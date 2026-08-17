@@ -13,6 +13,7 @@ import (
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimeports"
 	"github.com/portpowered/infinite-you/pkg/services/models"
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
@@ -404,6 +405,8 @@ func openRuntime(
 		configured.Workers.MockWorkers,
 		providerCommandRunner,
 	)
+	setWorkerProgressPublisher(durableExecution.Service, runtimeProgressPublisher(startupRuntime))
+	setWorkerAttemptStarter(durableExecution.Service, runtimeWorkerAttemptStarter(startupRuntime))
 	opened := assembleRuntimeProducts(
 		factoryDefinitions,
 		service4,
@@ -607,4 +610,78 @@ func setWorkerExecution(
 		return
 	}
 	setter.SetWorkerExecution(workerService, admission, runtimeID, generationID, providerOverride, mockWorkers, commandRunnerOverride)
+}
+
+type runtimeProgressPublisherProvider interface {
+	RuntimeProgressPublisher() workers.ProgressPublisher
+}
+
+func runtimeProgressPublisher(runtime runtimeports.RuntimeInstance) workers.ProgressPublisher {
+	if runtime == nil {
+		return nil
+	}
+	if provider, ok := runtime.(runtimeProgressPublisherProvider); ok {
+		return provider.RuntimeProgressPublisher()
+	}
+	if service := runtime.RuntimeService(); service != nil {
+		if provider, ok := service.(runtimeProgressPublisherProvider); ok {
+			return provider.RuntimeProgressPublisher()
+		}
+	}
+	return nil
+}
+
+func setWorkerProgressPublisher(execution any, publisher workers.ProgressPublisher) {
+	if publisher == nil {
+		return
+	}
+	setter, ok := execution.(interface {
+		SetWorkerProgressPublisher(workers.ProgressPublisher)
+	})
+	if !ok {
+		return
+	}
+	setter.SetWorkerProgressPublisher(publisher)
+}
+
+type runtimeWorkerAttemptStarterProvider interface {
+	BeginWorkerAttempt(
+		context.Context,
+		workers.ExecuteRequest,
+	) (func(context.Context, workers.ExecuteResult, error) error, error)
+}
+
+func runtimeWorkerAttemptStarter(
+	runtime runtimeports.RuntimeInstance,
+) func(context.Context, workers.ExecuteRequest) (func(context.Context, workers.ExecuteResult, error) error, error) {
+	if runtime == nil {
+		return nil
+	}
+	if provider, ok := runtime.(runtimeWorkerAttemptStarterProvider); ok {
+		return provider.BeginWorkerAttempt
+	}
+	if service := runtime.RuntimeService(); service != nil {
+		if provider, ok := service.(runtimeWorkerAttemptStarterProvider); ok {
+			return provider.BeginWorkerAttempt
+		}
+	}
+	return nil
+}
+
+func setWorkerAttemptStarter(
+	execution any,
+	starter func(context.Context, workers.ExecuteRequest) (func(context.Context, workers.ExecuteResult, error) error, error),
+) {
+	if starter == nil {
+		return
+	}
+	setter, ok := execution.(interface {
+		SetWorkerAttemptStarter(
+			func(context.Context, workers.ExecuteRequest) (func(context.Context, workers.ExecuteResult, error) error, error),
+		)
+	})
+	if !ok {
+		return
+	}
+	setter.SetWorkerAttemptStarter(starter)
 }

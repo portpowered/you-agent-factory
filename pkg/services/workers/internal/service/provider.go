@@ -22,12 +22,12 @@ func (s *Service) authorizeProviderTarget(
 	if identity != runners.AgentIdentity {
 		return nil
 	}
-	// A composed provider override is the execution authority for this one
-	// request. It may be an in-process edge with no catalog identity, as in a
-	// root composition test or an embedded caller. Do not require that edge to
-	// manufacture a Providers catalog entry; the override runner is selected in
-	// runRunner after the detached request has been validated.
-	if hasProviderOverride(request) {
+	// A composed provider override is the execution authority for legacy
+	// provider work whose execution mechanism is blank or SCRIPT_WRAP. Named
+	// executor providers remain catalog-selected, even when a process-scoped
+	// compatibility edge is present; otherwise an unknown named provider could
+	// silently fall through to that edge.
+	if providerOverrideApplies(request, configuredProviderOverride(s)) {
 		return nil
 	}
 	if s == nil || s.providers == nil {
@@ -93,8 +93,23 @@ func (s *Service) authorizeProviderTarget(
 	return nil
 }
 
-func hasProviderOverride(request *workers.ExecuteRequest) bool {
-	return request != nil && request.Input.ProviderOverride != nil
+func configuredProviderOverride(s *Service) providers.Service {
+	if s == nil {
+		return nil
+	}
+	return s.providerOverride
+}
+
+func providerOverrideApplies(
+	request *workers.ExecuteRequest,
+	serviceOverride providers.Service,
+) bool {
+	if request == nil ||
+		(request.Input.ProviderOverride == nil && serviceOverride == nil) {
+		return false
+	}
+	executorProvider := strings.TrimSpace(request.Target.ExecutorProvider)
+	return executorProvider == "" || strings.EqualFold(executorProvider, "SCRIPT_WRAP")
 }
 
 func validateProviderCapabilities(

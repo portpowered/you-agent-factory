@@ -99,6 +99,42 @@ func (s *Service) SetWorkerExecution(
 	setter.SetWorkerExecution(execution, admission, runtimeID, generationID, providerOverride, mockWorkers, commandRunnerOverride)
 }
 
+// SetWorkerProgressPublisher forwards the runtime-owned observation bridge to
+// the live JavaScript execution implementation when it supports the optional
+// child publication capability.
+func (s *Service) SetWorkerProgressPublisher(publisher workers.ProgressPublisher) {
+	if s == nil || s.Service == nil {
+		return
+	}
+	setter, ok := s.Service.(interface {
+		SetWorkerProgressPublisher(workers.ProgressPublisher)
+	})
+	if !ok {
+		return
+	}
+	setter.SetWorkerProgressPublisher(publisher)
+}
+
+// SetWorkerAttemptStarter forwards the Runtime-owned Worker Session opening
+// boundary to the live JavaScript execution implementation when it supports
+// the optional direct Execute lifecycle capability.
+func (s *Service) SetWorkerAttemptStarter(
+	starter func(context.Context, workers.ExecuteRequest) (func(context.Context, workers.ExecuteResult, error) error, error),
+) {
+	if s == nil || s.Service == nil {
+		return
+	}
+	setter, ok := s.Service.(interface {
+		SetWorkerAttemptStarter(
+			func(context.Context, workers.ExecuteRequest) (func(context.Context, workers.ExecuteResult, error) error, error),
+		)
+	})
+	if !ok {
+		return
+	}
+	setter.SetWorkerAttemptStarter(starter)
+}
+
 // SubscribeResponseEvents forwards durable-session response-event subscriptions
 // to the underlying JavaScript runtime when that capability is present.
 func (s *Service) SubscribeResponseEvents(

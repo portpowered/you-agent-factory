@@ -389,6 +389,7 @@ func (s *JavaScriptRuntimeService) childExecutorHooks(mode, sessionID string) fa
 			executor.providerOverride = binding.providerOverride
 			executor.mockWorkers = binding.mockWorkers.Clone()
 			executor.commandRunnerOverride = binding.commandRunnerOverride
+			executor.attemptStarter = binding.attemptStarter
 			executor.publish = binding.publish
 			return executor
 		}

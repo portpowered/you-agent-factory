@@ -50,7 +50,7 @@ func (s *Service) agentLoopRunner(
 	identity string,
 	providerOverride providers.Service,
 ) workers.Runner {
-	if providerOverride != nil && identity == runners.AgentIdentity &&
+	if providerOverrideApplies(&request, providerOverride) && identity == runners.AgentIdentity &&
 		!usesACPProvider(request.Target.ExecutorProvider) {
 		return agentLoopProviderOverrideRunner{
 			runner: workerrecording.NewProviderRunner(

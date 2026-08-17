@@ -18,6 +18,137 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
+// BeginWorkerAttempt opens the Worker Session observation window around a
+// detached Execute request. Factory Runtime remains the admission and
+// execution owner; the returned callback only commits the durable Worker
+// Session terminal observation after the caller's Execute operation returns.
+// This optional capability is used by the direct JavaScript child route, whose
+// request is already fully resolved and therefore does not go through the
+// Runtime stateless attempt driver.
+func (f *factoryImpl) BeginWorkerAttempt(
+	ctx context.Context,
+	executeRequest workers.ExecuteRequest,
+) (func(context.Context, workers.ExecuteResult, error) error, error) {
+	if f == nil || f.cfg == nil || f.cfg.workerSessions == nil || f.eventHistory == nil {
+		return nil, factory.ErrNotRunning
+	}
+	if err := executeRequest.Validate(); err != nil {
+		return nil, err
+	}
+	request := workstationDispatchRequestFromExecute(executeRequest)
+	dispatchID := strings.TrimSpace(executeRequest.Correlation.DispatchID)
+	sessionID := runtimeWorkerSessionID(f.cfg, request, executeRequest, false)
+	f.eventHistory.RecordDispatchWorkerSessionAssociation(
+		f.currentTick(),
+		dispatchID,
+		sessionID,
+		executeRequest.Correlation.RequestID,
+		f.cfg.clock.Now(),
+	)
+	prepare := runtimeAttemptPreparation(f.cfg, request, executeRequest, false)
+	if prepare == nil {
+		return nil, factory.ErrNotRunning
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	terminal, err := prepare(context.WithoutCancel(ctx), &executeRequest)
+	if err != nil {
+		return nil, err
+	}
+	return func(
+		callbackCtx context.Context,
+		result workers.ExecuteResult,
+		executeErr error,
+	) error {
+		if callbackCtx == nil {
+			callbackCtx = context.Background()
+		}
+		if terminal != nil {
+			terminal(callbackCtx, executeRequest, result, executeErr)
+		}
+		return nil
+	}, nil
+}
+
+func workstationDispatchRequestFromExecute(
+	request workers.ExecuteRequest,
+) workers.WorkstationDispatchRequest {
+	target := request.Target.Clone()
+	dispatch := work.CloneWorkDispatch(request.Input.Dispatch)
+	workstationName := strings.TrimSpace(target.WorkstationName)
+	if workstationName == "" {
+		workstationName = strings.TrimSpace(dispatch.WorkstationName)
+	}
+	if dispatch.DispatchID == "" {
+		dispatch.DispatchID = strings.TrimSpace(request.Correlation.DispatchID)
+	}
+	if dispatch.WorkstationName == "" {
+		dispatch.WorkstationName = workstationName
+	}
+	if dispatch.Execution.RequestID == "" {
+		dispatch.Execution.RequestID = strings.TrimSpace(request.Correlation.RequestID)
+	}
+	if dispatch.Execution.TraceID == "" {
+		dispatch.Execution.TraceID = strings.TrimSpace(request.Correlation.TraceID)
+	}
+	modelProvider := firstRuntimeValue(
+		target.Model.Provider,
+		target.Provider.ID,
+		target.Provider.Alias,
+	)
+	workingDirectory := firstRuntimeValue(
+		target.Workspace.WorkingDirectory,
+		target.Environment.WorkingDirectory,
+	)
+	projectID := ""
+	if request.Input.WorkflowContext != nil {
+		projectID = request.Input.WorkflowContext.ProjectID
+	}
+	return workers.WorkstationDispatchRequest{
+		WorkstationName: workstationName,
+		Execution: workers.WorkstationExecutionRequest{
+			Dispatch:                    dispatch,
+			WorkerName:                  target.WorkerName,
+			WorkerType:                  target.WorkerType,
+			RunnerID:                    target.RunnerID,
+			ExecutorProvider:            target.ExecutorProvider,
+			ProjectID:                   projectID,
+			FactorySessionID:            request.Correlation.FactorySessionID,
+			RuntimeID:                   request.Correlation.RuntimeID,
+			RecordingID:                 request.Input.RecordingID,
+			GenerationID:                request.Correlation.GenerationID,
+			WorkflowContext:             request.Input.WorkflowContext.Clone(),
+			Capabilities:                target.Capabilities,
+			ModelOperation:              request.Input.ModelOperation,
+			ModelBindings:               workers.CloneResolvedModelOperationBindings(request.Input.ModelBindings),
+			Model:                       target.Model.Name,
+			ModelProvider:               modelProvider,
+			ReasoningEffort:             target.Model.ReasoningEffort,
+			Command:                     target.Command,
+			Args:                        append([]string(nil), target.Args...),
+			FactoryDirectory:            target.FactoryDirectory,
+			OutputFormat:                target.Output.Format,
+			StopToken:                   target.Output.StopToken,
+			DecisionEnvelope:            target.Output.DecisionEnvelope,
+			GoalRoutingDecisionEnvelope: target.Output.GoalRoutingDecisionEnvelope,
+			SystemPrompt:                target.Prompt.SystemPrompt,
+			UserMessage:                 target.Prompt.UserMessage,
+			OutputSchema:                target.Prompt.OutputSchema,
+			OutputContract:              target.Output.Contract,
+			Timeout:                     target.Timeout,
+			EnvVars:                     target.Environment.Vars,
+			ProcessEnvironment:          append([]string(nil), target.Environment.ProcessEnvironment...),
+			ProcessLifecycleObserver:    request.Input.ProcessLifecycleObserver,
+			Worktree:                    target.Workspace.Worktree,
+			WorkingDirectory:            workingDirectory,
+			WorkingDirectoryAuthored:    target.Environment.WorkingDirectorySet,
+			Continuation:                cloneRuntimeContinuation(request.Input.Resume),
+			SkipPermissions:             target.Permissions.SkipPermissions,
+		},
+	}
+}
+
 // WorkstationRequestExecutorConfig supplies the immutable Runtime facts needed
 // to resolve a direct Worker Session request before handing it to the shared
 // Workers Execute boundary. It is deliberately separate from the Runtime's

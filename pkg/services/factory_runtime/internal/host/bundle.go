@@ -1,6 +1,7 @@
 package host
 
 import (
+	"context"
 	"sync"
 	"time"
 
@@ -10,6 +11,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/state"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
+	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"go.uber.org/zap"
 )
 
@@ -76,6 +78,43 @@ func (r *Bundle) RuntimeService() factory.Service {
 	}
 	service, _ := r.Factory.(factory.Service)
 	return service
+}
+
+// RuntimeProgressPublisher returns the runtime-scoped Workers observation
+// bridge when the assembled Factory implementation exposes it. The bundle
+// keeps this optional so inert and historical runtime records remain valid.
+func (r *Bundle) RuntimeProgressPublisher() workers.ProgressPublisher {
+	if r == nil || r.Factory == nil {
+		return nil
+	}
+	provider, _ := r.Factory.(interface {
+		RuntimeProgressPublisher() workers.ProgressPublisher
+	})
+	if provider == nil {
+		return nil
+	}
+	return provider.RuntimeProgressPublisher()
+}
+
+// BeginWorkerAttempt forwards the optional Runtime-owned Worker Session
+// opening capability through the hosted runtime record.
+func (r *Bundle) BeginWorkerAttempt(
+	ctx context.Context,
+	request workers.ExecuteRequest,
+) (func(context.Context, workers.ExecuteResult, error) error, error) {
+	if r == nil || r.Factory == nil {
+		return nil, factory.ErrNotRunning
+	}
+	provider, _ := r.Factory.(interface {
+		BeginWorkerAttempt(
+			context.Context,
+			workers.ExecuteRequest,
+		) (func(context.Context, workers.ExecuteResult, error) error, error)
+	})
+	if provider == nil {
+		return nil, factory.ErrNotRunning
+	}
+	return provider.BeginWorkerAttempt(ctx, request)
 }
 
 func (r *Bundle) Directory() string {

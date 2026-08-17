@@ -24,14 +24,21 @@ type childWorkerProgressPublisher func(string, workers.ProgressFragment)
 
 type childWorkerExecutionBinding struct {
 	execute               childExecuteService
+	attemptStarter        childWorkerAttemptStarter
 	resourceLeaseAcquirer childResourceLeaseAcquirer
 	runtimeID             string
 	generationID          string
 	providerOverride      providers.Service
 	mockWorkers           *workers.MockWorkersConfig
 	commandRunnerOverride workers.CommandRunner
+	progressPublisher     workers.ProgressPublisher
 	publish               childWorkerProgressPublisher
 }
+
+type childWorkerAttemptStarter func(
+	context.Context,
+	workers.ExecuteRequest,
+) (func(context.Context, workers.ExecuteResult, error) error, error)
 
 // childWorkerProgressBridge keeps provider-owned terminal fragments from
 // racing the canonical Execute result. Provider runners may publish a
@@ -264,6 +271,13 @@ func (s *JavaScriptRuntimeService) SetWorkerExecution(
 		if strings.TrimSpace(fragment.Correlation.DispatchID) == "" {
 			fragment.Correlation.DispatchID = workerDispatchID
 		}
+		s.invokerMu.RLock()
+		progressPublisher := binding.progressPublisher
+		s.invokerMu.RUnlock()
+		if progressPublisher != nil {
+			progressPublisher(fragment)
+			return
+		}
 		s.PublishWorkerProgress(fragment)
 	}
 	s.invokerMu.Lock()
@@ -271,6 +285,42 @@ func (s *JavaScriptRuntimeService) SetWorkerExecution(
 		s.workerExecution = nil
 	} else {
 		s.workerExecution = binding
+	}
+	s.invokerMu.Unlock()
+}
+
+// SetWorkerProgressPublisher attaches the runtime-owned progress bridge to
+// the already-bound child Execute operation. Runtime construction creates the
+// bridge while it binds the session-owned Worker Sessions service, which is
+// later than the durable execution service itself. Keeping this as a narrow
+// optional bind preserves the existing Execute seam for standalone, replay,
+// and test compositions.
+func (s *JavaScriptRuntimeService) SetWorkerProgressPublisher(
+	publisher workers.ProgressPublisher,
+) {
+	if s == nil {
+		return
+	}
+	s.invokerMu.Lock()
+	if s.workerExecution != nil {
+		s.workerExecution.progressPublisher = publisher
+	}
+	s.invokerMu.Unlock()
+}
+
+// SetWorkerAttemptStarter attaches the Runtime-owned Worker Session opening
+// boundary to the direct child Execute route. Runtime remains responsible for
+// admission and execution; the returned completion callback only commits the
+// durable Worker Session observation after Execute returns.
+func (s *JavaScriptRuntimeService) SetWorkerAttemptStarter(
+	starter func(context.Context, workers.ExecuteRequest) (func(context.Context, workers.ExecuteResult, error) error, error),
+) {
+	if s == nil {
+		return
+	}
+	s.invokerMu.Lock()
+	if s.workerExecution != nil {
+		s.workerExecution.attemptStarter = starter
 	}
 	s.invokerMu.Unlock()
 }
@@ -331,6 +381,7 @@ type childWorkerExecutor struct {
 	providerOverride      providers.Service
 	mockWorkers           *workers.MockWorkersConfig
 	commandRunnerOverride workers.CommandRunner
+	attemptStarter        childWorkerAttemptStarter
 	maxAttempts           int
 	resourceLeaseAcquirer childResourceLeaseAcquirer
 }
@@ -432,25 +483,79 @@ func (e *childWorkerExecutor) Execute(
 	if e.publish != nil {
 		progress = newChildWorkerProgressBridge(e.publish, workerDispatchID)
 	}
+	var completeAttempt func(context.Context, workers.ExecuteResult, error) error
 	for attemptNumber := 1; attemptNumber <= e.maxAttempts; attemptNumber++ {
 		request := e.executeRequest(req, base, workerDispatchID, attemptNumber, progress)
-		invoked, err := e.execute.Execute(ctx, request)
 		base.Attempt = request.Attempt.Number
+		var preStartResult workers.ExecuteResult
+		if attemptNumber == 1 {
+			completeAttempt, preStartResult, err = e.beginChildWorkerAttempt(ctx, request, progress)
+			if err != nil {
+				return e.failedChild(base, req, dispatchID, childIndex, preStartResult, err)
+			}
+		}
+		invoked, err := e.execute.Execute(ctx, request)
 		if childExecutionShouldRetry(ctx, invoked, err, attemptNumber, e.maxAttempts) {
 			if progress != nil {
 				progress.resetAttempt()
 			}
 			continue
 		}
-		if progress != nil {
-			progress.publishTerminal(invoked, err)
-		}
+		finishChildWorkerAttempt(completeAttempt, progress, invoked, err)
 		if err != nil || !childExecutionSucceeded(invoked.Outcome) {
 			return e.failedChild(base, req, dispatchID, childIndex, invoked, err)
 		}
 		return e.completedChild(base, req, dispatchID, childIndex, invoked)
 	}
 	return factory.JavaScriptChildExecutionResult{}, fmt.Errorf("javascript child execution exhausted its attempt budget")
+}
+
+func (e *childWorkerExecutor) beginChildWorkerAttempt(
+	ctx context.Context,
+	request workers.ExecuteRequest,
+	progress *childWorkerProgressBridge,
+) (func(context.Context, workers.ExecuteResult, error) error, workers.ExecuteResult, error) {
+	if e == nil || e.attemptStarter == nil {
+		return nil, workers.ExecuteResult{}, nil
+	}
+	complete, err := e.attemptStarter(context.WithoutCancel(ctx), request)
+	if err == nil {
+		return complete, workers.ExecuteResult{}, nil
+	}
+	result := failedChildWorkerExecuteResult(request, err)
+	if progress != nil {
+		progress.publishTerminal(result, err)
+	}
+	return nil, result, err
+}
+
+func failedChildWorkerExecuteResult(
+	request workers.ExecuteRequest,
+	err error,
+) workers.ExecuteResult {
+	return workers.ExecuteResult{
+		Correlation: request.Correlation,
+		Outcome:     workers.ExecutionOutcomeFailed,
+		Failure: &workers.ExecutionFailure{
+			Type:    workers.WorkFailureTypeUnknown,
+			Family:  workers.WorkFailureFamilyTerminal,
+			Message: err.Error(),
+		},
+	}
+}
+
+func finishChildWorkerAttempt(
+	complete func(context.Context, workers.ExecuteResult, error) error,
+	progress *childWorkerProgressBridge,
+	result workers.ExecuteResult,
+	err error,
+) {
+	if complete != nil {
+		_ = complete(context.Background(), result, err)
+	}
+	if progress != nil {
+		progress.publishTerminal(result, err)
+	}
 }
 
 func childExecutionShouldRetry(

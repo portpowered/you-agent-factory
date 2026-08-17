@@ -15,6 +15,7 @@ import (
 	factoryhost "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/host"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
 // invocationScheduleService is the optional Automations capability consumed
@@ -85,6 +86,42 @@ func (wrapped *invocationScheduleFactory) WorkerSessionsObservation() workersess
 		return nil
 	}
 	return provider.WorkerSessionsObservation()
+}
+
+// RuntimeProgressPublisher forwards the runtime-owned child observation
+// bridge through the schedule decorator installed on the Factory engine.
+func (wrapped *invocationScheduleFactory) RuntimeProgressPublisher() workers.ProgressPublisher {
+	if wrapped == nil {
+		return nil
+	}
+	provider, _ := wrapped.Engine.(interface {
+		RuntimeProgressPublisher() workers.ProgressPublisher
+	})
+	if provider == nil {
+		return nil
+	}
+	return provider.RuntimeProgressPublisher()
+}
+
+// BeginWorkerAttempt forwards the optional Runtime-owned Worker Session
+// opening capability through the automation schedule decorator.
+func (wrapped *invocationScheduleFactory) BeginWorkerAttempt(
+	ctx context.Context,
+	request workers.ExecuteRequest,
+) (func(context.Context, workers.ExecuteResult, error) error, error) {
+	if wrapped == nil {
+		return nil, factory.ErrNotRunning
+	}
+	provider, _ := wrapped.Engine.(interface {
+		BeginWorkerAttempt(
+			context.Context,
+			workers.ExecuteRequest,
+		) (func(context.Context, workers.ExecuteResult, error) error, error)
+	})
+	if provider == nil {
+		return nil, factory.ErrNotRunning
+	}
+	return provider.BeginWorkerAttempt(ctx, request)
 }
 
 func (wrapped *invocationScheduleFactory) ControlPause(ctx context.Context, request factory.PauseRequest) (factory.PauseResult, error) {
