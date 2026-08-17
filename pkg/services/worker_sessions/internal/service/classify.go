@@ -396,8 +396,6 @@ var genericFailureDetail = map[workersessions.FailureCauseKind]string{
 	workersessions.FailureCauseEventPublicationFailure: "the Worker Session opening record could not be published",
 	workersessions.FailureCauseProcessGone:             "the worker process exited before dispatch completion",
 	workersessions.FailureCauseTimeout:                 "the worker execution exceeded its hard deadline",
-	workersessions.FailureCauseOperatorCanceled:        "an operator cancel control ended the Worker Session",
-	workersessions.FailureCauseOperatorTerminated:      "an operator terminate control ended the Worker Session",
 }
 
 // knownFailureFamilies whitelists the exact WorkFailureFamily constants
@@ -621,7 +619,10 @@ func normalizeCommittedTerminal(state workersessions.State, result workersession
 	case workersessions.StateCompleted:
 		return workersessions.TerminalResult{Outcome: workersessions.TerminalOutcomeCompleted}
 	case workersessions.StateFailed:
-		if result.Outcome != workersessions.TerminalOutcomeFailed || result.Cause == nil || !result.Cause.Kind.Valid() {
+		// A control outcome is repaired here too: it names why a session ended
+		// but is never a committable failure cause.
+		if result.Outcome != workersessions.TerminalOutcomeFailed || result.Cause == nil ||
+			!result.Cause.Kind.Valid() || result.Cause.Kind.ControlTerminal() {
 			return failedTerminal(
 				workersessions.FailureCauseWorkersExecutionFailure,
 				"the Worker Session failed without a reported cause",

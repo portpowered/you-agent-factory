@@ -2152,6 +2152,22 @@ func TestNormalizeCommittedTerminal_RepairsInvalidFailure(t *testing.T) {
 	}
 }
 
+func TestNormalizeCommittedTerminal_RepairsAControlOutcomeOnFailed(t *testing.T) {
+	result := normalizeCommittedTerminal(workersessions.StateFailed, workersessions.TerminalResult{
+		Outcome: workersessions.TerminalOutcomeFailed,
+		Cause: &workersessions.FailureCause{
+			Kind:   workersessions.FailureCauseOperatorCanceled,
+			Detail: "an operator cancel control ended the Worker Session",
+		},
+	})
+	if result.Cause == nil || result.Cause.Kind != workersessions.FailureCauseWorkersExecutionFailure {
+		t.Fatalf("normalizeCommittedTerminal() = %#v, want the control outcome repaired to an execution failure", result)
+	}
+	if err := result.Validate(); err != nil {
+		t.Fatalf("normalized FAILED result is not committable: %v", err)
+	}
+}
+
 type staticProviderBindingAppender struct {
 	result events.AppendResult
 	err    error

@@ -454,10 +454,19 @@ func (r *registry) projectWorkerSessionIdentity(ctx context.Context, id string) 
 }
 
 // controlTerminalCause maps the two absorbing control states to the operator
-// control outcome that produced them.
-var controlTerminalCause = map[workersessions.State]workersessions.FailureCauseKind{
-	workersessions.StateCanceled:   workersessions.FailureCauseOperatorCanceled,
-	workersessions.StateTerminated: workersessions.FailureCauseOperatorTerminated,
+// control outcome that produced them, with the fixed safe detail naming it.
+// These reasons are derived from state rather than classified from a Workers
+// result, so they carry their own detail instead of a genericFailureDetail
+// fallback.
+var controlTerminalCause = map[workersessions.State]workersessions.FailureCause{
+	workersessions.StateCanceled: {
+		Kind:   workersessions.FailureCauseOperatorCanceled,
+		Detail: "an operator cancel control ended the Worker Session",
+	},
+	workersessions.StateTerminated: {
+		Kind:   workersessions.FailureCauseOperatorTerminated,
+		Detail: "an operator terminate control ended the Worker Session",
+	},
 }
 
 // observedTerminalCause names why a session ended. A committed FailureCause is
@@ -473,11 +482,12 @@ func observedTerminalCause(session workersessions.Session) *workersessions.Failu
 		cause := *session.Result.Cause
 		return &cause
 	}
-	kind, ok := controlTerminalCause[session.State]
+	cause, ok := controlTerminalCause[session.State]
 	if !ok {
 		return nil
 	}
-	return &workersessions.FailureCause{Kind: kind, Detail: boundedFailureDetail(kind, "")}
+	cause.Detail = boundedFailureDetail(cause.Kind, cause.Detail)
+	return &cause
 }
 
 // loadObservationState returns detached snapshots of the registered session
