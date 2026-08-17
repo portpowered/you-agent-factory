@@ -7,13 +7,17 @@ import (
 	"github.com/portpowered/infinite-you/internal/testutil/checkpointfixtures"
 	"github.com/portpowered/infinite-you/internal/testutil/factoryruntimefixtures"
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution/runtimepersist"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/livechange"
 	factorysessioncontracts "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire/contracts"
+	"github.com/portpowered/infinite-you/pkg/services/models"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
+	workerswire "github.com/portpowered/infinite-you/pkg/services/workers/wire"
 	"os"
 	"path/filepath"
 	"strings"
@@ -723,4 +727,61 @@ func (a orchestrationJavaScriptAdapter) ResumeJavaScript(
 	records []factory.JavaScriptRuntimeRecord,
 ) factory.JavaScriptResumeContext {
 	return a.ResumeContext(summary, records)
+}
+
+func newTerminalWorkersService(t *testing.T, provider providers.Service) workerexecution.Service {
+	t.Helper()
+	service, err := workerswire.NewService(
+		workerswire.AgentDependencies{
+			Providers: provider,
+			Publish:   func(workerexecution.ProgressFragment) {},
+		},
+		workerswire.ScriptConfig{Command: "terminal-script", RequestSelected: true},
+		workerswire.ScriptDependencies{
+			CommandRunner: terminalWorkerCommandRunner{},
+			FactoryDocs:   func(string) (map[string]string, error) { return nil, nil },
+			Now:           func() time.Time { return time.Unix(1, 0) },
+			Publish:       func(workerexecution.ProgressFragment) {},
+			Record:        func(workerexecution.ScriptEvent) {},
+		},
+		workerswire.InferenceConfig{Worker: models.LocalWorker{
+			Name: "terminal-inference",
+			Type: interfaces.WorkerTypeInference,
+		}},
+		workerswire.InferenceDependencies{Models: terminalWorkerLocalInvoker{}},
+		nil,
+		nil,
+		func() time.Time { return time.Unix(1, 0) },
+		nil,
+		nil,
+		nil,
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("construct real Workers service: %v", err)
+	}
+	return service
+}
+
+type terminalWorkerCommandRunner struct{}
+
+func (terminalWorkerCommandRunner) Run(context.Context, workerexecution.CommandRequest) (workerexecution.CommandResult, error) {
+	return workerexecution.CommandResult{}, nil
+}
+
+func (terminalWorkerCommandRunner) RunStreaming(
+	context.Context,
+	workerexecution.CommandRequest,
+	platformprocess.OutputChunkObserver,
+) (workerexecution.CommandResult, error) {
+	return workerexecution.CommandResult{}, nil
+}
+
+type terminalWorkerLocalInvoker struct{}
+
+func (terminalWorkerLocalInvoker) InvokeLocal(
+	context.Context,
+	models.LocalInvocationRequest,
+) (models.LocalInvocationResult, error) {
+	return models.LocalInvocationResult{}, nil
 }

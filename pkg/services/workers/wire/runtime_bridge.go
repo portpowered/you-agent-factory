@@ -29,16 +29,8 @@ func LocalRuntimeHooks() workers.LocalRuntimeHooks {
 	return modelrecording.Hooks()
 }
 
-// NewInvocationFromService adapts the canonical Workers service to the
-// transitional one-attempt invocation contract used by standalone opening.
-// Runtime and Sessions callers retain the older provider-backed constructors
-// below until their own cutover stories complete.
-func NewInvocationFromService(service workers.Service) workers.InvocationExecutor {
-	return workersinternal.NewInvocationFromService(service)
-}
-
-// NewInvocationWithProgressFromService is the progress-capable form of
-// NewInvocationFromService.
+// NewInvocationWithProgressFromService is the progress-capable form of the
+// canonical Workers service adapter used by the remaining child caller.
 func NewInvocationWithProgressFromService(
 	service workers.Service,
 	publisher workers.ProgressPublisher,

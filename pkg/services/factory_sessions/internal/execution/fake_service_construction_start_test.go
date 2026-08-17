@@ -857,3 +857,40 @@ func canonicalTypedInternalEvent(t *testing.T, eventType, sessionID string, payl
 	}
 	return raw
 }
+func TestDirectChildExecutor_MapsWorkersCanceledAndTimeoutToOneTerminalChild(t *testing.T) {
+	for _, test := range []struct {
+		name    string
+		outcome workers.ExecutionOutcome
+	}{
+		{name: "canceled", outcome: workers.ExecutionOutcomeCanceled},
+		{name: "timeout", outcome: workers.ExecutionOutcomeFailed},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			invoker := &recordingWorkerExecution{result: workers.ExecuteResult{
+				Outcome: test.outcome,
+				Failure: &workers.ExecutionFailure{
+					Type:      workers.WorkFailureTypeTimeout,
+					Message:   "child timed out",
+					RetryHint: true,
+				},
+			}}
+			sink := newChildRecordSink()
+			executor := newDirectChildExecutor("direct-session", invoker, sink, childTestValues{}, "/project")
+
+			result, err := executor.Execute(context.Background(), factory.JavaScriptChildExecutionRequest{Prompt: "run"})
+			if err == nil {
+				t.Fatal("Execute error = nil, want terminal child failure")
+			}
+			if result.Status != factory.JavaScriptChildDispatchStatusFailed {
+				t.Fatalf("child status = %q, want FAILED", result.Status)
+			}
+			if len(sink.records) != 1 {
+				t.Fatalf("terminal child records = %d, want exactly one", len(sink.records))
+			}
+			terminal := sink.terminalChildDispatch(t)
+			if terminal.FailureClassification != workers.WorkFailureTypeTimeout || terminal.FailureDetail == nil || terminal.FailureDetail.Message != "child timed out" {
+				t.Fatalf("terminal failure = %#v, want typed timeout detail", terminal)
+			}
+		})
+	}
+}

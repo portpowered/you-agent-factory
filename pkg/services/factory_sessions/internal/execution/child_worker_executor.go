@@ -120,7 +120,11 @@ func childTerminalProgressMatches(
 	case workers.CompletedFragmentKind:
 		return executeErr == nil && childExecutionSucceeded(result.Outcome)
 	case workers.FailedFragmentKind:
-		return executeErr != nil || result.Outcome == workers.ExecutionOutcomeFailed || result.Outcome == workers.ExecutionOutcomeCanceled
+		// A provider's failed fragment can be less specific than the
+		// canonical Execute result (for example STREAM_FAILED versus a typed
+		// timeout or cancellation). Always synthesize the canonical terminal
+		// for unhappy outcomes so the durable response keeps that classification.
+		return false
 	default:
 		return false
 	}
@@ -269,18 +273,6 @@ func (s *JavaScriptRuntimeService) SetWorkerExecution(
 		s.workerExecution = binding
 	}
 	s.invokerMu.Unlock()
-}
-
-// workerInvokerBound reports whether this service was composed with a Factory
-// Runtime behind it. This remains a live-change capability; child response
-// stores use workerExecutionBound so they do not depend on the Runtime root.
-func (s *JavaScriptRuntimeService) workerInvokerBound() bool {
-	if s == nil {
-		return false
-	}
-	s.invokerMu.RLock()
-	defer s.invokerMu.RUnlock()
-	return s.workerInvokerService != nil
 }
 
 func (s *JavaScriptRuntimeService) workerInvoker() factory.Service {

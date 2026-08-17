@@ -27,7 +27,7 @@ func (s *Service) authorizeProviderTarget(
 	// root composition test or an embedded caller. Do not require that edge to
 	// manufacture a Providers catalog entry; the override runner is selected in
 	// runRunner after the detached request has been validated.
-	if request != nil && request.Input.ProviderOverride != nil {
+	if hasProviderOverride(request) {
 		return nil
 	}
 	if s == nil || s.providers == nil {
@@ -91,6 +91,10 @@ func (s *Service) authorizeProviderTarget(
 		request.Target.RunnerID = runnerIDForProvider(resolved.ID)
 	}
 	return nil
+}
+
+func hasProviderOverride(request *workers.ExecuteRequest) bool {
+	return request != nil && request.Input.ProviderOverride != nil
 }
 
 func validateProviderCapabilities(

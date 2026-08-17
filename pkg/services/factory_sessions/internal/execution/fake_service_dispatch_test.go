@@ -3,12 +3,19 @@ package factorysessionexecution
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"os"
+	"sync"
 	"testing"
 	"time"
 
+	"github.com/portpowered/infinite-you/internal/testutil"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/fileeffects"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responseevents"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
+	"github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
@@ -649,4 +656,232 @@ func TestFakeService_InterruptAcceptedBeforeCompletion_ObservableDispatchAndEven
 	if err := ValidateDispatchListMatchesSessionProgress(session, updated.Dispatches); err != nil {
 		t.Fatalf("ValidateDispatchListMatchesSessionProgress: %v", err)
 	}
+}
+
+type terminalWorkerBehavior string
+
+const (
+	terminalWorkerSuccess      terminalWorkerBehavior = "success"
+	terminalWorkerFailure      terminalWorkerBehavior = "failure"
+	terminalWorkerCancellation terminalWorkerBehavior = "cancellation"
+	terminalWorkerTimeout      terminalWorkerBehavior = "timeout"
+)
+
+type childTerminalResponseCase struct {
+	name          string
+	behavior      terminalWorkerBehavior
+	progress      []workers.ProgressFragment
+	wantKind      responseevents.Kind
+	wantPhase     responseevents.Phase
+	wantErrorCode string
+}
+
+func TestChildWorkerExecutor_PublishesExactlyOneDurableTerminalResponseForEveryOutcome(t *testing.T) {
+	t.Parallel()
+	for _, test := range childTerminalResponseCases() {
+		test := test
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			runChildTerminalResponseCase(t, test)
+		})
+	}
+}
+
+func childTerminalResponseCases() []childTerminalResponseCase {
+	return []childTerminalResponseCase{
+		{
+			name:     "success with provider terminal progress",
+			behavior: terminalWorkerSuccess,
+			progress: []workers.ProgressFragment{
+				{Kind: workers.ProgressFragmentKind, Payload: "provider progress"},
+				{Kind: workers.CompletedFragmentKind, Type: "COMPLETED"},
+			},
+			wantKind: responseevents.KindRun, wantPhase: responseevents.PhaseCompleted,
+		},
+		{
+			name:          "failure without provider terminal progress",
+			behavior:      terminalWorkerFailure,
+			progress:      []workers.ProgressFragment{{Kind: workers.ProgressFragmentKind, Payload: "failure progress"}},
+			wantKind:      responseevents.KindError,
+			wantPhase:     responseevents.PhaseFailed,
+			wantErrorCode: "stream_failed",
+		},
+		{
+			name:          "cancellation without provider terminal progress",
+			behavior:      terminalWorkerCancellation,
+			wantKind:      responseevents.KindError,
+			wantPhase:     responseevents.PhaseFailed,
+			wantErrorCode: "stream_canceled",
+		},
+		{
+			name:          "timeout without provider terminal progress",
+			behavior:      terminalWorkerTimeout,
+			wantKind:      responseevents.KindError,
+			wantPhase:     responseevents.PhaseFailed,
+			wantErrorCode: "timeout",
+		},
+	}
+}
+
+func runChildTerminalResponseCase(t *testing.T, test childTerminalResponseCase) {
+	t.Helper()
+	const sessionID = "dur-sess-terminal-bridge"
+	service := newDurableResponseEventsService(t)
+	state := seedResponseEventSession(t, service, sessionID)
+	if err := service.ensureSessionResponseEvents(sessionID, state); err != nil {
+		t.Fatalf("ensure response events: %v", err)
+	}
+
+	provider, started := newTerminalWorkerProvider(test.behavior)
+	workerService := newTerminalWorkersService(t, provider)
+	execution := terminalWorkerExecution{service: workerService, progress: test.progress}
+	executor := newChildWorkerExecutor(
+		sessionID, execution, newChildRecordSink(), childTestValues{},
+		service.observeWorkerDispatch, "/project", 0,
+	)
+	executor.publish = func(_ string, fragment workers.ProgressFragment) {
+		service.PublishWorkerProgress(fragment)
+	}
+	executionErr := executeTerminalChild(t, executor, test.behavior, started)
+
+	cursor, err := service.SubscribeResponseEvents(context.Background(), sessionID, factorysessions.ResponseEventSubscriptionRequest{SessionID: sessionID})
+	if err != nil {
+		t.Fatalf("SubscribeResponseEvents: %v", err)
+	}
+	defer cursor.Detach()
+	events, err := cursor.Drain()
+	if err != nil {
+		t.Fatalf("Drain response events: %v", err)
+	}
+	assertTerminalResponse(t, events, test, executionErr)
+}
+
+func executeTerminalChild(
+	t *testing.T,
+	executor *childWorkerExecutor,
+	behavior terminalWorkerBehavior,
+	started <-chan struct{},
+) error {
+	t.Helper()
+	request := factory.JavaScriptChildExecutionRequest{
+		Prompt: "run", Preset: "agent", ModelProvider: "codex", Model: "terminal-model",
+	}
+	if behavior == terminalWorkerSuccess || behavior == terminalWorkerFailure {
+		_, err := executor.Execute(context.Background(), request)
+		return err
+	}
+
+	ctx := context.Background()
+	var cancel context.CancelFunc
+	if behavior == terminalWorkerCancellation {
+		ctx, cancel = context.WithCancel(ctx)
+	} else {
+		ctx, cancel = context.WithTimeout(ctx, 2*time.Second)
+	}
+	defer cancel()
+
+	done := make(chan error, 1)
+	go func() {
+		_, err := executor.Execute(ctx, request)
+		done <- err
+	}()
+	select {
+	case <-started:
+	case <-time.After(2 * time.Second):
+		t.Fatal("real Workers provider was not started")
+	}
+	if behavior == terminalWorkerCancellation {
+		cancel()
+	} else {
+		<-ctx.Done()
+	}
+	return <-done
+}
+
+func assertTerminalResponse(
+	t *testing.T,
+	events []responseevents.FactoryResponseEvent,
+	test childTerminalResponseCase,
+	executionErr error,
+) {
+	t.Helper()
+	if test.behavior == terminalWorkerSuccess && executionErr != nil {
+		t.Fatalf("success child execution error = %v", executionErr)
+	}
+	if test.behavior != terminalWorkerSuccess && executionErr == nil {
+		t.Fatal("unhappy child execution error = nil")
+	}
+	terminals := terminalResponseEvents(events)
+	if len(terminals) != 1 {
+		t.Fatalf("response events = %#v, want exactly one terminal event", events)
+	}
+	terminal := terminals[0]
+	if terminal.Kind != test.wantKind || terminal.Phase != test.wantPhase {
+		t.Fatalf("terminal event = %#v, want kind=%q phase=%q", terminal, test.wantKind, test.wantPhase)
+	}
+	if test.wantErrorCode != "" {
+		var payload responseevents.ErrorPayload
+		if err := json.Unmarshal(terminal.Payload, &payload); err != nil {
+			t.Fatalf("decode terminal error payload: %v", err)
+		}
+		if payload.Code != test.wantErrorCode {
+			t.Fatalf("terminal error code = %q, want %q", payload.Code, test.wantErrorCode)
+		}
+	}
+	if len(test.progress) > 0 && (len(events) < 2 || events[len(events)-1].EventID != terminal.EventID) {
+		t.Fatalf("events = %#v, want progress before the terminal event", events)
+	}
+}
+
+func newTerminalWorkerProvider(behavior terminalWorkerBehavior) (providers.Service, <-chan struct{}) {
+	started := make(chan struct{})
+	var once sync.Once
+	provider := testutil.NativeProvider{
+		ExecuteFunc: func(ctx context.Context, _ providers.ExecuteRequest) (providers.ExecuteResult, error) {
+			once.Do(func() { close(started) })
+			switch behavior {
+			case terminalWorkerSuccess:
+				return providers.ExecuteResult{
+					Outcome: providers.ExecuteOutcomeAccepted, Content: "completed",
+				}, nil
+			case terminalWorkerFailure:
+				return providers.ExecuteResult{}, errors.New("provider failed")
+			default:
+				<-ctx.Done()
+				return providers.ExecuteResult{}, ctx.Err()
+			}
+		},
+	}
+	return provider, started
+}
+
+type terminalWorkerExecution struct {
+	service  workers.Service
+	progress []workers.ProgressFragment
+}
+
+func (execution terminalWorkerExecution) Execute(
+	ctx context.Context,
+	request workers.ExecuteRequest,
+) (workers.ExecuteResult, error) {
+	if request.Input.ProgressPublisher == nil {
+		return workers.ExecuteResult{}, errors.New("progress publisher is required")
+	}
+	for _, fragment := range execution.progress {
+		request.Input.ProgressPublisher(fragment)
+	}
+	return execution.service.Execute(ctx, request)
+}
+
+func terminalResponseEvents(events []responseevents.FactoryResponseEvent) []responseevents.FactoryResponseEvent {
+	terminals := make([]responseevents.FactoryResponseEvent, 0, 2)
+	for _, event := range events {
+		isRunTerminal := event.Kind == responseevents.KindRun && event.Phase == responseevents.PhaseCompleted
+		isErrorTerminal := event.Kind == responseevents.KindError &&
+			(event.Phase == responseevents.PhaseFailed || event.Phase == responseevents.PhaseCanceled)
+		if isRunTerminal || isErrorTerminal {
+			terminals = append(terminals, event)
+		}
+	}
+	return terminals
 }

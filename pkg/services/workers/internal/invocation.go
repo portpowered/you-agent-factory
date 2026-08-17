@@ -13,13 +13,6 @@ import (
 	workerinvocation "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/invocation"
 )
 
-// NewInvocationFromService adapts the canonical Workers Execute capability
-// for the remaining standalone invocation factory. The caller still receives
-// the old one-attempt shape until the Sessions child caller family moves.
-func NewInvocationFromService(service workers.Service) workers.InvocationExecutor {
-	return workerinvocation.NewExecuteService(service)
-}
-
 // NewInvocationWithProgressFromService preserves the old progress-capable
 // factory shape while routing its attempt through Workers Service.Execute.
 func NewInvocationWithProgressFromService(
