@@ -1,6 +1,8 @@
 package wire
 
 import (
+	"fmt"
+
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	platformreplay "github.com/portpowered/infinite-you/pkg/platform/replay"
@@ -24,7 +26,7 @@ func provideRecordingsRoot(
 	captureSnapshot factorydefinitions.LoadedFactorySnapshotCapturer,
 	replayInputs recordings.ReplayInputLoader,
 	logger logging.Logger,
-) (recordings.Root, error) {
+) (recordings.Service, error) {
 	makeDirectories, createTemporaryFile, removePath, renamePath, readFile := provideRecordingFilesystemEffects(edges)
 	return recordingswire.NewRuntimeRoot(
 		targets,
@@ -41,6 +43,16 @@ func provideRecordingsRoot(
 		logger,
 		platformclock.Real{},
 	)
+}
+
+func provideRecordingsRuntimeOpening(
+	service recordings.Service,
+) (recordings.RuntimeOpening, error) {
+	runtime, ok := service.(recordings.RuntimeOpening)
+	if !ok || runtime == nil {
+		return nil, fmt.Errorf("compose Recordings runtime opening: service does not implement RuntimeOpening")
+	}
+	return runtime, nil
 }
 
 // provideFactorySessionReplayInputs composes the Recordings-owned, path-based

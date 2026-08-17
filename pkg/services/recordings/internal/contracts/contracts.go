@@ -684,7 +684,8 @@ type SubscribeRequest struct {
 
 // SubscribeResult is the plain reconnect-aware subscribe success outcome.
 type SubscribeResult struct {
-	Subscription EventSubscription
+	Subscription       EventSubscription
+	RetainedEventCount int
 }
 
 // WorldStateViewSchemaVersion identifies the detached world-state payload

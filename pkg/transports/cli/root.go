@@ -187,7 +187,7 @@ type CommandOperations struct {
 	OpenRunSelection                  runcli.SelectionFactory
 	RemoteInvocation                  runcli.RemoteInvocationOperation
 	ResponsePresentation              factoryvisualization.ResponsePresentation
-	ACP                               acpcli.Service
+	ACP                               acpcli.Operations
 	ACPServer                         acp.Server
 }
 
@@ -260,7 +260,7 @@ type CommandFactory struct {
 	openRunSelection           runcli.SelectionFactory
 	remoteInvocation           runcli.RemoteInvocationOperation
 	responsePresentation       factoryvisualization.ResponsePresentation
-	acp                        acpcli.Service
+	acp                        acpcli.Operations
 	acpServer                  acp.Server
 }
 

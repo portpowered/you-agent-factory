@@ -117,6 +117,13 @@ func TestNewServiceConstructsInertRoot(t *testing.T) {
 	}); !errors.Is(err, recordings.ErrReplayRecordingNotFound) {
 		t.Fatalf("LoadReplayRecording() = %v, want ErrReplayRecordingNotFound after inert construction", err)
 	}
+	_, err = root.QueryHistoricalRecording(recordings.HistoricalRecordingQueryRequest{
+		Recording: recordings.HistoricalRecordingIdentity{RecordingID: "missing-after-inert-construction"},
+	})
+	var historicalErr *recordings.HistoricalRecordingQueryError
+	if !errors.As(err, &historicalErr) || historicalErr.Kind != recordings.HistoricalRecordingQueryErrorInvalidRequest {
+		t.Fatalf("QueryHistoricalRecording() = %v, want typed invalid-request failure", err)
+	}
 }
 
 func TestNewServiceRejectsMissingRequiredDependencies(t *testing.T) {

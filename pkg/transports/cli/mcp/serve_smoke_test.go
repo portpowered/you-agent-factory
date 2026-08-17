@@ -23,6 +23,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/transports/cli/generated"
 	mcpcli "github.com/portpowered/infinite-you/pkg/transports/cli/mcp"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	mcpserver "github.com/portpowered/infinite-you/pkg/transports/mcp/server"
 	mcpstdio "github.com/portpowered/infinite-you/pkg/transports/mcp/stdio"
 )
 
@@ -93,13 +94,15 @@ func executeGeneratedMCPServe(
 				wantProjectRoot,
 			)
 		}
-		session, err := mcpstdio.Open(
-			service,
-			installSmokeRequestPreparation(),
-			installSmokeWorkflowDefinitions(),
-			intent.Stdin,
-			intent.Stdout,
-		)
+		server, err := mcpserver.New(mcpserver.Options{
+			ToolOperation: mcpserver.ToolOperation(mcpfactorysession.BindToolOperation(
+				service, nil, installSmokeRequestPreparation(), installSmokeWorkflowDefinitions(),
+			)),
+		})
+		if err != nil {
+			return err
+		}
+		session, err := mcpstdio.Open(server, intent.Stdin, intent.Stdout)
 		if err != nil {
 			return err
 		}

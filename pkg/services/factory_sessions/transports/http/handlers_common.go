@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"io"
 	"mime"
 	"net/http"
@@ -43,15 +42,6 @@ func (s *Server) writeErrorWithTargets(w http.ResponseWriter, status int, messag
 		Code:    factoryapi.ErrorResponseCode(code),
 		Targets: targetPtr,
 	})
-}
-
-func (s *Server) writeSSEDataJSON(w http.ResponseWriter, v any) error {
-	payload, err := json.Marshal(v)
-	if err != nil {
-		return err
-	}
-	_, err = fmt.Fprintf(w, "data: %s\n\n", payload)
-	return err
 }
 
 func errorFamilyForStatus(status int) factoryapi.ErrorFamily {

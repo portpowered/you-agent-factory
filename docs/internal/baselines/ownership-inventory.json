@@ -1449,6 +1449,8 @@
       "fromOwner": "factory_sessions",
       "toOwner": "recordings",
       "class": "event",
+      "bidirectional": true,
+      "unresolved": true,
       "evidence": "pkg/services/factory_sessions -> pkg/services/recordings"
     },
     {
@@ -1681,6 +1683,14 @@
     },
     {
       "fromOwner": "recordings",
+      "toOwner": "factory_sessions",
+      "class": "command",
+      "bidirectional": true,
+      "unresolved": true,
+      "evidence": "pkg/services/recordings/transports/http -> pkg/services/factory_sessions"
+    },
+    {
+      "fromOwner": "recordings",
       "toOwner": "platform",
       "class": "external_effect",
       "evidence": "pkg/services/recordings/internal -> pkg/platform/logging"
@@ -1852,7 +1862,7 @@
       "class": "protocol_composition",
       "bidirectional": true,
       "unresolved": true,
-      "evidence": "pkg/transports/http/application -> pkg/services/provider_sessions"
+      "evidence": "pkg/transports/http/server.go -> pkg/services/provider_sessions"
     },
     {
       "fromOwner": "transports",
@@ -5054,6 +5064,24 @@
       "destinationKind": "owner"
     },
     {
+      "packagePath": "pkg/services/recordings/internal/services/historical_query",
+      "disposition": "retain",
+      "destination": "recordings",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/recordings/internal/services/historical_query/internal/service",
+      "disposition": "retain",
+      "destination": "recordings",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/recordings/internal/services/historical_query/wire",
+      "disposition": "retain",
+      "destination": "recordings",
+      "destinationKind": "owner"
+    },
+    {
       "packagePath": "pkg/services/recordings/internal/services/projection_query",
       "disposition": "retain",
       "destination": "recordings",
@@ -5830,12 +5858,6 @@
       "destinationKind": "family"
     },
     {
-      "packagePath": "pkg/transports/http/application",
-      "disposition": "retain",
-      "destination": "transports",
-      "destinationKind": "family"
-    },
-    {
       "packagePath": "pkg/transports/http/client",
       "disposition": "retain",
       "destination": "transports",
@@ -5872,19 +5894,7 @@
       "destinationKind": "family"
     },
     {
-      "packagePath": "pkg/transports/http/workstationprojection",
-      "disposition": "retain",
-      "destination": "transports",
-      "destinationKind": "family"
-    },
-    {
       "packagePath": "pkg/transports/mapping",
-      "disposition": "retain",
-      "destination": "transports",
-      "destinationKind": "family"
-    },
-    {
-      "packagePath": "pkg/transports/mapping/composition",
       "disposition": "retain",
       "destination": "transports",
       "destinationKind": "family"
@@ -5927,12 +5937,6 @@
     },
     {
       "packagePath": "pkg/transports/mapping/factorydefinition/retiredboundary",
-      "disposition": "retain",
-      "destination": "transports",
-      "destinationKind": "family"
-    },
-    {
-      "packagePath": "pkg/transports/mapping/factoryeventprojection",
       "disposition": "retain",
       "destination": "transports",
       "destinationKind": "family"

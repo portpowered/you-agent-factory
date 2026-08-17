@@ -18,17 +18,11 @@ import (
 	factorysessionwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire"
 	factoryvisualizationwire "github.com/portpowered/infinite-you/pkg/services/factory_visualization/wire"
 	providersessionshttp "github.com/portpowered/infinite-you/pkg/services/provider_sessions/transports/http"
-	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	acp "github.com/portpowered/infinite-you/pkg/transports/acp"
 	"github.com/portpowered/infinite-you/pkg/transports/cli"
 	workersessionsrootcli "github.com/portpowered/infinite-you/pkg/transports/cli/worker_sessions"
-	httpapplication "github.com/portpowered/infinite-you/pkg/transports/http/application"
-	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
-	"github.com/portpowered/infinite-you/pkg/transports/mapping/composition"
-	factorydefinitionmapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factorydefinition"
-	factorysessionmapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factorysession"
 	mcpstdio "github.com/portpowered/infinite-you/pkg/transports/mcp/stdio"
 )
 
@@ -40,15 +34,8 @@ var platformSet = wire.NewSet(
 var apiSet = wire.NewSet(
 	providersessionshttp.NewAdapter,
 	providersessionshttp.NewHandler,
-	composition.NewHTTPBinder,
-	apisurface.NewRuntimeAPI,
-	composition.NewLiveSessionAPI,
-	factorydefinitionmapping.NewAPI,
-	factorysessionmapping.NewDurableAPI,
-	factorysessionmapping.NewLiveAPI,
-	factorysessionmapping.NewInvocationAPI,
 	mcpstdio.NewOpener,
-	httpapplication.NewHandler,
+	provideHTTPRuntimeBinding,
 )
 
 var servicesSet = wire.NewSet(
@@ -167,6 +154,7 @@ var servicesSet = wire.NewSet(
 	provideConductorInvocationWithProgressFactory,
 	provideFactorySessionReplayInputs,
 	provideRecordingsRoot,
+	provideRecordingsRuntimeOpening,
 	provideReplayArtifactStorage,
 	provideFactoryRuntimeIDGenerator,
 	provideFactoryRuntimeDirectories,
@@ -412,8 +400,6 @@ var BundleSet = wire.NewSet(
 	provideSystemInitializationService,
 	provideSystemInitializationOperation,
 	wire.Bind(new(factorydefinitions.Persistence), new(factorydefinitions.PackagedFactoryPersistence)),
-	wire.Bind(new(recordings.Service), new(recordings.Root)),
-	wire.Bind(new(recordings.RuntimeOpening), new(recordings.Root)),
 	wire.Bind(new(processcontract.ACPServer), new(acp.Server)),
 	wire.Bind(new(factorysessionwire.ApplicationRuntimeOpening), new(*factorysessionwire.RuntimeOpening)),
 	wire.Bind(new(factorysessionwire.InvocationRuntimeOpening), new(*factorysessionwire.RuntimeOpening)),
@@ -433,6 +419,7 @@ var BundleSet = wire.NewSet(
 	initializerapplication.NewOpenedStdioRunnerBuilder,
 	provideFixtureStdioApplicationBuilder,
 	provideRuntimeStdioApplicationBuilder,
+	provideMCPServerBuilder,
 	provideSessionExecutionOpeningFactory,
 	wire.Bind(new(factorysessionwire.StdioExecutionOpening), new(*factorysessionwire.ExecutionOpeningFactory)),
 	factorysessionwire.NewStdioOpeningService,

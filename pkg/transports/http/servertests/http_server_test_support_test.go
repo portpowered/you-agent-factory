@@ -7,6 +7,7 @@ import (
 	modelshttp "github.com/portpowered/infinite-you/pkg/services/models/transports/http"
 	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
 	providersessionshttp "github.com/portpowered/infinite-you/pkg/services/provider_sessions/transports/http"
+	recordingshttp "github.com/portpowered/infinite-you/pkg/services/recordings/transports/http"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workhttp "github.com/portpowered/infinite-you/pkg/services/work/transports/http"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
@@ -29,7 +30,7 @@ func newAPIServerFromRoles(
 	durableExecution apisurface.DurableSessionExecutionAPI,
 	durableLifecycle apisurface.DurableSessionLifecycleAPI,
 	durableListing apisurface.DurableSessionListingAPI,
-	durableProjection apisurface.DurableSessionProjectionAPI,
+	durableResponseEvents apisurface.DurableSessionProjectionAPI,
 	durableLister api.DurableExecutionSessionLister,
 	liveSessionLister factorysessionshttp.LiveSessionListReader,
 	providerSessions providersessions.Service,
@@ -41,11 +42,11 @@ func newAPIServerFromRoles(
 ) *api.Server {
 	handler := factorysessionshttp.NewHandler(factorysessionshttp.Dependencies{
 		Runtime: runtime, FactoryStatus: factoryStatus,
-		Sessions: sessions, SessionEvents: workAPI, Invocation: invocation,
+		Sessions: sessions, Invocation: invocation,
 		FactoryDefinitions: factoryDefinitions, FactoryValidation: factoryValidation,
 		WorkflowPreview:  workflowPreview,
 		DurableExecution: durableExecution, DurableLifecycle: durableLifecycle,
-		DurableListing: durableListing, DurableProjection: durableProjection,
+		DurableListing: durableListing, DurableResponseEvents: durableResponseEvents,
 		DurableLister: durableLister, LiveSessionLister: liveSessionLister,
 		WorkerPrompts:   workerPrompts,
 		SessionRequests: sessionRequests,
@@ -57,5 +58,9 @@ func newAPIServerFromRoles(
 			providersessionshttp.NewAdapter(providerSessions), logger,
 		)
 	}
-	return api.NewServer(handler, workhttp.NewAdapterFromRoles(workRoot, workRoot, workAPI, workRead), modelsHTTP, providerSessionsHTTP, nil, logger)
+	return api.NewServerWithRecordings(
+		recordingshttp.NewLegacyAdapterWithLive(durableResponseEvents, sessionRequests, workAPI),
+		handler, workhttp.NewAdapterFromRoles(workRoot, workRoot, workAPI, workRead),
+		modelsHTTP, providerSessionsHTTP, nil, logger,
+	)
 }

@@ -539,12 +539,100 @@ func provideConfigureInitOperation(
 	), nil
 }
 
+func provideACPConfigureOperation(
+	providersService providers.Service,
+) func(context.Context, []operatorsettings.ACPIntegration) error {
+	return func(ctx context.Context, configured []operatorsettings.ACPIntegration) error {
+		if providersService == nil {
+			return fmt.Errorf("Providers service is required")
+		}
+		configurator, ok := providersService.(interface {
+			ConfigureACPIntegrations(context.Context, []providers.ACPIntegration) error
+		})
+		if !ok {
+			return fmt.Errorf("Providers ACP configuration role is required")
+		}
+		integrations := make([]providers.ACPIntegration, len(configured))
+		for index, value := range configured {
+			integrations[index] = providers.ACPIntegration{
+				ID: value.ID, Name: providers.ID(value.Name), Transport: value.Transport,
+				Command: value.Command,
+			}
+		}
+		return configurator.ConfigureACPIntegrations(ctx, integrations)
+	}
+}
+
 func provideACPCLIService(
 	settings operatorsettings.Service,
 	providersService providers.Service,
 	generateID operatorsettings.IDGenerator,
-) acpcli.Service {
-	return acpcli.Service{Settings: settings, Providers: providersService, GenerateID: generateID}
+) acpcli.Operations {
+	configure := provideACPConfigureOperation(providersService)
+	listWorkers := func(ctx context.Context, home string) (acpcli.WorkerCatalog, error) {
+		if settings == nil {
+			return acpcli.WorkerCatalog{}, fmt.Errorf("Operator Settings service is required")
+		}
+		if providersService == nil {
+			return acpcli.WorkerCatalog{}, fmt.Errorf("Providers service is required")
+		}
+		document, err := settings.LoadDocument(operatorsettings.LoadDocumentRequest{
+			Path: settings.DefaultConfigPath(home),
+		})
+		if err != nil {
+			return acpcli.WorkerCatalog{}, err
+		}
+		configured := document.Document.Workers.ACP.Integrations
+		if err := configure(ctx, configured); err != nil {
+			return acpcli.WorkerCatalog{}, err
+		}
+		listed, err := providersService.ListProviders(ctx, providers.ListProvidersRequest{})
+		if err != nil {
+			return acpcli.WorkerCatalog{}, err
+		}
+		acpProviders := make(map[providers.ID]bool)
+		customProviders := make(map[providers.ID]bool)
+		for _, integration := range configured {
+			customProviders[providers.ID(integration.Name)] = true
+		}
+		for _, descriptor := range acpcli.FilterACPProviders(listed, configured).Providers {
+			acpProviders[descriptor.ID] = true
+		}
+		return acpcli.WorkerCatalog{
+			Providers: listed.Providers, ACP: acpProviders, Custom: customProviders,
+		}, nil
+	}
+	add := func(ctx context.Context, home, name, transport, command string) error {
+		if generateID == nil {
+			return fmt.Errorf("ACP integration ID generator is required")
+		}
+		if settings == nil {
+			return fmt.Errorf("Operator Settings service is required")
+		}
+		document, err := settings.ConfigureACPIntegrationAdd(ctx, settings.DefaultConfigPath(home), operatorsettings.ACPIntegration{
+			ID: generateID(), Name: name, Transport: transport, Command: command,
+		})
+		if err != nil {
+			return err
+		}
+		return configure(ctx, document.Workers.ACP.Integrations)
+	}
+	remove := func(ctx context.Context, home, name string) error {
+		if settings == nil {
+			return fmt.Errorf("Operator Settings service is required")
+		}
+		document, err := settings.ConfigureACPIntegrationDelete(ctx, settings.DefaultConfigPath(home), name)
+		if err != nil {
+			return err
+		}
+		return configure(ctx, document.Workers.ACP.Integrations)
+	}
+	return acpcli.Operations{
+		ListWorkersOperation: listWorkers,
+		ConfigureOperation:   configure,
+		AddOperation:         add,
+		DeleteOperation:      remove,
+	}
 }
 
 func provideQueryFactoryOperation(transport standardCLIHTTPProtocol) cli.QueryFactoryOperation {

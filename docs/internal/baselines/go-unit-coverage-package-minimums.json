@@ -1857,6 +1857,24 @@
       "minimum": 100.00
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/historical_query",
+      "exception": {
+        "kind": "measurement",
+        "justification": "The active unit coverage profile contains no measurable statements for this package.",
+        "owner": "backend-quality",
+        "deadline": "2027-07-15",
+        "removalGate": "The unit coverage profile reports at least one measurable statement for this package."
+      }
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/historical_query/internal/service",
+      "minimum": 38.04
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/historical_query/wire",
+      "minimum": 100.00
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/projection_query",
       "exception": {
         "kind": "measurement",
@@ -2421,20 +2439,8 @@
       "minimum": 73.91
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/transports/http/application",
-      "minimum": 85.00
-    },
-    {
-      "package": "github.com/portpowered/infinite-you/pkg/transports/http/workstationprojection",
-      "minimum": 30.69
-    },
-    {
       "package": "github.com/portpowered/infinite-you/pkg/transports/mapping",
       "minimum": 71.38
-    },
-    {
-      "package": "github.com/portpowered/infinite-you/pkg/transports/mapping/composition",
-      "minimum": 61.11
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig",
@@ -2459,10 +2465,6 @@
     {
       "package": "github.com/portpowered/infinite-you/pkg/transports/mapping/factorydefinition/retiredboundary",
       "minimum": 90.90
-    },
-    {
-      "package": "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryeventprojection",
-      "minimum": 85.71
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/transports/mapping/factorysession",

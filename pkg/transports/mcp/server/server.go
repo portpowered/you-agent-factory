@@ -11,7 +11,6 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	platformstdio "github.com/portpowered/infinite-you/pkg/platform/stdio"
-	mcpfactorysession "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/mcp"
 	mcpgenerated "github.com/portpowered/infinite-you/pkg/transports/mcp/generated"
 )
 
@@ -20,10 +19,15 @@ const (
 	defaultServerVersion = "dev"
 )
 
-// Options configures one MCP server instance around the exact injected tool
-// operation used by production and protocol tests.
+// ToolOperation is an owner-neutral raw MCP dispatch role. The shared server
+// does not know which product service owns a tool; Wire supplies the
+// precomposed operation and this package only handles protocol values.
+type ToolOperation func(context.Context, string, json.RawMessage) (json.RawMessage, error)
+
+// Options configures one MCP server instance around the exact injected raw
+// tool operation used by production and protocol tests.
 type Options struct {
-	ToolOperation mcpfactorysession.ToolOperation
+	ToolOperation ToolOperation
 	ServerName    string
 	ServerVersion string
 }

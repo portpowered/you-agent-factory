@@ -972,7 +972,7 @@ func TestWorkersACPCommandsValidateAndRouteRequests(t *testing.T) {
 
 	options := CommandFactory{
 		homeDir: func() (string, error) { return t.TempDir(), nil },
-		acp:     acpcli.Service{},
+		acp:     acpcli.Operations{},
 	}
 	tests := []struct {
 		name     string

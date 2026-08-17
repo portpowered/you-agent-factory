@@ -1,6 +1,4 @@
-// Package factoryeventprojection maps public Factory events into the canonical
-// Factory world-state projection boundary.
-package factoryeventprojection
+package http
 
 import (
 	"encoding/json"
@@ -11,8 +9,8 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
-// ReconstructFactoryWorldState converts public events at the transport
-// boundary, then delegates ordering and reduction to the Factory owner.
+// ReconstructFactoryWorldState converts public HTTP events at the Recordings
+// transport boundary, then delegates ordering and reduction to the owner.
 func ReconstructFactoryWorldState(
 	reconstruct recordings.WorldStateReconstructor,
 	events []factoryapi.FactoryEvent,
@@ -29,10 +27,9 @@ func ReconstructFactoryWorldState(
 	return reconstruct(canonicalEvents, selectedTick)
 }
 
-// CanonicalFactoryEvent converts one public Factory event into the canonical
-// event representation used by recordings and projections. Inference and
-// model response payloads translate the public provider-session projection
-// into the Providers-owned opaque continuation before decoding.
+// CanonicalFactoryEvent converts one public HTTP event to the Recordings
+// canonical event input. Provider-session response payloads are normalized to
+// the Providers-owned continuation value before the Factory decoder runs.
 func CanonicalFactoryEvent(event factoryapi.FactoryEvent) (recordings.FactoryEvent, error) {
 	return canonicalFactoryEvent(event)
 }

@@ -5,9 +5,29 @@ package recordingmcp
 func DiscoverTools() []ToolDefinition {
 	return []ToolDefinition{
 		queryStatusTool(),
+		queryHistoryTool(),
 		appendEventTool(),
 		loadReplayTool(),
 		readPortableArtifactTool(),
+	}
+}
+
+func queryHistoryTool() ToolDefinition {
+	return ToolDefinition{
+		Name: ToolQueryHistory,
+		Description: "Query ordered canonical history, selected world state, and dispatch facts through the " +
+			"accepted Recordings root without constructing Recordings internals.",
+		InputSchema:  queryHistoryInputSchema(),
+		OutputSchema: toolResponseSchema(historicalRecordingQueryResultSchema()),
+		SuccessStableFields: []string{
+			"result.Recording.RecordingID",
+			"result.Status",
+			"result.Events",
+			"result.WorldState",
+			"result.WorkstationRequests",
+			"result.Dispatches",
+		},
+		ErrorStableFields: sharedErrorStableFields,
 	}
 }
 

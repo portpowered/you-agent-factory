@@ -255,15 +255,15 @@
     },
     {
       "packagePath": "pkg/services/recordings/transports/http",
-      "fileCount": 17,
+      "fileCount": 24,
       "owner": "backend-maintainers",
-      "removalReason": "pre-existing baseline debt recorded 2026-08-08; split this package into focused sub-packages and remove this entry."
+      "removalReason": "P5B-2 moved the canonical history HTTP adapter family under the Recordings owner; split this package into focused sub-packages and remove this entry after the transport cutover."
     },
     {
       "packagePath": "pkg/services/recordings/transports/mcp",
-      "fileCount": 18,
+      "fileCount": 19,
       "owner": "backend-maintainers",
-      "removalReason": "pre-existing baseline debt recorded 2026-08-08; split this package into focused sub-packages and remove this entry."
+      "removalReason": "P5B-2 added the Recordings owner MCP history operation; split this package into focused sub-packages and remove this entry after the transport cutover."
     },
     {
       "packagePath": "pkg/services/work",

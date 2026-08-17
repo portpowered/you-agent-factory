@@ -163,7 +163,7 @@ func TestSDKProtocolErrors(t *testing.T) {
 func scriptedToolOperation(
 	result json.RawMessage,
 	err error,
-) mcpfactorysession.ToolOperation {
+) ToolOperation {
 	return func(context.Context, string, json.RawMessage) (json.RawMessage, error) {
 		return result, err
 	}

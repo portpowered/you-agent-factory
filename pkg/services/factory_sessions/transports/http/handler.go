@@ -25,50 +25,48 @@ import (
 // Handler owns the generated HTTP operation implementations for Factory
 // Sessions and their session-scoped Factory and Work resources.
 type Adapter struct {
-	sessionsRoot       factorysessions.Service
-	liveControl        factorysessions.LiveControlService
-	sessionEvents      SessionEventAPI
-	runtime            apisurface.RuntimeAPI
-	factoryStatus      apisurface.FactoryStatusAPI
-	sessions           apisurface.LiveSessionAPI
-	invocation         apisurface.InvocationAPI
-	factoryDefinitions apisurface.FactorySaveAPI
-	factoryValidation  factorydefinitions.SubmittedDefinitionValidationOperation
-	workflowPreview    factoryruntime.WorkflowPreviewOperation
-	durableExecution   apisurface.DurableSessionExecutionAPI
-	durableLifecycle   apisurface.DurableSessionLifecycleAPI
-	durableListing     apisurface.DurableSessionListingAPI
-	durableProjection  apisurface.DurableSessionProjectionAPI
-	durableLister      DurableExecutionSessionLister
-	liveSessionLister  LiveSessionListReader
-	workerPrompts      workers.PromptTemplates
-	invocationWorkType factorydefinitions.InvocationWorkTypeService
-	sessionRequests    RequestPreparation
-	logger             *zap.Logger
+	sessionsRoot          factorysessions.Service
+	liveControl           factorysessions.LiveControlService
+	runtime               apisurface.RuntimeAPI
+	factoryStatus         apisurface.FactoryStatusAPI
+	sessions              apisurface.LiveSessionAPI
+	invocation            apisurface.InvocationAPI
+	factoryDefinitions    apisurface.FactorySaveAPI
+	factoryValidation     factorydefinitions.SubmittedDefinitionValidationOperation
+	workflowPreview       factoryruntime.WorkflowPreviewOperation
+	durableExecution      apisurface.DurableSessionExecutionAPI
+	durableLifecycle      apisurface.DurableSessionLifecycleAPI
+	durableListing        apisurface.DurableSessionListingAPI
+	durableResponseEvents DurableResponseEventsAPI
+	durableLister         DurableExecutionSessionLister
+	liveSessionLister     LiveSessionListReader
+	workerPrompts         workers.PromptTemplates
+	invocationWorkType    factorydefinitions.InvocationWorkTypeService
+	sessionRequests       RequestPreparation
+	logger                *zap.Logger
 }
 
 // Dependencies are the exact injected roles used by the Factory Sessions HTTP
 // adapter. They are supplied by the already-opened runtime composition.
 type Dependencies struct {
-	SessionsRoot       factorysessions.Service
-	LiveControl        factorysessions.LiveControlService
-	SessionEvents      SessionEventAPI
-	Runtime            apisurface.RuntimeAPI
-	FactoryStatus      apisurface.FactoryStatusAPI
-	Sessions           apisurface.LiveSessionAPI
-	Invocation         apisurface.InvocationAPI
-	FactoryDefinitions apisurface.FactorySaveAPI
-	FactoryValidation  factorydefinitions.SubmittedDefinitionValidationOperation
-	WorkflowPreview    factoryruntime.WorkflowPreviewOperation
-	DurableExecution   apisurface.DurableSessionExecutionAPI
-	DurableLifecycle   apisurface.DurableSessionLifecycleAPI
-	DurableListing     apisurface.DurableSessionListingAPI
-	DurableProjection  apisurface.DurableSessionProjectionAPI
-	DurableLister      DurableExecutionSessionLister
-	LiveSessionLister  LiveSessionListReader
-	WorkerPrompts      workers.PromptTemplates
-	InvocationWorkType factorydefinitions.InvocationWorkTypeService
-	SessionRequests    RequestPreparation
+	SessionsRoot          factorysessions.Service
+	LiveControl           factorysessions.LiveControlService
+	Runtime               apisurface.RuntimeAPI
+	FactoryStatus         apisurface.FactoryStatusAPI
+	Sessions              apisurface.LiveSessionAPI
+	Invocation            apisurface.InvocationAPI
+	FactoryDefinitions    apisurface.FactorySaveAPI
+	FactoryValidation     factorydefinitions.SubmittedDefinitionValidationOperation
+	WorkflowPreview       factoryruntime.WorkflowPreviewOperation
+	DurableExecution      apisurface.DurableSessionExecutionAPI
+	DurableLifecycle      apisurface.DurableSessionLifecycleAPI
+	DurableListing        apisurface.DurableSessionListingAPI
+	DurableResponseEvents DurableResponseEventsAPI
+	DurableLister         DurableExecutionSessionLister
+	LiveSessionLister     LiveSessionListReader
+	WorkerPrompts         workers.PromptTemplates
+	InvocationWorkType    factorydefinitions.InvocationWorkTypeService
+	SessionRequests       RequestPreparation
 }
 
 type RequestPreparation interface {
@@ -82,11 +80,15 @@ type RequestPreparation interface {
 	PrepareEventReconnect(factorysessions.EventReconnectRequest) (factorysessions.EventReconnectRequest, error)
 }
 
-// SessionEventAPI is the narrow Factory Sessions event seam retained by this
-// transport. Work HTTP does not participate in session event ownership.
-type SessionEventAPI interface {
-	SubscribeFactoryEventsForSession(context.Context, string, *factorydefinitions.FactoryEventReconnectCursor) (*factorydefinitions.FactoryEventStream, error)
-	ProbeFactoryEventsForSession(context.Context, string, *factorydefinitions.FactoryEventReconnectCursor) error
+// DurableResponseEventsAPI is the only durable projection capability retained
+// by the Sessions HTTP adapter. Canonical history, dispatch, and artifact
+// reads are owned by Recordings; this narrow role exists solely for ephemeral
+// FactoryResponseEvent delivery.
+type DurableResponseEventsAPI interface {
+	SubscribeDurableFactoryResponseEvents(
+		context.Context,
+		factorysessions.ResponseEventSubscriptionRequest,
+	) (apisurface.FactoryResponseEventSubscription, error)
 }
 
 // NewHandler constructs an inert Factory Sessions HTTP adapter.
@@ -96,19 +98,60 @@ func NewHandler(deps Dependencies, logger *zap.Logger) *Adapter {
 	}
 	return &Adapter{
 		sessionsRoot: deps.SessionsRoot, liveControl: deps.LiveControl,
-		sessionEvents: deps.SessionEvents,
-		runtime:       deps.Runtime, factoryStatus: deps.FactoryStatus,
+		runtime: deps.Runtime, factoryStatus: deps.FactoryStatus,
 		sessions:           deps.Sessions,
 		invocation:         deps.Invocation,
 		factoryDefinitions: deps.FactoryDefinitions, factoryValidation: deps.FactoryValidation,
 		workflowPreview:  deps.WorkflowPreview,
 		durableExecution: deps.DurableExecution, durableLifecycle: deps.DurableLifecycle,
-		durableListing: deps.DurableListing, durableProjection: deps.DurableProjection,
+		durableListing: deps.DurableListing, durableResponseEvents: deps.DurableResponseEvents,
 		durableLister: deps.DurableLister, liveSessionLister: deps.LiveSessionLister,
 		workerPrompts: deps.WorkerPrompts, invocationWorkType: deps.InvocationWorkType,
 		sessionRequests: deps.SessionRequests,
 		logger:          logger,
 	}
+}
+
+// FactoryStatusSessionReader is the narrow session-scoped observation role
+// used by the Factory Sessions status routes. Wire supplies the owner root
+// only after confirming it exposes this capability.
+type FactoryStatusSessionReader interface {
+	ObserveForSession(
+		context.Context,
+		string,
+		factoryruntime.ObserveRequest,
+	) (factoryruntime.ObserveResult, error)
+}
+
+type factoryStatusAPI struct {
+	sessions  FactoryStatusSessionReader
+	projector factoryruntime.FactoryStatusProjector
+}
+
+// NewFactoryStatusAPI binds status projection to the Factory Sessions session
+// router. Factory Sessions owns session identity; the selected session gateway
+// owns the live observation.
+func NewFactoryStatusAPI(
+	sessions FactoryStatusSessionReader,
+	projector factoryruntime.FactoryStatusProjector,
+) apisurface.FactoryStatusAPI {
+	return &factoryStatusAPI{sessions: sessions, projector: projector}
+}
+
+func (api *factoryStatusAPI) ProjectFactoryStatus(ctx context.Context, sessionID string) (factoryruntime.FactoryStatus, error) {
+	if api == nil || api.sessions == nil || api.projector == nil {
+		return factoryruntime.FactoryStatus{}, factoryruntime.ErrNotRunning
+	}
+	if sessionID = strings.TrimSpace(sessionID); sessionID == "" {
+		sessionID = factorysessions.DefaultSessionID
+	}
+	result, err := api.sessions.ObserveForSession(ctx, sessionID, factoryruntime.ObserveRequest{
+		Scope: factoryruntime.ObservationScopeFull,
+	})
+	if err != nil {
+		return factoryruntime.FactoryStatus{}, err
+	}
+	return api.projector.ProjectFactoryStatusFromObservation(result.Observation), nil
 }
 
 // Server is retained as a private receiver alias while the moved handler files

@@ -1,8 +1,6 @@
 package http
 
 import (
-	"net/http"
-
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factorysessionmapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factorysession"
 	"go.uber.org/zap"
@@ -32,13 +30,13 @@ func NewHandlerFromRoot(binding RootBinding, logger *zap.Logger) *Adapter {
 	durable := factorysessionmapping.NewDurableAPI(binding.Sessions)
 	liveControl, _ := binding.Sessions.(factorysessions.LiveControlService)
 	return NewHandler(Dependencies{
-		SessionsRoot:      binding.Sessions,
-		LiveControl:       liveControl,
-		DurableExecution:  durable,
-		DurableLifecycle:  durable,
-		DurableListing:    durable,
-		DurableProjection: durable,
-		SessionRequests:   binding.Prepare,
+		SessionsRoot:          binding.Sessions,
+		LiveControl:           liveControl,
+		DurableExecution:      durable,
+		DurableLifecycle:      durable,
+		DurableListing:        durable,
+		DurableResponseEvents: durable,
+		SessionRequests:       binding.Prepare,
 	}, logger)
 }
 
@@ -67,12 +65,4 @@ func (noopRequestPreparation) PrepareResult(request factorysessions.ResultReques
 }
 func (noopRequestPreparation) PrepareEventReconnect(request factorysessions.EventReconnectRequest) (factorysessions.EventReconnectRequest, error) {
 	return request, nil
-}
-
-func (s *Server) requireSessionsRoot(w http.ResponseWriter) (SessionsRoot, bool) {
-	if s.sessionsRoot == nil {
-		s.writeError(w, http.StatusInternalServerError, "session-scoped API is unavailable", "INTERNAL_ERROR")
-		return nil, false
-	}
-	return s.sessionsRoot, true
 }

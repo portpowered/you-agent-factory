@@ -428,6 +428,9 @@
     "pkg/services/recordings/internal/services/canonical_ledger",
     "pkg/services/recordings/internal/services/canonical_ledger/internal/service",
     "pkg/services/recordings/internal/services/canonical_ledger/wire",
+    "pkg/services/recordings/internal/services/historical_query",
+    "pkg/services/recordings/internal/services/historical_query/internal/service",
+    "pkg/services/recordings/internal/services/historical_query/wire",
     "pkg/services/recordings/internal/services/projection_query",
     "pkg/services/recordings/internal/services/projection_query/internal/service",
     "pkg/services/recordings/internal/services/projection_query/wire",
@@ -553,20 +556,16 @@
     "pkg/transports/cli/workflow",
     "pkg/transports/http",
     "pkg/transports/http/apitypes",
-    "pkg/transports/http/application",
     "pkg/transports/http/client",
     "pkg/transports/http/generated",
     "pkg/transports/http/servertests/factorysessionsse",
-    "pkg/transports/http/workstationprojection",
     "pkg/transports/mapping",
-    "pkg/transports/mapping/composition",
     "pkg/transports/mapping/factoryconfig",
     "pkg/transports/mapping/factoryconfig/authored",
     "pkg/transports/mapping/factoryconfig/diagnostics",
     "pkg/transports/mapping/factoryconfig/openapitests",
     "pkg/transports/mapping/factorydefinition",
     "pkg/transports/mapping/factorydefinition/retiredboundary",
-    "pkg/transports/mapping/factoryeventprojection",
     "pkg/transports/mapping/factorysession",
     "pkg/transports/mapping/factorysnapshot",
     "pkg/transports/mapping/factorytarget",
@@ -2508,6 +2507,21 @@
       "destination": "recordings/internal/services/canonical_ledger"
     },
     {
+      "packagePath": "pkg/services/recordings/internal/services/historical_query",
+      "disposition": "retain",
+      "destination": "recordings/internal/services/historical_query"
+    },
+    {
+      "packagePath": "pkg/services/recordings/internal/services/historical_query/internal/service",
+      "disposition": "retain",
+      "destination": "recordings/internal/services/historical_query"
+    },
+    {
+      "packagePath": "pkg/services/recordings/internal/services/historical_query/wire",
+      "disposition": "retain",
+      "destination": "recordings/internal/services/historical_query"
+    },
+    {
       "packagePath": "pkg/services/recordings/internal/services/projection_query",
       "disposition": "retain",
       "destination": "recordings/internal/services/projection_query"
@@ -3133,11 +3147,6 @@
       "destination": "transports"
     },
     {
-      "packagePath": "pkg/transports/http/application",
-      "disposition": "retain",
-      "destination": "transports"
-    },
-    {
       "packagePath": "pkg/transports/http/client",
       "disposition": "retain",
       "destination": "transports"
@@ -3153,17 +3162,7 @@
       "destination": "transports"
     },
     {
-      "packagePath": "pkg/transports/http/workstationprojection",
-      "disposition": "retain",
-      "destination": "transports"
-    },
-    {
       "packagePath": "pkg/transports/mapping",
-      "disposition": "retain",
-      "destination": "transports"
-    },
-    {
-      "packagePath": "pkg/transports/mapping/composition",
       "disposition": "retain",
       "destination": "transports"
     },
@@ -3194,11 +3193,6 @@
     },
     {
       "packagePath": "pkg/transports/mapping/factorydefinition/retiredboundary",
-      "disposition": "retain",
-      "destination": "transports"
-    },
-    {
-      "packagePath": "pkg/transports/mapping/factoryeventprojection",
       "disposition": "retain",
       "destination": "transports"
     },

@@ -6,11 +6,10 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"net/http"
 	"os"
 	"path/filepath"
 	"runtime"
-	"strings"
-	"time"
 
 	"github.com/google/uuid"
 	"github.com/portpowered/infinite-you/internal/packagedfactorycatalog"
@@ -27,33 +26,44 @@ import (
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	platformmetrics "github.com/portpowered/infinite-you/pkg/platform/metrics"
 	"github.com/portpowered/infinite-you/pkg/platform/runtimeartifact"
-	platformruntimeartifact "github.com/portpowered/infinite-you/pkg/platform/runtimeartifact"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factorydefinitionshttp "github.com/portpowered/infinite-you/pkg/services/factory_definitions/transports/http"
 	factorydefinitionswire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	sessionexecutioncli "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/cli/sessionexecution"
 	factorysessionshttp "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/http"
+	factorysessionmcp "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/mcp"
 	factorysessionwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire"
 	factoryvisualization "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
 	factoryvisualizationwire "github.com/portpowered/infinite-you/pkg/services/factory_visualization/wire"
 	modelscli "github.com/portpowered/infinite-you/pkg/services/models/transports/cli"
+	modelshttp "github.com/portpowered/infinite-you/pkg/services/models/transports/http"
 	modelswire "github.com/portpowered/infinite-you/pkg/services/models/wire"
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	settingswire "github.com/portpowered/infinite-you/pkg/services/operator_settings/wire"
+	providersessionshttp "github.com/portpowered/infinite-you/pkg/services/provider_sessions/transports/http"
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	recordingscli "github.com/portpowered/infinite-you/pkg/services/recordings/transports/cli"
+	recordingshttp "github.com/portpowered/infinite-you/pkg/services/recordings/transports/http"
+	recordingmcp "github.com/portpowered/infinite-you/pkg/services/recordings/transports/mcp"
 	recordingswire "github.com/portpowered/infinite-you/pkg/services/recordings/wire"
 	systeminitialization "github.com/portpowered/infinite-you/pkg/services/system_initialization"
 	systeminitializationwire "github.com/portpowered/infinite-you/pkg/services/system_initialization/wire"
 	"github.com/portpowered/infinite-you/pkg/services/work"
+	workhttp "github.com/portpowered/infinite-you/pkg/services/work/transports/http"
 	workwire "github.com/portpowered/infinite-you/pkg/services/work/wire"
+	workersessionshttp "github.com/portpowered/infinite-you/pkg/services/worker_sessions/transports/http"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/terminalpolicy"
-	httpapplication "github.com/portpowered/infinite-you/pkg/transports/http/application"
+	transporthttp "github.com/portpowered/infinite-you/pkg/transports/http"
+	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
+	factorydefinitionmapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factorydefinition"
+	factorysessionmapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factorysession"
+	mcpserver "github.com/portpowered/infinite-you/pkg/transports/mcp/server"
 	mcpstdio "github.com/portpowered/infinite-you/pkg/transports/mcp/stdio"
 	"go.uber.org/zap"
 )
@@ -502,165 +512,14 @@ func provideWorkContentStagingService(
 	return workwire.NewContentStagingService(filesystem, random, clock, 0)
 }
 
-type runtimeArtifactClock func() time.Time
-type runtimeArtifactIDGenerator func() string
-
-func provideRuntimeArtifactClock() runtimeArtifactClock             { return time.Now }
-func provideRuntimeArtifactIDGenerator() runtimeArtifactIDGenerator { return uuid.NewString }
-
-func provideRuntimeLoggerFactory() factoryruntime.RuntimeLoggerFactory {
-	return func(logger *zap.Logger, verbose bool) factoryruntime.Logger {
-		return logging.NewZapLogger(logger, verbose)
-	}
-}
-
-func provideRuntimeArtifactRootResolver() factoryruntime.RuntimeArtifactRootResolver {
-	return func(home string) factoryruntime.RuntimeArtifactRoots {
-		if strings.TrimSpace(home) == "" {
-			return factoryruntime.RuntimeArtifactRoots{}
-		}
-		return factoryruntime.RuntimeArtifactRoots{
-			Logs: logging.RuntimeLogsRoot(home), Metrics: platformmetrics.RuntimeMetricsRoot(home),
-		}
-	}
-}
-
-func provideRuntimeArtifactPathReserver() (platformruntimeartifact.Reserver, error) {
-	return platformruntimeartifact.NewReserver(platformfilesystem.Local{})
-}
-
-func provideRuntimeLogOwner(
-	baseLogger *zap.Logger,
-	clock runtimeArtifactClock,
-	newID runtimeArtifactIDGenerator,
-	paths platformruntimeartifact.Reserver,
-) (factoryruntime.RuntimeLogOwner, error) {
-	opener, err := logging.NewRuntimeLogOpener(paths)
-	if err != nil {
-		return nil, err
-	}
-	if baseLogger == nil {
-		return nil, errors.New("runtime log owner base logger is required")
-	}
-	return runtimeLogOwner{
-		baseLogger: baseLogger, opener: opener, clock: clock, newID: newID,
-	}, nil
-}
-
-type runtimeLogOwner struct {
-	baseLogger *zap.Logger
-	opener     *logging.RuntimeLogOpener
-	clock      runtimeArtifactClock
-	newID      runtimeArtifactIDGenerator
-}
-
-func (owner runtimeLogOwner) Open(request factoryruntime.RuntimeLogScopeRequest) (factoryruntime.RuntimeLogSink, error) {
-	if request.Policy == factoryruntime.RuntimeFileLoggingPolicyDisabled {
-		return nil, nil
-	}
-	if owner.opener == nil || owner.clock == nil || owner.newID == nil {
-		return nil, errors.New("runtime log owner is not configured")
-	}
-	opened, err := owner.opener.Open(logging.RuntimeLogOpeningRequest{
-		BaseLogger: owner.baseLogger, RuntimeInstanceID: request.RuntimeInstanceID,
-		RootDirectory: request.RootDirectory, StartTimeUTC: owner.clock(), CollisionID: owner.newID(),
-		Config: logging.RuntimeLogConfig{
-			MaxSize: request.Config.MaxSize, MaxBackups: request.Config.MaxBackups,
-			MaxAge: request.Config.MaxAge, Compress: request.Config.Compress,
-		},
-	})
-	if err != nil {
-		return nil, err
-	}
-	return runtimeLogSinkAdapter{sink: opened}, nil
-}
-
-type runtimeLogSinkAdapter struct{ sink *logging.RuntimeLogSink }
-
-func (adapter runtimeLogSinkAdapter) Logger() *zap.Logger { return adapter.sink.Logger() }
-func (adapter runtimeLogSinkAdapter) Close() error        { return adapter.sink.Close() }
-func (adapter runtimeLogSinkAdapter) Artifact() factoryruntime.RuntimeLogArtifact {
-	artifact := adapter.sink.Artifact()
-	return factoryruntime.RuntimeLogArtifact{
-		Path: artifact.Path, RootDir: artifact.RootDir, StartTimeUTC: artifact.StartTimeUTC,
-		Config: factoryruntime.RuntimeLogStorageConfig{
-			MaxSize: artifact.Config.MaxSize, MaxBackups: artifact.Config.MaxBackups,
-			MaxAge: artifact.Config.MaxAge, Compress: artifact.Config.Compress,
-		},
-	}
-}
-
-func provideRuntimeMetricsOwner(
-	clock runtimeArtifactClock,
-	newID runtimeArtifactIDGenerator,
-	paths platformruntimeartifact.Reserver,
-) (factoryruntime.RuntimeMetricsOwner, error) {
-	opener, err := platformmetrics.NewRuntimeMetricsOpener(paths)
-	if err != nil {
-		return nil, err
-	}
-	return runtimeMetricsOwner{opener: opener, clock: clock, newID: newID}, nil
-}
-
-type runtimeMetricsOwner struct {
-	opener *platformmetrics.RuntimeMetricsOpener
-	clock  runtimeArtifactClock
-	newID  runtimeArtifactIDGenerator
-}
-
-func (owner runtimeMetricsOwner) Open(request factoryruntime.RuntimeMetricsScopeRequest) (factoryruntime.RuntimeMetricsSink, error) {
-	if request.Policy == factoryruntime.RuntimeMetricsPolicyDisabled {
-		return nil, nil
-	}
-	if owner.opener == nil || owner.clock == nil || owner.newID == nil {
-		return nil, errors.New("runtime metrics owner is not configured")
-	}
-	writer, err := owner.opener.Open(platformmetrics.RuntimeMetricsOpeningRequest{
-		SessionID: request.Scope.SessionID, RuntimeInstanceID: request.Scope.RuntimeInstanceID,
-		FolderPath: request.Scope.FolderPath, FactoryDirectory: request.Scope.FactoryDir,
-		RootDirectory: request.RootDirectory, StartTimeUTC: owner.clock(), CollisionID: owner.newID(),
-		Config: platformmetrics.RuntimeMetricsConfig{
-			MaxSize: request.Config.MaxSize, MaxBackups: request.Config.MaxBackups,
-			MaxAge: request.Config.MaxAge, Compress: request.Config.Compress,
-		},
-	})
-	if err != nil {
-		return nil, err
-	}
-	return factoryruntime.NewRuntimeMetricsSink(
-		runtimeMetricRecordWriterAdapter{writer: writer},
-		request.Scope,
-		owner.clock,
-		factoryruntime.RuntimeMetricsArtifact{
-			Path: writer.Path(), RootDir: writer.RootDir(),
-			StartTimeUTC: writer.StartTimeUTC(),
-		},
-	)
-}
-
-type runtimeMetricRecordWriterAdapter struct {
-	writer *platformmetrics.RuntimeMetricsSink
-}
-
-func (a runtimeMetricRecordWriterAdapter) WriteMetric(
-	ctx context.Context,
-	record factoryruntime.RuntimeMetricRecord,
-) error {
-	return a.writer.WriteMetric(ctx, record)
-}
-
-func (a runtimeMetricRecordWriterAdapter) Close() error {
-	return a.writer.Close()
-}
-
 func provideApplicationRuntimeAdapter(
 	edges serviceedges.Edges,
 	visualizationFactory factoryvisualization.RuntimeFactory,
-	httpHandler *httpapplication.Handler,
+	httpBinding httpRuntimeBinding,
 	newRunner lifecycle.RunnerFactory,
 ) (factorysessionwire.RuntimeAdapter, error) {
-	if visualizationFactory == nil || httpHandler == nil || newRunner == nil {
-		return nil, errors.New("Factory visualization, HTTP handler, and lifecycle component operations are required")
+	if visualizationFactory == nil || httpBinding == nil || newRunner == nil {
+		return nil, errors.New("Factory visualization, HTTP binding, and lifecycle component operations are required")
 	}
 	fixedSink := edges.FactoryVisualizationSink
 	fixedRootObserver := edges.FactoryVisualizationRootObserver
@@ -700,15 +559,7 @@ func provideApplicationRuntimeAdapter(
 				},
 			}
 		}
-		handler, err := httpHandler.Bind(httpapplication.Binding{
-			FactoryRuntime: opened.FactoryRuntime, FactoryDefinitions: opened.FactoryDefinitions,
-			WorkflowPreview: opened.WorkflowPreview, FactorySessions: opened.FactorySessions,
-			LiveControl: opened.LiveControl, Work: opened.Work, Models: opened.Models,
-			ModelsScope: opened.ModelsScope, ModelInvoker: opened.ModelInvoker,
-			Workers: opened.Workers, ProviderSessions: opened.ProviderSessions,
-			WorkerSessions: opened.WorkerSessions, WorkerPrompts: opened.WorkerPrompts,
-			Logger: opened.Logger,
-		})
+		handler, err := httpBinding(opened)
 		if err != nil {
 			return factorysessions.BoundProcessComponents{}, err
 		}
@@ -726,10 +577,41 @@ func provideManagedRunnerFactory() runtimeapplication.ManagedRunnerFactory {
 	return runtimeapplication.NewManagedRunner
 }
 
+type mcpServerBuilder func(
+	factorysessionwire.DurableExecutionService,
+	recordings.Service,
+	factorysessionwire.RequestPreparation,
+	factoryruntime.WorkflowPreviewOperation,
+) (*mcpserver.Server, error)
+
+// provideMCPServerBuilder composes owner adapters at the Wire boundary. The
+// protocol stdio package receives only the resulting inert server and caller
+// streams; it does not construct Factory Sessions, Recordings, or workflow
+// services while an opening is being selected.
+func provideMCPServerBuilder() mcpServerBuilder {
+	return func(
+		execution factorysessionwire.DurableExecutionService,
+		recordingsService recordings.Service,
+		prepare factorysessionwire.RequestPreparation,
+		workflowPreview factoryruntime.WorkflowPreviewOperation,
+	) (*mcpserver.Server, error) {
+		inspection := factorysessionmcp.RecordingsInspection(recordingsService)
+		if inspection == nil {
+			inspection = recordingmcp.NewLegacyFactorySessionInspection(execution)
+		}
+		return mcpserver.New(mcpserver.Options{
+			ToolOperation: mcpserver.ToolOperation(factorysessionmcp.BindToolOperation(
+				execution, inspection, prepare, workflowPreview,
+			)),
+		})
+	}
+}
+
 func provideFixtureStdioApplicationBuilder(
 	build initializerapplication.StdioRunnerBuilder,
 	newRunner lifecycle.RunnerFactory,
 	open mcpstdio.Opener,
+	buildServer mcpServerBuilder,
 	prepare factorysessionwire.RequestPreparation,
 	workflowPreview factoryruntime.WorkflowPreviewOperation,
 ) factorysessionwire.FixtureStdioApplicationBuilder {
@@ -750,7 +632,11 @@ func provideFixtureStdioApplicationBuilder(
 			if err := sessionCtx.Err(); err != nil {
 				return initializer.OpenedApplication{}, err
 			}
-			session, err := open(execution, prepare, workflowPreview, sessionInput, sessionOutput)
+			server, err := buildServer(execution, nil, prepare, workflowPreview)
+			if err != nil {
+				return initializer.OpenedApplication{}, err
+			}
+			session, err := open(server, sessionInput, sessionOutput)
 			if err != nil {
 				return initializer.OpenedApplication{}, err
 			}
@@ -764,6 +650,7 @@ func provideRuntimeStdioApplicationBuilder(
 	build initializerapplication.OpenedStdioRunnerBuilder,
 	newRunner lifecycle.RunnerFactory,
 	open mcpstdio.Opener,
+	buildServer mcpServerBuilder,
 	prepare factorysessionwire.RequestPreparation,
 ) factorysessionwire.RuntimeStdioApplicationBuilder {
 	return func(
@@ -784,7 +671,11 @@ func provideRuntimeStdioApplicationBuilder(
 				if err := sessionCtx.Err(); err != nil {
 					return initializer.OpenedApplication{}, err
 				}
-				session, err := open(opened.Execution, prepare, opened.WorkflowPreview, sessionInput, sessionOutput)
+				server, err := buildServer(opened.Execution, opened.Recordings, prepare, opened.WorkflowPreview)
+				if err != nil {
+					return initializer.OpenedApplication{}, err
+				}
+				session, err := open(server, sessionInput, sessionOutput)
 				if err != nil {
 					return initializer.OpenedApplication{}, err
 				}
@@ -954,36 +845,119 @@ func provideDirectJavaScriptSyncRunner() factorysessionwire.DirectJavaScriptSync
 	return sessionexecutioncli.RunNormalizedSync
 }
 
-func provideDirectJavaScriptHostAdapter(
-	httpHandler *httpapplication.Handler,
-	start platformhttpserver.Starter,
-	newRunner lifecycle.RunnerFactory,
-	logger *zap.Logger,
-) (factorysessionwire.DirectJavaScriptHostAdapter, error) {
-	if httpHandler == nil || start == nil || newRunner == nil || logger == nil {
-		return nil, errors.New("direct JavaScript HTTP handler, starter, and lifecycle runner are required")
+// httpRuntimeBinding is the Wire-owned operation that builds the owner HTTP
+// adapters for one opened runtime and returns the generated route shell.
+// Runtime opening invokes this operation directly; no transport application
+// binder or central mapping graph is involved.
+type httpRuntimeBinding func(factorysessionwire.OpenedApplicationRuntime) (http.Handler, error)
+
+// provideHTTPRuntimeBinding is the single Wire-owned live HTTP composition
+// path. It builds each owner adapter for the opened runtime and hands the
+// generated route shell only those prebuilt adapters.
+func provideHTTPRuntimeBinding(
+	factoryStatusProjector factoryruntime.FactoryStatusProjector,
+	providerSessionsHTTP *providersessionshttp.Handler,
+	modelsContent work.ContentPreparation,
+	validation factorydefinitions.SubmittedDefinitionValidationOperation,
+	invocationWorkType factorydefinitions.InvocationWorkTypeService,
+	sessionRequests factorysessionshttp.RequestPreparation,
+) (httpRuntimeBinding, error) {
+	if factoryStatusProjector == nil || providerSessionsHTTP == nil || modelsContent == nil || validation == nil || invocationWorkType == nil || sessionRequests == nil {
+		return nil, errors.New("construct HTTP runtime binding: owner adapters and boundary policies are required")
 	}
-	return func(
-		execution factorysessionwire.OwnedExecutionService,
-		host factorysessions.RuntimeHostRequest,
-		observer factorysessions.RuntimeHostObserver,
-	) (lifecycle.Component, error) {
-		handler, err := httpHandler.BindDurableExecution(execution, logger)
-		if err != nil {
-			return nil, err
-		}
-		return newRunner(func(ctx context.Context) error {
-			return start(ctx, platformhttpserver.StartRequest{
-				Handler: handler, Host: host.Host, Port: host.Port,
-				AutoPort: host.AutoPort, Logger: logger,
-				OnBound: func(binding platformhttpserver.Binding) {
-					if observer != nil {
-						observer(factorysessions.RuntimeHostBinding{
-							Host: binding.Host, Port: binding.Port,
-						})
-					}
-				},
-			})
-		}), nil
+	return func(opened factorysessionwire.OpenedApplicationRuntime) (http.Handler, error) {
+		return newHTTPRuntimeHandler(opened, factoryStatusProjector, providerSessionsHTTP, modelsContent, validation, invocationWorkType, sessionRequests)
 	}, nil
+}
+
+func newHTTPRuntimeHandler(
+	opened factorysessionwire.OpenedApplicationRuntime,
+	factoryStatusProjector factoryruntime.FactoryStatusProjector,
+	providerSessionsHTTP *providersessionshttp.Handler,
+	modelsContent work.ContentPreparation,
+	validation factorydefinitions.SubmittedDefinitionValidationOperation,
+	invocationWorkType factorydefinitions.InvocationWorkTypeService,
+	sessionRequests factorysessionshttp.RequestPreparation,
+) (http.Handler, error) {
+	if opened.FactoryRuntime == nil || opened.FactoryDefinitions == nil || opened.FactorySessions == nil || opened.LiveControl == nil {
+		return nil, errors.New("bind HTTP mappings: opened Factory Session roles are required")
+	}
+	modelInvoker := opened.ModelInvoker
+	if modelInvoker == nil {
+		modelInvoker = opened.Workers
+	}
+	modelsAdapter := modelshttp.NewAdapter(opened.Models, modelInvoker, modelsContent, opened.ModelsScope)
+	modelsHandler := modelshttp.NewHandler(modelsAdapter, opened.Logger)
+	if modelsHandler == nil {
+		return nil, errors.New("bind HTTP runtime: Models service, invoker, content preparation, and logger are required")
+	}
+
+	definitionMapping := factorydefinitionmapping.New(opened.FactoryDefinitions)
+	runtimeAPI := apisurface.NewRuntimeAPI(opened.FactoryRuntime, definitionMapping)
+	if _, ok := opened.FactoryRuntime.(interface {
+		SubscribeFactoryEvents(
+			context.Context,
+			*factorydefinitions.FactoryEventReconnectCursor,
+			factorydefinitions.FactoryEventReconnectScope,
+		) (*factorydefinitions.FactoryEventStream, error)
+	}); !ok {
+		return nil, errors.New("bind HTTP mappings: Factory Runtime event subscription is required")
+	}
+	statusSessions, ok := opened.FactorySessions.(factorysessionshttp.FactoryStatusSessionReader)
+	if !ok {
+		return nil, errors.New("bind HTTP mappings: Factory Sessions session-scoped status observation is required")
+	}
+	statusAPI := factorysessionshttp.NewFactoryStatusAPI(statusSessions, factoryStatusProjector)
+	liveGateway, ok := opened.FactorySessions.(factorysessionmapping.LiveGateway)
+	if !ok {
+		return nil, errors.New("bind HTTP mappings: Factory Sessions live result gateway is required")
+	}
+	factoryDefinitionsAPI := factorydefinitionmapping.NewAPI(definitionMapping, definitionMapping)
+	liveAPI := factorysessionmapping.NewLiveAPI(opened.LiveControl, liveGateway)
+	invocationAPI := factorysessionmapping.NewInvocationAPI(opened.FactorySessions)
+	durableAPI := factorysessionmapping.NewDurableAPI(opened.FactorySessions)
+	sessionsHandler := factorysessionshttp.NewHandler(factorysessionshttp.Dependencies{
+		SessionsRoot: opened.FactorySessions, LiveControl: opened.LiveControl,
+		Runtime: runtimeAPI, FactoryStatus: statusAPI,
+		Sessions: liveAPI, Invocation: invocationAPI, FactoryDefinitions: factoryDefinitionsAPI,
+		FactoryValidation: validation, WorkflowPreview: opened.WorkflowPreview,
+		DurableExecution: durableAPI, DurableLifecycle: durableAPI,
+		DurableListing: durableAPI, DurableResponseEvents: durableAPI,
+		DurableLister:     opened.FactorySessions,
+		LiveSessionLister: factorysessionshttp.ReadProjectionSessionListReader{Reader: opened.LiveControl},
+		WorkerPrompts:     opened.WorkerPrompts, InvocationWorkType: invocationWorkType,
+		SessionRequests: sessionRequests,
+	}, opened.Logger)
+	workHandler := workhttpAdapter(opened, factoryDefinitionsAPI, invocationWorkType)
+	factoryDefinitionsHandler := factorydefinitionshttp.NewHandlerFromRoot(
+		factorydefinitionshttp.RootBinding{Definitions: opened.FactoryDefinitions}, opened.Logger,
+	)
+	legacyDurable := factorysessionmapping.NewDurableAPI(opened.FactorySessions)
+	recordingsAdapter := recordingshttp.NewAdapterWithLegacyFallback(
+		opened.Recordings, legacyDurable, sessionRequests, opened.FactorySessions,
+	)
+	var workerSessionsHandler *workersessionshttp.Handler
+	if opened.WorkerSessions != nil {
+		workerSessionsHandler = workersessionshttp.NewHandler(
+			workersessionshttp.NewAdapterWithStartAndContinueAndInterruptAndControl(
+				opened.WorkerSessions, opened.WorkerSessions, opened.WorkerSessions,
+				opened.WorkerSessions, opened.WorkerSessions, opened.Work,
+			), opened.Logger,
+		)
+	}
+	return transporthttp.NewServerWithRecordings(
+		recordingsAdapter, sessionsHandler, workHandler, modelsHandler, providerSessionsHTTP,
+		factoryDefinitionsHandler, opened.Logger, workerSessionsHandler,
+	).Handler(), nil
+}
+
+func workhttpAdapter(
+	opened factorysessionwire.OpenedApplicationRuntime,
+	factoryDefinitionsAPI apisurface.FactorySaveAPI,
+	invocationWorkType factorydefinitions.InvocationWorkTypeService,
+) *workhttp.Adapter {
+	return workhttp.NewAdapterWithSessionScope(opened.Work, func(ctx context.Context, sessionID string) error {
+		_, err := factoryDefinitionsAPI.GetCurrentFactoryForSession(ctx, sessionID)
+		return err
+	}).WithDefaultWorkTypeResolver(workhttp.NewDefaultWorkTypeResolver(factoryDefinitionsAPI, invocationWorkType))
 }

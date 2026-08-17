@@ -2,6 +2,7 @@ package http
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -9,6 +10,9 @@ import (
 	"testing"
 	"time"
 
+	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
@@ -66,6 +70,7 @@ func TestGetEventsBySessionId_EncodesFakeRootHistoryAsSSE(t *testing.T) {
 			}
 			delivered := false
 			return recordings.SubscribeResult{
+				RetainedEventCount: 1,
 				Subscription: recordings.EventSubscription(func(context.Context) recordings.SubscriptionOutcome {
 					if delivered {
 						return recordings.SubscriptionOutcome{Kind: recordings.SubscriptionClosed}
@@ -89,7 +94,8 @@ func TestGetEventsBySessionId_EncodesFakeRootHistoryAsSSE(t *testing.T) {
 	if recorder.Code != http.StatusOK ||
 		!strings.Contains(recorder.Header().Get("Content-Type"), "text/event-stream") ||
 		!strings.Contains(body, `"id":"event-1"`) ||
-		recorder.Header().Get(SessionEventStreamFactorySessionHeader) != "session-1" {
+		recorder.Header().Get(SessionEventStreamFactorySessionHeader) != "session-1" ||
+		recorder.Header().Get(factorysessions.SessionEventStreamRetainedCountHeader) != "1" {
 		t.Fatalf("response = %d headers=%#v body=%s, want encoded SSE history", recorder.Code, recorder.Header(), body)
 	}
 }
@@ -214,5 +220,163 @@ func TestGetEventsBySessionId_MapsReconnectQueryIntoFakeRootRequest(t *testing.T
 		request.Cursor.StreamGenerationID != "generation-1" ||
 		request.Cursor.Sequence != 2 {
 		t.Fatalf("SubscribeRequest = %#v, want reconnect cursor generation-1/2 for session-1", request)
+	}
+}
+
+func TestGetEventsBySessionId_DurableCompatibilityPrefersDurableHistoryOverLive(t *testing.T) {
+	t.Parallel()
+
+	const sessionID = "dur-sess-live-compat-http-001"
+	liveCalls := 0
+	durableCalls := 0
+	events := make(chan interfaces.FactoryEvent)
+	close(events)
+	adapter := NewAdapterWithLegacyFallback(
+		&rootFake{
+			queryRecordingStatus: func(recordings.RecordingStatusRequest) (recordings.RecordingStatusResult, error) {
+				return recordings.RecordingStatusResult{Status: recordings.RecordingStatusFacts{
+					RecordingID: recordings.RecordingID(sessionID),
+				}}, nil
+			},
+		},
+		&legacyHistoryFake{
+			events: func(context.Context, string, factorysessions.EventReconnectRequest) (*interfaces.FactoryEventStream, error) {
+				durableCalls++
+				return &interfaces.FactoryEventStream{
+					FactorySessionID: sessionID,
+					History:          []interfaces.FactoryEvent{{Id: "durable-event-1", Type: interfaces.FactoryEventTypeWorkRequest}},
+					Events:           events,
+				}, nil
+			},
+		},
+		nil,
+		&legacyLiveEventsFake{
+			subscribe: func(context.Context, string, *interfaces.FactoryEventReconnectCursor) (*interfaces.FactoryEventStream, error) {
+				liveCalls++
+				return nil, factorysessions.ErrSessionNotFound
+			},
+		},
+	)
+	recorder := httptest.NewRecorder()
+
+	adapter.GetEventsBySessionId(
+		recorder,
+		httptest.NewRequest(http.MethodGet, "/factory-sessions/"+sessionID+"/events", nil),
+		factoryapi.SessionID(sessionID),
+		factoryapi.GetEventsBySessionIdParams{},
+	)
+
+	if recorder.Code != http.StatusOK ||
+		!strings.Contains(recorder.Body.String(), `"id":"durable-event-1"`) ||
+		durableCalls != 1 || liveCalls != 0 {
+		t.Fatalf("response = %d %s, durableCalls=%d liveCalls=%d, want durable compatibility history only", recorder.Code, recorder.Body.String(), durableCalls, liveCalls)
+	}
+}
+
+func TestGetEventsBySessionId_MapsLegacyRecordingsCursorErrorToBadRequest(t *testing.T) {
+	t.Parallel()
+
+	adapter := NewAdapterWithLegacyFallback(
+		nil,
+		nil,
+		nil,
+		&legacyLiveEventsFake{
+			subscribe: func(context.Context, string, *interfaces.FactoryEventReconnectCursor) (*interfaces.FactoryEventStream, error) {
+				return nil, recordings.ErrReconnectCursorNotFound
+			},
+		},
+	)
+	recorder := httptest.NewRecorder()
+
+	adapter.GetEventsBySessionId(
+		recorder,
+		httptest.NewRequest(http.MethodGet, "/factory-sessions/session-1/events", nil),
+		factoryapi.SessionID("session-1"),
+		factoryapi.GetEventsBySessionIdParams{},
+	)
+
+	if recorder.Code != http.StatusBadRequest ||
+		!strings.Contains(recorder.Body.String(), `"code":"BAD_REQUEST"`) ||
+		!strings.Contains(recorder.Body.String(), `"message":"invalid event reconnect cursor"`) {
+		t.Fatalf("response = %d %s, want typed bad request", recorder.Code, recorder.Body.String())
+	}
+}
+
+func TestGetEventsBySessionId_LiveCompatibilityProbeMapsCursorAndReadyOutcome(t *testing.T) {
+	t.Parallel()
+
+	var gotCursor *interfaces.FactoryEventReconnectCursor
+	adapter := NewAdapterWithLegacyFallback(nil, nil, nil, &legacyLiveEventsFake{
+		probe: func(_ context.Context, sessionID string, cursor *interfaces.FactoryEventReconnectCursor) error {
+			if sessionID != "session-live-probe-001" {
+				t.Fatalf("probe sessionID = %q, want session-live-probe-001", sessionID)
+			}
+			gotCursor = cursor
+			return nil
+		},
+	})
+	request := httptest.NewRequest(http.MethodGet, "/factory-sessions/session-live-probe-001/events", nil)
+	request.Header.Set("Accept", "application/json")
+	afterSequence := factoryapi.AfterSequence(5)
+	recorder := httptest.NewRecorder()
+	adapter.GetEventsBySessionId(
+		recorder, request, factoryapi.SessionID("session-live-probe-001"),
+		factoryapi.GetEventsBySessionIdParams{AfterSequence: &afterSequence},
+	)
+	if recorder.Code != http.StatusOK || !strings.Contains(recorder.Body.String(), `"outcome":"STREAM_READY"`) {
+		t.Fatalf("live probe = %d %s, want stream-ready outcome", recorder.Code, recorder.Body.String())
+	}
+	if gotCursor == nil || gotCursor.AfterSequence == nil || *gotCursor.AfterSequence != 5 {
+		t.Fatalf("live reconnect cursor = %#v, want afterSequence=5", gotCursor)
+	}
+}
+
+type legacyLiveEventsFake struct {
+	subscribe func(context.Context, string, *interfaces.FactoryEventReconnectCursor) (*interfaces.FactoryEventStream, error)
+	probe     func(context.Context, string, *interfaces.FactoryEventReconnectCursor) error
+}
+
+func (fake *legacyLiveEventsFake) SubscribeFactoryEventsForSession(ctx context.Context, sessionID string, cursor *interfaces.FactoryEventReconnectCursor) (*interfaces.FactoryEventStream, error) {
+	return fake.subscribe(ctx, sessionID, cursor)
+}
+
+func (fake *legacyLiveEventsFake) ProbeFactoryEventsForSession(ctx context.Context, sessionID string, cursor *interfaces.FactoryEventReconnectCursor) error {
+	if fake.probe == nil {
+		return nil
+	}
+	return fake.probe(ctx, sessionID, cursor)
+}
+
+func TestLegacyFactoryEventWriterProjectsProviderSession(t *testing.T) {
+	t.Parallel()
+
+	payload, err := json.Marshal(map[string]any{
+		"attempt":            1,
+		"continuation":       providers.ContinuationRef{Provider: "antigravity", Kind: providers.SessionIDKind, ProviderSessionID: "provider-session-1"},
+		"durationMillis":     12,
+		"inferenceRequestId": "inference-request-1",
+		"outcome":            "SUCCEEDED",
+		"response":           "ok",
+	})
+	if err != nil {
+		t.Fatalf("marshal event payload: %v", err)
+	}
+	event := interfaces.FactoryEvent{
+		Id:            "event-inference-response-1",
+		Payload:       payload,
+		SchemaVersion: interfaces.FactoryEventSchemaVersionV1,
+		Type:          interfaces.FactoryEventTypeInferenceResponse,
+	}
+	recorder := httptest.NewRecorder()
+
+	if err := legacyFactoryEventWriter(recorder)(event); err != nil {
+		t.Fatalf("legacyFactoryEventWriter: %v", err)
+	}
+	body := recorder.Body.String()
+	if !strings.Contains(body, `"providerSession":{"provider":"antigravity","kind":"session_id","id":"provider-session-1"}`) {
+		t.Fatalf("SSE body = %s, want projected provider session", body)
+	}
+	if strings.Contains(body, `"continuation"`) {
+		t.Fatalf("SSE body = %s, must not expose the worker continuation", body)
 	}
 }

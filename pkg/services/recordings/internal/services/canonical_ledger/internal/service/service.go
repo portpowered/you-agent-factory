@@ -159,7 +159,7 @@ func (service *Service) SubscribeFrom(
 		}
 		return recordings.SubscribeResult{}, err
 	}
-	subscription, err := newEventSubscription(
+	subscription, retainedEventCount, err := newEventSubscription(
 		stream,
 		request.Scope,
 		request.Cursor,
@@ -171,7 +171,8 @@ func (service *Service) SubscribeFrom(
 		return recordings.SubscribeResult{}, err
 	}
 	return recordings.SubscribeResult{
-		Subscription: subscription,
+		Subscription:       subscription,
+		RetainedEventCount: retainedEventCount,
 	}, nil
 }
 

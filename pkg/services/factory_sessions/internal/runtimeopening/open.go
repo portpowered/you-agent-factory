@@ -46,7 +46,8 @@ func openRuntime(
 	automationService automations.Service,
 	factorySessionsRuntimeAssembly roles.RuntimeAssembly,
 	factorySessionExecutionFactory FactorySessionExecutionFactory,
-	recordingsRoot recordings.Root,
+	recordingsService recordings.Service,
+	recordingsRuntime recordings.RuntimeOpening,
 	workersMockCommandRunnerFactory factoryruntime.WorkersMockCommandRunnerFactory,
 	factoryDefinitions factorydefinitions.Service,
 	definitionRuntimeRouter *factorysessions.DefinitionRuntimeRouter,
@@ -79,8 +80,11 @@ func openRuntime(
 	if request == nil {
 		return runtimeProducts{}, fmt.Errorf("runtime opening request is required")
 	}
-	if recordingsRoot == nil {
-		return runtimeProducts{}, fmt.Errorf("construct runtime scope: Recordings root is required")
+	if recordingsService == nil {
+		return runtimeProducts{}, fmt.Errorf("construct runtime scope: Recordings service is required")
+	}
+	if recordingsRuntime == nil {
+		return runtimeProducts{}, fmt.Errorf("construct runtime scope: Recordings runtime opening is required")
 	}
 	definitionRequest := request.FactoryDefinition
 	runtimeRequest := request.FactoryRuntime
@@ -110,8 +114,8 @@ func openRuntime(
 		loadFactory,
 		newLoadedFactory,
 		decodeReplayConfig,
-		recordingsRoot,
-		recordingsRoot.ReplayClock,
+		recordingsRuntime,
+		recordingsRuntime.ReplayClock,
 		factoryScaffoldInitializer,
 		editableFactoryValidator,
 		captureLoadedFactorySnapshot,
@@ -144,7 +148,7 @@ func openRuntime(
 	if clock == nil {
 		return runtimeProducts{}, fmt.Errorf("construct runtime scope: Factory Runtime clock is required")
 	}
-	recordingProjections := recordingsRoot.Projection()
+	recordingProjections := recordingsRuntime.Projection()
 	if recordingProjections == nil {
 		return runtimeProducts{}, fmt.Errorf("construct runtime scope: Recordings projection is unavailable")
 	}
@@ -267,7 +271,7 @@ func openRuntime(
 			runtimeService.DispatchCompletionObserverFactory(),
 			mutationOwner.RecordPetriTokenMutations,
 			recordingProjections.ReconstructFactoryWorldState,
-			recordingsRoot,
+			recordingsRuntime,
 			initialFactorySnapshotFactory,
 			configured.Definition.Directory,
 			root.FactoryRootDir,
@@ -293,7 +297,7 @@ func openRuntime(
 	webhookSubscription, err := startFactoryWebhookSubscription(
 		ctx,
 		webhooksService,
-		recordingsRoot,
+		recordingsService,
 		startupRuntime.RecordingLedger(),
 		load.LoadedFactoryCfg,
 		load.ReplayArtifact == nil,
@@ -416,6 +420,8 @@ func openRuntime(
 	opened.lifecycle = runtimeLifecycle
 	opened.sidecars = runtimeSidecars
 	opened.application.Resources.Clock = clock
+	opened.application.Recordings = recordingsService
+	opened.execution.Recordings = recordingsService
 	return opened, nil
 }
 

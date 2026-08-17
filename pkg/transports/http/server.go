@@ -16,6 +16,7 @@ import (
 	factorysessionshttp "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/http"
 	modelshttp "github.com/portpowered/infinite-you/pkg/services/models/transports/http"
 	providersessionshttp "github.com/portpowered/infinite-you/pkg/services/provider_sessions/transports/http"
+	recordingshttp "github.com/portpowered/infinite-you/pkg/services/recordings/transports/http"
 	workhttp "github.com/portpowered/infinite-you/pkg/services/work/transports/http"
 	workersessionshttp "github.com/portpowered/infinite-you/pkg/services/worker_sessions/transports/http"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
@@ -31,6 +32,7 @@ var _ factoryapi.ServerInterface = (*Server)(nil)
 type Server struct {
 	*factorySessionsAdapter
 	*workAdapter
+	recordingsHTTP         *recordingshttp.Adapter
 	factoryDefinitionsHTTP *factorydefinitionshttp.Handler
 	modelsHTTP             *modelshttp.Handler
 	providerSessionsHTTP   *providersessionshttp.Handler
@@ -54,12 +56,42 @@ func NewServer(
 	logger *zap.Logger,
 	workerSessions ...*workersessionshttp.Handler,
 ) *Server {
+	return newServer(nil, factorySessionsHTTP, workHTTP, modelsHTTP, providerSessionsHTTP, factoryDefinitionsHTTP, logger, workerSessions...)
+}
+
+// NewServerWithRecordings composes the generated route shell with the
+// Recordings-owned history and artifact adapter. Standalone durable-execution
+// compatibility is contained inside that owner adapter until its callers move.
+func NewServerWithRecordings(
+	recordingsHTTP *recordingshttp.Adapter,
+	factorySessionsHTTP *factorysessionshttp.Handler,
+	workHTTP *workhttp.Adapter,
+	modelsHTTP *modelshttp.Handler,
+	providerSessionsHTTP *providersessionshttp.Handler,
+	factoryDefinitionsHTTP *factorydefinitionshttp.Handler,
+	logger *zap.Logger,
+	workerSessions ...*workersessionshttp.Handler,
+) *Server {
+	return newServer(recordingsHTTP, factorySessionsHTTP, workHTTP, modelsHTTP, providerSessionsHTTP, factoryDefinitionsHTTP, logger, workerSessions...)
+}
+
+func newServer(
+	recordingsHTTP *recordingshttp.Adapter,
+	factorySessionsHTTP *factorysessionshttp.Handler,
+	workHTTP *workhttp.Adapter,
+	modelsHTTP *modelshttp.Handler,
+	providerSessionsHTTP *providersessionshttp.Handler,
+	factoryDefinitionsHTTP *factorydefinitionshttp.Handler,
+	logger *zap.Logger,
+	workerSessions ...*workersessionshttp.Handler,
+) *Server {
 	if logger == nil {
 		logger = zap.NewNop()
 	}
 	srv := &Server{
 		factorySessionsAdapter: &factorySessionsAdapter{Adapter: factorySessionsHTTP},
 		workAdapter:            &workAdapter{Adapter: workHTTP},
+		recordingsHTTP:         recordingsHTTP,
 		factoryDefinitionsHTTP: factoryDefinitionsHTTP,
 		modelsHTTP:             modelsHTTP, providerSessionsHTTP: providerSessionsHTTP, logger: logger,
 	}
@@ -416,4 +448,90 @@ func (s *Server) serveDashboardIndex(w http.ResponseWriter, r *http.Request, dis
 	}
 
 	http.ServeContent(w, r, dashboardUIIndexFile, noModTime, readSeeker)
+}
+
+// GetEventsBySessionId routes canonical Factory Event history to Recordings.
+func (s *Server) GetEventsBySessionId(
+	w http.ResponseWriter,
+	r *http.Request,
+	sessionID factoryapi.SessionID,
+	params factoryapi.GetEventsBySessionIdParams,
+) {
+	if s != nil && s.recordingsHTTP != nil {
+		s.recordingsHTTP.GetEventsBySessionId(w, r, sessionID, params)
+		return
+	}
+	s.writeError(w, http.StatusInternalServerError, "Recordings handler is unavailable", "INTERNAL_ERROR")
+}
+
+// GetFactorySessionResults routes durable historical result projection to
+// Recordings.
+func (s *Server) GetFactorySessionResults(
+	w http.ResponseWriter,
+	r *http.Request,
+	sessionID factoryapi.SessionID,
+	params factoryapi.GetFactorySessionResultsParams,
+) {
+	if s != nil && s.recordingsHTTP != nil {
+		s.recordingsHTTP.GetFactorySessionResults(w, r, sessionID, params)
+		return
+	}
+	s.writeError(w, http.StatusInternalServerError, "Recordings handler is unavailable", "INTERNAL_ERROR")
+}
+
+// ListFactorySessionDispatches routes durable dispatch history to Recordings.
+func (s *Server) ListFactorySessionDispatches(
+	w http.ResponseWriter,
+	r *http.Request,
+	sessionID factoryapi.SessionID,
+	params factoryapi.ListFactorySessionDispatchesParams,
+) {
+	if s != nil && s.recordingsHTTP != nil {
+		s.recordingsHTTP.ListFactorySessionDispatches(w, r, sessionID, params)
+		return
+	}
+	s.writeError(w, http.StatusInternalServerError, "Recordings handler is unavailable", "INTERNAL_ERROR")
+}
+
+// GetFactorySessionDispatch routes one durable dispatch projection to
+// Recordings.
+func (s *Server) GetFactorySessionDispatch(
+	w http.ResponseWriter,
+	r *http.Request,
+	sessionID factoryapi.SessionID,
+	dispatchID factoryapi.DispatchID,
+) {
+	if s != nil && s.recordingsHTTP != nil {
+		s.recordingsHTTP.GetFactorySessionDispatch(w, r, sessionID, dispatchID)
+		return
+	}
+	s.writeError(w, http.StatusInternalServerError, "Recordings handler is unavailable", "INTERNAL_ERROR")
+}
+
+// ListFactorySessionArtifacts routes durable artifact history to Recordings.
+func (s *Server) ListFactorySessionArtifacts(
+	w http.ResponseWriter,
+	r *http.Request,
+	sessionID factoryapi.SessionID,
+) {
+	if s != nil && s.recordingsHTTP != nil {
+		s.recordingsHTTP.ListFactorySessionArtifacts(w, r, sessionID)
+		return
+	}
+	s.writeError(w, http.StatusInternalServerError, "Recordings handler is unavailable", "INTERNAL_ERROR")
+}
+
+// GetFactorySessionArtifact routes one durable artifact projection to
+// Recordings.
+func (s *Server) GetFactorySessionArtifact(
+	w http.ResponseWriter,
+	r *http.Request,
+	sessionID factoryapi.SessionID,
+	artifactID factoryapi.ArtifactID,
+) {
+	if s != nil && s.recordingsHTTP != nil {
+		s.recordingsHTTP.GetFactorySessionArtifact(w, r, sessionID, artifactID)
+		return
+	}
+	s.writeError(w, http.StatusInternalServerError, "Recordings handler is unavailable", "INTERNAL_ERROR")
 }

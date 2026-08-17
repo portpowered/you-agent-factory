@@ -191,136 +191,6 @@ func (s *Server) GetFactorySessionResult(w http.ResponseWriter, r *http.Request,
 	s.writeJSON(w, http.StatusOK, response)
 }
 
-func (s *Server) GetFactorySessionResults(w http.ResponseWriter, r *http.Request, sessionID factoryapi.SessionID, params factoryapi.GetFactorySessionResultsParams) {
-	if !isDurableExecutionSessionID(string(sessionID)) {
-		s.writeError(w, http.StatusNotFound, "factory session not found", "NOT_FOUND")
-		return
-	}
-
-	getter, ok := s.requireDurableSessionResultGetter(w)
-	if !ok {
-		return
-	}
-	raw, err := factorysession.ResultRequestFromAPI(params)
-	if err == nil {
-		raw, err = s.sessionRequests.PrepareResult(raw)
-	}
-	if err != nil {
-		if status, errResp, handled := factorysession.ExecutionErrorResponse(err); handled {
-			s.writeJSON(w, status, errResp)
-			return
-		}
-		s.writeError(w, http.StatusBadRequest, err.Error(), "BAD_REQUEST")
-		return
-	}
-	response, err := getter.GetDurableFactorySessionResult(r.Context(), string(sessionID), raw)
-	if err != nil {
-		if status, errResp, handled := factorysession.ExecutionErrorResponse(err); handled {
-			s.writeJSON(w, status, errResp)
-			return
-		}
-		if s.writeDurableSessionReadError(w, err) {
-			return
-		}
-		s.logger.Error("get durable factory session result failed", zap.Error(err))
-		s.writeError(w, http.StatusInternalServerError, "failed to get factory session result", "INTERNAL_ERROR")
-		return
-	}
-	s.writeJSON(w, http.StatusOK, response)
-}
-
-func (s *Server) ListFactorySessionDispatches(w http.ResponseWriter, r *http.Request, sessionID factoryapi.SessionID, params factoryapi.ListFactorySessionDispatchesParams) {
-	if !isDurableExecutionSessionID(string(sessionID)) {
-		s.writeError(w, http.StatusNotFound, "factory session not found", "NOT_FOUND")
-		return
-	}
-
-	reader, ok := s.requireDurableSessionDispatchReader(w)
-	if !ok {
-		return
-	}
-	response, err := reader.ListDurableFactorySessionDispatches(r.Context(), string(sessionID), params)
-	if err != nil {
-		if status, errResp, handled := factorysession.ExecutionErrorResponse(err); handled {
-			s.writeJSON(w, status, errResp)
-			return
-		}
-		if s.writeDurableSessionReadError(w, err) {
-			return
-		}
-		s.logger.Error("list durable factory session dispatches failed", zap.Error(err))
-		s.writeError(w, http.StatusInternalServerError, "failed to list factory session dispatches", "INTERNAL_ERROR")
-		return
-	}
-	s.writeJSON(w, http.StatusOK, response)
-}
-
-func (s *Server) GetFactorySessionDispatch(w http.ResponseWriter, r *http.Request, sessionID factoryapi.SessionID, dispatchID factoryapi.DispatchID) {
-	if !isDurableExecutionSessionID(string(sessionID)) {
-		s.writeError(w, http.StatusNotFound, "factory session not found", "NOT_FOUND")
-		return
-	}
-
-	reader, ok := s.requireDurableSessionDispatchReader(w)
-	if !ok {
-		return
-	}
-	response, err := reader.GetDurableFactorySessionDispatch(r.Context(), string(sessionID), string(dispatchID))
-	if err != nil {
-		if s.writeDurableSessionReadError(w, err) {
-			return
-		}
-		s.logger.Error("get durable factory session dispatch failed", zap.Error(err))
-		s.writeError(w, http.StatusInternalServerError, "failed to get factory session dispatch", "INTERNAL_ERROR")
-		return
-	}
-	s.writeJSON(w, http.StatusOK, response)
-}
-
-func (s *Server) ListFactorySessionArtifacts(w http.ResponseWriter, r *http.Request, sessionID factoryapi.SessionID) {
-	if !isDurableExecutionSessionID(string(sessionID)) {
-		s.writeError(w, http.StatusNotFound, "factory session not found", "NOT_FOUND")
-		return
-	}
-
-	reader, ok := s.requireDurableSessionArtifactReader(w)
-	if !ok {
-		return
-	}
-	response, err := reader.ListDurableFactorySessionArtifacts(r.Context(), string(sessionID))
-	if err != nil {
-		if s.writeDurableSessionReadError(w, err) {
-			return
-		}
-		s.logger.Error("list durable factory session artifacts failed", zap.Error(err))
-		s.writeError(w, http.StatusInternalServerError, "failed to list factory session artifacts", "INTERNAL_ERROR")
-		return
-	}
-	s.writeJSON(w, http.StatusOK, response)
-}
-
-func (s *Server) GetFactorySessionArtifact(w http.ResponseWriter, r *http.Request, sessionID factoryapi.SessionID, artifactID factoryapi.ArtifactID) {
-	if !isDurableExecutionSessionID(string(sessionID)) {
-		s.writeError(w, http.StatusNotFound, "factory session not found", "NOT_FOUND")
-		return
-	}
-
-	reader, ok := s.requireDurableSessionArtifactReader(w)
-	if !ok {
-		return
-	}
-	response, err := reader.GetDurableFactorySessionArtifact(r.Context(), string(sessionID), string(artifactID))
-	if err != nil {
-		if s.writeDurableSessionReadError(w, err) {
-			return
-		}
-		s.logger.Error("get durable factory session artifact failed", zap.Error(err))
-		s.writeError(w, http.StatusInternalServerError, "failed to get factory session artifact", "INTERNAL_ERROR")
-		return
-	}
-	s.writeJSON(w, http.StatusOK, response)
-}
-
 func (s *Server) GetFactorySessionPartialResult(w http.ResponseWriter, r *http.Request, sessionID factoryapi.SessionID) {
 	sessionRuntime, ok := s.requireSessionRuntime(w)
 	if !ok {
@@ -468,45 +338,6 @@ func decodeOpenFactorySessionBody(body io.Reader) (factoryapi.OpenFactorySession
 	return decodeStrictJSON[factoryapi.OpenFactorySessionJSONRequestBody](body)
 }
 
-type durableSessionDispatchReader interface {
-	ListDurableFactorySessionDispatches(
-		ctx context.Context,
-		sessionID string,
-		params factoryapi.ListFactorySessionDispatchesParams,
-	) (factoryapi.ListFactorySessionDispatchesResponse, error)
-	GetDurableFactorySessionDispatch(
-		ctx context.Context,
-		sessionID, dispatchID string,
-	) (factoryapi.FactoryDispatch, error)
-}
-
-type durableSessionArtifactReader interface {
-	ListDurableFactorySessionArtifacts(
-		ctx context.Context,
-		sessionID string,
-	) (factoryapi.ListFactorySessionArtifactsResponse, error)
-	GetDurableFactorySessionArtifact(
-		ctx context.Context,
-		sessionID, artifactID string,
-	) (factoryapi.FactorySessionArtifactDetail, error)
-}
-
-func (s *Server) requireDurableSessionDispatchReader(w http.ResponseWriter) (durableSessionDispatchReader, bool) {
-	if s.durableProjection == nil {
-		s.writeError(w, http.StatusInternalServerError, "durable factory session dispatch read is unavailable", "INTERNAL_ERROR")
-		return nil, false
-	}
-	return s.durableProjection, true
-}
-
-func (s *Server) requireDurableSessionArtifactReader(w http.ResponseWriter) (durableSessionArtifactReader, bool) {
-	if s.durableProjection == nil {
-		s.writeError(w, http.StatusInternalServerError, "durable factory session artifact read is unavailable", "INTERNAL_ERROR")
-		return nil, false
-	}
-	return s.durableProjection, true
-}
-
 func (s *Server) requireDurableExecutionAPI(w http.ResponseWriter) (apisurface.DurableSessionExecutionAPI, bool) {
 	if s.durableExecution == nil {
 		s.writeError(w, http.StatusInternalServerError, "durable factory session execution is unavailable", "INTERNAL_ERROR")
@@ -619,27 +450,6 @@ type durableSessionGetter interface {
 	GetDurableFactorySession(ctx context.Context, sessionID string) (factoryapi.FactorySessionDurableReadModel, error)
 }
 
-type durableSessionResultGetter interface {
-	GetDurableFactorySessionResult(
-		ctx context.Context,
-		sessionID string,
-		request factorysessionexecution.ResultRequest,
-	) (factoryapi.FactorySessionResult, error)
-}
-
-type durableSessionEventsReader interface {
-	ReadDurableFactorySessionEvents(
-		ctx context.Context,
-		sessionID string,
-		request factorysessionexecution.EventReconnectRequest,
-	) (*interfaces.FactoryEventStream, error)
-	ProbeDurableFactorySessionEvents(
-		ctx context.Context,
-		sessionID string,
-		request factorysessionexecution.EventReconnectRequest,
-	) error
-}
-
 type durableSessionResponseEventsReader interface {
 	SubscribeDurableFactoryResponseEvents(
 		ctx context.Context,
@@ -662,28 +472,12 @@ func (s *Server) requireDurableSessionGetter(w http.ResponseWriter) (durableSess
 	return s.durableLifecycle, true
 }
 
-func (s *Server) requireDurableSessionResultGetter(w http.ResponseWriter) (durableSessionResultGetter, bool) {
-	if s.durableProjection == nil {
-		s.writeError(w, http.StatusInternalServerError, "durable factory session result read is unavailable", "INTERNAL_ERROR")
-		return nil, false
-	}
-	return s.durableProjection, true
-}
-
-func (s *Server) requireDurableSessionEventsReader(w http.ResponseWriter) (durableSessionEventsReader, bool) {
-	if s.durableProjection == nil {
-		s.writeError(w, http.StatusInternalServerError, "durable factory session event replay is unavailable", "INTERNAL_ERROR")
-		return nil, false
-	}
-	return s.durableProjection, true
-}
-
 func (s *Server) requireDurableSessionResponseEventsReader(w http.ResponseWriter) (durableSessionResponseEventsReader, bool) {
-	if s.durableProjection == nil {
+	if s.durableResponseEvents == nil {
 		s.writeError(w, http.StatusInternalServerError, "durable factory session response-event replay is unavailable", "INTERNAL_ERROR")
 		return nil, false
 	}
-	return s.durableProjection, true
+	return s.durableResponseEvents, true
 }
 
 func isDurableExecutionSessionID(sessionID string) bool {

@@ -14,6 +14,7 @@ import (
 	artifactsexportwire "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/artifacts_export/wire"
 	canonicalledger "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/canonical_ledger"
 	canonicalledgerwire "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/canonical_ledger/wire"
+	historicalquery "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/historical_query"
 	projectionquerywire "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/projection_query/wire"
 	recordinglifecycle "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/recording_lifecycle"
 	recordinglifecyclewire "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/recording_lifecycle/wire"
@@ -35,6 +36,7 @@ type combinedService struct {
 	artifactsExport artifactsexport.Service
 	replayService   recordingsreplay.Service
 	canonicalLedger canonicalledger.Service
+	historicalQuery historicalquery.Service
 
 	lifecycleMu sync.Mutex
 	recordingMu sync.Mutex
@@ -73,6 +75,18 @@ func (service *combinedService) ReconstructWorldState(
 	request recordings.ReconstructWorldStateRequest,
 ) (recordings.ReconstructWorldStateResult, error) {
 	return canonical.ReconstructWorldState(service.ProjectionService, request)
+}
+
+func (service *combinedService) QueryHistoricalRecording(
+	request recordings.HistoricalRecordingQueryRequest,
+) (recordings.HistoricalRecordingQueryResult, error) {
+	if service == nil || service.historicalQuery == nil {
+		return recordings.HistoricalRecordingQueryResult{}, &recordings.HistoricalRecordingQueryError{
+			Kind:        recordings.HistoricalRecordingQueryErrorUnavailable,
+			RecordingID: request.Recording.RecordingID,
+		}
+	}
+	return service.historicalQuery.QueryHistoricalRecording(request)
 }
 
 func (service *combinedService) QuerySimpleDashboard(
@@ -254,6 +268,7 @@ func NewServiceWithLifecycleEffects(
 		tickers,
 		publication,
 		logging.NoopLogger{},
+		nil,
 		clocks...,
 	)
 }
@@ -281,6 +296,58 @@ func NewServiceWithLifecycleEffectsAndLogger(
 		tickers,
 		publication,
 		logger,
+		nil,
+		clocks...,
+	)
+}
+
+// NewServiceWithLifecycleEffectsAndHistoricalQuery constructs the Recordings
+// root with a Wire-selected historical read capability and no-op logging.
+func NewServiceWithLifecycleEffectsAndHistoricalQuery(
+	ledger recordings.Ledger,
+	projection recordings.ProjectionService,
+	targetPlanner recordings.LiveRecordingTargetPlanner,
+	writer recordings.RecordingSnapshotWriter,
+	tickers recordings.RecordingFlushTickerFactory,
+	publication portableArtifactPublication,
+	historicalQuery historicalquery.Service,
+	clocks ...recordings.RecordingClock,
+) recordings.Service {
+	return newServiceWithLifecycleEffects(
+		ledger,
+		projection,
+		targetPlanner,
+		writer,
+		tickers,
+		publication,
+		logging.NoopLogger{},
+		historicalQuery,
+		clocks...,
+	)
+}
+
+// NewServiceWithLifecycleEffectsAndHistoricalQueryAndLogger constructs the
+// process-scoped root with both the selected logger and historical query.
+func NewServiceWithLifecycleEffectsAndHistoricalQueryAndLogger(
+	ledger recordings.Ledger,
+	projection recordings.ProjectionService,
+	targetPlanner recordings.LiveRecordingTargetPlanner,
+	writer recordings.RecordingSnapshotWriter,
+	tickers recordings.RecordingFlushTickerFactory,
+	publication portableArtifactPublication,
+	historicalQuery historicalquery.Service,
+	logger logging.Logger,
+	clocks ...recordings.RecordingClock,
+) recordings.Service {
+	return newServiceWithLifecycleEffects(
+		ledger,
+		projection,
+		targetPlanner,
+		writer,
+		tickers,
+		publication,
+		logger,
+		historicalQuery,
 		clocks...,
 	)
 }
@@ -293,6 +360,7 @@ func newServiceWithLifecycleEffects(
 	tickers recordings.RecordingFlushTickerFactory,
 	publication portableArtifactPublication,
 	logger logging.Logger,
+	historicalQuery historicalquery.Service,
 	clocks ...recordings.RecordingClock,
 ) recordings.Service {
 	if ledger == nil || projection == nil {
@@ -311,6 +379,7 @@ func newServiceWithLifecycleEffects(
 		artifactsExport:   artifactsexportwire.NewService(lifecycle, publication),
 		replayService:     replaywire.NewService(lifecycle, projection),
 		canonicalLedger:   canonicalledgerwire.NewService(ledger),
+		historicalQuery:   historicalQuery,
 		replayByKey:       make(map[string]*recordings.ReplayArtifact),
 		clock:             firstRecordingClock(clocks),
 		logger:            logging.EnsureLogger(logger),

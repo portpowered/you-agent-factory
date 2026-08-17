@@ -145,7 +145,8 @@ type ModelsPorts struct {
 
 // RecordingsPorts contains Recordings-owned opening collaborators.
 type RecordingsPorts struct {
-	Root recordings.Root
+	Service recordings.Service
+	Runtime recordings.RuntimeOpening
 }
 
 // WorkersPorts contains Workers-owned opening collaborators.
@@ -187,7 +188,8 @@ type Factory struct {
 	automationService                automations.Service
 	factorySessionsService           factorysessions.Service
 	factorySessionExecutionFactory   FactorySessionExecutionFactory
-	recordingsRoot                   recordings.Root
+	recordingsService                recordings.Service
+	recordingsRuntime                recordings.RuntimeOpening
 	replayInputs                     recordings.ReplayInputLoader
 	webhooksService                  webhooks.Service
 	workersMockCommandRunnerFactory  factoryruntime.WorkersMockCommandRunnerFactory
@@ -270,8 +272,9 @@ func NewFactory(
 		factorySessionsService:           factorySessions.Service,
 		factorySessionsRuntimeAssembly:   factorySessions.RuntimeAssembly,
 		factorySessionExecutionFactory:   factorySessions.FactorySessionExecutionFactory,
-		recordingsRoot:                   recordingsPorts.Root,
-		replayInputs:                     recordingsPorts.Root,
+		recordingsService:                recordingsPorts.Service,
+		recordingsRuntime:                recordingsPorts.Runtime,
+		replayInputs:                     recordingsPorts.Runtime,
 		webhooksService:                  webhooksPorts.Service,
 		workersMockCommandRunnerFactory:  factoryRuntime.WorkersMockCommandRunnerFactory,
 		factoryDefinitions:               factoryDefinitions.Service,
@@ -445,7 +448,8 @@ func validateRecordings(group *RecordingsPorts) error {
 		return err
 	}
 	return validateRuntimeOpeningRequirements("Recordings",
-		runtimeOpeningRequirement{"root", group.Root},
+		runtimeOpeningRequirement{"service", group.Service},
+		runtimeOpeningRequirement{"runtime", group.Runtime},
 	)
 }
 
@@ -563,7 +567,8 @@ func (f *Factory) openRuntimeWithOptions(
 		f.automationService,
 		f.factorySessionsRuntimeAssembly,
 		f.factorySessionExecutionFactory,
-		f.recordingsRoot,
+		f.recordingsService,
+		f.recordingsRuntime,
 		f.workersMockCommandRunnerFactory,
 		f.factoryDefinitions,
 		f.definitionRuntimeRouter,

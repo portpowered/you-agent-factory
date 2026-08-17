@@ -30,10 +30,10 @@ func newEventSubscription(
 	cursor *recordings.CanonicalEventCursor,
 	sourceDone <-chan struct{},
 	cancel context.CancelFunc,
-) (recordings.EventSubscription, error) {
+) (recordings.EventSubscription, int, error) {
 	history, nextDelivery, err := scopedHistoryAfter(stream.History, scope, cursor)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	subscription := &eventSubscription{
 		history:          history,
@@ -48,7 +48,7 @@ func newEventSubscription(
 	if cursor != nil {
 		subscription.lastCursor = *cursor
 	}
-	return subscription.Next, nil
+	return subscription.Next, len(history), nil
 }
 
 func scopedHistoryAfter(

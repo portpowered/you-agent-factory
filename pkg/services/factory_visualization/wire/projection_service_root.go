@@ -13,6 +13,15 @@ type projectionServiceRoot struct {
 
 var _ recordings.Service = (*projectionServiceRoot)(nil)
 
+func (adapter *projectionServiceRoot) QueryHistoricalRecording(
+	request recordings.HistoricalRecordingQueryRequest,
+) (recordings.HistoricalRecordingQueryResult, error) {
+	return recordings.HistoricalRecordingQueryResult{}, &recordings.HistoricalRecordingQueryError{
+		Kind:        recordings.HistoricalRecordingQueryErrorUnavailable,
+		RecordingID: request.Recording.RecordingID,
+	}
+}
+
 func (adapter *projectionServiceRoot) ReconstructWorldState(
 	request recordings.ReconstructWorldStateRequest,
 ) (recordings.ReconstructWorldStateResult, error) {

@@ -167,6 +167,40 @@ func TestWorkReadModelToAPI_EncodesDetachedReadModel(t *testing.T) {
 	assertExpectedArtifactAPI(t, got)
 }
 
+func TestWorkReadModelToAPI_PreservesOrderedMixedContentParts(t *testing.T) {
+	t.Parallel()
+
+	got := WorkReadModelToAPI(work.ReadModel{
+		Content: []work.WorkContentPart{
+			{Type: work.WorkContentPartTypeText, Text: "first", Slot: "prompt"},
+			{Type: work.WorkContentPartTypeJSON, JSON: json.RawMessage(`{"answer":42}`)},
+			{Type: work.WorkContentPartTypeImage, URL: "you-artifact://session-1/image-1"},
+		},
+	})
+	if got.Content == nil || len(*got.Content) != 3 {
+		t.Fatalf("content = %#v, want three ordered parts", got.Content)
+	}
+
+	textPart, err := (*got.Content)[0].AsWorkTextContentPart()
+	if err != nil || textPart.Type != factoryapi.WorkContentPartTypeText || textPart.Text != "first" {
+		t.Fatalf("content[0] = %#v (decode error %v), want first text part", textPart, err)
+	}
+
+	jsonPart, err := (*got.Content)[1].AsWorkJsonContentPart()
+	if err != nil || jsonPart.Type != factoryapi.WorkContentPartTypeJSON {
+		t.Fatalf("content[1] = %#v (decode error %v), want JSON part", jsonPart, err)
+	}
+	jsonValue, ok := jsonPart.Json.(map[string]any)
+	if !ok || jsonValue["answer"] != float64(42) {
+		t.Fatalf("content[1].json = %#v, want answer=42", jsonPart.Json)
+	}
+
+	imagePart, err := (*got.Content)[2].AsWorkImageContentPart()
+	if err != nil || imagePart.Type != factoryapi.WorkContentPartTypeImage || imagePart.Url != "you-artifact://session-1/image-1" {
+		t.Fatalf("content[2] = %#v (decode error %v), want image artifact reference", imagePart, err)
+	}
+}
+
 func assertDetachedWorkFields(t *testing.T, got factoryapi.Work) {
 	t.Helper()
 	if got.Name != "Review PRD" {

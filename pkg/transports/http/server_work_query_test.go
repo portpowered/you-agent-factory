@@ -12,9 +12,9 @@ import (
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	modelshttp "github.com/portpowered/infinite-you/pkg/services/models/transports/http"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
+	recordingshttp "github.com/portpowered/infinite-you/pkg/services/recordings/transports/http"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-	"github.com/portpowered/infinite-you/pkg/transports/http/workstationprojection"
 	"go.uber.org/zap"
 )
 
@@ -465,7 +465,7 @@ func TestListWork_PaginationCursorUsesDispatchTokenID(t *testing.T) {
 func TestBuildFactoryWorldWorkstationRequestProjectionSliceUsesServiceRootProjection(t *testing.T) {
 	state := interfaces.FactoryWorldState{ActiveDispatches: map[string]interfaces.FactoryWorldDispatch{"service-owned": {DispatchID: "service-owned"}}}
 	projector := &workstationRequestProjectorFake{result: recordings.WorkstationFactoryWorldWorkstationRequestProjectionSlice{WorkstationRequestsByDispatchId: &map[string]recordings.WorkstationFactoryWorldWorkstationRequestView{"dispatch-1": {DispatchId: "dispatch-1", TransitionId: "review", Counts: recordings.WorkstationFactoryWorldWorkstationRequestCountView{DispatchedCount: 1}}}}}
-	got := workstationprojection.Generated(projector.ProjectWorkstationRequests(state))
+	got := recordingshttp.Generated(projector.ProjectWorkstationRequests(state))
 	if projector.got.ActiveDispatches["service-owned"].DispatchID != "service-owned" || got.WorkstationRequestsByDispatchId == nil {
 		t.Fatalf("projection = %#v input=%#v", got, projector.got)
 	}
