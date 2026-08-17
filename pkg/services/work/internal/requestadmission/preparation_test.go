@@ -329,3 +329,59 @@ func mustRequestPreparationService(t *testing.T) RequestPreparationService {
 	}
 	return service
 }
+
+// oversizedWorkPayloadSize is comfortably past the size at which an inlined
+// prompt used to make the plan-stage worker spawn impossible. Admission
+// enforces no size bound because the rendered prompt no longer travels on the
+// provider command line, so a payload this large must be admitted rather than
+// rejected at the boundary or admitted and then killed one transition later.
+const oversizedWorkPayloadSize = 50_000
+
+func TestPrepareWorkRequestAdmitsAnOversizedPayloadWithoutASizeLimit(t *testing.T) {
+	t.Parallel()
+
+	service := mustRequestPreparationService(t)
+	text := strings.Repeat("u", oversizedWorkPayloadSize)
+
+	prepared, err := service.PrepareWorkRequest(context.Background(), WorkRequestPreparation{
+		Request: Request{
+			RequestID: "request-oversized",
+			Type:      RequestTypeFactoryRequestBatch,
+			Works: []Work{{
+				Name:       "oversized-idea",
+				WorkTypeID: "idea",
+				Content:    []ContentPart{{Type: ContentPartTypeText, Text: text}},
+			}},
+		},
+	})
+	if err != nil {
+		t.Fatalf("PrepareWorkRequest with a %d-character payload: %v", len(text), err)
+	}
+	if got := prepared.Works[0].Content[0].Text; got != text {
+		t.Fatalf("admitted content length = %d, want the submitted %d characters intact", len(got), len(text))
+	}
+}
+
+func TestPrepareWorkRequestAdmitsAnOversizedLegacyPayloadField(t *testing.T) {
+	t.Parallel()
+
+	service := mustRequestPreparationService(t)
+	text := strings.Repeat("p", oversizedWorkPayloadSize)
+
+	prepared, err := service.PrepareWorkRequest(context.Background(), WorkRequestPreparation{
+		Request: Request{
+			Works: []Work{{
+				Name:       "oversized-idea",
+				WorkTypeID: "idea",
+				Payload:    map[string]any{"description": text},
+			}},
+		},
+	})
+	if err != nil {
+		t.Fatalf("PrepareWorkRequest with a %d-character payload field: %v", len(text), err)
+	}
+	payload, ok := prepared.Works[0].Payload.(map[string]any)
+	if !ok || payload["description"] != text {
+		t.Fatalf("admitted payload = %T, want the submitted %d characters intact", prepared.Works[0].Payload, len(text))
+	}
+}
