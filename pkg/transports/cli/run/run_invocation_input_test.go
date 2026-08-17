@@ -164,17 +164,27 @@ func TestResolveFactoryInvocationRequestForRun_WorkFileProjectsOrderedContent(t 
 	if !invocationMode || prepareCalls != 1 {
 		t.Fatalf("invocationMode=%t prepareCalls=%d, want true/1", invocationMode, prepareCalls)
 	}
+	assertWorkFileInvocationRequest(t, request)
+}
+
+func assertWorkFileInvocationRequest(t *testing.T, request *factoryapi.InvocationRequest) {
+	t.Helper()
 	if request == nil || request.RequestId == nil || *request.RequestId != "request-from-file" {
 		t.Fatalf("request identity = %#v, want request-from-file", request)
 	}
 	if request.Content == nil || len(*request.Content) != 2 {
 		t.Fatalf("request content = %#v, want two ordered parts", request.Content)
 	}
-	first, firstErr := (*request.Content)[0].AsWorkTextContentPart()
+	assertWorkFileInvocationContent(t, *request.Content)
+}
+
+func assertWorkFileInvocationContent(t *testing.T, content factoryapi.WorkContent) {
+	t.Helper()
+	first, firstErr := content[0].AsWorkTextContentPart()
 	if firstErr != nil || first.Text != "first part" {
 		t.Fatalf("first content part = %#v/%v", first, firstErr)
 	}
-	second, secondErr := (*request.Content)[1].AsWorkJsonContentPart()
+	second, secondErr := content[1].AsWorkJsonContentPart()
 	if secondErr != nil {
 		t.Fatalf("second content part = %#v/%v", second, secondErr)
 	}
