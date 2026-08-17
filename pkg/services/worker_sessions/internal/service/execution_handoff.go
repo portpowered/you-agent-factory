@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
@@ -91,8 +92,47 @@ func executeWithService(
 	if !supervision.isAccepted() {
 		return canceledDispatchResult(request)
 	}
+	if executeRequest.Input.ProcessLifecycleObserver == nil {
+		executeRequest.Input.ProcessLifecycleObserver = processLifecycleObserver{supervision: supervision}
+	}
 	executeResult, executeErr := execution.Execute(ctx, executeRequest)
+	if supervision.processGoneObserved() {
+		executeResult = processGoneExecuteResult(executeRequest, executeResult)
+		executeErr = workers.ErrWorkstationDispatchProcessGone
+	}
 	return dispatchResultFromExecute(request, executeResult, executeErr)
+}
+
+type processLifecycleObserver struct {
+	supervision *supervision
+}
+
+func (observer processLifecycleObserver) ProcessStarted(platformprocess.ProcessInfo) {}
+
+func (observer processLifecycleObserver) ProcessExited(platformprocess.ProcessInfo) {
+	if observer.supervision == nil {
+		return
+	}
+	observer.supervision.markProcessGone()
+	_, _ = observer.supervision.cancelExecution()
+}
+
+func processGoneExecuteResult(
+	request workers.ExecuteRequest,
+	result workers.ExecuteResult,
+) workers.ExecuteResult {
+	result.Correlation = request.Correlation
+	result.Outcome = workers.ExecutionOutcomeFailed
+	result.Output = workers.ProposedOutput{}
+	result.StructuredResult = nil
+	result.StructuredResultPresent = false
+	result.Continuation = nil
+	result.Failure = &workers.ExecutionFailure{
+		Type:    workers.WorkFailureTypeUnknown,
+		Family:  workers.WorkFailureFamilyRetryable,
+		Message: workers.ErrWorkstationDispatchProcessGone.Error(),
+	}
+	return result
 }
 
 func executeRequestFromSessionDispatch(
@@ -166,12 +206,13 @@ func executeRequestFromSessionDispatch(
 			Timeout:     execution.Timeout,
 		},
 		Input: workers.ExecutionInput{
-			Dispatch:        dispatch,
-			RecordingID:     execution.RecordingID,
-			ModelBindings:   workers.CloneResolvedModelOperationBindings(execution.ModelBindings),
-			ModelOperation:  execution.ModelOperation,
-			Resume:          cloneSessionContinuation(execution.Continuation),
-			WorkflowContext: execution.WorkflowContext.Clone(),
+			Dispatch:                 dispatch,
+			RecordingID:              execution.RecordingID,
+			ModelBindings:            workers.CloneResolvedModelOperationBindings(execution.ModelBindings),
+			ModelOperation:           execution.ModelOperation,
+			Resume:                   cloneSessionContinuation(execution.Continuation),
+			WorkflowContext:          execution.WorkflowContext.Clone(),
+			ProcessLifecycleObserver: execution.ProcessLifecycleObserver,
 		},
 	}, nil
 }

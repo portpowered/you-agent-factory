@@ -579,6 +579,13 @@ type ExecutionInput struct {
 	// detached at Execute ingress and is consumed only by command-boundary
 	// adapters; it is never stored on the process Workers root.
 	MockWorkers *MockWorkersConfig
+	// SkipBuiltInPrerequisiteValidation carries the Factory Runtime opening
+	// policy into the request-scoped execution owner. It is deliberately an
+	// execution input rather than process-scoped Workers state.
+	SkipBuiltInPrerequisiteValidation bool `json:"-"`
+	// InvocationSkipPermissionsOverride carries the invocation-scoped
+	// permission policy selected while opening the Factory Runtime.
+	InvocationSkipPermissionsOverride *bool `json:"-"`
 	// ProviderOverride and CommandRunnerOverride carry runtime-scoped effect
 	// ports for detached execution, such as Recordings replay. They are never
 	// serialized or retained by the process-scoped Workers service.
@@ -831,6 +838,10 @@ func (input ExecutionInput) Clone() ExecutionInput {
 	}
 	clone.WorkflowContext = input.WorkflowContext.Clone()
 	clone.MockWorkers = input.MockWorkers.Clone()
+	if input.InvocationSkipPermissionsOverride != nil {
+		value := *input.InvocationSkipPermissionsOverride
+		clone.InvocationSkipPermissionsOverride = &value
+	}
 	return clone
 }
 

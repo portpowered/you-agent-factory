@@ -47,6 +47,8 @@ type FactoryRuntimeAssembler interface {
 		string,
 		string,
 		bool,
+		bool,
+		*bool,
 		factoryruntime.Clock,
 		*zap.Logger,
 		factoryruntime.WorkersMockCommandRunnerFactory,

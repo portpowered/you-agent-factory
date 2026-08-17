@@ -542,6 +542,7 @@ type supervision struct {
 	controlDone        chan struct{}
 	controlHistory     *controlHistoryReservation
 	deadlineExceeded   bool
+	processGone        bool
 	interrupting       bool
 	interruptRequestID string
 	interruptDone      chan struct{}
@@ -616,6 +617,7 @@ func (s *supervision) beginAttempt() chan struct{} {
 	defer s.mu.Unlock()
 	s.attemptsMade++
 	s.retryPending = false
+	s.processGone = false
 	s.attemptDone = make(chan struct{})
 	s.deadlineAt = time.Time{}
 	s.deadlineExceeded = false
@@ -716,6 +718,18 @@ func (s *supervision) markDeadlineExceeded() {
 	s.mu.Lock()
 	s.deadlineExceeded = true
 	s.mu.Unlock()
+}
+
+func (s *supervision) markProcessGone() {
+	s.mu.Lock()
+	s.processGone = true
+	s.mu.Unlock()
+}
+
+func (s *supervision) processGoneObserved() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.processGone
 }
 
 func (s *supervision) clearDeadlineExceeded() {

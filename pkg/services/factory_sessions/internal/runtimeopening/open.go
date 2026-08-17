@@ -255,6 +255,8 @@ func openRuntime(
 			configured.Session.BackendScopeID,
 			configured.Workers.RunnerID,
 			configured.Runtime.Verbose,
+			configured.Workers.SkipBuiltInPrerequisiteValidation,
+			configured.Workers.InvocationSkipPermissionsOverride,
 			clock,
 			logger,
 			workersMockCommandRunnerFactory,

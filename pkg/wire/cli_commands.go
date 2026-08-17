@@ -265,6 +265,19 @@ type localWorkerSessionsBoundary struct {
 	service workersessions.Service
 }
 
+type localWorkerSessionsExecution struct {
+	workers.Service
+	publisher workers.ProgressPublisher
+}
+
+func (execution localWorkerSessionsExecution) Execute(
+	ctx context.Context,
+	request workers.ExecuteRequest,
+) (workers.ExecuteResult, error) {
+	request.Input.ProgressPublisher = execution.publisher
+	return execution.Service.Execute(ctx, request)
+}
+
 var _ workersessionscli.LocalInvokeBoundary = (*localWorkerSessionsBoundary)(nil)
 var _ workersessionscli.LocalControlBoundary = (*localWorkerSessionsBoundary)(nil)
 
@@ -369,8 +382,9 @@ func provideLocalWorkerSessionsBoundary(
 	// before the first dispatch so provider-session association and source-native
 	// Worker drafts reach the local session topic as well.
 	observationPublisher := workersessions.NewProviderSessionObservationPublisher(nil)
+	execution := localWorkerSessionsExecution{Service: workerService, publisher: observationPublisher.Publish}
 	service, err := workersessionswire.NewService(
-		workerService,
+		execution,
 		eventsService,
 		logger,
 		platformclock.Real{},

@@ -26,11 +26,17 @@ type InitialFactorySnapshotFactory = factorydefinitions.InitialFactorySnapshotFa
 
 type runtimeWorkersServiceWithProgress struct {
 	workers.Service
-	publisher             workers.ProgressPublisher
-	providerOverride      providers.Service
-	commandRunnerOverride workers.CommandRunner
-	replayCommandRunner   workers.CommandRunner
-	clock                 workers.Clock
+	publisher                         workers.ProgressPublisher
+	providerOverride                  providers.Service
+	commandRunnerOverride             workers.CommandRunner
+	replayCommandRunner               workers.CommandRunner
+	skipBuiltInPrerequisiteValidation bool
+	invocationSkipPermissionsOverride *bool
+	workstationResolver               runtime.WorkstationExecutionResolver
+	factorySessionID                  string
+	runtimeID                         string
+	recordingID                       string
+	clock                             workers.Clock
 }
 
 func (service runtimeWorkersServiceWithProgress) RuntimeProgressPublisher() workers.ProgressPublisher {
@@ -44,8 +50,30 @@ func (service runtimeWorkersServiceWithProgress) Execute(
 	ctx context.Context,
 	request workers.ExecuteRequest,
 ) (workers.ExecuteResult, error) {
+	if service.workstationResolver != nil && targetNeedsRuntimeResolution(request.Target) {
+		resolved, err := service.workstationResolver.ResolveExecutionRequest(
+			workstationExecutionRequestFromExecute(
+				request,
+				service.factorySessionID,
+				service.runtimeID,
+				service.recordingID,
+			),
+		)
+		if err != nil {
+			return workers.ExecuteResult{}, err
+		}
+		request = resolved
+	}
 	if service.providerOverride != nil {
 		request.Input.ProviderOverride = service.providerOverride
+	}
+	if service.publisher != nil {
+		request.Input.ProgressPublisher = service.publisher
+	}
+	request.Input.SkipBuiltInPrerequisiteValidation = service.skipBuiltInPrerequisiteValidation
+	if service.invocationSkipPermissionsOverride != nil {
+		value := *service.invocationSkipPermissionsOverride
+		request.Input.InvocationSkipPermissionsOverride = &value
 	}
 	commandRunner := service.commandRunnerOverride
 	if service.replayCommandRunner != nil {
@@ -80,6 +108,80 @@ func (service runtimeWorkersServiceWithProgress) Execute(
 		request.Input.CommandRunnerOverride = commandRunner
 	}
 	return service.Service.Execute(ctx, request)
+}
+
+func targetNeedsRuntimeResolution(target workers.ExecutionTarget) bool {
+	return !target.Noop &&
+		strings.TrimSpace(target.RunnerID) == "" &&
+		strings.TrimSpace(target.Provider.ID) == "" &&
+		strings.TrimSpace(target.Provider.Alias) == "" &&
+		strings.TrimSpace(target.Model.Name) == ""
+}
+
+func workstationExecutionRequestFromExecute(
+	request workers.ExecuteRequest,
+	factorySessionID string,
+	runtimeID string,
+	recordingID string,
+) workers.WorkstationExecutionRequest {
+	target := request.Target
+	factorySessionID = strings.TrimSpace(factorySessionID)
+	if factorySessionID == "" {
+		factorySessionID = request.Correlation.FactorySessionID
+	}
+	runtimeID = strings.TrimSpace(runtimeID)
+	if runtimeID == "" {
+		runtimeID = request.Correlation.RuntimeID
+	}
+	generationID := runtimeID
+	if generationID == "" {
+		generationID = request.Correlation.GenerationID
+	}
+	if strings.TrimSpace(recordingID) == "" {
+		recordingID = request.Input.RecordingID
+	}
+	var continuation *workers.ProviderContinuationRef
+	if request.Input.Resume != nil {
+		value := *request.Input.Resume
+		continuation = &value
+	}
+	return workers.WorkstationExecutionRequest{
+		Dispatch:                    request.Input.Dispatch,
+		WorkerName:                  target.WorkerName,
+		WorkerType:                  target.WorkerType,
+		WorkstationType:             target.WorkstationName,
+		RunnerID:                    target.RunnerID,
+		ExecutorProvider:            target.ExecutorProvider,
+		FactorySessionID:            factorySessionID,
+		RuntimeID:                   runtimeID,
+		RecordingID:                 recordingID,
+		GenerationID:                generationID,
+		Capabilities:                target.Capabilities,
+		ModelOperation:              request.Input.ModelOperation,
+		ModelBindings:               workers.CloneResolvedModelOperationBindings(request.Input.ModelBindings),
+		Model:                       target.Model.Name,
+		ModelProvider:               target.Model.Provider,
+		ReasoningEffort:             target.Model.ReasoningEffort,
+		Command:                     target.Command,
+		Args:                        append([]string(nil), target.Args...),
+		FactoryDirectory:            target.FactoryDirectory,
+		OutputFormat:                target.Output.Format,
+		StopToken:                   target.Output.StopToken,
+		DecisionEnvelope:            target.Output.DecisionEnvelope,
+		GoalRoutingDecisionEnvelope: target.Output.GoalRoutingDecisionEnvelope,
+		SystemPrompt:                target.Prompt.SystemPrompt,
+		UserMessage:                 target.Prompt.UserMessage,
+		OutputSchema:                target.Prompt.OutputSchema,
+		Timeout:                     target.Timeout,
+		EnvVars:                     target.Environment.Vars,
+		ProcessEnvironment:          append([]string(nil), target.Environment.ProcessEnvironment...),
+		Worktree:                    target.Workspace.Worktree,
+		WorkingDirectory:            target.Environment.WorkingDirectory,
+		WorkingDirectoryAuthored:    target.Environment.WorkingDirectorySet,
+		WorkflowContext:             request.Input.WorkflowContext.Clone(),
+		Continuation:                continuation,
+		SkipPermissions:             target.Permissions.SkipPermissions,
+	}
 }
 
 func (service runtimeWorkersServiceWithProgress) RuntimeOwnsModelEventRecording() bool {
@@ -161,6 +263,8 @@ func NewRuntimeBuild(
 	backendScopeID string,
 	factoryRunnerID string,
 	verbose bool,
+	skipBuiltInPrerequisiteValidation bool,
+	invocationSkipPermissionsOverride *bool,
 	clock factory.Clock,
 	baseLogger *zap.Logger,
 	runtimeFactory *RuntimeFactory,
@@ -237,6 +341,8 @@ func NewRuntimeBuild(
 				backendScopeID,
 				factoryRunnerID,
 				verbose,
+				skipBuiltInPrerequisiteValidation,
+				invocationSkipPermissionsOverride,
 				workerService,
 				mockWorkersConfig,
 				workerSessionsFactory,
@@ -271,6 +377,8 @@ func buildBundle(
 	backendScopeID string,
 	factoryRunnerID string,
 	verbose bool,
+	skipBuiltInPrerequisiteValidation bool,
+	invocationSkipPermissionsOverride *bool,
 	workerExecution workers.Service,
 	mockWorkersConfig *workers.MockWorkersConfig,
 	workerSessionsFactory factory.WorkerSessionsFactory,
@@ -294,7 +402,16 @@ func buildBundle(
 	if err != nil {
 		return nil, err
 	}
-	workerServiceWithProgress := newRuntimeWorkersService(workerExecution, providerSessionProgress, spec)
+	workerServiceWithProgress := newRuntimeWorkersService(
+		workerExecution,
+		providerSessionProgress,
+		spec,
+		sessionID,
+		skipBuiltInPrerequisiteValidation,
+		invocationSkipPermissionsOverride,
+		runtimeFactory,
+		mockWorkersConfig,
+	)
 	bundle, err := runtimeFactory.Build(
 		ctx,
 		spec.Dir,
@@ -344,15 +461,52 @@ func newRuntimeWorkersService(
 	workerExecution workers.Service,
 	providerSessionProgress *workersessions.ProviderSessionObservationPublisher,
 	spec runtimebuild.SessionBuildSpec,
+	sessionID string,
+	skipBuiltInPrerequisiteValidation bool,
+	invocationSkipPermissionsOverride *bool,
+	runtimeFactory *RuntimeFactory,
+	mockWorkersConfig *workers.MockWorkersConfig,
 ) workers.Service {
-	return workers.Service(runtimeWorkersServiceWithProgress{
-		Service:               workerExecution,
-		publisher:             providerSessionProgress.Publish,
-		providerOverride:      spec.ProviderOverride,
-		commandRunnerOverride: spec.CommandRunnerOverride,
-		replayCommandRunner:   spec.ReplayCommandRunner,
-		clock:                 spec.Clock,
-	})
+	var invocationOverride *bool
+	if invocationSkipPermissionsOverride != nil {
+		value := *invocationSkipPermissionsOverride
+		invocationOverride = &value
+	}
+	service := &runtimeWorkersServiceWithProgress{
+		Service:                           workerExecution,
+		publisher:                         providerSessionProgress.Publish,
+		providerOverride:                  spec.ProviderOverride,
+		commandRunnerOverride:             spec.CommandRunnerOverride,
+		replayCommandRunner:               spec.ReplayCommandRunner,
+		skipBuiltInPrerequisiteValidation: skipBuiltInPrerequisiteValidation,
+		invocationSkipPermissionsOverride: invocationOverride,
+		factorySessionID:                  sessionID,
+		runtimeID:                         spec.RuntimeInstanceID,
+		recordingID:                       workerRecordingIdentity(spec.RuntimeInstanceID, spec.RecordPath),
+		clock:                             spec.Clock,
+	}
+	if runtimeFactory != nil && spec.LoadedFactoryCfg != nil {
+		resolver := runtime.NewWorkstationRequestExecutor(runtime.WorkstationRequestExecutorConfig{
+			Service:                    service,
+			RuntimeDefinitions:         spec.LoadedFactoryCfg,
+			InvocationInterpolation:    runtimeFactory.invocationInterpolation,
+			InvocationFileReader:       invocationFileReader(runtimeFactory.inputFiles),
+			WorkflowContext:            RuntimeWorkflowContext(spec.LoadedFactoryCfg.FactoryConfig(), sessionID),
+			FactorySessionID:           sessionID,
+			RuntimeID:                  spec.RuntimeInstanceID,
+			RecordingID:                workerRecordingIdentity(spec.RuntimeInstanceID, spec.RecordPath),
+			NewID:                      runtimeFactory.newID,
+			PromptRenderer:             service,
+			TemplateFieldResolver:      service,
+			MockWorkers:                mockWorkersConfig,
+			ProgressPublisher:          providerSessionProgress.Publish,
+			ExpectedArtifactFileSystem: runtimeFactory.inputFiles,
+		})
+		if typed, ok := resolver.(runtime.WorkstationExecutionResolver); ok {
+			service.workstationResolver = typed
+		}
+	}
+	return service
 }
 
 func setReplayEvents(
