@@ -12,6 +12,7 @@ import (
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	mcprecording "github.com/portpowered/infinite-you/pkg/services/recordings/transports/mcp"
+	factorysessionmapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factorysession"
 )
 
 const missingRecordingID = "recording-mcp-missing-001"
@@ -550,9 +551,14 @@ func newLegacyInspectionService(t *testing.T) (mcprecording.FactorySessionInspec
 		dispatches: []factorysessions.DispatchSummary{{ID: "dispatch-standalone-001", Status: factorysessions.DispatchStatus("COMPLETED"), DispatchKind: "JAVASCRIPT_SCRIPT"}},
 		artifacts:  []factorysessions.ArtifactSummary{{ID: "artifact-standalone-001", Kind: "LOG", Visibility: "PUBLIC", Label: "log", ContentHash: "hash", SizeBytes: 9, DispatchID: "dispatch-standalone-001"}},
 	}
-	service := mcprecording.NewLegacyFactorySessionInspection(legacy)
+	service := mcprecording.NewLegacyFactorySessionInspection(
+		factorysessionmapping.NewDurableInspectionBridge(legacy),
+	)
 	if service == nil || mcprecording.NewLegacyFactorySessionInspection(nil) != nil || mcprecording.NewLegacyFactorySessionInspection(struct{}{}) != nil {
 		t.Fatal("legacy inspection adapter should accept only the legacy inspection contract")
+	}
+	if factorysessionmapping.NewDurableInspectionBridge(struct{}{}) != nil {
+		t.Fatal("durable inspection bridge should accept only the durable inspection contract")
 	}
 	return service, sessionID
 }

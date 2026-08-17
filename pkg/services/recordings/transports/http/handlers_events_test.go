@@ -15,6 +15,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	factorysessionmapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factorysession"
 )
 
 func TestGetEventsBySessionId_RejectsInvalidReconnectBeforeFakeRoot(t *testing.T) {
@@ -95,7 +96,7 @@ func TestGetEventsBySessionId_EncodesFakeRootHistoryAsSSE(t *testing.T) {
 		!strings.Contains(recorder.Header().Get("Content-Type"), "text/event-stream") ||
 		!strings.Contains(body, `"id":"event-1"`) ||
 		recorder.Header().Get(SessionEventStreamFactorySessionHeader) != "session-1" ||
-		recorder.Header().Get(factorysessions.SessionEventStreamRetainedCountHeader) != "1" {
+		recorder.Header().Get(SessionEventStreamRetainedCountHeader) != "1" {
 		t.Fatalf("response = %d headers=%#v body=%s, want encoded SSE history", recorder.Code, recorder.Header(), body)
 	}
 }
@@ -240,7 +241,7 @@ func TestGetEventsBySessionId_DurableCompatibilityPrefersDurableHistoryOverLive(
 			},
 		},
 		&legacyHistoryFake{
-			events: func(context.Context, string, factorysessions.EventReconnectRequest) (*interfaces.FactoryEventStream, error) {
+			events: func(context.Context, string, factorysessionmapping.DurableEventReconnectInput) (*interfaces.FactoryEventStream, error) {
 				durableCalls++
 				return &interfaces.FactoryEventStream{
 					FactorySessionID: sessionID,

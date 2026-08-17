@@ -1447,8 +1447,6 @@
       "fromOwner": "factory_sessions",
       "toOwner": "recordings",
       "class": "event",
-      "bidirectional": true,
-      "unresolved": true,
       "evidence": "pkg/services/factory_sessions -> pkg/services/recordings"
     },
     {
@@ -1662,14 +1660,6 @@
       "bidirectional": true,
       "unresolved": true,
       "evidence": "pkg/services/recordings/internal -> pkg/services/factory_runtime"
-    },
-    {
-      "fromOwner": "recordings",
-      "toOwner": "factory_sessions",
-      "class": "command",
-      "bidirectional": true,
-      "unresolved": true,
-      "evidence": "pkg/services/recordings/transports/http -> pkg/services/factory_sessions"
     },
     {
       "fromOwner": "recordings",

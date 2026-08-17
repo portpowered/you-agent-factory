@@ -1,4 +1,4 @@
 {
   "description": "Ceiling for the exact minimum feedback arc set weight of the pkg/services cross-service import graph, derived by cmd/servicecyclecheck (make service-cycle). Weight is the number of non-test import statements that must be removed or reversed to make the service graph acyclic. This is a two-directional ratchet: the check fails when the weight rises above the ceiling, and it also fails when the weight drops below the ceiling without the ceiling being lowered in the same change. Lower this number whenever the checker reports a lower measured weight; never raise it.",
-  "ceiling": 42
+  "ceiling": 30
 }

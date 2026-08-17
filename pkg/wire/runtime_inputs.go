@@ -527,7 +527,10 @@ func newDurableExecutionHTTPHandler(
 		InvocationWorkType: invocationWorkType, SessionRequests: sessionRequests,
 	}, logger)
 	return transporthttp.NewServerWithRecordings(
-		recordingshttp.NewLegacyAdapter(durable, sessionRequests),
+		recordingshttp.NewLegacyAdapter(
+			factorysessionmapping.NewDurableHistoryBridge(durable),
+			factorysessionshttp.NewDurableRequestPreparation(sessionRequests),
+		),
 		sessionsHandler, nil, nil, nil, nil, logger,
 	).Handler(), nil
 }

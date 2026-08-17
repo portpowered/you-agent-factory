@@ -596,7 +596,9 @@ func provideMCPServerBuilder() mcpServerBuilder {
 	) (*mcpserver.Server, error) {
 		inspection := factorysessionmcp.RecordingsInspection(recordingsService)
 		if inspection == nil {
-			inspection = recordingmcp.NewLegacyFactorySessionInspection(execution)
+			if bridge := factorysessionmapping.NewDurableInspectionBridge(execution); bridge != nil {
+				inspection = recordingmcp.NewLegacyFactorySessionInspection(bridge)
+			}
 		}
 		return mcpserver.New(mcpserver.Options{
 			ToolOperation: mcpserver.ToolOperation(factorysessionmcp.BindToolOperation(
@@ -927,7 +929,10 @@ func newHTTPRuntimeHandler(
 	)
 	legacyDurable := factorysessionmapping.NewDurableAPI(opened.FactorySessions)
 	recordingsAdapter := recordingshttp.NewAdapterWithLegacyFallback(
-		opened.Recordings, legacyDurable, sessionRequests, opened.FactorySessions,
+		opened.Recordings,
+		factorysessionmapping.NewDurableHistoryBridge(legacyDurable),
+		factorysessionshttp.NewDurableRequestPreparation(sessionRequests),
+		opened.FactorySessions,
 	)
 	var workerSessionsHandler *workersessionshttp.Handler
 	if opened.WorkerSessions != nil {

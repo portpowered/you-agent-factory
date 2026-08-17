@@ -17,6 +17,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	factorysessionmapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factorysession"
 )
 
 func TestGetEventsBySessionId_DurableHistoryUsesHistoricalQueryAndPreservesOrder(t *testing.T) {
@@ -115,7 +116,7 @@ func TestHistoricalAdapter_LiveResultFallsBackToFactorySessions(t *testing.T) {
 			},
 		},
 		&legacyHistoryFake{
-			result: func(context.Context, string, factorysessions.ResultRequest) (factoryapi.FactorySessionResult, error) {
+			result: func(context.Context, string, factorysessionmapping.DurableResultInput) (factoryapi.FactorySessionResult, error) {
 				legacyCalls++
 				return factoryapi.FactorySessionResult{
 					SessionId: sessionID, ResultStatus: factoryapi.FactorySessionResultStatusNotReady,
@@ -423,9 +424,9 @@ func TestLegacyHistoryRecoveryProbeMapsReadyUnknownAndStaleOutcomes(t *testing.T
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			var got factorysessions.EventReconnectRequest
+			var got factorysessionmapping.DurableEventReconnectInput
 			adapter := NewLegacyAdapter(&legacyHistoryFake{
-				probe: func(_ context.Context, _ string, request factorysessions.EventReconnectRequest) error {
+				probe: func(_ context.Context, _ string, request factorysessionmapping.DurableEventReconnectInput) error {
 					got = request
 					return test.err
 				},
@@ -498,16 +499,16 @@ func historicalHTTPTestEvent(sessionID, id string, sequence int64) recordings.Ca
 
 type legacyHistoryFake struct {
 	LegacyHistory
-	result     func(context.Context, string, factorysessions.ResultRequest) (factoryapi.FactorySessionResult, error)
-	events     func(context.Context, string, factorysessions.EventReconnectRequest) (*interfaces.FactoryEventStream, error)
-	probe      func(context.Context, string, factorysessions.EventReconnectRequest) error
+	result     func(context.Context, string, factorysessionmapping.DurableResultInput) (factoryapi.FactorySessionResult, error)
+	events     func(context.Context, string, factorysessionmapping.DurableEventReconnectInput) (*interfaces.FactoryEventStream, error)
+	probe      func(context.Context, string, factorysessionmapping.DurableEventReconnectInput) error
 	dispatches func(context.Context, string, factoryapi.ListFactorySessionDispatchesParams) (factoryapi.ListFactorySessionDispatchesResponse, error)
 	artifacts  func(context.Context, string) (factoryapi.ListFactorySessionArtifactsResponse, error)
 	dispatch   func(context.Context, string, string) (factoryapi.FactoryDispatch, error)
 	artifact   func(context.Context, string, string) (factoryapi.FactorySessionArtifactDetail, error)
 }
 
-func (fake *legacyHistoryFake) GetDurableFactorySessionResult(ctx context.Context, sessionID string, request factorysessions.ResultRequest) (factoryapi.FactorySessionResult, error) {
+func (fake *legacyHistoryFake) GetDurableFactorySessionResult(ctx context.Context, sessionID string, request factorysessionmapping.DurableResultInput) (factoryapi.FactorySessionResult, error) {
 	return fake.result(ctx, sessionID, request)
 }
 
@@ -519,14 +520,14 @@ func (fake *legacyHistoryFake) ListDurableFactorySessionArtifacts(ctx context.Co
 	return fake.artifacts(ctx, sessionID)
 }
 
-func (fake *legacyHistoryFake) ReadDurableFactorySessionEvents(ctx context.Context, sessionID string, request factorysessions.EventReconnectRequest) (*interfaces.FactoryEventStream, error) {
+func (fake *legacyHistoryFake) ReadDurableFactorySessionEvents(ctx context.Context, sessionID string, request factorysessionmapping.DurableEventReconnectInput) (*interfaces.FactoryEventStream, error) {
 	if fake.events != nil {
 		return fake.events(ctx, sessionID, request)
 	}
 	return nil, nil
 }
 
-func (fake *legacyHistoryFake) ProbeDurableFactorySessionEvents(ctx context.Context, sessionID string, request factorysessions.EventReconnectRequest) error {
+func (fake *legacyHistoryFake) ProbeDurableFactorySessionEvents(ctx context.Context, sessionID string, request factorysessionmapping.DurableEventReconnectInput) error {
 	if fake.probe != nil {
 		return fake.probe(ctx, sessionID, request)
 	}
@@ -668,14 +669,14 @@ func TestWriteLegacyStreamHeaders_PublishesRetainedCountAndStreamIdentity(t *tes
 	writeLegacyStreamHeaders(recorder, stream, sessionID)
 
 	for header, want := range map[string]string{
-		"Content-Type":  "text/event-stream",
-		"Cache-Control": "no-cache",
-		"Connection":    "keep-alive",
-		factorysessions.SessionEventStreamRetainedCountHeader: "3",
-		"X-Factory-Session-Backend-Scope-Id":                  "backend-scope-1",
-		"X-Factory-Session-Logical-Session-Key-Id":            "logical-key-1",
-		SessionEventStreamFactorySessionHeader:                sessionID,
-		SessionEventStreamGenerationHeader:                    "generation-1",
+		"Content-Type":                             "text/event-stream",
+		"Cache-Control":                            "no-cache",
+		"Connection":                               "keep-alive",
+		SessionEventStreamRetainedCountHeader:      "3",
+		"X-Factory-Session-Backend-Scope-Id":       "backend-scope-1",
+		"X-Factory-Session-Logical-Session-Key-Id": "logical-key-1",
+		SessionEventStreamFactorySessionHeader:     sessionID,
+		SessionEventStreamGenerationHeader:         "generation-1",
 	} {
 		if got := recorder.Header().Get(header); got != want {
 			t.Fatalf("header %s = %q, want %q", header, got, want)
@@ -691,7 +692,7 @@ func TestWriteLegacyStreamHeaders_OmitsAbsentStreamIdentity(t *testing.T) {
 	recorder := httptest.NewRecorder()
 	writeLegacyStreamHeaders(recorder, &interfaces.FactoryEventStream{}, "dur-sess-legacy-headers-002")
 
-	if got := recorder.Header().Get(factorysessions.SessionEventStreamRetainedCountHeader); got != "0" {
+	if got := recorder.Header().Get(SessionEventStreamRetainedCountHeader); got != "0" {
 		t.Fatalf("retained count header = %q, want 0", got)
 	}
 	for _, header := range []string{

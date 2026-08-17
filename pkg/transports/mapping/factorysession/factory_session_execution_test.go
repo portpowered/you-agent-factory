@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -11,6 +12,7 @@ import (
 	"strings"
 	"testing"
 
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessionexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
@@ -403,14 +405,14 @@ func TestSyncStartResponseToAPI_MapsTerminalAndTimeoutFixtures(t *testing.T) {
 	}
 }
 
-func TestEventReconnectRequestFromCLI_MapsAfterEventIDAndSequence(t *testing.T) {
+func TestEventReconnectRequestFromInput_MapsAfterEventIDAndSequence(t *testing.T) {
 	sequence := 3
-	req, err := factorysession.EventReconnectRequestFromCLI(factorysession.CLIEventReconnectInput{
+	req, err := factorysession.EventReconnectRequestFromInput(factorysession.DurableEventReconnectInput{
 		AfterEventID:  " session-started/dur-sess-js-run-n-001 ",
 		AfterSequence: &sequence,
 	})
 	if err != nil {
-		t.Fatalf("EventReconnectRequestFromCLI: %v", err)
+		t.Fatalf("EventReconnectRequestFromInput: %v", err)
 	}
 	if req.AfterEventID != " session-started/dur-sess-js-run-n-001 " {
 		t.Fatalf("afterEventId = %q", req.AfterEventID)
@@ -420,14 +422,14 @@ func TestEventReconnectRequestFromCLI_MapsAfterEventIDAndSequence(t *testing.T) 
 	}
 }
 
-func TestResultRequestFromCLI_MapsModeAndIncludeArtifacts(t *testing.T) {
-	req, err := factorysession.ResultRequestFromCLI(factorysession.CLIResultInput{
+func TestResultRequestFromInput_MapsModeAndIncludeArtifacts(t *testing.T) {
+	req, err := factorysession.ResultRequestFromInput(factorysession.DurableResultInput{
 		Mode:             "partial",
 		IncludeArtifacts: true,
 	})
 
 	if err != nil {
-		t.Fatalf("ResultRequestFromCLI: %v", err)
+		t.Fatalf("ResultRequestFromInput: %v", err)
 	}
 	if req.Mode != factorysessionexecution.ResultModePartial {
 		t.Fatalf("mode = %q, want partial", req.Mode)
@@ -672,5 +674,326 @@ func TestNewResponseEventSubscription_SerializesPublishedEvents(t *testing.T) {
 	}
 	if !strings.Contains(string(records[0].Data), `"toolCallId":"call-7"`) {
 		t.Fatalf("record data = %s, want serialized tool payload", records[0].Data)
+	}
+}
+
+type durableHistorySourceFake struct {
+	resultRequest    factorysessionexecution.ResultRequest
+	reconnectRequest factorysessionexecution.EventReconnectRequest
+	dispatchID       string
+	artifactID       string
+	sessionID        string
+}
+
+func (fake *durableHistorySourceFake) GetDurableFactorySessionResult(_ context.Context, sessionID string, request factorysessionexecution.ResultRequest) (factoryapi.FactorySessionResult, error) {
+	fake.sessionID, fake.resultRequest = sessionID, request
+	return factoryapi.FactorySessionResult{SessionId: sessionID}, nil
+}
+
+func (fake *durableHistorySourceFake) ReadDurableFactorySessionEvents(_ context.Context, sessionID string, request factorysessionexecution.EventReconnectRequest) (*factorydefinitions.FactoryEventStream, error) {
+	fake.sessionID, fake.reconnectRequest = sessionID, request
+	return &factorydefinitions.FactoryEventStream{FactorySessionID: sessionID}, nil
+}
+
+func (fake *durableHistorySourceFake) ProbeDurableFactorySessionEvents(_ context.Context, sessionID string, request factorysessionexecution.EventReconnectRequest) error {
+	fake.sessionID, fake.reconnectRequest = sessionID, request
+	return nil
+}
+
+func (fake *durableHistorySourceFake) ListDurableFactorySessionDispatches(_ context.Context, sessionID string, _ factoryapi.ListFactorySessionDispatchesParams) (factoryapi.ListFactorySessionDispatchesResponse, error) {
+	fake.sessionID = sessionID
+	return factoryapi.ListFactorySessionDispatchesResponse{SessionId: sessionID}, nil
+}
+
+func (fake *durableHistorySourceFake) GetDurableFactorySessionDispatch(_ context.Context, sessionID, dispatchID string) (factoryapi.FactoryDispatch, error) {
+	fake.sessionID, fake.dispatchID = sessionID, dispatchID
+	return factoryapi.FactoryDispatch{Id: dispatchID}, nil
+}
+
+func (fake *durableHistorySourceFake) ListDurableFactorySessionArtifacts(_ context.Context, sessionID string) (factoryapi.ListFactorySessionArtifactsResponse, error) {
+	fake.sessionID = sessionID
+	return factoryapi.ListFactorySessionArtifactsResponse{SessionId: sessionID}, nil
+}
+
+func (fake *durableHistorySourceFake) GetDurableFactorySessionArtifact(_ context.Context, sessionID, artifactID string) (factoryapi.FactorySessionArtifactDetail, error) {
+	fake.sessionID, fake.artifactID = sessionID, artifactID
+	return factoryapi.FactorySessionArtifactDetail{Id: artifactID}, nil
+}
+
+func TestDurableHistoryBridge_CarriesTransportInputsOntoTheServiceRequest(t *testing.T) {
+	t.Parallel()
+
+	source := &durableHistorySourceFake{}
+	bridge := factorysession.NewDurableHistoryBridge(source)
+	if bridge == nil {
+		t.Fatal("durable history source should produce a bound bridge")
+	}
+	resultInput := factorysession.DurableResultInput{Mode: "partial", IncludeArtifacts: true}
+	result, err := bridge.GetDurableFactorySessionResult(context.Background(), "dur-sess-bridge-001", resultInput)
+	if err != nil || result.SessionId != "dur-sess-bridge-001" {
+		t.Fatalf("GetDurableFactorySessionResult = %#v, %v", result, err)
+	}
+	if source.resultRequest.Mode != factorysessionexecution.ResultMode("partial") ||
+		!source.resultRequest.IncludeArtifacts {
+		t.Fatalf("result request = %#v, want partial with artifacts", source.resultRequest)
+	}
+
+	sequence := 12
+	reconnect := factorysession.DurableEventReconnectInput{AfterEventID: "event-7", AfterSequence: &sequence}
+	stream, err := bridge.ReadDurableFactorySessionEvents(context.Background(), "dur-sess-bridge-002", reconnect)
+	if err != nil || stream == nil || stream.FactorySessionID != "dur-sess-bridge-002" {
+		t.Fatalf("ReadDurableFactorySessionEvents = %#v, %v", stream, err)
+	}
+	if source.reconnectRequest.AfterEventID != "event-7" ||
+		source.reconnectRequest.AfterSequence == nil || *source.reconnectRequest.AfterSequence != 12 {
+		t.Fatalf("reconnect request = %#v, want event-7/12", source.reconnectRequest)
+	}
+	if err := bridge.ProbeDurableFactorySessionEvents(context.Background(), "dur-sess-bridge-003", reconnect); err != nil {
+		t.Fatalf("ProbeDurableFactorySessionEvents: %v", err)
+	}
+	if source.sessionID != "dur-sess-bridge-003" {
+		t.Fatalf("probe sessionId = %q, want dur-sess-bridge-003", source.sessionID)
+	}
+}
+
+func TestDurableHistoryBridge_ForwardsAlreadyNeutralReads(t *testing.T) {
+	t.Parallel()
+
+	source := &durableHistorySourceFake{}
+	bridge := factorysession.NewDurableHistoryBridge(source)
+	ctx := context.Background()
+	listParams := factoryapi.ListFactorySessionDispatchesParams{}
+	dispatches, err := bridge.ListDurableFactorySessionDispatches(ctx, "dur-sess-bridge-004", listParams)
+	if err != nil || dispatches.SessionId != "dur-sess-bridge-004" {
+		t.Fatalf("ListDurableFactorySessionDispatches = %#v, %v", dispatches, err)
+	}
+	dispatch, err := bridge.GetDurableFactorySessionDispatch(ctx, "dur-sess-bridge-005", "dispatch-3")
+	if err != nil || dispatch.Id != "dispatch-3" {
+		t.Fatalf("GetDurableFactorySessionDispatch = %#v, %v", dispatch, err)
+	}
+	artifacts, err := bridge.ListDurableFactorySessionArtifacts(ctx, "dur-sess-bridge-006")
+	if err != nil || artifacts.SessionId != "dur-sess-bridge-006" {
+		t.Fatalf("ListDurableFactorySessionArtifacts = %#v, %v", artifacts, err)
+	}
+	artifact, err := bridge.GetDurableFactorySessionArtifact(ctx, "dur-sess-bridge-007", "artifact-4")
+	if err != nil || artifact.Id != "artifact-4" {
+		t.Fatalf("GetDurableFactorySessionArtifact = %#v, %v", artifact, err)
+	}
+}
+
+func TestNewDurableHistoryBridge_RejectsAbsentSources(t *testing.T) {
+	t.Parallel()
+
+	if factorysession.NewDurableHistoryBridge(nil) != nil {
+		t.Fatal("absent history source should not produce a bound bridge")
+	}
+	var typedNil *durableHistorySourceFake
+	if factorysession.NewDurableHistoryBridge(typedNil) != nil {
+		t.Fatal("typed-nil history source should not produce a bound bridge")
+	}
+}
+
+type durableInspectionSourceFake struct {
+	reconnect  factorysessionexecution.EventReconnectRequest
+	sessionID  string
+	dispatches []factorysessionexecution.DispatchSummary
+	artifacts  []factorysessionexecution.ArtifactSummary
+	events     []json.RawMessage
+}
+
+func (fake *durableInspectionSourceFake) QueryDispatches(_ context.Context, request factorysessionexecution.DispatchQueryRequest) (factorysessionexecution.ListDispatchesResult, error) {
+	fake.sessionID = request.SessionID
+	return factorysessionexecution.ListDispatchesResult{Dispatches: fake.dispatches}, nil
+}
+
+func (fake *durableInspectionSourceFake) ListArtifacts(_ context.Context, sessionID string) (factorysessionexecution.ListArtifactsResult, error) {
+	fake.sessionID = sessionID
+	return factorysessionexecution.ListArtifactsResult{Artifacts: fake.artifacts}, nil
+}
+
+func (fake *durableInspectionSourceFake) ReadEvents(_ context.Context, sessionID string, request factorysessionexecution.EventReconnectRequest) (factorysessionexecution.EventReadResult, error) {
+	fake.sessionID, fake.reconnect = sessionID, request
+	return factorysessionexecution.EventReadResult{Events: fake.events}, nil
+}
+
+func newDurableInspectionSourceFake() *durableInspectionSourceFake {
+	return &durableInspectionSourceFake{
+		dispatches: []factorysessionexecution.DispatchSummary{{
+			ID:           "dispatch-1",
+			Status:       factorysessionexecution.DispatchStatus("COMPLETED"),
+			DispatchKind: "PETRI_TRANSITION",
+		}},
+		artifacts: []factorysessionexecution.ArtifactSummary{{
+			ID: "artifact-1", Kind: "LOG", Visibility: "PUBLIC", Label: "log",
+			ContentHash: "hash", SizeBytes: 9, DispatchID: "dispatch-1",
+		}},
+		events: []json.RawMessage{json.RawMessage(`{"id":"event-1"}`)},
+	}
+}
+
+func TestDurableInspectionBridge_RestatesDispatchReadsInTransportVocabulary(t *testing.T) {
+	t.Parallel()
+
+	source := newDurableInspectionSourceFake()
+	bridge := factorysession.NewDurableInspectionBridge(source)
+	if bridge == nil {
+		t.Fatal("durable inspection source should produce a bound bridge")
+	}
+	dispatches, err := bridge.QueryDispatches(context.Background(), "dur-sess-inspect-001")
+	if err != nil {
+		t.Fatalf("QueryDispatches: %v", err)
+	}
+	want := []factorysession.HistoricalDispatchInput{
+		{ID: "dispatch-1", Status: "COMPLETED", DispatchKind: "PETRI_TRANSITION"},
+	}
+	if !reflect.DeepEqual(dispatches, want) {
+		t.Fatalf("QueryDispatches = %#v, want %#v", dispatches, want)
+	}
+	if source.sessionID != "dur-sess-inspect-001" {
+		t.Fatalf("query sessionId = %q, want dur-sess-inspect-001", source.sessionID)
+	}
+}
+
+func TestDurableInspectionBridge_RestatesArtifactReadsInTransportVocabulary(t *testing.T) {
+	t.Parallel()
+
+	source := newDurableInspectionSourceFake()
+	bridge := factorysession.NewDurableInspectionBridge(source)
+	artifacts, err := bridge.ListArtifacts(context.Background(), "dur-sess-inspect-002")
+	if err != nil {
+		t.Fatalf("ListArtifacts: %v", err)
+	}
+	want := []factorysession.DurableArtifactFact{{
+		ID: "artifact-1", Kind: "LOG", Visibility: "PUBLIC", Label: "log",
+		ContentHash: "hash", SizeBytes: 9, DispatchID: "dispatch-1",
+	}}
+	if !reflect.DeepEqual(artifacts, want) {
+		t.Fatalf("ListArtifacts = %#v, want %#v", artifacts, want)
+	}
+	if source.sessionID != "dur-sess-inspect-002" {
+		t.Fatalf("artifact sessionId = %q, want dur-sess-inspect-002", source.sessionID)
+	}
+}
+
+func TestDurableInspectionBridge_CarriesReconnectCursorsOntoEventReads(t *testing.T) {
+	t.Parallel()
+
+	source := newDurableInspectionSourceFake()
+	bridge := factorysession.NewDurableInspectionBridge(source)
+	sequence := 3
+	events, err := bridge.ReadEvents(context.Background(), "dur-sess-inspect-003",
+		factorysession.DurableEventReconnectInput{AfterEventID: "event-0", AfterSequence: &sequence})
+	if err != nil {
+		t.Fatalf("ReadEvents: %v", err)
+	}
+	if len(events) != 1 || string(events[0]) != `{"id":"event-1"}` {
+		t.Fatalf("ReadEvents = %#v, want the retained event payload", events)
+	}
+	if source.reconnect.AfterEventID != "event-0" {
+		t.Fatalf("reconnect afterEventId = %q, want event-0", source.reconnect.AfterEventID)
+	}
+	if source.reconnect.AfterSequence == nil || *source.reconnect.AfterSequence != 3 {
+		t.Fatalf("reconnect request = %#v, want afterSequence=3", source.reconnect)
+	}
+}
+
+func TestNewDurableInspectionBridge_RejectsAbsentAndForeignSources(t *testing.T) {
+	t.Parallel()
+
+	if factorysession.NewDurableInspectionBridge(nil) != nil {
+		t.Fatal("absent inspection source should not produce a bound bridge")
+	}
+	if factorysession.NewDurableInspectionBridge(struct{}{}) != nil {
+		t.Fatal("foreign value should not produce a bound bridge")
+	}
+	var typedNil *durableInspectionSourceFake
+	if factorysession.NewDurableInspectionBridge(typedNil) != nil {
+		t.Fatal("typed-nil inspection source should not produce a bound bridge")
+	}
+}
+
+func TestDurableInputsFromAPI_CarryPublicParametersWithoutTheServiceContract(t *testing.T) {
+	t.Parallel()
+
+	mode := factoryapi.FactorySessionResultMode("partial")
+	include := factoryapi.FactorySessionResultIncludeArtifacts(true)
+	result, err := factorysession.DurableResultInputFromAPI(factoryapi.GetFactorySessionResultsParams{
+		Mode: &mode, IncludeArtifacts: &include,
+	})
+	if err != nil || result.Mode != "partial" || !result.IncludeArtifacts {
+		t.Fatalf("DurableResultInputFromAPI = %#v, %v", result, err)
+	}
+	empty, err := factorysession.DurableResultInputFromAPI(factoryapi.GetFactorySessionResultsParams{})
+	if err != nil || empty.Mode != "" || empty.IncludeArtifacts {
+		t.Fatalf("DurableResultInputFromAPI(empty) = %#v, %v", empty, err)
+	}
+
+	eventID := factoryapi.AfterEventId("event-5")
+	sequence := factoryapi.AfterSequence(11)
+	reconnect, err := factorysession.DurableEventReconnectInputFromAPI(factoryapi.GetEventsBySessionIdParams{
+		AfterEventId: &eventID, AfterSequence: &sequence,
+	})
+	if err != nil || reconnect.AfterEventID != "event-5" ||
+		reconnect.AfterSequence == nil || *reconnect.AfterSequence != 11 {
+		t.Fatalf("DurableEventReconnectInputFromAPI = %#v, %v", reconnect, err)
+	}
+	blank, err := factorysession.DurableEventReconnectInputFromAPI(factoryapi.GetEventsBySessionIdParams{})
+	if err != nil || blank.AfterEventID != "" || blank.AfterSequence != nil {
+		t.Fatalf("DurableEventReconnectInputFromAPI(empty) = %#v, %v", blank, err)
+	}
+}
+
+func TestClassifyDurableHistoryFailure_ClassifiesEveryDurableHistorySentinel(t *testing.T) {
+	t.Parallel()
+
+	sessionNotFound := factorysession.DurableHistoryFailureSessionNotFound
+	dispatchNotFound := factorysession.DurableHistoryFailureDispatchNotFound
+	unclassified := factorysession.DurableHistoryFailureUnclassified
+	tests := []struct {
+		name string
+		err  error
+		want factorysession.DurableHistoryFailure
+	}{
+		{name: "absent", err: nil, want: unclassified},
+		{name: "durable session", err: factorysessionexecution.ErrDurableSessionNotFound, want: sessionNotFound},
+		{name: "live session", err: factorysessionexecution.ErrSessionNotFound, want: sessionNotFound},
+		{name: "dispatch", err: factorysessionexecution.ErrDispatchNotFound, want: dispatchNotFound},
+		{
+			name: "artifact",
+			err:  factorysessionexecution.ErrArtifactNotFound,
+			want: factorysession.DurableHistoryFailureArtifactNotFound,
+		},
+		{
+			name: "reconnect cursor",
+			err:  factorysessionexecution.ErrReconnectCursorNotFound,
+			want: factorysession.DurableHistoryFailureReconnectCursorNotFound,
+		},
+		{
+			name: "wrapped dispatch",
+			err:  fmt.Errorf("read dispatch: %w", factorysessionexecution.ErrDispatchNotFound),
+			want: dispatchNotFound,
+		},
+		{name: "unrelated", err: errors.New("boom"), want: unclassified},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			if got := factorysession.ClassifyDurableHistoryFailure(test.err); got != test.want {
+				t.Fatalf("ClassifyDurableHistoryFailure(%v) = %v, want %v", test.err, got, test.want)
+			}
+		})
+	}
+}
+
+func TestNewExecutionValidationError_MapsToBadRequestThroughExecutionErrorResponse(t *testing.T) {
+	t.Parallel()
+
+	err := factorysession.NewExecutionValidationError("status", "invalid status")
+	status, response, ok := factorysession.ExecutionErrorResponse(err)
+	if !ok || status != http.StatusBadRequest {
+		t.Fatalf("ExecutionErrorResponse = %d, %v, want 400 recognized", status, ok)
+	}
+	if response.Message != "invalid status" || response.Code != factoryapi.ErrorResponseCodeBADREQUEST {
+		t.Fatalf("response = %#v, want the invalid status bad-request body", response)
 	}
 }

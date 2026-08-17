@@ -702,3 +702,99 @@ func mustParseTime(t *testing.T, raw string) time.Time {
 	}
 	return value
 }
+
+func TestHistoricalDispatchListToAPI_ProjectsDetachedDispatchFacts(t *testing.T) {
+	t.Parallel()
+
+	response := factorysession.HistoricalDispatchListToAPI("dur-sess-hist-001", []factorysession.HistoricalDispatchInput{
+		{ID: "dispatch-1", Status: "COMPLETED", DispatchKind: "JAVASCRIPT_SCRIPT"},
+		{ID: "dispatch-2", Status: "FAILED", DispatchKind: "PETRI_TRANSITION"},
+	})
+	if response.SessionId != "dur-sess-hist-001" || len(response.Dispatches) != 2 {
+		t.Fatalf("response = %#v, want two dispatches for dur-sess-hist-001", response)
+	}
+	first := response.Dispatches[0]
+	if first.Id != "dispatch-1" ||
+		first.Status != factoryapi.FactoryDispatchStatus("COMPLETED") ||
+		first.DispatchKind != factoryapi.FactoryDispatchKind("JAVASCRIPT_SCRIPT") {
+		t.Fatalf("first dispatch = %#v, want dispatch-1 COMPLETED JAVASCRIPT_SCRIPT", first)
+	}
+	if response.Dispatches[1].Id != "dispatch-2" {
+		t.Fatalf("second dispatch = %#v, want dispatch-2", response.Dispatches[1])
+	}
+}
+
+func TestHistoricalDispatchListToAPI_EmitsAnEmptyListWithoutDispatches(t *testing.T) {
+	t.Parallel()
+
+	response := factorysession.HistoricalDispatchListToAPI("dur-sess-hist-002", nil)
+	if response.SessionId != "dur-sess-hist-002" || response.Dispatches == nil || len(response.Dispatches) != 0 {
+		t.Fatalf("response = %#v, want an empty dispatch list", response)
+	}
+}
+
+func TestHistoricalDispatchDetailToAPI_CarriesResolvedOrchestratorKind(t *testing.T) {
+	t.Parallel()
+
+	response := factorysession.HistoricalDispatchDetailToAPI(
+		"dur-sess-hist-003",
+		factorysession.HistoricalDispatchInput{ID: "dispatch-9", Status: "RUNNING", DispatchKind: "JAVASCRIPT_SCRIPT"},
+		"JAVASCRIPT",
+	)
+	if response.Id != "dispatch-9" || response.SessionId != "dur-sess-hist-003" {
+		t.Fatalf("response = %#v, want dispatch-9 on dur-sess-hist-003", response)
+	}
+	if response.OrchestratorKind != factoryapi.FactoryOrchestratorKind("JAVASCRIPT") {
+		t.Fatalf("orchestratorKind = %q, want JAVASCRIPT", response.OrchestratorKind)
+	}
+	if response.Status != factoryapi.FactoryDispatchStatus("RUNNING") {
+		t.Fatalf("status = %q, want RUNNING", response.Status)
+	}
+}
+
+func TestHistoricalResultToAPI_ProjectsFailureAndPrimaryResult(t *testing.T) {
+	t.Parallel()
+
+	response := factorysession.HistoricalResultToAPI(factorysession.HistoricalResultInput{
+		SessionID:        "dur-sess-hist-004",
+		ResultStatus:     "FAILED_WITH_PARTIAL",
+		SessionStatus:    "FAILED",
+		Mode:             "final",
+		IncludeArtifacts: true,
+		PrimaryResult:    json.RawMessage(`[{"type":"text","text":"partial"}]`),
+		ArtifactIDs:      []string{"artifact-1"},
+		Failure: &factorysession.HistoricalFailureInput{
+			Reason: "WORKER_FAILURE", Message: "worker exited", PartialResultAvailable: true,
+		},
+	})
+	if response.SessionId != "dur-sess-hist-004" {
+		t.Fatalf("sessionId = %q, want dur-sess-hist-004", response.SessionId)
+	}
+	if response.ResultStatus != factoryapi.FactorySessionResultStatus("FAILED_WITH_PARTIAL") {
+		t.Fatalf("resultStatus = %q, want FAILED_WITH_PARTIAL", response.ResultStatus)
+	}
+	if response.FailureDetail == nil || response.FailureDetail.Message != "worker exited" {
+		t.Fatalf("failureDetail = %#v, want the projected worker failure", response.FailureDetail)
+	}
+	if response.PartialResultAvailable == nil || !*response.PartialResultAvailable {
+		t.Fatal("partialResultAvailable should be published when the failure reports a partial result")
+	}
+	if response.PrimaryResult == nil {
+		t.Fatal("primaryResult should be carried onto the public response")
+	}
+}
+
+func TestHistoricalResultToAPI_OmitsFailureWhenAbsent(t *testing.T) {
+	t.Parallel()
+
+	response := factorysession.HistoricalResultToAPI(factorysession.HistoricalResultInput{
+		SessionID: "dur-sess-hist-005", ResultStatus: "FINAL", SessionStatus: "SUCCEEDED", Mode: "final",
+	})
+	if response.FailureDetail != nil {
+		t.Fatalf("failureDetail = %#v, want none", response.FailureDetail)
+	}
+	if response.SessionStatus == nil ||
+		*response.SessionStatus != factoryapi.FactorySessionDurableLifecycleStatus("SUCCEEDED") {
+		t.Fatalf("sessionStatus = %v, want SUCCEEDED", response.SessionStatus)
+	}
+}

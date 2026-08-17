@@ -6,15 +6,20 @@ import (
 	"strconv"
 	"strings"
 
-	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	factorysessionmapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factorysession"
 )
 
 const (
 	sessionEventStreamFactorySessionHeader = "X-Factory-Session-Factory-Session-Id"
 	sessionEventStreamGenerationHeader     = "X-Factory-Session-Stream-Generation-Id"
 )
+
+// SessionEventStreamRetainedCountHeader carries the number of already-committed
+// events replayed before an event stream switches to live delivery. It is the
+// same header the Factory Sessions stream publishes.
+const SessionEventStreamRetainedCountHeader = factorysessionmapping.SessionEventStreamRetainedCountHeader
 
 // SessionEventStreamFactorySessionHeader identifies the resolved session on an
 // event stream response.
@@ -297,7 +302,7 @@ func (a *Adapter) streamFactoryEvents(
 		w.Header().Set(SessionEventStreamGenerationHeader, streamGenerationID)
 	}
 	w.Header().Set(
-		factorysessions.SessionEventStreamRetainedCountHeader,
+		SessionEventStreamRetainedCountHeader,
 		strconv.Itoa(retainedEventCount),
 	)
 
