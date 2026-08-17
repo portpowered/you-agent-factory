@@ -185,6 +185,19 @@ func (a *Adapter) streamLegacyFactoryEvents(
 		a.writeError(w, http.StatusInternalServerError, "streaming unsupported", "INTERNAL_ERROR")
 		return
 	}
+	write := legacyFactoryEventWriter(w)
+	writeLegacyStreamHeaders(w, stream, sessionID)
+	if !writeLegacyHistory(flusher, stream.History, write) {
+		return
+	}
+	followLegacyFactoryEvents(r, flusher, stream.Events, write)
+}
+
+func writeLegacyStreamHeaders(
+	w http.ResponseWriter,
+	stream *interfaces.FactoryEventStream,
+	sessionID string,
+) {
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
@@ -202,7 +215,10 @@ func (a *Adapter) streamLegacyFactoryEvents(
 	if value := strings.TrimSpace(stream.StreamGenerationID); value != "" {
 		w.Header().Set(SessionEventStreamGenerationHeader, value)
 	}
-	write := func(event interfaces.FactoryEvent) error {
+}
+
+func legacyFactoryEventWriter(w http.ResponseWriter) func(interfaces.FactoryEvent) error {
+	return func(event interfaces.FactoryEvent) error {
 		var apiEvent factoryapi.FactoryEvent
 		encoded, err := json.Marshal(event)
 		if err != nil {
@@ -213,17 +229,33 @@ func (a *Adapter) streamLegacyFactoryEvents(
 		}
 		return writeSSEDataJSON(w, apiEvent)
 	}
-	for _, event := range stream.History {
+}
+
+func writeLegacyHistory(
+	flusher http.Flusher,
+	history []interfaces.FactoryEvent,
+	write func(interfaces.FactoryEvent) error,
+) bool {
+	for _, event := range history {
 		if err := write(event); err != nil {
-			return
+			return false
 		}
 		flusher.Flush()
 	}
+	return true
+}
+
+func followLegacyFactoryEvents(
+	r *http.Request,
+	flusher http.Flusher,
+	events <-chan interfaces.FactoryEvent,
+	write func(interfaces.FactoryEvent) error,
+) {
 	for {
 		select {
 		case <-r.Context().Done():
 			return
-		case event, ok := <-stream.Events:
+		case event, ok := <-events:
 			if !ok {
 				return
 			}

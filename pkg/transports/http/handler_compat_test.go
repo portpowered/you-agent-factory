@@ -78,15 +78,32 @@ func (s *Server) getEvents(
 	}
 	stream, err := subscribe(r.Context())
 	if err != nil {
-		status, message, code := http.StatusInternalServerError, "failed to subscribe to factory events", "INTERNAL_ERROR"
-		if errors.Is(err, apisurface.ErrFactorySessionNotFound) {
-			status, message, code = http.StatusNotFound, "factory session not found", "NOT_FOUND"
-		} else if errors.Is(err, apisurface.ErrInvalidEventReconnectCursor) || errors.Is(err, recordings.ErrReconnectCursorNotFound) {
-			status, message, code = http.StatusBadRequest, "invalid event reconnect cursor", "BAD_REQUEST"
-		}
-		s.writeError(w, status, message, code)
+		s.writeCompatEventSubscriptionError(w, err)
 		return
 	}
+	writeCompatEventHeaders(w, stream, includeSessionHandshake)
+	write := compatFactoryEventWriter(w)
+	if !writeCompatFactoryEventHistory(flusher, stream.History, write) {
+		return
+	}
+	followCompatFactoryEvents(r, flusher, stream.Events, write)
+}
+
+func (s *Server) writeCompatEventSubscriptionError(w http.ResponseWriter, err error) {
+	status, message, code := http.StatusInternalServerError, "failed to subscribe to factory events", "INTERNAL_ERROR"
+	if errors.Is(err, apisurface.ErrFactorySessionNotFound) {
+		status, message, code = http.StatusNotFound, "factory session not found", "NOT_FOUND"
+	} else if errors.Is(err, apisurface.ErrInvalidEventReconnectCursor) || errors.Is(err, recordings.ErrReconnectCursorNotFound) {
+		status, message, code = http.StatusBadRequest, "invalid event reconnect cursor", "BAD_REQUEST"
+	}
+	s.writeError(w, status, message, code)
+}
+
+func writeCompatEventHeaders(
+	w http.ResponseWriter,
+	stream *interfaces.FactoryEventStream,
+	includeSessionHandshake bool,
+) {
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
@@ -104,7 +121,10 @@ func (s *Server) getEvents(
 			}
 		}
 	}
-	write := func(event interfaces.FactoryEvent) error {
+}
+
+func compatFactoryEventWriter(w http.ResponseWriter) func(interfaces.FactoryEvent) error {
+	return func(event interfaces.FactoryEvent) error {
 		apiEvent, err := apisurface.FactoryEventToAPI(event)
 		if err != nil {
 			return err
@@ -116,17 +136,33 @@ func (s *Server) getEvents(
 		_, err = fmt.Fprintf(w, "data: %s\n\n", data)
 		return err
 	}
-	for _, event := range stream.History {
+}
+
+func writeCompatFactoryEventHistory(
+	flusher http.Flusher,
+	history []interfaces.FactoryEvent,
+	write func(interfaces.FactoryEvent) error,
+) bool {
+	for _, event := range history {
 		if err := write(event); err != nil {
-			return
+			return false
 		}
 		flusher.Flush()
 	}
+	return true
+}
+
+func followCompatFactoryEvents(
+	r *http.Request,
+	flusher http.Flusher,
+	events <-chan interfaces.FactoryEvent,
+	write func(interfaces.FactoryEvent) error,
+) {
 	for {
 		select {
 		case <-r.Context().Done():
 			return
-		case event, ok := <-stream.Events:
+		case event, ok := <-events:
 			if !ok {
 				return
 			}

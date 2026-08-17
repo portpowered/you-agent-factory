@@ -14,6 +14,13 @@ import (
 )
 
 func TestGetFactorySessionResults_RuntimeBackedCompletedReturnsFinalResult(t *testing.T) {
+	result := runtimeBackedCompletedResult(t)
+	assertCompletedResult(t, result)
+	assertOrderedMixedContentResult(t, result)
+}
+
+func runtimeBackedCompletedResult(t *testing.T) factoryapi.FactorySessionResult {
+	t.Helper()
 	const sessionID = "dur-sess-api-result-001"
 	final := finalAPIResult(sessionID)
 	final.PrimaryResult = json.RawMessage(`[{"type":"text","text":"first"},{"type":"JSON","json":{"echo":"you:api"}},{"type":"image","url":"you-artifact://dur-sess-api-result-001/image-1"}]`)
@@ -56,8 +63,13 @@ func TestGetFactorySessionResults_RuntimeBackedCompletedReturnsFinalResult(t *te
 	}
 
 	result := getDurableFactorySessionResult(t, server.URL, syncResult.SessionId, "")
-	if result.SessionId != syncResult.SessionId {
-		t.Fatalf("sessionId = %q, want %q", result.SessionId, syncResult.SessionId)
+	return result
+}
+
+func assertCompletedResult(t *testing.T, result factoryapi.FactorySessionResult) {
+	t.Helper()
+	if result.SessionId != "dur-sess-api-result-001" {
+		t.Fatalf("sessionId = %q, want dur-sess-api-result-001", result.SessionId)
 	}
 	if result.ResultStatus != factoryapi.FactorySessionResultStatusFinal {
 		t.Fatalf("resultStatus = %q, want FINAL", result.ResultStatus)
@@ -65,6 +77,10 @@ func TestGetFactorySessionResults_RuntimeBackedCompletedReturnsFinalResult(t *te
 	if result.PrimaryResult == nil || len(*result.PrimaryResult) != 3 {
 		t.Fatalf("primaryResult = %#v, want three ordered work content parts", result.PrimaryResult)
 	}
+}
+
+func assertOrderedMixedContentResult(t *testing.T, result factoryapi.FactorySessionResult) {
+	t.Helper()
 	textPart, err := (*result.PrimaryResult)[0].AsWorkTextContentPart()
 	if err != nil {
 		t.Fatalf("primary result text part: %v", err)

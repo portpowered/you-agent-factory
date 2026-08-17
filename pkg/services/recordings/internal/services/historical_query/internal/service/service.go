@@ -171,6 +171,19 @@ func validatePortableArtifact(
 	artifact recordings.PortableArtifact,
 	identity recordings.HistoricalRecordingIdentity,
 ) error {
+	if err := validatePortableArtifactSummary(artifact, identity); err != nil {
+		return err
+	}
+	if err := validatePortableArtifactCursors(artifact); err != nil {
+		return err
+	}
+	return validatePortableArtifactIntegrity(artifact)
+}
+
+func validatePortableArtifactSummary(
+	artifact recordings.PortableArtifact,
+	identity recordings.HistoricalRecordingIdentity,
+) error {
 	summary := artifact.Summary
 	if artifact.SchemaVersion != recordings.PortableArtifactSchemaV1 ||
 		summary.RecordingID != identity.RecordingID ||
@@ -180,6 +193,11 @@ func validatePortableArtifact(
 		(summary.State != recordings.RecordingFinalized && summary.State != recordings.RecordingFailed) {
 		return errors.New("portable artifact summary is inconsistent")
 	}
+	return nil
+}
+
+func validatePortableArtifactCursors(artifact recordings.PortableArtifact) error {
+	summary := artifact.Summary
 	if len(artifact.Events) == 0 {
 		if summary.FirstCursor != nil || summary.LastCursor != nil {
 			return errors.New("portable artifact empty cursor bounds are invalid")
@@ -189,6 +207,10 @@ func validatePortableArtifact(
 		*summary.LastCursor != artifact.Events[len(artifact.Events)-1].Cursor {
 		return errors.New("portable artifact cursor bounds are invalid")
 	}
+	return nil
+}
+
+func validatePortableArtifactIntegrity(artifact recordings.PortableArtifact) error {
 	if artifact.Integrity.Algorithm != recordings.PortableArtifactIntegritySHA256 {
 		return errors.New("portable artifact integrity algorithm is invalid")
 	}
