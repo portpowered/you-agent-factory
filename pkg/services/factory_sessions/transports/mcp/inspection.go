@@ -16,6 +16,18 @@ import (
 	apifactorysession "github.com/portpowered/infinite-you/pkg/transports/mapping/factorysession"
 )
 
+// RecordingsInspection is the narrow Recordings capability consumed by the
+// Factory Sessions inspection tools. The consumer owns this view so fixture
+// bridges can satisfy the same detached operations without expanding the
+// Recordings service-root interface set.
+type RecordingsInspection interface {
+	QueryRecordingStatus(recordings.RecordingStatusRequest) (recordings.RecordingStatusResult, error)
+	QueryHistoricalRecording(recordings.HistoricalRecordingQueryRequest) (recordings.HistoricalRecordingQueryResult, error)
+	BuildPortableArtifact(recordings.BuildPortableArtifactRequest) (recordings.BuildPortableArtifactResult, error)
+	ReconstructWorldState(recordings.ReconstructWorldStateRequest) (recordings.ReconstructWorldStateResult, error)
+	SubscribeFrom(context.Context, recordings.SubscribeRequest) (recordings.SubscribeResult, error)
+}
+
 // ListDispatchesInput is the MCP request shape for you.factory_session.list_dispatches.
 type ListDispatchesInput struct {
 	SessionID string `json:"sessionId"`
@@ -28,7 +40,7 @@ type ListDispatchesInput struct {
 // is owned by Recordings; the durable execution role is intentionally absent.
 func ListDispatches(
 	ctx context.Context,
-	service recordings.FactorySessionInspectionService,
+	service RecordingsInspection,
 	input ListDispatchesInput,
 ) ToolResponse[factoryapi.ListFactorySessionDispatchesResponse] {
 	if ctx == nil {
@@ -56,7 +68,7 @@ type ListArtifactsInput struct {
 // owns the artifact and reconstructed-world-state reads.
 func ListArtifacts(
 	ctx context.Context,
-	service recordings.FactorySessionInspectionService,
+	service RecordingsInspection,
 	input ListArtifactsInput,
 ) ToolResponse[factoryapi.ListFactorySessionArtifactsResponse] {
 	if ctx == nil {
@@ -90,7 +102,7 @@ type ReadEventsResult struct {
 // ReadEvents returns ordered Factory Session event facts for reconnect and
 // inspection through the you.factory_session.read_events MCP tool. Recordings
 // owns the canonical event subscription and reconnect cursor semantics.
-func ReadEvents(ctx context.Context, service recordings.FactorySessionInspectionService, input ReadEventsInput) ToolResponse[ReadEventsResult] {
+func ReadEvents(ctx context.Context, service RecordingsInspection, input ReadEventsInput) ToolResponse[ReadEventsResult] {
 	if ctx == nil {
 		envelope := executionErrorEnvelope(errMissingRequestContext)
 		return ToolResponse[ReadEventsResult]{Error: &envelope}
@@ -280,7 +292,7 @@ func derefString(value *string) string {
 // package part of the Factory Sessions transport dependency graph.
 func listFactorySessionDispatches(
 	ctx context.Context,
-	service recordings.FactorySessionInspectionService,
+	service RecordingsInspection,
 	input ListDispatchesInput,
 ) (factoryapi.ListFactorySessionDispatchesResponse, error) {
 	if err := validateDispatchStatus(input.Status); err != nil {
@@ -319,7 +331,7 @@ func listFactorySessionDispatches(
 
 func listFactorySessionArtifacts(
 	ctx context.Context,
-	service recordings.FactorySessionInspectionService,
+	service RecordingsInspection,
 	input ListArtifactsInput,
 ) (factoryapi.ListFactorySessionArtifactsResponse, error) {
 	if err := validateInspectionRequest(ctx, service, input.SessionID); err != nil {
@@ -368,7 +380,7 @@ func listFactorySessionArtifacts(
 
 func readFactorySessionEvents(
 	ctx context.Context,
-	service recordings.FactorySessionInspectionService,
+	service RecordingsInspection,
 	input ReadEventsInput,
 ) (ReadEventsResult, error) {
 	if err := validateInspectionRequest(ctx, service, input.SessionID); err != nil {
@@ -419,7 +431,7 @@ func readFactorySessionEvents(
 
 func validateInspectionRequest(
 	ctx context.Context,
-	service recordings.FactorySessionInspectionService,
+	service RecordingsInspection,
 	sessionID string,
 ) error {
 	if ctx == nil {
@@ -448,7 +460,7 @@ func validateDispatchStatus(status string) error {
 
 func historicalRecording(
 	ctx context.Context,
-	service recordings.FactorySessionInspectionService,
+	service RecordingsInspection,
 	sessionID string,
 ) (recordings.HistoricalRecordingQueryResult, error) {
 	status, err := service.QueryRecordingStatus(recordings.RecordingStatusRequest{

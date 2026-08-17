@@ -675,7 +675,7 @@ func provideMCPServerBuilder() mcpServerBuilder {
 		prepare factorysessionwire.RequestPreparation,
 		workflowPreview factoryruntime.WorkflowPreviewOperation,
 	) (*mcpserver.Server, error) {
-		inspection := recordings.FactorySessionInspectionService(recordingsService)
+		inspection := factorysessionmcp.RecordingsInspection(recordingsService)
 		if inspection == nil {
 			inspection = recordingmcp.NewLegacyFactorySessionInspection(execution)
 		}

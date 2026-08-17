@@ -93,10 +93,17 @@ func historicalQueryErrorEnvelope(recordingID string, err error) ToolErrorEnvelo
 	return executionErrorEnvelope(recordingID, err)
 }
 
-// FactorySessionInspectionService keeps the compatibility name available to
-// existing Recordings transport callers while the actual capability is now
-// published by the Recordings root.
-type FactorySessionInspectionService = recordings.FactorySessionInspectionService
+// FactorySessionInspectionService is the local compatibility seam used by the
+// standalone Recordings transport adapter. Factory Sessions owns its own
+// consumer view so this transport package does not publish a peer-facing
+// service-root interface.
+type FactorySessionInspectionService interface {
+	QueryRecordingStatus(recordings.RecordingStatusRequest) (recordings.RecordingStatusResult, error)
+	QueryHistoricalRecording(recordings.HistoricalRecordingQueryRequest) (recordings.HistoricalRecordingQueryResult, error)
+	BuildPortableArtifact(recordings.BuildPortableArtifactRequest) (recordings.BuildPortableArtifactResult, error)
+	ReconstructWorldState(recordings.ReconstructWorldStateRequest) (recordings.ReconstructWorldStateResult, error)
+	SubscribeFrom(context.Context, recordings.SubscribeRequest) (recordings.SubscribeResult, error)
+}
 
 // LegacyFactorySessionInspection is the compatibility input used only by the
 // standalone fixture opener. It is deliberately kept beside the Recordings

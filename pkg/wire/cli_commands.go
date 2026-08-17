@@ -539,12 +539,10 @@ func provideConfigureInitOperation(
 	), nil
 }
 
-func provideACPCLIService(
-	settings operatorsettings.Service,
+func provideACPConfigureOperation(
 	providersService providers.Service,
-	generateID operatorsettings.IDGenerator,
-) acpcli.Operations {
-	configure := func(ctx context.Context, configured []operatorsettings.ACPIntegration) error {
+) func(context.Context, []operatorsettings.ACPIntegration) error {
+	return func(ctx context.Context, configured []operatorsettings.ACPIntegration) error {
 		if providersService == nil {
 			return fmt.Errorf("Providers service is required")
 		}
@@ -563,6 +561,14 @@ func provideACPCLIService(
 		}
 		return configurator.ConfigureACPIntegrations(ctx, integrations)
 	}
+}
+
+func provideACPCLIService(
+	settings operatorsettings.Service,
+	providersService providers.Service,
+	generateID operatorsettings.IDGenerator,
+) acpcli.Operations {
+	configure := provideACPConfigureOperation(providersService)
 	listWorkers := func(ctx context.Context, home string) (acpcli.WorkerCatalog, error) {
 		if settings == nil {
 			return acpcli.WorkerCatalog{}, fmt.Errorf("Operator Settings service is required")

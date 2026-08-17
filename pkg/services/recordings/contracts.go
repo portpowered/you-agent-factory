@@ -3,7 +3,6 @@
 package recordings
 
 import (
-	"context"
 	"errors"
 )
 
@@ -330,18 +329,6 @@ type (
 // to import another service's transport package to classify the failure.
 var ErrServiceUnavailable = errors.New("recordings service is required")
 
-// FactorySessionInspectionService is the narrow Recordings capability used by
-// Factory Session inspection transports. The aggregate Service satisfies this
-// interface, while fixture-only compatibility adapters can provide the same
-// detached read operations without constructing a second Recordings graph.
-type FactorySessionInspectionService interface {
-	QueryRecordingStatus(RecordingStatusRequest) (RecordingStatusResult, error)
-	QueryHistoricalRecording(HistoricalRecordingQueryRequest) (HistoricalRecordingQueryResult, error)
-	BuildPortableArtifact(BuildPortableArtifactRequest) (BuildPortableArtifactResult, error)
-	ReconstructWorldState(ReconstructWorldStateRequest) (ReconstructWorldStateResult, error)
-	SubscribeFrom(context.Context, SubscribeRequest) (SubscribeResult, error)
-}
-
 // RuntimeOpening is the Recordings-owned capability used while Factory
 // Runtime opens a private runtime scope. Replay input loading remains on the
 // same process root so Factory Sessions cannot construct a second Recordings
@@ -530,8 +517,6 @@ type Service interface {
 	// projections selected by that artifact.
 	QueryHistoricalRecording(HistoricalRecordingQueryRequest) (HistoricalRecordingQueryResult, error)
 }
-
-var _ FactorySessionInspectionService = (Service)(nil)
 
 // HistoricalRecordingIdentity identifies one durable recording and its
 // requested Factory Session scope.
