@@ -782,3 +782,67 @@ func TestInfer_PeerCompilesWithoutNestedInvoker(t *testing.T) {
 		t.Fatalf("InvokeLocal result = %#v, want handled Models-owned shape", result)
 	}
 }
+
+// TestInferenceFailure_CarriesClassificationAndUnwrapsToItsCause pins the
+// behavior outward adapters depend on: the failure reports its public message,
+// participates in errors.Is/errors.As traversal through its cause, and answers
+// safely on a nil receiver.
+func TestInferenceFailure_CarriesClassificationAndUnwrapsToItsCause(t *testing.T) {
+	cause := fmt.Errorf("host refused: %w", models.ErrLoading)
+	failure := &models.InferenceFailure{
+		Class:      models.InferenceFailureClassLoadingModel,
+		Message:    "managed runtime is still loading",
+		ModelName:  "OMNIVOICE_Q4_K_M",
+		WorkerName: "speech",
+		Operation:  "TTS",
+		Cause:      cause,
+	}
+
+	if failure.Error() != "managed runtime is still loading" {
+		t.Fatalf("Error() = %q, want the public message", failure.Error())
+	}
+	if !errors.Is(failure, models.ErrLoading) {
+		t.Fatal("errors.Is must reach ErrLoading through the retained cause")
+	}
+	if !errors.Is(failure.Unwrap(), models.ErrLoading) {
+		t.Fatal("Unwrap must return the retained cause")
+	}
+
+	var classified *models.InferenceFailure
+	if !errors.As(fmt.Errorf("wrapped: %w", failure), &classified) {
+		t.Fatal("errors.As must recover the failure from a wrapping error")
+	}
+	if classified.Class != models.InferenceFailureClassLoadingModel ||
+		classified.ModelName != "OMNIVOICE_Q4_K_M" ||
+		classified.WorkerName != "speech" ||
+		classified.Operation != "TTS" {
+		t.Fatalf("recovered failure = %#v, want the original identity and class", classified)
+	}
+}
+
+func TestInferenceFailure_NilReceiverReportsNothing(t *testing.T) {
+	var absent *models.InferenceFailure
+	if absent.Error() != "" {
+		t.Fatalf("nil Error() = %q, want empty", absent.Error())
+	}
+	if absent.Unwrap() != nil {
+		t.Fatalf("nil Unwrap() = %v, want nil", absent.Unwrap())
+	}
+}
+
+func TestInferenceFailureClass_NamesEveryCustomerFacingCategory(t *testing.T) {
+	for _, want := range []struct {
+		class models.InferenceFailureClass
+		name  string
+	}{
+		{models.InferenceFailureClassMissingModel, "missing_model"},
+		{models.InferenceFailureClassLoadingModel, "loading_model"},
+		{models.InferenceFailureClassUnsupportedOperation, "unsupported_operation"},
+		{models.InferenceFailureClassTimeout, "timeout"},
+		{models.InferenceFailureClassRuntimeFailure, "runtime_failure"},
+	} {
+		if string(want.class) != want.name {
+			t.Fatalf("class %v = %q, want %q", want.class, string(want.class), want.name)
+		}
+	}
+}
