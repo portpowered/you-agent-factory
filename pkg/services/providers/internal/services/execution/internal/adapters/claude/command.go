@@ -89,17 +89,39 @@ func buildCommand(request execution.ContinuationRequest) (providerservice.Comman
 		"--output-format",
 		outputFormatStreamJSON,
 		"--include-partial-messages",
-		request.UserMessage,
 	)
-	return commanddispatch.Request(request.ExecuteRequest, providerservice.CommandRequest{
+	command := providerservice.CommandRequest{
 		Command: string(providers.IDClaude),
-		Args:    args,
 		Env: buildCommandEnv(
 			request.ProcessEnvironment,
 			request.EnvVars,
 		),
 		WorkDir: request.WorkingDirectory,
-	}), nil
+	}
+	command.Args, command.Stdin = deliverPrompt(command.Command, args, request.UserMessage)
+	return commanddispatch.Request(request.ExecuteRequest, command), nil
+}
+
+// promptCommandLineBudget is the composed command-line size at which the
+// rendered prompt stops travelling in argv. The bound is the Windows
+// CreateProcess limit, applied on every host so one factory definition
+// dispatches identically everywhere instead of succeeding on Linux and being
+// rejected by the process loader on Windows.
+const promptCommandLineBudget = platformprocess.WindowsCommandLineLimit
+
+// deliverPrompt chooses how the rendered prompt reaches the provider. The
+// prompt stays in argv while the composed command line fits the budget, which
+// keeps the observable command shape unchanged for ordinary work. A prompt
+// large enough to push the command line past the budget moves to stdin, which
+// print mode accepts and which is already how the codex adapter delivers every
+// prompt. Without this the process loader rejects the spawn outright, so the
+// payload size, not the request, decided whether work could dispatch at all.
+func deliverPrompt(command string, args []string, prompt string) ([]string, []byte) {
+	inline := append(append([]string(nil), args...), prompt)
+	if platformprocess.ComposedCommandLineLength(command, inline) < promptCommandLineBudget {
+		return inline, nil
+	}
+	return args, []byte(prompt)
 }
 
 func buildCommandEnv(processEnvironment []string, envVars map[string]string) []string {
