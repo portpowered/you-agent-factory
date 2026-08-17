@@ -272,7 +272,6 @@ var workerServiceSet = wire.NewSet(
 	provideWorkersWorktreeRelease,
 	provideWorkersFactoryDocsFileSystem,
 	provideProviderFromCommandRunnerFactory,
-	provideWorkerInvocationWithProgressFactory,
 	provideWorkerProcessEnvironment,
 	provideWorkerCurrentWorkingDirectory,
 )

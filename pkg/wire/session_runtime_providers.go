@@ -1034,14 +1034,6 @@ func provideWorkersMockCommandRunnerFactory() factoryruntime.WorkersMockCommandR
 	return workerswire.NewMockCommandRunner
 }
 
-func provideWorkerInvocationWithProgressFactory(
-	executionService workers.Service,
-) factorysessionwire.WorkerInvocationWithProgressFactory {
-	return func(_ workers.CommandRunner, _ workers.PTYAllocator, publisher workers.ProgressPublisher) (workers.InvocationExecutor, error) {
-		return workerswire.NewInvocationWithProgressFromService(executionService, publisher), nil
-	}
-}
-
 func provideConductorInvocationWithProgressFactory(
 	providersService providers.Service,
 	edges serviceedges.Edges,

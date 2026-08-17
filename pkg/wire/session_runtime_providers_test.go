@@ -682,44 +682,6 @@ func TestWorkerProviderCommandRunnerHonorsInjectedAndDefaultOwnership(t *testing
 	}
 }
 
-func TestWorkerInvocationWithProgressFactoryConstructsExecutor(t *testing.T) {
-	service := &executeOnlyWorkersService{}
-	factory := provideWorkerInvocationWithProgressFactory(service)
-	executor, err := factory(nil, nil, nil)
-	if err != nil {
-		t.Fatalf("worker invocation factory() error = %v", err)
-	}
-	if executor == nil {
-		t.Fatal("worker invocation factory() = nil executor")
-	}
-	if _, err := executor.Execute(context.Background(), workers.InvocationInput{
-		Request: workers.ProviderInferenceRequest{RunnerID: "script"},
-	}); err != nil {
-		t.Fatalf("canonical invocation adapter Execute() error = %v", err)
-	}
-	if service.calls != 1 || service.request.Target.RunnerID != "script" {
-		t.Fatalf("canonical Execute calls/request = %d/%#v, want one script request", service.calls, service.request)
-	}
-}
-
-// executeOnlyWorkersService keeps this construction test focused on the
-// canonical Execute dependency. Embedding the root contract is sufficient
-// because the factory only forwards the service to its adapter.
-type executeOnlyWorkersService struct {
-	workers.Service
-	request workers.ExecuteRequest
-	calls   int
-}
-
-func (service *executeOnlyWorkersService) Execute(
-	_ context.Context,
-	request workers.ExecuteRequest,
-) (workers.ExecuteResult, error) {
-	service.calls++
-	service.request = request
-	return workers.ExecuteResult{Outcome: workers.ExecutionOutcomeAccepted}, nil
-}
-
 func TestWorkerProcessCompatibilityCallbacksRemainCallable(t *testing.T) {
 	if environment := provideWorkerProcessEnvironment()(); len(environment) == 0 {
 		t.Fatal("provideWorkerProcessEnvironment() returned an empty environment")

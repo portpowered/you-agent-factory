@@ -13,15 +13,6 @@ import (
 	workerinvocation "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/invocation"
 )
 
-// NewInvocationWithProgressFromService preserves the old progress-capable
-// factory shape while routing its attempt through Workers Service.Execute.
-func NewInvocationWithProgressFromService(
-	service workers.Service,
-	publisher workers.ProgressPublisher,
-) workers.InvocationExecutor {
-	return workerinvocation.NewExecuteServiceWithProgress(service, publisher)
-}
-
 // TODO(P6-C): retire the provider-backed compatibility invocation bridge after
 // Runtime and Sessions caller families pass detached values to Service.Execute.
 // NewInvocation constructs the narrow direct-invocation role used by

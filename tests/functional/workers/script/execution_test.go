@@ -13,11 +13,8 @@ import (
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	"github.com/portpowered/infinite-you/pkg/root"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
-	modelinference "github.com/portpowered/infinite-you/pkg/services/models"
-	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
-	workerwire "github.com/portpowered/infinite-you/pkg/services/workers/wire"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -208,233 +205,141 @@ func TestServiceConfigOverrideAlignment_FunctionalHTTPServerScriptCommandRunner(
 	}
 }
 
-// TestStatelessInvocationAdapterExecutesThroughCanonicalWorkers proves the
-// compatibility invocation boundary uses a real root-built Workers service,
-// rather than constructing the retired provider-backed execution graph.
-func TestStatelessInvocationAdapterExecutesThroughCanonicalWorkers(t *testing.T) {
-	runner := support.NewRecordingCommandRunner("adapter-script-output")
+// TestStatelessWorkersRootExecutesDetachedScriptAttempt proves a detached
+// script attempt submitted to the public Workers root contract runs through
+// the injected command edge and returns one correlated accepted result.
+func TestStatelessWorkersRootExecutesDetachedScriptAttempt(t *testing.T) {
+	runner := support.NewRecordingCommandRunner("detached-script-output")
 	service, err := root.BuildStatelessWorkers(t.Context(), serviceedges.Edges{
 		ScriptCommandRunner: runner,
 	})
 	if err != nil {
 		t.Fatalf("BuildStatelessWorkers() error = %v", err)
 	}
-	executor := workerwire.NewInvocationWithProgressFromService(service, nil)
 
-	result, err := executor.Execute(context.Background(), workerexecution.InvocationInput{
-		Request: workerexecution.ProviderInferenceRequest{
-			Dispatch: work.WorkDispatch{
-				DispatchID:  "adapter-dispatch",
-				WorkerType:  "SCRIPT_WORKER",
-				ProjectID:   "adapter-project",
-				InputTokens: []any{"adapter-token"},
-				Execution: work.ExecutionMetadata{
-					RequestID: "adapter-request",
-					TraceID:   "adapter-trace",
-				},
-			},
-			Correlation: workerexecution.ExecutionCorrelation{
-				FactorySessionID: "adapter-session",
-				RuntimeID:        "adapter-runtime",
-				GenerationID:     "adapter-generation",
-				DispatchID:       "adapter-dispatch",
-				AttemptID:        "adapter-attempt",
-				RequestID:        "adapter-request",
-				TraceID:          "adapter-trace",
-			},
-			WorkerName:       "adapter-script-worker",
-			WorkerType:       "SCRIPT_WORKER",
-			WorkstationType:  "adapter-workstation",
-			RunnerID:         "script",
-			ExecutorProvider: workerexecution.ExecutorProviderACP,
-			Model:            "adapter-model",
-			ModelProvider:    "adapter-provider",
-			ModelOperation:   "invoke",
-			UserMessage:      "run the adapter script",
-			EnvVars:          map[string]string{"ADAPTER_MODE": "functional"},
-			Command:          "echo",
-			Args:             []string{"adapter-output"},
-		},
-	})
+	result, err := service.Execute(t.Context(), detachedScriptExecuteRequest())
 	if err != nil {
-		t.Fatalf("invocation Execute() error = %v", err)
+		t.Fatalf("Workers Execute() error = %v", err)
 	}
-	if result.Attempt != 1 || result.Response.Outcome != workerexecution.OutcomeAccepted ||
-		result.Response.Content != "adapter-script-output" {
-		t.Fatalf(
-			"invocation result = %#v, failure metadata = %#v, failure detail = %#v, want normalized accepted output",
-			result,
-			result.FailureMetadata,
-			result.FailureDetail,
-		)
+	if result.Outcome != workerexecution.ExecutionOutcomeAccepted {
+		t.Fatalf("detached outcome = %q, failure = %#v, want ACCEPTED", result.Outcome, result.Failure)
+	}
+	if got := executeOutputText(result.Output); got != "detached-script-output" {
+		t.Fatalf("detached primary output = %q, want the script stdout", got)
+	}
+	if result.Correlation.DispatchID != "detached-dispatch" ||
+		result.Correlation.AttemptID != "detached-attempt" ||
+		result.Correlation.TraceID != "detached-trace" {
+		t.Fatalf("result correlation = %#v, want the submitted detached correlation", result.Correlation)
 	}
 	if runner.CallCount() != 1 {
 		t.Fatalf("script command calls = %d, want one canonical Workers attempt", runner.CallCount())
 	}
 	request := runner.LastRequest()
-	if request.Command != "echo" || len(request.Args) != 1 || request.Args[0] != "adapter-output" {
-		t.Fatalf("script command request = %#v, want mapped invocation command", request)
+	if request.Command != "echo" || len(request.Args) != 1 || request.Args[0] != "detached-output" {
+		t.Fatalf("script command request = %#v, want the submitted command and args", request)
 	}
 }
 
-// TestStatelessInvocationAdapterPreservesCanonicalFailureAndPreStartErrors
-// proves both canonical terminal results and pre-start Execute errors retain
-// their public invocation shape at the compatibility boundary.
-func TestStatelessInvocationAdapterPreservesCanonicalFailureAndPreStartErrors(t *testing.T) {
-	t.Run("canonical failure result", func(t *testing.T) {
-		runner := nonZeroExitCommandRunner{stderr: "adapter failure", exitCode: 17}
+// TestStatelessWorkersRootPreservesDetachedFailureAndPreStartErrors proves the
+// public Workers root reports a typed terminal failure for a non-zero script
+// exit and a pre-start error for an unknown runner, without sharing attempt
+// state between the two calls.
+func TestStatelessWorkersRootPreservesDetachedFailureAndPreStartErrors(t *testing.T) {
+	t.Run("non-zero exit is a typed terminal failure", func(t *testing.T) {
+		service, err := root.BuildStatelessWorkers(t.Context(), serviceedges.Edges{
+			ScriptCommandRunner: nonZeroExitCommandRunner{stderr: "detached failure", exitCode: 17},
+		})
+		if err != nil {
+			t.Fatalf("BuildStatelessWorkers() error = %v", err)
+		}
+
+		result, err := service.Execute(t.Context(), detachedScriptExecuteRequest())
+		if err != nil {
+			t.Fatalf("Workers Execute() error = %v", err)
+		}
+		if result.Outcome != workerexecution.ExecutionOutcomeFailed || result.Failure == nil {
+			t.Fatalf("failed result = %#v, want a typed terminal failure", result)
+		}
+		if result.Failure.Type == "" || result.Failure.Family == "" {
+			t.Fatalf("failure classification = %#v, want type and family", result.Failure)
+		}
+		if result.Correlation.DispatchID != "detached-dispatch" {
+			t.Fatalf("failed correlation = %#v, want the submitted detached correlation", result.Correlation)
+		}
+	})
+
+	t.Run("unknown runner fails before the command edge starts", func(t *testing.T) {
+		runner := support.NewRecordingCommandRunner("never-executed")
 		service, err := root.BuildStatelessWorkers(t.Context(), serviceedges.Edges{
 			ScriptCommandRunner: runner,
 		})
 		if err != nil {
 			t.Fatalf("BuildStatelessWorkers() error = %v", err)
 		}
-		executor := workerwire.NewInvocationWithProgressFromService(service, nil)
-		result, err := executor.Execute(context.Background(), workerexecution.InvocationInput{
-			Attempt: 2,
-			Request: workerexecution.ProviderInferenceRequest{
-				RunnerID: "script",
-				Command:  "echo",
-				Args:     []string{"failure"},
-				Dispatch: work.WorkDispatch{DispatchID: "adapter-failure"},
-			},
-		})
-		if err != nil {
-			t.Fatalf("invocation Execute() error = %v", err)
-		}
-		if result.Attempt != 2 || result.Response.Outcome != workerexecution.OutcomeFailed ||
-			result.FailureMetadata == nil || result.FailureDetail == nil {
-			t.Fatalf("failure result = %#v, want mapped canonical failure", result)
-		}
-	})
 
-	t.Run("pre-start error", func(t *testing.T) {
-		service, err := root.BuildStatelessWorkers(t.Context(), serviceedges.Edges{})
-		if err != nil {
-			t.Fatalf("BuildStatelessWorkers() error = %v", err)
+		request := detachedScriptExecuteRequest()
+		request.Target.RunnerID = "unknown-functional-runner"
+		result, err := service.Execute(t.Context(), request)
+		if err == nil {
+			t.Fatalf("pre-start result = %#v, want an unknown-runner request error", result)
 		}
-		executor := workerwire.NewInvocationWithProgressFromService(service, nil)
-		result, err := executor.Execute(context.Background(), workerexecution.InvocationInput{
-			Attempt: 3,
-			Request: workerexecution.ProviderInferenceRequest{
-				RunnerID: "unknown-functional-runner",
-				Dispatch: work.WorkDispatch{DispatchID: "adapter-pre-start"},
-			},
-		})
-		if err == nil || result.Attempt != 3 || result.FailureDetail == nil ||
-			result.FailureMetadata == nil {
-			t.Fatalf("pre-start result = %#v, error %v, want invocation failure", result, err)
+		if !strings.Contains(err.Error(), "unknown-functional-runner") {
+			t.Fatalf("pre-start error = %v, want it to name the rejected runner", err)
 		}
-	})
-
-	t.Run("nil context", func(t *testing.T) {
-		service := &functionalInvocationService{result: workerexecution.ExecuteResult{
-			Outcome: workerexecution.ExecutionOutcomeAccepted,
-		}}
-		executor := workerwire.NewInvocationWithProgressFromService(service, nil)
-		result, err := executor.Execute(nil, workerexecution.InvocationInput{
-			Attempt: 5,
-			Request: workerexecution.ProviderInferenceRequest{RunnerID: "script"},
-		})
-		if err == nil || result.Attempt != 5 || result.FailureDetail == nil {
-			t.Fatalf("nil-context result = %#v, error %v, want invocation failure", result, err)
+		if result.Outcome != "" {
+			t.Fatalf("pre-start outcome = %q, want no terminal outcome before start", result.Outcome)
+		}
+		if runner.CallCount() != 0 {
+			t.Fatalf("script command calls = %d, want no external effect before start", runner.CallCount())
 		}
 	})
 }
 
-// TestInvocationAdapterMapsAllPublicOutcomesFunctional keeps result mapping
-// observable at the public bridge while the root-backed tests above exercise
-// the workstation execution path.
-func TestInvocationAdapterMapsAllPublicOutcomesFunctional(t *testing.T) {
-	if executor := workerwire.NewInvocationWithProgressFromService(nil, nil); executor != nil {
-		t.Fatal("nil Workers service produced an invocation executor")
-	}
-
-	cases := []struct {
-		name    string
-		outcome workerexecution.ExecutionOutcome
-		want    workerexecution.WorkOutcome
-	}{
-		{name: "accepted", outcome: workerexecution.ExecutionOutcomeAccepted, want: workerexecution.OutcomeAccepted},
-		{name: "continue", outcome: workerexecution.ExecutionOutcomeContinue, want: workerexecution.OutcomeContinue},
-		{name: "rejected", outcome: workerexecution.ExecutionOutcomeRejected, want: workerexecution.OutcomeRejected},
-		{name: "canceled", outcome: workerexecution.ExecutionOutcomeCanceled, want: workerexecution.OutcomeFailed},
-	}
-	for _, test := range cases {
-		t.Run(test.name, func(t *testing.T) {
-			continuation := (&providers.SessionMetadata{
-				Provider: "functional-provider",
-				Kind:     "thread",
-				ID:       "functional-continuation",
-			}).ContinuationRef()
-			service := &functionalInvocationService{result: workerexecution.ExecuteResult{
-				Outcome:      test.outcome,
-				Continuation: continuation,
-				Output: workerexecution.ProposedOutput{
-					Primary:        []work.WorkContentPart{{Text: "first"}, {Text: "second"}},
-					Feedback:       "feedback",
-					Classification: "classification",
+func detachedScriptExecuteRequest() workerexecution.ExecuteRequest {
+	return workerexecution.ExecuteRequest{
+		Correlation: workerexecution.ExecutionCorrelation{
+			FactorySessionID: "detached-session",
+			RuntimeID:        "detached-runtime",
+			GenerationID:     "detached-generation",
+			DispatchID:       "detached-dispatch",
+			AttemptID:        "detached-attempt",
+			RequestID:        "detached-request",
+			TraceID:          "detached-trace",
+		},
+		Target: workerexecution.ExecutionTarget{
+			WorkerName:      "detached-script-worker",
+			WorkerType:      "SCRIPT_WORKER",
+			WorkstationName: "detached-workstation",
+			RunnerID:        "script",
+			Command:         "echo",
+			Args:            []string{"detached-output"},
+			Environment: workerexecution.EnvironmentPolicy{
+				Vars: map[string]string{"DETACHED_MODE": "functional"},
+			},
+		},
+		Input: workerexecution.ExecutionInput{
+			Dispatch: work.WorkDispatch{
+				DispatchID:  "detached-dispatch",
+				WorkerType:  "SCRIPT_WORKER",
+				ProjectID:   "detached-project",
+				InputTokens: []any{"detached-token"},
+				Execution: work.ExecutionMetadata{
+					RequestID: "detached-request",
+					TraceID:   "detached-trace",
 				},
-			}}
-			executor := workerwire.NewInvocationWithProgressFromService(service, nil)
-			result, err := executor.Execute(context.Background(), workerexecution.InvocationInput{
-				Request: workerexecution.ProviderInferenceRequest{RunnerID: "script"},
-				Attempt: 4,
-			})
-			if err != nil {
-				t.Fatalf("invocation Execute() error = %v", err)
-			}
-			if result.Attempt != 4 || result.Response.Outcome != test.want ||
-				result.Response.Content != "firstsecond" || result.Response.Feedback != "feedback" ||
-				result.Response.Classification != "classification" || result.Continuation == nil ||
-				result.Response.Continuation == nil {
-				t.Fatalf("mapped result = %#v, want %q outcome and joined output", result, test.want)
-			}
-		})
-	}
-
-	t.Run("non-ACP provider and workflow context fallback", func(t *testing.T) {
-		service := &functionalInvocationService{result: workerexecution.ExecuteResult{
-			Outcome: workerexecution.ExecutionOutcomeAccepted,
-		}}
-		executor := workerwire.NewInvocationWithProgressFromService(service, nil)
-		_, err := executor.Execute(context.Background(), workerexecution.InvocationInput{
-			Request: workerexecution.ProviderInferenceRequest{
-				RunnerID:         "script",
-				ExecutorProvider: "custom-executor",
-				WorkflowContext:  &workerexecution.Context{SessionID: "functional-session"},
-				Dispatch:         work.WorkDispatch{DispatchID: "fallback-dispatch"},
 			},
-		})
-		if err != nil {
-			t.Fatalf("invocation Execute() error = %v", err)
-		}
-		if service.request.Target.Provider.ID != "custom-executor" ||
-			service.request.Correlation.FactorySessionID != "functional-session" {
-			t.Fatalf("canonical fallback request = %#v, want provider and workflow identity", service.request)
-		}
-	})
+		},
+		Attempt: workerexecution.AttemptContext{Number: 1},
+	}
 }
 
-type functionalInvocationService struct {
-	result  workerexecution.ExecuteResult
-	request workerexecution.ExecuteRequest
-}
-
-func (service *functionalInvocationService) Execute(
-	_ context.Context,
-	request workerexecution.ExecuteRequest,
-) (workerexecution.ExecuteResult, error) {
-	service.request = request
-	return service.result, nil
-}
-
-func (service *functionalInvocationService) InvokeModel(
-	context.Context,
-	string,
-	modelinference.Request,
-) (modelinference.Result, error) {
-	return modelinference.Result{}, nil
+func executeOutputText(output workerexecution.ProposedOutput) string {
+	var builder strings.Builder
+	for _, part := range output.Primary {
+		builder.WriteString(part.Text)
+	}
+	return builder.String()
 }
 
 type blockingCancellationCommandRunner struct {

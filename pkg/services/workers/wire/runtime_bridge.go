@@ -29,15 +29,6 @@ func LocalRuntimeHooks() workers.LocalRuntimeHooks {
 	return modelrecording.Hooks()
 }
 
-// NewInvocationWithProgressFromService is the progress-capable form of the
-// canonical Workers service adapter used by the remaining child caller.
-func NewInvocationWithProgressFromService(
-	service workers.Service,
-	publisher workers.ProgressPublisher,
-) workers.InvocationExecutor {
-	return workersinternal.NewInvocationWithProgressFromService(service, publisher)
-}
-
 // TODO(P6-C): retire the provider-backed compatibility constructors after the
 // Runtime and Sessions caller families use the canonical Execute boundary.
 // NewInvocation constructs the narrow direct-invocation role.

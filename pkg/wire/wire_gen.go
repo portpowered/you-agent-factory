@@ -998,7 +998,6 @@ var workerServiceSet = wire5.NewSet(
 	provideWorkersWorktreeRelease,
 	provideWorkersFactoryDocsFileSystem,
 	provideProviderFromCommandRunnerFactory,
-	provideWorkerInvocationWithProgressFactory,
 	provideWorkerProcessEnvironment,
 	provideWorkerCurrentWorkingDirectory,
 )
