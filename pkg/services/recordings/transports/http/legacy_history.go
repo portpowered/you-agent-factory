@@ -148,7 +148,9 @@ func (a *Adapter) writeLegacyError(w http.ResponseWriter, err error, fallback st
 		status, message = http.StatusNotFound, "dispatch not found"
 	case errors.Is(err, factorysessions.ErrArtifactNotFound):
 		status, message = http.StatusNotFound, "factory session artifact not found"
-	case errors.Is(err, factorysessions.ErrReconnectCursorNotFound), errors.Is(err, apisurface.ErrInvalidEventReconnectCursor):
+	case errors.Is(err, factorysessions.ErrReconnectCursorNotFound),
+		errors.Is(err, recordings.ErrReconnectCursorNotFound),
+		errors.Is(err, apisurface.ErrInvalidEventReconnectCursor):
 		status, message, code = http.StatusBadRequest, "invalid event reconnect cursor", string(factoryapi.ErrorResponseCodeBADREQUEST)
 	default:
 		status, message, code = http.StatusInternalServerError, fallback, string(factoryapi.ErrorResponseCodeINTERNALERROR)

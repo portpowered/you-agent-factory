@@ -9,6 +9,7 @@ import (
 	"time"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	mcprecording "github.com/portpowered/infinite-you/pkg/services/recordings/transports/mcp"
 )
@@ -452,3 +453,127 @@ func inspectionCanonicalEvent(id string, sequence int64) recordings.CanonicalEve
 }
 
 func intPointer(value int) *int { return &value }
+
+func TestQueryHistoryMapsContextAndTypedFailures(t *testing.T) {
+	t.Parallel()
+
+	input := mcprecording.QueryHistoryInput{
+		RecordingID: " recording-history-errors-001 ", Artifact: " artifact-1 ", FactorySessionID: " session-1 ",
+	}
+	if response := mcprecording.QueryHistory(nil, fakeRecordingsRoot{}, input); response.Error == nil || response.Error.Code != "BAD_REQUEST" {
+		t.Fatalf("nil-context response = %#v, want bad request envelope", response)
+	}
+	canceled, cancel := context.WithCancel(context.Background())
+	cancel()
+	if response := mcprecording.QueryHistory(canceled, fakeRecordingsRoot{}, input); response.Error == nil || response.Error.Code != "recording.request.canceled" {
+		t.Fatalf("canceled response = %#v, want canceled envelope", response)
+	}
+	if response := mcprecording.QueryHistory(context.Background(), nil, input); response.Error == nil || response.Error.Code != "recording.service.unavailable" {
+		t.Fatalf("nil-service response = %#v, want unavailable envelope", response)
+	}
+
+	tests := []struct {
+		kind      recordings.HistoricalRecordingQueryErrorKind
+		code      string
+		retryable bool
+	}{
+		{kind: recordings.HistoricalRecordingQueryErrorInvalidRequest, code: "recording.history.invalid"},
+		{kind: recordings.HistoricalRecordingQueryErrorMissingHistory, code: "recording.history.not_found"},
+		{kind: recordings.HistoricalRecordingQueryErrorCorruptHistory, code: "recording.history.corrupt"},
+		{kind: recordings.HistoricalRecordingQueryErrorUnavailable, code: "recording.history.unavailable", retryable: true},
+	}
+	for _, test := range tests {
+		test := test
+		fake := fakeRecordingsRoot{queryHistory: func(request recordings.HistoricalRecordingQueryRequest) (recordings.HistoricalRecordingQueryResult, error) {
+			return recordings.HistoricalRecordingQueryResult{}, &recordings.HistoricalRecordingQueryError{
+				Kind: test.kind, RecordingID: request.Recording.RecordingID,
+			}
+		}}
+		response := mcprecording.QueryHistory(context.Background(), fake, input)
+		if response.Error == nil || response.Error.Code != test.code || response.Error.Retryable != test.retryable || response.Error.RecordingID != "recording-history-errors-001" {
+			t.Fatalf("kind %s response = %#v, want code=%s retryable=%v", test.kind, response, test.code, test.retryable)
+		}
+	}
+
+	clientError := mcprecording.QueryHistory(context.Background(), fakeRecordingsRoot{
+		queryHistory: func(recordings.HistoricalRecordingQueryRequest) (recordings.HistoricalRecordingQueryResult, error) {
+			return recordings.HistoricalRecordingQueryResult{}, errors.New("invalid scope")
+		},
+	}, input)
+	if clientError.Error == nil || clientError.Error.Code != "BAD_REQUEST" {
+		t.Fatalf("safe client error = %#v, want bad request", clientError)
+	}
+	internalError := mcprecording.QueryHistory(context.Background(), fakeRecordingsRoot{
+		queryHistory: func(recordings.HistoricalRecordingQueryRequest) (recordings.HistoricalRecordingQueryResult, error) {
+			return recordings.HistoricalRecordingQueryResult{}, errors.New("pkg/services/recordings/internal failure")
+		},
+	}, input)
+	if internalError.Error == nil || internalError.Error.Code != "recording.execution.internal" {
+		t.Fatalf("internal error = %#v, want sanitized internal envelope", internalError)
+	}
+}
+
+func TestLegacyFactorySessionInspectionAdaptsStandaloneReads(t *testing.T) {
+	t.Parallel()
+
+	sessionID := "standalone-session-001"
+	event := json.RawMessage(`{"context":{"eventTime":"2026-08-16T03:00:00Z","sequence":2,"tick":4,"sessionId":"` + sessionID + `"},"id":"event-standalone-001","payload":{"status":"COMPLETED"},"schemaVersion":"agent-factory.event.v1","type":"RUN_RESPONSE"}`)
+	legacy := &legacyInspectionFake{
+		events:     []json.RawMessage{event},
+		dispatches: []factorysessions.DispatchSummary{{ID: "dispatch-standalone-001", Status: factorysessions.DispatchStatus("COMPLETED"), DispatchKind: "JAVASCRIPT_SCRIPT"}},
+		artifacts:  []factorysessions.ArtifactSummary{{ID: "artifact-standalone-001", Kind: "LOG", Visibility: "PUBLIC", Label: "log", ContentHash: "hash", SizeBytes: 9, DispatchID: "dispatch-standalone-001"}},
+	}
+	service := mcprecording.NewLegacyFactorySessionInspection(legacy)
+	if service == nil || mcprecording.NewLegacyFactorySessionInspection(nil) != nil || mcprecording.NewLegacyFactorySessionInspection(struct{}{}) != nil {
+		t.Fatal("legacy inspection adapter should accept only the legacy inspection contract")
+	}
+
+	status, err := service.QueryRecordingStatus(recordings.RecordingStatusRequest{RecordingID: recordings.RecordingID(sessionID)})
+	if err != nil || string(status.Status.Artifact) != "standalone://"+sessionID || status.Status.LastEvent == nil || status.Status.LastEvent.Sequence != 2 {
+		t.Fatalf("legacy status = %#v err=%v, want artifact and last cursor", status, err)
+	}
+	history, err := service.QueryHistoricalRecording(recordings.HistoricalRecordingQueryRequest{Recording: recordings.HistoricalRecordingIdentity{
+		RecordingID: recordings.RecordingID(sessionID), Artifact: "artifact-standalone-001", Scope: recordings.CanonicalEventScope{FactorySessionID: sessionID},
+	}})
+	if err != nil || len(history.Events) != 1 || len(history.Dispatches) != 1 || history.Dispatches[0].ID != "dispatch-standalone-001" {
+		t.Fatalf("legacy history = %#v err=%v, want event and dispatch", history, err)
+	}
+	portable, err := service.BuildPortableArtifact(recordings.BuildPortableArtifactRequest{RecordingID: recordings.RecordingID(sessionID)})
+	if err != nil || portable.Artifact.Summary.EventCount != 1 || portable.Artifact.Summary.FirstCursor == nil || portable.Artifact.Summary.LastCursor == nil {
+		t.Fatalf("legacy portable artifact = %#v err=%v, want cursor bounds", portable, err)
+	}
+	world, err := service.ReconstructWorldState(recordings.ReconstructWorldStateRequest{Scope: recordings.CanonicalEventScope{FactorySessionID: sessionID}})
+	if err != nil || !strings.Contains(world.WorldState.Payload, "artifact-standalone-001") {
+		t.Fatalf("legacy world state = %#v err=%v, want artifact projection", world, err)
+	}
+
+	cursor := recordings.CanonicalEventCursor{Sequence: 1}
+	subscribed, err := service.SubscribeFrom(context.Background(), recordings.SubscribeRequest{Scope: recordings.CanonicalEventScope{FactorySessionID: sessionID}, Cursor: &cursor})
+	if err != nil || subscribed.RetainedEventCount != 1 || subscribed.Subscription == nil {
+		t.Fatalf("legacy subscription = %#v err=%v, want retained event subscription", subscribed, err)
+	}
+	if outcome := subscribed.Subscription(context.Background()); outcome.Kind != recordings.SubscriptionEvent || outcome.Event.ID != "event-standalone-001" {
+		t.Fatalf("legacy subscription outcome = %#v, want standalone event", outcome)
+	}
+	if outcome := subscribed.Subscription(context.Background()); outcome.Kind != recordings.SubscriptionClosed {
+		t.Fatalf("legacy exhausted subscription outcome = %#v, want closed", outcome)
+	}
+}
+
+type legacyInspectionFake struct {
+	events     []json.RawMessage
+	dispatches []factorysessions.DispatchSummary
+	artifacts  []factorysessions.ArtifactSummary
+}
+
+func (fake *legacyInspectionFake) QueryDispatches(context.Context, factorysessions.DispatchQueryRequest) (factorysessions.ListDispatchesResult, error) {
+	return factorysessions.ListDispatchesResult{Dispatches: fake.dispatches}, nil
+}
+
+func (fake *legacyInspectionFake) ListArtifacts(context.Context, string) (factorysessions.ListArtifactsResult, error) {
+	return factorysessions.ListArtifactsResult{Artifacts: fake.artifacts}, nil
+}
+
+func (fake *legacyInspectionFake) ReadEvents(context.Context, string, factorysessions.EventReconnectRequest) (factorysessions.EventReadResult, error) {
+	return factorysessions.EventReadResult{Events: fake.events}, nil
+}

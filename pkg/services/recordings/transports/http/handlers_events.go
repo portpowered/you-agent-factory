@@ -38,10 +38,10 @@ func (a *Adapter) GetEventsBySessionId(
 		Params:             params,
 		StreamGenerationID: r.Header.Get(SessionEventStreamGenerationHeader),
 	}
-	if a.handleLegacyLiveFallbackEvents(w, r, input) {
+	if a.handleLegacyDurableEvents(w, r, input) {
 		return
 	}
-	if a.handleLegacyDurableEvents(w, r, input) {
+	if a.handleLegacyLiveFallbackEvents(w, r, input) {
 		return
 	}
 	if a.handleLegacyLiveEvents(w, r, input) {
