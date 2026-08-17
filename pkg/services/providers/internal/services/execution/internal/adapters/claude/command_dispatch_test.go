@@ -9,6 +9,7 @@ import (
 
 	"github.com/portpowered/infinite-you/internal/testutil"
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
 	execution "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution"
 	claude "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/claude"
@@ -117,5 +118,58 @@ func TestCommandEffectRejectsUnsupportedReasoningEffort(t *testing.T) {
 				t.Fatalf("runner requests = %#v, want none", got)
 			}
 		})
+	}
+}
+
+// failingStartCommandRunner reports a subprocess that never started, which is
+// what the host returns when the process loader rejects the command line.
+type failingStartCommandRunner struct{ err error }
+
+func (r failingStartCommandRunner) Run(
+	context.Context,
+	platformprocess.CommandRequest,
+) (platformprocess.CommandResult, error) {
+	return platformprocess.CommandResult{}, r.err
+}
+
+func TestCommandEffectDeclaresAnOversizedCommandLineSpawnFailure(t *testing.T) {
+	t.Parallel()
+
+	startErr := &platformprocess.CommandStartError{
+		Command:           "claude",
+		ArgsCount:         9,
+		CommandLineLength: 32932,
+		CommandLineLimit:  platformprocess.WindowsCommandLineLimit,
+		Cause:             errors.New("The filename or extension is too long."),
+	}
+	effect := claude.NewCommandEffect(
+		workers.AdaptCommandRunner(failingStartCommandRunner{err: startErr}),
+		platformclock.Real{},
+	)
+	if effect == nil {
+		t.Fatal("NewCommandEffect() returned nil")
+	}
+
+	_, err := effect.Execute(context.Background(), execution.ContinuationRequest{
+		ExecuteRequest: providers.ExecuteRequest{
+			Provider:    providers.IDClaude,
+			AttemptID:   "claude-oversized-command-line",
+			Model:       "claude-model",
+			UserMessage: strings.Repeat("u", 9819),
+		},
+	}, func([]byte) error { return nil })
+
+	var failure providers.ExecuteFailure
+	if !errors.As(err, &failure) {
+		t.Fatalf("Execute() error = %#v, want a declared providers.ExecuteFailure", err)
+	}
+	if failure.Kind != providers.ExecuteFailureKindMisconfigured {
+		t.Fatalf("failure kind = %q, want %q", failure.Kind, providers.ExecuteFailureKindMisconfigured)
+	}
+	if failure.Diagnostics == nil || failure.Diagnostics.Metadata["work-failure-type"] != "command_line_too_long" {
+		t.Fatalf("failure diagnostics = %#v, want work-failure-type command_line_too_long", failure.Diagnostics)
+	}
+	if !strings.Contains(failure.Message, "32932") || !strings.Contains(failure.Message, "32767") {
+		t.Fatalf("failure message = %q, want it to report the measured size against the host limit", failure.Message)
 	}
 }

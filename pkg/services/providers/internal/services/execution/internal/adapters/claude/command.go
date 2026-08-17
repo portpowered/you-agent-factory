@@ -143,5 +143,8 @@ func nativeCommandError(ctx context.Context, err error) error {
 	if errors.Is(ctx.Err(), context.Canceled) || errors.Is(err, context.Canceled) {
 		return providers.ExecuteFailure{Kind: providers.ExecuteFailureKindCanceled}
 	}
+	if failure, ok := commanddispatch.StartFailure(err); ok {
+		return failure
+	}
 	return err
 }
