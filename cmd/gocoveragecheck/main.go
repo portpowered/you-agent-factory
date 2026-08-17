@@ -398,7 +398,7 @@ func runCoverageProfile(cfg config, targetOS string, profilePath string) (covera
 		}
 		result.packageMinimumFailures, result.packageMinimumWarnings = checkCoverageManifestWithEpsilonAndBlocks(manifest, result.packageTotals, cfg.packageManifest, cfg.packageFloorEpsilon, result.coverageBlocks)
 		result.unmeasuredPackageDiagnostics = formatUnmeasuredCoverageManifestDiagnostics(manifest, result.packageTotals)
-		result.packageGates = packageGatesFromManifest(manifest)
+		result.packageGates = coverageManifestGatedPackages(manifest, result.packageTotals)
 	} else if legacyPackageGateEnabled {
 		result.packageGates = packageGatesFromLegacyMin(result.packageSummaries, cfg.packageCoverageMin(), baselinePackages)
 	}

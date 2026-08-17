@@ -90,29 +90,59 @@ func TestNewCoverageManifestIsSortedAndByteDeterministic(t *testing.T) {
 	}
 }
 
-func TestNewCoverageManifestUsesExplicitExceptionForUnmeasurablePackage(t *testing.T) {
+func TestNewCoverageManifestOmitsUnmeasurablePackagesAndDeclaresServiceRoots(t *testing.T) {
 	t.Parallel()
 
-	importPath := modulePath + "/cmd/factory"
-	manifest, err := newCoverageManifest("unit", map[string]packageCoverageTotals{}, []string{importPath})
+	commandPackage := modulePath + "/cmd/factory"
+	serviceRoot := modulePath + "/pkg/services/work"
+	serviceInternal := modulePath + "/pkg/services/work/internal"
+	measured := []string{commandPackage, serviceRoot, serviceInternal}
+	manifest, err := newCoverageManifest("unit", map[string]packageCoverageTotals{}, measured)
 	if err != nil {
 		t.Fatalf("newCoverageManifest() error = %v", err)
 	}
-	entry := manifest.Packages[0]
-	if len(entry.Minimum) != 0 {
-		t.Fatalf("minimum = %s, want no fabricated floor", entry.Minimum)
+
+	entries := make(map[string]coverageManifestEntry, len(manifest.Packages))
+	for _, entry := range manifest.Packages {
+		entries[entry.Package] = entry
 	}
-	if entry.Exception == nil || entry.Exception.Kind != "measurement" || entry.Exception.Deadline != unmeasurablePackageDeadline {
-		t.Fatalf("exception = %+v, want structured measurement exception", entry.Exception)
+	if _, ok := entries[commandPackage]; ok {
+		t.Fatalf("manifest = %+v, want no row for an unmeasurable non-service package", manifest.Packages)
 	}
-	if got, want := entry.Exception.Justification, "The active unit coverage profile contains no measurable statements for this package."; got != want {
-		t.Fatalf("exception justification = %q, want %q", got, want)
+	if _, ok := entries[serviceInternal]; ok {
+		t.Fatalf("manifest = %+v, want no row for an unmeasurable package inside a declared service", manifest.Packages)
 	}
-	if strings.Contains(entry.Exception.Justification, "declaration-only") {
-		t.Fatalf("exception justification %q invents an uninspected package property", entry.Exception.Justification)
+	root, ok := entries[serviceRoot]
+	if !ok {
+		t.Fatalf("manifest = %+v, want a root row declaring the service", manifest.Packages)
 	}
-	if err := validateCoverageManifest(manifest, "unit", []string{importPath}); err != nil {
+	if root.Exception != nil {
+		t.Fatalf("service root entry = %+v, want an explicit floor rather than an exception", root)
+	}
+	if got := string(root.Minimum); got != unitLaneDefaultFloorPercent {
+		t.Fatalf("service root minimum = %s, want the unit lane default %s", got, unitLaneDefaultFloorPercent)
+	}
+	if err := validateCoverageManifest(manifest, "unit", measured); err != nil {
 		t.Fatalf("generated manifest does not validate: %v", err)
+	}
+}
+
+func TestNewCoverageManifestRecordsFunctionalServiceRootDefault(t *testing.T) {
+	t.Parallel()
+
+	serviceRoot := modulePath + "/pkg/services/work"
+	manifest, err := newCoverageManifest("functional", map[string]packageCoverageTotals{}, []string{serviceRoot})
+	if err != nil {
+		t.Fatalf("newCoverageManifest() error = %v", err)
+	}
+	if len(manifest.Packages) != 1 {
+		t.Fatalf("manifest packages = %+v, want exactly the service root", manifest.Packages)
+	}
+	if got := string(manifest.Packages[0].Minimum); got != functionalLaneDefaultFloorPercent {
+		t.Fatalf("service root minimum = %s, want the functional lane default %s", got, functionalLaneDefaultFloorPercent)
+	}
+	if got := string(manifest.DefaultFloorPercent); got != functionalLaneDefaultFloorPercent {
+		t.Fatalf("defaultFloorPercent = %s, want %s", got, functionalLaneDefaultFloorPercent)
 	}
 }
 
@@ -135,7 +165,8 @@ func TestReadCoverageManifestValidatesContract(t *testing.T) {
 		{name: "unknown lane", manifest: strings.Replace(valid, `"unit"`, `"long"`, 1), measured: []string{configPackage, servicePackage}, want: "unknown lane"},
 		{name: "duplicate", manifest: `{"version":1,"lane":"unit","packages":[{"package":"` + configPackage + `","minimum":80.00},{"package":"` + configPackage + `","minimum":81.00}]}`, measured: []string{configPackage}, want: "duplicate package"},
 		{name: "outside measured set", manifest: valid, measured: []string{configPackage}, want: "outside the unit measured package set"},
-		{name: "missing measured package", manifest: `{"version":1,"lane":"unit","packages":[{"package":"` + configPackage + `","minimum":80.00}]}`, measured: []string{configPackage, servicePackage}, want: "has no manifest entry"},
+		{name: "missing service root", manifest: `{"version":1,"lane":"unit","packages":[{"package":"` + configPackage + `","minimum":80.00}]}`, measured: []string{configPackage, modulePath + "/pkg/services/work/internal"}, want: `measured unit service "` + modulePath + `/pkg/services/work" has no root manifest entry`},
+		{name: "invalid default floor", manifest: `{"version":1,"lane":"unit","defaultFloorPercent":50.0,"packages":[{"package":"` + configPackage + `","minimum":80.00}]}`, measured: []string{configPackage}, want: "defaultFloorPercent"},
 		{name: "unsorted", manifest: `{"version":1,"lane":"unit","packages":[{"package":"` + servicePackage + `","minimum":80.00},{"package":"` + configPackage + `","minimum":80.00}]}`, measured: []string{configPackage, servicePackage}, want: "must be sorted"},
 		{name: "invalid percentage", manifest: `{"version":1,"lane":"unit","packages":[{"package":"` + configPackage + `","minimum":100.01}]}`, measured: []string{configPackage}, want: "between 0.00 and 100.00"},
 		{name: "imprecise percentage", manifest: `{"version":1,"lane":"unit","packages":[{"package":"` + configPackage + `","minimum":80.0}]}`, measured: []string{configPackage}, want: "exactly two decimal places"},
@@ -230,11 +261,12 @@ func TestCheckCoverageManifestControlledProfilesForBothLanes(t *testing.T) {
 					{Package: beta, Minimum: json.RawMessage("75.00")},
 				},
 			}
-			missing := manifest
-			missing.Packages = missing.Packages[:1]
-			err := validateCoverageManifestAt(missing, lane, []string{alpha, beta}, time.Date(2026, 7, 15, 0, 0, 0, 0, time.UTC))
-			if err == nil || !strings.Contains(err.Error(), "measured "+lane+" package \""+beta+"\" has no manifest entry") {
-				t.Fatalf("missing-entry error = %v, want lane-specific closed failure", err)
+			// A measured package outside pkg/services with no entry is not a
+			// completeness failure: it resolves to the lane default floor.
+			unlisted := manifest
+			unlisted.Packages = unlisted.Packages[:1]
+			if err := validateCoverageManifestAt(unlisted, lane, []string{alpha, beta}, time.Date(2026, 7, 15, 0, 0, 0, 0, time.UTC)); err != nil {
+				t.Fatalf("unlisted non-service package error = %v, want the %s lane default to apply", err, lane)
 			}
 
 			if failures := checkCoverageManifest(manifest, map[string]packageCoverageTotals{
@@ -389,27 +421,30 @@ func uncoveredBlockManifestFixture() (coverageManifest, map[string]coverageBlock
 	return manifest, coverageBlocks, importPath
 }
 
-func TestValidateCoverageManifestReportsAllMissingPackagesWithMeasurements(t *testing.T) {
+func TestValidateCoverageManifestReportsEachUndeclaredServiceOnce(t *testing.T) {
 	t.Parallel()
 
-	alpha := modulePath + "/pkg/alpha"
-	beta := modulePath + "/pkg/beta"
-	zeta := modulePath + "/pkg/zeta"
+	declaredRoot := modulePath + "/pkg/services/work"
+	declaredChild := modulePath + "/pkg/services/work/internal/staging"
+	alphaRoot := modulePath + "/pkg/services/alpha"
+	zetaRoot := modulePath + "/pkg/services/zeta"
 	manifest := coverageManifest{
 		Version: coverageManifestVersion,
 		Lane:    "functional",
 		Packages: []coverageManifestEntry{
-			{Package: alpha, Minimum: json.RawMessage("80.00")},
+			{Package: declaredRoot, Minimum: json.RawMessage("40.00")},
 		},
 	}
 	err := validateCoverageManifestAtWithTotals(
 		manifest,
 		"functional",
-		[]string{zeta, alpha, beta},
+		[]string{
+			zetaRoot, zetaRoot + "/internal", zetaRoot + "/transports/http",
+			alphaRoot + "/wire", declaredRoot, declaredChild,
+		},
 		time.Date(2026, 8, 13, 0, 0, 0, 0, time.UTC),
 		map[string]packageCoverageTotals{
-			beta: {coveredStatements: 2, totalStatements: 3},
-			zeta: {},
+			zetaRoot: {coveredStatements: 2, totalStatements: 3},
 		},
 	)
 	if err == nil {
@@ -417,20 +452,47 @@ func TestValidateCoverageManifestReportsAllMissingPackagesWithMeasurements(t *te
 	}
 
 	message := err.Error()
-	if !strings.Contains(message, "measured functional packages have no manifest entry") {
-		t.Fatalf("missing-entry error = %q, want functional lane diagnostic", message)
+	if !strings.Contains(message, "measured functional services have no root manifest entry") {
+		t.Fatalf("missing-root error = %q, want functional lane diagnostic", message)
 	}
-	if strings.Count(message, "has no manifest entry") != 2 {
-		t.Fatalf("missing-entry error = %q, want one line per missing package", message)
+	if got := strings.Count(message, "has no root manifest entry;"); got != 2 {
+		t.Fatalf("missing-root error = %q, want one line per undeclared service, got %d", message, got)
 	}
-	if !strings.Contains(message, `measured functional package "`+beta+`" has no manifest entry; measured coverage 66.66%`) {
-		t.Fatalf("missing-entry error = %q, want truncated two-decimal beta measurement", message)
+	if strings.Contains(message, declaredRoot+"/") || strings.Contains(message, zetaRoot+"/") {
+		t.Fatalf("missing-root error = %q, want services named once rather than per package", message)
 	}
-	if !strings.Contains(message, `measured functional package "`+zeta+`" has no manifest entry; no measurable statements`) {
-		t.Fatalf("missing-entry error = %q, want no-measurable-statements classification", message)
+	if !strings.Contains(message, `measured functional service "`+alphaRoot+`" has no root manifest entry`) {
+		t.Fatalf("missing-root error = %q, want the alpha service named by its root", message)
 	}
-	if strings.Index(message, beta) > strings.Index(message, zeta) {
-		t.Fatalf("missing packages are not sorted by import path: %q", message)
+	if !strings.Contains(message, `measured functional service "`+zetaRoot+`" has no root manifest entry; record one entry for the service root; the root package measures 2/3 statements`) {
+		t.Fatalf("missing-root error = %q, want the zeta root measurement", message)
+	}
+	if strings.Index(message, alphaRoot) > strings.Index(message, zetaRoot) {
+		t.Fatalf("undeclared services are not sorted by import path: %q", message)
+	}
+}
+
+func TestValidateCoverageManifestAcceptsNewPackagesInsideDeclaredService(t *testing.T) {
+	t.Parallel()
+
+	declaredRoot := modulePath + "/pkg/services/work"
+	manifest := coverageManifest{
+		Version: coverageManifestVersion,
+		Lane:    "unit",
+		Packages: []coverageManifestEntry{
+			{Package: declaredRoot, Minimum: json.RawMessage("40.00")},
+		},
+	}
+	measured := []string{declaredRoot, declaredRoot + "/internal/brand_new", declaredRoot + "/transports/cli"}
+	if err := validateCoverageManifestAt(manifest, "unit", measured, time.Date(2026, 8, 13, 0, 0, 0, 0, time.UTC)); err != nil {
+		t.Fatalf("validateCoverageManifestAt() error = %v, want new packages inside a declared service to pass completeness", err)
+	}
+
+	withoutRoot := manifest
+	withoutRoot.Packages = nil
+	err := validateCoverageManifestAt(withoutRoot, "unit", measured, time.Date(2026, 8, 13, 0, 0, 0, 0, time.UTC))
+	if err == nil || !strings.Contains(err.Error(), `measured unit service "`+declaredRoot+`" has no root manifest entry`) {
+		t.Fatalf("validateCoverageManifestAt() error = %v, want the service named after its root entry is removed", err)
 	}
 }
 
