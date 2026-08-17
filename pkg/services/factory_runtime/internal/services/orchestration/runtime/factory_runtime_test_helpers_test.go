@@ -29,6 +29,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/scheduler"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/state"
 	factorytoken "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/token"
+	modelinference "github.com/portpowered/infinite-you/pkg/services/models"
 	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
@@ -151,8 +152,7 @@ type testFactoryConfig struct {
 	net                       *state.Net
 	scheduler                 scheduler.Scheduler
 	workerExecutors           map[string]workers.WorkerExecutor
-	workerService             workers.WorkstationExecutionService
-	providerInvocation        workers.WorkstationRequestExecutor
+	workerService             workers.Service
 	workerSessions            workersessions.Service
 	runtimeConfig             interfaces.RuntimeDefinitionLookup
 	workflowContext           *factory_context.FactoryContext
@@ -179,27 +179,16 @@ func newTestFactory(opts ...testFactoryOption) (factoryhost.Engine, error) {
 	var identity atomic.Int64
 	workerService := cfg.workerService
 	if workerService == nil {
-		workerService = &testWorkstationBoundary{}
+		workerService = &testWorkstationBoundary{executors: cfg.workerExecutors}
+	} else if boundary, ok := workerService.(*testWorkstationBoundary); ok && boundary.executors == nil {
+		boundary.executors = cfg.workerExecutors
 	}
 	workerSessionsService := cfg.workerSessions
 	if workerSessionsService == nil {
 		workerSessionsService = &fakeWorkerSessionsService{execution: workerService}
 	}
-	var statelessService interface {
-		Execute(context.Context, workers.ExecuteRequest) (workers.ExecuteResult, error)
-	}
-	if direct, ok := workerService.(interface {
-		Execute(context.Context, workers.ExecuteRequest) (workers.ExecuteResult, error)
-	}); ok {
-		statelessService = direct
-	} else {
-		statelessService = &testStatelessExecutionService{
-			service:   workerService,
-			executors: cfg.workerExecutors,
-		}
-	}
 	runtime, err := New(
-		cfg.net, cfg.scheduler, statelessService, workerSessionsService, cfg.runtimeConfig, nil, nil,
+		cfg.net, cfg.scheduler, workerService, workerSessionsService, cfg.runtimeConfig, nil, nil,
 		cfg.workflowContext, cfg.runtimeMode, cfg.logger, cfg.clock,
 		cfg.inlineDispatch, cfg.eventHistory, "runtime-test-recording-id", "runtime-test-id", nil, unavailableProviderSessions{},
 		nil, nil, cfg.submissionHooks,
@@ -221,73 +210,6 @@ func newTestFactory(opts ...testFactoryOption) (factoryhost.Engine, error) {
 		return nil, err
 	}
 	return runtime, nil
-}
-
-// testStatelessExecutionService keeps legacy test effects behind the detached
-// Execute seam. Production Runtime never constructs this adapter.
-type testStatelessExecutionService struct {
-	service   workers.WorkstationExecutionService
-	executors map[string]workers.WorkerExecutor
-	startOnce sync.Once
-	startErr  error
-}
-
-func (service *testStatelessExecutionService) Execute(
-	ctx context.Context,
-	request workers.ExecuteRequest,
-) (workers.ExecuteResult, error) {
-	service.start(ctx, request)
-	if service.startErr != nil {
-		return workers.ExecuteResult{}, service.startErr
-	}
-	if service.service == nil {
-		return workers.ExecuteResult{}, fmt.Errorf("test stateless execution service is not configured")
-	}
-	legacy := testLegacyRequestFromExecute(request)
-	result, err := service.service.DispatchWorkstation(ctx, legacy)
-	if ctx.Err() != nil {
-		_, _ = service.service.CancelWorkstationDispatch(
-			context.WithoutCancel(ctx),
-			workers.WorkstationDispatchCancelRequest{
-				DispatchID: legacy.Execution.Dispatch.DispatchID,
-			},
-		)
-	}
-	if err != nil {
-		return workers.ExecuteResult{}, err
-	}
-	return workers.ExecuteResult{
-		Correlation: request.Correlation,
-		Outcome:     executeOutcomeFromWorkstationResult(result),
-		Failure:     executeFailureFromWorkResult(result.Result),
-		Output:      workers.ProposedOutputFromLegacyWorkResult(result.Result),
-	}, nil
-}
-
-func (service *testStatelessExecutionService) start(
-	ctx context.Context,
-	request workers.ExecuteRequest,
-) {
-	service.startOnce.Do(func() {
-		requestExecutor := testWorkstationRequestExecutor{executors: service.executors}
-		bindings := make([]workers.AssembledRuntimeBinding, 0, len(service.executors)+1)
-		for workerType := range service.executors {
-			bindings = append(bindings, workers.AssembledRuntimeBinding{
-				RoleName: workerType, RoleKind: workers.RuntimeBuildRoleKindWorkstation,
-				Executor: requestExecutor,
-			})
-		}
-		bindings = append(bindings, workers.AssembledRuntimeBinding{
-			RoleName: request.Target.WorkstationName,
-			RoleKind: workers.RuntimeBuildRoleKindWorkstation,
-			Executor: requestExecutor,
-		})
-		if service.service != nil {
-			_, service.startErr = service.service.StartWorkstationPool(
-				ctx, workers.WorkstationPoolStartRequest{Bindings: bindings},
-			)
-		}
-	})
 }
 
 func testLegacyRequestFromExecute(
@@ -357,6 +279,158 @@ func testLegacyRequestFromExecute(
 	}
 }
 
+func testExecuteRequestFromDispatch(
+	request workers.WorkstationDispatchRequest,
+) workers.ExecuteRequest {
+	execution := workers.CloneWorkstationExecutionRequest(request.Execution)
+	dispatch := execution.Dispatch
+	return workers.ExecuteRequest{
+		Correlation: workers.ExecutionCorrelation{
+			FactorySessionID: execution.FactorySessionID,
+			RuntimeID:        execution.RuntimeID,
+			GenerationID:     execution.GenerationID,
+			DispatchID:       dispatch.DispatchID,
+			AttemptID:        dispatch.DispatchID,
+			RequestID:        dispatch.Execution.RequestID,
+			TraceID:          dispatch.Execution.TraceID,
+		},
+		Target: workers.ExecutionTarget{
+			WorkerName:       execution.WorkerName,
+			WorkerType:       execution.WorkerType,
+			WorkstationName:  request.WorkstationName,
+			RunnerID:         execution.RunnerID,
+			ExecutorProvider: execution.ExecutorProvider,
+			Capabilities:     cloneRuntimeCapabilities(execution.Capabilities),
+			Command:          execution.Command,
+			Args:             append([]string(nil), execution.Args...),
+			FactoryDirectory: execution.FactoryDirectory,
+			Provider: workers.ProviderReference{
+				ID:    execution.ModelProvider,
+				Alias: execution.ModelProvider,
+			},
+			Model: workers.ModelReference{
+				Name:            execution.Model,
+				Provider:        execution.ModelProvider,
+				ReasoningEffort: execution.ReasoningEffort,
+			},
+			Prompt: workers.PromptPolicy{
+				SystemPrompt: execution.SystemPrompt,
+				UserMessage:  execution.UserMessage,
+				OutputSchema: execution.OutputSchema,
+			},
+			Output: workers.OutputPolicy{
+				Contract:                    execution.OutputContract,
+				Format:                      execution.OutputFormat,
+				StopToken:                   execution.StopToken,
+				DecisionEnvelope:            execution.DecisionEnvelope,
+				GoalRoutingDecisionEnvelope: execution.GoalRoutingDecisionEnvelope,
+			},
+			Environment: workers.EnvironmentPolicy{
+				Vars:                   cloneRuntimeStringMap(execution.EnvVars),
+				ProcessEnvironment:     append([]string(nil), execution.ProcessEnvironment...),
+				WorkingDirectory:       execution.WorkingDirectory,
+				WorkingDirectorySet:    execution.WorkingDirectoryAuthored,
+				SkipProcessInheritance: len(execution.ProcessEnvironment) > 0,
+			},
+			Workspace: workers.WorkspacePolicy{
+				Worktree:         execution.Worktree,
+				WorkingDirectory: execution.WorkingDirectory,
+			},
+			Permissions: workers.PermissionPolicy{SkipPermissions: execution.SkipPermissions},
+			Timeout:     execution.Timeout,
+		},
+		Input: workers.ExecutionInput{
+			Dispatch:        dispatch,
+			RecordingID:     execution.RecordingID,
+			ModelBindings:   workers.CloneResolvedModelOperationBindings(execution.ModelBindings),
+			ModelOperation:  execution.ModelOperation,
+			Resume:          cloneRuntimeContinuation(execution.Continuation),
+			WorkflowContext: execution.WorkflowContext.Clone(),
+		},
+		Attempt: workers.AttemptContext{Number: 1},
+	}
+}
+
+func testDispatchResultFromExecute(
+	request workers.WorkstationDispatchRequest,
+	result workers.ExecuteResult,
+	executeErr error,
+) workers.WorkstationDispatchResult {
+	workResult := workers.WorkResult{
+		DispatchID:                  request.Execution.Dispatch.DispatchID,
+		TransitionID:                request.Execution.Dispatch.TransitionID,
+		Outcome:                     workers.OutcomeAccepted,
+		Output:                      testMaterializationPrimaryOutput(result.Output.Primary),
+		Feedback:                    result.Output.Feedback,
+		SelectedClassificationLabel: result.Output.Classification,
+		Continuation:                cloneRuntimeContinuation(result.Continuation),
+		Metrics: workers.WorkMetrics{
+			Duration:   result.Metrics.Duration,
+			Cost:       result.Metrics.Cost,
+			RetryCount: result.Metrics.RetryCount,
+		},
+	}
+	terminal := workers.WorkstationDispatchTerminalOutcomeCompleted
+	if result.Failure != nil {
+		workResult.Error = result.Failure.Message
+		workResult.FailureMetadata = &workers.WorkFailureMetadata{
+			Family: result.Failure.Family,
+			Type:   result.Failure.Type,
+		}
+	}
+	if executeErr != nil {
+		if errors.Is(executeErr, context.Canceled) || result.Outcome == workers.ExecutionOutcomeCanceled {
+			terminal = workers.WorkstationDispatchTerminalOutcomeCanceled
+			workResult.Error = workers.ErrWorkstationDispatchCanceled.Error()
+		} else {
+			terminal = workers.WorkstationDispatchTerminalOutcomeFailed
+			if workResult.Error == "" {
+				workResult.Error = executeErr.Error()
+			}
+		}
+	}
+	switch result.Outcome {
+	case workers.ExecutionOutcomeContinue:
+		workResult.Outcome = workers.OutcomeContinue
+	case workers.ExecutionOutcomeRejected:
+		workResult.Outcome = workers.OutcomeRejected
+	case workers.ExecutionOutcomeFailed:
+		workResult.Outcome = workers.OutcomeFailed
+		terminal = workers.WorkstationDispatchTerminalOutcomeFailed
+	case workers.ExecutionOutcomeCanceled:
+		workResult.Outcome = workers.OutcomeFailed
+		terminal = workers.WorkstationDispatchTerminalOutcomeCanceled
+		if workResult.Error == "" {
+			workResult.Error = workers.ErrWorkstationDispatchCanceled.Error()
+		}
+	}
+	output := result.Output.Clone()
+	return workers.WorkstationDispatchResult{
+		DispatchID:      request.Execution.Dispatch.DispatchID,
+		WorkstationName: request.WorkstationName,
+		TerminalOutcome: terminal,
+		Result:          workResult,
+		ProposedOutput:  &output,
+	}
+}
+
+func testExecuteResultFromDispatchResult(
+	request workers.ExecuteRequest,
+	result workers.WorkstationDispatchResult,
+) workers.ExecuteResult {
+	executeResult := workers.ExecuteResult{
+		Correlation:  request.Correlation,
+		Outcome:      executeOutcomeFromWorkResult(result.Result),
+		Failure:      executeFailureFromWorkResult(result.Result),
+		Output:       workers.ProposedOutputFromLegacyWorkResult(result.Result),
+		Continuation: cloneRuntimeContinuation(result.Result.Continuation),
+	}
+	if result.TerminalOutcome == workers.WorkstationDispatchTerminalOutcomeCanceled {
+		executeResult.Outcome = workers.ExecutionOutcomeCanceled
+	}
+	return executeResult
+}
+
 func executeFailureFromWorkResult(result workers.WorkResult) *workers.ExecutionFailure {
 	if result.FailureMetadata == nil && strings.TrimSpace(result.Error) == "" {
 		return nil
@@ -367,14 +441,10 @@ func executeFailureFromWorkResult(result workers.WorkResult) *workers.ExecutionF
 		failure.Type = result.FailureMetadata.Type
 		failure.RetryHint = workers.FailureDecisionFromMetadata(result.FailureMetadata).Retryable
 	}
+	failure.ProviderFailureKind = result.ProviderFailureKind
+	failure.ProviderContinuationFailureKind = result.ProviderContinuationFailureKind
+	failure.ProviderContinuationOutcome = result.ProviderContinuationOutcome
 	return failure
-}
-
-func executeOutcomeFromWorkstationResult(result workers.WorkstationDispatchResult) workers.ExecutionOutcome {
-	if result.TerminalOutcome == workers.WorkstationDispatchTerminalOutcomeCanceled {
-		return workers.ExecutionOutcomeCanceled
-	}
-	return executeOutcomeFromWorkResult(result.Result)
 }
 
 func executeOutcomeFromWorkResult(result workers.WorkResult) workers.ExecutionOutcome {
@@ -459,7 +529,7 @@ func withWorkerExecutor(workerType string, executor workers.WorkerExecutor) test
 	}
 }
 
-func withWorkerService(service workers.WorkstationExecutionService) testFactoryOption {
+func withWorkerService(service workers.Service) testFactoryOption {
 	return func(cfg *testFactoryConfig) { cfg.workerService = service }
 }
 
@@ -474,7 +544,7 @@ func withWorkerSessions(service workersessions.Service) testFactoryOption {
 // worker_sessions' own state-machine/Events behavior is exercised in its own
 // package tests; Runtime's tests only need this seam's integration contract.
 type fakeWorkerSessionsService struct {
-	execution workers.WorkstationExecutionService
+	execution workers.Service
 }
 
 func (s *fakeWorkerSessionsService) Reserve(context.Context, workersessions.ReserveRequest) (workersessions.Session, error) {
@@ -526,11 +596,12 @@ func (s *fakeWorkerSessionsService) InvokeSession(ctx context.Context, req worke
 		WorkstationName: req.Execution.WorkstationName,
 		Execution:       req.Execution.Execution,
 	}
-	dispatchResult, dispatchErr := s.execution.DispatchWorkstation(ctx, handoff)
+	executeResult, executeErr := s.execution.Execute(ctx, testExecuteRequestFromDispatch(handoff))
+	dispatchResult := testDispatchResultFromExecute(handoff, executeResult, executeErr)
 	return workersessions.InvokeSessionResult{
 		Session:     workersessions.Session{ID: req.ID, State: workersessions.StateCompleted},
 		Dispatch:    dispatchResult,
-		DispatchErr: dispatchErr,
+		DispatchErr: executeErr,
 	}, nil
 }
 
@@ -588,38 +659,7 @@ func (s *fakeWorkerSessionsService) Terminate(context.Context, workersessions.Co
 }
 
 type testWorkstationBoundary struct {
-	routes map[string]workers.WorkstationRequestExecutor
-}
-
-func testWorkstationPoolBoundaryFactory(cfg workers.WorkstationPoolBoundaryConfig) workers.WorkstationPoolBoundary {
-	bindings := make([]workers.AssembledRuntimeBinding, 0, len(cfg.RouteNames)+1)
-	requestExecutor := testWorkstationRequestExecutor{executors: cfg.Executors}
-	for _, routeName := range cfg.RouteNames {
-		bindings = append(bindings, workers.AssembledRuntimeBinding{
-			RoleName:      routeName,
-			RoleKind:      workers.RuntimeBuildRoleKindWorkstation,
-			Executor:      requestExecutor,
-			Capacity:      cfg.Capacity,
-			QueueCapacity: cfg.QueueCapacity,
-		})
-	}
-	if cfg.ProviderInvocation != nil {
-		bindings = append(bindings, workers.AssembledRuntimeBinding{
-			RoleName:      workers.ProviderInvocationRoute,
-			RoleKind:      workers.RuntimeBuildRoleKindWorkstation,
-			Executor:      cfg.ProviderInvocation,
-			Capacity:      cfg.Capacity,
-			QueueCapacity: cfg.QueueCapacity,
-		})
-	}
-	return &testWorkstationPoolBoundary{service: cfg.Service, bindings: bindings}
-}
-
-type testWorkstationPoolBoundary struct {
-	service  workers.WorkstationExecutionService
-	bindings []workers.AssembledRuntimeBinding
-	started  bool
-	mu       sync.Mutex
+	executors map[string]workers.WorkerExecutor
 }
 
 type testWorkstationRequestExecutor struct {
@@ -653,137 +693,26 @@ func (executor testWorkstationRequestExecutor) Execute(
 	return worker.Execute(ctx, request.Dispatch)
 }
 
-func (boundary *testWorkstationPoolBoundary) Start(ctx context.Context) error {
-	boundary.mu.Lock()
-	defer boundary.mu.Unlock()
-	if boundary.started {
-		return nil
-	}
-	if boundary.service == nil {
-		return nil
-	}
-	if _, err := boundary.service.StartWorkstationPool(ctx, workers.WorkstationPoolStartRequest{
-		Bindings: append([]workers.AssembledRuntimeBinding(nil), boundary.bindings...),
-	}); err != nil {
-		return err
-	}
-	boundary.started = true
-	return nil
-}
-
-func (boundary *testWorkstationPoolBoundary) Publish(
+func (b *testWorkstationBoundary) Execute(
 	ctx context.Context,
-	request workers.WorkstationDispatchRequest,
-	accept workers.WorkstationDispatchAcceptFunc,
-) error {
-	return boundary.PublishWithAdmission(ctx, request, nil, accept)
-}
-
-func (boundary *testWorkstationPoolBoundary) PublishWithAdmission(
-	ctx context.Context,
-	request workers.WorkstationDispatchRequest,
-	admission workers.WorkstationDispatchAdmissionFunc,
-	accept workers.WorkstationDispatchAcceptFunc,
-) error {
-	if err := boundary.Start(ctx); err != nil {
-		return err
-	}
-	result, err := boundary.service.DispatchWorkstationWithAdmission(ctx, request, admission)
-	if accept != nil {
-		accept(context.Background(), request, result, err)
-	}
-	return nil
-}
-
-func (boundary *testWorkstationPoolBoundary) Cancel(
-	ctx context.Context,
-	request workers.WorkstationDispatchCancelRequest,
-) (workers.WorkstationDispatchCancelResult, error) {
-	return boundary.service.CancelWorkstationDispatch(ctx, request)
-}
-
-func (boundary *testWorkstationPoolBoundary) Stop(ctx context.Context) error {
-	boundary.mu.Lock()
-	defer boundary.mu.Unlock()
-	if !boundary.started || boundary.service == nil {
-		return nil
-	}
-	_, err := boundary.service.StopWorkstationPool(ctx)
-	return err
-}
-
-func (b *testWorkstationBoundary) StartWorkstationPool(
-	_ context.Context,
-	request workers.WorkstationPoolStartRequest,
-) (workers.WorkstationPoolStartResult, error) {
-	b.routes = make(map[string]workers.WorkstationRequestExecutor, len(request.Bindings))
-	for _, binding := range request.Bindings {
-		b.routes[binding.RoleName] = binding.Executor
-	}
-	return workers.WorkstationPoolStartResult{
-		Outcome: workers.WorkstationPoolLifecycleOutcomeStarted,
-	}, nil
-}
-
-func (*testWorkstationBoundary) StopWorkstationPool(
-	context.Context,
-) (workers.WorkstationPoolStopResult, error) {
-	return workers.WorkstationPoolStopResult{
-		Outcome: workers.WorkstationPoolLifecycleOutcomeStopped,
-	}, nil
-}
-
-func (b *testWorkstationBoundary) DispatchWorkstation(
-	ctx context.Context,
-	request workers.WorkstationDispatchRequest,
-) (workers.WorkstationDispatchResult, error) {
-	executor := b.routes[request.WorkstationName]
-	if executor == nil {
-		result := workerexecution.WorkResult{
-			DispatchID:   request.Execution.Dispatch.DispatchID,
-			TransitionID: request.Execution.Dispatch.TransitionID,
-			Outcome:      workerexecution.OutcomeFailed,
-			Error:        fmt.Sprintf("no executor registered for worker type %q", request.Execution.WorkerType),
-		}
-		return workers.WorkstationDispatchResult{
-			DispatchID:      result.DispatchID,
-			WorkstationName: request.WorkstationName,
-			TerminalOutcome: workers.WorkstationDispatchTerminalOutcomeFailed,
-			Result:          result,
-		}, nil
-	}
-	result, err := executor.Execute(ctx, request.Execution)
-	terminal := workers.WorkstationDispatchTerminalOutcomeCompleted
-	if err != nil || result.Outcome == workerexecution.OutcomeFailed {
-		terminal = workers.WorkstationDispatchTerminalOutcomeFailed
-	}
-	return workers.WorkstationDispatchResult{
-		DispatchID:      request.Execution.Dispatch.DispatchID,
-		WorkstationName: request.WorkstationName,
-		TerminalOutcome: terminal,
-		Result:          result,
+	request workers.ExecuteRequest,
+) (workers.ExecuteResult, error) {
+	legacy := testLegacyRequestFromExecute(request)
+	result, err := (testWorkstationRequestExecutor{executors: b.executors}).Execute(ctx, legacy.Execution)
+	return workers.ExecuteResult{
+		Correlation: request.Correlation,
+		Outcome:     executeOutcomeFromWorkResult(result),
+		Failure:     executeFailureFromWorkResult(result),
+		Output:      workers.ProposedOutputFromLegacyWorkResult(result),
 	}, err
 }
 
-func (b *testWorkstationBoundary) DispatchWorkstationWithAdmission(
-	ctx context.Context,
-	request workers.WorkstationDispatchRequest,
-	admitted workers.WorkstationDispatchAdmissionFunc,
-) (workers.WorkstationDispatchResult, error) {
-	if admitted != nil {
-		admitted()
-	}
-	return b.DispatchWorkstation(ctx, request)
-}
-
-func (*testWorkstationBoundary) CancelWorkstationDispatch(
-	_ context.Context,
-	request workers.WorkstationDispatchCancelRequest,
-) (workers.WorkstationDispatchCancelResult, error) {
-	return workers.WorkstationDispatchCancelResult{
-		DispatchID: request.DispatchID,
-		Outcome:    workers.WorkstationDispatchCancelOutcomeCanceled,
-	}, nil
+func (*testWorkstationBoundary) InvokeModel(
+	context.Context,
+	string,
+	modelinference.Request,
+) (modelinference.Result, error) {
+	return modelinference.Result{}, errors.New("test Workers service does not support direct model invocation")
 }
 
 func withRuntimeConfig(value interfaces.RuntimeDefinitionLookup) testFactoryOption {

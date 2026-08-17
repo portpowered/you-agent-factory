@@ -8,7 +8,6 @@ import (
 	"io/fs"
 	"sync"
 
-	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factoryhost "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/host"
@@ -20,7 +19,6 @@ import (
 	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
-	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"go.uber.org/zap"
 	"path/filepath"
@@ -30,27 +28,25 @@ import (
 const defaultSessionID = "~default"
 
 // RuntimeFactory constructs hosted runtime bundles. It is stateless.
-type runtimeWorkstationService = workers.WorkstationExecutionService
 
 type RuntimeFactory struct {
-	quorumPolicy              interfaces.QuorumPolicyService
-	outputShaping             interfaces.InvocationOutputShapingService
-	workPropagation           interfaces.WorkPropagationPolicyService
-	workService               work.Service
-	decisionEnvelopes         interfaces.DecisionEnvelopeService
-	invocationInterpolation   interfaces.InvocationInterpolationService
-	baseLogger                *zap.Logger
-	loggerFactory             factory.RuntimeLoggerFactory
-	runtimeLogs               factory.RuntimeLogOwner
-	runtimeMetrics            factory.RuntimeMetricsOwner
-	newID                     factory.IDGenerator
-	workRequestIDs            work.RequestIDGenerator
-	runtimeDirs               factory.RuntimeDirectoryFileSystem
-	inputFiles                factory.InputFileSystem
-	inputDirectoryWalker      factory.InputDirectoryWalker
-	orchestrationCompilation  factory.OrchestrationCompilation
-	providerSessions          providersessions.Service
-	workerPoolBoundaryFactory factory.WorkstationPoolBoundaryFactory
+	quorumPolicy             interfaces.QuorumPolicyService
+	outputShaping            interfaces.InvocationOutputShapingService
+	workPropagation          interfaces.WorkPropagationPolicyService
+	workService              work.Service
+	decisionEnvelopes        interfaces.DecisionEnvelopeService
+	invocationInterpolation  interfaces.InvocationInterpolationService
+	baseLogger               *zap.Logger
+	loggerFactory            factory.RuntimeLoggerFactory
+	runtimeLogs              factory.RuntimeLogOwner
+	runtimeMetrics           factory.RuntimeMetricsOwner
+	newID                    factory.IDGenerator
+	workRequestIDs           work.RequestIDGenerator
+	runtimeDirs              factory.RuntimeDirectoryFileSystem
+	inputFiles               factory.InputFileSystem
+	inputDirectoryWalker     factory.InputDirectoryWalker
+	orchestrationCompilation factory.OrchestrationCompilation
+	providerSessions         providersessions.Service
 }
 
 func NewRuntimeFactory(
@@ -71,27 +67,25 @@ func NewRuntimeFactory(
 	inputDirectoryWalker factory.InputDirectoryWalker,
 	orchestrationCompilation factory.OrchestrationCompilation,
 	providerSessions providersessions.Service,
-	workerPoolBoundaryFactory factory.WorkstationPoolBoundaryFactory,
 ) *RuntimeFactory {
 	return &RuntimeFactory{
-		quorumPolicy:              quorumPolicy,
-		outputShaping:             outputShaping,
-		workPropagation:           workPropagation,
-		workService:               workService,
-		decisionEnvelopes:         decisionEnvelopes,
-		invocationInterpolation:   invocationInterpolation,
-		baseLogger:                baseLogger,
-		loggerFactory:             loggerFactory,
-		runtimeLogs:               runtimeLogs,
-		runtimeMetrics:            runtimeMetrics,
-		newID:                     newID,
-		workRequestIDs:            workRequestIDs,
-		runtimeDirs:               runtimeDirs,
-		inputFiles:                inputFiles,
-		inputDirectoryWalker:      inputDirectoryWalker,
-		orchestrationCompilation:  orchestrationCompilation,
-		providerSessions:          providerSessions,
-		workerPoolBoundaryFactory: workerPoolBoundaryFactory,
+		quorumPolicy:             quorumPolicy,
+		outputShaping:            outputShaping,
+		workPropagation:          workPropagation,
+		workService:              workService,
+		decisionEnvelopes:        decisionEnvelopes,
+		invocationInterpolation:  invocationInterpolation,
+		baseLogger:               baseLogger,
+		loggerFactory:            loggerFactory,
+		runtimeLogs:              runtimeLogs,
+		runtimeMetrics:           runtimeMetrics,
+		newID:                    newID,
+		workRequestIDs:           workRequestIDs,
+		runtimeDirs:              runtimeDirs,
+		inputFiles:               inputFiles,
+		inputDirectoryWalker:     inputDirectoryWalker,
+		orchestrationCompilation: orchestrationCompilation,
+		providerSessions:         providerSessions,
 	}
 }
 
@@ -110,8 +104,6 @@ func (f *RuntimeFactory) Build(
 	runtimeMode interfaces.RuntimeMode,
 	verbose bool,
 	runtimeScheduler scheduler.Scheduler,
-	workerExecutorOverrides map[string]workers.WorkerExecutor,
-	workerExecutorDecorator func(string, workers.WorkerExecutor) workers.WorkerExecutor,
 	inlineDispatch bool,
 	submissionRecorder recordings.SubmissionRecorder,
 	dispatchRecorder recordings.DispatchRecorder,
@@ -132,9 +124,7 @@ func (f *RuntimeFactory) Build(
 	petriMutationRecorder factory.PetriMutationRecorder,
 	worldStateProjector factory.WorldStateProjector,
 	recordingsRuntime recordings.RuntimeOpening,
-	loadWorkerExecutors func(recordings.WorkerEventRecorder, *zap.Logger) (map[string]workers.WorkerExecutor, error),
-	workerService runtimeWorkstationService,
-	providerInvocation workers.WorkstationRequestExecutor,
+	workerService workers.Service,
 	workerSessionsFactory factory.WorkerSessionsFactory,
 	dispatchCompleted func(string),
 	mockWorkersConfigs ...*workers.MockWorkersConfig,
@@ -188,10 +178,6 @@ func (f *RuntimeFactory) Build(
 	if workerSessionsFactory == nil {
 		_ = factoryhost.CloseBundleSinks(logSink, nil)
 		return nil, fmt.Errorf("Worker Sessions factory is required")
-	}
-	if f.workerPoolBoundaryFactory == nil {
-		_ = logSink.Close()
-		return nil, fmt.Errorf("Workstation pool boundary factory is required")
 	}
 	metricsSink, err := openRuntimeMetricsScope(
 		f.runtimeMetrics,
@@ -257,76 +243,35 @@ func (f *RuntimeFactory) Build(
 	if initialFactory != nil {
 		eventHistory.SetInitialStructureFactory(initialFactory)
 	}
-	var workerExecutors map[string]workers.WorkerExecutor
-	if loadWorkerExecutors != nil {
-		workerExecutors, err = loadWorkerExecutors(eventHistory, logger)
-		if err != nil {
-			return nil, err
-		}
-	}
 	var mockWorkersConfig *workers.MockWorkersConfig
 	if len(mockWorkersConfigs) > 0 {
 		mockWorkersConfig = mockWorkersConfigs[0]
 	}
-	var sharedWorkersService workers.Service
-	if service, ok := workerService.(workers.Service); ok {
-		sharedWorkersService = service
-	}
-	var promptRenderer runtime.PromptRenderer
-	if renderer, ok := workerService.(runtime.PromptRenderer); ok {
-		promptRenderer = renderer
-	}
-	var templateFieldResolver runtime.TemplateFieldResolver
-	if resolver, ok := workerService.(runtime.TemplateFieldResolver); ok {
-		templateFieldResolver = resolver
-	}
-	var progressPublisher workers.ProgressPublisher
-	if publisherProvider, ok := workerService.(interface {
-		RuntimeProgressPublisher() workers.ProgressPublisher
-	}); ok {
-		progressPublisher = publisherProvider.RuntimeProgressPublisher()
-	}
-	directWorkstationExecutor := runtime.NewWorkstationRequestExecutor(
-		runtime.WorkstationRequestExecutorConfig{
-			Service:                    sharedWorkersService,
-			RuntimeDefinitions:         loadedFactoryCfg,
-			InvocationInterpolation:    f.invocationInterpolation,
-			InvocationFileReader:       invocationFileReader(f.inputFiles),
-			WorkflowContext:            RuntimeWorkflowContext(loadedFactoryCfg.FactoryConfig(), sessionID),
-			FactorySessionID:           sessionID,
-			RuntimeID:                  runtimeInstanceID,
-			RecordingID:                workerRecordingIdentity(runtimeInstanceID, recordPath),
-			EventHistory:               eventHistory,
-			NewID:                      f.newID,
-			PromptRenderer:             promptRenderer,
-			TemplateFieldResolver:      templateFieldResolver,
-			PromptSourceReader:         invocationFileReader(f.inputFiles),
-			MockWorkers:                mockWorkersConfig,
-			ProgressPublisher:          progressPublisher,
-			Net:                        net,
-			ExpectedArtifactFileSystem: f.inputFiles,
-		},
+	bundle, err := assembleRuntimeBundle(
+		ctx,
+		dir, folderPath, sessionID, runtimeMode, verbose, runtimeScheduler,
+		inlineDispatch, submissionRecorder,
+		dispatchRecorder,
+		loadedFactoryCfg, runtimeInstanceID,
+		backendScopeID, clock, recordPath, recording, submissionHooks,
+		completionPlanner, petriMutationRecorder, worldStateProjector,
+		dispatchCompleted, logger, structuredLogger, logSink, metricsSink, net, eventHistory,
+		workerService,
+		mockWorkersConfig,
+		workerSessionsFactory,
+		f.providerSessions,
+		f.workService,
+		f.quorumPolicy,
+		f.outputShaping,
+		f.workPropagation,
+		f.workRequestIDs,
+		f.newID,
+		f.runtimeDirs,
+		f.inputFiles,
+		f.inputDirectoryWalker,
+		f.decisionEnvelopes,
+		f.invocationInterpolation,
 	)
-
-	bundle, err := assembleRuntimeBundle(runtimeBundleAssembly{
-		dir: dir, folderPath: folderPath, sessionID: sessionID, runtimeMode: runtimeMode,
-		runtimeScheduler:        runtimeScheduler,
-		workerExecutorOverrides: workerExecutorOverrides, workerExecutorDecorator: workerExecutorDecorator,
-		inlineDispatch: inlineDispatch, submissionRecorder: submissionRecorder, dispatchRecorder: dispatchRecorder,
-		loadedFactoryCfg: loadedFactoryCfg, runtimeInstanceID: runtimeInstanceID, backendScopeID: backendScopeID,
-		clock: clock, recordPath: recordPath, recording: recording, submissionHooks: submissionHooks,
-		completionPlanner: completionPlanner, petriMutationRecorder: petriMutationRecorder,
-		worldStateProjector: worldStateProjector, dispatchCompleted: dispatchCompleted, logger: logger,
-		structuredLogger: structuredLogger, logSink: logSink, metricsSink: metricsSink, net: net,
-		eventHistory: eventHistory, workerExecutors: workerExecutors, workerService: workerService,
-		directWorkstationExecutor: directWorkstationExecutor, mockWorkersConfig: mockWorkersConfig,
-		providerInvocation: providerInvocation, workerSessionsFactory: workerSessionsFactory,
-		workerPoolBoundaryFactory: f.workerPoolBoundaryFactory, providerSessions: f.providerSessions,
-		workService: f.workService, quorumPolicy: f.quorumPolicy, outputShaping: f.outputShaping,
-		workPropagation: f.workPropagation, workRequestIDs: f.workRequestIDs, newID: f.newID,
-		runtimeDirs: f.runtimeDirs, inputFiles: f.inputFiles, inputDirectoryWalker: f.inputDirectoryWalker,
-		decisionEnvelopes: f.decisionEnvelopes, invocationInterpolation: f.invocationInterpolation,
-	})
 	if err != nil {
 		return nil, err
 	}
@@ -353,105 +298,81 @@ func validateConfiguredRuntimeWorkers(loaded factory.LoadedConfig) error {
 	return nil
 }
 
-type runtimeBundleAssembly struct {
-	dir                       string
-	folderPath                string
-	sessionID                 string
-	runtimeMode               interfaces.RuntimeMode
-	runtimeScheduler          scheduler.Scheduler
-	workerExecutorOverrides   map[string]workers.WorkerExecutor
-	workerExecutorDecorator   func(string, workers.WorkerExecutor) workers.WorkerExecutor
-	inlineDispatch            bool
-	submissionRecorder        recordings.SubmissionRecorder
-	dispatchRecorder          recordings.DispatchRecorder
-	loadedFactoryCfg          factory.LoadedConfig
-	runtimeInstanceID         string
-	backendScopeID            string
-	clock                     factory.Clock
-	recordPath                string
-	recording                 recordings.RuntimeRecorder
-	submissionHooks           []factory.SubmissionHook
-	completionPlanner         factory.CompletionDeliveryPlanner
-	petriMutationRecorder     factory.PetriMutationRecorder
-	worldStateProjector       factory.WorldStateProjector
-	dispatchCompleted         func(string)
-	logger                    *zap.Logger
-	structuredLogger          factory.Logger
-	logSink                   factory.RuntimeLogSink
-	metricsSink               factory.RuntimeMetricsSink
-	net                       *state.Net
-	eventHistory              recordings.RuntimeLedger
-	workerExecutors           map[string]workers.WorkerExecutor
-	workerService             runtimeWorkstationService
-	directWorkstationExecutor workers.WorkstationRequestExecutor
-	mockWorkersConfig         *workers.MockWorkersConfig
-	providerInvocation        workers.WorkstationRequestExecutor
-	workerSessionsFactory     factory.WorkerSessionsFactory
-	workerPoolBoundaryFactory factory.WorkstationPoolBoundaryFactory
-	providerSessions          providersessions.Service
-	workService               work.Service
-	quorumPolicy              interfaces.QuorumPolicyService
-	outputShaping             interfaces.InvocationOutputShapingService
-	workPropagation           interfaces.WorkPropagationPolicyService
-	workRequestIDs            work.RequestIDGenerator
-	newID                     factory.IDGenerator
-	runtimeDirs               factory.RuntimeDirectoryFileSystem
-	inputFiles                factory.InputFileSystem
-	inputDirectoryWalker      factory.InputDirectoryWalker
-	decisionEnvelopes         interfaces.DecisionEnvelopeService
-	invocationInterpolation   interfaces.InvocationInterpolationService
-}
-
-func assembleRuntimeBundle(input runtimeBundleAssembly) (*factoryhost.Bundle, error) {
-	dir, folderPath, sessionID := input.dir, input.folderPath, input.sessionID
-	runtimeMode, runtimeScheduler := input.runtimeMode, input.runtimeScheduler
-	workerExecutorOverrides, workerExecutorDecorator := input.workerExecutorOverrides, input.workerExecutorDecorator
-	inlineDispatch, submissionRecorder, dispatchRecorder := input.inlineDispatch, input.submissionRecorder, input.dispatchRecorder
-	loadedFactoryCfg, runtimeInstanceID, backendScopeID := input.loadedFactoryCfg, input.runtimeInstanceID, input.backendScopeID
-	clock, recordPath, recording, submissionHooks := input.clock, input.recordPath, input.recording, input.submissionHooks
-	completionPlanner, petriMutationRecorder, worldStateProjector := input.completionPlanner, input.petriMutationRecorder, input.worldStateProjector
-	dispatchCompleted, logger, structuredLogger := input.dispatchCompleted, input.logger, input.structuredLogger
-	logSink, metricsSink, net, eventHistory := input.logSink, input.metricsSink, input.net, input.eventHistory
-	workerExecutors, workerService, directWorkstationExecutor := input.workerExecutors, input.workerService, input.directWorkstationExecutor
-	mockWorkersConfig, providerInvocation, workerSessionsFactory := input.mockWorkersConfig, input.providerInvocation, input.workerSessionsFactory
-	workerPoolBoundaryFactory, providerSessions, workService := input.workerPoolBoundaryFactory, input.providerSessions, input.workService
-	quorumPolicy, outputShaping, workPropagation, workRequestIDs := input.quorumPolicy, input.outputShaping, input.workPropagation, input.workRequestIDs
-	newID, runtimeDirs, inputFiles, inputDirectoryWalker := input.newID, input.runtimeDirs, input.inputFiles, input.inputDirectoryWalker
-	decisionEnvelopes, invocationInterpolation := input.decisionEnvelopes, input.invocationInterpolation
-	workerExecutors = prepareRuntimeWorkerExecutors(workerExecutors, workerExecutorOverrides, workerExecutorDecorator)
-	bindRuntimeLogger(directWorkstationExecutor, structuredLogger)
+// backendsizecheck:ignore-function service-ownership migration preserves this orchestration flow; extract focused helpers and remove this exemption.
+// pkgmaintcheck:ignore-function-lines service-ownership migration preserves this orchestration flow; extract focused helpers and remove this exemption.
+func assembleRuntimeBundle(
+	ctx context.Context,
+	dir string,
+	folderPath string,
+	sessionID string,
+	runtimeMode interfaces.RuntimeMode,
+	verbose bool,
+	runtimeScheduler scheduler.Scheduler,
+	inlineDispatch bool,
+	submissionRecorder recordings.SubmissionRecorder,
+	dispatchRecorder recordings.DispatchRecorder,
+	loadedFactoryCfg factory.LoadedConfig,
+	runtimeInstanceID string,
+	backendScopeID string,
+	clock factory.Clock,
+	recordPath string,
+	recording recordings.RuntimeRecorder,
+	submissionHooks []factory.SubmissionHook,
+	completionPlanner factory.CompletionDeliveryPlanner,
+	petriMutationRecorder factory.PetriMutationRecorder,
+	worldStateProjector factory.WorldStateProjector,
+	dispatchCompleted func(string),
+	logger *zap.Logger,
+	structuredLogger factory.Logger,
+	logSink factory.RuntimeLogSink,
+	metricsSink factory.RuntimeMetricsSink,
+	net *state.Net,
+	eventHistory recordings.RuntimeLedger,
+	workerService workers.Service,
+	mockWorkersConfig *workers.MockWorkersConfig,
+	workerSessionsFactory factory.WorkerSessionsFactory,
+	providerSessions providersessions.Service,
+	workService work.Service,
+	quorumPolicy interfaces.QuorumPolicyService,
+	outputShaping interfaces.InvocationOutputShapingService,
+	workPropagation interfaces.WorkPropagationPolicyService,
+	workRequestIDs work.RequestIDGenerator,
+	newID factory.IDGenerator,
+	runtimeDirs factory.RuntimeDirectoryFileSystem,
+	inputFiles factory.InputFileSystem,
+	inputDirectoryWalker factory.InputDirectoryWalker,
+	decisionEnvelopes interfaces.DecisionEnvelopeService,
+	invocationInterpolation interfaces.InvocationInterpolationService,
+) (*factoryhost.Bundle, error) {
 	bundle := factoryhost.NewBundle(
 		dir, folderPath, runtimeInstanceID, strings.TrimSpace(backendScopeID),
 		clock.Now().UTC(), eventHistory, net, loadedFactoryCfg,
 		logger, logSink, metricsSink, recording, recordPath, dispatchCompleted,
 	)
-	factoryEventRecorder := runtimeFactoryEventRecorder(recordPath, recording)
-	// Runtime dispatch uses the detached Workers Execute capability below. The
-	// workstation boundary remains only for the Worker Sessions direct/child
-	// compatibility path until P5C-4/P6-C retires that graph.
-	workstationBoundary := buildRuntimeWorkstationBoundary(
-		workerPoolBoundaryFactory,
-		workerService,
-		workerExecutors,
-		net,
-		directWorkstationExecutor,
-		providerInvocation,
-	)
-	workerSessions, err := buildRuntimeWorkerSessions(workerSessionsFactory, workstationBoundary, clock)
-	if err != nil {
-		return nil, err
+	factoryEventRecorder := factory.FactoryEventRecorder(nil)
+	if recordPath != "" {
+		factoryEventRecorder = func(event interfaces.FactoryEvent) {
+			if recording == nil {
+				return
+			}
+			recording.RecordEvent(event)
+		}
 	}
-	// TODO(P6-C): delete the legacy workstation pool/request-executor graph
-	// after the remaining Worker Sessions caller family migrates to Execute.
-	statelessService, err := requireRuntimeExecuteService(workerService)
+	workerSessions, err := workerSessionsFactory(workerService, clock)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("construct Worker Sessions service: %w", err)
 	}
-	effectiveSubmissionRecorder := runtimeSubmissionRecorder(bundle, submissionRecorder)
-	activeFactory, err := newRuntimeFactory(
+	if workerSessions == nil {
+		return nil, fmt.Errorf("construct Worker Sessions service: factory returned nil")
+	}
+	effectiveSubmissionRecorder := recordings.SubmissionRecorder(bundle.RecordSubmissionMetric)
+	if submissionRecorder != nil {
+		effectiveSubmissionRecorder = submissionRecorder
+	}
+	activeFactory, err := runtime.New(
 		net,
 		runtimeScheduler,
-		statelessService,
+		workerService,
 		workerSessions,
 		loadedFactoryCfg,
 		invocationInterpolation,
@@ -483,175 +404,8 @@ func assembleRuntimeBundle(input runtimeBundleAssembly) (*factoryhost.Bundle, er
 		decisionEnvelopes,
 	)
 	if err != nil {
-		return nil, err
-	}
-	if err := configureRuntimeFactory(activeFactory, mockWorkersConfig, inputFiles, dir, logger, runtimeDirs); err != nil {
-		return nil, err
-	}
-
-	bundle.Factory = activeFactory
-	bundle.InputFiles = inputFiles
-	bundle.InputDirectoryWalker = inputDirectoryWalker
-	bundle.WorkRequestIDs = workRequestIDs
-	return bundle, nil
-}
-
-func newRuntimeFactory(
-	net *state.Net,
-	runtimeScheduler scheduler.Scheduler,
-	statelessService interface {
-		Execute(context.Context, workers.ExecuteRequest) (workers.ExecuteResult, error)
-	},
-	workerSessions workersessions.Service,
-	loadedFactoryCfg factory.LoadedConfig,
-	invocationInterpolation interfaces.InvocationInterpolationService,
-	invocationFileReader interfaces.FileReader,
-	workflowContext *factory_context.FactoryContext,
-	runtimeMode interfaces.RuntimeMode,
-	structuredLogger factory.Logger,
-	clock factory.Clock,
-	inlineDispatch bool,
-	eventHistory recordings.RuntimeLedger,
-	recordingID string,
-	runtimeID string,
-	worldStateProjector factory.WorldStateProjector,
-	providerSessions providersessions.Service,
-	submissionRecorder recordings.SubmissionRecorder,
-	factoryEventRecorder factory.FactoryEventRecorder,
-	submissionHooks []factory.SubmissionHook,
-	dispatchRecorder recordings.DispatchRecorder,
-	completionRecorder factory.CompletionRecorder,
-	petriMutationRecorder factory.PetriMutationRecorder,
-	completionPlanner factory.CompletionDeliveryPlanner,
-	quorumPolicy interfaces.QuorumPolicyService,
-	outputShaping interfaces.InvocationOutputShapingService,
-	workPropagation interfaces.WorkPropagationPolicyService,
-	workService work.Service,
-	workRequestIDs work.RequestIDGenerator,
-	newID factory.IDGenerator,
-	expectedArtifactFileSystemValue any,
-	decisionEnvelopes interfaces.DecisionEnvelopeService,
-) (factoryhost.Engine, error) {
-	activeFactory, err := runtime.New(
-		net,
-		runtimeScheduler,
-		statelessService,
-		workerSessions,
-		loadedFactoryCfg,
-		invocationInterpolation,
-		invocationFileReader,
-		workflowContext,
-		runtimeMode,
-		structuredLogger,
-		clock,
-		inlineDispatch,
-		eventHistory,
-		recordingID,
-		runtimeID,
-		worldStateProjector,
-		providerSessions,
-		submissionRecorder,
-		factoryEventRecorder,
-		submissionHooks,
-		dispatchRecorder,
-		completionRecorder,
-		petriMutationRecorder,
-		completionPlanner,
-		quorumPolicy,
-		outputShaping,
-		workPropagation,
-		workService,
-		workRequestIDs,
-		newID,
-		expectedArtifactFileSystemValue,
-		decisionEnvelopes,
-	)
-	if err != nil {
 		return nil, fmt.Errorf("create factory: %w", err)
 	}
-	return activeFactory, nil
-}
-
-func prepareRuntimeWorkerExecutors(
-	workerExecutors map[string]workers.WorkerExecutor,
-	overrides map[string]workers.WorkerExecutor,
-	decorate func(string, workers.WorkerExecutor) workers.WorkerExecutor,
-) map[string]workers.WorkerExecutor {
-	if workerExecutors == nil {
-		workerExecutors = make(map[string]workers.WorkerExecutor)
-	}
-	for workerType, executor := range overrides {
-		workerExecutors[workerType] = executor
-	}
-	if decorate != nil {
-		for workerType, executor := range workerExecutors {
-			workerExecutors[workerType] = decorate(workerType, executor)
-		}
-	}
-	return workerExecutors
-}
-
-func runtimeFactoryEventRecorder(
-	recordPath string,
-	recording recordings.RuntimeRecorder,
-) factory.FactoryEventRecorder {
-	if recordPath == "" {
-		return nil
-	}
-	return func(event interfaces.FactoryEvent) {
-		if recording != nil {
-			recording.RecordEvent(event)
-		}
-	}
-}
-
-func buildRuntimeWorkerSessions(
-	workerSessionsFactory factory.WorkerSessionsFactory,
-	boundary workers.WorkstationPoolBoundary,
-	clock platformclock.Source,
-) (workersessions.Service, error) {
-	workerSessions, err := workerSessionsFactory(boundary, clock)
-	if err != nil {
-		return nil, fmt.Errorf("construct Worker Sessions service: %w", err)
-	}
-	if workerSessions == nil {
-		return nil, fmt.Errorf("construct Worker Sessions service: factory returned nil")
-	}
-	return workerSessions, nil
-}
-
-func requireRuntimeExecuteService(
-	workerService runtimeWorkstationService,
-) (interface {
-	Execute(context.Context, workers.ExecuteRequest) (workers.ExecuteResult, error)
-}, error) {
-	statelessService, ok := workerService.(interface {
-		Execute(context.Context, workers.ExecuteRequest) (workers.ExecuteResult, error)
-	})
-	if !ok || statelessService == nil {
-		return nil, fmt.Errorf("Workers Execute service is required for Factory Runtime dispatch")
-	}
-	return statelessService, nil
-}
-
-func runtimeSubmissionRecorder(
-	bundle *factoryhost.Bundle,
-	submissionRecorder recordings.SubmissionRecorder,
-) recordings.SubmissionRecorder {
-	if submissionRecorder != nil {
-		return submissionRecorder
-	}
-	return recordings.SubmissionRecorder(bundle.RecordSubmissionMetric)
-}
-
-func configureRuntimeFactory(
-	activeFactory factoryhost.Engine,
-	mockWorkersConfig *workers.MockWorkersConfig,
-	inputFiles factory.InputFileSystem,
-	dir string,
-	logger *zap.Logger,
-	runtimeDirs factory.RuntimeDirectoryFileSystem,
-) error {
 	if configurable, ok := activeFactory.(interface {
 		SetMockWorkersConfig(*workers.MockWorkersConfig)
 	}); ok {
@@ -662,15 +416,15 @@ func configureRuntimeFactory(
 	}); ok && inputFiles != nil {
 		configurable.SetPromptSourceReader(inputFiles.ReadFile)
 	}
-	return ensureRuntimeInputsDir(dir, logger, runtimeDirs)
-}
-
-func bindRuntimeLogger(executor workers.WorkstationRequestExecutor, logger factory.Logger) {
-	if loggerBinder, ok := executor.(interface {
-		SetRuntimeLogger(factory.Logger)
-	}); ok {
-		loggerBinder.SetRuntimeLogger(logger)
+	if err := ensureRuntimeInputsDir(dir, logger, runtimeDirs); err != nil {
+		return nil, err
 	}
+
+	bundle.Factory = activeFactory
+	bundle.InputFiles = inputFiles
+	bundle.InputDirectoryWalker = inputDirectoryWalker
+	bundle.WorkRequestIDs = workRequestIDs
+	return bundle, nil
 }
 
 func invocationFileReader(inputFiles factory.InputFileSystem) interfaces.FileReader {

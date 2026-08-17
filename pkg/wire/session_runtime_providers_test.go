@@ -729,26 +729,6 @@ func TestWorkerProcessCompatibilityCallbacksRemainCallable(t *testing.T) {
 	}
 }
 
-func TestCanonicalWorkerCompositionBindingsRemainConstructible(t *testing.T) {
-	providersService, err := provideProvidersService(serviceedges.Edges{})
-	if err != nil {
-		t.Fatalf("provideProvidersService() error = %v", err)
-	}
-	if registry, err := buildProviderRegistry(serviceedges.Edges{}, providersService); err != nil || registry == nil {
-		t.Fatalf("buildProviderRegistry() = registry %T, error %v", registry, err)
-	}
-
-	allocator, err := provideAgyPTYAllocator(serviceedges.Edges{})
-	if err != nil {
-		t.Fatalf("provideAgyPTYAllocator() error = %v", err)
-	}
-	invocationFactory := provideWorkerInvocationFactory(providersService, serviceedges.Edges{})
-	executor, err := invocationFactory(workers.AdaptCommandRunner(testutil.NewProviderCommandRunner()), allocator)
-	if err != nil || executor == nil {
-		t.Fatalf("worker invocation factory() = executor %T, error %v", executor, err)
-	}
-}
-
 func TestRuntimeRunnerAndWorkerSessionFactoriesUseInjectedPorts(t *testing.T) {
 	runner := testutil.NewProviderCommandRunner()
 	edges := serviceedges.Edges{
