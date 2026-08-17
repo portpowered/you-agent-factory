@@ -619,7 +619,10 @@ func normalizeCommittedTerminal(state workersessions.State, result workersession
 	case workersessions.StateCompleted:
 		return workersessions.TerminalResult{Outcome: workersessions.TerminalOutcomeCompleted}
 	case workersessions.StateFailed:
-		if result.Outcome != workersessions.TerminalOutcomeFailed || result.Cause == nil || !result.Cause.Kind.Valid() {
+		// A control outcome is repaired here too: it names why a session ended
+		// but is never a committable failure cause.
+		if result.Outcome != workersessions.TerminalOutcomeFailed || result.Cause == nil ||
+			!result.Cause.Kind.Valid() || result.Cause.Kind.ControlTerminal() {
 			return failedTerminal(
 				workersessions.FailureCauseWorkersExecutionFailure,
 				"the Worker Session failed without a reported cause",

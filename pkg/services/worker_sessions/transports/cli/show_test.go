@@ -144,6 +144,46 @@ func TestShowHumanRendersFailureAndParseDiagnostics(t *testing.T) {
 	}
 }
 
+// TestShowHumanNamesTheOperatorCancelTerminalReason is the operator-visible
+// half of the diagnosis path: before the named reason existed this line read
+// "Failure:\tunavailable" for a cancellation, which is indistinguishable from
+// a failure whose cause was never recorded.
+func TestShowHumanNamesTheOperatorCancelTerminalReason(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(generated.WorkerSessionObservation{
+			WorkerSessionId: "worker-session-canceled", WorkIds: []string{"work-1"}, AttemptId: "attempt-1",
+			State:         generated.WorkerSessionObservationStateCanceled,
+			DurationBasis: generated.WorkerSessionObservationDurationBasisRECORDEDTIMESTAMPS,
+			Transcript:    generated.WorkerSessionObservationTranscriptUNAVAILABLE,
+			Failure: &generated.WorkerSessionFailure{
+				Kind:   "OPERATOR_CANCELED",
+				Detail: "an operator cancel control ended the Worker Session",
+			},
+		})
+	}))
+	defer server.Close()
+
+	var output bytes.Buffer
+	err := NewShow(testHTTPProtocol(t))(ShowConfig{
+		Context: context.Background(), Server: server.URL, WorkerSessionID: "worker-session-canceled", Output: &output,
+	})
+	if err != nil {
+		t.Fatalf("Show() error = %v", err)
+	}
+	for _, want := range []string{
+		"State:\tCANCELED",
+		"Failure:\tkind=OPERATOR_CANCELED detail=an operator cancel control ended the Worker Session",
+	} {
+		if !strings.Contains(output.String(), want) {
+			t.Fatalf("human output %q missing %q", output.String(), want)
+		}
+	}
+	if strings.Contains(output.String(), "Failure:\tunavailable") {
+		t.Fatalf("human output %q still reports an unnamed terminal reason", output.String())
+	}
+}
+
 func TestShowMapsMissingSessionToStableJSONError(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusNotFound)

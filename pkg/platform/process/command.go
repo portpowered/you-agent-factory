@@ -286,12 +286,7 @@ func (r ExecCommandRunner) run(
 		if ctx.Err() != nil {
 			return result, ctx.Err()
 		}
-		var exitErr *exec.ExitError
-		if errors.As(runErr, &exitErr) {
-			result.ExitCode = exitErr.ExitCode()
-			return result, nil
-		}
-		return result, runErr
+		return r.resultFromWaitError(result, runErr, cleanupLogger, req)
 	}
 	return result, nil
 }
@@ -379,6 +374,38 @@ func (r ExecCommandRunner) reportCommandStartFailure(logger logging.Logger, req 
 // find a spawn that died before the child process existed.
 const commandRunnerStartFailedEvent = "command_runner.start_failed"
 
+// resultFromWaitError converts one terminal cmd.Wait error into the runner's
+// result contract.
+//
+// exec.ErrWaitDelay is the exact process-gone-with-open-pipe fact this runner
+// must not stall on: the started process already exited successfully, and
+// os/exec force-closed the inherited stdout/stderr descriptors that a surviving
+// descendant kept open past the wait delay. The exit status is authoritative,
+// so the run reports the command's own success rather than the pipe's fate.
+func (r ExecCommandRunner) resultFromWaitError(
+	result CommandResult,
+	runErr error,
+	logger logging.Logger,
+	req CommandRequest,
+) (CommandResult, error) {
+	var exitErr *exec.ExitError
+	if errors.As(runErr, &exitErr) {
+		result.ExitCode = exitErr.ExitCode()
+		return result, nil
+	}
+	if errors.Is(runErr, exec.ErrWaitDelay) {
+		logger.Warn(
+			"command runner: process exited while a descendant held its output pipe open",
+			"event_name", "command_runner.output_pipe_wait_delay_elapsed",
+			"command", req.Command,
+			"args_count", len(req.Args),
+			"wait_delay_ms", orphanedOutputPipeGracePeriod().Milliseconds(),
+		)
+		return result, nil
+	}
+	return result, runErr
+}
+
 func (r ExecCommandRunner) prepareCommand(
 	req CommandRequest,
 	observer OutputChunkObserver,
@@ -411,18 +438,45 @@ func (r ExecCommandRunner) prepareCommand(
 	stderr := &observedBuffer{stream: OutputStreamStderr, observer: observer, maxBytes: outputLimit}
 	cmd.Stdout = stdout
 	cmd.Stderr = stderr
+	// Assigning plain io.Writers makes os/exec create pipes plus copy
+	// goroutines, and cmd.Wait joins those goroutines after the process itself
+	// is reaped. A descendant that inherited the write end therefore keeps
+	// cmd.Wait blocked indefinitely once the started process is gone. WaitDelay
+	// bounds exactly that window: os/exec force-closes the inherited
+	// descriptors once the delay elapses after process exit, so a dead process
+	// always produces a terminal result instead of an unbounded wait.
+	cmd.WaitDelay = orphanedOutputPipeGracePeriod()
 	return cmd, stdout, stderr, nil
 }
 
 const defaultPostRunCleanupGracePeriod = 10 * time.Second
 
-var postRunCleanupGracePeriodForTest time.Duration
+// defaultOrphanedOutputPipeGracePeriod bounds how long cmd.Wait keeps waiting
+// on inherited stdout/stderr descriptors after the started process has already
+// been reaped. It is the wait-delay boundary between "output still draining"
+// and "a surviving descendant is holding these descriptors open forever". Five
+// seconds is far longer than a drained kernel pipe buffer needs once the
+// writers are gone, and vastly below the two-hour workstation execution timeout
+// that used to be the only exit from a wedged wait.
+const defaultOrphanedOutputPipeGracePeriod = 5 * time.Second
+
+var (
+	postRunCleanupGracePeriodForTest     time.Duration
+	orphanedOutputPipeGracePeriodForTest time.Duration
+)
 
 func postRunCleanupGracePeriod() time.Duration {
 	if postRunCleanupGracePeriodForTest > 0 {
 		return postRunCleanupGracePeriodForTest
 	}
 	return defaultPostRunCleanupGracePeriod
+}
+
+func orphanedOutputPipeGracePeriod() time.Duration {
+	if orphanedOutputPipeGracePeriodForTest > 0 {
+		return orphanedOutputPipeGracePeriodForTest
+	}
+	return defaultOrphanedOutputPipeGracePeriod
 }
 
 // waitForCommandExit bounds the cancellation path even when an inherited

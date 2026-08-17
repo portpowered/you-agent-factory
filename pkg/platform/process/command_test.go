@@ -18,7 +18,29 @@ import (
 // commandHelperSpawnTimeoutBudget allows slow CI hosts (especially Windows) to
 // start the helper, spawn the child, and write the pid file before the test
 // context deadline fires. spawn-child sleeps 10s after spawning.
-const commandHelperSpawnTimeoutBudget = 3 * time.Second
+//
+// This bounds a failure, so it only costs wall time when a guard is already
+// broken: budgeting generously is free. A tighter 3s budget expired against
+// nothing worse than two Windows process creations under package load, which
+// surfaced as a missing pid file in whichever guard happened to run then.
+const commandHelperSpawnTimeoutBudget = 20 * time.Second
+
+// commandHelperInterruptionBudget bounds how long the guards that interrupt a
+// run let it proceed before their deadline fires. Unlike the budget above this
+// one is spent on every pass, so it trades wall time for headroom, and it is
+// squeezed from both sides: it has to outlast two process creations (the
+// helper, then the helper's own child) plus the helper's fixed pre-spawn pause,
+// or the run is torn down before the descendant it is meant to interrupt ever
+// exists -- yet stay under the 10s the helper sleeps, or the run ends on its
+// own and no deadline is ever observed.
+const commandHelperInterruptionBudget = 4 * time.Second
+
+// commandHelperDelayedSideEffectDelay is how long an escaped descendant waits
+// before producing its side effect. Keeping it above
+// commandHelperInterruptionBudget makes the guard's ordering unconditional: the
+// descendant starts no earlier than the run, so its side effect is always still
+// pending when the interruption lands, on any host and under any load.
+const commandHelperDelayedSideEffectDelay = 6 * time.Second
 
 func requireProcessIntegration(t *testing.T) {
 	t.Helper()
@@ -256,7 +278,7 @@ func testExecCommandRunnerAgentStyleSuccessLeavesNoChildProcess(t *testing.T) {
 func TestExecCommandRunner_ContextDeadlineTerminatesSpawnedChildProcess(t *testing.T) {
 	requireProcessIntegration(t)
 	pidFile := filepath.Join(t.TempDir(), "child.pid")
-	ctx, cancel := context.WithTimeout(context.Background(), commandHelperSpawnTimeoutBudget)
+	ctx, cancel := context.WithTimeout(context.Background(), commandHelperInterruptionBudget)
 	defer cancel()
 
 	result, err := testExecCommandRunner(t, nil).Run(ctx, CommandRequest{
@@ -336,66 +358,6 @@ func TestExecCommandRunner_ContextCancelTerminatesSpawnedChildProcess(t *testing
 
 	if !waitForCommandHelperProcessExit(childPID, 2*time.Second) {
 		t.Fatalf("spawned child process %d is still running after context cancel", childPID)
-	}
-}
-
-func TestExecCommandRunner_InterruptionPreventsDelayedDescendantSideEffect(t *testing.T) {
-	t.Run("cancellation", func(t *testing.T) {
-		assertInterruptionPreventsDelayedSideEffect(t, false)
-	})
-	t.Run("deadline", func(t *testing.T) {
-		assertInterruptionPreventsDelayedSideEffect(t, true)
-	})
-}
-
-func assertInterruptionPreventsDelayedSideEffect(t *testing.T, deadline bool) {
-	t.Helper()
-	requireProcessIntegration(t)
-	tempDir := t.TempDir()
-	pidFile := filepath.Join(tempDir, "child.pid")
-	sideEffectFile := filepath.Join(tempDir, "delayed-side-effect")
-
-	ctx, cancel := context.WithCancel(context.Background())
-	if deadline {
-		ctx, cancel = context.WithTimeout(context.Background(), 500*time.Millisecond)
-	}
-	defer cancel()
-	runDone := make(chan error, 1)
-	go func() {
-		_, err := testExecCommandRunner(t, nil).Run(ctx, CommandRequest{
-			Command: os.Args[0],
-			Args: []string{
-				"-test.run=TestExecCommandRunner_HelperProcess",
-				"--",
-				"spawn-child-side-effect",
-			},
-			Env: append(os.Environ(),
-				"GO_WANT_COMMAND_HELPER=1",
-				"COMMAND_HELPER_PID_FILE="+pidFile,
-				"COMMAND_HELPER_SIDE_EFFECT_FILE="+sideEffectFile,
-			),
-		})
-		runDone <- err
-	}()
-
-	childPID := waitForCommandHelperPID(t, pidFile, commandHelperSpawnTimeoutBudget)
-	t.Cleanup(func() {
-		commandTestTerminateProcess(childPID)
-	})
-	if !deadline {
-		cancel()
-	}
-	err := <-runDone
-	wantErr := context.Canceled
-	if deadline {
-		wantErr = context.DeadlineExceeded
-	}
-	if !errors.Is(err, wantErr) {
-		t.Fatalf("Run error = %v, want %v", err, wantErr)
-	}
-	time.Sleep(time.Second)
-	if _, statErr := os.Stat(sideEffectFile); !errors.Is(statErr, os.ErrNotExist) {
-		t.Fatalf("delayed descendant side effect exists after Run returned: %v", statErr)
 	}
 }
 

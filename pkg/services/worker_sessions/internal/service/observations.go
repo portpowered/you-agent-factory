@@ -449,11 +449,45 @@ func (r *registry) projectWorkerSessionIdentity(ctx context.Context, id string) 
 
 	projected := baseObservation(id, session, metadata)
 	applyObservationTiming(&projected, session, metadata, r.clock)
-	if session.Result != nil && session.Result.Cause != nil {
-		failure := *session.Result.Cause
-		projected.Failure = &failure
-	}
+	projected.Failure = observedTerminalCause(session)
 	return projected, nil
+}
+
+// controlTerminalCause maps the two absorbing control states to the operator
+// control outcome that produced them, with the fixed safe detail naming it.
+// These reasons are derived from state rather than classified from a Workers
+// result, so they carry their own detail instead of a genericFailureDetail
+// fallback.
+var controlTerminalCause = map[workersessions.State]workersessions.FailureCause{
+	workersessions.StateCanceled: {
+		Kind:   workersessions.FailureCauseOperatorCanceled,
+		Detail: "an operator cancel control ended the Worker Session",
+	},
+	workersessions.StateTerminated: {
+		Kind:   workersessions.FailureCauseOperatorTerminated,
+		Detail: "an operator terminate control ended the Worker Session",
+	},
+}
+
+// observedTerminalCause names why a session ended. A committed FailureCause is
+// authoritative. A session ended by an operator control never has one:
+// commitControlTerminal deliberately keeps Result nil so a control invents no
+// terminal result, and the boundary cancel path commits an empty one. Deriving
+// the control outcome from the absorbing state preserves that invariant while
+// still naming the reason, so the inspection surface no longer reports
+// "unavailable" for a cancellation — which is indistinguishable from a failure
+// whose cause was never recorded.
+func observedTerminalCause(session workersessions.Session) *workersessions.FailureCause {
+	if session.Result != nil && session.Result.Cause != nil {
+		cause := *session.Result.Cause
+		return &cause
+	}
+	cause, ok := controlTerminalCause[session.State]
+	if !ok {
+		return nil
+	}
+	cause.Detail = boundedFailureDetail(cause.Kind, cause.Detail)
+	return &cause
 }
 
 // loadObservationState returns detached snapshots of the registered session

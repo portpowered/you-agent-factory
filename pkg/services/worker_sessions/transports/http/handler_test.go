@@ -54,22 +54,34 @@ func TestListWorkerSessionsBySessionIDProjectsPopulatedObservation(t *testing.T)
 	assertPopulatedListResponse(t, recorder.Body.Bytes(), total)
 }
 
-func TestListWorkerSessionsBySessionIDPreservesBoundedFailureKinds(t *testing.T) {
-	kinds := []workersessions.FailureCauseKind{
-		workersessions.FailureCauseRejected,
-		workersessions.FailureCauseIncompleteOutput,
-		workersessions.FailureCauseWorkersExecutionFailure,
+// TestListWorkerSessionsBySessionIDPreservesBoundedTerminalReasons covers the
+// API half of the operator diagnosis path. Every bounded reason must survive
+// the boundary paired with the state it ended in, including the operator
+// control outcomes: before those existed a canceled session arrived with a null
+// failure, which reads exactly like a cause that was never recorded.
+func TestListWorkerSessionsBySessionIDPreservesBoundedTerminalReasons(t *testing.T) {
+	reasons := []struct {
+		state workersessions.State
+		kind  workersessions.FailureCauseKind
+	}{
+		{state: workersessions.StateFailed, kind: workersessions.FailureCauseRejected},
+		{state: workersessions.StateFailed, kind: workersessions.FailureCauseIncompleteOutput},
+		{state: workersessions.StateFailed, kind: workersessions.FailureCauseWorkersExecutionFailure},
+		{state: workersessions.StateFailed, kind: workersessions.FailureCauseProcessGone},
+		{state: workersessions.StateFailed, kind: workersessions.FailureCauseTimeout},
+		{state: workersessions.StateCanceled, kind: workersessions.FailureCauseOperatorCanceled},
+		{state: workersessions.StateTerminated, kind: workersessions.FailureCauseOperatorTerminated},
 	}
-	observations := make([]workersessions.Observation, 0, len(kinds))
-	for _, kind := range kinds {
+	observations := make([]workersessions.Observation, 0, len(reasons))
+	for _, reason := range reasons {
 		observations = append(observations, workersessions.Observation{
-			WorkerSessionID: "worker-session-" + string(kind),
-			AttemptID:       "attempt-" + string(kind),
+			WorkerSessionID: "worker-session-" + string(reason.kind),
+			AttemptID:       "attempt-" + string(reason.kind),
 			WorkIDs:         []string{"work-1"},
-			State:           workersessions.StateFailed,
+			State:           reason.state,
 			DurationBasis:   workersessions.DurationBasisRecordedTimestamps,
 			Transcript:      workersessions.TranscriptAvailabilityUnavailable,
-			Failure:         &workersessions.FailureCause{Kind: kind, Detail: "safe bounded detail"},
+			Failure:         &workersessions.FailureCause{Kind: reason.kind, Detail: "safe bounded detail"},
 		})
 	}
 	service := &fakeObservationService{result: workersessions.ListObservationsResult{Observations: observations}}
@@ -91,19 +103,24 @@ func TestListWorkerSessionsBySessionIDPreservesBoundedFailureKinds(t *testing.T)
 	if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
-	if len(response.Sessions) != len(kinds) {
-		t.Fatalf("session count = %d, want %d", len(response.Sessions), len(kinds))
+	if len(response.Sessions) != len(reasons) {
+		t.Fatalf("session count = %d, want %d", len(response.Sessions), len(reasons))
 	}
-	gotKinds := make(map[string]bool, len(response.Sessions))
+	byWorkerSessionID := make(map[string]factoryapi.WorkerSessionObservation, len(response.Sessions))
 	for _, session := range response.Sessions {
-		if session.Failure == nil {
-			t.Fatalf("session %q has no failure classification", session.WorkerSessionId)
-		}
-		gotKinds[session.Failure.Kind] = true
+		byWorkerSessionID[session.WorkerSessionId] = session
 	}
-	for _, kind := range kinds {
-		if !gotKinds[string(kind)] {
-			t.Fatalf("response failure kinds = %#v, missing %q", gotKinds, kind)
+	for _, reason := range reasons {
+		session, ok := byWorkerSessionID["worker-session-"+string(reason.kind)]
+		if !ok {
+			t.Fatalf("response is missing the %q session", reason.kind)
+		}
+		if session.Failure == nil {
+			t.Fatalf("session ended by %q reports no named reason", reason.kind)
+		}
+		if session.Failure.Kind != string(reason.kind) || string(session.State) != string(reason.state) {
+			t.Fatalf("session reason = %q in state %q, want %q in state %q",
+				session.Failure.Kind, session.State, reason.kind, reason.state)
 		}
 	}
 }
