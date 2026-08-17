@@ -86,21 +86,39 @@ func TestExecuteServiceAdapterMapsInvocationToCanonicalRequest(t *testing.T) {
 	if service.calls != 1 {
 		t.Fatalf("Execute() calls = %d, want one", service.calls)
 	}
-	if got := service.request.Correlation; got != request.Correlation {
-		t.Fatalf("canonical correlation = %#v, want %#v", got, request.Correlation)
+	assertCanonicalInvocationRequest(t, service.request, request, continuation)
+	assertCanonicalInvocationResult(t, result, continuation)
+}
+
+func assertCanonicalInvocationRequest(
+	t *testing.T,
+	got workerexecution.ExecuteRequest,
+	want workerexecution.ProviderInferenceRequest,
+	continuation *workerexecution.ProviderContinuationRef,
+) {
+	t.Helper()
+	if got.Correlation != want.Correlation {
+		t.Fatalf("canonical correlation = %#v, want %#v", got.Correlation, want.Correlation)
 	}
-	if got := service.request.Target; got.RunnerID != "codex" ||
-		got.Provider.ID != "codex" || got.ExecutorProvider != "ACP" ||
-		got.Prompt.UserMessage != "finish the task" || got.Output.Contract != "decision" ||
-		got.Environment.Vars["MODE"] != "test" || got.Workspace.Worktree != request.Worktree ||
-		!got.Permissions.SkipPermissions {
-		t.Fatalf("canonical target = %#v, want mapped invocation target", got)
+	target := got.Target
+	if target.RunnerID != "codex" || target.Provider.ID != "codex" || target.ExecutorProvider != "ACP" ||
+		target.Prompt.UserMessage != "finish the task" || target.Output.Contract != "decision" ||
+		target.Environment.Vars["MODE"] != "test" || target.Workspace.Worktree != want.Worktree ||
+		!target.Permissions.SkipPermissions {
+		t.Fatalf("canonical target = %#v, want mapped invocation target", target)
 	}
-	if service.request.Input.ProgressPublisher == nil ||
-		service.request.Input.Resume == continuation ||
-		service.request.Input.Resume.ProviderSessionID != continuation.ProviderSessionID {
-		t.Fatalf("canonical input = %#v, want detached continuation and progress", service.request.Input)
+	if got.Input.ProgressPublisher == nil || got.Input.Resume == continuation ||
+		got.Input.Resume == nil || got.Input.Resume.ProviderSessionID != continuation.ProviderSessionID {
+		t.Fatalf("canonical input = %#v, want detached continuation and progress", got.Input)
 	}
+}
+
+func assertCanonicalInvocationResult(
+	t *testing.T,
+	result workerexecution.InvocationResult,
+	continuation *workerexecution.ProviderContinuationRef,
+) {
+	t.Helper()
 	if result.Attempt != 2 || result.Response.Content != "output" ||
 		result.Response.Feedback != "ready" || result.Response.Classification != "accepted" ||
 		result.Response.Outcome != workerexecution.OutcomeAccepted {

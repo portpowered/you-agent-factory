@@ -8,6 +8,7 @@ import (
 	"io/fs"
 	"sync"
 
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factoryhost "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/host"
@@ -19,6 +20,7 @@ import (
 	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
+	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"go.uber.org/zap"
 	"path/filepath"
@@ -360,8 +362,6 @@ func validateConfiguredRuntimeWorkers(loaded factory.LoadedConfig) error {
 	return nil
 }
 
-// backendsizecheck:ignore-function service-ownership migration preserves this orchestration flow; extract focused helpers and remove this exemption.
-// pkgmaintcheck:ignore-function-lines service-ownership migration preserves this orchestration flow; extract focused helpers and remove this exemption.
 func assembleRuntimeBundle(
 	dir string,
 	folderPath string,
@@ -411,32 +411,14 @@ func assembleRuntimeBundle(
 	decisionEnvelopes interfaces.DecisionEnvelopeService,
 	invocationInterpolation interfaces.InvocationInterpolationService,
 ) (*factoryhost.Bundle, error) {
-	if workerExecutors == nil {
-		workerExecutors = make(map[string]workers.WorkerExecutor)
-	}
+	workerExecutors = prepareRuntimeWorkerExecutors(workerExecutors, workerExecutorOverrides, workerExecutorDecorator)
 	bindRuntimeLogger(directWorkstationExecutor, structuredLogger)
 	bundle := factoryhost.NewBundle(
 		dir, folderPath, runtimeInstanceID, strings.TrimSpace(backendScopeID),
 		clock.Now().UTC(), eventHistory, net, loadedFactoryCfg,
 		logger, logSink, metricsSink, recording, recordPath, dispatchCompleted,
 	)
-	factoryEventRecorder := factory.FactoryEventRecorder(nil)
-	if recordPath != "" {
-		factoryEventRecorder = func(event interfaces.FactoryEvent) {
-			if recording == nil {
-				return
-			}
-			recording.RecordEvent(event)
-		}
-	}
-	for workerType, executor := range workerExecutorOverrides {
-		workerExecutors[workerType] = executor
-	}
-	if workerExecutorDecorator != nil {
-		for workerType, executor := range workerExecutors {
-			workerExecutors[workerType] = workerExecutorDecorator(workerType, executor)
-		}
-	}
+	factoryEventRecorder := runtimeFactoryEventRecorder(recordPath, recording)
 	// Runtime dispatch uses the detached Workers Execute capability below. The
 	// workstation boundary remains only for the Worker Sessions direct/child
 	// compatibility path until P5C-4/P6-C retires that graph.
@@ -448,25 +430,17 @@ func assembleRuntimeBundle(
 		directWorkstationExecutor,
 		providerInvocation,
 	)
-	workerSessions, err := workerSessionsFactory(workstationBoundary, clock)
+	workerSessions, err := buildRuntimeWorkerSessions(workerSessionsFactory, workstationBoundary, clock)
 	if err != nil {
-		return nil, fmt.Errorf("construct Worker Sessions service: %w", err)
-	}
-	if workerSessions == nil {
-		return nil, fmt.Errorf("construct Worker Sessions service: factory returned nil")
+		return nil, err
 	}
 	// TODO(P6-C): delete the legacy workstation pool/request-executor graph
 	// after the remaining Worker Sessions caller family migrates to Execute.
-	statelessService, ok := workerService.(interface {
-		Execute(context.Context, workers.ExecuteRequest) (workers.ExecuteResult, error)
-	})
-	if !ok || statelessService == nil {
-		return nil, fmt.Errorf("Workers Execute service is required for Factory Runtime dispatch")
+	statelessService, err := requireRuntimeExecuteService(workerService)
+	if err != nil {
+		return nil, err
 	}
-	effectiveSubmissionRecorder := recordings.SubmissionRecorder(bundle.RecordSubmissionMetric)
-	if submissionRecorder != nil {
-		effectiveSubmissionRecorder = submissionRecorder
-	}
+	effectiveSubmissionRecorder := runtimeSubmissionRecorder(bundle, submissionRecorder)
 	activeFactory, err := runtime.New(
 		net,
 		runtimeScheduler,
@@ -504,6 +478,97 @@ func assembleRuntimeBundle(
 	if err != nil {
 		return nil, fmt.Errorf("create factory: %w", err)
 	}
+	if err := configureRuntimeFactory(activeFactory, mockWorkersConfig, inputFiles, dir, logger, runtimeDirs); err != nil {
+		return nil, err
+	}
+
+	bundle.Factory = activeFactory
+	bundle.InputFiles = inputFiles
+	bundle.InputDirectoryWalker = inputDirectoryWalker
+	bundle.WorkRequestIDs = workRequestIDs
+	return bundle, nil
+}
+
+func prepareRuntimeWorkerExecutors(
+	workerExecutors map[string]workers.WorkerExecutor,
+	overrides map[string]workers.WorkerExecutor,
+	decorate func(string, workers.WorkerExecutor) workers.WorkerExecutor,
+) map[string]workers.WorkerExecutor {
+	if workerExecutors == nil {
+		workerExecutors = make(map[string]workers.WorkerExecutor)
+	}
+	for workerType, executor := range overrides {
+		workerExecutors[workerType] = executor
+	}
+	if decorate != nil {
+		for workerType, executor := range workerExecutors {
+			workerExecutors[workerType] = decorate(workerType, executor)
+		}
+	}
+	return workerExecutors
+}
+
+func runtimeFactoryEventRecorder(
+	recordPath string,
+	recording recordings.RuntimeRecorder,
+) factory.FactoryEventRecorder {
+	if recordPath == "" {
+		return nil
+	}
+	return func(event interfaces.FactoryEvent) {
+		if recording != nil {
+			recording.RecordEvent(event)
+		}
+	}
+}
+
+func buildRuntimeWorkerSessions(
+	workerSessionsFactory factory.WorkerSessionsFactory,
+	boundary workers.WorkstationPoolBoundary,
+	clock platformclock.Source,
+) (workersessions.Service, error) {
+	workerSessions, err := workerSessionsFactory(boundary, clock)
+	if err != nil {
+		return nil, fmt.Errorf("construct Worker Sessions service: %w", err)
+	}
+	if workerSessions == nil {
+		return nil, fmt.Errorf("construct Worker Sessions service: factory returned nil")
+	}
+	return workerSessions, nil
+}
+
+func requireRuntimeExecuteService(
+	workerService runtimeWorkstationService,
+) (interface {
+	Execute(context.Context, workers.ExecuteRequest) (workers.ExecuteResult, error)
+}, error) {
+	statelessService, ok := workerService.(interface {
+		Execute(context.Context, workers.ExecuteRequest) (workers.ExecuteResult, error)
+	})
+	if !ok || statelessService == nil {
+		return nil, fmt.Errorf("Workers Execute service is required for Factory Runtime dispatch")
+	}
+	return statelessService, nil
+}
+
+func runtimeSubmissionRecorder(
+	bundle *factoryhost.Bundle,
+	submissionRecorder recordings.SubmissionRecorder,
+) recordings.SubmissionRecorder {
+	if submissionRecorder != nil {
+		return submissionRecorder
+	}
+	return recordings.SubmissionRecorder(bundle.RecordSubmissionMetric)
+}
+
+func configureRuntimeFactory(
+	activeFactory factoryhost.Engine,
+	mockWorkersConfig *workers.MockWorkersConfig,
+	inputFiles factory.InputFileSystem,
+	dir string,
+	logger *zap.Logger,
+	runtimeDirs factory.RuntimeDirectoryFileSystem,
+) error {
 	if configurable, ok := activeFactory.(interface {
 		SetMockWorkersConfig(*workers.MockWorkersConfig)
 	}); ok {
@@ -514,15 +579,7 @@ func assembleRuntimeBundle(
 	}); ok && inputFiles != nil {
 		configurable.SetPromptSourceReader(inputFiles.ReadFile)
 	}
-	if err := ensureRuntimeInputsDir(dir, logger, runtimeDirs); err != nil {
-		return nil, err
-	}
-
-	bundle.Factory = activeFactory
-	bundle.InputFiles = inputFiles
-	bundle.InputDirectoryWalker = inputDirectoryWalker
-	bundle.WorkRequestIDs = workRequestIDs
-	return bundle, nil
+	return ensureRuntimeInputsDir(dir, logger, runtimeDirs)
 }
 
 func bindRuntimeLogger(executor workers.WorkstationRequestExecutor, logger factory.Logger) {
