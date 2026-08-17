@@ -128,6 +128,33 @@ func TestBeginWorkerAttemptRecordsAssociationAndCompletesTerminal(t *testing.T) 
 	}
 }
 
+func TestBeginWorkerAttemptReopensTerminalSessionWithPhysicalAttemptIdentity(t *testing.T) {
+	ledger := &recordingfixtures.ScriptedRuntimeLedger{}
+	sessions := &beginRuntimeAttemptService{
+		Service: &fakeWorkerSessionsService{},
+		existing: workersessions.Session{
+			ID:    "dispatch-begin",
+			State: workersessions.StateCanceled,
+		},
+	}
+	f := &factoryImpl{
+		cfg:          &runtimeConfig{workerSessions: sessions, clock: platformclock.Real{}},
+		eventHistory: ledger,
+	}
+	request := detachedTargetRequest()
+
+	if _, err := f.BeginWorkerAttempt(nil, request); err != nil {
+		t.Fatalf("BeginWorkerAttempt() error = %v", err)
+	}
+	associations := ledger.DispatchWorkerSessionAssociationsSnapshot()
+	if len(associations) != 1 || associations[0].DispatchID != "dispatch-begin" || associations[0].WorkerSessionID != "attempt-begin" {
+		t.Fatalf("recorded associations = %#v, want physical attempt identity", associations)
+	}
+	if sessions.request.ID != "attempt-begin" {
+		t.Fatalf("Worker Session ID = %q, want attempt-begin", sessions.request.ID)
+	}
+}
+
 func TestWorkstationDispatchRequestFromExecutePreservesDetachedSelection(t *testing.T) {
 	request := detachedTargetRequest()
 	request.Target.WorkstationName = " "
@@ -175,6 +202,15 @@ type beginRuntimeAttemptService struct {
 	request     workersessions.RuntimeAttemptRequest
 	completed   *workers.WorkstationDispatchResult
 	completeErr error
+	existing    workersessions.Session
+	getErr      error
+}
+
+func (service *beginRuntimeAttemptService) Get(context.Context, workersessions.GetRequest) (workersessions.Session, error) {
+	if service.getErr != nil {
+		return workersessions.Session{}, service.getErr
+	}
+	return service.existing, nil
 }
 
 func (service *beginRuntimeAttemptService) BeginRuntimeAttempt(

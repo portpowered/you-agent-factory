@@ -15,6 +15,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/state"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
+	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
@@ -37,7 +38,9 @@ func (f *factoryImpl) BeginWorkerAttempt(
 	}
 	request := workstationDispatchRequestFromExecute(executeRequest)
 	dispatchID := strings.TrimSpace(executeRequest.Correlation.DispatchID)
-	sessionID := runtimeWorkerSessionID(f.cfg, request, executeRequest, false)
+	initialSessionID := runtimeWorkerSessionID(f.cfg, request, executeRequest, false)
+	allowRetry := terminalWorkerSessionRequiresRetry(ctx, f.cfg.workerSessions, initialSessionID)
+	sessionID := runtimeWorkerSessionID(f.cfg, request, executeRequest, allowRetry)
 	f.eventHistory.RecordDispatchWorkerSessionAssociation(
 		f.currentTick(),
 		dispatchID,
@@ -45,7 +48,7 @@ func (f *factoryImpl) BeginWorkerAttempt(
 		executeRequest.Correlation.RequestID,
 		f.cfg.clock.Now(),
 	)
-	prepare := runtimeAttemptPreparation(f.cfg, request, executeRequest, false)
+	prepare := runtimeAttemptPreparation(f.cfg, request, executeRequest, allowRetry)
 	if prepare == nil {
 		return nil, factory.ErrNotRunning
 	}
@@ -69,6 +72,27 @@ func (f *factoryImpl) BeginWorkerAttempt(
 		}
 		return nil
 	}, nil
+}
+
+// terminalWorkerSessionRequiresRetry distinguishes a first direct child from
+// a resumed child whose prior Worker Session already committed a terminal
+// observation. The logical dispatch remains stable, but the reopened attempt
+// must use its physical attempt identity as the new Worker Session identity;
+// Worker Sessions intentionally does not transition an absorbing terminal
+// session back to RESERVED.
+func terminalWorkerSessionRequiresRetry(
+	ctx context.Context,
+	service workersessions.Service,
+	sessionID string,
+) bool {
+	if service == nil || strings.TrimSpace(sessionID) == "" {
+		return false
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	session, err := service.Get(context.WithoutCancel(ctx), workersessions.GetRequest{ID: sessionID})
+	return err == nil && session.Terminal()
 }
 
 func workstationDispatchRequestFromExecute(
