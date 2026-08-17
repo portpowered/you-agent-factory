@@ -4,8 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	"github.com/portpowered/infinite-you/pkg/services/events"
@@ -14,6 +17,30 @@ import (
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
+
+const controlledBoundaryWaitTimeout = 2 * time.Second
+
+var errControlledBoundaryCompletionTimeout = errors.New("controlled boundary completion signal not received")
+
+type controlledDispatch struct {
+	prepared      chan struct{}
+	preparedOnce  sync.Once
+	completed     chan struct{}
+	completedOnce sync.Once
+	returned      chan struct{}
+	returnedOnce  sync.Once
+	request       workers.WorkstationDispatchRequest
+	result        workers.WorkstationDispatchResult
+	err           error
+}
+
+func newControlledDispatch() *controlledDispatch {
+	return &controlledDispatch{
+		prepared:  make(chan struct{}),
+		completed: make(chan struct{}),
+		returned:  make(chan struct{}),
+	}
+}
 
 // controlledBoundary records the exact Workers execution controls Worker
 // Sessions performs and exposes completion as deterministic test input. It
@@ -28,23 +55,30 @@ type controlledBoundary struct {
 	request            workers.WorkstationDispatchRequest
 	publishCalls       int
 	publishError       func(int, workers.WorkstationDispatchRequest) error
-	completed          chan struct{}
-	completedOnce      sync.Once
-	returned           chan struct{}
-	returnedOnce       sync.Once
+	dispatches         map[string]*controlledDispatch
+	dispatchesChanged  chan struct{}
 	cancelled          []workers.WorkstationDispatchCancelRequest
 	cancelObserved     chan struct{}
 	cancelObservedOnce sync.Once
 	ignoreCancellation bool
-	result             workers.WorkstationDispatchResult
-	resultErr          error
+	waitTimeout        time.Duration
 }
 
 func newControlledBoundary() *controlledBoundary {
+	return newControlledBoundaryWithTimeout(controlledBoundaryWaitTimeout)
+}
+
+func newControlledBoundaryWithTimeout(timeout time.Duration) *controlledBoundary {
+	if timeout <= 0 {
+		timeout = controlledBoundaryWaitTimeout
+	}
 	return &controlledBoundary{
-		started:        make(chan struct{}),
-		admitted:       make(chan struct{}),
-		cancelObserved: make(chan struct{}),
+		started:           make(chan struct{}),
+		admitted:          make(chan struct{}),
+		cancelObserved:    make(chan struct{}),
+		dispatches:        make(map[string]*controlledDispatch),
+		dispatchesChanged: make(chan struct{}),
+		waitTimeout:       timeout,
 	}
 }
 
@@ -53,7 +87,7 @@ func (b *controlledBoundary) DispatchWorkstation(ctx context.Context, request wo
 }
 
 func (b *controlledBoundary) DispatchWorkstationWithAdmission(ctx context.Context, request workers.WorkstationDispatchRequest, admitted workers.WorkstationDispatchAdmissionFunc) (workers.WorkstationDispatchResult, error) {
-	completed, err := b.prepare(request)
+	dispatch, err := b.prepare(request)
 	if err != nil {
 		return workers.WorkstationDispatchResult{}, err
 	}
@@ -61,29 +95,36 @@ func (b *controlledBoundary) DispatchWorkstationWithAdmission(ctx context.Contex
 		admitted()
 		b.admittedOnce.Do(func() { close(b.admitted) })
 	}
-	return b.await(ctx, completed, request.Execution.Dispatch.DispatchID)
+	return b.await(ctx, dispatch, request.Execution.Dispatch.DispatchID)
 }
 
-func (b *controlledBoundary) await(ctx context.Context, completed chan struct{}, dispatchID string) (workers.WorkstationDispatchResult, error) {
-	defer b.returnedOnce.Do(func() { close(b.returned) })
+func (b *controlledBoundary) await(ctx context.Context, dispatch *controlledDispatch, dispatchID string) (workers.WorkstationDispatchResult, error) {
+	defer dispatch.returnedOnce.Do(func() { close(dispatch.returned) })
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	timer := time.NewTimer(b.waitTimeout)
+	defer timer.Stop()
 	select {
-	case <-completed:
+	case <-dispatch.completed:
 	case <-ctx.Done():
 		b.recordCancellation(dispatchID)
 		b.mu.Lock()
 		ignoreCancellation := b.ignoreCancellation
 		b.mu.Unlock()
 		if ignoreCancellation {
-			<-completed
-			b.mu.Lock()
-			defer b.mu.Unlock()
-			return b.result, b.resultErr
+			select {
+			case <-dispatch.completed:
+			case <-timer.C:
+				return controlledBoundaryTimeoutResult(dispatchID), controlledBoundaryTimeoutError(dispatchID)
+			}
+			return b.dispatchResult(dispatch)
 		}
 		return canceledDispatchResult(dispatchID), ctx.Err()
+	case <-timer.C:
+		return controlledBoundaryTimeoutResult(dispatchID), controlledBoundaryTimeoutError(dispatchID)
 	}
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	return b.result, b.resultErr
+	return b.dispatchResult(dispatch)
 }
 
 func (b *controlledBoundary) recordCancellation(dispatchID string) {
@@ -109,38 +150,129 @@ func (b *controlledBoundary) setIgnoreCancellation(ignore bool) {
 	b.mu.Unlock()
 }
 
-func (b *controlledBoundary) prepare(request workers.WorkstationDispatchRequest) (chan struct{}, error) {
+func (b *controlledBoundary) prepare(request workers.WorkstationDispatchRequest) (*controlledDispatch, error) {
+	dispatchID := request.Execution.Dispatch.DispatchID
 	b.mu.Lock()
-	defer b.mu.Unlock()
+	dispatch := b.dispatches[dispatchID]
+	if dispatch == nil {
+		dispatch = newControlledDispatch()
+		b.dispatches[dispatchID] = dispatch
+		close(b.dispatchesChanged)
+		b.dispatchesChanged = make(chan struct{})
+	}
+	select {
+	case <-dispatch.prepared:
+		b.mu.Unlock()
+		return nil, fmt.Errorf("controlled boundary duplicate preparation for dispatch %q", dispatchID)
+	default:
+	}
 	b.request = request
 	b.publishCalls++
 	publishCall := b.publishCalls
 	publishError := b.publishError
-	b.completed = make(chan struct{})
-	b.completedOnce = sync.Once{}
-	completed := b.completed
-	b.returned = make(chan struct{})
-	b.returnedOnce = sync.Once{}
+	dispatch.request = request
 	b.startedOnce.Do(func() { close(b.started) })
+	dispatch.preparedOnce.Do(func() { close(dispatch.prepared) })
+	b.mu.Unlock()
 	if publishError != nil {
 		if err := publishError(publishCall, request); err != nil {
-			return nil, err
+			return dispatch, err
 		}
 	}
-	return completed, nil
+	return dispatch, nil
 }
 
 func (b *controlledBoundary) complete(result workers.WorkstationDispatchResult, err error) {
-	b.mu.Lock()
-	completed := b.completed
-	b.result, b.resultErr = result, err
-	b.mu.Unlock()
-	if completed == nil {
-		panic("complete before Publish")
+	dispatchID := result.DispatchID
+	if dispatchID == "" {
+		dispatchID = result.Result.DispatchID
 	}
-	b.completedOnce.Do(func() { close(completed) })
-	if returned := b.returned; returned != nil {
-		<-returned
+	if dispatchID == "" {
+		panic("controlled boundary complete: dispatch ID is required")
+	}
+	b.mu.Lock()
+	dispatch := b.dispatches[dispatchID]
+	if dispatch == nil {
+		dispatch = newControlledDispatch()
+		b.dispatches[dispatchID] = dispatch
+		close(b.dispatchesChanged)
+		b.dispatchesChanged = make(chan struct{})
+	}
+	dispatch.result, dispatch.err = result, err
+	b.mu.Unlock()
+	dispatch.completedOnce.Do(func() { close(dispatch.completed) })
+	if err := waitControlledSignal(dispatch.returned, b.waitTimeout); err != nil {
+		panic(fmt.Sprintf("controlled boundary complete(%q): %v", dispatchID, err))
+	}
+}
+
+func (b *controlledBoundary) dispatchResult(dispatch *controlledDispatch) (workers.WorkstationDispatchResult, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return dispatch.result, dispatch.err
+}
+
+func controlledBoundaryTimeoutError(dispatchID string) error {
+	return fmt.Errorf("%w: dispatch %q", errControlledBoundaryCompletionTimeout, dispatchID)
+}
+
+func controlledBoundaryTimeoutResult(dispatchID string) workers.WorkstationDispatchResult {
+	err := controlledBoundaryTimeoutError(dispatchID)
+	return workers.WorkstationDispatchResult{
+		DispatchID:      dispatchID,
+		TerminalOutcome: workers.WorkstationDispatchTerminalOutcomeFailed,
+		Result: workers.WorkResult{
+			DispatchID: dispatchID,
+			Outcome:    workers.OutcomeFailed,
+			Error:      err.Error(),
+		},
+	}
+}
+
+func waitControlledSignal(signal <-chan struct{}, timeout time.Duration) error {
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
+	select {
+	case <-signal:
+		return nil
+	case <-timer.C:
+		return fmt.Errorf("%w after %s", errControlledBoundaryCompletionTimeout, timeout)
+	}
+}
+
+func (b *controlledBoundary) requestFor(t *testing.T, dispatchID string) workers.WorkstationDispatchRequest {
+	t.Helper()
+	dispatch, err := b.dispatchFor(dispatchID)
+	if err != nil {
+		t.Fatalf("controlled boundary dispatch %q was not prepared: %v", dispatchID, err)
+	}
+	if err := waitControlledSignal(dispatch.prepared, b.waitTimeout); err != nil {
+		t.Fatalf("controlled boundary dispatch %q readiness: %v", dispatchID, err)
+	}
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return workers.WorkstationDispatchRequest{
+		WorkstationName: dispatch.request.WorkstationName,
+		Execution:       workers.CloneWorkstationExecutionRequest(dispatch.request.Execution),
+	}
+}
+
+func (b *controlledBoundary) dispatchFor(dispatchID string) (*controlledDispatch, error) {
+	timer := time.NewTimer(b.waitTimeout)
+	defer timer.Stop()
+	for {
+		b.mu.Lock()
+		dispatch := b.dispatches[dispatchID]
+		changed := b.dispatchesChanged
+		b.mu.Unlock()
+		if dispatch != nil {
+			return dispatch, nil
+		}
+		select {
+		case <-changed:
+		case <-timer.C:
+			return nil, controlledBoundaryTimeoutError(dispatchID)
+		}
 	}
 }
 
@@ -197,15 +329,39 @@ func completedDispatchResult(dispatchID string) workers.WorkstationDispatchResul
 func startControlledSession(t *testing.T, registry workersessions.Service, boundary *controlledBoundary, id, dispatchID string) <-chan workersessions.InvokeSessionResult {
 	t.Helper()
 	result := make(chan workersessions.InvokeSessionResult, 1)
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
 	go func() {
-		started, err := registry.InvokeSession(context.Background(), validStartRequest(id, dispatchID))
+		defer close(done)
+		started, err := registry.InvokeSession(ctx, validStartRequest(id, dispatchID))
 		if err != nil {
 			t.Errorf("Start() error = %v", err)
 		}
 		result <- started
 	}()
-	<-boundary.admitted
+	t.Cleanup(func() {
+		cancel()
+		if err := waitControlledSignal(done, boundary.waitTimeout); err != nil {
+			t.Errorf("controlled Start() goroutine did not join: %v", err)
+		}
+	})
+	if err := waitControlledSignal(boundary.admitted, boundary.waitTimeout); err != nil {
+		t.Fatalf("controlled Start() admission: %v", err)
+	}
 	return result
+}
+
+func TestControlledBoundary_MissingCompletionFailsWithDispatchDiagnostic(t *testing.T) {
+	boundary := newControlledBoundaryWithTimeout(10 * time.Millisecond)
+	dispatch, err := boundary.prepare(validStartRequest("worker-1", "dispatch-missing").Execution)
+	if err != nil {
+		t.Fatalf("prepare() error = %v", err)
+	}
+	_, err = boundary.await(context.Background(), dispatch, "dispatch-missing")
+	if !errors.Is(err, errControlledBoundaryCompletionTimeout) ||
+		!strings.Contains(err.Error(), `dispatch "dispatch-missing"`) {
+		t.Fatalf("await() error = %v, want named dispatch completion timeout", err)
+	}
 }
 
 func TestCancel_UsesServerOwnedAttemptContextDespiteCanceledCallerContextAndIsIdempotent(t *testing.T) {
@@ -300,7 +456,7 @@ func TestPauseResume_ContinuesExactProviderReferenceWithSameWorkerSessionCorrela
 	if err != nil || resumed.Outcome != workersessions.ControlOutcomeApplied || resumed.Session.State != workersessions.StateRunning {
 		t.Fatalf("Resume() = %#v, %v, want applied RUNNING", resumed, err)
 	}
-	continuation := boundary.currentRequest()
+	continuation := boundary.requestFor(t, resumed.DispatchID)
 	wantContinuation := reference.ContinuationRef()
 	if continuation.Execution.Continuation == nil || *continuation.Execution.Continuation != wantContinuation {
 		t.Fatalf("continuation Continuation = %#v, want exact %#v", continuation.Execution.Continuation, wantContinuation)

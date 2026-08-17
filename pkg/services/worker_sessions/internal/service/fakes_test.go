@@ -472,7 +472,7 @@ func TestContinue_CreatesDistinctSuccessorWithExactReferenceAndLineage(t *testin
 	}
 	assertContinuationAdmission(t, continued, request)
 
-	handoff := boundary.currentRequest()
+	handoff := boundary.requestFor(t, continued.Session.ProviderSessionAssociation.DispatchID)
 	assertContinuationHandoff(t, handoff, request, reference, source)
 
 	sourceAfter, err := registry.Get(context.Background(), workersessions.GetRequest{ID: request.SourceWorkerSessionID})
@@ -698,7 +698,7 @@ func (b *continuationAdmissionBoundary) DispatchWorkstationWithAdmission(
 	request workers.WorkstationDispatchRequest,
 	admitted workers.WorkstationDispatchAdmissionFunc,
 ) (workers.WorkstationDispatchResult, error) {
-	completed, err := b.controlledBoundary.prepare(request)
+	dispatch, err := b.controlledBoundary.prepare(request)
 	if err != nil {
 		return workers.WorkstationDispatchResult{}, err
 	}
@@ -714,7 +714,7 @@ func (b *continuationAdmissionBoundary) DispatchWorkstationWithAdmission(
 		admitted()
 		b.controlledBoundary.admittedOnce.Do(func() { close(b.controlledBoundary.admitted) })
 	}
-	return b.controlledBoundary.await(ctx, completed, request.Execution.Dispatch.DispatchID)
+	return b.controlledBoundary.await(ctx, dispatch, request.Execution.Dispatch.DispatchID)
 }
 
 func TestContinue_ProviderFailureLeavesSuccessorFailedWithExactAssociation(t *testing.T) {
