@@ -253,6 +253,135 @@ func testExecCommandRunnerAgentStyleSuccessLeavesNoChildProcess(t *testing.T) {
 	}
 }
 
+// orphanedOutputPipeTestGrace is deliberately far below the descendant helper's
+// ten-second lifetime so a passing run can only mean the wait ended on the
+// started process exiting, never on the inherited output pipe closing.
+const orphanedOutputPipeTestGrace = 300 * time.Millisecond
+
+func useShortOrphanedOutputPipeGrace(t *testing.T) time.Duration {
+	t.Helper()
+	orphanedOutputPipeGracePeriodForTest = orphanedOutputPipeTestGrace
+	postRunCleanupGracePeriodForTest = 250 * time.Millisecond
+	t.Cleanup(func() {
+		orphanedOutputPipeGracePeriodForTest = 0
+		postRunCleanupGracePeriodForTest = 0
+	})
+	// Both graces plus generous slack for a loaded CI host. The guard only has
+	// to separate a bounded return from the descendant's ten-second lifetime.
+	return 5 * time.Second
+}
+
+// TestExecCommandRunner_ExitedProcessEndsRunWhileDescendantHoldsOutputPipe
+// guards the wait boundary that left a worker session RUNNING for 21+ minutes
+// with its process already dead. cmd.Wait joins the os/exec output-copy
+// goroutines after reaping the process, so a descendant that inherited the
+// stdout/stderr write end used to keep Run blocked for as long as that
+// descendant lived -- and the work dispatch stayed active behind it. Run must
+// end on the started process exiting, not on the pipe closing.
+func TestExecCommandRunner_ExitedProcessEndsRunWhileDescendantHoldsOutputPipe(t *testing.T) {
+	requireProcessIntegration(t)
+	bound := useShortOrphanedOutputPipeGrace(t)
+
+	pidFile := filepath.Join(t.TempDir(), "child.pid")
+	started := time.Now()
+	result, err := testExecCommandRunner(t, nil).Run(context.Background(), CommandRequest{
+		Command: os.Args[0],
+		Args: []string{
+			"-test.run=TestExecCommandRunner_HelperProcess",
+			"--",
+			"spawn-child-success",
+		},
+		Env: append(os.Environ(),
+			"GO_WANT_COMMAND_HELPER=1",
+			"COMMAND_HELPER_PID_FILE="+pidFile,
+		),
+	})
+	elapsed := time.Since(started)
+
+	if err != nil {
+		t.Fatalf("Run() error = %v, want nil for a command that exited 0", err)
+	}
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; the exit status survives the wait delay", result.ExitCode)
+	}
+	if elapsed > bound {
+		t.Fatalf("Run() took %v, want a bounded return under %v instead of waiting out the descendant", elapsed, bound)
+	}
+	childPID := waitForCommandHelperPID(t, pidFile, commandHelperSpawnTimeoutBudget)
+	t.Cleanup(func() { commandTestTerminateProcess(childPID) })
+}
+
+// TestExecCommandRunner_KilledProcessEndsRunWhileDescendantHoldsOutputPipe is
+// the reported incident: the operator kills the worker's process and the run
+// never ends because a surviving descendant holds the output pipe. The escaped
+// helper child never exits on its own, so before the wait delay this Run could
+// only be released by an outer execution timeout. The observer here records the
+// process and takes no action, proving the runner bounds its own wait rather
+// than depending on a caller turning the exit into a cancellation.
+func TestExecCommandRunner_KilledProcessEndsRunWhileDescendantHoldsOutputPipe(t *testing.T) {
+	requireProcessIntegration(t)
+	bound := useShortOrphanedOutputPipeGrace(t)
+
+	pidFile := filepath.Join(t.TempDir(), "escaped-child.pid")
+	observer := &lifecycleObserverRecorder{
+		started: make(chan ProcessInfo, 1),
+		exited:  make(chan ProcessInfo, 1),
+	}
+	type runOutcome struct {
+		result  CommandResult
+		err     error
+		elapsed time.Duration
+	}
+	runDone := make(chan runOutcome, 1)
+	go func() {
+		startedAt := time.Now()
+		result, err := testExecCommandRunner(t, nil).Run(context.Background(), CommandRequest{
+			Command: os.Args[0],
+			Args: []string{
+				"-test.run=TestExecCommandRunner_HelperProcess",
+				"--",
+				"spawn-child-orphan-pipe",
+			},
+			Env: append(os.Environ(),
+				"GO_WANT_COMMAND_HELPER=1",
+				"COMMAND_HELPER_PID_FILE="+pidFile,
+			),
+			ProcessLifecycleObserver: observer,
+		})
+		runDone <- runOutcome{result: result, err: err, elapsed: time.Since(startedAt)}
+	}()
+
+	var leader ProcessInfo
+	select {
+	case leader = <-observer.started:
+	case <-time.After(commandHelperSpawnTimeoutBudget):
+		t.Fatal("command runner did not report the started process")
+	}
+	// Wait for the escaped descendant before killing the leader, so the run is
+	// genuinely blocked on an inherited pipe rather than reaching a clean EOF.
+	childPID := waitForCommandHelperPID(t, pidFile, commandHelperSpawnTimeoutBudget)
+	t.Cleanup(func() { commandTestTerminateProcess(childPID) })
+	commandTestTerminateProcess(leader.PID)
+
+	select {
+	case outcome := <-runDone:
+		if errors.Is(outcome.err, context.Canceled) {
+			t.Fatalf("Run() error = %v, want a process-exit outcome distinguishable from cancellation", outcome.err)
+		}
+		if outcome.err != nil {
+			t.Fatalf("Run() error = %v, want the killed process reported through its exit status", outcome.err)
+		}
+		if outcome.result.ExitCode == 0 {
+			t.Fatal("ExitCode = 0, want the killed process reported as a failing exit status")
+		}
+		if outcome.elapsed > bound {
+			t.Fatalf("Run() took %v, want a bounded return under %v after the process was killed", outcome.elapsed, bound)
+		}
+	case <-time.After(15 * time.Second):
+		t.Fatal("Run() never returned after its process was killed while a descendant held the output pipe open")
+	}
+}
+
 func TestExecCommandRunner_ContextDeadlineTerminatesSpawnedChildProcess(t *testing.T) {
 	requireProcessIntegration(t)
 	pidFile := filepath.Join(t.TempDir(), "child.pid")
