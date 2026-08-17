@@ -29,65 +29,14 @@ func LocalRuntimeHooks() workers.LocalRuntimeHooks {
 	return modelrecording.Hooks()
 }
 
-// TODO(P6-C): retire the provider-backed compatibility constructors after the
-// Runtime and Sessions caller families use the canonical Execute boundary.
-// NewInvocation constructs the narrow direct-invocation role.
-func NewInvocation(
-	providersService providers.Service,
-	commandRunner workers.CommandRunner,
-	commandClock workers.Clock,
-	allocator workers.PTYAllocator,
-	resolveSymlinks workers.ResolveExecutableSymlinks,
-	executableLocator platformprocess.ExecutableLocator,
-	executableInspector platformfilesystem.PathInspector,
-	executableFiles platformfilesystem.ReadOpener,
-	operatingSystem workers.OperatingSystem,
-	temporaryFileSystems ...platformfilesystem.TemporaryFileSystem,
-) (workers.InvocationExecutor, error) {
-	return workersinternal.NewInvocation(
-		providersService,
-		commandRunner,
-		commandClock,
-		allocator,
-		resolveSymlinks,
-		executableLocator,
-		executableInspector,
-		executableFiles,
-		operatingSystem,
-		temporaryFileSystems...,
-	)
-}
-
-// NewInvocationWithProgress constructs direct invocation with provider progress publishing.
-func NewInvocationWithProgress(
-	providersService providers.Service,
-	commandRunner workers.CommandRunner,
-	commandClock workers.Clock,
-	allocator workers.PTYAllocator,
-	resolveSymlinks workers.ResolveExecutableSymlinks,
-	executableLocator platformprocess.ExecutableLocator,
-	executableInspector platformfilesystem.PathInspector,
-	executableFiles platformfilesystem.ReadOpener,
-	operatingSystem workers.OperatingSystem,
-	progressPublisher workers.ProgressPublisher,
-	temporaryFileSystems ...platformfilesystem.TemporaryFileSystem,
-) (workers.InvocationExecutor, error) {
-	return workersinternal.NewInvocationWithProgress(
-		providersService,
-		commandRunner,
-		commandClock,
-		allocator,
-		resolveSymlinks,
-		executableLocator,
-		executableInspector,
-		executableFiles,
-		operatingSystem,
-		progressPublisher,
-		temporaryFileSystems...,
-	)
-}
-
-// NewConductorInvocationWithProgress routes external integrations through the conductor.
+// NewConductorInvocationWithProgress routes external integrations through the
+// conductor. It is the only direct-invocation constructor with a remaining
+// production caller (pkg/wire/session_runtime_providers.go composes it for
+// standalone Factory Session execution); its zero-caller siblings
+// NewInvocation and NewInvocationWithProgress were retired in P6-C.
+//
+// TODO(P6-C): retire this bridge once that caller passes detached values to
+// workers.Service.Execute, which is the named successor boundary.
 func NewConductorInvocationWithProgress(
 	providersService providers.Service,
 	commandRunner workers.CommandRunner,
