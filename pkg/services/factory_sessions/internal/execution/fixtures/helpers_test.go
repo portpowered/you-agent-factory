@@ -9,7 +9,6 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
-	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -23,11 +22,8 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution/fixtures"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution/runtimepersist"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/fileeffects"
-	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
-	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
-	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
 const runtimeEventSource = "runtime-service"
@@ -332,28 +328,6 @@ func (portableRecordingTestWriter) Write(path string, value recordings.PortableR
 	return os.WriteFile(path, append(data, '\n'), 0o600)
 }
 
-type acceptedPetriExecutor struct{}
-
-func (*acceptedPetriExecutor) Execute(_ context.Context, dispatch work.WorkDispatch) (workerexecution.WorkResult, error) {
-	return workerexecution.WorkResult{DispatchID: dispatch.DispatchID, TransitionID: dispatch.TransitionID, Outcome: workerexecution.OutcomeAccepted, Output: "done"}, nil
-}
-
-func petriRecordingNet() *factory.Net {
-	workType := &factory.WorkType{ID: "task", Name: "Task", States: []factory.StateDefinition{
-		{Value: "init", Category: factory.StateCategoryInitial}, {Value: "done", Category: factory.StateCategoryTerminal},
-	}}
-	places := make(map[string]*factory.PetriPlace)
-	for _, place := range workType.GeneratePlaces() {
-		places[place.ID] = place
-	}
-	transition := &factory.PetriTransition{
-		ID: "process", Name: "Process", Type: factory.PetriTransitionNormal, WorkerType: "mock",
-		InputArcs:  []factory.PetriArc{{ID: "input", PlaceID: "task:init", Direction: factory.PetriArcInput, Cardinality: factory.PetriArcCardinality{Mode: factory.PetriCardinalityOne}}},
-		OutputArcs: []factory.PetriArc{{ID: "output", PlaceID: "task:done", Direction: factory.PetriArcOutput, Cardinality: factory.PetriArcCardinality{Mode: factory.PetriCardinalityOne}}},
-	}
-	return &factory.Net{ID: "petri-recording", Places: places, Transitions: map[string]*factory.PetriTransition{transition.ID: transition}, WorkTypes: map[string]*factory.WorkType{workType.ID: workType}, Resources: map[string]*factory.ResourceDef{}}
-}
-
 func assertPersistedPetriMutationAndCanonicalProjection(t *testing.T, store runtimepersist.Store, sessionID string) {
 	t.Helper()
 	encoded, err := store.Load(sessionID)
@@ -382,8 +356,6 @@ func assertPersistedPetriMutationAndCanonicalProjection(t *testing.T, store runt
 		t.Fatalf("reloaded Petri mutation = %#v, want typed process mutation into task:done", mutation)
 	}
 }
-
-var _ workers.WorkerExecutor = (*acceptedPetriExecutor)(nil)
 
 func runtimePersistence(projectRoot string) runtimepersist.Store {
 	store, err := runtimepersist.NewDirectoryStore(
@@ -853,140 +825,6 @@ func assertReplayProjectionStable(
 	}
 }
 
-type interruptedResumableHarness struct {
-	projectRoot string
-	provider    *sequentialBlockingProvider
-	initial     fse.Service
-	sessionID   string
-	interrupted fse.SessionReadResult
-	summary     *factory.JavaScriptCheckpointSummary
-}
-
-func startInterruptedResumableSession(t *testing.T, requestID string) interruptedResumableHarness {
-	t.Helper()
-	return startInterruptedResumableSessionForWorkflow(
-		t,
-		requestID,
-		"resumable-two-step-fake-children.workflow.js",
-		"resumable-two-step-fake-children",
-	)
-}
-
-func startInterruptedCheckpointStateBranchSession(t *testing.T, requestID string) interruptedResumableHarness {
-	t.Helper()
-	return startInterruptedResumableSessionForWorkflow(
-		t,
-		requestID,
-		"resumable-checkpoint-state-branch.workflow.js",
-		"resumable-checkpoint-state-branch",
-	)
-}
-
-func startInterruptedResumableSessionForWorkflow(
-	t *testing.T,
-	requestID string,
-	workflowFile string,
-	workflowName string,
-) interruptedResumableHarness {
-	t.Helper()
-
-	provider := newSequentialBlockingProviderForWorkflow(workflowName)
-	projectRoot := setupRuntimeWorkflowFixture(t, workflowFile, workflowName)
-	checkpointSummary := checkpointfixtures.ResumableCheckpointSummaryResult()
-	if workflowName == "resumable-live-child-output" {
-		checkpointSummary = checkpointfixtures.ReplayFirstChildCheckpointSummaryResult()
-	}
-	initial := newConfiguredJavaScriptRuntimeService(runtimeServiceConfig{
-		ProjectRoot:       projectRoot,
-		ChildExecutorMode: fse.ChildExecutorModeLive,
-		ProviderExecutor:  provider,
-		Persistence:       runtimePersistence(projectRoot),
-		CheckpointSummary: checkpointSummary,
-	})
-
-	started, err := initial.StartAsync(context.Background(), fse.StartRequest{
-		RequestID: requestID,
-		Source: fse.Source{
-			Kind:         factory.WorkflowSourceKindWorkflowName,
-			WorkflowName: workflowName,
-		},
-		Args: map[string]any{
-			"subject": "workflows",
-		},
-		Runtime: &fse.RuntimeOptions{
-			ChildExecutorMode: fse.ChildExecutorModeLive,
-		},
-	})
-	if err != nil {
-		t.Fatalf("StartAsync: %v", err)
-	}
-
-	waitForDispatchStatus(t, initial, started.SessionID, "dispatch-1", fse.DispatchStatusCompleted, 10*time.Second)
-	waitForDispatchStatus(t, initial, started.SessionID, "dispatch-2", fse.DispatchStatusRunning, 10*time.Second)
-	provider.waitUntilBlockedOnInfer(t, 10*time.Second)
-
-	interruptResult, err := initial.InterruptDispatch(context.Background(), started.SessionID, fse.InterruptDispatchRequest{
-		ControlRequest: fse.ControlRequest{Reason: "process restart simulation"},
-		DispatchID:     "dispatch-2",
-	})
-	if err != nil {
-		t.Fatalf("InterruptDispatch: %v", err)
-	}
-	if interruptResult.Outcome != fse.LifecycleControlOutcomeAccepted {
-		t.Fatalf("interrupt outcome = %q, want ACCEPTED", interruptResult.Outcome)
-	}
-
-	provider.waitForCanceledInfer(t, 10*time.Second)
-	interrupted := waitUntilSessionStatus(t, initial, started.SessionID, fse.LifecycleStatusInterrupted, 5*time.Second)
-	if interrupted.Status != fse.LifecycleStatusInterrupted {
-		t.Fatalf("session status = %q, want INTERRUPTED", interrupted.Status)
-	}
-
-	return interruptedResumableHarness{
-		projectRoot: projectRoot,
-		provider:    provider,
-		initial:     initial,
-		sessionID:   started.SessionID,
-		interrupted: interrupted,
-		summary:     checkpointSummary,
-	}
-}
-
-func newResumedRuntimeService(harness interruptedResumableHarness) *fse.JavaScriptRuntimeService {
-	return newConfiguredJavaScriptRuntimeService(runtimeServiceConfig{
-		ProjectRoot:       harness.projectRoot,
-		ChildExecutorMode: fse.ChildExecutorModeLive,
-		ProviderExecutor:  harness.provider,
-		Persistence:       runtimePersistence(harness.projectRoot),
-		CheckpointSummary: harness.summary,
-	})
-}
-
-func resumeInterruptedHarness(t *testing.T, harness interruptedResumableHarness, requestID string) *fse.JavaScriptRuntimeService {
-	t.Helper()
-	resumedService := newResumedRuntimeService(harness)
-	resumed, err := resumedService.ResumeInterruptedSession(context.Background(), harness.sessionID, fse.ResumeSessionRequest{
-		RequestID: requestID,
-	})
-	if err != nil {
-		t.Fatalf("ResumeInterruptedSession: %v", err)
-	}
-	if resumed.SessionID != harness.sessionID {
-		t.Fatalf("resumed sessionId = %q, want %q", resumed.SessionID, harness.sessionID)
-	}
-	if resumed.Status != string(fse.LifecycleStatusResuming) && resumed.Status != string(fse.LifecycleStatusSucceeded) {
-		t.Fatalf("resumed start status = %q, want RESUMING or SUCCEEDED", resumed.Status)
-	}
-	return resumedService
-}
-
-func assertInterruptedLifecycleHasTimestamp(t *testing.T, lifecycle *fse.LifecycleTimestamps) {
-	t.Helper()
-	if lifecycle == nil || lifecycle.InterruptedAt == nil {
-		t.Fatalf("interrupted lifecycle = %#v, want interruptedAt", lifecycle)
-	}
-}
-
 func assertResumedSessionReadSurfaces(t *testing.T, success fse.SessionReadResult) {
 	t.Helper()
 	if success.Lifecycle == nil || success.Lifecycle.InterruptedAt == nil || success.Lifecycle.ResumedAt == nil {
@@ -1055,135 +893,6 @@ func assertResumedReconnectEvents(t *testing.T, service *fse.JavaScriptRuntimeSe
 	if len(reconnect.Events) == 0 {
 		t.Fatal("expected reconnect-filtered events after first event id")
 	}
-}
-
-type sequentialBlockingProvider struct {
-	mu              sync.Mutex
-	calls           int
-	blockedOnce     bool
-	contextCanceled int
-	workflowName    string
-	blockedOnCtx    chan struct{}
-	blockSignal     sync.Once
-}
-
-func newSequentialBlockingProvider() *sequentialBlockingProvider {
-	return newSequentialBlockingProviderForWorkflow("resumable-two-step-fake-children")
-}
-
-func newSequentialBlockingProviderForWorkflow(workflowName string) *sequentialBlockingProvider {
-	return &sequentialBlockingProvider{
-		workflowName: workflowName,
-		blockedOnCtx: make(chan struct{}),
-	}
-}
-
-func (p *sequentialBlockingProvider) Execute(
-	ctx context.Context,
-	input workerexecution.InvocationInput,
-) (workerexecution.InvocationResult, error) {
-	p.mu.Lock()
-	p.calls++
-	call := p.calls
-	alreadyBlocked := p.blockedOnce
-	p.mu.Unlock()
-
-	if call == 1 {
-		continuation := (&providers.SessionMetadata{Provider: "mock", Kind: providers.SessionIDKind, ID: "live-provider-session-1"}).ContinuationRef()
-		response := workerexecution.InferenceResponse{
-			Content:      fmt.Sprintf(`{"text":"live:%s:step-one:step-one:workflows","label":"step-one"}`, p.workflowName),
-			Continuation: continuation,
-		}
-		return workerexecution.InvocationResult{
-			Response: response, Attempt: input.Attempt,
-			Continuation: (response.Continuation).ClonePtr(),
-		}, nil
-	}
-
-	if !alreadyBlocked {
-		p.mu.Lock()
-		p.blockedOnce = true
-		p.mu.Unlock()
-
-		p.blockSignal.Do(func() { close(p.blockedOnCtx) })
-		<-ctx.Done()
-		p.mu.Lock()
-		p.contextCanceled++
-		p.mu.Unlock()
-		return workerexecution.InvocationResult{Attempt: input.Attempt}, ctx.Err()
-	}
-
-	continuation := (&providers.SessionMetadata{Provider: "mock", Kind: providers.SessionIDKind, ID: "live-provider-session-2"}).ContinuationRef()
-	response := workerexecution.InferenceResponse{
-		Content:      fmt.Sprintf(`{"text":"live:%s:step-two:step-two:workflows","label":"step-two"}`, p.workflowName),
-		Continuation: continuation,
-	}
-	return workerexecution.InvocationResult{
-		Response: response, Attempt: input.Attempt,
-		Continuation: (response.Continuation).ClonePtr(),
-	}, nil
-}
-
-func (p *sequentialBlockingProvider) CallCount() int {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	return p.calls
-}
-
-var _ workers.InvocationExecutor = (*sequentialBlockingProvider)(nil)
-
-func (p *sequentialBlockingProvider) waitUntilBlockedOnInfer(t *testing.T, timeout time.Duration) {
-	t.Helper()
-	select {
-	case <-p.blockedOnCtx:
-		return
-	case <-time.After(timeout):
-		t.Fatal("provider Infer did not block on workflow context")
-	}
-}
-
-func (p *sequentialBlockingProvider) waitForCanceledInfer(t *testing.T, timeout time.Duration) {
-	t.Helper()
-	deadline := time.Now().Add(timeout)
-	for time.Now().Before(deadline) {
-		p.mu.Lock()
-		canceled := p.contextCanceled
-		p.mu.Unlock()
-		if canceled > 0 {
-			return
-		}
-		time.Sleep(5 * time.Millisecond)
-	}
-	t.Fatal("provider Infer did not observe canceled workflow context")
-}
-
-func waitForDispatchStatus(
-	t *testing.T,
-	service fse.Service,
-	sessionID string,
-	dispatchID string,
-	want fse.DispatchStatus,
-	timeout time.Duration,
-) fse.DispatchSummary {
-	t.Helper()
-	deadline := time.Now().Add(timeout)
-	for time.Now().Before(deadline) {
-		listed, err := service.ListDispatches(context.Background(), sessionID)
-		if err != nil {
-			t.Fatalf("ListDispatches: %v", err)
-		}
-		for _, dispatch := range listed.Dispatches {
-			if dispatch.ID != dispatchID {
-				continue
-			}
-			if dispatch.Status == want {
-				return dispatch
-			}
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
-	t.Fatalf("dispatch %q did not reach status %q within %s", dispatchID, want, timeout)
-	return fse.DispatchSummary{}
 }
 
 type orchestrationJavaScriptAdapter struct {
