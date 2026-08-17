@@ -4,6 +4,10 @@
   "defaultFloorPercent": 50.00,
   "packages": [
     {
+      "package": "github.com/portpowered/infinite-you/pkg/initializer",
+      "minimum": 43.00
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/initializer/application",
       "minimum": 78.83
     },
@@ -576,6 +580,10 @@
       "minimum": 100.00
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration",
+      "minimum": 41.00
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/context",
       "minimum": 86.11
     },
@@ -964,6 +972,10 @@
       "minimum": 52.10
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/services/activation_lifecycle",
+      "minimum": 0.00
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/services/activation_lifecycle/internal/service",
       "minimum": 35.00
     },
@@ -1046,6 +1058,10 @@
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/models/internal/services/catalog/wire",
       "minimum": 81.81
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/models/internal/services/inference",
+      "minimum": 49.00
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/models/internal/services/inference/internal/artifacts",
@@ -1476,6 +1492,10 @@
       "minimum": 80.00
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/services/work/internal/services/content_materialization",
+      "minimum": 0.00
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/services/work/internal/services/content_materialization/internal/service",
       "minimum": 68.91
     },
@@ -1550,6 +1570,10 @@
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/draftvalidation",
       "minimum": 0.00
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/execution",
+      "minimum": 38.00
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/execution/recording",
