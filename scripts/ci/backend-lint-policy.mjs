@@ -21,6 +21,18 @@ export const BACKEND_LINT_ALLOWANCES = Object.freeze({
 	},
 });
 
+// Targets recorded here are gated with no allowance at all: any failure is a
+// policy failure on its first run, and the target must appear in every Backend
+// Lint report. Requiring observation matters for ratchet checkers, because
+// dropping a target from LINT_TARGETS would otherwise be a silent way to turn
+// a red ratchet green without doing the decoupling work it is measuring.
+export const BACKEND_LINT_REQUIRED_TARGETS = Object.freeze({
+	"service-cycle-check": {
+		reason: "Derived cross-service cycle ratchet: fails when the pkg/services minimum feedback arc weight rises above the recorded ceiling, and equally when it drops below the ceiling without the ceiling being lowered.",
+		ownerOrLane: "Service decoupling program",
+	},
+});
+
 function allowanceStatus(target, allowance) {
 	if (target.status === "pass") {
 		return "clean";
@@ -69,6 +81,22 @@ export function evaluateBackendLintPolicy(targets) {
 		}
 	}
 
+	const requiredTargets = Object.entries(BACKEND_LINT_REQUIRED_TARGETS).map(([name, requirement]) => {
+		const target = evaluatedTargets.find((item) => item.name === name);
+		if (BACKEND_LINT_ALLOWANCES[name]) {
+			failures.push(`${name} is gated with no allowance but a baseline allowance was recorded for it; remove one of the two entries.`);
+		}
+		if (!target) {
+			failures.push(`${name} is gated with no allowance and must run in every lint report, but it was not observed.`);
+		}
+		return {
+			name,
+			...requirement,
+			observedViolationCount: target?.violationCount ?? null,
+			status: target ? target.policyStatus : "not observed",
+		};
+	});
+
 	const allowances = Object.entries(BACKEND_LINT_ALLOWANCES).map(([name, allowance]) => {
 		const target = evaluatedTargets.find((item) => item.name === name);
 		return {
@@ -84,5 +112,6 @@ export function evaluateBackendLintPolicy(targets) {
 		failures,
 		targets: evaluatedTargets,
 		allowances,
+		requiredTargets,
 	};
 }

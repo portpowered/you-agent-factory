@@ -12,7 +12,7 @@ import (
 
 // diagnosticPrefix labels this checker's output the way the other repository
 // lint checkers label theirs.
-const diagnosticPrefix = "[agent-factory:service-cycle]"
+const diagnosticPrefix = "[agent-factory:service-cycle-check]"
 
 // defaultCeilingRelativePath is the small dedicated baseline that stores the
 // ratchet ceiling. It is deliberately separate from ownership-inventory.json:
