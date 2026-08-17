@@ -143,8 +143,105 @@ func TestControlRemoteFailureDoesNotFallbackAndMapsStableError(t *testing.T) {
 	}
 }
 
+// The inspection commands (list/show/read/stream) are always addressed to the
+// factory server, so every Worker Session an operator can see belongs to that
+// server. A control addressed by the same stable Worker Session ID must reach
+// the same owner instead of reporting NOT_FOUND from an in-process root that
+// never ran the session.
+func TestControlLocalNotFoundReAddressesTheSameWorkerSessionIDToTheFactoryServer(t *testing.T) {
+	for _, action := range []workersessions.ControlAction{
+		workersessions.ControlActionCancel, workersessions.ControlActionTerminate,
+		workersessions.ControlActionPause, workersessions.ControlActionResume,
+	} {
+		t.Run(strings.ToLower(string(action)), func(t *testing.T) {
+			local := &controlLocalFake{errs: map[workersessions.ControlAction]error{
+				action: workersessions.ErrSessionNotFound,
+			}}
+			var requestedPath string
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				requestedPath = r.URL.Path
+				w.Header().Set("Content-Type", "application/json")
+				_ = json.NewEncoder(w).Encode(factoryapi.WorkerSessionControlResponse{
+					WorkerSessionId: "worker-1",
+					Action:          factoryapi.WorkerSessionControlResponseAction(action),
+					Outcome:         factoryapi.WorkerSessionControlResponseOutcomeApplied,
+					State:           factoryapi.WorkerSessionControlResponseStateCanceled,
+					DispatchId:      "dispatch-1",
+				})
+			}))
+			defer server.Close()
+
+			var output bytes.Buffer
+			err := NewControl(testHTTPProtocol(t), local)(ControlConfig{
+				Context: context.Background(), Server: server.URL,
+				WorkerSessionID: "worker-1", Action: action,
+				OutputFormat: "json", Output: &output,
+			})
+			if err != nil {
+				t.Fatalf("control after local not-found error = %v; output=%q", err, output.String())
+			}
+			if local.calls != 1 || local.request.ID != "worker-1" {
+				t.Fatalf("local calls = %d request = %#v, want one local attempt for worker-1", local.calls, local.request)
+			}
+			wantPath := "/worker-sessions/worker-1/" + strings.ToLower(string(action))
+			if requestedPath != wantPath {
+				t.Fatalf("server path = %q, want %q", requestedPath, wantPath)
+			}
+			var result factoryapi.WorkerSessionControlResponse
+			if decodeErr := json.Unmarshal(output.Bytes(), &result); decodeErr != nil {
+				t.Fatalf("decode result: %v; output=%q", decodeErr, output.String())
+			}
+			if result.WorkerSessionId != "worker-1" ||
+				result.Outcome != factoryapi.WorkerSessionControlResponseOutcomeApplied ||
+				result.State != factoryapi.WorkerSessionControlResponseStateCanceled {
+				t.Fatalf("result = %#v, want the server's applied CANCELED snapshot", result)
+			}
+		})
+	}
+}
+
+// A control that the local root does not own and that has no factory server to
+// re-address must still report the honest NOT_FOUND rather than inventing a
+// success.
+func TestControlLocalNotFoundWithoutAFactoryServerStillReportsNotFound(t *testing.T) {
+	local := &controlLocalFake{errs: map[workersessions.ControlAction]error{
+		workersessions.ControlActionCancel: workersessions.ErrSessionNotFound,
+	}}
+	var output bytes.Buffer
+	err := NewControl(nil, local)(ControlConfig{
+		Context: context.Background(), WorkerSessionID: "worker-1",
+		Action: workersessions.ControlActionCancel, OutputFormat: "json", Output: &output,
+	})
+	assertCLIErrorCode(t, err, "NOT_FOUND")
+}
+
+// A local control failure that is not a missing session is the local root's
+// authoritative answer and must never be retried against the factory server.
+func TestControlLocalConflictIsNotReAddressedToTheFactoryServer(t *testing.T) {
+	local := &controlLocalFake{errs: map[workersessions.ControlAction]error{
+		workersessions.ControlActionResume: workersessions.ErrProviderSessionAssociationMissing,
+	}}
+	serverCalls := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		serverCalls++
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	var output bytes.Buffer
+	err := NewControl(testHTTPProtocol(t), local)(ControlConfig{
+		Context: context.Background(), Server: server.URL, WorkerSessionID: "worker-1",
+		Action: workersessions.ControlActionResume, OutputFormat: "json", Output: &output,
+	})
+	assertCLIErrorCode(t, err, "WORKER_SESSION_CONTROL_CONFLICT")
+	if serverCalls != 0 {
+		t.Fatalf("server calls = %d, want 0", serverCalls)
+	}
+}
+
 type controlLocalFake struct {
 	results map[workersessions.ControlAction]workersessions.ControlResult
+	errs    map[workersessions.ControlAction]error
 	action  workersessions.ControlAction
 	request workersessions.ControlRequest
 	calls   int
@@ -153,6 +250,9 @@ type controlLocalFake struct {
 func (f *controlLocalFake) control(action workersessions.ControlAction, request workersessions.ControlRequest) (workersessions.ControlResult, error) {
 	f.calls++
 	f.action, f.request = action, request
+	if err := f.errs[action]; err != nil {
+		return workersessions.ControlResult{}, err
+	}
 	return f.results[action], nil
 }
 

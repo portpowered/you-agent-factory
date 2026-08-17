@@ -389,6 +389,48 @@ func TestCancel_UsesServerOwnedAttemptContextDespiteCanceledCallerContextAndIsId
 	}
 }
 
+// Cancel resolves a session by its stable Worker Session ID and never by the
+// Provider Session it may not have published yet. This asserts the
+// pre-association window explicitly -- providerSessionAvailable is false on the
+// observation route while the session is RUNNING -- because that is the exact
+// window an operator reported as uncancellable.
+func TestCancel_RunningSessionWithoutAProviderSessionIsCancelledByItsWorkerSessionID(t *testing.T) {
+	boundary := newControlledBoundary()
+	registry := newControlledRegistry(t, boundary)
+	started := startControlledSession(t, registry, boundary, "worker-1", "dispatch-1")
+
+	observed, err := registry.GetObservationByWorkerSessionID(
+		context.Background(),
+		workersessions.GetObservationByWorkerSessionIDRequest{WorkerSessionID: "worker-1"},
+	)
+	if err != nil {
+		t.Fatalf("GetObservationByWorkerSessionID() error = %v", err)
+	}
+	if observed.State != workersessions.StateRunning || observed.ProviderSessionAvailable {
+		t.Fatalf("observation = state %q providerSessionAvailable %t, want RUNNING without a provider session",
+			observed.State, observed.ProviderSessionAvailable)
+	}
+
+	result, err := registry.Cancel(context.Background(), workersessions.ControlRequest{ID: observed.WorkerSessionID})
+	if err != nil {
+		t.Fatalf("Cancel() by observed Worker Session ID error = %v, want no error", err)
+	}
+	if errors.Is(err, workersessions.ErrSessionNotFound) {
+		t.Fatalf("Cancel() = %v, want the session resolved by its stable identity", err)
+	}
+	if result.Outcome != workersessions.ControlOutcomeApplied || result.Session.State != workersessions.StateCanceled {
+		t.Fatalf("Cancel() = %#v, want APPLIED with a CANCELED session", result)
+	}
+	if got := <-started; got.Session.State != workersessions.StateCanceled {
+		t.Fatalf("Start() result after cancel = %#v, want CANCELED", got.Session)
+	}
+
+	repeated, err := registry.Cancel(context.Background(), workersessions.ControlRequest{ID: "worker-1"})
+	if err != nil || repeated.Outcome != workersessions.ControlOutcomeNoop {
+		t.Fatalf("repeated Cancel() = %#v, %v, want NOOP without an error", repeated, err)
+	}
+}
+
 func TestControl_UnsupportedPauseResumeAndCanonicalCancellationLeaveLifecycleTruthful(t *testing.T) {
 	boundary := newControlledBoundary()
 	registry := newControlledRegistry(t, boundary)

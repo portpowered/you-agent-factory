@@ -496,6 +496,12 @@ func controlWorkerSession(config ControlConfig) error {
 	return controlLocal(config, jsonOutput)
 }
 
+// controlOwnerAvailable reports whether the configured factory server can be
+// addressed for a Worker Session the in-process root does not own.
+func controlOwnerAvailable(config ControlConfig) bool {
+	return config.HTTP != nil && strings.TrimSpace(config.Server) != ""
+}
+
 func validateControlConfig(config ControlConfig) error {
 	if config.Context == nil {
 		return fmt.Errorf("context is required")
@@ -528,26 +534,51 @@ func validControlAction(action workersessions.ControlAction) bool {
 	}
 }
 
+// controlLocal applies the control through the in-process Worker Sessions root
+// and, when that root does not own the addressed session, re-addresses the
+// exact same stable Worker Session ID to the configured factory server.
+//
+// The inspection commands (list, show, read, stream) are server-addressed only,
+// so every Worker Session an operator can observe is owned by that server while
+// the CLI process builds its own empty root per invocation. Resolving a control
+// solely against the local root therefore reported NOT_FOUND for every
+// observable session, including a RUNNING one, regardless of whether it had
+// published a Provider Session yet.
+//
+// This is deliberately the opposite direction from the remote path, which never
+// falls back to the local boundary: a remote answer is authoritative and must
+// not be masked by a different root. A local ErrSessionNotFound is not an
+// answer about the session at all -- it only reports that this process never
+// ran it -- so continuing to its owner resolves the same identity rather than
+// substituting a different one.
 func controlLocal(config ControlConfig, jsonOutput bool) error {
-	request := workersessions.ControlRequest{ID: strings.TrimSpace(config.WorkerSessionID)}
-	var (
-		result workersessions.ControlResult
-		err    error
-	)
-	switch config.Action {
-	case workersessions.ControlActionPause:
-		result, err = config.Local.Pause(config.Context, request)
-	case workersessions.ControlActionResume:
-		result, err = config.Local.Resume(config.Context, request)
-	case workersessions.ControlActionCancel:
-		result, err = config.Local.Cancel(config.Context, request)
-	case workersessions.ControlActionTerminate:
-		result, err = config.Local.Terminate(config.Context, request)
+	result, err := applyLocalControl(config)
+	if err == nil {
+		return writeControlResult(config, jsonOutput, controlResultFromService(result))
 	}
-	if err != nil {
+	if !errors.Is(err, workersessions.ErrSessionNotFound) || !controlOwnerAvailable(config) {
 		return emitControlCLIError(config, jsonOutput, mapControlServiceError(err))
 	}
-	return writeControlResult(config, jsonOutput, controlResultFromService(result))
+	clidiag.Printf(config.Diagnostics, config.Verbose || config.Debug,
+		"worker sessions control request placement=local-miss action=%s workerSessionID=%s re-addressing=server",
+		config.Action, config.WorkerSessionID)
+	return controlRemote(config, jsonOutput)
+}
+
+func applyLocalControl(config ControlConfig) (workersessions.ControlResult, error) {
+	request := workersessions.ControlRequest{ID: strings.TrimSpace(config.WorkerSessionID)}
+	switch config.Action {
+	case workersessions.ControlActionPause:
+		return config.Local.Pause(config.Context, request)
+	case workersessions.ControlActionResume:
+		return config.Local.Resume(config.Context, request)
+	case workersessions.ControlActionCancel:
+		return config.Local.Cancel(config.Context, request)
+	case workersessions.ControlActionTerminate:
+		return config.Local.Terminate(config.Context, request)
+	default:
+		return workersessions.ControlResult{}, workersessions.ErrInvalidState
+	}
 }
 
 func controlRemote(config ControlConfig, jsonOutput bool) error {

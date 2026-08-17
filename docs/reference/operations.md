@@ -290,12 +290,20 @@ you worker-sessions terminate <worker-session-id>
 you --server http://localhost:7437 worker-sessions terminate <worker-session-id> --remote
 ```
 
-Local placement is the default for all four controls. `--remote` sends the
-selected action only to the configured `--server`; a transport or control
-failure never falls back to local state. Outcomes are `APPLIED`, `NOOP`,
-`UNSUPPORTED`, or `FAILED`, with stable error classifications for invalid
-identity, unknown session, invalid state, transport failure, and an already
-terminal session.
+Local placement is the default for all four controls, and a control is always
+resolved by the same stable Worker Session identity that `list`, `show`, `read`,
+and `stream` report. When the local placement does not own the addressed
+session, the control continues to the configured `--server`, which is where an
+observed session actually runs; without a reachable server it still reports the
+unknown session rather than a fabricated result. `--remote` sends the selected
+action only to the configured `--server`; a transport or control failure never
+falls back to local state. Outcomes are `APPLIED`, `NOOP`, `UNSUPPORTED`, or
+`FAILED`, with stable error classifications for invalid identity, unknown
+session, invalid state, transport failure, and an already terminal session.
+
+Cancel and terminate do not require the session to have published a Provider
+Session yet: a `RUNNING` session whose `providerSessionAvailable` is still
+`false` is cancelled by its `workerSessionId` like any other.
 
 Local placement is the default. `--remote` selects exactly the configured
 `--server`; a failed remote continuation never falls back to a new local
