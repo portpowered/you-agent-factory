@@ -347,6 +347,7 @@ jobs:
             .artifacts/backend-lint/report.json
             .artifacts/backend-lint/lint.log
             .artifacts/backend-lint/comment.md
+            bin/deadcode-current.txt
           if-no-files-found: warn
           retention-days: 14
       - name: Publish Backend Lint inventory to the pull request
