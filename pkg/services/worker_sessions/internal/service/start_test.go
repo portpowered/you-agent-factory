@@ -986,7 +986,7 @@ func TestStart_ProviderProgressCommitsAssociationBeforeOutputAndEnablesResume(t 
 	if err != nil || resumed.Outcome != workersessions.ControlOutcomeApplied {
 		t.Fatalf("Resume() = %#v, %v, want applied exact continuation", resumed, err)
 	}
-	continuation := boundary.currentRequest()
+	continuation := boundary.requestFor(t, resumed.DispatchID)
 	wantContinuation := reference.ContinuationRef()
 	if continuation.Execution.Continuation == nil || *continuation.Execution.Continuation != wantContinuation {
 		t.Fatalf("continuation Continuation = %#v, want exact %#v", continuation.Execution.Continuation, wantContinuation)

@@ -645,7 +645,7 @@ func TestInterrupt_CancelsExactSourceBeforeAdmittingExactSessionSuccessor(t *tes
 		t.Fatalf("cancellations = %#v, want one exact source dispatch", cancellations)
 	}
 
-	handoff := boundary.currentRequest()
+	handoff := boundary.requestFor(t, result.Successor.ProviderSessionAssociation.DispatchID)
 	assertInterruptHandoff(t, handoff, request, reference)
 	if sourceResult := <-sourceResult; sourceResult.Session.State != workersessions.StateCanceled {
 		t.Fatalf("source InvokeSession() = %#v, want CANCELED", sourceResult.Session)
@@ -781,7 +781,7 @@ func TestInterrupt_IdempotencyAndRequestConflictAvoidDuplicateEffects(t *testing
 	if boundary.publishCount() != firstPublishCount || len(boundary.cancellations()) != firstCancellationCount {
 		t.Fatalf("conflict effects changed: publishes=%d cancels=%d", boundary.publishCount(), len(boundary.cancellations()))
 	}
-	handoff := boundary.currentRequest()
+	handoff := boundary.requestFor(t, first.Successor.ProviderSessionAssociation.DispatchID)
 	boundary.complete(completedDispatchWithProviderSession(handoff.Execution.Dispatch.DispatchID, reference), nil)
 	if got := <-sourceResult; got.Session.State != workersessions.StateCanceled {
 		t.Fatalf("source InvokeSession() = %#v, want CANCELED", got.Session)
@@ -852,9 +852,13 @@ func TestInterrupt_ConcurrentIdenticalRequestsReplayOneOperation(t *testing.T) {
 	}
 	group.Wait()
 	close(outcomes)
+	var successorDispatchID string
 	for result := range outcomes {
 		if result.err != nil || !result.result.Accepted {
 			t.Fatalf("concurrent Interrupt() = %#v, %v, want accepted replay", result.result, result.err)
+		}
+		if result.result.Successor.ProviderSessionAssociation != nil {
+			successorDispatchID = result.result.Successor.ProviderSessionAssociation.DispatchID
 		}
 	}
 	if got := len(boundary.cancellations()); got != 1 {
@@ -863,7 +867,7 @@ func TestInterrupt_ConcurrentIdenticalRequestsReplayOneOperation(t *testing.T) {
 	if got := boundary.publishCount(); got != 2 {
 		t.Fatalf("concurrent interrupt publishes = %d, want source plus one successor", got)
 	}
-	handoff := boundary.currentRequest()
+	handoff := boundary.requestFor(t, successorDispatchID)
 	boundary.complete(completedDispatchWithProviderSession(handoff.Execution.Dispatch.DispatchID, reference), nil)
 	if got := <-sourceResult; got.Session.State != workersessions.StateCanceled {
 		t.Fatalf("source cleanup InvokeSession() = %#v, want CANCELED", got.Session)

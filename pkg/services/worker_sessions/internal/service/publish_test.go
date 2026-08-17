@@ -665,7 +665,7 @@ func TestContinue_PersistsExactAttemptAndPortableContinuationLineage(t *testing.
 	assertSourceContinuationLineage(t, sourceRecords, request, reference)
 	successorRecords := readWorkerSessionRecords(t, eventsSvc, request.SuccessorWorkerSessionID)
 	assertSuccessorContinuationOpening(t, successorRecords, request, reference)
-	successorHandoff := boundary.currentRequest()
+	successorHandoff := boundary.requestFor(t, continued.Session.ProviderSessionAssociation.DispatchID)
 	boundary.complete(completedDispatchWithProviderSession(successorHandoff.Execution.Dispatch.DispatchID, reference), nil)
 	successorRecords = readWorkerSessionRecordsUntil(t, eventsSvc, request.SuccessorWorkerSessionID, 2)
 	if len(successorRecords) != 2 {

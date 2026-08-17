@@ -618,7 +618,6 @@ func TestReplayOnly_DoesNotClaimCompletenessBeforeTerminalRecordIsRetained(t *te
 		terminalAppendStarted: make(chan struct{}),
 		releaseTerminalAppend: make(chan struct{}),
 	}
-	defer appender.release()
 	boundary := newControlledBoundary()
 	registry, err := newService(boundary, appender, nil)
 	if err != nil {
@@ -646,7 +645,17 @@ func TestReplayOnly_DoesNotClaimCompletenessBeforeTerminalRecordIsRetained(t *te
 	}); err != nil {
 		t.Fatalf("AssociateProviderSession() error = %v, want nil", err)
 	}
-	go boundary.complete(completedDispatchResult("dispatch-1"), nil)
+	completionDone := make(chan struct{})
+	go func() {
+		defer close(completionDone)
+		boundary.complete(completedDispatchResult("dispatch-1"), nil)
+	}()
+	t.Cleanup(func() {
+		appender.release()
+		if err := waitControlledSignal(completionDone, controlledBoundaryWaitTimeout); err != nil {
+			t.Errorf("controlled dispatch completion goroutine did not join: %v", err)
+		}
+	})
 	waitForReplayRaceSignal(t, appender.terminalAppendStarted, "blocked terminal append")
 
 	replay, err := registry.StreamObservations(ctx, workersessions.StreamObservationsRequest{
@@ -661,6 +670,7 @@ func TestReplayOnly_DoesNotClaimCompletenessBeforeTerminalRecordIsRetained(t *te
 
 	appender.release()
 	assertReplayRaceStartCompleted(t, <-startDone)
+	waitForReplayRaceSignal(t, completionDone, "controlled dispatch completion")
 }
 
 func waitForReplayRaceSignal(t *testing.T, signal <-chan struct{}, name string) {
