@@ -43,6 +43,32 @@ func ListDispatches(
 	service RecordingsInspection,
 	input ListDispatchesInput,
 ) ToolResponse[factoryapi.ListFactorySessionDispatchesResponse] {
+	return listDispatchesWithFallback(ctx, nil, service, input)
+}
+
+// ListDispatchesWithFallback preserves live-session inspection while the
+// canonical Recordings artifact is still unavailable. Finalized history stays
+// on Recordings; only the explicit no-artifact compatibility case reaches the
+// already-bound Factory Sessions reader.
+func ListDispatchesWithFallback(
+	ctx context.Context,
+	execution DurableExecution,
+	service RecordingsInspection,
+	input ListDispatchesInput,
+) ToolResponse[factoryapi.ListFactorySessionDispatchesResponse] {
+	var live LiveDispatchReader
+	if reader, ok := any(execution).(LiveDispatchReader); ok {
+		live = reader
+	}
+	return listDispatchesWithFallback(ctx, live, service, input)
+}
+
+func listDispatchesWithFallback(
+	ctx context.Context,
+	live LiveDispatchReader,
+	service RecordingsInspection,
+	input ListDispatchesInput,
+) ToolResponse[factoryapi.ListFactorySessionDispatchesResponse] {
 	if ctx == nil {
 		envelope := executionErrorEnvelope(errMissingRequestContext)
 		return ToolResponse[factoryapi.ListFactorySessionDispatchesResponse]{Error: &envelope}
@@ -50,7 +76,24 @@ func ListDispatches(
 	if response, done := requestContextErrorResponse[factoryapi.ListFactorySessionDispatchesResponse](ctx); done {
 		return response
 	}
+	if err := validateDispatchStatus(input.Status); err != nil {
+		envelope := readErrorEnvelope(input.SessionID, err)
+		return ToolResponse[factoryapi.ListFactorySessionDispatchesResponse]{Error: &envelope}
+	}
+	if err := validateDispatchInspectionRequest(ctx, service, live, input.SessionID); err != nil {
+		envelope := readErrorEnvelope(input.SessionID, err)
+		return ToolResponse[factoryapi.ListFactorySessionDispatchesResponse]{Error: &envelope}
+	}
 	result, err := listFactorySessionDispatches(ctx, service, input)
+	if err != nil && live != nil && canUseLiveDispatchFallback(err) {
+		liveResult, liveErr := live.ListDispatches(ctx, input.SessionID)
+		if liveErr == nil {
+			result = liveDispatchesResponse(input, liveResult)
+			err = nil
+		} else {
+			err = liveErr
+		}
+	}
 	if err != nil {
 		envelope := readErrorEnvelope(input.SessionID, err)
 		return ToolResponse[factoryapi.ListFactorySessionDispatchesResponse]{Error: &envelope}
@@ -447,6 +490,55 @@ func validateInspectionRequest(
 		return fmt.Errorf("sessionId is required")
 	}
 	return nil
+}
+
+func validateDispatchInspectionRequest(
+	ctx context.Context,
+	service RecordingsInspection,
+	live LiveDispatchReader,
+	sessionID string,
+) error {
+	if ctx == nil {
+		return errors.New("MCP request context is required")
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if service == nil && live == nil {
+		return recordings.ErrServiceUnavailable
+	}
+	if strings.TrimSpace(sessionID) == "" {
+		return fmt.Errorf("sessionId is required")
+	}
+	return nil
+}
+
+func canUseLiveDispatchFallback(err error) bool {
+	var queryErr *recordings.HistoricalRecordingQueryError
+	if errors.As(err, &queryErr) {
+		return queryErr.Kind == recordings.HistoricalRecordingQueryErrorUnavailable
+	}
+	return errors.Is(err, recordings.ErrServiceUnavailable) ||
+		errors.Is(err, recordings.ErrMissingRecordingTarget)
+}
+
+func liveDispatchesResponse(
+	input ListDispatchesInput,
+	result factorysessionexecution.ListDispatchesResult,
+) factoryapi.ListFactorySessionDispatchesResponse {
+	filtered := make([]factorysessionexecution.DispatchSummary, 0, len(result.Dispatches))
+	for _, dispatch := range result.Dispatches {
+		if strings.TrimSpace(input.Phase) != "" {
+			continue
+		}
+		if status := strings.TrimSpace(input.Status); status != "" && status != string(dispatch.Status) {
+			continue
+		}
+		filtered = append(filtered, dispatch)
+	}
+	result.SessionID = input.SessionID
+	result.Dispatches = filtered
+	return apifactorysession.ListDispatchesResponseToAPI(result)
 }
 
 func validateDispatchStatus(status string) error {

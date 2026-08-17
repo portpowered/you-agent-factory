@@ -25,3 +25,11 @@ type DurableExecution interface {
 	GetResult(context.Context, string, factorysessions.ResultRequest) (factorysessions.ResultReadResult, error)
 	ListSessions(context.Context, factorysessions.ListSessionsRequest) (factorysessions.ListSessionsResult, error)
 }
+
+// LiveDispatchReader is the narrow compatibility capability used when a live
+// Factory Session has no finalized Recordings artifact yet. It is asserted
+// from the already-bound durable execution owner; no second execution graph is
+// constructed by the MCP transport.
+type LiveDispatchReader interface {
+	ListDispatches(context.Context, string) (factorysessions.ListDispatchesResult, error)
+}

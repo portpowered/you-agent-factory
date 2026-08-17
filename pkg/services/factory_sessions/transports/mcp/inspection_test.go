@@ -258,6 +258,28 @@ func TestMockClient_ListDispatches_FiltersAndRejectsInvalidStatus(t *testing.T) 
 	}
 }
 
+func TestMockClient_ListDispatches_UsesLiveFallbackWithoutRecordingArtifact(t *testing.T) {
+	client := newTestClientWithRecordings(
+		scriptedExecutionService{
+			listDispatches: func(context.Context, string) (factorysessions.ListDispatchesResult, error) {
+				return dispatchInspection(), nil
+			},
+		},
+		nil,
+		missingArtifactRecordingsRoot{},
+	)
+
+	response, err := client.ListDispatches(context.Background(), mcpfactorysession.ListDispatchesInput{
+		SessionID: successSessionID,
+	})
+	if err != nil || response.Error != nil || response.Result == nil {
+		t.Fatalf("response = %#v, %v; want live fallback dispatch list", response, err)
+	}
+	if len(response.Result.Dispatches) != 1 || response.Result.Dispatches[0].Id != dispatchID {
+		t.Fatalf("response = %#v, want live dispatch %q", response.Result, dispatchID)
+	}
+}
+
 func TestMockClient_ListArtifacts_ArtifactInspectionFixtureReturnsStableSummaries(t *testing.T) {
 	client := clientWithScript(scriptedExecutionService{
 		startAsync: func(context.Context, factorysessions.StartRequest) (factorysessions.AsyncStartResult, error) {
@@ -430,6 +452,14 @@ func artifactInspection() factorysessions.ListArtifactsResult {
 type scriptedRecordingsRoot struct {
 	recordings.Service
 	service scriptedExecutionService
+}
+
+type missingArtifactRecordingsRoot struct {
+	recordings.Service
+}
+
+func (missingArtifactRecordingsRoot) QueryRecordingStatus(recordings.RecordingStatusRequest) (recordings.RecordingStatusResult, error) {
+	return recordings.RecordingStatusResult{}, recordings.ErrMissingRecordingTarget
 }
 
 func newScriptedRecordingsRoot(service scriptedExecutionService) recordings.Service {
