@@ -558,6 +558,7 @@ func provideApplicationRuntimeAdapter(
 		handler, err := httpHandler.Bind(httpapplication.Binding{
 			FactoryRuntime: opened.FactoryRuntime, FactoryDefinitions: opened.FactoryDefinitions,
 			WorkflowPreview: opened.WorkflowPreview, FactorySessions: opened.FactorySessions,
+			Recordings:  opened.Recordings,
 			LiveControl: opened.LiveControl, Work: opened.Work, Models: opened.Models,
 			ModelsScope: opened.ModelsScope, ModelInvoker: opened.ModelInvoker,
 			Workers: opened.Workers, ProviderSessions: opened.ProviderSessions,
