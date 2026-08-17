@@ -1,6 +1,8 @@
 package main
 
 import (
+	"bytes"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"slices"
@@ -36,7 +38,7 @@ func TestListProductionPkgPackagesIsStableSortedAndIdempotent(t *testing.T) {
 		t.Fatalf("second listProductionPkgPackages() error = %v", err)
 	}
 	if !slices.Equal(first, second) {
-		t.Fatalf("re-running inventory generation changed the ordered package list")
+		t.Fatalf("re-running package discovery changed the ordered package list")
 	}
 }
 
@@ -59,14 +61,115 @@ func TestListProductionPkgPackagesIncludesProductionAndOmitsTestOnly(t *testing.
 	}
 }
 
-func TestValidateManifestRequiresCompleteStableInventory(t *testing.T) {
+// TestCheckPassesWhenPackageIsAddedInsideExistingServiceWithNoManifestEdit is the
+// core of the registration-tax retirement: package churn inside a service must
+// not require a manifest edit. The check runs before and after a new package
+// appears, against a byte-identical manifest.
+func TestCheckPassesWhenPackageIsAddedInsideExistingServiceWithNoManifestEdit(t *testing.T) {
 	t.Parallel()
 
 	repoRoot := t.TempDir()
-	writeGoPackage(t, repoRoot, "pkg/alpha", "package alpha\n")
-	writeGoPackage(t, repoRoot, "pkg/beta", "package beta\n")
+	writeGoPackage(t, repoRoot, "pkg/services/work", "package work\n")
+	writeGoPackage(t, repoRoot, "pkg/services/work/internal/lineagegraph", "package lineagegraph\n")
+	manifestPath := writeFixtureManifest(t, repoRoot, []PackageMapping{{
+		PackagePath: "pkg/services/work/internal/lineagegraph",
+		Disposition: DispositionMove,
+		Destination: "work/internal",
+	}})
+	before := readFileBytes(t, manifestPath)
 
-	base := Manifest{
+	if err := runCheck(t, repoRoot); err != nil {
+		t.Fatalf("check on the starting tree error = %v", err)
+	}
+
+	// A brand-new package inside an existing service, with no registry edit.
+	writeGoPackage(t, repoRoot, "pkg/services/work/internal/newsubsystem", "package newsubsystem\n")
+	if err := runCheck(t, repoRoot); err != nil {
+		t.Fatalf("check after adding a package with no manifest edit error = %v", err)
+	}
+
+	// Deleting a package that never had a row is likewise a no-edit change.
+	if err := os.RemoveAll(filepath.Join(repoRoot, filepath.FromSlash("pkg/services/work/internal/newsubsystem"))); err != nil {
+		t.Fatalf("remove added package: %v", err)
+	}
+	if err := runCheck(t, repoRoot); err != nil {
+		t.Fatalf("check after deleting a package with no manifest edit error = %v", err)
+	}
+
+	if after := readFileBytes(t, manifestPath); !bytes.Equal(before, after) {
+		t.Fatal("the check rewrote the manifest; it must be read-only")
+	}
+}
+
+// TestCheckFailsWhenMoveRowNamesAbsentPackage proves the surviving rows cannot
+// rot: completeness is retired in one direction only.
+func TestCheckFailsWhenMoveRowNamesAbsentPackage(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	writeGoPackage(t, repoRoot, "pkg/services/work", "package work\n")
+	writeFixtureManifest(t, repoRoot, []PackageMapping{{
+		PackagePath: "pkg/services/work/internal/alreadymoved",
+		Disposition: DispositionMove,
+		Destination: "work/internal",
+	}})
+
+	err := runCheck(t, repoRoot)
+	if err == nil {
+		t.Fatal("check error = nil, want failure for a row naming an absent package")
+	}
+	if !strings.Contains(err.Error(), "pkg/services/work/internal/alreadymoved") {
+		t.Fatalf("check error = %v, want the stale package path named", err)
+	}
+	if !strings.Contains(err.Error(), "LINT_VIOLATION_COUNT: 1") {
+		t.Fatalf("check error = %v, want a machine-readable violation count", err)
+	}
+}
+
+// TestCheckRejectsRetainDisposition locks the retirement in place: a row that
+// only restates where a package already lives is no longer accepted, so the
+// enumeration cannot creep back one row at a time.
+func TestCheckRejectsRetainDisposition(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	writeGoPackage(t, repoRoot, "pkg/services/work", "package work\n")
+	writeFixtureManifest(t, repoRoot, []PackageMapping{{
+		PackagePath: "pkg/services/work",
+		Disposition: DispositionRetain,
+		Destination: "work",
+	}})
+
+	err := runCheck(t, repoRoot)
+	if err == nil {
+		t.Fatal("check error = nil, want retain disposition rejection")
+	}
+	if !strings.Contains(err.Error(), "retired") {
+		t.Fatalf("check error = %v, want a retired-disposition message", err)
+	}
+}
+
+// TestCommittedManifestPassesTheCheck runs the real committed manifest against
+// the real tree, which is what the packaged-service-structure lint target does.
+func TestCommittedManifestPassesTheCheck(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := findRepoRoot(t)
+	if err := runCheck(t, repoRoot); err != nil {
+		t.Fatalf("committed manifest check error = %v", err)
+	}
+}
+
+func runCheck(t *testing.T, repoRoot string) error {
+	t.Helper()
+	return run(config{root: repoRoot, manifestPath: manifestRelativePath}, &bytes.Buffer{}, &bytes.Buffer{})
+}
+
+// writeFixtureManifest writes a schema-valid manifest carrying only the given
+// rows and returns its path.
+func writeFixtureManifest(t *testing.T, repoRoot string, rows []PackageMapping) string {
+	t.Helper()
+	manifest := Manifest{
 		Version:               1,
 		Stage:                 manifestStage,
 		DestinationVocabulary: closedDestinationVocabulary(),
@@ -74,64 +177,29 @@ func TestValidateManifestRequiresCompleteStableInventory(t *testing.T) {
 			"edges": edgesArchitectureExceptionNote,
 		},
 		FutureDebt: []FutureDebt{edgesFutureDebtEntry()},
+		Packages:   rows,
 	}
-
-	missing := base
-	missing.Inventory = []string{"pkg/alpha"}
-	missing.Packages = mustResidualPackages(t, missing.Inventory)
-	if err := validateManifestAt(repoRoot, missing); err == nil || !strings.Contains(err.Error(), "inventory") {
-		t.Fatalf("incomplete inventory error = %v", err)
+	data, err := json.MarshalIndent(manifest, "", "  ")
+	if err != nil {
+		t.Fatalf("encode fixture manifest: %v", err)
 	}
-
-	unsorted := base
-	unsorted.Inventory = []string{"pkg/beta", "pkg/alpha"}
-	unsorted.Packages = mustResidualPackages(t, unsorted.Inventory)
-	if err := validateManifestAt(repoRoot, unsorted); err == nil || !strings.Contains(err.Error(), "stable-sorted") {
-		t.Fatalf("unsorted inventory error = %v", err)
+	path := filepath.Join(repoRoot, filepath.FromSlash(manifestRelativePath))
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatalf("mkdir fixture manifest dir: %v", err)
 	}
-
-	complete := base
-	complete.Inventory = []string{"pkg/alpha", "pkg/beta"}
-	complete.Packages = mustResidualPackages(t, complete.Inventory)
-	if err := validateManifestAt(repoRoot, complete); err != nil {
-		t.Fatalf("complete inventory error = %v", err)
+	if err := os.WriteFile(path, append(data, '\n'), 0o644); err != nil {
+		t.Fatalf("write fixture manifest: %v", err)
 	}
+	return path
 }
 
-func mustResidualPackages(t *testing.T, inventory []string) []PackageMapping {
+func readFileBytes(t *testing.T, path string) []byte {
 	t.Helper()
-	rows := make([]PackageMapping, 0, len(inventory))
-	for _, packagePath := range inventory {
-		mapping, ok := mapResidualPackage(packagePath)
-		if !ok {
-			t.Fatalf("mapResidualPackage(%q) ok = false for inventory fixture", packagePath)
-		}
-		rows = append(rows, mapping)
-	}
-	return rows
-}
-
-func TestCommittedManifestInventoryMatchesLiveProductionPackages(t *testing.T) {
-	t.Parallel()
-
-	repoRoot := findRepoRoot(t)
-	manifest, err := loadManifest(filepath.Join(repoRoot, manifestRelativePath))
+	data, err := os.ReadFile(path)
 	if err != nil {
-		t.Fatalf("loadManifest() error = %v", err)
+		t.Fatalf("read %s: %v", path, err)
 	}
-	if err := validateManifestAt(repoRoot, manifest); err != nil {
-		t.Fatalf("committed manifest inventory validation error = %v", err)
-	}
-	live, err := listProductionPkgPackages(repoRoot)
-	if err != nil {
-		t.Fatalf("listProductionPkgPackages() error = %v", err)
-	}
-	if !slices.Equal(manifest.Inventory, live) {
-		t.Fatalf("committed inventory diverges from live production packages (manifest=%d live=%d)", len(manifest.Inventory), len(live))
-	}
-	if len(manifest.Inventory) == 0 {
-		t.Fatal("committed inventory is empty")
-	}
+	return data
 }
 
 func writeGoPackage(t *testing.T, repoRoot, packagePath, source string, fileName ...string) {

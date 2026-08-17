@@ -43,11 +43,12 @@ type Manifest struct {
 	// FutureDebt records deferred migration work intentionally left outside
 	// this packet (for example FND-06 Edges narrowing).
 	FutureDebt []FutureDebt `json:"futureDebt"`
-	// Inventory is the stable-sorted ledger seed of every production pkg package
-	// path (repository-relative, slash-separated). Package destination rows are
-	// filled separately under Packages.
-	Inventory []string         `json:"inventory"`
-	Packages  []PackageMapping `json:"packages"`
+	// Packages records the packages that still carry unfinished migration
+	// intent. A package that stays where it already lives carries no row: its
+	// destination is derivable from its own path, so restating it here would be
+	// a registration tax rather than a decision. The list is expected to shrink
+	// to zero as the remaining moves land.
+	Packages []PackageMapping `json:"packages"`
 }
 
 func closedDestinationVocabulary() DestinationVocabulary {
@@ -120,7 +121,7 @@ func validateManifestAt(repoRoot string, manifest Manifest) error {
 	if err := validateManifestSchema(manifest); err != nil {
 		return err
 	}
-	return validateInventory(repoRoot, manifest.Inventory)
+	return validateRowsNamePackagesThatExist(repoRoot, manifest.Packages)
 }
 
 func validateManifestSchema(manifest Manifest) error {
@@ -145,20 +146,7 @@ func validateManifestSchema(manifest Manifest) error {
 			return err
 		}
 	}
-	if err := validateEdgesExceptionCoverage(manifest); err != nil {
-		return err
-	}
-	if err := validateResidualCoverage(manifest); err != nil {
-		return err
-	}
-	// Complete one-destination coverage is required once the inventory ledger
-	// seed is present; schema-only fixtures may omit inventory.
-	if len(manifest.Inventory) > 0 {
-		if err := validatePackageCoverage(manifest); err != nil {
-			return err
-		}
-	}
-	return nil
+	return validatePackageCoverage(manifest)
 }
 
 func validateVocabulary(got DestinationVocabulary) error {
@@ -181,9 +169,15 @@ func validatePackageMapping(index int, row PackageMapping, closed map[string]str
 		return fmt.Errorf("%s.packagePath is required", prefix)
 	}
 	switch row.Disposition {
-	case DispositionRetain, DispositionMove, DispositionDelete:
+	case DispositionMove, DispositionDelete:
+	case DispositionRetain:
+		return fmt.Errorf(
+			"%s.disposition %q is retired: a package that stays where it already lives derives its destination from its own path and carries no row",
+			prefix,
+			row.Disposition,
+		)
 	default:
-		return fmt.Errorf("%s.disposition %q is invalid; want retain, move, or delete", prefix, row.Disposition)
+		return fmt.Errorf("%s.disposition %q is invalid; want move or delete", prefix, row.Disposition)
 	}
 	if strings.TrimSpace(row.Destination) == "" {
 		return fmt.Errorf("%s.destination is required", prefix)

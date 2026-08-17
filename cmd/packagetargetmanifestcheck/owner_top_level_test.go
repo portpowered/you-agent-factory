@@ -1,7 +1,6 @@
 package main
 
 import (
-	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
@@ -149,10 +148,8 @@ func TestRecordingsTopLevelInventoryMatchesUnifiedRegistry(t *testing.T) {
 	}
 }
 
+// loadManifestInventory returns the live production package list. The manifest
+// no longer carries a committed copy of it, so the tree is the only source.
 func loadManifestInventory(repoRoot string) ([]string, error) {
-	manifest, err := loadManifest(filepath.Join(repoRoot, manifestRelativePath))
-	if err != nil {
-		return nil, err
-	}
-	return manifest.Inventory, nil
+	return listProductionPkgPackages(repoRoot)
 }

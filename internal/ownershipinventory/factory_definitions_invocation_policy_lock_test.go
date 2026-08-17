@@ -11,9 +11,8 @@ import (
 )
 
 const (
-	factoryDefinitionsInvocationPolicyServiceID = "factory_definitions/invocation_policy"
+	factoryDefinitionsInvocationPolicyServiceID  = "factory_definitions/invocation_policy"
 	factoryDefinitionsInvocationPolicyTargetPath = "pkg/services/factory_definitions/internal/services/invocation_policy"
-	factoryDefinitionsInvocationPolicyManifestDestination = "factory_definitions/internal/services/invocation_policy"
 )
 
 var factoryDefinitionsInvocationPolicyResidualRests = []string{
@@ -111,19 +110,15 @@ func TestFactoryDefinitionsResidualInvocationPolicyPackagesLocked(t *testing.T) 
 			t.Fatalf("frozen inventory %q disposition = %q, want retain", packagePath, ownershipRow.Disposition)
 		}
 
-		manifestRow, ok := manifestByPath[packagePath]
-		if !ok {
-			t.Fatalf("package-target-manifest missing row for %q", packagePath)
-		}
-		if manifestRow.Disposition != ownershipinventory.DispositionRetain {
-			t.Fatalf("manifest %q disposition = %q, want retain", packagePath, manifestRow.Disposition)
-		}
-		wantDestination := factoryDefinitionsInvocationPolicyManifestDestination
-		if strings.HasPrefix(rest, "internal/services/distribution/") {
-			wantDestination = "factory_definitions/internal/services/distribution"
-		}
-		if manifestRow.Destination != wantDestination {
-			t.Fatalf("manifest %q destination = %q, want %q", packagePath, manifestRow.Destination, wantDestination)
+		// The manifest tracks only unfinished migration intent. These packages are
+		// locked where they are, so the lock is proven by the absence of a row:
+		// adding a move or delete row for one of them fails here.
+		if manifestRow, ok := manifestByPath[packagePath]; ok {
+			t.Fatalf(
+				"package-target-manifest carries a %q row for locked package %q; locked packages carry no row",
+				manifestRow.Disposition,
+				packagePath,
+			)
 		}
 	}
 }
@@ -178,17 +173,16 @@ func TestFactoryDefinitionsSnapshotsPortabilityAndDefinitionDestinationsLocked(t
 		t.Fatalf("manifest %q = %#v, want move→factory_definitions/internal", definitionPath, definitionManifest)
 	}
 
+	// snapshots_portability already sits at its destination, so it carries no
+	// migration row. A row appearing here would mean a move was reopened.
 	const snapshotsPrefix = "pkg/services/factory_definitions/internal/services/snapshots_portability"
 	for _, row := range manifest.Packages {
-		if !strings.HasPrefix(row.PackagePath, snapshotsPrefix) {
-			continue
-		}
-		if row.Disposition != ownershipinventory.DispositionRetain {
-			t.Fatalf("snapshots_portability row %q disposition = %q, want retain", row.PackagePath, row.Disposition)
-		}
-		if row.Destination != "factory_definitions/internal/services/snapshots_portability" {
-			t.Fatalf("snapshots_portability row %q destination = %q, want factory_definitions/internal/services/snapshots_portability",
-				row.PackagePath, row.Destination)
+		if strings.HasPrefix(row.PackagePath, snapshotsPrefix) {
+			t.Fatalf(
+				"package-target-manifest carries a %q row for settled package %q; settled packages carry no row",
+				row.Disposition,
+				row.PackagePath,
+			)
 		}
 	}
 }

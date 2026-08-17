@@ -45,7 +45,7 @@ func TestClosedDestinationVocabularyMatchesCommittedOwners(t *testing.T) {
 	assertExactStrings(t, "architectureExceptions", vocab.ArchitectureExceptions, wantExceptions)
 }
 
-func TestValidateManifestAcceptsRetainMoveAndNestedOwnerDestination(t *testing.T) {
+func TestValidateManifestAcceptsMoveAndNestedOwnerDestination(t *testing.T) {
 	t.Parallel()
 
 	manifest := Manifest{
@@ -58,19 +58,14 @@ func TestValidateManifestAcceptsRetainMoveAndNestedOwnerDestination(t *testing.T
 		FutureDebt: []FutureDebt{edgesFutureDebtEntry()},
 		Packages: []PackageMapping{
 			{
-				PackagePath: "pkg/services/work",
-				Disposition: DispositionRetain,
-				Destination: "work",
-			},
-			{
 				PackagePath: "pkg/services/work/content_staging",
 				Disposition: DispositionMove,
 				Destination: "work/internal/services/content_staging",
 			},
 			{
-				PackagePath: "pkg/services/edges",
-				Disposition: DispositionRetain,
-				Destination: "edges",
+				PackagePath: "pkg/services/work/legacy_lineage",
+				Disposition: DispositionMove,
+				Destination: "work/internal",
 			},
 		},
 	}
@@ -94,7 +89,7 @@ func TestValidateManifestRejectsDestinationOutsideClosedSet(t *testing.T) {
 		Packages: []PackageMapping{
 			{
 				PackagePath: "pkg/services/mystery",
-				Disposition: DispositionRetain,
+				Disposition: DispositionMove,
 				Destination: "mystery_service",
 			},
 		},
@@ -255,5 +250,15 @@ func assertExactStrings(t *testing.T, label string, got, want []string) {
 		if got[i] != want[i] {
 			t.Fatalf("%s[%d] = %q, want %q", label, i, got[i], want[i])
 		}
+	}
+}
+
+// edgesFutureDebtEntry is the FND-06 fixture the schema requires. It lives in
+// the test now that the checker no longer rewrites the committed manifest.
+func edgesFutureDebtEntry() FutureDebt {
+	return FutureDebt{
+		ID:          edgesFutureDebtID,
+		PackagePath: "pkg/services/edges",
+		Description: "Narrow Edges implementation imports and the broad external-effect surface; deferred to FND-06. This packet only records the architecture exception.",
 	}
 }

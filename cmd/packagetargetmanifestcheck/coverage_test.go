@@ -2,17 +2,53 @@ package main
 
 import (
 	"path/filepath"
-	"slices"
 	"strings"
 	"testing"
 )
 
-func TestValidatePackageCoverageRequiresExactOneDestinationPerInventoryPath(t *testing.T) {
+func TestValidatePackageCoverageRejectsDuplicateAndUnsortedRows(t *testing.T) {
 	t.Parallel()
 
-	repoRoot := t.TempDir()
-	writeGoPackage(t, repoRoot, "pkg/alpha", "package alpha\n")
-	writeGoPackage(t, repoRoot, "pkg/beta", "package beta\n")
+	alpha := PackageMapping{
+		PackagePath: "pkg/services/work/alpha",
+		Disposition: DispositionMove,
+		Destination: "work/internal",
+	}
+	beta := PackageMapping{
+		PackagePath: "pkg/services/work/beta",
+		Disposition: DispositionMove,
+		Destination: "work/internal",
+	}
+
+	duplicate := Manifest{Packages: []PackageMapping{alpha, alpha, beta}}
+	if err := validatePackageCoverage(duplicate); err == nil || !strings.Contains(err.Error(), "duplicate") {
+		t.Fatalf("duplicate packages error = %v, want duplicate rejection", err)
+	}
+
+	unsorted := Manifest{Packages: []PackageMapping{beta, alpha}}
+	if err := validatePackageCoverage(unsorted); err == nil || !strings.Contains(err.Error(), "stable-sorted") {
+		t.Fatalf("unsorted packages error = %v, want sort rejection", err)
+	}
+
+	sorted := Manifest{Packages: []PackageMapping{alpha, beta}}
+	if err := validatePackageCoverage(sorted); err != nil {
+		t.Fatalf("sorted, duplicate-free packages error = %v", err)
+	}
+}
+
+// TestValidatePackageCoverageAcceptsNoRows is the shrink-to-zero end state: the
+// manifest tracks unfinished migration intent, so an empty list is success, not
+// a missing-inventory failure.
+func TestValidatePackageCoverageAcceptsNoRows(t *testing.T) {
+	t.Parallel()
+
+	if err := validatePackageCoverage(Manifest{}); err != nil {
+		t.Fatalf("validatePackageCoverage() on an empty row list error = %v", err)
+	}
+}
+
+func TestValidateManifestRejectsInvalidDestinationAndIncompleteDelete(t *testing.T) {
+	t.Parallel()
 
 	base := Manifest{
 		Version:               1,
@@ -22,68 +58,31 @@ func TestValidatePackageCoverageRequiresExactOneDestinationPerInventoryPath(t *t
 			"edges": edgesArchitectureExceptionNote,
 		},
 		FutureDebt: []FutureDebt{edgesFutureDebtEntry()},
-		Inventory:  []string{"pkg/alpha", "pkg/beta"},
-	}
-
-	// Representative fixture: one deliberately unmapped inventory path fails.
-	unmapped := base
-	unmapped.Packages = mustResidualPackages(t, []string{"pkg/alpha"})
-	err := validateManifestAt(repoRoot, unmapped)
-	if err == nil {
-		t.Fatal("validateManifestAt() error = nil, want missing mapping failure")
-	}
-	if !strings.Contains(err.Error(), "pkg/beta") {
-		t.Fatalf("validateManifestAt() error = %v, want unmapped path pkg/beta", err)
-	}
-
-	duplicate := base
-	duplicate.Packages = []PackageMapping{
-		mustResidualPackages(t, []string{"pkg/alpha"})[0],
-		mustResidualPackages(t, []string{"pkg/alpha"})[0],
-		mustResidualPackages(t, []string{"pkg/beta"})[0],
-	}
-	if err := validatePackageCoverage(duplicate); err == nil || !strings.Contains(err.Error(), "duplicate") {
-		t.Fatalf("duplicate packages error = %v", err)
-	}
-
-	unsorted := base
-	unsorted.Packages = mustResidualPackages(t, []string{"pkg/beta", "pkg/alpha"})
-	if err := validatePackageCoverage(unsorted); err == nil || !strings.Contains(err.Error(), "stable-sorted") {
-		t.Fatalf("unsorted packages error = %v", err)
 	}
 
 	invalidDestination := base
-	invalidDestination.Packages = mustResidualPackages(t, []string{"pkg/alpha", "pkg/beta"})
-	invalidDestination.Packages[0].Disposition = DispositionRetain
-	invalidDestination.Packages[0].Destination = "not_a_closed_destination"
-	invalidDestination.Packages[0].DeletionSuccessor = ""
-	invalidDestination.Packages[0].DeletionCondition = ""
+	invalidDestination.Packages = []PackageMapping{{
+		PackagePath: "pkg/services/work/alpha",
+		Disposition: DispositionMove,
+		Destination: "not_a_closed_destination",
+	}}
 	if err := validateManifest(invalidDestination); err == nil || !strings.Contains(err.Error(), "destination") {
 		t.Fatalf("invalid destination error = %v", err)
 	}
 
 	incompleteDelete := base
-	incompleteDelete.Packages = mustResidualPackages(t, []string{"pkg/alpha", "pkg/beta"})
-	incompleteDelete.Packages[0].Disposition = DispositionDelete
-	incompleteDelete.Packages[0].Destination = "platform"
-	incompleteDelete.Packages[0].DeletionSuccessor = ""
-	incompleteDelete.Packages[0].DeletionCondition = "delete when no importers remain"
+	incompleteDelete.Packages = []PackageMapping{{
+		PackagePath:       "pkg/services/work/alpha",
+		Disposition:       DispositionDelete,
+		Destination:       "platform",
+		DeletionCondition: "delete when no importers remain",
+	}}
 	if err := validateManifest(incompleteDelete); err == nil || !strings.Contains(err.Error(), "deletionSuccessor") {
 		t.Fatalf("incomplete delete error = %v", err)
 	}
-
-	// Restoring the missing mapping makes validation pass.
-	complete := base
-	complete.Packages = mustResidualPackages(t, []string{"pkg/alpha", "pkg/beta"})
-	if err := validateManifestAt(repoRoot, complete); err != nil {
-		t.Fatalf("complete coverage validateManifestAt() error = %v", err)
-	}
-	if err := validatePackageCoverage(complete); err != nil {
-		t.Fatalf("complete coverage validatePackageCoverage() error = %v", err)
-	}
 }
 
-func TestCommittedManifestHasExactOneDestinationCoverageAsLedgerSeed(t *testing.T) {
+func TestCommittedManifestTracksOnlyUnfinishedMigrationIntent(t *testing.T) {
 	t.Parallel()
 
 	repoRoot := findRepoRoot(t)
@@ -94,21 +93,21 @@ func TestCommittedManifestHasExactOneDestinationCoverageAsLedgerSeed(t *testing.
 	if err := validateManifestAt(repoRoot, manifest); err != nil {
 		t.Fatalf("committed manifest validateManifestAt() error = %v", err)
 	}
-	if err := validatePackageCoverage(manifest); err != nil {
-		t.Fatalf("committed package coverage error = %v", err)
-	}
-	if !slices.Equal(manifest.Inventory, packagePaths(manifest.Packages)) {
-		t.Fatalf("committed packages packagePath order diverges from inventory ledger seed")
-	}
-	if len(manifest.Inventory) == 0 {
-		t.Fatal("committed inventory ledger seed is empty")
-	}
-}
 
-func packagePaths(rows []PackageMapping) []string {
-	paths := make([]string, len(rows))
-	for i, row := range rows {
-		paths[i] = row.PackagePath
+	live, err := listProductionPkgPackages(repoRoot)
+	if err != nil {
+		t.Fatalf("listProductionPkgPackages() error = %v", err)
 	}
-	return paths
+	if len(manifest.Packages) >= len(live) {
+		t.Fatalf(
+			"committed manifest still enumerates the tree: %d rows for %d live packages",
+			len(manifest.Packages),
+			len(live),
+		)
+	}
+	for _, row := range manifest.Packages {
+		if row.Disposition == DispositionRetain {
+			t.Fatalf("committed manifest still carries a derivable retain row for %q", row.PackagePath)
+		}
+	}
 }
