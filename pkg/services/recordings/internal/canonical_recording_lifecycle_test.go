@@ -679,3 +679,135 @@ type staticRecordingClock struct {
 }
 
 func (clock staticRecordingClock) Now() time.Time { return clock.at }
+
+// TestRecordingScopeReplayIsEquivalentAndIsolatedUnderConcurrentAccess proves
+// canonical replay stays equivalent to the retained projection of the same
+// finalized recording scope, and that equivalence survives concurrent access:
+// several replays of two distinct scopes run at once and each one completes
+// with exactly its own scope's retained world state, never another scope's.
+func TestRecordingScopeReplayIsEquivalentAndIsolatedUnderConcurrentAccess(t *testing.T) {
+	t.Parallel()
+
+	root := newScopedQueryRoot(t)
+	scopes := []finalizedReplayScope{
+		newFinalizedReplayScope(t, root, "concurrent-replay-a"),
+		newFinalizedReplayScope(t, root, "concurrent-replay-b"),
+	}
+
+	var wait sync.WaitGroup
+	errs := make(chan error, len(scopes)*8)
+	for _, scope := range scopes {
+		for range 8 {
+			wait.Add(1)
+			go func() {
+				defer wait.Done()
+				replayed, err := replayScopeWorldState(root, scope)
+				if err != nil {
+					errs <- err
+					return
+				}
+				if !reflect.DeepEqual(replayed, scope.retained) {
+					errs <- errors.New("concurrent replay of " + scope.eventScope.FactorySessionID +
+						" diverged from its retained projection")
+				}
+			}()
+		}
+	}
+	wait.Wait()
+	close(errs)
+	for err := range errs {
+		t.Fatal(err)
+	}
+	if reflect.DeepEqual(scopes[0].retained, scopes[1].retained) {
+		t.Fatal("the two recording scopes projected identical world states, so isolation is unobservable")
+	}
+}
+
+type finalizedReplayScope struct {
+	ref        recordings.RecordingScopeRef
+	eventScope recordings.CanonicalEventScope
+	events     []recordings.CanonicalEvent
+	retained   recordings.WorldStateView
+}
+
+// newFinalizedReplayScope records two canonical facts for one Factory Session,
+// finalizes the recording, opens its scope, and captures the retained
+// projection every concurrent replay of that scope must reproduce.
+func newFinalizedReplayScope(t *testing.T, root recordings.Service, sessionID string) finalizedReplayScope {
+	t.Helper()
+	eventScope := recordings.CanonicalEventScope{FactorySessionID: sessionID}
+	bound, err := root.BindRecording(recordings.BindRecordingRequest{
+		RecordingID: recordings.RecordingID("recording-" + sessionID),
+		Artifact:    recordings.RecordingArtifactReference("recording://" + sessionID),
+		Scope:       eventScope,
+	})
+	if err != nil {
+		t.Fatalf("BindRecording(%s): %v", sessionID, err)
+	}
+	events := []recordings.CanonicalEvent{
+		scopedScopeEvent(sessionID+"-event-1", 0, eventScope),
+		scopedScopeEvent(sessionID+"-event-2", 1, eventScope),
+	}
+	for index, event := range events {
+		if _, err := root.RecordRecordingEvent(recordings.RecordRecordingEventRequest{
+			RecordingID: bound.Status.RecordingID, Event: event,
+		}); err != nil {
+			t.Fatalf("RecordRecordingEvent(%s)[%d]: %v", sessionID, index, err)
+		}
+	}
+	if _, err := root.FinishRecording(recordings.FinishRecordingRequest{
+		RecordingID: bound.Status.RecordingID,
+		FinishedAt:  time.Unix(1_700_000_100, 0).UTC(),
+	}); err != nil {
+		t.Fatalf("FinishRecording(%s): %v", sessionID, err)
+	}
+	opened, err := root.OpenRecordingScope(context.Background(), recordings.OpenRecordingScopeRequest{
+		RecordingID: bound.Status.RecordingID, Scope: eventScope,
+	})
+	if err != nil {
+		t.Fatalf("OpenRecordingScope(%s): %v", sessionID, err)
+	}
+	retained, err := root.ReconstructRecordingScope(context.Background(), recordings.ReconstructRecordingScopeRequest{
+		Scope: opened.Scope, SelectedTick: 4,
+	})
+	if err != nil {
+		t.Fatalf("ReconstructRecordingScope(%s): %v", sessionID, err)
+	}
+	if retained.WorldState.Scope != eventScope {
+		t.Fatalf("retained projection scope = %#v, want %#v", retained.WorldState.Scope, eventScope)
+	}
+	return finalizedReplayScope{
+		ref: opened.Scope, eventScope: eventScope, events: events, retained: retained.WorldState,
+	}
+}
+
+// replayScopeWorldState drives one complete canonical replay of a finalized
+// scope and returns the world state its terminal observation reports.
+func replayScopeWorldState(
+	root recordings.Service,
+	scope finalizedReplayScope,
+) (recordings.WorldStateView, error) {
+	planned, err := root.CreateReplayPlanScope(context.Background(), recordings.CreateReplayPlanScopeRequest{
+		Scope:         scope.ref,
+		SchemaVersion: recordings.ReplayPlanSchemaV1,
+		Timing:        recordings.ReplayTimingOrderOnly,
+		SelectedTick:  4,
+	})
+	if err != nil {
+		return recordings.WorldStateView{}, err
+	}
+	var observed recordings.ObserveReplayScopeResult
+	for range scope.events {
+		observed, err = root.ObserveReplayScope(context.Background(), recordings.ObserveReplayScopeRequest{
+			Scope: scope.ref, Plan: planned.Plan.Handle,
+		})
+		if err != nil {
+			return recordings.WorldStateView{}, err
+		}
+	}
+	if observed.Observation.Kind != recordings.ReplayCompleted {
+		return recordings.WorldStateView{}, errors.New("replay of " + scope.eventScope.FactorySessionID +
+			" did not complete: " + string(observed.Observation.Kind))
+	}
+	return observed.Observation.WorldState, nil
+}

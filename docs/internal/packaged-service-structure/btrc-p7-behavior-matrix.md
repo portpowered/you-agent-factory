@@ -37,7 +37,9 @@ test that runs a real operation.
 | --- | --- |
 | **Guarded** | A direct guard exists in the tree and runs a real operation. |
 | **Closed by P7-A** | The cell had no direct guard at the named boundary; this slice added one. |
-| **P7-B / P7-C / P7-D** | The cell is deliberately deferred to a later, authored P7 slice. |
+| **Closed by P7-B** | Same, closed by the P7-B slice. |
+| **Closed by P7-C** | Same, closed by the P7-C slice. |
+| **P7-D** | The cell is deliberately deferred to the final authored P7 slice. |
 
 ## 1. `cmd/factory/main.go:runProcess` and `root.BuildProcess`
 
@@ -53,8 +55,10 @@ Canonical path: `Process.Execute` plus the Initializer lifecycle.
 | Cancellation | A declared cancel exit code is selected per command path; an ordinary failure wins over a canceled process context | `cmd/factory/main_test.go:TestProcessExitCodePreservesDeclaredLifecycleContract` | `cmd/factory` | Guarded |
 | Cleanup | `Close` is deterministic and idempotent on a built process | `pkg/root/events_lifecycle_composition_test.go:TestBuildProcessClosesDeterministicallyAndIdempotently` | `pkg/root`, `pkg/wire` | Guarded |
 | Cleanup / close-error joining | After a **failed command**, `Close` still succeeds, so `errors.Join` carries exactly the command failure and never a cancellation classification | `tests/functional/sessions/root_composition/process_lifecycle_close_test.go:TestRootProcessCloseAfterFailedCommandPreservesTheCommandFailure`, `...:TestRootProcessCloseAfterSuccessfulCommandReportsNoFailure` | `pkg/root`, `pkg/initializer/lifecycle` | **Closed by P7-A** |
-| Cleanup unwind | Start failure unwinds acquired roles once, joins cleanup errors, and close continues through every owner | `pkg/initializer/lifecycle/manager_test.go:TestManagerUnwindsStartFailureAndJoinsCleanupErrors`, `pkg/wire/session_runtime_providers_test.go:TestProcessCloseContinuesThroughEveryLifecycleOwnerAfterFailure` | `pkg/initializer/lifecycle`, `pkg/wire` | Guarded |
-| Activation failure | An already-opened Runtime is closed when the Visualization sink cannot be resolved | `tests/functional/sessions/root_composition/application_opening_failure_test.go:TestApplicationOpeningClosesRuntimeWhenVisualizationSinkIsUnavailable` | `pkg/services/factory_sessions` | Guarded |
+| Cleanup unwind (exactly once) | Start failure stops only the components that actually started, in reverse order, exactly once each; the component whose Start failed is never stopped; no later component starts; the primary never runs; every acquired resource closes exactly once in reverse order; the primary start failure is retained beside each cleanup failure | `pkg/initializer/lifecycle/manager_test.go:TestManagerUnwindsStartFailureAndJoinsCleanupErrors` | `pkg/initializer/lifecycle` | **Closed by P7-C** |
+| Cleanup continuation (composed lifecycle) | The lifecycle Wire actually composes reaches Providers then Events exactly once per `Close`, and an earlier owner's teardown failure neither skips nor masks the later one | `pkg/wire/session_runtime_providers_test.go:TestProvideApplicationProcessLifecycle_ClosesProvidersAndEventsExactlyOnceAfterAFailure`, `...:TestProcessCloseContinuesThroughEveryLifecycleOwnerAfterFailure` | `pkg/wire` | **Closed by P7-C** |
+| Activation failure | An already-opened Runtime is closed exactly once when the Visualization sink cannot be resolved, and the runtime adapter is never reached | `tests/functional/sessions/root_composition/application_opening_failure_test.go:TestApplicationOpeningClosesRuntimeWhenVisualizationSinkIsUnavailable` | `pkg/services/factory_sessions` | Guarded |
+| Activation failure (owner tier) | Every other opening-failure branch -- adapter failure and lifecycle-planning failure -- also closes the opened runtime exactly once and preserves the primary error | `pkg/services/factory_sessions/internal/applicationopening/service_test.go:TestOpenApplicationClosesOpenedResourcesOnBindingFailure`, `...:TestOpenApplicationClosesOpenedResourcesWhenLifecyclePlanningFails` | `pkg/services/factory_sessions` | Guarded |
 
 ## 2. HTTP generated server and SSE response-event routes
 
@@ -124,9 +128,10 @@ Worker Sessions identity.
 
 | Operation | Observable outcome | Existing assertion | Owning package | Status |
 | --- | --- | --- | --- | --- |
-| Direct dispatch | Concurrent accept of a dispatch result resolves exactly once | `pkg/services/factory_runtime/internal/services/orchestration/runtime/dispatch_worker_sessions_idempotency_test.go:TestFactoryImpl_ConcurrentAcceptDispatchResultResolvesExactlyOnce` | `pkg/services/factory_runtime` | Guarded |
+| Child dispatch | Concurrent accept of a scheduler-originated dispatch result resolves exactly once | `pkg/services/factory_runtime/internal/services/orchestration/runtime/dispatch_worker_sessions_idempotency_test.go:TestFactoryImpl_ConcurrentAcceptDispatchResultResolvesExactlyOnce` | `pkg/services/factory_runtime` | Guarded |
 | Direct vs child dispatch | Both preserve an identical terminal-outcome mapping | `pkg/services/factory_runtime/internal/services/orchestration/runtime/dispatch_worker_sessions_terminal_semantics_test.go:TestFactoryImpl_DirectAndChildDispatchPreserveIdenticalTerminalOutcomeMapping` | `pkg/services/factory_runtime` | Guarded |
-| Completion vs acceptance race | Worker-session completion racing explicit acceptance and canonical replay resolves once | *(plan-named guard absent from the tree)* | `pkg/services/factory_runtime` | **P7-C** |
+| Direct vs child dispatch, duplicate completion | Duplicate terminal delivery for one in-flight dispatch resolves to exactly one RETIRED acceptance with every other concurrent caller DUPLICATE_IDEMPOTENT, records one Worker Session association and no duplicate canonical response, leaves nothing in flight, and maps to the identical terminal outcome from **both** origins | `pkg/services/factory_runtime/internal/services/orchestration/runtime/dispatch_workers_root_boundary_test.go:TestFactoryImpl_ConcurrentDuplicateCompletionResolvesExactlyOnceForDirectAndChildDispatch` | `pkg/services/factory_runtime` | **Closed by P7-C** |
+| Completion vs acceptance race | A Worker Session terminal callback racing an explicit Runtime-root acceptance retires exactly once, with the loser DUPLICATE_IDEMPOTENT and one recorded association and response | `pkg/services/factory_runtime/internal/services/orchestration/runtime/dispatch_worker_sessions_idempotency_test.go:TestFactoryImpl_WorkerSessionCompletionRacesExplicitAcceptanceAndCanonicalIdempotency` | `pkg/services/factory_runtime` | Guarded |
 | Response observation | An observed in-flight response is excluded from the in-flight projection and does not terminate early | `pkg/services/factory_runtime/internal/rootobservation/project_test.go:TestProject_ExcludesObservedDispatchResponseFromInFlightProjection`, `.../terminationtests/termination_test.go:TestTerminationCheck_DoesNotTerminateWhileObservedResponseAwaitsRetirement` | `pkg/services/factory_runtime` | Guarded |
 | Worker Sessions identity | A dispatch is control-addressable before start and records its association before Workers handoff | `pkg/services/factory_runtime/internal/services/orchestration/runtime/dispatch_worker_sessions_cutover_test.go:TestStartThroughWorkerSessions_AssociationIsControlAddressableBeforeStart`, `...:TestFactoryImpl_PlanDispatchRecordsWorkerSessionAssociationBeforeWorkersHandoff` | `pkg/services/factory_runtime`, `pkg/services/worker_sessions` | Guarded |
 | Replay | Historical attempts list chronologically and the terminal stream replays from an atomic snapshot | `pkg/services/factory_runtime/internal/services/orchestration/runtime/dispatch_worker_sessions_cutover_test.go:TestRecordedWorkerSessionObservation_ListsHistoricalAttemptsInChronologicalOrder`, `...:TestRecordedWorkerSessionObservationStreamUsesAtomicSnapshotAndPreservesHistory` | `pkg/services/factory_runtime` | Guarded |
@@ -140,6 +145,7 @@ history/projection/replay.
 | --- | --- | --- | --- | --- |
 | Replay equivalence | Projection queries are equivalent for retained and replayed canonical facts | `pkg/services/recordings/internal/projection_query_contract_test.go:TestProjectionQueries_AreEquivalentForRetainedAndReplayedCanonicalFacts` | `pkg/services/recordings` | Guarded |
 | Scope isolation | Recording-scope queries stay isolated across concurrent scopes and concurrent sessions | `pkg/services/recordings/internal/projection_query_contract_test.go:TestRecordingScopeQueriesRemainIsolatedAcrossConcurrentScopes`, `pkg/services/recordings/internal/canonical_recording_lifecycle_test.go:TestRecordingScopesKeepConcurrentSessionsIsolated` | `pkg/services/recordings` | Guarded |
+| Replay equivalence under concurrent access | Several concurrent canonical replays of two distinct finalized scopes each complete with exactly their own scope's retained world state, never another scope's | `pkg/services/recordings/internal/canonical_recording_lifecycle_test.go:TestRecordingScopeReplayIsEquivalentAndIsolatedUnderConcurrentAccess` | `pkg/services/recordings` | **Closed by P7-C** |
 | Multi-part Work content | A terminal result with two differently typed ordered parts (text then JSON) keeps both discriminated types and their order through the public boundary, and a failure terminal outcome is never reported as success | `tests/functional/transport/http/server/work_terminal_response_test.go:TestWorkTerminalResponsePreservesOrderedTypedContentThroughPublicBoundary` | `pkg/services/work` | **Closed by P7-B** |
 
 ## 8. CLI and API invocation parity
@@ -164,7 +170,7 @@ silently re-pointed at a lookalike.
 | --- | --- | --- |
 | `tests/functional/workers/agent/stateless_root_test.go:TestBuildStatelessWorkersExecutesDetachedAttemptThroughRoot` | The name existed only as an in-package test at `pkg/root/root_submit_family_compatibility_test.go:410`. No test outside `pkg/root` drove `root.BuildStatelessWorkers` as a customer would, so the "detached execution stays outside Runtime/Session opening" promise had no public guard. | **Closed by P7-A** at the named path. The `pkg/root` owner-tier test is retained; the two assert different boundaries and neither replaces the other. |
 | `pkg/services/workers/internal/services/workstations/executor/agentrun/executor_test.go:TestAgentRunExecutor_TimeoutSurfacesAgentRunTimeoutClass` | Neither the file nor the test exists. The nearest coverage, `agentrun/failure_test.go:TestFailureClassForError_RawDeadlineRemainsAgentRunTimeout`, tests the class mapping as a pure function and never runs a detached agent loop. | **Closed by P7-A** as `agentrun/detached_test.go:TestExecuteDetachedTimeoutSurfacesAgentRunTimeoutClass`, which drives `ExecuteDetached` and then asserts the class, metadata, and diagnostics of the error it actually returns. No new file was added to `agentrun` (the package is at 14 Go files against a limit of 15). |
-| `.../runtime/dispatch_worker_sessions_idempotency_test.go:TestFactoryImpl_WorkerSessionCompletionRacesExplicitAcceptanceAndCanonicalReplay` | Absent. The sibling `TestFactoryImpl_ConcurrentAcceptDispatchResultResolvesExactlyOnce` exists in that file and covers concurrent accept, but not completion racing explicit acceptance against canonical replay. | **P7-C** owns this cell; it is the slice authored for dispatch races. |
+| `.../runtime/dispatch_worker_sessions_idempotency_test.go:TestFactoryImpl_WorkerSessionCompletionRacesExplicitAcceptanceAndCanonicalReplay` | Absent **under that exact name**. P7-A recorded the cell as unguarded; **P7-C corrects that**: the same file already carries `TestFactoryImpl_WorkerSessionCompletionRacesExplicitAcceptanceAndCanonicalIdempotency`, which holds a Worker Session terminal callback and an explicit Runtime-root acceptance behind one barrier and asserts exactly one RETIRED, one DUPLICATE_IDEMPOTENT, one recorded association and one recorded response. Its own doc comment defers the *canonical replay* half to the Recordings owner package, and that half had no concurrent-access guard. | **Closed by P7-C** in two halves: the Runtime race is the existing `...AndCanonicalIdempotency` guard, extended by the new direct-vs-child duplicate-completion guard; the canonical replay half is closed at its owner by `pkg/services/recordings/internal/canonical_recording_lifecycle_test.go:TestRecordingScopeReplayIsEquivalentAndIsolatedUnderConcurrentAccess`. No duplicate of the existing Runtime guard was added under the plan's name. |
 | `tests/functional/transport/http/server/work_terminal_response_test.go:TestWorkTerminalResponsePreservesOrderedTypedContentThroughPublicBoundary` | Absent, and the plan already marks it *planned*. | **Closed by P7-B** at the named path. |
 | `tests/functional/sessions/root_composition/p3_p7_behavior_matrix_test.go:TestP3P7CanonicalPathPreservesTerminalCleanupAndReplayIsolation` | Absent, and the plan already marks it *planned*. | **P7-D** owns this cell. |
 
@@ -218,10 +224,41 @@ Two P7-B findings are recorded rather than papered over:
   route is text-only by contract (`work.ResolveAPITextInputContent`), so it
   cannot carry this case. No production compatibility path was added.
 
+## Gap closure delivered by P7-C
+
+| Cell | New or strengthened guard |
+| --- | --- |
+| Activation-failure unwind is exactly once, in reverse order, and never touches a component that did not start | `pkg/initializer/lifecycle/manager_test.go:TestManagerUnwindsStartFailureAndJoinsCleanupErrors` (strengthened) |
+| The lifecycle Wire composes reaches both resource-owning closers exactly once and does not short-circuit on the first failure | `pkg/wire/session_runtime_providers_test.go:TestProvideApplicationProcessLifecycle_ClosesProvidersAndEventsExactlyOnceAfterAFailure` |
+| Concurrent duplicate completion resolves exactly once with identical terminal mapping for **direct** and **child** dispatch | `pkg/services/factory_runtime/internal/services/orchestration/runtime/dispatch_workers_root_boundary_test.go:TestFactoryImpl_ConcurrentDuplicateCompletionResolvesExactlyOnceForDirectAndChildDispatch` |
+| Canonical replay equivalence holds under concurrent cross-scope access | `pkg/services/recordings/internal/canonical_recording_lifecycle_test.go:TestRecordingScopeReplayIsEquivalentAndIsolatedUnderConcurrentAccess` |
+
+Three P7-C findings are recorded rather than papered over:
+
+- **P7-A's "absent" verdict on the completion-race cell was too strong.** The
+  guard exists under the suffix `...AndCanonicalIdempotency`, not
+  `...AndCanonicalReplay`. P7-C corrects the reconciliation row instead of
+  adding a second Runtime test under the plan's name, and closes the *replay*
+  half at its actual owner, Recordings.
+- **The pre-existing concurrent-acceptance guard covers only the child
+  origin.** `TestFactoryImpl_ConcurrentAcceptDispatchResultResolvesExactlyOnce`
+  and `...AndCanonicalIdempotency` both drive `SubmitWorkRequest` + `Run`, which
+  is the scheduler-originated (child) dispatch. The Runtime-root `PlanDispatch`
+  (direct) origin had no duplicate-completion race guard at all. That is the
+  gap the new direct-vs-child guard closes.
+- **The direct origin records no canonical workstation response when an
+  external acceptance wins the race.** Probed, not assumed: the scripted ledger
+  shows `RecordDispatchWorkerSessionAssociation` for both origins but
+  `RecordWorkstationResponse` only for the child origin. The guard therefore
+  asserts one association and *no duplicate* response, rather than asserting a
+  response count that only one origin produces.
+
+Every P7-C guard was falsified once before being trusted: appending a component
+to the started set before `Start` succeeds (double-stop), returning early from
+the composed `Close` on the first failure, classifying duplicate retirement as
+RETIRED, and crossing the two replay scopes each produced the expected failure.
+
 ## Cells deliberately left to later slices
 
-- **P7-C** — activation-failure exactly-once unwind; concurrent/duplicate
-  dispatch completion; canonical replay equivalence under concurrent scope
-  access; the absent worker-session completion race guard above.
 - **P7-D** — the cross-packet corpus test, the full `-race`/`-count>=2` rerun,
   and deletion-register closure.

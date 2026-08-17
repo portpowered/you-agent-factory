@@ -2,12 +2,15 @@ package runtime
 
 import (
 	"context"
+	"sync"
 	"sync/atomic"
 	"testing"
 
+	"github.com/portpowered/infinite-you/internal/testutil/recordingfixtures"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	dispatchplanning "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/dispatch_planning"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
@@ -231,5 +234,195 @@ func TestWorkersServiceExecutesRuntimePlannedRequest(t *testing.T) {
 	lastDispatchID, _ := executor.lastDispatchID.Load().(string)
 	if lastDispatchID != dispatch.DispatchID {
 		t.Fatalf("executed dispatch ID = %q, want %q", lastDispatchID, dispatch.DispatchID)
+	}
+}
+
+// TestFactoryImpl_ConcurrentDuplicateCompletionResolvesExactlyOnceForDirectAndChildDispatch
+// proves duplicate terminal delivery for one in-flight dispatch resolves to
+// exactly one accepted Runtime terminal result for both dispatch origins: a
+// Runtime-root PlanDispatch (direct) and a scheduler-originated Factory
+// dispatch (child). Every losing concurrent caller observes the deterministic
+// DUPLICATE_IDEMPOTENT outcome, the dispatch records one Worker Session
+// association and no duplicate canonical response once the Workers callback
+// that follows is released, nothing is left in flight, and both origins map the
+// delivered result to the identical canonical terminal outcome.
+func TestFactoryImpl_ConcurrentDuplicateCompletionResolvesExactlyOnceForDirectAndChildDispatch(t *testing.T) {
+	tests := []struct {
+		name     string
+		deliver  func(workers.WorkstationDispatchRequest) workers.WorkstationDispatchResult
+		accepted factory.DispatchResultOutcome
+		want     dispatchplanning.TerminalResultOutcome
+	}{
+		{"success", completedWorkersResult, factory.DispatchResultOutcomeSuccess, dispatchplanning.TerminalResultOutcomeSuccess},
+		{"failure", failedWorkersResult, factory.DispatchResultOutcomeFailure, dispatchplanning.TerminalResultOutcomeFailure},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			direct := concurrentDirectDispatchCompletion(t, tc.deliver, tc.accepted)
+			child := concurrentChildDispatchCompletion(t, tc.deliver, tc.accepted)
+			if direct != tc.want || child != tc.want || direct != child {
+				t.Fatalf(
+					"terminal outcomes under duplicate completion = direct:%q child:%q, want both %q",
+					direct, child, tc.want,
+				)
+			}
+		})
+	}
+}
+
+// concurrentDirectDispatchCompletion parks a Runtime-root PlanDispatch inside
+// the Workers boundary, races duplicate terminal acceptance against it, then
+// releases the real Workers callback as a late duplicate.
+func concurrentDirectDispatchCompletion(
+	t *testing.T,
+	deliver func(workers.WorkstationDispatchRequest) workers.WorkstationDispatchResult,
+	accepted factory.DispatchResultOutcome,
+) dispatchplanning.TerminalResultOutcome {
+	t.Helper()
+	boundary := newControlledWorkstationBoundary()
+	ledger := &recordingfixtures.ScriptedRuntimeLedger{GenerationID: "concurrent-direct-completion"}
+	runtime, err := newTestFactory(
+		withNet(buildSimpleNetWithFailureArc()),
+		withInlineDispatch(),
+		withWorkerService(boundary),
+		withFactoryEventHistory(ledger),
+		withLogger(logging.NoopLogger{}),
+	)
+	requireNoRootErr(t, err, "New")
+	impl := runtime.(*factoryImpl)
+	impl.state = interfaces.FactoryStateRunning
+
+	plan := factory.PlanDispatchRequest{
+		DispatchID:      "concurrent-direct-" + t.Name(),
+		CorrelationID:   "concurrent-direct-corr-" + t.Name(),
+		WorkIDs:         []string{"concurrent-direct-work"},
+		WorkstationName: "t-process",
+		WorkerType:      "mock",
+		ReplayKey:       "t-process/concurrent-direct-trace/concurrent-direct-work",
+	}
+	planErrCh := make(chan error, 1)
+	go func() {
+		_, planErr := impl.PlanDispatch(t.Context(), plan)
+		planErrCh <- planErr
+	}()
+
+	request := awaitCanonicalWorkersRequest(t, boundary.requests)
+	raceDuplicateTerminalAcceptance(t, impl, factory.AcceptDispatchResultRequest{
+		DispatchID:    request.Execution.Dispatch.DispatchID,
+		CorrelationID: plan.CorrelationID,
+		WorkID:        plan.WorkIDs[0],
+		ResultOutcome: accepted,
+	})
+	boundary.results <- deliver(request)
+	requireNoRootErr(t, <-planErrCh, "PlanDispatch")
+
+	requireSingleCanonicalDispatchRecord(t, impl, ledger)
+	return recordedTerminalOutcome(t, impl, plan.DispatchID)
+}
+
+// concurrentChildDispatchCompletion runs the same duplicate-completion race
+// against a scheduler-originated Factory child dispatch.
+func concurrentChildDispatchCompletion(
+	t *testing.T,
+	deliver func(workers.WorkstationDispatchRequest) workers.WorkstationDispatchResult,
+	accepted factory.DispatchResultOutcome,
+) dispatchplanning.TerminalResultOutcome {
+	t.Helper()
+	boundary := newControlledWorkstationBoundary()
+	ledger := &recordingfixtures.ScriptedRuntimeLedger{GenerationID: "concurrent-child-completion"}
+	runtime, err := newTestFactory(
+		withNet(buildSimpleNetWithFailureArc()),
+		withWorkerService(boundary),
+		withFactoryEventHistory(ledger),
+		withLogger(logging.NoopLogger{}),
+	)
+	requireNoRootErr(t, err, "New")
+	impl := runtime.(*factoryImpl)
+	workID := "concurrent-child-work-" + t.Name()
+	if _, err := submitWorkRequests(t.Context(), runtime, []work.SubmitRequest{{
+		WorkID: workID, WorkTypeID: "task", TraceID: "concurrent-child-trace-" + t.Name(),
+	}}); err != nil {
+		t.Fatalf("SubmitWorkRequest: %v", err)
+	}
+
+	runDone := make(chan error, 1)
+	go func() { runDone <- runtime.Run(t.Context()) }()
+
+	request := awaitCanonicalWorkersRequest(t, boundary.requests)
+	raceDuplicateTerminalAcceptance(t, impl, factory.AcceptDispatchResultRequest{
+		DispatchID:    request.Execution.Dispatch.DispatchID,
+		CorrelationID: request.Execution.Dispatch.DispatchID,
+		WorkID:        workID,
+		ResultOutcome: accepted,
+	})
+	boundary.results <- deliver(request)
+	if err := <-runDone; err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+
+	requireSingleCanonicalDispatchRecord(t, impl, ledger)
+	return recordedTerminalOutcome(t, impl, request.Execution.Dispatch.DispatchID)
+}
+
+// raceDuplicateTerminalAcceptance releases concurrentTerminalCallers duplicate
+// AcceptDispatchResult callers together and requires exactly one accepted
+// retirement with every other caller deterministically DUPLICATE_IDEMPOTENT.
+func raceDuplicateTerminalAcceptance(t *testing.T, impl *factoryImpl, terminal factory.AcceptDispatchResultRequest) {
+	t.Helper()
+	const concurrentTerminalCallers = 8
+	var retired, duplicate, failed atomic.Int32
+	var start, done sync.WaitGroup
+	start.Add(1)
+	done.Add(concurrentTerminalCallers)
+	for range concurrentTerminalCallers {
+		go func() {
+			defer done.Done()
+			start.Wait()
+			result, err := impl.AcceptDispatchResult(t.Context(), terminal)
+			switch {
+			case err != nil:
+				failed.Add(1)
+			case result.Outcome == factory.DispatchPlanOutcomeRetired:
+				retired.Add(1)
+			case result.Outcome == factory.DispatchPlanOutcomeDuplicateIdempotent:
+				duplicate.Add(1)
+			}
+		}()
+	}
+	start.Done()
+	done.Wait()
+
+	if failed.Load() != 0 || retired.Load() != 1 || duplicate.Load() != concurrentTerminalCallers-1 {
+		t.Fatalf(
+			"duplicate terminal acceptance outcomes = retired:%d duplicate:%d errors:%d, want 1, %d and 0",
+			retired.Load(), duplicate.Load(), failed.Load(), concurrentTerminalCallers-1,
+		)
+	}
+}
+
+// requireSingleCanonicalDispatchRecord requires the raced dispatch to have
+// recorded exactly one Worker Session association and at most one canonical
+// workstation response, and to leave nothing in flight -- so a duplicate
+// acceptance that leaked a second terminal fact or restarted the dispatch would
+// be observable in recorded history rather than only in planner bookkeeping.
+func requireSingleCanonicalDispatchRecord(
+	t *testing.T,
+	impl *factoryImpl,
+	ledger *recordingfixtures.ScriptedRuntimeLedger,
+) {
+	t.Helper()
+	if associations := ledger.CallCount("RecordDispatchWorkerSessionAssociation"); associations != 1 {
+		t.Fatalf("dispatch/Worker Session association count = %d, want exactly 1", associations)
+	}
+	if responses := ledger.CallCount("RecordWorkstationResponse"); responses > 1 {
+		t.Fatalf("canonical workstation response count = %d, want at most 1", responses)
+	}
+	observed, err := impl.Observe(t.Context(), factory.ObserveRequest{Scope: factory.ObservationScopeFull})
+	requireNoRootErr(t, err, "Observe")
+	if observed.Observation.Progress.InFlightDispatchCount != 0 {
+		t.Fatalf(
+			"in-flight dispatch count after terminal acceptance = %d, want 0",
+			observed.Observation.Progress.InFlightDispatchCount,
+		)
 	}
 }

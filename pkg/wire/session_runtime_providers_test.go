@@ -19,6 +19,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	events "github.com/portpowered/infinite-you/pkg/services/events"
 	eventswire "github.com/portpowered/infinite-you/pkg/services/events/wire"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
@@ -334,6 +335,67 @@ func TestProcessCloseContinuesThroughEveryLifecycleOwnerAfterFailure(t *testing.
 		t.Fatalf("Process.Close() closer calls = %v, want every process lifecycle owner in order", closed)
 	}
 }
+
+// TestProvideApplicationProcessLifecycle_ClosesProvidersAndEventsExactlyOnceAfterAFailure
+// proves the failure-continuation contract above holds for the lifecycle Wire
+// actually composes, not only for a hand-assembled composite. The two owners
+// that retain real process resources -- Providers (executable/session
+// teardown) and the singular Events root -- must each be reached exactly once
+// per Close, in composition order, and an earlier owner's teardown failure must
+// neither skip nor mask the later one.
+func TestProvideApplicationProcessLifecycle_ClosesProvidersAndEventsExactlyOnceAfterAFailure(t *testing.T) {
+	t.Parallel()
+
+	providersCloseErr := errors.New("close Providers")
+	eventsCloseErr := errors.New("close Events")
+	var closed []string
+	providersStub := &closingProvidersService{
+		onClose: func() error { closed = append(closed, "providers"); return providersCloseErr },
+	}
+	eventsStub := &closingEventsService{
+		onClose: func() error { closed = append(closed, "events"); return eventsCloseErr },
+	}
+
+	lifecycle, err := provideApplicationProcessLifecycle(providersStub, eventsStub, nil, &localWorkerSessionsBoundary{})
+	if err != nil {
+		t.Fatalf("provideApplicationProcessLifecycle() error = %v", err)
+	}
+
+	closeErr := lifecycle.Close(context.Background())
+	for _, expected := range []error{providersCloseErr, eventsCloseErr} {
+		if !errors.Is(closeErr, expected) {
+			t.Fatalf("composed ProcessLifecycle.Close() error = %v, want it to retain %v", closeErr, expected)
+		}
+	}
+	if !slices.Equal(closed, []string{"providers", "events"}) {
+		t.Fatalf(
+			"composed ProcessLifecycle.Close() closer calls = %v, want Providers then Events exactly once each",
+			closed,
+		)
+	}
+}
+
+// closingProvidersService is a providers.Service stand-in (embedding the
+// interface as a permanently nil value) that implements only the process
+// teardown method provideApplicationProcessLifecycle requires, so its Close is
+// observable in the composed lifecycle.
+type closingProvidersService struct {
+	providers.Service
+
+	onClose func() error
+}
+
+func (service *closingProvidersService) Close(context.Context) error { return service.onClose() }
+
+// closingEventsService is the equivalent events.Service stand-in for the
+// singular Events root's process teardown.
+type closingEventsService struct {
+	events.Service
+
+	onClose func() error
+}
+
+func (service *closingEventsService) Close(context.Context) error { return service.onClose() }
 
 // TestProvideApplicationProcessLifecycle_RequiresProvidersLifecycle proves a
 // providers.Service that does not implement providers.Lifecycle is rejected
