@@ -10,9 +10,10 @@ import (
 )
 
 const (
-	mcpAdapterPackagePath = "pkg/services/factory_runtime/transports/mcp"
-	mcpAdapterImportPath  = "github.com/portpowered/infinite-you/pkg/services/factory_runtime/transports/mcp"
-	factoryRuntimeOwner   = "factory_runtime"
+	mcpAdapterPackagePath           = "pkg/services/factory_runtime/transports/mcp"
+	mcpAdapterImportPath            = "github.com/portpowered/infinite-you/pkg/services/factory_runtime/transports/mcp"
+	mcpAdapterServiceRootImportPath = "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	factoryRuntimeOwner             = "factory_runtime"
 )
 
 type coverageMinimumManifest struct {
@@ -132,13 +133,13 @@ func assertCoverageMinimumRegistration(t *testing.T, lane string, relativePath s
 	}
 
 	for _, entry := range manifest.Packages {
-		if entry.Package != mcpAdapterImportPath {
+		if entry.Package != mcpAdapterServiceRootImportPath {
 			continue
 		}
 		if entry.Minimum < 0 {
-			t.Fatalf("%s coverage minimum for %q must be non-negative", lane, mcpAdapterImportPath)
+			t.Fatalf("%s coverage minimum for %q must be non-negative", lane, mcpAdapterServiceRootImportPath)
 		}
 		return
 	}
-	t.Fatalf("%s coverage manifest missing %q", lane, mcpAdapterImportPath)
+	t.Fatalf("%s coverage manifest missing service root %q declaring %q", lane, mcpAdapterServiceRootImportPath, mcpAdapterImportPath)
 }

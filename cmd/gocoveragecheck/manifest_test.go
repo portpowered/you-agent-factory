@@ -119,15 +119,15 @@ func TestNewCoverageManifestOmitsUnmeasurablePackagesAndDeclaresServiceRoots(t *
 	if root.Exception != nil {
 		t.Fatalf("service root entry = %+v, want an explicit floor rather than an exception", root)
 	}
-	if got := string(root.Minimum); got != unitLaneDefaultFloorPercent {
-		t.Fatalf("service root minimum = %s, want the unit lane default %s", got, unitLaneDefaultFloorPercent)
+	if got := string(root.Minimum); got != unmeasuredServiceRootFloorPercent {
+		t.Fatalf("service root minimum = %s, want the inert declaration floor %s", got, unmeasuredServiceRootFloorPercent)
 	}
 	if err := validateCoverageManifest(manifest, "unit", measured); err != nil {
 		t.Fatalf("generated manifest does not validate: %v", err)
 	}
 }
 
-func TestNewCoverageManifestRecordsFunctionalServiceRootDefault(t *testing.T) {
+func TestNewCoverageManifestRecordsFunctionalLaneDefaultFloor(t *testing.T) {
 	t.Parallel()
 
 	serviceRoot := modulePath + "/pkg/services/work"
@@ -138,8 +138,8 @@ func TestNewCoverageManifestRecordsFunctionalServiceRootDefault(t *testing.T) {
 	if len(manifest.Packages) != 1 {
 		t.Fatalf("manifest packages = %+v, want exactly the service root", manifest.Packages)
 	}
-	if got := string(manifest.Packages[0].Minimum); got != functionalLaneDefaultFloorPercent {
-		t.Fatalf("service root minimum = %s, want the functional lane default %s", got, functionalLaneDefaultFloorPercent)
+	if got := string(manifest.Packages[0].Minimum); got != unmeasuredServiceRootFloorPercent {
+		t.Fatalf("service root minimum = %s, want the inert declaration floor %s", got, unmeasuredServiceRootFloorPercent)
 	}
 	if got := string(manifest.DefaultFloorPercent); got != functionalLaneDefaultFloorPercent {
 		t.Fatalf("defaultFloorPercent = %s, want %s", got, functionalLaneDefaultFloorPercent)

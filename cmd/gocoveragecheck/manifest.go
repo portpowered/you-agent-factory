@@ -125,7 +125,7 @@ func newCoverageManifestEntry(lane string, importPath string, totals packageCove
 		return coverageManifestEntry{}, false, err
 	}
 	if isCoverageManifestServiceRoot(importPath) {
-		return coverageManifestServiceRootEntry(lane, importPath), true, nil
+		return coverageManifestServiceRootEntry(importPath), true, nil
 	}
 	return coverageManifestEntry{}, false, nil
 }

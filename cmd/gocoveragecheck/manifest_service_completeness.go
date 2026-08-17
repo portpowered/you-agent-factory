@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"maps"
 	"slices"
@@ -94,12 +95,19 @@ func isCoverageManifestServiceRoot(importPath string) bool {
 	return ok && root == importPath
 }
 
-// coverageManifestServiceRootEntry builds the root entry a service declares
-// when its root package carries no measurable statements of its own. The lane
-// default is recorded explicitly so the row states the floor it applies.
-func coverageManifestServiceRootEntry(lane string, importPath string) coverageManifestEntry {
+// unmeasuredServiceRootFloorPercent is the floor recorded for a service root
+// whose own package carries no measurable statements. The row exists to declare
+// the service for per-service completeness; its floor is inert, because a
+// package with no measurable statements passes vacuously. Recording anything
+// higher would fabricate a floor for a package the profile never measured.
+// `-update-manifest` raises the row from samples once the root is measured.
+const unmeasuredServiceRootFloorPercent = "0.00"
+
+// coverageManifestServiceRootEntry builds the declaration row for a service
+// root whose package carries no measurable statements of its own.
+func coverageManifestServiceRootEntry(importPath string) coverageManifestEntry {
 	return coverageManifestEntry{
 		Package: importPath,
-		Minimum: laneDefaultCoverageFloorRaw(lane),
+		Minimum: json.RawMessage(unmeasuredServiceRootFloorPercent),
 	}
 }

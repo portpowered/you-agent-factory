@@ -10,9 +10,10 @@ import (
 )
 
 const (
-	httpAdapterPackagePath = "pkg/services/factory_sessions/transports/http"
-	httpAdapterImportPath  = "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/http"
-	factorySessionsOwner   = "factory_sessions"
+	httpAdapterPackagePath           = "pkg/services/factory_sessions/transports/http"
+	httpAdapterImportPath            = "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/http"
+	httpAdapterServiceRootImportPath = "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	factorySessionsOwner             = "factory_sessions"
 )
 
 type coverageMinimumManifest struct {
@@ -132,13 +133,13 @@ func assertCoverageMinimumRegistration(t *testing.T, lane string, relativePath s
 	}
 
 	for _, entry := range manifest.Packages {
-		if entry.Package != httpAdapterImportPath {
+		if entry.Package != httpAdapterServiceRootImportPath {
 			continue
 		}
 		if entry.Minimum < 0 {
-			t.Fatalf("%s coverage minimum for %q must be non-negative", lane, httpAdapterImportPath)
+			t.Fatalf("%s coverage minimum for %q must be non-negative", lane, httpAdapterServiceRootImportPath)
 		}
 		return
 	}
-	t.Fatalf("%s coverage manifest missing %q", lane, httpAdapterImportPath)
+	t.Fatalf("%s coverage manifest missing service root %q declaring %q", lane, httpAdapterServiceRootImportPath, httpAdapterImportPath)
 }
