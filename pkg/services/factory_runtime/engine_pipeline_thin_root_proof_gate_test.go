@@ -244,14 +244,6 @@ func runPackageTargetManifestProof(t *testing.T, root string) {
 		t.Parallel()
 
 		manifest := loadPackageTargetManifestBaseline(t, root)
-		for _, packagePath := range manifest.Inventory {
-			for _, deleted := range foldedEnginePipelineTopLevelChildren() {
-				deletedPath := "pkg/services/factory_runtime/" + deleted
-				if packagePath == deletedPath || strings.HasPrefix(packagePath, deletedPath+"/") {
-					t.Fatalf("package-target manifest inventory still lists deleted pipeline package %q", packagePath)
-				}
-			}
-		}
 		for _, row := range manifest.Packages {
 			for _, deleted := range foldedEnginePipelineTopLevelChildren() {
 				deletedPath := "pkg/services/factory_runtime/" + deleted
@@ -293,8 +285,7 @@ func runInternalServicesLayoutProof(t *testing.T, serviceRoot string) {
 }
 
 type packageTargetManifestBaseline struct {
-	Inventory []string `json:"inventory"`
-	Packages  []struct {
+	Packages []struct {
 		PackagePath string `json:"packagePath"`
 	} `json:"packages"`
 }

@@ -212,7 +212,11 @@ The package layout is guarded mechanically:
 - `make pkg-boundary` checks dependency and ownership boundaries.
 - `make pkg-structure` checks repository-specific package and functional-test
   shape.
-- `make package-target-manifest-check` validates package target inventory.
+- `make package-target-manifest-check` validates the remaining package migration
+  rows. The manifest records only packages with unfinished migration intent; a
+  package that stays where it already lives derives its destination from its own
+  path and carries no row, so package churn inside a service needs no manifest
+  edit. A row naming a package that no longer exists fails the check.
 - `make lint` runs these checks with the rest of the lint suite.
 
 Mechanical baselines may record temporary, deletion-only debt. Those baselines
