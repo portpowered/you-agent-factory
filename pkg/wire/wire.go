@@ -432,6 +432,7 @@ var BundleSet = wire.NewSet(
 	initializerapplication.NewOpenedStdioRunnerBuilder,
 	provideFixtureStdioApplicationBuilder,
 	provideRuntimeStdioApplicationBuilder,
+	provideMCPServerBuilder,
 	provideSessionExecutionOpeningFactory,
 	wire.Bind(new(factorysessionwire.StdioExecutionOpening), new(*factorysessionwire.ExecutionOpeningFactory)),
 	factorysessionwire.NewStdioOpeningService,

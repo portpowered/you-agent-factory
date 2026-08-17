@@ -34,6 +34,7 @@ import (
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	sessionexecutioncli "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/cli/sessionexecution"
 	factorysessionshttp "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/http"
+	factorysessionmcp "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/mcp"
 	factorysessionwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire"
 	factoryvisualization "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
 	factoryvisualizationwire "github.com/portpowered/infinite-you/pkg/services/factory_visualization/wire"
@@ -47,6 +48,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	recordingscli "github.com/portpowered/infinite-you/pkg/services/recordings/transports/cli"
 	recordingshttp "github.com/portpowered/infinite-you/pkg/services/recordings/transports/http"
+	recordingmcp "github.com/portpowered/infinite-you/pkg/services/recordings/transports/mcp"
 	recordingswire "github.com/portpowered/infinite-you/pkg/services/recordings/wire"
 	systeminitialization "github.com/portpowered/infinite-you/pkg/services/system_initialization"
 	systeminitializationwire "github.com/portpowered/infinite-you/pkg/services/system_initialization/wire"
@@ -61,6 +63,7 @@ import (
 	httpapplication "github.com/portpowered/infinite-you/pkg/transports/http/application"
 	mappingcomposition "github.com/portpowered/infinite-you/pkg/transports/mapping/composition"
 	factorysessionmapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factorysession"
+	mcpserver "github.com/portpowered/infinite-you/pkg/transports/mcp/server"
 	mcpstdio "github.com/portpowered/infinite-you/pkg/transports/mcp/stdio"
 	"go.uber.org/zap"
 )
@@ -654,10 +657,41 @@ func provideManagedRunnerFactory() runtimeapplication.ManagedRunnerFactory {
 	return runtimeapplication.NewManagedRunner
 }
 
+type mcpServerBuilder func(
+	factorysessionwire.DurableExecutionService,
+	recordings.Service,
+	factorysessionwire.RequestPreparation,
+	factoryruntime.WorkflowPreviewOperation,
+) (*mcpserver.Server, error)
+
+// provideMCPServerBuilder composes owner adapters at the Wire boundary. The
+// protocol stdio package receives only the resulting inert server and caller
+// streams; it does not construct Factory Sessions, Recordings, or workflow
+// services while an opening is being selected.
+func provideMCPServerBuilder() mcpServerBuilder {
+	return func(
+		execution factorysessionwire.DurableExecutionService,
+		recordingsService recordings.Service,
+		prepare factorysessionwire.RequestPreparation,
+		workflowPreview factoryruntime.WorkflowPreviewOperation,
+	) (*mcpserver.Server, error) {
+		inspection := recordings.FactorySessionInspectionService(recordingsService)
+		if inspection == nil {
+			inspection = recordingmcp.NewLegacyFactorySessionInspection(execution)
+		}
+		return mcpserver.New(mcpserver.Options{
+			ToolOperation: mcpserver.ToolOperation(factorysessionmcp.BindToolOperation(
+				execution, inspection, prepare, workflowPreview,
+			)),
+		})
+	}
+}
+
 func provideFixtureStdioApplicationBuilder(
 	build initializerapplication.StdioRunnerBuilder,
 	newRunner lifecycle.RunnerFactory,
 	open mcpstdio.Opener,
+	buildServer mcpServerBuilder,
 	prepare factorysessionwire.RequestPreparation,
 	workflowPreview factoryruntime.WorkflowPreviewOperation,
 ) factorysessionwire.FixtureStdioApplicationBuilder {
@@ -678,7 +712,11 @@ func provideFixtureStdioApplicationBuilder(
 			if err := sessionCtx.Err(); err != nil {
 				return initializer.OpenedApplication{}, err
 			}
-			session, err := open(execution, nil, prepare, workflowPreview, sessionInput, sessionOutput)
+			server, err := buildServer(execution, nil, prepare, workflowPreview)
+			if err != nil {
+				return initializer.OpenedApplication{}, err
+			}
+			session, err := open(server, sessionInput, sessionOutput)
 			if err != nil {
 				return initializer.OpenedApplication{}, err
 			}
@@ -692,6 +730,7 @@ func provideRuntimeStdioApplicationBuilder(
 	build initializerapplication.OpenedStdioRunnerBuilder,
 	newRunner lifecycle.RunnerFactory,
 	open mcpstdio.Opener,
+	buildServer mcpServerBuilder,
 	prepare factorysessionwire.RequestPreparation,
 ) factorysessionwire.RuntimeStdioApplicationBuilder {
 	return func(
@@ -712,7 +751,11 @@ func provideRuntimeStdioApplicationBuilder(
 				if err := sessionCtx.Err(); err != nil {
 					return initializer.OpenedApplication{}, err
 				}
-				session, err := open(opened.Execution, opened.Recordings, prepare, opened.WorkflowPreview, sessionInput, sessionOutput)
+				server, err := buildServer(opened.Execution, opened.Recordings, prepare, opened.WorkflowPreview)
+				if err != nil {
+					return initializer.OpenedApplication{}, err
+				}
+				session, err := open(server, sessionInput, sessionOutput)
 				if err != nil {
 					return initializer.OpenedApplication{}, err
 				}

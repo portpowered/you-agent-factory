@@ -93,17 +93,10 @@ func historicalQueryErrorEnvelope(recordingID string, err error) ToolErrorEnvelo
 	return executionErrorEnvelope(recordingID, err)
 }
 
-// FactorySessionInspectionService is the narrow Recordings-owned operation
-// set consumed by Factory Session inspection tools. The concrete Recordings
-// Service satisfies it in production; the legacy bridge below exists only for
-// standalone fixture sessions that have no process Recordings ledger.
-type FactorySessionInspectionService interface {
-	QueryRecordingStatus(recordings.RecordingStatusRequest) (recordings.RecordingStatusResult, error)
-	QueryHistoricalRecording(recordings.HistoricalRecordingQueryRequest) (recordings.HistoricalRecordingQueryResult, error)
-	BuildPortableArtifact(recordings.BuildPortableArtifactRequest) (recordings.BuildPortableArtifactResult, error)
-	ReconstructWorldState(recordings.ReconstructWorldStateRequest) (recordings.ReconstructWorldStateResult, error)
-	SubscribeFrom(context.Context, recordings.SubscribeRequest) (recordings.SubscribeResult, error)
-}
+// FactorySessionInspectionService keeps the compatibility name available to
+// existing Recordings transport callers while the actual capability is now
+// published by the Recordings root.
+type FactorySessionInspectionService = recordings.FactorySessionInspectionService
 
 // LegacyFactorySessionInspection is the compatibility input used only by the
 // standalone fixture opener. It is deliberately kept beside the Recordings
@@ -319,7 +312,7 @@ func (legacyFactorySessionInspection) canonicalEventsFromResult(
 
 // ErrServiceUnavailable keeps the compatibility envelope stable when the
 // Recordings owner has not been bound into a Factory Sessions transport.
-var ErrServiceUnavailable = errors.New("recordings service is required")
+var ErrServiceUnavailable = recordings.ErrServiceUnavailable
 
 // FactorySessionListDispatchesInput preserves the established MCP request
 // shape while routing the read through Recordings.

@@ -5,20 +5,24 @@ import (
 	"errors"
 
 	factorysessionexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
-	recordingmcp "github.com/portpowered/infinite-you/pkg/services/recordings/transports/mcp"
+	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	apifactorysession "github.com/portpowered/infinite-you/pkg/transports/mapping/factorysession"
 )
 
 // ListDispatchesInput is the MCP request shape for you.factory_session.list_dispatches.
-type ListDispatchesInput = recordingmcp.FactorySessionListDispatchesInput
+type ListDispatchesInput struct {
+	SessionID string `json:"sessionId"`
+	Phase     string `json:"phase,omitempty"`
+	Status    string `json:"status,omitempty"`
+}
 
 // ListDispatches returns deterministic dispatch summaries for one Factory Session
 // through the you.factory_session.list_dispatches MCP tool. The canonical read
 // is owned by Recordings; the durable execution role is intentionally absent.
 func ListDispatches(
 	ctx context.Context,
-	service recordingmcp.FactorySessionInspectionService,
+	service recordings.FactorySessionInspectionService,
 	input ListDispatchesInput,
 ) ToolResponse[factoryapi.ListFactorySessionDispatchesResponse] {
 	if ctx == nil {
@@ -28,7 +32,7 @@ func ListDispatches(
 	if response, done := requestContextErrorResponse[factoryapi.ListFactorySessionDispatchesResponse](ctx); done {
 		return response
 	}
-	result, err := recordingmcp.ListFactorySessionDispatches(ctx, service, input)
+	result, err := listFactorySessionDispatches(ctx, service, input)
 	if err != nil {
 		envelope := readErrorEnvelope(input.SessionID, err)
 		return ToolResponse[factoryapi.ListFactorySessionDispatchesResponse]{Error: &envelope}
@@ -37,14 +41,16 @@ func ListDispatches(
 }
 
 // ListArtifactsInput is the MCP request shape for you.factory_session.list_artifacts.
-type ListArtifactsInput = recordingmcp.FactorySessionListArtifactsInput
+type ListArtifactsInput struct {
+	SessionID string `json:"sessionId"`
+}
 
 // ListArtifacts returns deterministic FactoryArtifact summaries for one Factory
 // Session through the you.factory_session.list_artifacts MCP tool. Recordings
 // owns the artifact and reconstructed-world-state reads.
 func ListArtifacts(
 	ctx context.Context,
-	service recordingmcp.FactorySessionInspectionService,
+	service recordings.FactorySessionInspectionService,
 	input ListArtifactsInput,
 ) ToolResponse[factoryapi.ListFactorySessionArtifactsResponse] {
 	if ctx == nil {
@@ -54,7 +60,7 @@ func ListArtifacts(
 	if response, done := requestContextErrorResponse[factoryapi.ListFactorySessionArtifactsResponse](ctx); done {
 		return response
 	}
-	result, err := recordingmcp.ListFactorySessionArtifacts(ctx, service, input)
+	result, err := listFactorySessionArtifacts(ctx, service, input)
 	if err != nil {
 		envelope := readErrorEnvelope(input.SessionID, err)
 		return ToolResponse[factoryapi.ListFactorySessionArtifactsResponse]{Error: &envelope}
@@ -63,15 +69,22 @@ func ListArtifacts(
 }
 
 // ReadEventsInput is the MCP request shape for you.factory_session.read_events.
-type ReadEventsInput = recordingmcp.FactorySessionReadEventsInput
+type ReadEventsInput struct {
+	SessionID     string `json:"sessionId"`
+	AfterEventID  string `json:"afterEventId,omitempty"`
+	AfterSequence *int   `json:"afterSequence,omitempty"`
+}
 
 // ReadEventsResult is the MCP response shape for you.factory_session.read_events.
-type ReadEventsResult = recordingmcp.FactorySessionReadEventsResult
+type ReadEventsResult struct {
+	SessionID string                    `json:"sessionId"`
+	Events    []factoryapi.FactoryEvent `json:"events,omitempty"`
+}
 
 // ReadEvents returns ordered Factory Session event facts for reconnect and
 // inspection through the you.factory_session.read_events MCP tool. Recordings
 // owns the canonical event subscription and reconnect cursor semantics.
-func ReadEvents(ctx context.Context, service recordingmcp.FactorySessionInspectionService, input ReadEventsInput) ToolResponse[ReadEventsResult] {
+func ReadEvents(ctx context.Context, service recordings.FactorySessionInspectionService, input ReadEventsInput) ToolResponse[ReadEventsResult] {
 	if ctx == nil {
 		envelope := executionErrorEnvelope(errMissingRequestContext)
 		return ToolResponse[ReadEventsResult]{Error: &envelope}
@@ -79,7 +92,7 @@ func ReadEvents(ctx context.Context, service recordingmcp.FactorySessionInspecti
 	if response, done := requestContextErrorResponse[ReadEventsResult](ctx); done {
 		return response
 	}
-	result, err := recordingmcp.ReadFactorySessionEvents(ctx, service, input)
+	result, err := readFactorySessionEvents(ctx, service, input)
 	if err != nil {
 		envelope := eventReadErrorEnvelope(input.SessionID, err)
 		return ToolResponse[ReadEventsResult]{Error: &envelope}

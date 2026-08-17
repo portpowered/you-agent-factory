@@ -7,7 +7,6 @@ import (
 
 	factorysessionexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
-	recordingmcp "github.com/portpowered/infinite-you/pkg/services/recordings/transports/mcp"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 )
@@ -147,7 +146,7 @@ func unavailableServiceErrorEnvelope() ToolErrorEnvelope {
 }
 
 func readErrorEnvelope(sessionID string, err error) ToolErrorEnvelope {
-	if errors.Is(err, recordingmcp.ErrServiceUnavailable) {
+	if errors.Is(err, recordings.ErrServiceUnavailable) {
 		return unavailableServiceErrorEnvelope()
 	}
 	if errors.Is(err, factorysessionexecution.ErrDurableSessionNotFound) ||
@@ -196,7 +195,7 @@ func resultNotReadyErrorEnvelope(sessionID string, availability *factorysessione
 }
 
 func eventReadErrorEnvelope(sessionID string, err error) ToolErrorEnvelope {
-	if errors.Is(err, recordingmcp.ErrServiceUnavailable) {
+	if errors.Is(err, recordings.ErrServiceUnavailable) {
 		return unavailableServiceErrorEnvelope()
 	}
 	if errors.Is(err, factorysessionexecution.ErrDurableSessionNotFound) ||

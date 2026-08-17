@@ -6,10 +6,6 @@ import (
 	"fmt"
 	"io"
 
-	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
-	mcpfactorysession "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/mcp"
-	"github.com/portpowered/infinite-you/pkg/services/recordings"
-	recordingmcp "github.com/portpowered/infinite-you/pkg/services/recordings/transports/mcp"
 	mcpserver "github.com/portpowered/infinite-you/pkg/transports/mcp/server"
 )
 
@@ -32,38 +28,26 @@ func (s *session) Run(ctx context.Context) error {
 }
 
 type Opener func(
-	mcpfactorysession.DurableExecution,
-	recordings.Service,
-	mcpfactorysession.RequestPreparation,
-	factoryruntime.WorkflowPreviewOperation,
+	*mcpserver.Server,
 	io.Reader,
 	io.Writer,
 ) (Session, error)
 
 func NewOpener() Opener { return Open }
 
-// Open binds invocation-local streams and an opened Factory Session execution
-// role to an inert MCP protocol server.
+// Open binds invocation-local streams to an already-composed MCP protocol
+// server. Service adapters and execution roles are composed by Wire before
+// this transport receives the server.
 func Open(
-	execution mcpfactorysession.DurableExecution,
-	recordingsService recordings.Service,
-	prepare mcpfactorysession.RequestPreparation,
-	workflows factoryruntime.WorkflowPreviewOperation,
+	server *mcpserver.Server,
 	input io.Reader,
 	output io.Writer,
 ) (Session, error) {
 	if input == nil || output == nil {
 		return nil, fmt.Errorf("MCP stdio streams are required")
 	}
-	inspection := recordingmcp.FactorySessionInspectionService(recordingsService)
-	if inspection == nil {
-		inspection = recordingmcp.NewLegacyFactorySessionInspection(execution)
-	}
-	server, err := mcpserver.New(mcpserver.Options{
-		ToolOperation: mcpfactorysession.BindToolOperation(execution, inspection, prepare, workflows),
-	})
-	if err != nil {
-		return nil, err
+	if server == nil {
+		return nil, fmt.Errorf("MCP stdio server is required")
 	}
 	return &session{server: server, input: input, output: output}, nil
 }
