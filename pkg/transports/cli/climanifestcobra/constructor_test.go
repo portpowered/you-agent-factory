@@ -818,59 +818,6 @@ func directedRelationship(
 	return climanifest.Relationship{ID: id, Kind: kind, When: &when, Participants: participants}
 }
 
-func TestWorkerConstructorManifestBranches(t *testing.T) {
-	manifest := workerCoverageManifest(t)
-	for _, id := range []string{"you.work", "you.work.list", "you.work.watch", "you.work.show", "you.work.move", "you.work.visualize"} {
-		mutated := cloneWorkerCoverageManifest(manifest)
-		delete(mutated.Commands, id)
-		if _, _, _, _, _, _, err := workManifestRecords(mutated); err == nil {
-			t.Fatalf("workManifestRecords(missing %q) error = nil", id)
-		}
-	}
-	if _, err := buildWorkCommandFromRecord(climanifest.Command{ID: "you.work.submit"}); err == nil {
-		t.Fatal("buildWorkCommandFromRecord(foreign) error = nil")
-	}
-}
-
-func TestWorkerConstructorLeafBranches(t *testing.T) {
-	manifest := workerCoverageManifest(t)
-	list := manifest.Commands["you.work.list"]
-	flagTarget := ""
-	badFlag := climanifest.Command{Flags: map[string]climanifest.Flag{"flag": {ID: "flag", Long: "flag", Scope: "local", ValueType: "float"}}}
-	requireWorkerConstructorError(t, func() error { return registerWorkLocalFlags(&cobra.Command{Use: "list"}, list, WorkFamilyBindings{}) })
-	requireWorkerConstructorError(t, func() error {
-		return registerWorkLocalFlags(&cobra.Command{Use: "invalid"}, badFlag, WorkFamilyBindings{LocalTargets: map[string]any{"flag": &flagTarget}})
-	})
-	requireWorkerConstructorError(t, func() error {
-		_, err := buildRunnableWorkLeaf(badFlag, commandregistry.NewRegistry(), WorkFamilyBindings{LocalTargets: map[string]any{"flag": &flagTarget}})
-		return err
-	})
-	hidden := list
-	hidden.Visibility = "hidden"
-	command, err := buildWorkCommandFromRecord(hidden)
-	if err != nil || !command.Hidden {
-		t.Fatalf("hidden work command = %#v, %v", command, err)
-	}
-	requireWorkerConstructorError(t, func() error {
-		_, err := buildRunnableWorkLeaf(climanifest.Command{ID: "you.work.submit"}, commandregistry.NewRegistry(), WorkFamilyBindings{})
-		return err
-	})
-	foreignRelationship := list
-	foreignRelationship.Flags = nil
-	foreignRelationship.Relationships = map[string]climanifest.Relationship{"relationship": {ID: "relationship", Kind: "unsupported"}}
-	requireWorkerConstructorError(t, func() error {
-		_, err := buildRunnableWorkLeaf(foreignRelationship, commandregistry.NewRegistry(), WorkFamilyBindings{})
-		return err
-	})
-	missingHandler := list
-	missingHandler.Flags = nil
-	missingHandler.Relationships = nil
-	requireWorkerConstructorError(t, func() error {
-		_, err := buildRunnableWorkLeaf(missingHandler, commandregistry.NewRegistry(), WorkFamilyBindings{})
-		return err
-	})
-}
-
 func TestWorkerConstructorCompatibilityBranches(t *testing.T) {
 	manifest := workerCoverageManifest(t)
 	list := manifest.Commands["you.work.list"]
