@@ -19,7 +19,6 @@ import (
 	modelshttp "github.com/portpowered/infinite-you/pkg/services/models/transports/http"
 	factoryevents "github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
-	"github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 	"go.uber.org/zap"
@@ -619,8 +618,8 @@ func testInvokeModelRuntimeErrors(t *testing.T) {
 		{
 			name: "provider_execution_timeout",
 			body: validBody,
-			invokeErr: &workers.InferenceFailure{
-				Class:   workers.InferenceFailureClassTimeout,
+			invokeErr: &modelinference.InferenceFailure{
+				Class:   modelinference.InferenceFailureClassTimeout,
 				Message: "inference timed out for model \"OMNIVOICE_Q4_K_M\" operation \"TTS\": wait and retry the request",
 			},
 			wantStatus: http.StatusGatewayTimeout,

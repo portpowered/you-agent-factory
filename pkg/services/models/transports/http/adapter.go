@@ -6,7 +6,6 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/services/models"
 	"github.com/portpowered/infinite-you/pkg/services/work"
-	"github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
@@ -19,14 +18,14 @@ var (
 type Adapter struct {
 	models  models.Service
 	scope   models.RuntimeScopeRef
-	invoker workers.ModelInvoker
+	invoker ModelInvoker
 	content work.ContentPreparation
 }
 
 // NewAdapter constructs the Models HTTP representation adapter.
 func NewAdapter(
 	service models.Service,
-	invoker workers.ModelInvoker,
+	invoker ModelInvoker,
 	content work.ContentPreparation,
 	scopes ...models.RuntimeScopeRef,
 ) *Adapter {

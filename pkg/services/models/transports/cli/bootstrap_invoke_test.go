@@ -11,11 +11,9 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	"github.com/portpowered/infinite-you/pkg/platform/metrics"
-	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	modelinference "github.com/portpowered/infinite-you/pkg/services/models"
 	operatorconfig "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
-	"github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 	"go.uber.org/zap"
@@ -194,7 +192,7 @@ func (c *capturingModelInvocationOperation) ExportModelInvocationArtifact(string
 
 func (c *capturingModelInvocationOperation) InvokeModel(
 	_ context.Context,
-	target factorysessions.InvocationTarget,
+	target InvocationTarget,
 	modelName string,
 	request modelinference.Request,
 ) (modelinference.Result, error) {
@@ -290,8 +288,8 @@ func TestMapBootstrapModelInvokeError_PreservesInferenceFailureCauseChain(t *tes
 		ReadinessState: modelinference.ReadinessStateLoading,
 		LifecycleState: modelinference.LifecycleStateLoading,
 	}).InvocationError()
-	failure := &workers.InferenceFailure{
-		Class: workers.InferenceFailureClassLoadingModel, Message: "managed runtime is loading",
+	failure := &modelinference.InferenceFailure{
+		Class: modelinference.InferenceFailureClassLoadingModel, Message: "managed runtime is loading",
 		ModelName: "OMNIVOICE_Q4_K_M", Operation: "TTS", Cause: readinessErr,
 	}
 
@@ -299,7 +297,8 @@ func TestMapBootstrapModelInvokeError_PreservesInferenceFailureCauseChain(t *tes
 	if !errors.Is(mapped, modelinference.ErrLoading) {
 		t.Fatalf("mapped error = %v, want ErrManagedRuntimeLoading in chain", mapped)
 	}
-	if failure, ok := workers.AsInferenceFailure(mapped); !ok || failure.Class != workers.InferenceFailureClassLoadingModel {
+	var classified *modelinference.InferenceFailure
+	if !errors.As(mapped, &classified) || classified.Class != modelinference.InferenceFailureClassLoadingModel {
 		t.Fatalf("mapped error = %T, want loading_model InferenceFailure", mapped)
 	}
 }

@@ -10,7 +10,6 @@ import (
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/services/models"
-	"github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"go.uber.org/zap"
 )
@@ -106,8 +105,8 @@ func assertRootErrorMapping(t *testing.T, tt rootErrorMappingCase) {
 func TestRootErrorResponse_MapsInferenceFailureForInvoke(t *testing.T) {
 	t.Parallel()
 
-	failure := &workers.InferenceFailure{
-		Class:   workers.InferenceFailureClassTimeout,
+	failure := &models.InferenceFailure{
+		Class:   models.InferenceFailureClassTimeout,
 		Message: "model inference timed out",
 	}
 	status, response, ok := RootErrorResponse(failure, modelsHTTPOperationInvoke)
@@ -132,38 +131,38 @@ func TestRootErrorResponse_MapsEveryInferenceFailureClassForInvoke(t *testing.T)
 
 	for _, tt := range []struct {
 		name       string
-		class      workers.InferenceFailureClass
+		class      models.InferenceFailureClass
 		wantStatus int
 		wantCode   string
 		wantFamily factoryapi.ErrorFamily
 	}{
 		{
-			name: "missing model", class: workers.InferenceFailureClassMissingModel,
+			name: "missing model", class: models.InferenceFailureClassMissingModel,
 			wantStatus: http.StatusNotFound, wantCode: "MODEL_NOT_AVAILABLE",
 			wantFamily: factoryapi.ErrorFamilyNotFound,
 		},
 		{
-			name: "loading model", class: workers.InferenceFailureClassLoadingModel,
+			name: "loading model", class: models.InferenceFailureClassLoadingModel,
 			wantStatus: http.StatusConflict, wantCode: "MODEL_RUNTIME_LOADING",
 			wantFamily: factoryapi.ErrorFamilyConflict,
 		},
 		{
-			name: "unsupported operation", class: workers.InferenceFailureClassUnsupportedOperation,
+			name: "unsupported operation", class: models.InferenceFailureClassUnsupportedOperation,
 			wantStatus: http.StatusBadRequest, wantCode: "BAD_REQUEST",
 			wantFamily: factoryapi.ErrorFamilyBadRequest,
 		},
 		{
-			name: "timeout", class: workers.InferenceFailureClassTimeout,
+			name: "timeout", class: models.InferenceFailureClassTimeout,
 			wantStatus: http.StatusGatewayTimeout, wantCode: "MODEL_INFERENCE_TIMEOUT",
 			wantFamily: factoryapi.ErrorFamilyInternalServerError,
 		},
 		{
-			name: "runtime failure", class: workers.InferenceFailureClassRuntimeFailure,
+			name: "runtime failure", class: models.InferenceFailureClassRuntimeFailure,
 			wantStatus: http.StatusInternalServerError, wantCode: "MODEL_INFERENCE_RUNTIME_FAILURE",
 			wantFamily: factoryapi.ErrorFamilyInternalServerError,
 		},
 		{
-			name: "unrecognized class falls back to runtime failure", class: workers.InferenceFailureClass("not_a_known_class"),
+			name: "unrecognized class falls back to runtime failure", class: models.InferenceFailureClass("not_a_known_class"),
 			wantStatus: http.StatusInternalServerError, wantCode: "MODEL_INFERENCE_RUNTIME_FAILURE",
 			wantFamily: factoryapi.ErrorFamilyInternalServerError,
 		},
@@ -171,7 +170,7 @@ func TestRootErrorResponse_MapsEveryInferenceFailureClassForInvoke(t *testing.T)
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			failure := &workers.InferenceFailure{
+			failure := &models.InferenceFailure{
 				Class:      tt.class,
 				Message:    "inference failed for " + string(tt.class),
 				ModelName:  "voice",
@@ -199,8 +198,8 @@ func TestRootErrorResponse_MapsEveryInferenceFailureClassForInvoke(t *testing.T)
 func TestRootErrorResponse_WrappedInferenceFailureStaysClassified(t *testing.T) {
 	t.Parallel()
 
-	failure := &workers.InferenceFailure{
-		Class:   workers.InferenceFailureClassMissingModel,
+	failure := &models.InferenceFailure{
+		Class:   models.InferenceFailureClassMissingModel,
 		Message: "model voice is not installed",
 	}
 	wrapped := fmt.Errorf("invoke model: %w", failure)
@@ -222,8 +221,8 @@ func TestRootErrorResponse_WrappedInferenceFailureStaysClassified(t *testing.T) 
 func TestRootErrorResponse_IgnoresInferenceFailureOutsideInvoke(t *testing.T) {
 	t.Parallel()
 
-	failure := &workers.InferenceFailure{
-		Class:   workers.InferenceFailureClassTimeout,
+	failure := &models.InferenceFailure{
+		Class:   models.InferenceFailureClassTimeout,
 		Message: "model inference timed out",
 	}
 	for _, operation := range []modelsHTTPOperation{modelsHTTPOperationCatalog, modelsHTTPOperationPull} {

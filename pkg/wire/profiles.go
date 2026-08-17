@@ -38,6 +38,7 @@ import (
 	factorysessionwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire"
 	factoryvisualization "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
 	factoryvisualizationwire "github.com/portpowered/infinite-you/pkg/services/factory_visualization/wire"
+	"github.com/portpowered/infinite-you/pkg/services/models"
 	modelscli "github.com/portpowered/infinite-you/pkg/services/models/transports/cli"
 	modelshttp "github.com/portpowered/infinite-you/pkg/services/models/transports/http"
 	modelswire "github.com/portpowered/infinite-you/pkg/services/models/wire"
@@ -809,7 +810,45 @@ func provideRunInvocationOperation(
 func provideModelsCLIInvocationOperation(
 	invocation factorysessionwire.InvocationOperation,
 ) modelscli.InvocationOperation {
-	return invocation
+	if invocation == nil {
+		return nil
+	}
+	return modelsCLIInvocationOperation{invocation: invocation}
+}
+
+// modelsCLIInvocationOperation maps the four invocation inputs the Models CLI
+// resolves onto the fuller Factory Sessions invocation target. Owning the
+// mapping here keeps the Models CLI transport free of a Factory Sessions
+// import while preserving the exact values the command sent before.
+type modelsCLIInvocationOperation struct {
+	invocation factorysessionwire.InvocationOperation
+}
+
+func (o modelsCLIInvocationOperation) InvokeModel(
+	ctx context.Context,
+	target modelscli.InvocationTarget,
+	modelName string,
+	request models.Request,
+) (models.Result, error) {
+	return o.invocation.InvokeModel(ctx, factorysessions.InvocationTarget{
+		FactoryDir:       target.FactoryDir,
+		HomeDir:          target.HomeDir,
+		OperatorDefaults: target.OperatorDefaults,
+		Verbose:          target.Verbose,
+	}, modelName, request)
+}
+
+func (o modelsCLIInvocationOperation) ResolveModelInvocationFactoryDir(
+	factoryDir string,
+) (string, error) {
+	return o.invocation.ResolveModelInvocationFactoryDir(factoryDir)
+}
+
+func (o modelsCLIInvocationOperation) ExportModelInvocationArtifact(
+	source string,
+	destination string,
+) error {
+	return o.invocation.ExportModelInvocationArtifact(source, destination)
 }
 
 func provideRunSelectionFactory(

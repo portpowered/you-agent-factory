@@ -165,8 +165,9 @@ func TestRunnerNormalizesUnavailableModelReadinessFailure(t *testing.T) {
 	inferenceRunner := newTestRunner(t, modelsEdge)
 
 	_, err := inferenceRunner.Execute(t.Context(), validRequest())
-	failure, ok := workers.AsInferenceFailure(err)
-	if !ok || failure.Class != workers.InferenceFailureClassMissingModel {
+	var failure *models.InferenceFailure
+	ok := errors.As(err, &failure)
+	if !ok || failure.Class != models.InferenceFailureClassMissingModel {
 		t.Fatalf("Execute() error = %#v, want missing-model InferenceFailure", err)
 	}
 	if !errors.Is(err, models.ErrMissing) {
@@ -587,8 +588,9 @@ func runInterruptedInferenceCase(t *testing.T, deadline bool) {
 	wantCause := context.Canceled
 	if deadline {
 		wantCause = context.DeadlineExceeded
-		failure, ok := workers.AsInferenceFailure(outcome.err)
-		if !ok || failure.Class != workers.InferenceFailureClassTimeout {
+		var failure *models.InferenceFailure
+		ok := errors.As(outcome.err, &failure)
+		if !ok || failure.Class != models.InferenceFailureClassTimeout {
 			t.Fatalf("Execute() error = %#v, want timeout InferenceFailure", outcome.err)
 		}
 	}
@@ -631,8 +633,9 @@ func TestRunnerNormalizesLeaseCapacityFailure(t *testing.T) {
 			inferenceRunner := newTestRunner(t, modelsEdge)
 
 			_, err := inferenceRunner.Execute(t.Context(), validRequest())
-			failure, ok := workers.AsInferenceFailure(err)
-			if !ok || failure.Class != workers.InferenceFailureClassRuntimeFailure {
+			var failure *models.InferenceFailure
+			ok := errors.As(err, &failure)
+			if !ok || failure.Class != models.InferenceFailureClassRuntimeFailure {
 				t.Fatalf("Execute() error = %#v, want runtime InferenceFailure", err)
 			}
 			if !errors.Is(err, models.ErrHostCapacityExhausted) {
