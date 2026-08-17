@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"os/exec"
+	"strings"
 	"sync"
 	"time"
 
@@ -94,6 +95,86 @@ type CommandResult struct {
 	ExitCode int
 }
 
+// WindowsCommandLineLimit is the maximum number of UTF-16 code units, including
+// the terminating null, that the Windows process loader accepts for one
+// composed command line. os/exec joins the command name, every argument, and
+// its quoting into that single string, so an argument large enough to cross
+// this bound is rejected before any child process exists.
+const WindowsCommandLineLimit = 32767
+
+// ComposedCommandLineLength reports the length, in UTF-16 code units, of the
+// command line the Windows process loader receives for one command and its
+// arguments. The quoting mirrors os/exec, and the command name is measured as
+// written because os/exec composes the command line from the requested argv
+// rather than the resolved executable path. The measurement is computed the
+// same way on every platform so command-line growth stays observable from any
+// host, while the injected ExecCommandRunner.CommandLineLimit decides whether
+// that growth is fatal.
+func ComposedCommandLineLength(command string, args []string) int {
+	var line strings.Builder
+	appendEscapedCommandLineArgument(&line, command)
+	for _, arg := range args {
+		line.WriteByte(' ')
+		appendEscapedCommandLineArgument(&line, arg)
+	}
+	return utf16CodeUnitLength(line.String())
+}
+
+// appendEscapedCommandLineArgument mirrors the quoting os/exec applies when it
+// composes a Windows command line. Reproducing the exact escaping keeps a
+// measured length equal to the string the process loader receives instead of an
+// approximation that could sit on the wrong side of the limit.
+func appendEscapedCommandLineArgument(line *strings.Builder, arg string) {
+	if arg == "" {
+		line.WriteString(`""`)
+		return
+	}
+	if !strings.ContainsAny(arg, " \t\"\\") {
+		line.WriteString(arg)
+		return
+	}
+	quoted := strings.ContainsAny(arg, " \t")
+	if quoted {
+		line.WriteByte('"')
+	}
+	backslashes := 0
+	for index := 0; index < len(arg); index++ {
+		char := arg[index]
+		switch char {
+		case '\\':
+			backslashes++
+		case '"':
+			for ; backslashes > 0; backslashes-- {
+				line.WriteByte('\\')
+			}
+			line.WriteByte('\\')
+		default:
+			backslashes = 0
+		}
+		line.WriteByte(char)
+	}
+	if quoted {
+		for ; backslashes > 0; backslashes-- {
+			line.WriteByte('\\')
+		}
+		line.WriteByte('"')
+	}
+}
+
+// utf16CodeUnitLength counts the UTF-16 code units Windows stores for one
+// command line. Characters outside the basic multilingual plane occupy two
+// units, so a byte or rune count would misreport the measured limit.
+func utf16CodeUnitLength(value string) int {
+	units := 0
+	for _, char := range value {
+		units++
+		if char > 0xFFFF {
+			units++
+		}
+	}
+	return units
+}
+
 // ExecCommandRunner implements CommandRunner by delegating to os/exec.
 type ExecCommandRunner struct {
 	// Logger emits structured process-group cleanup diagnostics. Nil disables cleanup logging.
@@ -101,6 +182,14 @@ type ExecCommandRunner struct {
 	Clock              Clock
 	NewCommand         CommandFactory
 	ProcessStateReader ProcessStateReader
+	// CommandLineLimit is the composed command-line bound the host process
+	// loader enforces for a single spawn, injected by the application injector
+	// because the running operating system is a policy this package must not
+	// select for itself. Zero means the host states no single composed-line cap,
+	// which is how Unix hosts report: they bound the total argument block and
+	// each individual argument rather than the composed line, so their spawn
+	// failures are named from the operating system error alone.
+	CommandLineLimit int
 }
 
 // NewExecCommandRunner constructs a host command runner from exact external
@@ -141,12 +230,12 @@ func (r ExecCommandRunner) run(
 		return CommandResult{}, err
 	}
 
+	cleanupLogger := logging.EnsureLogger(r.Logger)
 	configureCommandProcessTree(cmd)
 	if err := cmd.Start(); err != nil {
-		return CommandResult{}, err
+		return CommandResult{}, r.reportCommandStartFailure(cleanupLogger, req, err)
 	}
 
-	cleanupLogger := logging.EnsureLogger(r.Logger)
 	tree, attachErr := attachCommandProcessTree(cmd)
 	if attachErr != nil {
 		cleanupLogger.Warn(
@@ -206,6 +295,89 @@ func (r ExecCommandRunner) run(
 	}
 	return result, nil
 }
+
+// CommandStartError names a subprocess that never started. The measured
+// command line travels with the error because a command line the process loader
+// rejects produces no child, no exit status, and no output, which otherwise
+// leaves the caller with a bare operating-system error and no way to tell an
+// oversized command line apart from a missing executable.
+type CommandStartError struct {
+	Command           string
+	ArgsCount         int
+	CommandLineLength int
+	CommandLineLimit  int
+	StdinBytes        int
+	Cause             error
+}
+
+// OverCommandLineLimit reports whether the composed command line reached the
+// bound the host enforces. That is the one spawn failure a caller can repair by
+// moving argument content to stdin or a file, so it is named separately from
+// every other start failure.
+func (e *CommandStartError) OverCommandLineLimit() bool {
+	if e == nil || e.CommandLineLimit <= 0 {
+		return false
+	}
+	return e.CommandLineLength >= e.CommandLineLimit
+}
+
+func (e *CommandStartError) Error() string {
+	if e == nil {
+		return ""
+	}
+	if e.OverCommandLineLimit() {
+		return fmt.Sprintf(
+			"start %q: composed command line is %d characters across %d arguments, "+
+				"at or above the %d-character host command-line limit: %v",
+			e.Command, e.CommandLineLength, e.ArgsCount, e.CommandLineLimit, e.Cause,
+		)
+	}
+	return fmt.Sprintf(
+		"start %q: process start failed with a %d-character command line across %d arguments: %v",
+		e.Command, e.CommandLineLength, e.ArgsCount, e.Cause,
+	)
+}
+
+func (e *CommandStartError) Unwrap() error {
+	if e == nil {
+		return nil
+	}
+	return e.Cause
+}
+
+// reportCommandStartFailure names and records a spawn that produced no child
+// process. Returning the operating-system error bare left an oversized command
+// line indistinguishable from any other execution failure and wrote nothing to
+// the log, so the only remaining evidence was how quickly the attempt died. The
+// bound the failure is judged against is the runner's injected limit, so this
+// package never has to ask which operating system it is running on.
+func (r ExecCommandRunner) reportCommandStartFailure(logger logging.Logger, req CommandRequest, cause error) error {
+	startErr := &CommandStartError{
+		Command:           req.Command,
+		ArgsCount:         len(req.Args),
+		CommandLineLength: ComposedCommandLineLength(req.Command, req.Args),
+		CommandLineLimit:  r.CommandLineLimit,
+		StdinBytes:        len(req.Stdin),
+		Cause:             cause,
+	}
+	logger.Error(
+		"command runner: process start failed",
+		"event_name", commandRunnerStartFailedEvent,
+		"command", req.Command,
+		"args_count", startErr.ArgsCount,
+		"command_line_chars", startErr.CommandLineLength,
+		"command_line_limit", startErr.CommandLineLimit,
+		"over_command_line_limit", startErr.OverCommandLineLimit(),
+		"stdin_bytes", startErr.StdinBytes,
+		"working_dir", req.WorkDir,
+		"error", cause.Error(),
+	)
+	return startErr
+}
+
+// commandRunnerStartFailedEvent is the greppable event name an operator uses to
+// find a spawn that died before the child process existed.
+const commandRunnerStartFailedEvent = "command_runner.start_failed"
 
 func (r ExecCommandRunner) prepareCommand(
 	req CommandRequest,

@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -174,5 +175,36 @@ func assertDiagnosticFailure(t *testing.T, result workers.RunnerExecutionResult,
 	if result.Diagnostics == nil || result.Diagnostics.Provider == nil ||
 		result.Diagnostics.Provider.ResponseMetadata[workers.ProviderResponseMetadataDurationMS] != "42" {
 		t.Fatalf("failure diagnostics = %#v, want preserved provider duration", result.Diagnostics)
+	}
+}
+
+func TestExecuteFailureClassifiesAnOversizedCommandLineFromProviderDiagnostics(t *testing.T) {
+	t.Parallel()
+
+	fake := &failingProvidersFake{failure: providers.ExecuteFailure{
+		Kind:    providers.ExecuteFailureKindMisconfigured,
+		Message: `start "claude": composed command line is 32932 characters across 9 arguments, at or above the 32767-character host command-line limit`,
+		Diagnostics: &providers.ExecuteDiagnostics{
+			Metadata: map[string]string{"work-failure-type": string(workers.WorkFailureTypeCommandLineTooLong)},
+		},
+	}}
+	runner, err := New(fake, func(workers.ProgressFragment) {})
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+
+	_, err = runner.Execute(t.Context(), baseAgentRequest())
+
+	var providerErr *workers.ProviderError
+	if !errors.As(err, &providerErr) {
+		t.Fatalf("Execute() error = %v, want *workers.ProviderError", err)
+	}
+	if providerErr.Type != workers.WorkFailureTypeCommandLineTooLong {
+		t.Fatalf("ProviderError.Type = %q, want %q", providerErr.Type, workers.WorkFailureTypeCommandLineTooLong)
+	}
+	for _, want := range []string{"32932", "32767"} {
+		if !strings.Contains(providerErr.Message, want) {
+			t.Fatalf("ProviderError.Message = %q, want it to report the measured size %q", providerErr.Message, want)
+		}
 	}
 }

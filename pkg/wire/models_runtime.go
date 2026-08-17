@@ -172,7 +172,22 @@ func providePlatformProcessCommandRunner(edges serviceedges.Edges) (platformproc
 	if err != nil {
 		return nil, err
 	}
+	runner.CommandLineLimit = hostCommandLineLimit()
 	return runner, nil
+}
+
+// hostCommandLineLimit selects the composed command-line bound the running
+// host's process loader enforces for one spawn. The operating system is read
+// here, at the canonical injection boundary, so pkg/platform/process can name
+// an oversized-command-line spawn failure without selecting a host policy of
+// its own. Hosts other than Windows report 0 because they bound the total
+// argument block and each individual argument rather than the composed line,
+// so their spawn failures are named from the operating system error alone.
+func hostCommandLineLimit() int {
+	if runtime.GOOS == "windows" {
+		return platformprocess.WindowsCommandLineLimit
+	}
+	return 0
 }
 
 func provideModelAssetHostPlatform(edges serviceedges.Edges) models.AssetHostPlatform {

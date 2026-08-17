@@ -870,6 +870,8 @@ func normalizeProviderFailure(
 			failureType = workers.WorkFailureTypeMissingExecutable
 		case string(workers.WorkFailureTypeMisconfigured):
 			failureType = workers.WorkFailureTypeMisconfigured
+		case string(workers.WorkFailureTypeCommandLineTooLong):
+			failureType = workers.WorkFailureTypeCommandLineTooLong
 		}
 	}
 	if errors.Is(interruption, context.DeadlineExceeded) {
