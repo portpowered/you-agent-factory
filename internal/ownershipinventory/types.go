@@ -62,7 +62,7 @@ type Inventory struct {
 	Version                 int                      `json:"version"`
 	Stage                   string                   `json:"stage"`
 	SortKey                 string                   `json:"sortKey"`
-	Destinations            DestinationVocabulary    `json:"destinations"`
+	Destinations            DestinationVocabulary    `json:"-"`
 	ProcessEdgesException   ProcessEdgesException    `json:"processEdgesException"`
 	SeedServices            []SeedService            `json:"seedServices"`
 	AdditionalCurrentRoots  []string                 `json:"additionalCurrentRoots"`
@@ -121,7 +121,12 @@ type CrossServiceEdge struct {
 	Evidence              string `json:"evidence"`
 }
 
-// DestinationVocabulary is the closed destination set for inventory rows.
+// DestinationVocabulary is the destination set inventory rows may claim.
+//
+// It is derived from the repository tree by DiscoverDestinationVocabulary and is
+// never persisted: the owners half is the live pkg/services listing, so writing
+// it into the artifact would only reintroduce a hand-maintained mirror that has
+// to be regenerated every time a service is added.
 type DestinationVocabulary struct {
 	Owners    []string `json:"owners"`
 	Families  []string `json:"families"`

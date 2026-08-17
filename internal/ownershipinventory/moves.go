@@ -97,11 +97,14 @@ func DestinationOwnerOf(destination string) string {
 }
 
 // ValidateUnfinishedMoves checks the consolidated ledger's own schema: required
-// fields, a closed destination owner, a successor under that owner, no
-// duplicate package paths, and a stable sort. It deliberately does not check
-// the live tree; ValidateInventory owns proving each row still names a package
-// that exists.
-func ValidateUnfinishedMoves(moves UnfinishedMoves) []string {
+// fields, a destination naming an owner in the derived vocabulary, a successor
+// under that owner, no duplicate package paths, and a stable sort. It
+// deliberately does not check the live tree; ValidateInventory owns proving each
+// row still names a package that exists.
+//
+// vocabulary is derived from pkg/services, so a row may target any service that
+// exists and no row may target a service that does not.
+func ValidateUnfinishedMoves(moves UnfinishedMoves, vocabulary DestinationVocabulary) []string {
 	var problems []string
 	if len(moves.Moves) == 0 {
 		return nil
@@ -119,11 +122,10 @@ func ValidateUnfinishedMoves(moves UnfinishedMoves) []string {
 		problems = append(problems, "unfinished package moves endState must state that the ledger shrinks to zero and is then deleted")
 	}
 
-	closed := closedDestinationSet()
 	seen := map[string]int{}
 	for _, move := range moves.Moves {
 		seen[move.PackagePath]++
-		problems = append(problems, validateUnfinishedMoveRow(move, closed)...)
+		problems = append(problems, validateUnfinishedMoveRow(move, vocabulary)...)
 	}
 	for packagePath, count := range seen {
 		if count > 1 {
@@ -139,7 +141,7 @@ func ValidateUnfinishedMoves(moves UnfinishedMoves) []string {
 	return problems
 }
 
-func validateUnfinishedMoveRow(move UnfinishedMoveRow, closed map[string]string) []string {
+func validateUnfinishedMoveRow(move UnfinishedMoveRow, vocabulary DestinationVocabulary) []string {
 	packagePath := strings.TrimSpace(move.PackagePath)
 	if packagePath == "" {
 		return []string{"unfinished move row missing packagePath"}
@@ -153,8 +155,8 @@ func validateUnfinishedMoveRow(move UnfinishedMoveRow, closed map[string]string)
 		problems = append(problems, fmt.Sprintf("%s: missing destination", packagePath))
 		return problems
 	}
-	if closed[owner] != DestinationKindOwner {
-		problems = append(problems, fmt.Sprintf("%s: destination %q is outside the closed owner vocabulary", packagePath, move.Destination))
+	if !vocabulary.IsOwner(owner) {
+		problems = append(problems, fmt.Sprintf("%s: destination %q is outside the derived owner vocabulary", packagePath, move.Destination))
 	}
 	successor := strings.TrimSpace(move.Successor)
 	if successor == "" {

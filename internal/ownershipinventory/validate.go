@@ -37,12 +37,12 @@ func ValidateInventory(inventory Inventory, packages []string) Report {
 		report.UnstableSort = true
 	}
 
-	report.InvalidMappings = append(report.InvalidMappings, ValidateUnfinishedMoves(inventory.UnfinishedMoves)...)
+	report.InvalidMappings = append(report.InvalidMappings, ValidateUnfinishedMoves(inventory.UnfinishedMoves, inventory.Destinations)...)
 
 	seen := map[string]int{}
 	for _, row := range inventory.Packages {
 		seen[row.PackagePath]++
-		if msg := validateRow(row); msg != "" {
+		if msg := validateRow(row, inventory.Destinations); msg != "" {
 			report.InvalidMappings = append(report.InvalidMappings, msg)
 		}
 	}
@@ -75,7 +75,7 @@ func ValidateInventory(inventory Inventory, packages []string) Report {
 	seedNames := map[string]struct{}{}
 	for _, seed := range inventory.SeedServices {
 		seedNames[seed.Name] = struct{}{}
-		if !isKnownDestination(seed.Destination) || seed.Destination == DestinationDeletionQueue {
+		if !inventory.Destinations.IsKnownDestination(seed.Destination) || seed.Destination == DestinationDeletionQueue {
 			report.InvalidMappings = append(report.InvalidMappings, fmt.Sprintf("seed service %q has invalid destination %q", seed.Name, seed.Destination))
 		}
 	}
@@ -116,7 +116,7 @@ func validateMisplacedGuards(inventory Inventory, report *Report) {
 	}
 	for _, entry := range inventory.MisplacedGuards {
 		byID[entry.ID] = entry
-		if msg := validateMisplacedGuardEntry(entry); msg != "" {
+		if msg := validateMisplacedGuardEntry(entry, inventory.Destinations); msg != "" {
 			report.InvalidMisplacedGuards = append(report.InvalidMisplacedGuards, msg)
 		}
 		if _, expected := required[entry.ID]; !expected {
@@ -133,7 +133,7 @@ func validateMisplacedGuards(inventory Inventory, report *Report) {
 	report.InvalidMisplacedGuards = slices.Compact(report.InvalidMisplacedGuards)
 }
 
-func validateMisplacedGuardEntry(entry MisplacedGuardEntry) string {
+func validateMisplacedGuardEntry(entry MisplacedGuardEntry, vocabulary DestinationVocabulary) string {
 	if strings.TrimSpace(entry.ID) == "" {
 		return "misplaced guard missing id"
 	}
@@ -164,7 +164,7 @@ func validateMisplacedGuardEntry(entry MisplacedGuardEntry) string {
 	if strings.TrimSpace(entry.ReplacementOwner) == "" {
 		return entry.ID + ": missing replacementOwner"
 	}
-	if !isKnownDestination(entry.ReplacementOwner) || entry.ReplacementOwner == DestinationDeletionQueue {
+	if !vocabulary.IsKnownDestination(entry.ReplacementOwner) || entry.ReplacementOwner == DestinationDeletionQueue {
 		return entry.ID + ": replacementOwner outside product owner vocabulary"
 	}
 	if strings.TrimSpace(entry.Note) == "" {
@@ -181,7 +181,7 @@ func validateNamedOwners(inventory Inventory, report *Report) {
 	byOwner := map[string]NamedOwnerConfirmation{}
 	for _, confirmation := range inventory.NamedOwnerConfirmations {
 		byOwner[confirmation.Owner] = confirmation
-		if msg := validateNamedOwnerConfirmation(confirmation, inventory.Packages); msg != "" {
+		if msg := validateNamedOwnerConfirmation(confirmation, inventory.Packages, inventory.Destinations); msg != "" {
 			report.InvalidNamedOwnerMaps = append(report.InvalidNamedOwnerMaps, msg)
 		}
 		if confirmation.Status != NamedOwnerStatusConfirmed ||
@@ -189,7 +189,7 @@ func validateNamedOwners(inventory Inventory, report *Report) {
 			strings.Contains(strings.ToLower(confirmation.Status), "decomposition") {
 			report.UnconfirmedNamedOwners = append(report.UnconfirmedNamedOwners, confirmation.Owner)
 		}
-		if !slices.Contains(ProductOwners, confirmation.Owner) {
+		if !inventory.Destinations.IsOwner(confirmation.Owner) {
 			report.InvalidNamedOwnerMaps = append(
 				report.InvalidNamedOwnerMaps,
 				confirmation.Owner+": introduces alternate top-level owner outside the committed product-owner tree",
@@ -221,7 +221,7 @@ func validateNamedOwners(inventory Inventory, report *Report) {
 	report.InvalidNamedOwnerMaps = slices.Compact(report.InvalidNamedOwnerMaps)
 }
 
-func validateNamedOwnerConfirmation(confirmation NamedOwnerConfirmation, packages []PackageRow) string {
+func validateNamedOwnerConfirmation(confirmation NamedOwnerConfirmation, packages []PackageRow, vocabulary DestinationVocabulary) string {
 	if strings.TrimSpace(confirmation.Owner) == "" {
 		return "named owner confirmation missing owner"
 	}
@@ -249,21 +249,21 @@ func validateNamedOwnerConfirmation(confirmation NamedOwnerConfirmation, package
 		return confirmation.Owner + ": missing note"
 	}
 	for _, rule := range confirmation.ResidualPackageRules {
-		if msg := validateResidualPackageRule(confirmation.Owner, rule, packages); msg != "" {
+		if msg := validateResidualPackageRule(confirmation.Owner, rule, packages, vocabulary); msg != "" {
 			return msg
 		}
 	}
 	return ""
 }
 
-func validateResidualPackageRule(owner string, rule ResidualPackageRule, packages []PackageRow) string {
+func validateResidualPackageRule(owner string, rule ResidualPackageRule, packages []PackageRow, vocabulary DestinationVocabulary) string {
 	if strings.TrimSpace(rule.PackagePrefix) == "" {
 		return owner + ": residual rule missing packagePrefix"
 	}
 	if strings.TrimSpace(rule.Destination) == "" {
 		return owner + ": residual rule " + rule.PackagePrefix + " missing destination"
 	}
-	if !isKnownDestination(rule.Destination) {
+	if !vocabulary.IsKnownDestination(rule.Destination) {
 		return owner + ": residual rule " + rule.PackagePrefix + " destination outside closed vocabulary"
 	}
 	if rule.Disposition != DispositionRetain && rule.Disposition != DispositionMove && rule.Disposition != DispositionDelete {
@@ -399,7 +399,7 @@ func packagePaths(rows []PackageRow) []string {
 	return out
 }
 
-func validateRow(row PackageRow) string {
+func validateRow(row PackageRow, vocabulary DestinationVocabulary) string {
 	if row.PackagePath == "" {
 		return "package row missing packagePath"
 	}
@@ -411,7 +411,7 @@ func validateRow(row PackageRow) string {
 	if row.Destination == "" {
 		return fmt.Sprintf("%s: missing destination", row.PackagePath)
 	}
-	kind, ok := closedDestinationSet()[row.Destination]
+	kind, ok := vocabulary.KindOf(row.Destination)
 	if !ok {
 		return fmt.Sprintf("%s: destination %q outside closed vocabulary", row.PackagePath, row.Destination)
 	}

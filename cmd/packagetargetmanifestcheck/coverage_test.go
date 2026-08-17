@@ -57,7 +57,7 @@ func TestValidateMoveLedgerRejectsInvalidDestination(t *testing.T) {
 		Destination: "not_a_closed_destination",
 		Successor:   "pkg/services/work/internal",
 	})
-	if err := validateUnfinishedMovesSchema(invalidDestination); err == nil || !strings.Contains(err.Error(), "destination") {
+	if err := validateUnfinishedMovesSchema(invalidDestination, testVocabulary()); err == nil || !strings.Contains(err.Error(), "destination") {
 		t.Fatalf("invalid destination error = %v", err)
 	}
 }

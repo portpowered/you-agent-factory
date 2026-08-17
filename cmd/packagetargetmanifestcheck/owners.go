@@ -83,10 +83,9 @@ var committedNestedSubservices = map[string][]string{
 	"events":                {},
 }
 
-func productOwnerSet() map[string]struct{} {
-	owners := closedDestinationVocabulary().ProductOwners
-	set := make(map[string]struct{}, len(owners))
-	for _, owner := range owners {
+func productOwnerSet(vocabulary DestinationVocabulary) map[string]struct{} {
+	set := make(map[string]struct{}, len(vocabulary.ProductOwners))
+	for _, owner := range vocabulary.ProductOwners {
 		set[owner] = struct{}{}
 	}
 	return set

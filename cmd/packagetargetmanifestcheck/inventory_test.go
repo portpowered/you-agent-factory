@@ -157,6 +157,66 @@ func TestCheckRejectsResurrectedRetainRow(t *testing.T) {
 	}
 }
 
+// TestCheckDerivesServiceVocabularyFromServicesDirectory proves the service-name
+// vocabulary comes from the pkg/services directory at check time rather than from
+// a closed Go list inside this tool.
+//
+// The fixture root contains one service name that appears nowhere in this
+// repository's Go source. A move row targeting it is accepted purely because the
+// directory exists, with no edit to the checker; the same row is rejected once the
+// destination names a service with no directory.
+func TestCheckDerivesServiceVocabularyFromServicesDirectory(t *testing.T) {
+	t.Parallel()
+
+	const throwaway = "throwaway_probe_service"
+
+	t.Run("accepts a destination naming a service that only exists as a directory", func(t *testing.T) {
+		t.Parallel()
+
+		repoRoot := t.TempDir()
+		writeGoPackage(t, repoRoot, "pkg/services/"+throwaway, "package "+throwaway+"\n")
+		writeGoPackage(t, repoRoot, "pkg/services/"+throwaway+"/legacyfacade", "package legacyfacade\n")
+		writeFixtureMoveLedger(t, repoRoot, []PackageMapping{{
+			PackagePath: "pkg/services/" + throwaway + "/legacyfacade",
+			Destination: throwaway + "/internal",
+			Successor:   "pkg/services/" + throwaway + "/internal",
+		}})
+
+		if err := runCheck(t, repoRoot); err != nil {
+			t.Fatalf("check error = %v; a service directory alone must make its name a valid destination", err)
+		}
+
+		vocab, err := derivedDestinationVocabulary(repoRoot)
+		if err != nil {
+			t.Fatalf("derivedDestinationVocabulary() error = %v", err)
+		}
+		if !slices.Contains(vocab.ProductOwners, throwaway) {
+			t.Fatalf("derived productOwners = %v, want it to include %q", vocab.ProductOwners, throwaway)
+		}
+	})
+
+	t.Run("rejects a destination naming a service with no directory", func(t *testing.T) {
+		t.Parallel()
+
+		repoRoot := t.TempDir()
+		writeGoPackage(t, repoRoot, "pkg/services/"+throwaway, "package "+throwaway+"\n")
+		writeGoPackage(t, repoRoot, "pkg/services/"+throwaway+"/legacyfacade", "package legacyfacade\n")
+		writeFixtureMoveLedger(t, repoRoot, []PackageMapping{{
+			PackagePath: "pkg/services/" + throwaway + "/legacyfacade",
+			Destination: "ghost_service/internal",
+			Successor:   "pkg/services/ghost_service",
+		}})
+
+		err := runCheck(t, repoRoot)
+		if err == nil {
+			t.Fatal("check error = nil, want rejection of a destination naming no live service")
+		}
+		if !strings.Contains(err.Error(), "ghost_service") {
+			t.Fatalf("check error = %v, want the unknown service named", err)
+		}
+	})
+}
+
 // TestCommittedManifestPassesTheCheck runs the real committed registries against
 // the real tree, which is what the packaged-service-structure lint target does.
 func TestCommittedManifestPassesTheCheck(t *testing.T) {

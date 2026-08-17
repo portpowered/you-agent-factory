@@ -3,46 +3,55 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 )
 
-func TestClosedDestinationVocabularyMatchesCommittedOwners(t *testing.T) {
+// TestDerivedVocabularyMatchesTheLiveServicesDirectory proves the product-owner
+// half of the vocabulary is read off the tree. The expectation is built by
+// listing pkg/services here, so a service added to the repository shows up in the
+// checker with no edit to this file or to the checker.
+func TestDerivedVocabularyMatchesTheLiveServicesDirectory(t *testing.T) {
 	t.Parallel()
 
-	vocab := closedDestinationVocabulary()
+	repoRoot := findRepoRoot(t)
+	vocab, err := derivedDestinationVocabulary(repoRoot)
+	if err != nil {
+		t.Fatalf("derivedDestinationVocabulary() error = %v", err)
+	}
 
-	wantOwners := []string{
-		"factory_definitions",
-		"factory_sessions",
-		"factory_runtime",
-		"work",
-		"workers",
-		"providers",
-		"provider_sessions",
-		"models",
-		"automations",
-		"recordings",
-		"factory_visualization",
-		"operator_settings",
-		"system_initialization",
-		"chat_sessions",
-		"events",
-		"worker_sessions",
-		"webhooks",
+	entries, err := os.ReadDir(filepath.Join(repoRoot, filepath.FromSlash(servicesRootRelative)))
+	if err != nil {
+		t.Fatalf("read services root: %v", err)
 	}
-	wantFamilies := []string{
-		"initializer",
-		"root",
-		"wire",
-		"platform",
-		"transports",
+	var wantOwners []string
+	for _, entry := range entries {
+		if !entry.IsDir() || entry.Name() == "edges" {
+			continue
+		}
+		wantOwners = append(wantOwners, entry.Name())
 	}
-	wantExceptions := []string{"edges"}
+	slices.Sort(wantOwners)
+	if len(wantOwners) == 0 {
+		t.Fatal("expected the live pkg/services tree to contain services")
+	}
 
 	assertExactStrings(t, "productOwners", vocab.ProductOwners, wantOwners)
-	assertExactStrings(t, "nonServiceFamilies", vocab.NonServiceFamilies, wantFamilies)
-	assertExactStrings(t, "architectureExceptions", vocab.ArchitectureExceptions, wantExceptions)
+	assertExactStrings(t, "nonServiceFamilies", vocab.NonServiceFamilies, []string{
+		"initializer", "platform", "root", "transports", "wire",
+	})
+	assertExactStrings(t, "architectureExceptions", vocab.ArchitectureExceptions, []string{"edges"})
+}
+
+// testVocabulary is the derived-shaped vocabulary schema-level unit tests run
+// against, so they exercise validation rules rather than the live tree.
+func testVocabulary() DestinationVocabulary {
+	return DestinationVocabulary{
+		ProductOwners:          []string{"factory_definitions", "recordings", "work", "workers"},
+		NonServiceFamilies:     []string{"initializer", "platform", "root", "transports", "wire"},
+		ArchitectureExceptions: []string{"edges"},
+	}
 }
 
 func TestValidateMoveLedgerAcceptsMoveAndNestedOwnerDestination(t *testing.T) {
@@ -61,7 +70,7 @@ func TestValidateMoveLedgerAcceptsMoveAndNestedOwnerDestination(t *testing.T) {
 		},
 	)
 
-	if err := validateUnfinishedMovesSchema(moves); err != nil {
+	if err := validateUnfinishedMovesSchema(moves, testVocabulary()); err != nil {
 		t.Fatalf("validateUnfinishedMovesSchema() error = %v", err)
 	}
 }
@@ -75,7 +84,7 @@ func TestValidateMoveLedgerRejectsDestinationOutsideClosedSet(t *testing.T) {
 		Successor:   "pkg/services/mystery_service",
 	})
 
-	err := validateUnfinishedMovesSchema(moves)
+	err := validateUnfinishedMovesSchema(moves, testVocabulary())
 	if err == nil {
 		t.Fatal("validateUnfinishedMovesSchema() error = nil, want closed-set rejection")
 	}
@@ -96,7 +105,7 @@ func TestValidateMoveLedgerRejectsNestedDestinationWithUnknownOwner(t *testing.T
 		Successor:   "pkg/services/mystery/internal/services/admission",
 	})
 
-	err := validateUnfinishedMovesSchema(moves)
+	err := validateUnfinishedMovesSchema(moves, testVocabulary())
 	if err == nil {
 		t.Fatal("validateUnfinishedMovesSchema() error = nil, want nested owner rejection")
 	}
@@ -115,7 +124,7 @@ func TestValidateMoveLedgerRequiresSuccessor(t *testing.T) {
 		Destination: "work/internal",
 	})
 
-	err := validateUnfinishedMovesSchema(moves)
+	err := validateUnfinishedMovesSchema(moves, testVocabulary())
 	if err == nil || !strings.Contains(err.Error(), "successor is required") {
 		t.Fatalf("missing successor error = %v, want successor requirement", err)
 	}
@@ -132,7 +141,7 @@ func TestValidateMoveLedgerRejectsSuccessorOutsideDestinationOwner(t *testing.T)
 		Successor:   "pkg/services/recordings/internal",
 	})
 
-	err := validateUnfinishedMovesSchema(moves)
+	err := validateUnfinishedMovesSchema(moves, testVocabulary())
 	if err == nil || !strings.Contains(err.Error(), "must sit under pkg/services/work") {
 		t.Fatalf("successor owner mismatch error = %v, want owner-root requirement", err)
 	}
@@ -143,7 +152,7 @@ func TestValidateMoveLedgerRejectsSuccessorOutsideDestinationOwner(t *testing.T)
 func TestValidateMoveLedgerAcceptsEmptyLedger(t *testing.T) {
 	t.Parallel()
 
-	if err := validateUnfinishedMovesSchema(UnfinishedMoves{}); err != nil {
+	if err := validateUnfinishedMovesSchema(UnfinishedMoves{}, testVocabulary()); err != nil {
 		t.Fatalf("validateUnfinishedMovesSchema() on an empty ledger error = %v", err)
 	}
 }

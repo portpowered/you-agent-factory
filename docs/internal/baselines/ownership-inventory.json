@@ -2,37 +2,6 @@
   "version": 1,
   "stage": "pss-f01-ownership-inventory",
   "sortKey": "packagePath ascending byte order (path slash-separated)",
-  "destinations": {
-    "owners": [
-      "factory_definitions",
-      "factory_sessions",
-      "factory_runtime",
-      "work",
-      "workers",
-      "providers",
-      "provider_sessions",
-      "models",
-      "automations",
-      "recordings",
-      "factory_visualization",
-      "operator_settings",
-      "system_initialization",
-      "chat_sessions",
-      "events",
-      "worker_sessions",
-      "webhooks"
-    ],
-    "families": [
-      "initializer",
-      "root",
-      "wire",
-      "platform",
-      "transports"
-    ],
-    "exception": [
-      "edges"
-    ]
-  },
   "processEdgesException": {
     "packagePath": "pkg/services/edges",
     "destination": "edges",

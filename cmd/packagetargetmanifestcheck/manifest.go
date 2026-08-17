@@ -5,7 +5,10 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
+
+	"github.com/portpowered/infinite-you/internal/ownershipinventory"
 )
 
 const (
@@ -42,42 +45,29 @@ type UnfinishedMoves struct {
 	Moves   []PackageMapping `json:"moves"`
 }
 
-func closedDestinationVocabulary() DestinationVocabulary {
-	return DestinationVocabulary{
-		ProductOwners: []string{
-			"factory_definitions",
-			"factory_sessions",
-			"factory_runtime",
-			"work",
-			"workers",
-			"providers",
-			"provider_sessions",
-			"models",
-			"automations",
-			"recordings",
-			"factory_visualization",
-			"operator_settings",
-			"system_initialization",
-			"chat_sessions",
-			"events",
-			"worker_sessions",
-			"webhooks",
-		},
-		NonServiceFamilies: []string{
-			"initializer",
-			"root",
-			"wire",
-			"platform",
-			"transports",
-		},
-		ArchitectureExceptions: []string{
-			"edges",
-		},
+// derivedDestinationVocabulary builds the destination vocabulary for repoRoot.
+//
+// The product-owner half is derived from the live pkg/services directory by the
+// same ownershipinventory helper the ownership-inventory checker uses, so the two
+// tools cannot disagree about which services exist. Before this, both carried the
+// service names as hand-maintained Go literals and adding a service meant editing
+// each one; now a service is a directory and neither tool needs a code change.
+//
+// The non-service families stay closed on purpose: they encode the approved
+// top-level pkg/ families architectural rule, not a service roster.
+func derivedDestinationVocabulary(repoRoot string) (DestinationVocabulary, error) {
+	owners, err := ownershipinventory.DiscoverProductOwners(repoRoot)
+	if err != nil {
+		return DestinationVocabulary{}, err
 	}
+	return DestinationVocabulary{
+		ProductOwners:          owners,
+		NonServiceFamilies:     slices.Clone(ownershipinventory.NonServiceFamilies),
+		ArchitectureExceptions: []string{"edges"},
+	}, nil
 }
 
-func closedDestinationSet() map[string]struct{} {
-	vocab := closedDestinationVocabulary()
+func destinationSet(vocab DestinationVocabulary) map[string]struct{} {
 	set := make(map[string]struct{}, len(vocab.ProductOwners)+len(vocab.NonServiceFamilies)+len(vocab.ArchitectureExceptions))
 	for _, name := range vocab.ProductOwners {
 		set[name] = struct{}{}
@@ -110,13 +100,17 @@ func loadUnfinishedMoves(path string) (UnfinishedMoves, error) {
 // validateOpenMoveLedger checks the consolidated open-move ledger's schema and
 // that every remaining row still names a package that exists on disk.
 func validateOpenMoveLedger(repoRoot string, moves UnfinishedMoves) error {
-	if err := validateUnfinishedMovesSchema(moves); err != nil {
+	vocabulary, err := derivedDestinationVocabulary(repoRoot)
+	if err != nil {
+		return err
+	}
+	if err := validateUnfinishedMovesSchema(moves, vocabulary); err != nil {
 		return err
 	}
 	return validateRowsNamePackagesThatExist(repoRoot, moves.Moves)
 }
 
-func validateUnfinishedMovesSchema(moves UnfinishedMoves) error {
+func validateUnfinishedMovesSchema(moves UnfinishedMoves, vocabulary DestinationVocabulary) error {
 	if len(moves.Moves) == 0 {
 		return nil
 	}
@@ -126,16 +120,16 @@ func validateUnfinishedMovesSchema(moves UnfinishedMoves) error {
 	if moves.Stage != unfinishedMovesStage {
 		return fmt.Errorf("unfinished package moves stage %q is unsupported; want %q", moves.Stage, unfinishedMovesStage)
 	}
-	closed := closedDestinationSet()
+	closed := destinationSet(vocabulary)
 	for i, row := range moves.Moves {
-		if err := validatePackageMapping(i, row, closed); err != nil {
+		if err := validatePackageMapping(i, row, vocabulary, closed); err != nil {
 			return err
 		}
 	}
 	return validatePackageCoverage(moves)
 }
 
-func validatePackageMapping(index int, row PackageMapping, closed map[string]struct{}) error {
+func validatePackageMapping(index int, row PackageMapping, vocabulary DestinationVocabulary, closed map[string]struct{}) error {
 	prefix := fmt.Sprintf("moves[%d]", index)
 	packagePath := strings.TrimSpace(row.PackagePath)
 	if packagePath == "" {
@@ -144,7 +138,7 @@ func validatePackageMapping(index int, row PackageMapping, closed map[string]str
 	if strings.TrimSpace(row.Destination) == "" {
 		return fmt.Errorf("%s.destination is required", prefix)
 	}
-	if err := validateDestination(row.Destination, closed); err != nil {
+	if err := validateDestination(row.Destination, vocabulary, closed); err != nil {
 		return fmt.Errorf("%s.destination: %w", prefix, err)
 	}
 	successor := strings.TrimSpace(row.Successor)
@@ -161,7 +155,7 @@ func validatePackageMapping(index int, row PackageMapping, closed map[string]str
 	return nil
 }
 
-func validateDestination(destination string, closed map[string]struct{}) error {
+func validateDestination(destination string, vocabulary DestinationVocabulary, closed map[string]struct{}) error {
 	root, nested, ok := splitDestination(destination)
 	if !ok {
 		return fmt.Errorf("%q is outside closed destination set", destination)
@@ -184,7 +178,7 @@ func validateDestination(destination string, closed map[string]struct{}) error {
 	if subservice == "" || strings.Contains(subservice, "/") {
 		return fmt.Errorf("%q must name exactly one internal/services/<subservice> segment", destination)
 	}
-	if _, isOwner := productOwnerSet()[root]; isOwner && !isCommittedNestedSubservice(root, subservice) {
+	if _, isOwner := productOwnerSet(vocabulary)[root]; isOwner && !isCommittedNestedSubservice(root, subservice) {
 		return fmt.Errorf("%q uses nested subservice %q outside the committed plan tree for %s", destination, subservice, root)
 	}
 	return nil

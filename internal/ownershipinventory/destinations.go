@@ -5,45 +5,6 @@ import (
 	"strings"
 )
 
-// ProductOwners is the closed destination vocabulary. Chat Sessions, Events,
-// and Worker Sessions are confirmed as distinct L1 ACP Core owners in
-// docs/internal/projects/acp-program/README.md (D2, cross-lane contracts); this
-// reconciles the committed tree with that already-settled decision rather than
-// reopening owner discovery.
-var ProductOwners = []string{
-	"factory_definitions",
-	"factory_sessions",
-	"factory_runtime",
-	"work",
-	"workers",
-	"providers",
-	"provider_sessions",
-	"models",
-	"automations",
-	"recordings",
-	"factory_visualization",
-	"operator_settings",
-	"system_initialization",
-	"chat_sessions",
-	"events",
-	"worker_sessions",
-	"webhooks",
-}
-
-// ApprovedFamilies are retain destinations that are not product services.
-var ApprovedFamilies = []string{
-	"initializer",
-	"root",
-	"wire",
-	"platform",
-	"transports",
-}
-
-// ArchitectureExceptions is the closed exception vocabulary.
-var ArchitectureExceptions = []string{
-	DestinationEdges,
-}
-
 // AdditionalCurrentRoots appear in the committed ownership table outside the
 // structures.md seed list.
 var AdditionalCurrentRoots = []string{
@@ -76,34 +37,20 @@ var StructuresSeedServices = []SeedService{
 	{Name: "Session Ledger and Projection", Source: "docs/architecture/structures.md", Destination: "recordings"},
 }
 
-func closedDestinationSet() map[string]string {
-	out := make(map[string]string, len(ProductOwners)+len(ApprovedFamilies)+len(ArchitectureExceptions)+1)
-	for _, owner := range ProductOwners {
-		out[owner] = DestinationKindOwner
-	}
-	for _, family := range ApprovedFamilies {
-		out[family] = DestinationKindFamily
-	}
-	for _, exception := range ArchitectureExceptions {
-		out[exception] = DestinationKindArchitectureException
-	}
-	out[DestinationDeletionQueue] = DestinationKindDeletionQueue
-	return out
-}
-
-func isKnownDestination(destination string) bool {
-	_, ok := closedDestinationSet()[destination]
-	return ok
-}
-
 // OwnerForPackage derives the destination a production package belongs to from
 // the repository tree layout alone: pkg/services/<owner>/... belongs to <owner>
 // (or to the Process Edges architecture exception), and pkg/<family>/... belongs
 // to that approved non-service family. Reporting false means the path sits
-// outside the closed destination vocabulary and has no derivable owner.
+// outside the derivable owner tree.
 //
-// This is why the inventory no longer carries a "retain" row per package: a row
-// that only restates the directory the package already lives in adds nothing
+// For a path under pkg/services/ the directory segment IS the owner. No service
+// roster is consulted, because for any path taken from the live tree the
+// directory pkg/services/<owner> necessarily exists — checking the name against
+// a list would only restate what the path already proves, and would reject a
+// newly added service until a checker literal was edited to match.
+//
+// This is also why the inventory no longer carries a "retain" row per package: a
+// row that only restates the directory the package already lives in adds nothing
 // this function cannot compute.
 func OwnerForPackage(packagePath string) (string, bool) {
 	const pkgPrefix = "pkg/"
@@ -113,21 +60,34 @@ func OwnerForPackage(packagePath string) (string, bool) {
 	if !ok || remainder == "" {
 		return "", false
 	}
-	closed := closedDestinationSet()
 	if serviceRemainder, isService := strings.CutPrefix(remainder, servicesPrefix); isService {
 		owner := firstPathSegment(serviceRemainder)
-		switch closed[owner] {
-		case DestinationKindOwner, DestinationKindArchitectureException:
-			return owner, true
-		default:
+		if owner == "" {
 			return "", false
 		}
+		if _, ignored := ignoredServiceDirectoryNames[owner]; ignored {
+			return "", false
+		}
+		return owner, true
 	}
 	family := firstPathSegment(remainder)
-	if closed[family] == DestinationKindFamily {
+	if slices.Contains(NonServiceFamilies, family) {
 		return family, true
 	}
 	return "", false
+}
+
+// KindForDerivedOwner reports the destination kind for an owner derived by
+// OwnerForPackage.
+func KindForDerivedOwner(owner string) string {
+	switch {
+	case slices.Contains(architectureExceptionServices, owner):
+		return DestinationKindArchitectureException
+	case slices.Contains(NonServiceFamilies, owner):
+		return DestinationKindFamily
+	default:
+		return DestinationKindOwner
+	}
 }
 
 func firstPathSegment(path string) string {
@@ -135,14 +95,6 @@ func firstPathSegment(path string) string {
 		return path[:index]
 	}
 	return path
-}
-
-func defaultDestinationVocabulary() DestinationVocabulary {
-	return DestinationVocabulary{
-		Owners:    slices.Clone(ProductOwners),
-		Families:  slices.Clone(ApprovedFamilies),
-		Exception: slices.Clone(ArchitectureExceptions),
-	}
 }
 
 func defaultProcessEdgesException() ProcessEdgesException {
