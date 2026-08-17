@@ -568,7 +568,6 @@
     "pkg/transports/mapping/factoryconfig/openapitests",
     "pkg/transports/mapping/factorydefinition",
     "pkg/transports/mapping/factorydefinition/retiredboundary",
-    "pkg/transports/mapping/factoryeventprojection",
     "pkg/transports/mapping/factorysession",
     "pkg/transports/mapping/factorysnapshot",
     "pkg/transports/mapping/factorytarget",
@@ -3206,11 +3205,6 @@
     },
     {
       "packagePath": "pkg/transports/mapping/factorydefinition/retiredboundary",
-      "disposition": "retain",
-      "destination": "transports"
-    },
-    {
-      "packagePath": "pkg/transports/mapping/factoryeventprojection",
       "disposition": "retain",
       "destination": "transports"
     },
