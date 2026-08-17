@@ -190,7 +190,9 @@ func TestNewFactoryOpensHistoricalReplayWithoutLiveRuntimeCollaborators(t *testi
 	calls := 0
 	dependencies := validRuntimeOpeningOwnerPorts(&calls)
 	replayInputs := &historicalReplayInputsRecorder{portable: portable, events: &events}
-	dependencies.Recordings.Root = &recordingsRootConstructionStub{replayInputs: replayInputs}
+	recordingsRoot := &recordingsRootConstructionStub{replayInputs: replayInputs}
+	dependencies.Recordings.Service = recordingsRoot
+	dependencies.Recordings.Runtime = recordingsRoot
 	dependencies.FactorySessions.GenerateRuntimeInstanceID = func() string {
 		events = append(events, "runtime-instance-id")
 		return "historical-runtime"
@@ -310,7 +312,8 @@ func assertModelsPortsRetained(t *testing.T, factory *Factory, dependencies runt
 func assertRecordingsPortsRetained(t *testing.T, factory *Factory, dependencies runtimeOpeningFixture) {
 	t.Helper()
 	group := dependencies.Recordings
-	assertRuntimeOpeningDependencyIdentity(t, "Recordings root", factory.recordingsRoot, group.Root)
+	assertRuntimeOpeningDependencyIdentity(t, "Recordings service", factory.recordingsService, group.Service)
+	assertRuntimeOpeningDependencyIdentity(t, "Recordings runtime", factory.recordingsRuntime, group.Runtime)
 }
 
 func assertWebhooksPortsRetained(t *testing.T, factory *Factory, dependencies runtimeOpeningFixture) {
@@ -393,7 +396,8 @@ func runtimeOpeningMemberOmissions() []runtimeOpeningDependencyOmission {
 		{"Work service", func(d *runtimeOpeningFixture) { d.Work.Service = nil }},
 		{"Automations service", func(d *runtimeOpeningFixture) { d.Automations.Service = nil }},
 		{"Models service", func(d *runtimeOpeningFixture) { d.Models.Service = nil }},
-		{"Recordings root", func(d *runtimeOpeningFixture) { d.Recordings.Root = nil }},
+		{"Recordings service", func(d *runtimeOpeningFixture) { d.Recordings.Service = nil }},
+		{"Recordings runtime", func(d *runtimeOpeningFixture) { d.Recordings.Runtime = nil }},
 		{"Webhooks service", func(d *runtimeOpeningFixture) { d.Webhooks.Service = nil }},
 		{"Workers service", func(d *runtimeOpeningFixture) { d.Workers.Service = nil }},
 		{"Workers provider-from-command-runner factory", func(d *runtimeOpeningFixture) { d.Workers.ProviderFromCommandRunnerFactory = nil }},
@@ -448,9 +452,12 @@ func validRuntimeOpeningOwnerPorts(calls *int) runtimeOpeningFixture {
 		Automations: &AutomationsPorts{
 			Service: automations.Root{},
 		},
-		Models:     &ModelsPorts{Service: &modelsConstructionStub{}},
-		Recordings: &RecordingsPorts{Root: &recordingsRootConstructionStub{}},
-		Webhooks:   &WebhooksPorts{Service: webhooksConstructionStub{}},
+		Models: &ModelsPorts{Service: &modelsConstructionStub{}},
+		Recordings: &RecordingsPorts{
+			Service: &recordingsRootConstructionStub{},
+			Runtime: &recordingsRootConstructionStub{},
+		},
+		Webhooks: &WebhooksPorts{Service: webhooksConstructionStub{}},
 		Workers: &WorkersPorts{
 			Service:                          &workersConstructionStub{},
 			ProviderFromCommandRunnerFactory: inertRuntimeOpeningFunction[ProviderFromCommandRunnerFactory](calls),
@@ -562,4 +569,5 @@ func (stub *recordingsRootConstructionStub) LoadReplayInput(
 	return stub.replayInputs.LoadReplayInput(request)
 }
 
-var _ recordings.Root = (*recordingsRootConstructionStub)(nil)
+var _ recordings.Service = (*recordingsRootConstructionStub)(nil)
+var _ recordings.RuntimeOpening = (*recordingsRootConstructionStub)(nil)

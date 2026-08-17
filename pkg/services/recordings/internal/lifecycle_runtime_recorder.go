@@ -348,7 +348,7 @@ func NewRuntimeRoot(
 	replayInputs recordings.ReplayInputLoader,
 	logger logging.Logger,
 	clocks ...recordings.RecordingClock,
-) recordings.Root {
+) recordings.Service {
 	return NewRuntimeRootWithHistoricalQuery(
 		targets,
 		writeFile,
@@ -379,7 +379,7 @@ func NewRuntimeRootWithHistoricalQuery(
 	logger logging.Logger,
 	historicalQuery historicalquery.Service,
 	clocks ...recordings.RecordingClock,
-) recordings.Root {
+) recordings.Service {
 	router := newRuntimeLedgerRouter(recordingClockNow(clocks...))
 	projection := NewProjectionService()
 	var writer recordings.RecordingSnapshotWriter
@@ -411,7 +411,8 @@ func NewRuntimeRootWithHistoricalQuery(
 	return root
 }
 
-var _ recordings.Root = (*combinedService)(nil)
+var _ recordings.Service = (*combinedService)(nil)
+var _ recordings.RuntimeOpening = (*combinedService)(nil)
 
 func (service *combinedService) Projection() recordings.ProjectionService {
 	if service == nil {

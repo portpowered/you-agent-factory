@@ -79,7 +79,7 @@ func NewRuntimeRoot(
 	replayInputs recordings.ReplayInputLoader,
 	logger logging.Logger,
 	clocks ...recordings.RecordingClock,
-) (recordings.Root, error) {
+) (recordings.Service, error) {
 	publication, err := recordingsinternal.NewPortableArtifactPublication(
 		makeDirectories,
 		createTemporaryFile,

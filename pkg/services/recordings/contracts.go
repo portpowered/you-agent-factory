@@ -325,14 +325,6 @@ type (
 // graph for historical replay.
 type RuntimeOpening = recordingcontracts.RuntimeOpening
 
-// Root is the complete process-scoped Recordings authority. The historical
-// query capability is part of the same process root so Wire can bind the
-// public Service contract without introducing a second Recordings graph.
-type Root interface {
-	recordingcontracts.Root
-	HistoricalRecordingQuery
-}
-
 const (
 	CheckpointResumabilityStatusResumable         = recordingcontracts.CheckpointResumabilityStatusResumable
 	DefaultRecordingFlushInterval                 = recordingcontracts.DefaultRecordingFlushInterval
@@ -503,8 +495,104 @@ var (
 	ValidatePortableRecordingWithVersions              = recordingcontracts.ValidatePortableRecordingWithVersions
 )
 
-// Service is the singular cross-service Recordings authority.
+// Service is the singular cross-service Recordings authority. Historical
+// queries are part of this same owner contract; runtime opening remains a
+// separate capability so peers do not need to advertise process lifecycle
+// operations just to read canonical history.
 type Service interface {
 	recordingcontracts.Service
-	HistoricalRecordingQuery
+
+	// QueryHistoricalRecording reconstructs one finalized recording from its
+	// published artifact and returns the detached canonical history and
+	// projections selected by that artifact.
+	QueryHistoricalRecording(HistoricalRecordingQueryRequest) (HistoricalRecordingQueryResult, error)
+}
+
+// HistoricalRecordingIdentity identifies one durable recording and its
+// requested Factory Session scope.
+type HistoricalRecordingIdentity struct {
+	RecordingID RecordingID
+	Artifact    RecordingArtifactReference
+	Scope       CanonicalEventScope
+}
+
+// HistoricalRecordingQueryRequest selects one immutable recording artifact.
+type HistoricalRecordingQueryRequest struct {
+	Recording HistoricalRecordingIdentity
+}
+
+// HistoricalDispatchWorkerSessionAssociation records the canonical event
+// that associated a dispatch with a Worker Session.
+type HistoricalDispatchWorkerSessionAssociation struct {
+	ID              CanonicalEventID
+	WorkerSessionID string
+	RequestID       string
+	Cursor          CanonicalEventCursor
+}
+
+// HistoricalDispatch is the detached latest lifecycle projection for one
+// dispatch. The result preserves first-seen dispatch order.
+type HistoricalDispatch struct {
+	ID           string
+	Status       FactoryDispatchStatus
+	DispatchKind FactoryDispatchKind
+	TransitionID string
+	FirstCursor  CanonicalEventCursor
+	LastCursor   CanonicalEventCursor
+	Association  *HistoricalDispatchWorkerSessionAssociation
+}
+
+// HistoricalRecordingQueryResult contains detached canonical history,
+// selected-tick state, recording status, and dispatch facts.
+type HistoricalRecordingQueryResult struct {
+	Recording  HistoricalRecordingIdentity
+	Status     RecordingStatusFacts
+	Events     []CanonicalEvent
+	WorldState WorldStateView
+	// WorkstationRequests is the selected-tick workstation read model derived
+	// from the same historical world state, keeping HTTP and MCP on one owner
+	// projection result.
+	WorkstationRequests WorkstationFactoryWorldWorkstationRequestProjectionSlice
+	Dispatches          []HistoricalDispatch
+}
+
+// HistoricalRecordingQueryErrorKind classifies durable-history outcomes
+// without requiring callers to parse diagnostic strings.
+type HistoricalRecordingQueryErrorKind string
+
+const (
+	HistoricalRecordingQueryErrorInvalidRequest HistoricalRecordingQueryErrorKind = "INVALID_REQUEST"
+	HistoricalRecordingQueryErrorMissingHistory HistoricalRecordingQueryErrorKind = "MISSING_HISTORY"
+	HistoricalRecordingQueryErrorCorruptHistory HistoricalRecordingQueryErrorKind = "CORRUPT_HISTORY"
+	HistoricalRecordingQueryErrorUnavailable    HistoricalRecordingQueryErrorKind = "UNAVAILABLE"
+)
+
+// HistoricalRecordingQueryError retains only safe recording and event identity
+// in its public presentation. Cause remains available for errors.Is/errors.As.
+type HistoricalRecordingQueryError struct {
+	Kind        HistoricalRecordingQueryErrorKind
+	RecordingID RecordingID
+	EventID     CanonicalEventID
+	Cause       error
+}
+
+func (e *HistoricalRecordingQueryError) Error() string {
+	if e == nil {
+		return ""
+	}
+	message := "historical recording query " + string(e.Kind)
+	if e.RecordingID != "" {
+		message += " recording=" + string(e.RecordingID)
+	}
+	if e.EventID != "" {
+		message += " event=" + string(e.EventID)
+	}
+	return message
+}
+
+func (e *HistoricalRecordingQueryError) Unwrap() error {
+	if e == nil {
+		return nil
+	}
+	return e.Cause
 }

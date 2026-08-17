@@ -11,6 +11,11 @@ import (
 	"time"
 )
 
+type runtimeRoot interface {
+	recordings.Service
+	recordings.RuntimeOpening
+}
+
 const (
 	modulePrefix       = "github.com/portpowered/infinite-you/"
 	factoryRuntimeRoot = modulePrefix + "pkg/services/factory_runtime"
@@ -101,8 +106,9 @@ func TestLifecycleRuntimeRecorderAcceptsRuntimeRootFinishedEvent(t *testing.T) {
 }
 
 func TestRuntimeRootKeepsConcurrentLedgersIsolatedAndReleasesRoutes(t *testing.T) {
-	root := NewRuntimeRoot(nil, nil, nil, nil, nil, nil, nil, nil, nil)
-	if root == nil {
+	service := NewRuntimeRoot(nil, nil, nil, nil, nil, nil, nil, nil, nil)
+	root, ok := service.(runtimeRoot)
+	if !ok || root == nil {
 		t.Fatal("NewRuntimeRoot() returned nil")
 	}
 	topology := runtimeOpeningTopology{}
@@ -174,7 +180,7 @@ func TestRuntimeRootActiveRecordingOwnsOpaqueScopeAndFinalizesOnce(t *testing.T)
 	assertActiveScopeClosed(t, root, opened.Scope)
 }
 
-func openActiveRuntime(t *testing.T) (recordings.Root, recordings.RuntimeScopeResult, func() time.Time) {
+func openActiveRuntime(t *testing.T) (runtimeRoot, recordings.RuntimeScopeResult, func() time.Time) {
 	t.Helper()
 	snapshot, err := factorydefinitions.NewFactorySnapshot(map[string]any{
 		"id": "runtime-opening-test",
@@ -182,7 +188,7 @@ func openActiveRuntime(t *testing.T) (recordings.Root, recordings.RuntimeScopeRe
 	if err != nil {
 		t.Fatalf("NewFactorySnapshot: %v", err)
 	}
-	root := NewRuntimeRoot(
+	service := NewRuntimeRoot(
 		nil,
 		nil,
 		nil,
@@ -198,6 +204,10 @@ func openActiveRuntime(t *testing.T) (recordings.Root, recordings.RuntimeScopeRe
 		nil,
 		nil,
 	)
+	root, ok := service.(runtimeRoot)
+	if !ok || root == nil {
+		t.Fatal("NewRuntimeRoot() did not expose runtime opening")
+	}
 	now := func() time.Time { return time.Unix(1_700_000_100, 0).UTC() }
 	opened, err := root.OpenRuntime(context.Background(), recordings.RuntimeScopeRequest{
 		Topology:         runtimeOpeningTopology{},
@@ -212,7 +222,7 @@ func openActiveRuntime(t *testing.T) (recordings.Root, recordings.RuntimeScopeRe
 	return root, opened, now
 }
 
-func assertActiveRecordingStarted(t *testing.T, root recordings.Root) {
+func assertActiveRecordingStarted(t *testing.T, root runtimeRoot) {
 	t.Helper()
 	status, err := root.QueryRecordingStatus(recordings.RecordingStatusRequest{
 		RecordingID: "recording-active",
@@ -227,7 +237,7 @@ func assertActiveRecordingStarted(t *testing.T, root recordings.Root) {
 
 func queryActiveScope(
 	t *testing.T,
-	root recordings.Root,
+	root runtimeRoot,
 	scope recordings.RecordingScopeRef,
 ) recordings.QueryRecordingScopeResult {
 	t.Helper()
@@ -242,7 +252,7 @@ func queryActiveScope(
 
 func appendActiveScopeEvent(
 	t *testing.T,
-	root recordings.Root,
+	root runtimeRoot,
 	scope recordings.RecordingScopeRef,
 	scopeStatus recordings.QueryRecordingScopeResult,
 ) {
@@ -270,7 +280,7 @@ func finalizeActiveRuntime(t *testing.T, recorder recordings.RuntimeRecorder, no
 	}
 }
 
-func assertActiveRecordingFinalized(t *testing.T, root recordings.Root) {
+func assertActiveRecordingFinalized(t *testing.T, root runtimeRoot) {
 	t.Helper()
 	status, err := root.QueryRecordingStatus(recordings.RecordingStatusRequest{
 		RecordingID: "recording-active",
@@ -283,7 +293,7 @@ func assertActiveRecordingFinalized(t *testing.T, root recordings.Root) {
 	}
 }
 
-func assertActiveScopeClosed(t *testing.T, root recordings.Root, scope recordings.RecordingScopeRef) {
+func assertActiveScopeClosed(t *testing.T, root runtimeRoot, scope recordings.RecordingScopeRef) {
 	t.Helper()
 	if _, err := root.QueryRecordingScope(context.Background(), recordings.QueryRecordingScopeRequest{
 		Scope: scope,
