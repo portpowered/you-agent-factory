@@ -66,16 +66,12 @@ func TestCommittedLedgerTracksOnlyUnfinishedMigrationIntent(t *testing.T) {
 	t.Parallel()
 
 	repoRoot := findRepoRoot(t)
-	manifest, err := loadManifest(filepath.Join(repoRoot, manifestRelativePath))
-	if err != nil {
-		t.Fatalf("loadManifest() error = %v", err)
-	}
 	moves, err := loadUnfinishedMoves(filepath.Join(repoRoot, unfinishedMovesRelativePath))
 	if err != nil {
 		t.Fatalf("loadUnfinishedMoves() error = %v", err)
 	}
-	if err := validateManifestAt(repoRoot, manifest, moves); err != nil {
-		t.Fatalf("committed manifest validateManifestAt() error = %v", err)
+	if err := validateOpenMoveLedger(repoRoot, moves); err != nil {
+		t.Fatalf("committed ledger validateOpenMoveLedger() error = %v", err)
 	}
 
 	live, err := ownershipinventory.ListProductionPackages(repoRoot)

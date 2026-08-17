@@ -3,7 +3,6 @@ package ownershipinventory_test
 import (
 	"os"
 	"path/filepath"
-	"slices"
 	"strings"
 	"testing"
 
@@ -27,40 +26,32 @@ var factoryDefinitionsInvocationPolicyResidualRests = []string{
 	"internal/services/distribution/goal",
 }
 
-func TestFrozenInventoryRegistersInvocationPolicyNestedService(t *testing.T) {
+// Invocation Policy is a nested subservice of Factory Definitions. It used to be
+// proved by a rationale card in the registry, which meant every nested service
+// had to be registered twice. The durable claim is about the tree: the
+// subservice sits at its committed path and derives to the Factory Definitions
+// owner from that path alone. Its design rationale is prose and lives in
+// docs/architecture/service-ownership-rationale.md.
+func TestInvocationPolicyNestedServiceDerivesToFactoryDefinitions(t *testing.T) {
 	t.Parallel()
 
-	if !slices.Contains(ownershipinventory.CommittedNestedServiceIDs, factoryDefinitionsInvocationPolicyServiceID) {
-		t.Fatalf("CommittedNestedServiceIDs missing %q", factoryDefinitionsInvocationPolicyServiceID)
-	}
-
 	root := repositoryRoot(t)
-	inventory, err := ownershipinventory.Load(root)
-	if err != nil {
-		t.Fatalf("Load() error = %v", err)
+	if _, err := os.Stat(filepath.Join(root, filepath.FromSlash(factoryDefinitionsInvocationPolicyTargetPath))); err != nil {
+		t.Fatalf("nested subservice %q must exist on disk: %v", factoryDefinitionsInvocationPolicyServiceID, err)
 	}
 
-	var card *ownershipinventory.OwnerRationaleCard
-	for i := range inventory.OwnerRationales {
-		if inventory.OwnerRationales[i].ServiceID == factoryDefinitionsInvocationPolicyServiceID {
-			card = &inventory.OwnerRationales[i]
-			break
-		}
+	owner, ok := ownershipinventory.OwnerForPackage(factoryDefinitionsInvocationPolicyTargetPath)
+	if !ok || owner != "factory_definitions" {
+		t.Fatalf("OwnerForPackage(%q) = %q, %v; want factory_definitions, true", factoryDefinitionsInvocationPolicyTargetPath, owner, ok)
 	}
-	if card == nil {
-		t.Fatalf("frozen inventory missing rationale card for %q", factoryDefinitionsInvocationPolicyServiceID)
-	}
-	if card.Kind != ownershipinventory.RationaleKindNested {
-		t.Fatalf("rationale card %q kind = %q, want nested", card.ServiceID, card.Kind)
-	}
-	if card.ParentServiceID != "factory_definitions" {
-		t.Fatalf("rationale card %q parentServiceId = %q, want factory_definitions", card.ServiceID, card.ParentServiceID)
-	}
-	if card.TargetPath != factoryDefinitionsInvocationPolicyTargetPath {
-		t.Fatalf("rationale card %q targetPath = %q, want %q", card.ServiceID, card.TargetPath, factoryDefinitionsInvocationPolicyTargetPath)
-	}
-	if !strings.Contains(card.Authority, "invocation time") {
-		t.Fatalf("rationale card %q authority should describe invocation-time policy ownership", card.ServiceID)
+
+	// The subservice is settled where it lives, so it carries no open-move row.
+	if moveRow, ok := committedMoveLedger(t, root)[factoryDefinitionsInvocationPolicyTargetPath]; ok {
+		t.Fatalf(
+			"move ledger carries a row for settled nested subservice %q (successor %q)",
+			factoryDefinitionsInvocationPolicyTargetPath,
+			moveRow.Successor,
+		)
 	}
 }
 

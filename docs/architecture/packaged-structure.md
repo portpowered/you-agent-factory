@@ -11,6 +11,11 @@ use the
 [`general backend standard`](../internal/standards/code/general-backend-standards.md)
 for dependency direction, code shape, testing, and package-size requirements.
 
+For why each owner holds what it holds — per-service authority, state store,
+lifecycle, consumers, transaction boundary, and failure recovery, plus
+responsibility clusters, public-surface ownership, and owned roles — see
+[Service Ownership Rationale](service-ownership-rationale.md).
+
 ## Top-Level Package Families
 
 The backend has six direct package families:

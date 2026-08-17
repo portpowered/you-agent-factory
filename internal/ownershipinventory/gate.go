@@ -8,7 +8,6 @@ import "fmt"
 type VerificationGateReport struct {
 	Completeness               bool
 	StableSortOrder            bool
-	RequiredRationaleFields    bool
 	EdgeClassifications        bool
 	NamedOwnerCoverage         bool
 	ProcessEdgesException      bool
@@ -23,7 +22,6 @@ type VerificationGateReport struct {
 func (r VerificationGateReport) OK() bool {
 	return r.Completeness &&
 		r.StableSortOrder &&
-		r.RequiredRationaleFields &&
 		r.EdgeClassifications &&
 		r.NamedOwnerCoverage &&
 		r.ProcessEdgesException &&
@@ -57,17 +55,10 @@ func composeVerificationGate(inventory Report, pathLease PathLeaseFreezeReport) 
 	return VerificationGateReport{
 		Completeness: completenessProved(inventory),
 		StableSortOrder: !inventory.UnstableSort &&
-			!inventory.UnstableRationaleSort &&
-			!inventory.UnstableResponsibilitySort &&
 			!inventory.UnstableEdgeSort &&
 			!inventory.UnstableNamedOwnerSort &&
 			!inventory.UnstableMisplacedGuardSort &&
-			!inventory.UnstablePublicSurfaceSort &&
-			!inventory.UnstableOwnedRoleSort &&
 			!pathLease.UnstablePacketSort,
-		RequiredRationaleFields: len(inventory.MissingOwnerRationales) == 0 &&
-			len(inventory.MissingNestedRationales) == 0 &&
-			len(inventory.InvalidRationaleFields) == 0,
 		EdgeClassifications: !inventory.MissingCrossServiceEdgeTable &&
 			len(inventory.MissingCrossServiceEdges) == 0 &&
 			len(inventory.UnexpectedCrossServiceEdges) == 0 &&
@@ -91,11 +82,6 @@ func completenessProved(inventory Report) bool {
 		len(inventory.InvalidMappings) == 0 &&
 		len(inventory.MissingSeedServices) == 0 &&
 		len(inventory.MissingAdditionalRoots) == 0 &&
-		len(inventory.MissingResponsibilityClusters) == 0 &&
 		len(inventory.MissingMisplacedGuards) == 0 &&
-		len(inventory.InvalidMisplacedGuards) == 0 &&
-		len(inventory.MissingPublicSurfaces) == 0 &&
-		len(inventory.InvalidPublicSurfaces) == 0 &&
-		len(inventory.MissingOwnedRoles) == 0 &&
-		len(inventory.InvalidOwnedRoles) == 0
+		len(inventory.InvalidMisplacedGuards) == 0
 }

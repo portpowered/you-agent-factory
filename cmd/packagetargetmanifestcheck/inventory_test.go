@@ -71,12 +71,11 @@ func TestCheckPassesWhenPackageIsAddedInsideExistingServiceWithNoRegistryEdit(t 
 	repoRoot := t.TempDir()
 	writeGoPackage(t, repoRoot, "pkg/services/work", "package work\n")
 	writeGoPackage(t, repoRoot, "pkg/services/work/internal/lineagegraph", "package lineagegraph\n")
-	manifestPath, movesPath := writeFixtureRegistries(t, repoRoot, []PackageMapping{{
+	movesPath := writeFixtureMoveLedger(t, repoRoot, []PackageMapping{{
 		PackagePath: "pkg/services/work/internal/lineagegraph",
 		Destination: "work/internal",
 		Successor:   "pkg/services/work/internal",
 	}})
-	manifestBefore := readFileBytes(t, manifestPath)
 	movesBefore := readFileBytes(t, movesPath)
 
 	if err := runCheck(t, repoRoot); err != nil {
@@ -97,9 +96,6 @@ func TestCheckPassesWhenPackageIsAddedInsideExistingServiceWithNoRegistryEdit(t 
 		t.Fatalf("check after deleting a package with no registry edit error = %v", err)
 	}
 
-	if after := readFileBytes(t, manifestPath); !bytes.Equal(manifestBefore, after) {
-		t.Fatal("the check rewrote the manifest; it must be read-only")
-	}
 	if after := readFileBytes(t, movesPath); !bytes.Equal(movesBefore, after) {
 		t.Fatal("the check rewrote the move ledger; it must be read-only")
 	}
@@ -112,7 +108,7 @@ func TestCheckFailsWhenMoveRowNamesAbsentPackage(t *testing.T) {
 
 	repoRoot := t.TempDir()
 	writeGoPackage(t, repoRoot, "pkg/services/work", "package work\n")
-	writeFixtureRegistries(t, repoRoot, []PackageMapping{{
+	writeFixtureMoveLedger(t, repoRoot, []PackageMapping{{
 		PackagePath: "pkg/services/work/internal/alreadymoved",
 		Destination: "work/internal",
 		Successor:   "pkg/services/work/internal",
@@ -139,7 +135,7 @@ func TestCheckRejectsResurrectedRetainRow(t *testing.T) {
 
 	repoRoot := t.TempDir()
 	writeGoPackage(t, repoRoot, "pkg/services/work", "package work\n")
-	writeFixtureRegistries(t, repoRoot, nil)
+	writeFixtureMoveLedger(t, repoRoot, nil)
 	writeRawMoveLedger(t, repoRoot, `{
   "version": 1,
   "stage": "`+unfinishedMovesStage+`",
@@ -175,32 +171,21 @@ func TestCommittedManifestPassesTheCheck(t *testing.T) {
 func runCheck(t *testing.T, repoRoot string) error {
 	t.Helper()
 	return run(config{
-		root:         repoRoot,
-		manifestPath: manifestRelativePath,
-		movesPath:    unfinishedMovesRelativePath,
+		root:      repoRoot,
+		movesPath: unfinishedMovesRelativePath,
 	}, &bytes.Buffer{}, &bytes.Buffer{})
 }
 
-// writeFixtureRegistries writes a schema-valid manifest plus an open-move ledger
-// carrying only the given rows, and returns both paths.
-func writeFixtureRegistries(t *testing.T, repoRoot string, rows []PackageMapping) (manifestPath, movesPath string) {
+// writeFixtureMoveLedger writes a schema-valid open-move ledger carrying only
+// the given rows and returns its path.
+func writeFixtureMoveLedger(t *testing.T, repoRoot string, rows []PackageMapping) string {
 	t.Helper()
-	manifest := Manifest{
-		Version:               1,
-		Stage:                 manifestStage,
-		DestinationVocabulary: closedDestinationVocabulary(),
-		ArchitectureExceptionNotes: map[string]string{
-			"edges": edgesArchitectureExceptionNote,
-		},
-		FutureDebt: []FutureDebt{edgesFutureDebtEntry()},
-	}
 	moves := UnfinishedMoves{
 		Version: 1,
 		Stage:   unfinishedMovesStage,
 		Moves:   rows,
 	}
-	return writeFixtureJSON(t, repoRoot, manifestRelativePath, manifest),
-		writeFixtureJSON(t, repoRoot, unfinishedMovesRelativePath, moves)
+	return writeFixtureJSON(t, repoRoot, unfinishedMovesRelativePath, moves)
 }
 
 func writeFixtureJSON(t *testing.T, repoRoot, relativePath string, value any) string {

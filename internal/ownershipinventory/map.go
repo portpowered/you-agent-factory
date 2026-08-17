@@ -181,6 +181,10 @@ func moveRow(packagePath, destination, successor, condition string) PackageRow {
 // authored migration intent, so they are read from the consolidated ledger
 // rather than re-derived here; every other package is where it already belongs
 // and OwnerForPackage computes that from the tree.
+//
+// Owner rationale, responsibility clusters, public-surface ownership, and owned
+// roles are not part of it either: that is design prose nothing counts, and it
+// is published at docs/architecture/service-ownership-rationale.md.
 func BuildInventory(root string, packages []string) (Inventory, error) {
 	// Every live package must still resolve to a committed destination, even
 	// though the resolved row is no longer written down for the retain case.
@@ -206,13 +210,9 @@ func BuildInventory(root string, packages []string) (Inventory, error) {
 		ProcessEdgesException:   defaultProcessEdgesException(),
 		SeedServices:            append([]SeedService(nil), StructuresSeedServices...),
 		AdditionalCurrentRoots:  append([]string(nil), AdditionalCurrentRoots...),
-		OwnerRationales:         BuildOwnerRationales(),
-		ResponsibilityClusters:  BuildResponsibilityClusters(),
 		CrossServiceEdges:       edges,
 		NamedOwnerConfirmations: BuildNamedOwnerConfirmations(),
 		MisplacedGuards:         BuildMisplacedGuards(),
-		PublicSurfaces:          BuildPublicSurfaces(),
-		OwnedRoles:              BuildOwnedRoles(),
 		UnfinishedMoves:         moves,
 		Packages:                rows,
 	}, nil

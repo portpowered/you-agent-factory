@@ -5,19 +5,15 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"slices"
 	"strings"
 )
 
 const (
-	manifestStage                  = "pss-fnd-01-package-target-manifest"
-	manifestRelativePath           = "docs/internal/packaged-service-structure/package-target-manifest.json"
-	unfinishedMovesStage           = "pss-unfinished-package-moves"
-	unfinishedMovesRelativePath    = "docs/internal/baselines/unfinished-package-moves.json"
-	edgesArchitectureExceptionNote = "Process Edges (pkg/services/edges) is the sole broad external-effect architecture exception for the Packaged Service Structure program."
+	unfinishedMovesStage        = "pss-unfinished-package-moves"
+	unfinishedMovesRelativePath = "docs/internal/baselines/unfinished-package-moves.json"
 )
 
-// DestinationVocabulary is the closed set of destinations inventory rows may claim.
+// DestinationVocabulary is the closed set of destinations move rows may claim.
 type DestinationVocabulary struct {
 	ProductOwners          []string `json:"productOwners"`
 	NonServiceFamilies     []string `json:"nonServiceFamilies"`
@@ -35,21 +31,6 @@ type PackageMapping struct {
 	Destination       string `json:"destination"`
 	Successor         string `json:"successor"`
 	DeletionCondition string `json:"deletionCondition,omitempty"`
-}
-
-// Manifest is the package-target destination vocabulary and future-debt document.
-//
-// It no longer carries package rows. Open moves live in one consolidated
-// ledger (unfinishedMovesRelativePath) shared with the ownership-inventory
-// checker, so a package that still has to move is recorded exactly once.
-type Manifest struct {
-	Version                    int                   `json:"version"`
-	Stage                      string                `json:"stage"`
-	DestinationVocabulary      DestinationVocabulary `json:"destinationVocabulary"`
-	ArchitectureExceptionNotes map[string]string     `json:"architectureExceptionNotes"`
-	// FutureDebt records deferred migration work intentionally left outside
-	// this packet (for example FND-06 Edges narrowing).
-	FutureDebt []FutureDebt `json:"futureDebt"`
 }
 
 // UnfinishedMoves is the consolidated open-move ledger. The ledger only
@@ -110,18 +91,6 @@ func closedDestinationSet() map[string]struct{} {
 	return set
 }
 
-func loadManifest(relativePath string) (Manifest, error) {
-	data, err := os.ReadFile(relativePath)
-	if err != nil {
-		return Manifest{}, fmt.Errorf("read manifest %s: %w", relativePath, err)
-	}
-	var manifest Manifest
-	if err := json.Unmarshal(data, &manifest); err != nil {
-		return Manifest{}, fmt.Errorf("decode manifest %s: %w", relativePath, err)
-	}
-	return manifest, nil
-}
-
 func loadUnfinishedMoves(path string) (UnfinishedMoves, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -138,35 +107,13 @@ func loadUnfinishedMoves(path string) (UnfinishedMoves, error) {
 	return moves, nil
 }
 
-func validateManifest(manifest Manifest) error {
-	// Schema-only validation used by unit fixtures that do not bind a repo tree.
-	return validateManifestSchema(manifest)
-}
-
-func validateManifestAt(repoRoot string, manifest Manifest, moves UnfinishedMoves) error {
-	if err := validateManifestSchema(manifest); err != nil {
-		return err
-	}
+// validateOpenMoveLedger checks the consolidated open-move ledger's schema and
+// that every remaining row still names a package that exists on disk.
+func validateOpenMoveLedger(repoRoot string, moves UnfinishedMoves) error {
 	if err := validateUnfinishedMovesSchema(moves); err != nil {
 		return err
 	}
 	return validateRowsNamePackagesThatExist(repoRoot, moves.Moves)
-}
-
-func validateManifestSchema(manifest Manifest) error {
-	if manifest.Version != 1 {
-		return fmt.Errorf("manifest version %d is unsupported; want 1", manifest.Version)
-	}
-	if manifest.Stage != manifestStage {
-		return fmt.Errorf("manifest stage %q is unsupported; want %q", manifest.Stage, manifestStage)
-	}
-	if err := validateVocabulary(manifest.DestinationVocabulary); err != nil {
-		return err
-	}
-	if note := manifest.ArchitectureExceptionNotes["edges"]; note != edgesArchitectureExceptionNote {
-		return fmt.Errorf("architectureExceptionNotes.edges must record the Process Edges exception exactly")
-	}
-	return validateFutureDebt(manifest.FutureDebt)
 }
 
 func validateUnfinishedMovesSchema(moves UnfinishedMoves) error {
@@ -186,20 +133,6 @@ func validateUnfinishedMovesSchema(moves UnfinishedMoves) error {
 		}
 	}
 	return validatePackageCoverage(moves)
-}
-
-func validateVocabulary(got DestinationVocabulary) error {
-	want := closedDestinationVocabulary()
-	if !slices.Equal(got.ProductOwners, want.ProductOwners) {
-		return fmt.Errorf("destination vocabulary productOwners must exactly match the closed product-owner set")
-	}
-	if !slices.Equal(got.NonServiceFamilies, want.NonServiceFamilies) {
-		return fmt.Errorf("destination vocabulary nonServiceFamilies must exactly match the closed approved family set")
-	}
-	if !slices.Equal(got.ArchitectureExceptions, want.ArchitectureExceptions) {
-		return fmt.Errorf("destination vocabulary architectureExceptions must exactly match the closed exception set")
-	}
-	return nil
 }
 
 func validatePackageMapping(index int, row PackageMapping, closed map[string]struct{}) error {
@@ -273,7 +206,7 @@ func splitDestination(destination string) (root, nested string, ok bool) {
 	return root, parts[1], true
 }
 
-func resolveManifestPath(repoRoot, relativePath string) string {
+func resolveRepoPath(repoRoot, relativePath string) string {
 	if filepath.IsAbs(relativePath) {
 		return relativePath
 	}

@@ -148,50 +148,6 @@ func TestValidateMoveLedgerAcceptsEmptyLedger(t *testing.T) {
 	}
 }
 
-func TestValidateManifestRejectsAlteredVocabulary(t *testing.T) {
-	t.Parallel()
-
-	vocab := closedDestinationVocabulary()
-	vocab.ProductOwners = append(append([]string{}, vocab.ProductOwners...), "new_owner")
-	manifest := Manifest{
-		Version:               1,
-		Stage:                 manifestStage,
-		DestinationVocabulary: vocab,
-		ArchitectureExceptionNotes: map[string]string{
-			"edges": edgesArchitectureExceptionNote,
-		},
-		FutureDebt: []FutureDebt{edgesFutureDebtEntry()},
-	}
-
-	err := validateManifest(manifest)
-	if err == nil {
-		t.Fatal("validateManifest() error = nil, want vocabulary rejection")
-	}
-	if !strings.Contains(err.Error(), "destination vocabulary") {
-		t.Fatalf("validateManifest() error = %v, want vocabulary message", err)
-	}
-}
-
-func TestCommittedManifestDeclaresClosedVocabulary(t *testing.T) {
-	t.Parallel()
-
-	repoRoot := findRepoRoot(t)
-	manifest, err := loadManifest(filepath.Join(repoRoot, manifestRelativePath))
-	if err != nil {
-		t.Fatalf("loadManifest() error = %v", err)
-	}
-	moves, err := loadUnfinishedMoves(filepath.Join(repoRoot, unfinishedMovesRelativePath))
-	if err != nil {
-		t.Fatalf("loadUnfinishedMoves() error = %v", err)
-	}
-	if err := validateManifestAt(repoRoot, manifest, moves); err != nil {
-		t.Fatalf("committed manifest validateManifestAt() error = %v", err)
-	}
-	assertExactStrings(t, "productOwners", manifest.DestinationVocabulary.ProductOwners, closedDestinationVocabulary().ProductOwners)
-	assertExactStrings(t, "nonServiceFamilies", manifest.DestinationVocabulary.NonServiceFamilies, closedDestinationVocabulary().NonServiceFamilies)
-	assertExactStrings(t, "architectureExceptions", manifest.DestinationVocabulary.ArchitectureExceptions, closedDestinationVocabulary().ArchitectureExceptions)
-}
-
 func findRepoRoot(t *testing.T) string {
 	t.Helper()
 	dir, err := os.Getwd()
@@ -245,15 +201,5 @@ func moveLedgerFixture(rows ...PackageMapping) UnfinishedMoves {
 		Version: 1,
 		Stage:   unfinishedMovesStage,
 		Moves:   rows,
-	}
-}
-
-// edgesFutureDebtEntry is the FND-06 fixture the schema requires. It lives in
-// the test now that the checker no longer rewrites the committed manifest.
-func edgesFutureDebtEntry() FutureDebt {
-	return FutureDebt{
-		ID:          edgesFutureDebtID,
-		PackagePath: "pkg/services/edges",
-		Description: "Narrow Edges implementation imports and the broad external-effect surface; deferred to FND-06. This packet only records the architecture exception.",
 	}
 }
