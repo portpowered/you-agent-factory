@@ -453,6 +453,33 @@ func (r *registry) projectWorkerSessionIdentity(ctx context.Context, id string) 
 	return projected, nil
 }
 
+// controlTerminalCause maps the two absorbing control states to the operator
+// control outcome that produced them.
+var controlTerminalCause = map[workersessions.State]workersessions.FailureCauseKind{
+	workersessions.StateCanceled:   workersessions.FailureCauseOperatorCanceled,
+	workersessions.StateTerminated: workersessions.FailureCauseOperatorTerminated,
+}
+
+// observedTerminalCause names why a session ended. A committed FailureCause is
+// authoritative. A session ended by an operator control never has one:
+// commitControlTerminal deliberately keeps Result nil so a control invents no
+// terminal result, and the boundary cancel path commits an empty one. Deriving
+// the control outcome from the absorbing state preserves that invariant while
+// still naming the reason, so the inspection surface no longer reports
+// "unavailable" for a cancellation — which is indistinguishable from a failure
+// whose cause was never recorded.
+func observedTerminalCause(session workersessions.Session) *workersessions.FailureCause {
+	if session.Result != nil && session.Result.Cause != nil {
+		cause := *session.Result.Cause
+		return &cause
+	}
+	kind, ok := controlTerminalCause[session.State]
+	if !ok {
+		return nil
+	}
+	return &workersessions.FailureCause{Kind: kind, Detail: boundedFailureDetail(kind, "")}
+}
+
 // loadObservationState returns detached snapshots of the registered session
 // and observation metadata for id. ok is false when either is missing.
 func (r *registry) loadObservationState(id string) (workersessions.Session, *observation, bool) {
