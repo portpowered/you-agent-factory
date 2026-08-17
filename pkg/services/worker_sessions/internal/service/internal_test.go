@@ -4105,6 +4105,11 @@ func coverageExecutionResult(request workers.ExecuteRequest, outcome workers.Exe
 }
 
 func TestWorkerExecutionHandoff_CoversAdmissionFailuresAndProcessLifecycle(t *testing.T) {
+	t.Run("admission failures", testWorkerExecutionHandoffAdmissionFailures)
+	t.Run("process lifecycle", testWorkerExecutionHandoffProcessLifecycle)
+}
+
+func testWorkerExecutionHandoffAdmissionFailures(t *testing.T) {
 	request := dispatchHandoff("handoff-dispatch")
 
 	t.Run("missing execution", func(t *testing.T) {
@@ -4154,7 +4159,10 @@ func TestWorkerExecutionHandoff_CoversAdmissionFailuresAndProcessLifecycle(t *te
 			t.Fatalf("executeWithService(panic) error = %v, want WorkerExecutorPanicError", err)
 		}
 	})
+}
 
+func testWorkerExecutionHandoffProcessLifecycle(t *testing.T) {
+	request := dispatchHandoff("handoff-dispatch")
 	t.Run("process exit wins over executor result", func(t *testing.T) {
 		supervision := newSupervision("handoff-dispatch", "")
 		setCoverageAccepted(supervision, true)
@@ -4169,7 +4177,11 @@ func TestWorkerExecutionHandoff_CoversAdmissionFailuresAndProcessLifecycle(t *te
 			t.Fatalf("executeWithService(process exit) = %#v, %v, want process-gone failure", result, err)
 		}
 	})
+	t.Run("preserves a caller process observer", testWorkerExecutionHandoffPreservesProcessObserver)
+}
 
+func testWorkerExecutionHandoffPreservesProcessObserver(t *testing.T) {
+	request := dispatchHandoff("handoff-dispatch")
 	var nilObserver processLifecycleObserver
 	nilObserver.ProcessExited(platformprocess.ProcessInfo{})
 
@@ -4192,6 +4204,11 @@ func TestWorkerExecutionHandoff_CoversAdmissionFailuresAndProcessLifecycle(t *te
 }
 
 func TestWorkerExecutionHandoff_MapsWorkerOutcomesAndDetachesProcessGoneResults(t *testing.T) {
+	t.Run("maps worker outcomes", testWorkerExecutionHandoffMapsWorkerOutcomes)
+	t.Run("detaches process-gone results", testWorkerExecutionHandoffDetachesProcessGoneResults)
+}
+
+func testWorkerExecutionHandoffMapsWorkerOutcomes(t *testing.T) {
 	request := dispatchHandoff("result-dispatch")
 	output := workers.ProposedOutput{Primary: []work.WorkContentPart{
 		{Type: work.WorkContentPartTypeText, Text: "primary output"},
@@ -4229,7 +4246,13 @@ func TestWorkerExecutionHandoff_MapsWorkerOutcomesAndDetachesProcessGoneResults(
 	if err != nil || result.Result.Output != "primary output" {
 		t.Fatalf("dispatchResultFromExecute(primary text) = %#v, %v, want copied text", result, err)
 	}
+}
 
+func testWorkerExecutionHandoffDetachesProcessGoneResults(t *testing.T) {
+	request := dispatchHandoff("result-dispatch")
+	output := workers.ProposedOutput{Primary: []work.WorkContentPart{
+		{Type: work.WorkContentPartTypeText, Text: "primary output"},
+	}}
 	gone := processGoneExecuteResult(
 		workers.ExecuteRequest{Correlation: workers.ExecutionCorrelation{DispatchID: "gone-dispatch"}},
 		workers.ExecuteResult{Output: output, StructuredResult: map[string]any{"value": true}, StructuredResultPresent: true, Continuation: &workers.ProviderContinuationRef{Provider: "codex", ProviderSessionID: "provider-session"}},
@@ -4619,116 +4642,135 @@ func TestWorkerSessionStartAdmissionCompletionRemainsObservable(t *testing.T) {
 	}
 }
 
+type directControlStartOutcome struct {
+	result workersessions.StartResult
+	err    error
+}
+
+type directControlOutcome struct {
+	result workersessions.ControlResult
+	err    error
+}
+
 func TestWorkerSessionDirectExecutionControlsCancelContextAndJoinTerminal(t *testing.T) {
-	controls := []struct {
-		name   string
-		action workersessions.ControlAction
-		call   func(workersessions.Service, context.Context, workersessions.ControlRequest) (workersessions.ControlResult, error)
-	}{
-		{name: "cancel", action: workersessions.ControlActionCancel, call: func(service workersessions.Service, ctx context.Context, req workersessions.ControlRequest) (workersessions.ControlResult, error) {
+	t.Run("cancel", func(t *testing.T) {
+		runWorkerSessionDirectExecutionControl(t, workersessions.ControlActionCancel, func(service workersessions.Service, ctx context.Context, req workersessions.ControlRequest) (workersessions.ControlResult, error) {
 			return service.Cancel(ctx, req)
-		}},
-		{name: "terminate", action: workersessions.ControlActionTerminate, call: func(service workersessions.Service, ctx context.Context, req workersessions.ControlRequest) (workersessions.ControlResult, error) {
-			return service.Terminate(ctx, req)
-		}},
-	}
-	for _, control := range controls {
-		t.Run(control.name, func(t *testing.T) {
-			started := make(chan struct{})
-			cancellationObserved := make(chan struct{})
-			release := make(chan struct{})
-			var startedOnce sync.Once
-			var cancellationOnce sync.Once
-			var releaseOnce sync.Once
-			defer releaseOnce.Do(func() { close(release) })
-
-			r := newTestRegistry(t)
-			r.execution = coverageExecution{execute: func(ctx context.Context, request workers.ExecuteRequest) (workers.ExecuteResult, error) {
-				startedOnce.Do(func() { close(started) })
-				<-ctx.Done()
-				cancellationOnce.Do(func() { close(cancellationObserved) })
-				<-release
-				return coverageExecutionResult(request, workers.ExecutionOutcomeCanceled), ctx.Err()
-			}}
-
-			startOutcome := make(chan struct {
-				result workersessions.StartResult
-				err    error
-			}, 1)
-			go func() {
-				result, err := r.Start(context.Background(), workersessions.StartRequest{
-					RequestID: "direct-control-start-" + control.name,
-					ID:        "direct-control-session-" + control.name,
-					Execution: dispatchHandoff("direct-control-dispatch-" + control.name),
-				})
-				startOutcome <- struct {
-					result workersessions.StartResult
-					err    error
-				}{result: result, err: err}
-			}()
-			select {
-			case <-started:
-			case <-time.After(2 * time.Second):
-				t.Fatal("direct Workers execution did not start")
-			}
-			var startedResult struct {
-				result workersessions.StartResult
-				err    error
-			}
-			select {
-			case startedResult = <-startOutcome:
-			case <-time.After(2 * time.Second):
-				t.Fatal("Start() did not return at the direct Workers admission barrier")
-			}
-			if startedResult.err != nil || startedResult.result.Session.State != workersessions.StateRunning {
-				t.Fatalf("Start() = %#v, %v, want admitted RUNNING session", startedResult.result, startedResult.err)
-			}
-
-			callerCtx, cancelCaller := context.WithCancel(context.Background())
-			cancelCaller()
-			controlOutcome := make(chan struct {
-				result workersessions.ControlResult
-				err    error
-			}, 1)
-			go func() {
-				result, err := control.call(r, callerCtx, workersessions.ControlRequest{ID: startedResult.result.Session.ID})
-				controlOutcome <- struct {
-					result workersessions.ControlResult
-					err    error
-				}{result: result, err: err}
-			}()
-			select {
-			case <-cancellationObserved:
-			case <-time.After(2 * time.Second):
-				t.Fatal("direct Workers execution did not observe the server-owned cancellation context")
-			}
-			select {
-			case outcome := <-controlOutcome:
-				t.Fatalf("%s returned before the direct execution callback joined: %#v", control.name, outcome.result)
-			default:
-			}
-
-			releaseOnce.Do(func() { close(release) })
-			outcome := <-controlOutcome
-			if outcome.err != nil || outcome.result.Outcome != workersessions.ControlOutcomeApplied {
-				t.Fatalf("%s() = %#v, %v, want applied control after callback", control.name, outcome.result, outcome.err)
-			}
-			wantState := workersessions.StateCanceled
-			if control.action == workersessions.ControlActionTerminate {
-				wantState = workersessions.StateTerminated
-			}
-			if outcome.result.Session.State != wantState {
-				t.Fatalf("%s() state = %q, want %q", control.name, outcome.result.Session.State, wantState)
-			}
-			final, err := r.Get(context.Background(), workersessions.GetRequest{ID: startedResult.result.Session.ID})
-			if err != nil || final.State != wantState {
-				t.Fatalf("Get() after %s = %#v, %v, want %q", control.name, final, err, wantState)
-			}
-			repeated, err := control.call(r, context.Background(), workersessions.ControlRequest{ID: startedResult.result.Session.ID})
-			if err != nil || repeated.Outcome != workersessions.ControlOutcomeNoop || repeated.Session.State != wantState {
-				t.Fatalf("repeated %s() = %#v, %v, want terminal NOOP", control.name, repeated, err)
-			}
 		})
+	})
+	t.Run("terminate", func(t *testing.T) {
+		runWorkerSessionDirectExecutionControl(t, workersessions.ControlActionTerminate, func(service workersessions.Service, ctx context.Context, req workersessions.ControlRequest) (workersessions.ControlResult, error) {
+			return service.Terminate(ctx, req)
+		})
+	})
+}
+
+func runWorkerSessionDirectExecutionControl(t *testing.T, action workersessions.ControlAction, call func(workersessions.Service, context.Context, workersessions.ControlRequest) (workersessions.ControlResult, error)) {
+	t.Helper()
+	started := make(chan struct{})
+	cancellationObserved := make(chan struct{})
+	release := make(chan struct{})
+	var startedOnce sync.Once
+	var cancellationOnce sync.Once
+	var releaseOnce sync.Once
+	defer releaseOnce.Do(func() { close(release) })
+
+	r := newTestRegistry(t)
+	r.execution = coverageExecution{execute: func(ctx context.Context, request workers.ExecuteRequest) (workers.ExecuteResult, error) {
+		startedOnce.Do(func() { close(started) })
+		<-ctx.Done()
+		cancellationOnce.Do(func() { close(cancellationObserved) })
+		<-release
+		return coverageExecutionResult(request, workers.ExecutionOutcomeCanceled), ctx.Err()
+	}}
+
+	startOutcome := startDirectControlSession(t, r, string(action))
+	startedResult := awaitDirectControlStart(t, started, startOutcome)
+	if startedResult.err != nil || startedResult.result.Session.State != workersessions.StateRunning {
+		t.Fatalf("Start() = %#v, %v, want admitted RUNNING session", startedResult.result, startedResult.err)
+	}
+
+	callerCtx, cancelCaller := context.WithCancel(context.Background())
+	cancelCaller()
+	controlOutcome := invokeDirectControl(r, callerCtx, startedResult.result.Session.ID, call)
+	awaitDirectControlCancellation(t, action, cancellationObserved, controlOutcome, release, &releaseOnce)
+	outcome := <-controlOutcome
+	assertDirectControlTerminal(t, r, action, startedResult.result.Session.ID, outcome, call)
+}
+
+func startDirectControlSession(t *testing.T, r *registry, controlName string) <-chan directControlStartOutcome {
+	t.Helper()
+	startOutcome := make(chan directControlStartOutcome, 1)
+	go func() {
+		result, err := r.Start(context.Background(), workersessions.StartRequest{
+			RequestID: "direct-control-start-" + controlName,
+			ID:        "direct-control-session-" + controlName,
+			Execution: dispatchHandoff("direct-control-dispatch-" + controlName),
+		})
+		startOutcome <- directControlStartOutcome{result: result, err: err}
+	}()
+	return startOutcome
+}
+
+func awaitDirectControlStart(t *testing.T, started <-chan struct{}, startOutcome <-chan directControlStartOutcome) directControlStartOutcome {
+	t.Helper()
+	select {
+	case <-started:
+	case <-time.After(2 * time.Second):
+		t.Fatal("direct Workers execution did not start")
+	}
+	select {
+	case outcome := <-startOutcome:
+		return outcome
+	case <-time.After(2 * time.Second):
+		t.Fatal("Start() did not return at the direct Workers admission barrier")
+		return directControlStartOutcome{}
+	}
+}
+
+func invokeDirectControl(r workersessions.Service, callerCtx context.Context, sessionID string, call func(workersessions.Service, context.Context, workersessions.ControlRequest) (workersessions.ControlResult, error)) <-chan directControlOutcome {
+	controlOutcome := make(chan directControlOutcome, 1)
+	go func() {
+		result, err := call(r, callerCtx, workersessions.ControlRequest{ID: sessionID})
+		controlOutcome <- directControlOutcome{result: result, err: err}
+	}()
+	return controlOutcome
+}
+
+func awaitDirectControlCancellation(t *testing.T, action workersessions.ControlAction, cancellationObserved <-chan struct{}, controlOutcome <-chan directControlOutcome, release chan struct{}, releaseOnce *sync.Once) {
+	t.Helper()
+	select {
+	case <-cancellationObserved:
+	case <-time.After(2 * time.Second):
+		t.Fatal("direct Workers execution did not observe the server-owned cancellation context")
+	}
+	select {
+	case outcome := <-controlOutcome:
+		t.Fatalf("%s returned before the direct execution callback joined: %#v", action, outcome.result)
+	default:
+	}
+	releaseOnce.Do(func() { close(release) })
+}
+
+func assertDirectControlTerminal(t *testing.T, r *registry, action workersessions.ControlAction, sessionID string, outcome directControlOutcome, call func(workersessions.Service, context.Context, workersessions.ControlRequest) (workersessions.ControlResult, error)) {
+	t.Helper()
+	if outcome.err != nil || outcome.result.Outcome != workersessions.ControlOutcomeApplied {
+		t.Fatalf("%s() = %#v, %v, want applied control after callback", action, outcome.result, outcome.err)
+	}
+	wantState := workersessions.StateCanceled
+	if action == workersessions.ControlActionTerminate {
+		wantState = workersessions.StateTerminated
+	}
+	if outcome.result.Session.State != wantState {
+		t.Fatalf("%s() state = %q, want %q", action, outcome.result.Session.State, wantState)
+	}
+	final, err := r.Get(context.Background(), workersessions.GetRequest{ID: sessionID})
+	if err != nil || final.State != wantState {
+		t.Fatalf("Get() after %s = %#v, %v, want %q", action, final, err, wantState)
+	}
+	repeated, err := call(r, context.Background(), workersessions.ControlRequest{ID: sessionID})
+	if err != nil || repeated.Outcome != workersessions.ControlOutcomeNoop || repeated.Session.State != wantState {
+		t.Fatalf("repeated %s() = %#v, %v, want terminal NOOP", action, repeated, err)
 	}
 }
 
