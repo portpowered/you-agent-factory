@@ -57,6 +57,7 @@ type recordingCommandLogger struct {
 	infos    []recordedCommandLog
 	verboses []recordedCommandLog
 	warns    []recordedCommandLog
+	errors   []recordedCommandLog
 }
 
 type recordedCommandLog struct {
@@ -77,7 +78,12 @@ func (l *recordingCommandLogger) Warn(msg string, keysAndValues ...any) {
 		fields: commandLogFieldsMap(keysAndValues...),
 	})
 }
-func (l *recordingCommandLogger) Error(_ string, _ ...any) {}
+func (l *recordingCommandLogger) Error(msg string, keysAndValues ...any) {
+	l.errors = append(l.errors, recordedCommandLog{
+		msg:    msg,
+		fields: commandLogFieldsMap(keysAndValues...),
+	})
+}
 func (l *recordingCommandLogger) Verbose(msg string, keysAndValues ...any) {
 	l.verboses = append(l.verboses, recordedCommandLog{
 		msg:    msg,
@@ -765,4 +771,197 @@ func assertLoggingCommandRunnerVerboseCompletionLog(t *testing.T, fields map[str
 	if fields["stdout_bytes"] == nil || fields["stderr_bytes"] == nil {
 		t.Fatalf("verbose completion missing output byte counters: %#v", fields)
 	}
+}
+
+func TestComposedCommandLineLength_MeasuresTheStringTheProcessLoaderReceives(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		command string
+		args    []string
+		want    int
+	}{
+		{name: "bare command", command: "claude", want: len("claude")},
+		{
+			name:    "plain arguments join with single separators",
+			command: "claude",
+			args:    []string{"-p", "--verbose"},
+			want:    len(`claude -p --verbose`),
+		},
+		{
+			name:    "arguments containing spaces gain surrounding quotes",
+			command: "claude",
+			args:    []string{"--system-prompt", "be brief"},
+			want:    len(`claude --system-prompt "be brief"`),
+		},
+		{
+			name:    "embedded quotes gain an escaping backslash",
+			command: "claude",
+			args:    []string{`say "hi"`},
+			want:    len(`claude "say \"hi\""`),
+		},
+		{
+			name:    "trailing backslashes double before the closing quote",
+			command: "claude",
+			args:    []string{`C:\work dir\`},
+			want:    len(`claude "C:\work dir\\"`),
+		},
+		{
+			name:    "empty arguments are emitted as an empty quoted pair",
+			command: "claude",
+			args:    []string{""},
+			want:    len(`claude ""`),
+		},
+		{
+			name:    "characters outside the basic multilingual plane cost two code units",
+			command: "claude",
+			args:    []string{"\U0001F600"},
+			want:    len("claude ") + 2,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			if got := ComposedCommandLineLength(tc.command, tc.args); got != tc.want {
+				t.Fatalf("ComposedCommandLineLength(%q, %#v) = %d, want %d", tc.command, tc.args, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestComposedCommandLineLength_GrowsWithInlinedArgumentContent(t *testing.T) {
+	t.Parallel()
+
+	small := ComposedCommandLineLength("claude", []string{"-p", strings.Repeat("a", 9152)})
+	large := ComposedCommandLineLength("claude", []string{"-p", strings.Repeat("a", 9819)})
+	if large-small != 9819-9152 {
+		t.Fatalf("inline argument growth = %d, want %d", large-small, 9819-9152)
+	}
+
+	viaStdin := ComposedCommandLineLength("claude", []string{"-p"})
+	if viaStdin >= small {
+		t.Fatalf("command line with the prompt removed = %d, want below the inline measurement %d", viaStdin, small)
+	}
+}
+
+func TestCommandStartError_NamesAnOversizedCommandLineWithItsMeasuredSize(t *testing.T) {
+	t.Parallel()
+
+	overLimit := &CommandStartError{
+		Command:           "claude",
+		ArgsCount:         12,
+		CommandLineLength: 33012,
+		CommandLineLimit:  WindowsCommandLineLimit,
+		Cause:             errors.New("The filename or extension is too long."),
+	}
+	if !overLimit.OverCommandLineLimit() {
+		t.Fatalf("OverCommandLineLimit() = false, want true for %d against %d", overLimit.CommandLineLength, overLimit.CommandLineLimit)
+	}
+	message := overLimit.Error()
+	for _, want := range []string{"claude", "33012", "12", "32767", "command-line limit", "The filename or extension is too long."} {
+		if !strings.Contains(message, want) {
+			t.Fatalf("Error() = %q, want it to name %q", message, want)
+		}
+	}
+
+	underLimit := &CommandStartError{
+		Command:           "claude",
+		ArgsCount:         3,
+		CommandLineLength: 64,
+		CommandLineLimit:  WindowsCommandLineLimit,
+		Cause:             errors.New("executable file not found"),
+	}
+	if underLimit.OverCommandLineLimit() {
+		t.Fatalf("OverCommandLineLimit() = true, want false for %d against %d", underLimit.CommandLineLength, underLimit.CommandLineLimit)
+	}
+	if got := underLimit.Error(); strings.Contains(got, "command-line limit") {
+		t.Fatalf("Error() = %q, want it not to blame the command-line limit", got)
+	}
+
+	unbounded := &CommandStartError{CommandLineLength: 1 << 20, CommandLineLimit: 0, Cause: errors.New("boom")}
+	if unbounded.OverCommandLineLimit() {
+		t.Fatalf("OverCommandLineLimit() = true, want false when the host states no command-line limit")
+	}
+}
+
+func TestCommandStartError_UnwrapsTheOperatingSystemCause(t *testing.T) {
+	t.Parallel()
+
+	cause := errors.New("fork/exec failed")
+	err := error(&CommandStartError{Command: "claude", Cause: cause})
+	if !errors.Is(err, cause) {
+		t.Fatalf("errors.Is(%v, cause) = false, want true", err)
+	}
+}
+
+func TestExecCommandRunner_StartFailureReturnsANamedErrorAndLogsIt(t *testing.T) {
+	logger := &recordingCommandLogger{}
+	missing := filepath.Join(t.TempDir(), "provider-executable-that-does-not-exist")
+	req := CommandRequest{
+		Command: missing,
+		Args:    []string{"-p", strings.Repeat("prompt ", 512)},
+		Stdin:   []byte("stdin payload"),
+		WorkDir: t.TempDir(),
+	}
+
+	_, err := testExecCommandRunner(t, logger).Run(context.Background(), req)
+
+	var startErr *CommandStartError
+	if !errors.As(err, &startErr) {
+		t.Fatalf("Run() error = %#v, want a *CommandStartError", err)
+	}
+	if startErr.Command != missing {
+		t.Fatalf("start error command = %q, want %q", startErr.Command, missing)
+	}
+	if want := ComposedCommandLineLength(req.Command, req.Args); startErr.CommandLineLength != want {
+		t.Fatalf("start error command line length = %d, want %d", startErr.CommandLineLength, want)
+	}
+	if startErr.ArgsCount != len(req.Args) || startErr.StdinBytes != len(req.Stdin) {
+		t.Fatalf("start error = %#v, want args %d and stdin %d", startErr, len(req.Args), len(req.Stdin))
+	}
+	if startErr.Cause == nil {
+		t.Fatalf("start error cause = nil, want the operating system failure")
+	}
+
+	logged := commandStartFailureLogs(logger)
+	if len(logged) != 1 {
+		t.Fatalf("start failure logs = %d, want exactly 1: %#v", len(logged), logger.errors)
+	}
+	fields := logged[0].fields
+	if fields["command"] != missing {
+		t.Fatalf("start failure log command = %#v, want %q", fields["command"], missing)
+	}
+	if fields["command_line_chars"] != startErr.CommandLineLength {
+		t.Fatalf("start failure log command_line_chars = %#v, want %d", fields["command_line_chars"], startErr.CommandLineLength)
+	}
+	if fields["over_command_line_limit"] != startErr.OverCommandLineLimit() {
+		t.Fatalf("start failure log over_command_line_limit = %#v, want %v", fields["over_command_line_limit"], startErr.OverCommandLineLimit())
+	}
+	if fields["error"] == nil || fields["error"] == "" {
+		t.Fatalf("start failure log error = %#v, want the operating system failure text", fields["error"])
+	}
+}
+
+func TestExecCommandRunner_SuccessfulStartLogsNoStartFailure(t *testing.T) {
+	requireProcessIntegration(t)
+	logger := &recordingCommandLogger{}
+
+	if _, err := testExecCommandRunner(t, logger).Run(context.Background(), commandCleanupTestRequest(t)); err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if logged := commandStartFailureLogs(logger); len(logged) != 0 {
+		t.Fatalf("start failure logs = %#v, want none for a command that started", logged)
+	}
+}
+
+func commandStartFailureLogs(logger *recordingCommandLogger) []recordedCommandLog {
+	var matched []recordedCommandLog
+	for _, entry := range logger.errors {
+		if entry.fields["event_name"] == commandRunnerStartFailedEvent {
+			matched = append(matched, entry)
+		}
+	}
+	return matched
 }

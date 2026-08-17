@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 )
 
@@ -50,9 +51,16 @@ func commandCompletionLogFields(req CommandRequest, result CommandResult, durati
 	}
 	return fields
 }
+
+// commandRequestDetailsLogFields records the composed command-line size next to
+// the argument count. The count alone cannot distinguish a dispatch that fits
+// the host command-line limit from one that will be rejected by the process
+// loader, so an operator had no way to see a prompt growing toward that bound.
 func commandRequestDetailsLogFields(req CommandRequest) []any {
 	return workLogFields(req.Execution, "event_name", workLogEventCommandRunnerRequestDetails, "status", "verbose",
-		"command", req.Command, "args_count", len(req.Args), "working_dir", req.WorkDir, "stdin_bytes", len(req.Stdin))
+		"command", req.Command, "args_count", len(req.Args), "working_dir", req.WorkDir, "stdin_bytes", len(req.Stdin),
+		"command_line_chars", platformprocess.ComposedCommandLineLength(req.Command, req.Args),
+		"command_line_limit", platformprocess.HostCommandLineLimit())
 }
 func commandOutputDetailsLogFields(req CommandRequest, result CommandResult, duration time.Duration) []any {
 	return workLogFields(req.Execution, "event_name", workLogEventCommandRunnerOutputDetails, "status", "verbose",
