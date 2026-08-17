@@ -69,6 +69,8 @@ Recordings canonical reads.
 | Terminal envelope | The response-event payload union covers every documented variant | `pkg/transports/http/contracttests/openapi_contract_response_events_test.go:TestOpenAPIContract_FactoryResponseEventPayloadUnionCoversAllVariants` | `pkg/transports/http` | Guarded |
 | Response stream | Retained-then-live SSE ordering; documented stream close boundary | `tests/functional/events/response_events/stream_test.go:TestAPIResponseEventSSEStreamsRetainedThenLiveEvents`, `...:TestAPIResponseEventStreamClosesAtDocumentedBoundary` | `pkg/services/factory_sessions` | Guarded |
 | Reconnect gap | A cursor gap emits the typed stream-gap record; an expired session returns typed Gone | `tests/functional/events/response_events/stream_test.go:TestAPIResponseEventCursorGapEmitsStreamGap`, `...:TestAPIResponseEventSessionExpiryReturnsTypedGone` | `pkg/services/factory_sessions` | Guarded |
+| Reconnect resume | Reopening a live session's stream from an acknowledged cursor replays exactly the retained suffix, in order, with no duplicate of the acknowledged prefix | `tests/functional/events/response_events/concurrent_session_isolation_test.go:TestConcurrentFactorySessionResponseEventStreamsStayIsolatedAndResumeFromCursor` | `pkg/services/factory_sessions` | **Closed by P7-B** |
+| Concurrent response streams | Two Factory Sessions streaming at once each decode their own typed payload unions in published order; neither stream carries the other session's identity, event ids, dispatch identity, or message text | `tests/functional/events/response_events/concurrent_session_isolation_test.go:TestConcurrentFactorySessionResponseEventStreamsStayIsolatedAndResumeFromCursor` | `pkg/services/factory_sessions` | **Closed by P7-B** |
 | Active-stream close | Server shutdown closes the listener and every active stream; bind failure unwinds started lifecycle roles | `tests/functional/transport/http/server/startup_shutdown_test.go:TestAPIServerShutdownClosesListenerAndActiveStreams`, `...:TestAPIServerBindFailureUnwindsStartedLifecycleRoles` | `pkg/transports/http`, `pkg/initializer` | Guarded |
 | Terminal result | Response-event stream read to a terminal run outcome | `tests/functional/events/response_events/terminal_outcomes_test.go:TestReadResponseEventStreamUntilTerminalRunOutcomes` | `pkg/services/factory_sessions` | Guarded |
 | Work admission | Work admission and response stream activate after runtime lifecycle through `root.BuildProcess` | `tests/functional/sessions/root_composition/work_admission_response_stream_test.go:TestSessionsWorkAdmissionAndResponseStreamActivateThroughRootBuildProcessAfterLifecycle` | `pkg/services/factory_sessions`, `pkg/services/work` | Guarded |
@@ -138,7 +140,7 @@ history/projection/replay.
 | --- | --- | --- | --- | --- |
 | Replay equivalence | Projection queries are equivalent for retained and replayed canonical facts | `pkg/services/recordings/internal/projection_query_contract_test.go:TestProjectionQueries_AreEquivalentForRetainedAndReplayedCanonicalFacts` | `pkg/services/recordings` | Guarded |
 | Scope isolation | Recording-scope queries stay isolated across concurrent scopes and concurrent sessions | `pkg/services/recordings/internal/projection_query_contract_test.go:TestRecordingScopeQueriesRemainIsolatedAcrossConcurrentScopes`, `pkg/services/recordings/internal/canonical_recording_lifecycle_test.go:TestRecordingScopesKeepConcurrentSessionsIsolated` | `pkg/services/recordings` | Guarded |
-| Multi-part Work content | A terminal result with two differently typed ordered parts (text then JSON) keeps both discriminated types and their order through the public boundary, and a failure terminal outcome is never reported as success | *(planned guard; mapping/read-model prerequisites exist at `pkg/services/work/transports/http/admission_mapping_test.go:TestSubmitWorkResponseToAPI_EncodesDetachedResult` and `.../read_mapping_test.go:TestWorkReadModelToAPI_EncodesDetachedReadModel`)* | `pkg/services/work` | **P7-B** |
+| Multi-part Work content | A terminal result with two differently typed ordered parts (text then JSON) keeps both discriminated types and their order through the public boundary, and a failure terminal outcome is never reported as success | `tests/functional/transport/http/server/work_terminal_response_test.go:TestWorkTerminalResponsePreservesOrderedTypedContentThroughPublicBoundary` | `pkg/services/work` | **Closed by P7-B** |
 
 ## 8. CLI and API invocation parity
 
@@ -163,7 +165,7 @@ silently re-pointed at a lookalike.
 | `tests/functional/workers/agent/stateless_root_test.go:TestBuildStatelessWorkersExecutesDetachedAttemptThroughRoot` | The name existed only as an in-package test at `pkg/root/root_submit_family_compatibility_test.go:410`. No test outside `pkg/root` drove `root.BuildStatelessWorkers` as a customer would, so the "detached execution stays outside Runtime/Session opening" promise had no public guard. | **Closed by P7-A** at the named path. The `pkg/root` owner-tier test is retained; the two assert different boundaries and neither replaces the other. |
 | `pkg/services/workers/internal/services/workstations/executor/agentrun/executor_test.go:TestAgentRunExecutor_TimeoutSurfacesAgentRunTimeoutClass` | Neither the file nor the test exists. The nearest coverage, `agentrun/failure_test.go:TestFailureClassForError_RawDeadlineRemainsAgentRunTimeout`, tests the class mapping as a pure function and never runs a detached agent loop. | **Closed by P7-A** as `agentrun/detached_test.go:TestExecuteDetachedTimeoutSurfacesAgentRunTimeoutClass`, which drives `ExecuteDetached` and then asserts the class, metadata, and diagnostics of the error it actually returns. No new file was added to `agentrun` (the package is at 14 Go files against a limit of 15). |
 | `.../runtime/dispatch_worker_sessions_idempotency_test.go:TestFactoryImpl_WorkerSessionCompletionRacesExplicitAcceptanceAndCanonicalReplay` | Absent. The sibling `TestFactoryImpl_ConcurrentAcceptDispatchResultResolvesExactlyOnce` exists in that file and covers concurrent accept, but not completion racing explicit acceptance against canonical replay. | **P7-C** owns this cell; it is the slice authored for dispatch races. |
-| `tests/functional/transport/http/server/work_terminal_response_test.go:TestWorkTerminalResponsePreservesOrderedTypedContentThroughPublicBoundary` | Absent, and the plan already marks it *planned*. | **P7-B** owns this cell. |
+| `tests/functional/transport/http/server/work_terminal_response_test.go:TestWorkTerminalResponsePreservesOrderedTypedContentThroughPublicBoundary` | Absent, and the plan already marks it *planned*. | **Closed by P7-B** at the named path. |
 | `tests/functional/sessions/root_composition/p3_p7_behavior_matrix_test.go:TestP3P7CanonicalPathPreservesTerminalCleanupAndReplayIsolation` | Absent, and the plan already marks it *planned*. | **P7-D** owns this cell. |
 
 One further gap was found by walking the caller table rather than the guard
@@ -191,10 +193,33 @@ or through the process's own `Args`/`Env`/`WorkingDirectory`/stream inputs. No
 guard sleeps, pads a timeout, or synchronizes on wall-clock time. P7-A makes no
 production change and no deletion.
 
+## Gap closure delivered by P7-B
+
+| Cell | New or extended guard |
+| --- | --- |
+| Public multi-part Work terminal response, success and failure | `tests/functional/transport/http/server/work_terminal_response_test.go:TestWorkTerminalResponsePreservesOrderedTypedContentThroughPublicBoundary` |
+| Concurrent-session response-event isolation, typed ordered payloads, cursor resume | `tests/functional/events/response_events/concurrent_session_isolation_test.go:TestConcurrentFactorySessionResponseEventStreamsStayIsolatedAndResumeFromCursor` |
+
+Two P7-B findings are recorded rather than papered over:
+
+- **CLI/API invocation parity needed no new guard.** Section 8's success,
+  domain-failure, and cancellation rows already assert local-versus-remote
+  `run` parity through `support.BuildProcess`, so P7-B verified the three cells
+  against the plan's wording instead of adding a duplicate parity test.
+- **Ordered multi-part terminal content reaches the public read through
+  customer-submitted content, not through worker output.** Worker output
+  materialization produces exactly one text part
+  (`work.ProposedOutputFromLegacyWorkResult`), and a recorded decision-envelope
+  output Work is re-materialized under a fresh identity, which breaks
+  submitted-Work lineage. The guard therefore submits the ordered typed parts
+  through `POST /factory-sessions/{id}/work` and authors
+  `workPropagation: {mode: PRESERVE_INPUT}`, which is the one production path
+  that carries customer content onto the terminal token. The public invocation
+  route is text-only by contract (`work.ResolveAPITextInputContent`), so it
+  cannot carry this case. No production compatibility path was added.
+
 ## Cells deliberately left to later slices
 
-- **P7-B** — public multi-part Work terminal response; CLI/API parity
-  strengthening; HTTP response-event and reconnect/replay strengthening.
 - **P7-C** — activation-failure exactly-once unwind; concurrent/duplicate
   dispatch completion; canonical replay equivalence under concurrent scope
   access; the absent worker-session completion race guard above.
