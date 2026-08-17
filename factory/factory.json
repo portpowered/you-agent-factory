@@ -769,6 +769,7 @@
       "workingDirectory": ".claude/worktrees/{{ (index .Inputs 0).Name }}"
     },
     {
+      "behavior": "REPEATER",
       "id": "review",
       "inputs": [
         {
@@ -781,6 +782,16 @@
         }
       ],
       "name": "review",
+      "onContinue": [
+        {
+          "state": "in-review",
+          "workType": "task"
+        },
+        {
+          "state": "init",
+          "workType": "review"
+        }
+      ],
       "onFailure": [
         {
           "state": "failed",
