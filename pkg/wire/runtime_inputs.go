@@ -3,13 +3,16 @@ package wire
 import (
 	"context"
 	"errors"
+	"net/http"
 	"os"
 	"strings"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/portpowered/infinite-you/pkg/initializer/lifecycle"
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
+	platformhttpserver "github.com/portpowered/infinite-you/pkg/platform/httpserver"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	platformmetrics "github.com/portpowered/infinite-you/pkg/platform/metrics"
 	platformpty "github.com/portpowered/infinite-you/pkg/platform/pty"
@@ -18,15 +21,19 @@ import (
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	factorysessionshttp "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/http"
 	factorysessionwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire"
 	"github.com/portpowered/infinite-you/pkg/services/models"
 	modelswire "github.com/portpowered/infinite-you/pkg/services/models/wire"
 	providerswire "github.com/portpowered/infinite-you/pkg/services/providers/wire"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
+	recordingshttp "github.com/portpowered/infinite-you/pkg/services/recordings/transports/http"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workwire "github.com/portpowered/infinite-you/pkg/services/work/wire"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
+	transporthttp "github.com/portpowered/infinite-you/pkg/transports/http"
+	factorysessionmapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factorysession"
 	"go.uber.org/zap"
 )
 
@@ -465,4 +472,65 @@ func provideWorkService(
 	contentMaterializer work.ContentMaterializer,
 ) work.Service {
 	return workwire.NewRuntimeService(runtimes, readFile, inspectPath, contentStaging, contentMaterializer)
+}
+
+func provideDirectJavaScriptHostAdapter(
+	validation factorydefinitions.SubmittedDefinitionValidationOperation,
+	invocationWorkType factorydefinitions.InvocationWorkTypeService,
+	sessionRequests factorysessionshttp.RequestPreparation,
+	start platformhttpserver.Starter,
+	newRunner lifecycle.RunnerFactory,
+	logger *zap.Logger,
+) (factorysessionwire.DirectJavaScriptHostAdapter, error) {
+	if validation == nil || invocationWorkType == nil || sessionRequests == nil || start == nil || newRunner == nil || logger == nil {
+		return nil, errors.New("direct JavaScript HTTP handler, starter, and lifecycle runner are required")
+	}
+	return func(
+		execution factorysessionwire.OwnedExecutionService,
+		host factorysessions.RuntimeHostRequest,
+		observer factorysessions.RuntimeHostObserver,
+	) (lifecycle.Component, error) {
+		handler, err := newDurableExecutionHTTPHandler(
+			execution, validation, invocationWorkType, sessionRequests, logger,
+		)
+		if err != nil {
+			return nil, err
+		}
+		return newRunner(func(ctx context.Context) error {
+			return start(ctx, platformhttpserver.StartRequest{
+				Handler: handler, Host: host.Host, Port: host.Port,
+				AutoPort: host.AutoPort, Logger: logger,
+				OnBound: func(binding platformhttpserver.Binding) {
+					if observer != nil {
+						observer(factorysessions.RuntimeHostBinding{
+							Host: binding.Host, Port: binding.Port,
+						})
+					}
+				},
+			})
+		}), nil
+	}, nil
+}
+
+func newDurableExecutionHTTPHandler(
+	execution factorysessionwire.OwnedExecutionService,
+	validation factorydefinitions.SubmittedDefinitionValidationOperation,
+	invocationWorkType factorydefinitions.InvocationWorkTypeService,
+	sessionRequests factorysessionshttp.RequestPreparation,
+	logger *zap.Logger,
+) (http.Handler, error) {
+	if execution == nil || validation == nil || invocationWorkType == nil || sessionRequests == nil || logger == nil {
+		return nil, errors.New("construct durable execution HTTP handler: execution, policies, request preparation, and logger are required")
+	}
+	durable := factorysessionmapping.NewDurableAPI(execution)
+	sessionsHandler := factorysessionshttp.NewHandler(factorysessionshttp.Dependencies{
+		DurableExecution: durable, DurableLifecycle: durable,
+		DurableListing: durable, DurableResponseEvents: durable,
+		DurableLister: execution, FactoryValidation: validation,
+		InvocationWorkType: invocationWorkType, SessionRequests: sessionRequests,
+	}, logger)
+	return transporthttp.NewServerWithRecordings(
+		recordingshttp.NewLegacyAdapter(durable, sessionRequests),
+		sessionsHandler, nil, nil, nil, nil, logger,
+	).Handler(), nil
 }

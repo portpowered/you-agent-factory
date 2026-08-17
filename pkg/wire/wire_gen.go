@@ -26,11 +26,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/transports/acp"
 	"github.com/portpowered/infinite-you/pkg/transports/cli"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/worker_sessions"
-	application2 "github.com/portpowered/infinite-you/pkg/transports/http/application"
-	"github.com/portpowered/infinite-you/pkg/transports/mapping"
-	"github.com/portpowered/infinite-you/pkg/transports/mapping/composition"
-	"github.com/portpowered/infinite-you/pkg/transports/mapping/factorydefinition"
-	"github.com/portpowered/infinite-you/pkg/transports/mapping/factorysession"
 	"github.com/portpowered/infinite-you/pkg/transports/mcp/stdio"
 )
 
@@ -534,24 +529,16 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	v83 := provideRuntimeInputResolver()
 	runtimeFactory := provideFactoryVisualizationFactory()
 	factoryStatusProjector := factory.NewFactoryStatusProjector()
-	contentPreparation := work.NewContentPreparation()
-	httpBinder, err := composition.NewHTTPBinder(factoryStatusProjector, contentPreparation)
-	if err != nil {
-		return nil, err
-	}
 	httpAdapter := http.NewAdapter(providersessionsService)
 	handler := http.NewHandler(httpAdapter, logger)
+	contentPreparation := work.NewContentPreparation()
 	requestPreparation := provideFactorySessionHTTPRequestPreparation(v70)
-	runtimeBinding, err := provideHTTPRuntimeBinding(httpBinder, handler, contentPreparation, v72, invocationWorkTypeService, requestPreparation)
-	if err != nil {
-		return nil, err
-	}
-	applicationHandler, err := application2.NewHandler(runtimeBinding, v72, invocationWorkTypeService, requestPreparation)
+	wireHttpRuntimeBinding, err := provideHTTPRuntimeBinding(factoryStatusProjector, handler, contentPreparation, v72, invocationWorkTypeService, requestPreparation)
 	if err != nil {
 		return nil, err
 	}
 	runnerFactory := provideLifecycleRunnerFactory()
-	v84, err := provideApplicationRuntimeAdapter(edges2, runtimeFactory, applicationHandler, runnerFactory)
+	v84, err := provideApplicationRuntimeAdapter(edges2, runtimeFactory, wireHttpRuntimeBinding, runnerFactory)
 	if err != nil {
 		return nil, err
 	}
@@ -566,7 +553,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	}
 	v87 := provideResponsePresentation()
 	v88 := provideDirectJavaScriptSyncRunner()
-	directJavaScriptHostAdapter, err := provideDirectJavaScriptHostAdapter(applicationHandler, starter, runnerFactory, logger)
+	directJavaScriptHostAdapter, err := provideDirectJavaScriptHostAdapter(v72, invocationWorkTypeService, requestPreparation, starter, runnerFactory, logger)
 	if err != nil {
 		return nil, err
 	}
@@ -816,7 +803,7 @@ func BuildMockStatelessWorkers(ctx context.Context, edges2 edges.Edges, mockWork
 
 var platformSet = wire5.NewSet(logging.NewDefaultLogger)
 
-var apiSet = wire5.NewSet(http.NewAdapter, http.NewHandler, composition.NewHTTPBinder, apisurface.NewRuntimeAPI, composition.NewLiveSessionAPI, factorydefinition.NewAPI, factorysession.NewDurableAPI, factorysession.NewLiveAPI, factorysession.NewInvocationAPI, stdio.NewOpener, provideHTTPRuntimeBinding, application2.NewHandler)
+var apiSet = wire5.NewSet(http.NewAdapter, http.NewHandler, stdio.NewOpener, provideHTTPRuntimeBinding)
 
 var servicesSet = wire5.NewSet(
 	provideProvidersService,

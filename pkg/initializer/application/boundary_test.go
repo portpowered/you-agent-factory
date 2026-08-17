@@ -35,7 +35,6 @@ func TestInitializerApplicationDoesNotConstructConcreteTransportsOrMappingAdapte
 			"pkg/services/bundle",
 			"lifecycle.New",
 			"runtimeapplication.New",
-			"httpapplication.New",
 			"mcpstdio.New",
 			"ApplyRuntimeOverrides",
 			"serviceedges.Merge(",

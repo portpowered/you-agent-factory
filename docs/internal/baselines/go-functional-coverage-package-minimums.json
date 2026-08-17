@@ -2343,6 +2343,24 @@
       }
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/historical_query",
+      "exception": {
+        "kind": "measurement",
+        "justification": "The active functional coverage profile contains no measurable statements for this package.",
+        "owner": "backend-quality",
+        "deadline": "2027-07-15",
+        "removalGate": "The functional coverage profile reports at least one measurable statement for this package."
+      }
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/historical_query/internal/service",
+      "minimum": 0.48
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/historical_query/wire",
+      "minimum": 100.00
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/projection_query",
       "exception": {
         "kind": "measurement",
@@ -3099,16 +3117,8 @@
       "minimum": 43.47
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/transports/http/application",
-      "minimum": 75.00
-    },
-    {
       "package": "github.com/portpowered/infinite-you/pkg/transports/mapping",
       "minimum": 25.00
-    },
-    {
-      "package": "github.com/portpowered/infinite-you/pkg/transports/mapping/composition",
-      "minimum": 75.00
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig",

@@ -2439,16 +2439,8 @@
       "minimum": 73.91
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/transports/http/application",
-      "minimum": 85.00
-    },
-    {
       "package": "github.com/portpowered/infinite-you/pkg/transports/mapping",
       "minimum": 71.38
-    },
-    {
-      "package": "github.com/portpowered/infinite-you/pkg/transports/mapping/composition",
-      "minimum": 61.11
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig",

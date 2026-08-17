@@ -1862,7 +1862,7 @@
       "class": "protocol_composition",
       "bidirectional": true,
       "unresolved": true,
-      "evidence": "pkg/transports/http/application -> pkg/services/provider_sessions"
+      "evidence": "pkg/transports/http/server.go -> pkg/services/provider_sessions"
     },
     {
       "fromOwner": "transports",
@@ -5858,12 +5858,6 @@
       "destinationKind": "family"
     },
     {
-      "packagePath": "pkg/transports/http/application",
-      "disposition": "retain",
-      "destination": "transports",
-      "destinationKind": "family"
-    },
-    {
       "packagePath": "pkg/transports/http/client",
       "disposition": "retain",
       "destination": "transports",
@@ -5901,12 +5895,6 @@
     },
     {
       "packagePath": "pkg/transports/mapping",
-      "disposition": "retain",
-      "destination": "transports",
-      "destinationKind": "family"
-    },
-    {
-      "packagePath": "pkg/transports/mapping/composition",
       "disposition": "retain",
       "destination": "transports",
       "destinationKind": "family"

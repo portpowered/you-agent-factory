@@ -556,12 +556,10 @@
     "pkg/transports/cli/workflow",
     "pkg/transports/http",
     "pkg/transports/http/apitypes",
-    "pkg/transports/http/application",
     "pkg/transports/http/client",
     "pkg/transports/http/generated",
     "pkg/transports/http/servertests/factorysessionsse",
     "pkg/transports/mapping",
-    "pkg/transports/mapping/composition",
     "pkg/transports/mapping/factoryconfig",
     "pkg/transports/mapping/factoryconfig/authored",
     "pkg/transports/mapping/factoryconfig/diagnostics",
@@ -3149,11 +3147,6 @@
       "destination": "transports"
     },
     {
-      "packagePath": "pkg/transports/http/application",
-      "disposition": "retain",
-      "destination": "transports"
-    },
-    {
       "packagePath": "pkg/transports/http/client",
       "disposition": "retain",
       "destination": "transports"
@@ -3170,11 +3163,6 @@
     },
     {
       "packagePath": "pkg/transports/mapping",
-      "disposition": "retain",
-      "destination": "transports"
-    },
-    {
-      "packagePath": "pkg/transports/mapping/composition",
       "disposition": "retain",
       "destination": "transports"
     },
