@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 
-import { BACKEND_LINT_ALLOWANCES } from "./backend-lint-policy.mjs";
+import { BACKEND_LINT_ALLOWANCES, BACKEND_LINT_REQUIRED_TARGETS } from "./backend-lint-policy.mjs";
 import {
 	BACKEND_LINT_COMMENT_MARKER,
 	countViolations,
@@ -46,7 +46,11 @@ function report(overrides = {}) {
 }
 
 function baselineTargets(overrides = {}) {
-	return Object.entries(BACKEND_LINT_ALLOWANCES).map(([name]) => ({
+	const names = [
+		...Object.keys(BACKEND_LINT_ALLOWANCES),
+		...Object.keys(BACKEND_LINT_REQUIRED_TARGETS),
+	];
+	return names.map((name) => ({
 		name,
 		status: "pass",
 		durationMillis: 100,
@@ -111,7 +115,10 @@ test("all clean current-main checkers pass the baseline policy", () => {
 
 	assert.equal(summary.ok, true);
 	assert.equal(summary.failures.length, 0);
-	assert.equal(summary.targets.filter((target) => target.policyStatus === "clean").length, 2);
+	assert.equal(
+		summary.targets.filter((target) => target.policyStatus === "clean").length,
+		baselineTargets().length,
+	);
 });
 
 test("a measured baseline failure is reported but allowed at its recorded count", () => {
@@ -399,4 +406,49 @@ test("PR publication includes a stable marker and hosted identity", () => {
 	assert.match(comment, new RegExp(BACKEND_LINT_COMMENT_MARKER.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
 	assert.match(comment, /Hosted head: `abc123`/);
 	assert.match(comment, /actions\/runs\/42/);
+});
+
+test("a no-allowance target is gated from its first failing run", () => {
+	const targets = baselineTargets({
+		"service-cycle-check": {
+			status: "fail",
+			output: [
+				"cross-service cycle regression: minimum feedback arc weight is 43, above the recorded ceiling of 42.",
+				"LINT_VIOLATION_COUNT: 1",
+			].join("\n"),
+		},
+	});
+	const summary = summarizeBackendLintReport(report({ targets }));
+	const verdict = renderBackendLintVerdict(summary);
+
+	assert.equal(BACKEND_LINT_ALLOWANCES["service-cycle-check"], undefined);
+	assert.equal(summary.ok, false);
+	assert.equal(summary.targets.find((target) => target.name === "service-cycle-check").violationCount, 1);
+	assert.match(verdict, /service-cycle-check: baseline 0 -> current 1 \(delta \+1; new failure\)/);
+	assert.match(
+		summary.failures.join("\n"),
+		/service-cycle-check failed with 1 reported violation\(s\); no baseline allowance exists/,
+	);
+});
+
+test("a passing no-allowance target is measured, not classified unmeasured", () => {
+	const summary = summarizeBackendLintReport(report({ targets: baselineTargets() }));
+	const target = summary.targets.find((item) => item.name === "service-cycle-check");
+
+	assert.equal(summary.ok, true);
+	assert.equal(target.violationCount, 0);
+	assert.equal(target.policyStatus, "clean");
+	assert.match(renderBackendLintSummary(summary), /\| service-cycle-check \| `pass` \| 0 \| 0 \| \+0 \|/);
+});
+
+test("dropping a no-allowance target from the lint suite fails the policy", () => {
+	const targets = baselineTargets().filter((target) => target.name !== "service-cycle-check");
+	const summary = summarizeBackendLintReport(report({ targets }));
+
+	assert.equal(summary.ok, false);
+	assert.match(
+		summary.failures.join("\n"),
+		/service-cycle-check is gated with no allowance and must run in every lint report, but it was not observed/,
+	);
+	assert.match(renderBackendLintSummary(summary), /### No-allowance targets/);
 });

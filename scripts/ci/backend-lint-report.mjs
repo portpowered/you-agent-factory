@@ -122,6 +122,7 @@ export function summarizeBackendLintReport(report, options = {}) {
 			jobs: null,
 			baselineSource: BACKEND_LINT_BASELINE_SOURCE,
 			allowances: [],
+			requiredTargets: [],
 		};
 	}
 
@@ -147,6 +148,7 @@ export function summarizeBackendLintReport(report, options = {}) {
 		failures: policy.failures,
 		baselineSource: BACKEND_LINT_BASELINE_SOURCE,
 		allowances: policy.allowances,
+		requiredTargets: policy.requiredTargets,
 		totalDurationMillis: numericValue(report.totalDurationMillis),
 		jobs: Number.isInteger(report.jobs) ? report.jobs : null,
 	};
@@ -305,6 +307,24 @@ export function renderBackendLintSummary(summary) {
 	}
 	if (!(summary.allowances || []).length) {
 		lines.push("| (none) | — | — | — | — | No baseline allowances loaded. | — | — | — |");
+	}
+
+	lines.push(
+		"",
+		"### No-allowance targets",
+		"",
+		"These targets carry no allowance and must appear in every report; any failure fails the policy on its first run.",
+		"",
+		"| Checker | Observed | Status | Reason | Owner/lane |",
+		"| --- | ---: | --- | --- | --- |",
+	);
+	for (const required of summary.requiredTargets || []) {
+		lines.push(
+			`| ${required.name} | ${required.observedViolationCount ?? "not observed"} | ${required.status} | ${formatMarkdownCell(required.reason)} | ${formatMarkdownCell(required.ownerOrLane)} |`,
+		);
+	}
+	if (!(summary.requiredTargets || []).length) {
+		lines.push("| (none) | — | — | No no-allowance targets loaded. | — |");
 	}
 
 	const failedTargets = summary.targets.filter((target) => target.status !== "pass");
