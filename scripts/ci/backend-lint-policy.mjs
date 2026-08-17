@@ -12,13 +12,6 @@ export const BACKEND_LINT_ALLOWANCES = Object.freeze({
 		deadline: "2026-10-15",
 		removalCondition: "Route the matrix through the Factory Definitions catalog boundary, then delete this allowance when hosted packaged-factory-consumption-check passes.",
 	},
-	"ownership-inventory-check": {
-		baselineViolationCount: 5,
-		reason: "The 2026-08-16 hosted baseline reports 5 existing ownership-inventory violations from packaged-service-structure migration debt.",
-		ownerOrLane: "Packaged-service structure migration / ownership inventory lane",
-		deadline: "2026-10-31",
-		removalCondition: "Reconcile the migrated package and edge inventory, then delete this allowance when hosted ownership-inventory-check passes.",
-	},
 	deadcode: {
 		baselineViolationCount: 562,
 		reason: "The 2026-08-16 hosted baseline reports 562 existing dead-code findings against the repository baseline.",
