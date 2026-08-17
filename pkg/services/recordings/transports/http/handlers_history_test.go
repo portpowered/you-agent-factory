@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -544,4 +545,357 @@ func (fake *legacyHistoryFake) GetDurableFactorySessionArtifact(ctx context.Cont
 		return fake.artifact(ctx, sessionID, artifactID)
 	}
 	return factoryapi.FactorySessionArtifactDetail{}, factorysessions.ErrArtifactNotFound
+}
+
+// TestWriteLegacyError_MapsEverySessionFailureSentinel pins the complete public
+// error contract of the standalone durable-execution compatibility path. Each
+// sentinel the legacy bridge can return has one status/code/message triple, and
+// this table is what makes a later change to where those sentinels are named
+// provably behavior preserving.
+func TestWriteLegacyError_MapsEverySessionFailureSentinel(t *testing.T) {
+	t.Parallel()
+
+	adapter := NewLegacyAdapter(&legacyHistoryFake{}, nil)
+	for _, tt := range []struct {
+		name        string
+		err         error
+		wantStatus  int
+		wantMessage string
+		wantCode    string
+		wantFamily  factoryapi.ErrorFamily
+	}{
+		{
+			name: "durable session not found", err: factorysessions.ErrDurableSessionNotFound,
+			wantStatus: http.StatusNotFound, wantMessage: "factory session not found",
+			wantCode: "NOT_FOUND", wantFamily: factoryapi.ErrorFamilyNotFound,
+		},
+		{
+			name: "session not found", err: factorysessions.ErrSessionNotFound,
+			wantStatus: http.StatusNotFound, wantMessage: "factory session not found",
+			wantCode: "NOT_FOUND", wantFamily: factoryapi.ErrorFamilyNotFound,
+		},
+		{
+			name: "dispatch not found", err: factorysessions.ErrDispatchNotFound,
+			wantStatus: http.StatusNotFound, wantMessage: "dispatch not found",
+			wantCode: "NOT_FOUND", wantFamily: factoryapi.ErrorFamilyNotFound,
+		},
+		{
+			name: "artifact not found", err: factorysessions.ErrArtifactNotFound,
+			wantStatus: http.StatusNotFound, wantMessage: "factory session artifact not found",
+			wantCode: "NOT_FOUND", wantFamily: factoryapi.ErrorFamilyNotFound,
+		},
+		{
+			name: "reconnect cursor not found", err: factorysessions.ErrReconnectCursorNotFound,
+			wantStatus: http.StatusBadRequest, wantMessage: "invalid event reconnect cursor",
+			wantCode: "BAD_REQUEST", wantFamily: factoryapi.ErrorFamilyBadRequest,
+		},
+		{
+			name: "recordings reconnect cursor not found", err: recordings.ErrReconnectCursorNotFound,
+			wantStatus: http.StatusBadRequest, wantMessage: "invalid event reconnect cursor",
+			wantCode: "BAD_REQUEST", wantFamily: factoryapi.ErrorFamilyBadRequest,
+		},
+		{
+			name: "wrapped dispatch not found stays classified",
+			err:  fmt.Errorf("read durable dispatch: %w", factorysessions.ErrDispatchNotFound),
+			wantStatus: http.StatusNotFound, wantMessage: "dispatch not found",
+			wantCode: "NOT_FOUND", wantFamily: factoryapi.ErrorFamilyNotFound,
+		},
+		{
+			name: "unclassified failure uses the caller fallback", err: errors.New("boom"),
+			wantStatus: http.StatusInternalServerError, wantMessage: "failed to read durable history",
+			wantCode: "INTERNAL_ERROR", wantFamily: factoryapi.ErrorFamilyInternalServerError,
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			recorder := httptest.NewRecorder()
+			if !adapter.writeLegacyError(recorder, tt.err, "failed to read durable history") {
+				t.Fatalf("writeLegacyError(%v) = false, want the failure written", tt.err)
+			}
+			if recorder.Code != tt.wantStatus {
+				t.Fatalf("status = %d, want %d", recorder.Code, tt.wantStatus)
+			}
+			var response factoryapi.ErrorResponse
+			if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil {
+				t.Fatalf("decode body %q: %v", recorder.Body.String(), err)
+			}
+			if response.Message != tt.wantMessage ||
+				string(response.Code) != tt.wantCode ||
+				response.Family != tt.wantFamily {
+				t.Fatalf("body = %#v, want message=%q code=%s family=%s",
+					response, tt.wantMessage, tt.wantCode, tt.wantFamily)
+			}
+		})
+	}
+}
+
+// TestWriteLegacyError_IgnoresSuccess pins that a nil failure writes nothing so
+// the caller keeps ownership of the success response.
+func TestWriteLegacyError_IgnoresSuccess(t *testing.T) {
+	t.Parallel()
+
+	recorder := httptest.NewRecorder()
+	adapter := NewLegacyAdapter(&legacyHistoryFake{}, nil)
+	if adapter.writeLegacyError(recorder, nil, "failed to read durable history") {
+		t.Fatal("writeLegacyError(nil) = true, want no response written")
+	}
+	if recorder.Body.Len() != 0 {
+		t.Fatalf("body = %q, want empty", recorder.Body.String())
+	}
+}
+
+// TestWriteLegacyStreamHeaders_PublishesRetainedCountAndStreamIdentity pins the
+// SSE header contract of the legacy event path, including the retained-event
+// count header consumed by dashboard reconnect logic.
+func TestWriteLegacyStreamHeaders_PublishesRetainedCountAndStreamIdentity(t *testing.T) {
+	t.Parallel()
+
+	sessionID := "dur-sess-legacy-headers-001"
+	stream := &interfaces.FactoryEventStream{
+		History: []interfaces.FactoryEvent{
+			{Id: "legacy-event-1"},
+			{Id: "legacy-event-2"},
+			{Id: "legacy-event-3"},
+		},
+		BackendScopeID:      "backend-scope-1",
+		LogicalSessionKeyID: "logical-key-1",
+		FactorySessionID:    sessionID,
+		StreamGenerationID:  "generation-1",
+	}
+
+	recorder := httptest.NewRecorder()
+	writeLegacyStreamHeaders(recorder, stream, sessionID)
+
+	for header, want := range map[string]string{
+		"Content-Type":  "text/event-stream",
+		"Cache-Control": "no-cache",
+		"Connection":    "keep-alive",
+		factorysessions.SessionEventStreamRetainedCountHeader: "3",
+		"X-Factory-Session-Backend-Scope-Id":                  "backend-scope-1",
+		"X-Factory-Session-Logical-Session-Key-Id":            "logical-key-1",
+		SessionEventStreamFactorySessionHeader:                sessionID,
+		SessionEventStreamGenerationHeader:                    "generation-1",
+	} {
+		if got := recorder.Header().Get(header); got != want {
+			t.Fatalf("header %s = %q, want %q", header, got, want)
+		}
+	}
+}
+
+// TestWriteLegacyStreamHeaders_OmitsAbsentStreamIdentity pins that blank stream
+// identity values are not published as empty headers.
+func TestWriteLegacyStreamHeaders_OmitsAbsentStreamIdentity(t *testing.T) {
+	t.Parallel()
+
+	recorder := httptest.NewRecorder()
+	writeLegacyStreamHeaders(recorder, &interfaces.FactoryEventStream{}, "dur-sess-legacy-headers-002")
+
+	if got := recorder.Header().Get(factorysessions.SessionEventStreamRetainedCountHeader); got != "0" {
+		t.Fatalf("retained count header = %q, want 0", got)
+	}
+	for _, header := range []string{
+		"X-Factory-Session-Backend-Scope-Id",
+		"X-Factory-Session-Logical-Session-Key-Id",
+		SessionEventStreamFactorySessionHeader,
+		SessionEventStreamGenerationHeader,
+	} {
+		if _, present := recorder.Header()[http.CanonicalHeaderKey(header)]; present {
+			t.Fatalf("header %s present, want omitted for a blank stream identity", header)
+		}
+	}
+}
+
+// historicalResultTestAdapter builds an adapter whose Recordings root replays
+// one finalized recording with the supplied world state and dispatches.
+func historicalResultTestAdapter(worldState string, dispatches []recordings.HistoricalDispatch) *Adapter {
+	artifact := recordings.RecordingArtifactReference("artifact-history-projection-001")
+	return NewAdapter(&rootFake{
+		queryRecordingStatus: func(request recordings.RecordingStatusRequest) (recordings.RecordingStatusResult, error) {
+			return recordings.RecordingStatusResult{Status: recordings.RecordingStatusFacts{
+				RecordingID: request.RecordingID, Artifact: artifact, State: recordings.RecordingFinalized,
+			}}, nil
+		},
+		queryHistoricalRecording: func(request recordings.HistoricalRecordingQueryRequest) (recordings.HistoricalRecordingQueryResult, error) {
+			return recordings.HistoricalRecordingQueryResult{
+				Recording: request.Recording, Status: recordings.RecordingStatusFacts{
+					RecordingID: request.Recording.RecordingID, Artifact: artifact, State: recordings.RecordingFinalized,
+				}, WorldState: recordings.WorldStateView{Payload: worldState}, Dispatches: dispatches,
+			}, nil
+		},
+	})
+}
+
+// TestGetFactorySessionResults_ProjectsFailureAndPrimaryResult pins the full
+// decoded result body for a failed session: the failure detail, the partial
+// result flag, the primary result content, the requested mode, and the
+// include-artifacts echo. The prior suite asserted only three substrings, so
+// the failure and primary-result projections had no behavioral coverage.
+func TestGetFactorySessionResults_ProjectsFailureAndPrimaryResult(t *testing.T) {
+	t.Parallel()
+
+	sessionID := "dur-sess-history-http-failure-001"
+	includeArtifacts := true
+	mode := factoryapi.FactorySessionResultModePartial
+	worldState, err := json.Marshal(interfaces.FactoryWorldState{
+		SessionBracket: &interfaces.FactoryWorldSessionBracketState{
+			SessionID: sessionID, ResultStatus: "FAILED_WITH_PARTIAL", FinalStatus: "FAILED",
+			ResultSummary: []work.WorkContentPart{{Type: work.WorkContentPartTypeText, Text: "partial result"}},
+			ArtifactIDs:   []string{"artifact-1", "artifact-2"},
+			FailureDetail: &workerexecution.FailureDetail{
+				Reason: workerexecution.WorkFailureTypeTimeout, Message: "timed out",
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("marshal world state: %v", err)
+	}
+
+	recorder := httptest.NewRecorder()
+	historicalResultTestAdapter(string(worldState), nil).GetFactorySessionResults(
+		recorder,
+		httptest.NewRequest(http.MethodGet, "/factory-sessions/"+sessionID+"/results", nil),
+		factoryapi.SessionID(sessionID),
+		factoryapi.GetFactorySessionResultsParams{IncludeArtifacts: &includeArtifacts, Mode: &mode},
+	)
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status = %d %s, want 200", recorder.Code, recorder.Body.String())
+	}
+
+	var response factoryapi.FactorySessionResult
+	if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil {
+		t.Fatalf("decode body %q: %v", recorder.Body.String(), err)
+	}
+	if response.SessionId != sessionID ||
+		response.ResultStatus != factoryapi.FactorySessionResultStatus("FAILED_WITH_PARTIAL") {
+		t.Fatalf("identity = %q %q, want the failed-with-partial projection", response.SessionId, response.ResultStatus)
+	}
+	if response.SessionStatus == nil || string(*response.SessionStatus) != "FAILED" {
+		t.Fatalf("sessionStatus = %v, want FAILED", response.SessionStatus)
+	}
+	if response.Mode == nil || *response.Mode != factoryapi.FactorySessionResultModePartial {
+		t.Fatalf("mode = %v, want the requested partial mode", response.Mode)
+	}
+	if response.IncludeArtifacts == nil || !*response.IncludeArtifacts {
+		t.Fatalf("includeArtifacts = %v, want the requested true echo", response.IncludeArtifacts)
+	}
+	if response.FailureDetail == nil ||
+		string(response.FailureDetail.Reason) != string(workerexecution.WorkFailureTypeTimeout) ||
+		response.FailureDetail.Message != "timed out" {
+		t.Fatalf("failureDetail = %#v, want the timeout failure summary", response.FailureDetail)
+	}
+	if response.PartialResultAvailable == nil || !*response.PartialResultAvailable {
+		t.Fatalf("partialResultAvailable = %v, want true alongside a result summary", response.PartialResultAvailable)
+	}
+	if response.PrimaryResult == nil || len(*response.PrimaryResult) != 1 {
+		t.Fatalf("primaryResult = %#v, want the single encoded result part", response.PrimaryResult)
+	}
+	if response.ArtifactIds == nil || len(*response.ArtifactIds) != 2 {
+		t.Fatalf("artifactIds = %#v, want both bracket artifact ids", response.ArtifactIds)
+	}
+}
+
+// TestGetFactorySessionResults_DefaultsToFinalModeWithoutFailure pins the
+// success projection: the default final mode, no failure detail, and no
+// include-artifacts echo when the caller did not request one.
+func TestGetFactorySessionResults_DefaultsToFinalModeWithoutFailure(t *testing.T) {
+	t.Parallel()
+
+	sessionID := "dur-sess-history-http-final-001"
+	worldState, err := json.Marshal(interfaces.FactoryWorldState{
+		SessionBracket: &interfaces.FactoryWorldSessionBracketState{
+			SessionID: sessionID, ResultStatus: "FINAL", FinalStatus: "SUCCEEDED",
+		},
+	})
+	if err != nil {
+		t.Fatalf("marshal world state: %v", err)
+	}
+
+	recorder := httptest.NewRecorder()
+	historicalResultTestAdapter(string(worldState), nil).GetFactorySessionResults(
+		recorder,
+		httptest.NewRequest(http.MethodGet, "/factory-sessions/"+sessionID+"/results", nil),
+		factoryapi.SessionID(sessionID), factoryapi.GetFactorySessionResultsParams{},
+	)
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status = %d %s, want 200", recorder.Code, recorder.Body.String())
+	}
+
+	var response factoryapi.FactorySessionResult
+	if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil {
+		t.Fatalf("decode body %q: %v", recorder.Body.String(), err)
+	}
+	if response.Mode == nil || *response.Mode != factoryapi.FactorySessionResultModeFinal {
+		t.Fatalf("mode = %v, want the default final mode", response.Mode)
+	}
+	if response.FailureDetail != nil || response.PartialResultAvailable != nil {
+		t.Fatalf("failure projection = %#v / %v, want both omitted for a successful session",
+			response.FailureDetail, response.PartialResultAvailable)
+	}
+	if response.IncludeArtifacts != nil {
+		t.Fatalf("includeArtifacts = %v, want omitted when not requested", response.IncludeArtifacts)
+	}
+}
+
+// TestListFactorySessionDispatches_FiltersByRequestedStatus pins the status
+// query filter, which selects which historical dispatches reach the response.
+func TestListFactorySessionDispatches_FiltersByRequestedStatus(t *testing.T) {
+	t.Parallel()
+
+	sessionID := "dur-sess-history-http-filter-001"
+	dispatches := []recordings.HistoricalDispatch{
+		{ID: "dispatch-completed", Status: recordings.FactoryDispatchStatusCompleted},
+		{ID: "dispatch-queued", Status: recordings.FactoryDispatchStatusQueued},
+	}
+	adapter := historicalResultTestAdapter(`{}`, dispatches)
+
+	completed := factoryapi.FactoryDispatchStatus(recordings.FactoryDispatchStatusCompleted)
+	filtered := httptest.NewRecorder()
+	adapter.ListFactorySessionDispatches(
+		filtered,
+		httptest.NewRequest(http.MethodGet, "/factory-sessions/"+sessionID+"/dispatches", nil),
+		factoryapi.SessionID(sessionID),
+		factoryapi.ListFactorySessionDispatchesParams{Status: &completed},
+	)
+	if filtered.Code != http.StatusOK {
+		t.Fatalf("status = %d %s, want 200", filtered.Code, filtered.Body.String())
+	}
+	var filteredResponse factoryapi.ListFactorySessionDispatchesResponse
+	if err := json.Unmarshal(filtered.Body.Bytes(), &filteredResponse); err != nil {
+		t.Fatalf("decode filtered body %q: %v", filtered.Body.String(), err)
+	}
+	if filteredResponse.SessionId != sessionID || len(filteredResponse.Dispatches) != 1 ||
+		filteredResponse.Dispatches[0].Id != "dispatch-completed" {
+		t.Fatalf("filtered dispatches = %#v, want only dispatch-completed", filteredResponse.Dispatches)
+	}
+
+	unfiltered := httptest.NewRecorder()
+	adapter.ListFactorySessionDispatches(
+		unfiltered,
+		httptest.NewRequest(http.MethodGet, "/factory-sessions/"+sessionID+"/dispatches", nil),
+		factoryapi.SessionID(sessionID), factoryapi.ListFactorySessionDispatchesParams{},
+	)
+	var unfilteredResponse factoryapi.ListFactorySessionDispatchesResponse
+	if err := json.Unmarshal(unfiltered.Body.Bytes(), &unfilteredResponse); err != nil {
+		t.Fatalf("decode unfiltered body %q: %v", unfiltered.Body.String(), err)
+	}
+	if len(unfilteredResponse.Dispatches) != 2 {
+		t.Fatalf("unfiltered dispatches = %#v, want both historical dispatches", unfilteredResponse.Dispatches)
+	}
+
+	missing := factoryapi.FactoryDispatchStatus("INTERRUPTED")
+	empty := httptest.NewRecorder()
+	adapter.ListFactorySessionDispatches(
+		empty,
+		httptest.NewRequest(http.MethodGet, "/factory-sessions/"+sessionID+"/dispatches", nil),
+		factoryapi.SessionID(sessionID),
+		factoryapi.ListFactorySessionDispatchesParams{Status: &missing},
+	)
+	var emptyResponse factoryapi.ListFactorySessionDispatchesResponse
+	if err := json.Unmarshal(empty.Body.Bytes(), &emptyResponse); err != nil {
+		t.Fatalf("decode empty body %q: %v", empty.Body.String(), err)
+	}
+	if emptyResponse.Dispatches == nil || len(emptyResponse.Dispatches) != 0 {
+		t.Fatalf("unmatched filter dispatches = %#v, want an empty list", emptyResponse.Dispatches)
+	}
 }
