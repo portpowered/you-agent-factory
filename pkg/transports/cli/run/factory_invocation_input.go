@@ -984,13 +984,6 @@ func remoteDurableFailureReason(result factoryapi.FactorySessionResult) string {
 	return string(result.FailureDetail.Reason)
 }
 
-// ResolveFactoryInvocationRequest exposes the same request projection used by
-// the local run operation. Callers must prepare the RunConfig through the
-// shared Work input preparation boundary before invoking this helper.
-func ResolveFactoryInvocationRequest(cfg RunConfig) (*factoryapi.InvocationRequest, bool, error) {
-	return resolveFactoryInvocationRequest(cfg)
-}
-
 // RunRemoteInvocation starts one server-owned durable Factory Session through
 // the selected remote adapter. It does not open local runtime state or use the
 // live-session compatibility invocation route.
