@@ -18,6 +18,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/root"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	mcpgenerated "github.com/portpowered/infinite-you/pkg/transports/mcp/generated"
+	mcpstdio "github.com/portpowered/infinite-you/pkg/transports/mcp/stdio"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -170,6 +171,28 @@ func TestMCPStdioFixtureAndRuntimePathsReachInitializer(t *testing.T) {
 		}()
 		initializeMCPClient(t, client)
 	})
+}
+
+// TestMCPStdioOpenRejectsUncomposedServerAndStreams proves the stdio transport
+// refuses to open an invocation when Wire has not supplied a composed protocol
+// server or the invocation streams are absent. A misconfigured composition must
+// fail at open time with a diagnostic rather than hand back an inert session
+// that would silently accept and drop client traffic.
+func TestMCPStdioOpenRejectsUncomposedServerAndStreams(t *testing.T) {
+	t.Parallel()
+
+	if _, err := mcpstdio.Open(nil, strings.NewReader(""), &bytes.Buffer{}); err == nil ||
+		!strings.Contains(err.Error(), "server") {
+		t.Fatalf("Open(nil server) error = %v, want composed-server diagnostic", err)
+	}
+	if _, err := mcpstdio.Open(nil, nil, &bytes.Buffer{}); err == nil ||
+		!strings.Contains(err.Error(), "streams") {
+		t.Fatalf("Open(nil input) error = %v, want invocation-stream diagnostic", err)
+	}
+	if _, err := mcpstdio.Open(nil, strings.NewReader(""), nil); err == nil ||
+		!strings.Contains(err.Error(), "streams") {
+		t.Fatalf("Open(nil output) error = %v, want invocation-stream diagnostic", err)
+	}
 }
 
 type stdioMCPClient struct {
