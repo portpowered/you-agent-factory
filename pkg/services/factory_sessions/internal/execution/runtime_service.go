@@ -958,6 +958,7 @@ func (s *JavaScriptRuntimeService) childExecutorHooks(mode, sessionID string) fa
 				s.childValues,
 				s.observeWorkerDispatch,
 				s.projectRoot,
+				policy.MaxRetries,
 			)
 			executor.resourceLeaseAcquirer = binding.resourceLeaseAcquirer
 			executor.runtimeID = binding.runtimeID

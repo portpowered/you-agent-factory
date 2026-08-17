@@ -22,6 +22,14 @@ func (s *Service) authorizeProviderTarget(
 	if identity != runners.AgentIdentity {
 		return nil
 	}
+	// A composed provider override is the execution authority for this one
+	// request. It may be an in-process edge with no catalog identity, as in a
+	// root composition test or an embedded caller. Do not require that edge to
+	// manufacture a Providers catalog entry; the override runner is selected in
+	// runRunner after the detached request has been validated.
+	if request != nil && request.Input.ProviderOverride != nil {
+		return nil
+	}
 	if s == nil || s.providers == nil {
 		return fmt.Errorf(
 			"%w: Providers service is required for agent execution",

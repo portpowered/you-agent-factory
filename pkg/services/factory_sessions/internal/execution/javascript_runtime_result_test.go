@@ -507,19 +507,35 @@ func TestApplyRuntimeSuccessProjection_InvalidResultMarksFailed(t *testing.T) {
 // record a customer reads for a child that ran: its provider, its provider
 // session, its decoded output, and the attempt count the Worker actually took.
 func TestChildWorkerExecutor_CompletedChildRecordsItsWorkerAndOutput(t *testing.T) {
-	invoker := &recordingWorkerExecution{result: workers.ExecuteResult{
-		Outcome: workers.ExecutionOutcomeAccepted,
-		Output: workers.ProposedOutput{Primary: []work.WorkContentPart{{
-			Type: work.WorkContentPartTypeText,
-			Text: `{"text":"child finished"}`,
-		}}},
-		Continuation: &workers.ProviderContinuationRef{
-			Provider:          "codex",
-			ProviderSessionID: "codex-session-1",
-		},
-	}}
+	invoker := &recordingWorkerExecution{}
+	attempts := 0
+	invoker.onExecute = func(_ workers.ExecuteRequest) {
+		attempts++
+		if attempts == 1 {
+			invoker.result = workers.ExecuteResult{
+				Outcome: workers.ExecutionOutcomeFailed,
+				Failure: &workers.ExecutionFailure{
+					Type:      workers.WorkFailureTypeInternalServerError,
+					Message:   "transient provider failure",
+					RetryHint: true,
+				},
+			}
+			return
+		}
+		invoker.result = workers.ExecuteResult{
+			Outcome: workers.ExecutionOutcomeAccepted,
+			Output: workers.ProposedOutput{Primary: []work.WorkContentPart{{
+				Type: work.WorkContentPartTypeText,
+				Text: `{"text":"child finished"}`,
+			}}},
+			Continuation: &workers.ProviderContinuationRef{
+				Provider:          "codex",
+				ProviderSessionID: "codex-session-1",
+			},
+		}
+	}
 	sink := newChildRecordSink()
-	executor := newTestChildWorkerExecutor(invoker, sink, nil)
+	executor := newChildWorkerExecutor("dur-sess-1", invoker, sink, childTestValues{}, nil, "/project", 1)
 
 	result, err := executor.Execute(context.Background(), factory.JavaScriptChildExecutionRequest{
 		Prompt:        "summarize",
@@ -542,8 +558,8 @@ func TestChildWorkerExecutor_CompletedChildRecordsItsWorkerAndOutput(t *testing.
 		t.Fatalf("terminal record provider = %q/%q, want codex/codex-session-1",
 			terminal.Provider, terminal.ProviderSessionRef)
 	}
-	if terminal.Attempt != 1 {
-		t.Fatalf("terminal record attempt = %d, want the detached attempt number 1", terminal.Attempt)
+	if attempts != 2 || terminal.Attempt != 2 {
+		t.Fatalf("attempts = %d, terminal record attempt = %d, want two attempts and terminal attempt 2", attempts, terminal.Attempt)
 	}
 	if len(sink.statuses) != 2 ||
 		sink.statuses[0] != factory.JavaScriptChildDispatchStatusQueued ||
@@ -911,7 +927,7 @@ func newTestChildWorkerExecutor(
 	sink *childRecordSink,
 	observe workerDispatchObserver,
 ) *childWorkerExecutor {
-	return newChildWorkerExecutor("dur-sess-1", invoke, sink, childTestValues{}, observe, "/project")
+	return newChildWorkerExecutor("dur-sess-1", invoke, sink, childTestValues{}, observe, "/project", 0)
 }
 
 // recordingWorkerExecution is the narrow Workers Execute seam a child reaches

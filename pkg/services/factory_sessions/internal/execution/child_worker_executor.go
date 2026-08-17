@@ -3,8 +3,10 @@ package factorysessionexecution
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
+	"sync"
 
 	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
@@ -29,6 +31,152 @@ type childWorkerExecutionBinding struct {
 	mockWorkers           *workers.MockWorkersConfig
 	commandRunnerOverride workers.CommandRunner
 	publish               childWorkerProgressPublisher
+}
+
+// childWorkerProgressBridge keeps provider-owned terminal fragments from
+// racing the canonical Execute result. Provider runners may publish a
+// STREAM_COMPLETED/STREAM_FAILED fragment before Execute returns, while a
+// plain provider, model, harness, cancellation, or timeout may publish none.
+// Buffering that one fragment lets the child publish exactly one final
+// response outcome after the retry budget and Execute result are known.
+type childWorkerProgressBridge struct {
+	mu         sync.Mutex
+	publish    childWorkerProgressPublisher
+	dispatchID string
+	pending    *workers.ProgressFragment
+}
+
+func newChildWorkerProgressBridge(
+	publish childWorkerProgressPublisher,
+	dispatchID string,
+) *childWorkerProgressBridge {
+	return &childWorkerProgressBridge{
+		publish:    publish,
+		dispatchID: dispatchID,
+	}
+}
+
+func (b *childWorkerProgressBridge) publishProgress(fragment workers.ProgressFragment) {
+	if b == nil || b.publish == nil {
+		return
+	}
+	fragment = b.normalize(fragment)
+	if isChildTerminalProgress(fragment) {
+		b.mu.Lock()
+		b.pending = &fragment
+		b.mu.Unlock()
+		return
+	}
+	b.publish(b.dispatchID, fragment)
+}
+
+func (b *childWorkerProgressBridge) resetAttempt() {
+	if b == nil {
+		return
+	}
+	b.mu.Lock()
+	b.pending = nil
+	b.mu.Unlock()
+}
+
+func (b *childWorkerProgressBridge) publishTerminal(
+	result workers.ExecuteResult,
+	executeErr error,
+) {
+	if b == nil || b.publish == nil {
+		return
+	}
+	b.mu.Lock()
+	pending := b.pending
+	b.pending = nil
+	b.mu.Unlock()
+	if pending != nil && childTerminalProgressMatches(*pending, result, executeErr) {
+		b.publish(b.dispatchID, *pending)
+		return
+	}
+	b.publish(b.dispatchID, childTerminalProgressFromResult(b.dispatchID, result, executeErr))
+}
+
+func (b *childWorkerProgressBridge) normalize(fragment workers.ProgressFragment) workers.ProgressFragment {
+	if strings.TrimSpace(fragment.DispatchID) == "" {
+		fragment.DispatchID = b.dispatchID
+	}
+	if strings.TrimSpace(fragment.Correlation.DispatchID) == "" {
+		fragment.Correlation.DispatchID = b.dispatchID
+	}
+	return fragment
+}
+
+func isChildTerminalProgress(fragment workers.ProgressFragment) bool {
+	return fragment.Kind == workers.CompletedFragmentKind || fragment.Kind == workers.FailedFragmentKind
+}
+
+func childTerminalProgressMatches(
+	fragment workers.ProgressFragment,
+	result workers.ExecuteResult,
+	executeErr error,
+) bool {
+	switch fragment.Kind {
+	case workers.CompletedFragmentKind:
+		return executeErr == nil && childExecutionSucceeded(result.Outcome)
+	case workers.FailedFragmentKind:
+		return executeErr != nil || result.Outcome == workers.ExecutionOutcomeFailed || result.Outcome == workers.ExecutionOutcomeCanceled
+	default:
+		return false
+	}
+}
+
+func childTerminalProgressFromResult(
+	dispatchID string,
+	result workers.ExecuteResult,
+	executeErr error,
+) workers.ProgressFragment {
+	fragment := workers.ProgressFragment{
+		DispatchID:   dispatchID,
+		Correlation:  result.Correlation,
+		Provider:     childProviderName(result),
+		Continuation: (result.Continuation).ClonePtr(),
+	}
+	if strings.TrimSpace(fragment.Correlation.DispatchID) == "" {
+		fragment.Correlation.DispatchID = dispatchID
+	}
+	fragment.Kind = workers.CompletedFragmentKind
+	fragment.Type = "COMPLETED"
+	fragment.ExternalEventType = "STREAM_COMPLETED"
+	if !childExecutionSucceeded(result.Outcome) || executeErr != nil {
+		fragment.Kind = workers.FailedFragmentKind
+		fragment.Type = "FAILED"
+		fragment.ExternalEventType = "STREAM_FAILED"
+		if result.Outcome == workers.ExecutionOutcomeCanceled || errors.Is(executeErr, context.Canceled) {
+			fragment.Type = "CANCELED"
+		}
+		fragment.Payload = childExecutionDiagnostic(result, executeErr)
+		if result.Failure != nil {
+			fragment.Metadata = map[string]string{
+				"work_failure_type": string(result.Failure.Type),
+				"retryable":         fmt.Sprintf("%t", result.Failure.RetryHint),
+			}
+		}
+	}
+	return fragment
+}
+
+func childProviderName(result workers.ExecuteResult) string {
+	provider, _ := childProviderSession(result)
+	return provider
+}
+
+func childExecutionDiagnostic(result workers.ExecuteResult, executeErr error) string {
+	if result.Failure != nil && strings.TrimSpace(result.Failure.Message) != "" {
+		return strings.TrimSpace(result.Failure.Message)
+	}
+	if executeErr != nil && strings.TrimSpace(executeErr.Error()) != "" {
+		return strings.TrimSpace(executeErr.Error())
+	}
+	if result.Outcome == workers.ExecutionOutcomeCanceled {
+		return "Provider execution canceled."
+	}
+	return "Provider execution failed."
 }
 
 // SetWorkerInvoker attaches the Runtime capability used by durable live-change
@@ -191,6 +339,7 @@ type childWorkerExecutor struct {
 	providerOverride      providers.Service
 	mockWorkers           *workers.MockWorkersConfig
 	commandRunnerOverride workers.CommandRunner
+	maxAttempts           int
 	resourceLeaseAcquirer childResourceLeaseAcquirer
 }
 
@@ -224,7 +373,12 @@ func newChildWorkerExecutor(
 	childValues factory.JavaScriptChildValues,
 	observe workerDispatchObserver,
 	workingDir string,
+	maxRetries int,
 ) *childWorkerExecutor {
+	attempts := maxRetries + 1
+	if attempts < 1 {
+		attempts = 1
+	}
 	return &childWorkerExecutor{
 		sessionID:             sessionID,
 		execute:               execution,
@@ -232,6 +386,7 @@ func newChildWorkerExecutor(
 		childValues:           childValues,
 		observe:               observe,
 		workingDir:            strings.TrimSpace(workingDir),
+		maxAttempts:           attempts,
 		resourceLeaseAcquirer: nil,
 	}
 }
@@ -281,18 +436,57 @@ func (e *childWorkerExecutor) Execute(
 	releaseWorker := e.observeWorker(workerDispatchID)
 	defer releaseWorker()
 
-	request := e.executeRequest(req, base, workerDispatchID)
-	invoked, err := e.execute.Execute(ctx, request)
-	if err != nil || !childExecutionSucceeded(invoked.Outcome) {
-		return e.failedChild(base, req, dispatchID, childIndex, invoked, err)
+	var progress *childWorkerProgressBridge
+	if e.publish != nil {
+		progress = newChildWorkerProgressBridge(e.publish, workerDispatchID)
 	}
-	base.Attempt = request.Attempt.Number
-	provider, providerSessionRef := childProviderSession(invoked)
+	for attemptNumber := 1; attemptNumber <= e.maxAttempts; attemptNumber++ {
+		request := e.executeRequest(req, base, workerDispatchID, attemptNumber, progress)
+		invoked, err := e.execute.Execute(ctx, request)
+		base.Attempt = request.Attempt.Number
+		if childExecutionShouldRetry(ctx, invoked, err, attemptNumber, e.maxAttempts) {
+			if progress != nil {
+				progress.resetAttempt()
+			}
+			continue
+		}
+		if progress != nil {
+			progress.publishTerminal(invoked, err)
+		}
+		if err != nil || !childExecutionSucceeded(invoked.Outcome) {
+			return e.failedChild(base, req, dispatchID, childIndex, invoked, err)
+		}
+		return e.completedChild(base, req, dispatchID, childIndex, invoked)
+	}
+	return factory.JavaScriptChildExecutionResult{}, fmt.Errorf("javascript child execution exhausted its attempt budget")
+}
+
+func childExecutionShouldRetry(
+	ctx context.Context,
+	result workers.ExecuteResult,
+	executeErr error,
+	attemptNumber int,
+	maxAttempts int,
+) bool {
+	if attemptNumber >= maxAttempts || ctx.Err() != nil || executeErr != nil {
+		return false
+	}
+	return result.Outcome == workers.ExecutionOutcomeFailed && result.Failure != nil && result.Failure.RetryHint
+}
+
+func (e *childWorkerExecutor) completedChild(
+	base factory.JavaScriptChildDispatchRecord,
+	req factory.JavaScriptChildExecutionRequest,
+	dispatchID string,
+	childIndex int,
+	result workers.ExecuteResult,
+) (factory.JavaScriptChildExecutionResult, error) {
+	provider, providerSessionRef := childProviderSession(result)
 	completed := base
 	completed.Status = factory.JavaScriptChildDispatchStatusCompleted
 	completed.Provider = provider
 	completed.ProviderSessionRef = providerSessionRef
-	output := childWorkerOutputFromExecute(req, invoked)
+	output := childWorkerOutputFromExecute(req, result)
 	completed.Output = e.childValues.CloneOutputMap(output)
 	e.records.Append(factory.JavaScriptRuntimeRecord{
 		Kind:          factory.JavaScriptRecordKindChildDispatch,
@@ -315,6 +509,8 @@ func (e *childWorkerExecutor) executeRequest(
 	req factory.JavaScriptChildExecutionRequest,
 	base factory.JavaScriptChildDispatchRecord,
 	workerDispatchID string,
+	attemptNumber int,
+	progressBridge *childWorkerProgressBridge,
 ) workers.ExecuteRequest {
 	requestID := strings.TrimSpace(e.sessionID)
 	traceID := workerDispatchID
@@ -328,24 +524,17 @@ func (e *childWorkerExecutor) executeRequest(
 		},
 	}
 	progress := workers.ProgressPublisher(nil)
-	if e.publish != nil {
-		progress = func(fragment workers.ProgressFragment) {
-			if strings.TrimSpace(fragment.DispatchID) == "" {
-				fragment.DispatchID = workerDispatchID
-			}
-			if strings.TrimSpace(fragment.Correlation.DispatchID) == "" {
-				fragment.Correlation.DispatchID = workerDispatchID
-			}
-			e.publish(workerDispatchID, fragment)
-		}
+	if progressBridge != nil {
+		progress = progressBridge.publishProgress
 	}
+	attemptID := fmt.Sprintf("%s/attempt/%d", workerDispatchID, attemptNumber)
 	return workers.ExecuteRequest{
 		Correlation: workers.ExecutionCorrelation{
 			FactorySessionID: requestID,
 			RuntimeID:        firstNonBlank(e.runtimeID, "runtime-"+requestID),
 			GenerationID:     firstNonBlank(e.generationID, "generation-"+requestID),
 			DispatchID:       workerDispatchID,
-			AttemptID:        workerDispatchID + "/attempt/1",
+			AttemptID:        attemptID,
 			RequestID:        requestID,
 			TraceID:          traceID,
 		},
@@ -388,7 +577,7 @@ func (e *childWorkerExecutor) executeRequest(
 			WorkflowContext:       &workers.Context{FactoryDirectory: e.workingDir, WorkDirectory: e.workingDir, SessionID: requestID},
 			ProgressPublisher:     progress,
 		},
-		Attempt: workers.AttemptContext{Number: 1},
+		Attempt: workers.AttemptContext{Number: attemptNumber},
 	}
 }
 
