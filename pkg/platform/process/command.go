@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"os/exec"
-	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -103,26 +102,14 @@ type CommandResult struct {
 // this bound is rejected before any child process exists.
 const WindowsCommandLineLimit = 32767
 
-// HostCommandLineLimit reports the composed command-line bound the running host
-// enforces for a single spawn, or 0 when the host has no single command-line
-// cap this package can state exactly. Unix hosts bound the total argument block
-// and each individual argument rather than the composed line, so they report as
-// unbounded here and their spawn failures are named from the operating system
-// error alone.
-func HostCommandLineLimit() int {
-	if runtime.GOOS == "windows" {
-		return WindowsCommandLineLimit
-	}
-	return 0
-}
-
 // ComposedCommandLineLength reports the length, in UTF-16 code units, of the
 // command line the Windows process loader receives for one command and its
 // arguments. The quoting mirrors os/exec, and the command name is measured as
 // written because os/exec composes the command line from the requested argv
 // rather than the resolved executable path. The measurement is computed the
 // same way on every platform so command-line growth stays observable from any
-// host, while HostCommandLineLimit decides whether that growth is fatal.
+// host, while the injected ExecCommandRunner.CommandLineLimit decides whether
+// that growth is fatal.
 func ComposedCommandLineLength(command string, args []string) int {
 	var line strings.Builder
 	appendEscapedCommandLineArgument(&line, command)
@@ -195,6 +182,14 @@ type ExecCommandRunner struct {
 	Clock              Clock
 	NewCommand         CommandFactory
 	ProcessStateReader ProcessStateReader
+	// CommandLineLimit is the composed command-line bound the host process
+	// loader enforces for a single spawn, injected by the application injector
+	// because the running operating system is a policy this package must not
+	// select for itself. Zero means the host states no single composed-line cap,
+	// which is how Unix hosts report: they bound the total argument block and
+	// each individual argument rather than the composed line, so their spawn
+	// failures are named from the operating system error alone.
+	CommandLineLimit int
 }
 
 // NewExecCommandRunner constructs a host command runner from exact external
@@ -238,7 +233,7 @@ func (r ExecCommandRunner) run(
 	cleanupLogger := logging.EnsureLogger(r.Logger)
 	configureCommandProcessTree(cmd)
 	if err := cmd.Start(); err != nil {
-		return CommandResult{}, reportCommandStartFailure(cleanupLogger, req, err)
+		return CommandResult{}, r.reportCommandStartFailure(cleanupLogger, req, err)
 	}
 
 	tree, attachErr := attachCommandProcessTree(cmd)
@@ -353,13 +348,15 @@ func (e *CommandStartError) Unwrap() error {
 // reportCommandStartFailure names and records a spawn that produced no child
 // process. Returning the operating-system error bare left an oversized command
 // line indistinguishable from any other execution failure and wrote nothing to
-// the log, so the only remaining evidence was how quickly the attempt died.
-func reportCommandStartFailure(logger logging.Logger, req CommandRequest, cause error) error {
+// the log, so the only remaining evidence was how quickly the attempt died. The
+// bound the failure is judged against is the runner's injected limit, so this
+// package never has to ask which operating system it is running on.
+func (r ExecCommandRunner) reportCommandStartFailure(logger logging.Logger, req CommandRequest, cause error) error {
 	startErr := &CommandStartError{
 		Command:           req.Command,
 		ArgsCount:         len(req.Args),
 		CommandLineLength: ComposedCommandLineLength(req.Command, req.Args),
-		CommandLineLimit:  HostCommandLineLimit(),
+		CommandLineLimit:  r.CommandLineLimit,
 		StdinBytes:        len(req.Stdin),
 		Cause:             cause,
 	}

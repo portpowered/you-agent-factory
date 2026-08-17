@@ -944,6 +944,35 @@ func TestExecCommandRunner_StartFailureReturnsANamedErrorAndLogsIt(t *testing.T)
 	}
 }
 
+// TestExecCommandRunner_StartFailureUsesTheInjectedCommandLineLimit pins the
+// classification to the bound injected into the runner rather than to the
+// operating system the test happens to run on. That is what keeps the Windows
+// over-limit case observable from a non-Windows CI host, which was impossible
+// while the limit was computed from the ambient runtime.
+func TestExecCommandRunner_StartFailureUsesTheInjectedCommandLineLimit(t *testing.T) {
+	logger := &recordingCommandLogger{}
+	runner := testExecCommandRunner(t, logger)
+	runner.CommandLineLimit = WindowsCommandLineLimit
+
+	_, err := runner.Run(context.Background(), CommandRequest{
+		Command: filepath.Join(t.TempDir(), "provider-executable-that-does-not-exist"),
+		Args:    []string{"--system-prompt", strings.Repeat("s", 20_000), strings.Repeat("p", 13_000)},
+	})
+
+	var startErr *CommandStartError
+	if !errors.As(err, &startErr) {
+		t.Fatalf("Run() error = %#v, want a *CommandStartError", err)
+	}
+	if startErr.CommandLineLimit != WindowsCommandLineLimit || !startErr.OverCommandLineLimit() {
+		t.Fatalf("start error limit = %d and over-limit = %v, want the injected %d and true",
+			startErr.CommandLineLimit, startErr.OverCommandLineLimit(), WindowsCommandLineLimit)
+	}
+	logged := commandStartFailureLogs(logger)
+	if len(logged) != 1 || logged[0].fields["command_line_limit"] != WindowsCommandLineLimit {
+		t.Fatalf("start failure logs = %#v, want exactly one carrying the injected limit %d", logged, WindowsCommandLineLimit)
+	}
+}
+
 func TestExecCommandRunner_SuccessfulStartLogsNoStartFailure(t *testing.T) {
 	requireProcessIntegration(t)
 	logger := &recordingCommandLogger{}

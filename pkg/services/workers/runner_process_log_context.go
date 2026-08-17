@@ -54,13 +54,16 @@ func commandCompletionLogFields(req CommandRequest, result CommandResult, durati
 
 // commandRequestDetailsLogFields records the composed command-line size next to
 // the argument count. The count alone cannot distinguish a dispatch that fits
-// the host command-line limit from one that will be rejected by the process
-// loader, so an operator had no way to see a prompt growing toward that bound.
+// the command-line budget from one that will be rejected by the process loader,
+// so an operator had no way to see a prompt growing toward that bound. The
+// budget reported here is the one the prompt-shaping path applies on every
+// host, which is why it is the same constant everywhere rather than a reading
+// of the current operating system.
 func commandRequestDetailsLogFields(req CommandRequest) []any {
 	return workLogFields(req.Execution, "event_name", workLogEventCommandRunnerRequestDetails, "status", "verbose",
 		"command", req.Command, "args_count", len(req.Args), "working_dir", req.WorkDir, "stdin_bytes", len(req.Stdin),
 		"command_line_chars", platformprocess.ComposedCommandLineLength(req.Command, req.Args),
-		"command_line_limit", platformprocess.HostCommandLineLimit())
+		"command_line_budget", platformprocess.WindowsCommandLineLimit)
 }
 func commandOutputDetailsLogFields(req CommandRequest, result CommandResult, duration time.Duration) []any {
 	return workLogFields(req.Execution, "event_name", workLogEventCommandRunnerOutputDetails, "status", "verbose",
