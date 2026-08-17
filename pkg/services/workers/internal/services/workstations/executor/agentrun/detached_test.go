@@ -3,6 +3,7 @@ package agentrun
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"sync"
 	"testing"
@@ -342,6 +343,48 @@ func TestExecuteDetachedReturnsLastRunnerTurnWithHarnessError(t *testing.T) {
 	if result.Diagnostics == nil ||
 		result.Diagnostics.Metadata[DiagnosticExecutionBehavior] != ExecutionBehaviorAgentRun {
 		t.Fatalf("ExecuteDetached() Diagnostics = %+v, want agent-run execution behavior on the failure result", result.Diagnostics)
+	}
+}
+
+// TestExecuteDetachedTimeoutSurfacesAgentRunTimeoutClass characterizes the
+// typed timeout a detached agent-run caller observes. failure_test.go already
+// covers failureClassForError as a pure mapping, but nothing asserted that a
+// deadline reached inside the agent loop travels out of ExecuteDetached still
+// classifiable as an agent-run timeout with the last provider turn intact --
+// which is exactly what the detached caller reports as its terminal failure.
+func TestExecuteDetachedTimeoutSurfacesAgentRunTimeoutClass(t *testing.T) {
+	t.Parallel()
+
+	timeoutErr := fmt.Errorf("agent loop exceeded its budget: %w", context.DeadlineExceeded)
+	runner := &detachedRunnerStub{results: []workerexecution.RunnerExecutionResult{{
+		Content: "last turn before the deadline",
+		Outcome: workerexecution.WorkOutcome("INCOMPLETE"),
+	}}}
+
+	result, err := ExecuteDetached(
+		context.Background(),
+		&inferencingHarnessStub{
+			result: HarnessResult{FinalText: "harness text"},
+			err:    timeoutErr,
+		},
+		runner,
+		DetachedRequest{Attempt: detachedAttempt()},
+	)
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("ExecuteDetached() error = %v, want a deadline-classifiable agent-run failure", err)
+	}
+	if result.Content != "last turn before the deadline" {
+		t.Fatalf("ExecuteDetached() Content = %q, want the last provider turn preserved through the timeout", result.Content)
+	}
+	if got := failureClassForError(err); got != FailureClassTimeout {
+		t.Fatalf("failureClassForError(ExecuteDetached error) = %q, want %q", got, FailureClassTimeout)
+	}
+	metadata := failureMetadataForError(err)
+	if metadata == nil || metadata.Type != workerexecution.WorkFailureTypeTimeout {
+		t.Fatalf("failureMetadataForError(ExecuteDetached error) = %#v, want a timeout failure type", metadata)
+	}
+	if got := agentRunFailureDiagnostics(err)[DiagnosticFailureClass]; got != FailureClassTimeout {
+		t.Fatalf("agent-run diagnostics failure class = %q, want %q", got, FailureClassTimeout)
 	}
 }
 

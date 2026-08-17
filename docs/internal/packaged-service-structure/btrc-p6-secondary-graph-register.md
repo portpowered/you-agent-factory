@@ -11,8 +11,12 @@ Every row below is classified as **already deleted** (retired by an earlier
 packet), **retained with caller** (a live non-test caller is named, so P6 may
 not delete it), or **deleted in this packet**. No row is left unaddressed.
 
-Reconciliation base: `469c3bbcb`, the merge-base of this branch and
-`origin/main`.
+Reconciliation history. The table below was first written against `469c3bbcb`,
+the P6 merge-base. It was rewritten at `6fb128ab3` (#2047, P6-D) when the
+projection-fallback rows closed, and re-verified row by row against the merged
+tree at `75d51e97d` (#2051) by BTRC P7-D. Every row now states the tree as
+merged; the rows that had drifted are corrected in place and listed in
+*P7-D reconciliation* at the end of this document.
 
 Method: symbol audits use word-boundary matches across **all** file types, not
 just `.go`. Substring matching produces false positives on this tree —
@@ -20,18 +24,20 @@ just `.go`. Substring matching produces false positives on this tree —
 matches the canonical, unrelated `DurableExecutionService`,
 `OwnedExecutionService`, and `TargetExecutionService`. Package rows use
 import-path audits and distinguish importers inside the package's own directory
-from external ones.
+from external ones. A row that says a symbol has "zero matches" means zero
+matches in **code**: retired names survive in plan and register prose under
+`docs/**`, and those prose matches are never evidence that a symbol is live.
 
 ## P6 candidate-residue reconciliation
 
 | Plan row | Status | Evidence |
 | --- | --- | --- |
 | HTTP application binding and central mapping | **Already deleted** | `pkg/transports/http/application` and `pkg/transports/mapping/composition` were both removed in `d6fd68c33` "refactor(http): retire residual composition forwarding", merged as part of P5B (#2042, `b2ad0f7d6`); `92bff1790` "refactor(http): compose owner adapters in Wire" had already moved routes onto Wire-built owner handlers. `Handler.Bind`, `BindDurableExecution`, and `HTTPBinder` have zero matches repo-wide. |
-| Opened HTTP service bags and Sessions application roles | **Retained with caller** | `RuntimeHTTPServices` has zero matches repo-wide and is already deleted. `factory_sessions/internal/roles` and `factory_sessions/wire/application_graph.go` are **not** residue: `pkg/wire` imports `factory_sessions/wire` (`pkg/wire/wire.go:18`, generated `pkg/wire/wire_gen.go:21`) and binds its runtime-opening contracts (`wire.go:402-404`, `wire_gen.go:1121`). `roles` has ~58 importers across Sessions. Canonical, load-bearing; no deletion. |
+| Opened HTTP service bags and Sessions application roles | **Retained with caller** | `RuntimeHTTPServices` has zero matches repo-wide and is already deleted. `factory_sessions/internal/roles` and `factory_sessions/wire/application_graph.go` are **not** residue: `pkg/wire` imports `factory_sessions/wire` (`pkg/wire/wire.go:18`, generated `pkg/wire/wire_gen.go:21`) and binds its runtime-opening contracts (`wire.go:402-404`, `wire_gen.go:1121`). `roles` is imported by 57 Go files outside its own directory. Canonical, load-bearing; no deletion. |
 | Sessions runtime compatibility | **Already deleted** | `ForRuntime` (word-boundary) and `BindWorkerInvoker` have zero matches repo-wide. Bare `ExecutionService` has no production declaration; the only matches are synthetic checker fixtures in `cmd/ownershipboundarycheck/main_test.go` and `owner_inventory_test.go`. |
-| Runtime legacy owner surface (`APIFactory`) | **Retained with caller** | `factoryruntime.APIFactory` is declared at `pkg/services/factory_runtime/interfaces.go:24`. Its sole non-test production reference is the interface embed at `pkg/services/factory_runtime/internal/host/engine.go:17`. Its two methods are still reached by the projection fallbacks in the next row, so it is retained until those callers move. |
+| Runtime legacy owner surface (`APIFactory`) | **Retained with caller** | `factoryruntime.APIFactory` is declared at `pkg/services/factory_runtime/interfaces.go:24`. After the projection-fallback closure in the next row it has 14 non-test production references, not one: the interface embed at `pkg/services/factory_runtime/internal/host/engine.go:17`, the two declared ingress fields (`factory_runtime/runtime_activation_contract.go:257`, `factory_sessions/types.go:51`), the Runtime root's stored activation ingress (`factory_runtime/internal/root.go:53,558,575,617`), the Sessions resolvers (`runtimeopening/runtime_activation.go:75`, `sessionservice/work_runtime_adapter.go:26`, `runtimebinding/binding.go:361,362,373,384`), and the Work resolver (`work/internal/live_session_runtime.go:36`). It retires once Work admission owns submission and Recordings owns canonical event reads; see the closing paragraphs of the projection-fallback section below. |
 | Cross-owner projection fallbacks | **Deleted in this packet** | Both plan-named sites are migrated: `factory_visualization/internal/service/runtime_source.go` and `work/internal/live_session_runtime.go` now read the declared `LiveRuntime.WorkAndEventIngress` capability instead of asserting one out of `runtime.Factory`. The sweep covered every sibling on the same carrier, not just the two named files; see the root-cause section below. |
-| Workers persistent execution graph | **Already deleted**, plus one row **deleted in this packet** and one **retained with caller** | `pkg/services/workers/internal/services/runtime_assembly` does not exist. `BuildRuntime`, `BuildRuntimeExecutors`, and `AssembledRuntimeBinding` match **only** in three `docs/**/*.md` plan files and have zero Go references. `WorkstationPool` has zero matches repo-wide. What remained was the provider-backed direct-invocation constructor family; see the Workers section below. |
+| Workers persistent execution graph | **Already deleted**, plus one row **deleted in this packet** and one **retained with caller** | `pkg/services/workers/internal/services/runtime_assembly` does not exist. `BuildRuntime`, `BuildRuntimeExecutors`, and `AssembledRuntimeBinding` have zero Go references and survive only in `docs/**/*.md` prose — three plan files each, plus `docs/internal/projects/worker-session-convergence/README.md:78,81` for `BuildRuntime`. `WorkstationPool` has zero matches repo-wide. What remained was the provider-backed direct-invocation constructor family; see the Workers section below. |
 
 ## Sessions runtime-opening family is canonical, not a second graph
 
@@ -170,7 +176,7 @@ provider-backed direct-invocation constructor family:
 | `workers/wire.NewInvocationWithProgress` | **Deleted in this packet** | Zero callers. |
 | `workers/internal.NewInvocation` | **Deleted in this packet** | Its only caller was the `workers/wire` wrapper above. |
 | `NewConductorInvocationWithProgress` | **Retained with caller** | One production caller: `pkg/wire/session_runtime_providers.go:1072`. Successor: `workers.Service.Execute`. |
-| `workers/internal.NewInvocationWithProgress` | **Retained with caller** | Reached from `NewConductorInvocationWithProgress` (`conductor_invocation.go:28`). |
+| `workers/internal.NewInvocationWithProgress` | **Retained with caller** | Declared at `workers/internal/invocation.go:23`; reached from `NewConductorInvocationWithProgress` (`workers/internal/conductor_invocation.go:31`). |
 
 The retained rows are held deliberately. The plan states that P6 "is not
 permission to delete a compatibility method whose caller has not moved," and
@@ -179,7 +185,11 @@ retirement slice." The `TODO(P6-C)` markers were therefore rescoped to name
 that exact caller and `workers.Service.Execute` as the successor boundary,
 rather than removed outright.
 
-## Static-gate state at the reconciliation base
+## Static-gate state at the P6 reconciliation base
+
+The measurements below are pinned to the P6 merge-base and are retained as the
+record of what P6 observed. They are not re-derived here; P7-D changed no
+production file, so it cannot move them.
 
 `make deadcode` is **already failing on `origin/main`** and is not caused by
 this packet. Measured in a disposable detached worktree at the merge-base:
@@ -197,8 +207,71 @@ the drift is recorded rather than absorbed. `make pkg-boundary`,
 `make pkg-structure`, `make pkg-file-count`, `make pkg-maint`,
 `make backend-size`, and `make vet` all pass at this packet's head.
 
+**Superseded on main.** The two numbers above are historical. `75d51e97d`
+(#2051) has since dropped 56 phantom baseline entries naming deleted files and
+removed 58 unreachable test helpers, so at the P7-D reconciliation base the
+same command reports **baseline 257, current 487** — still drift, but roughly
+half the gap this section recorded. That commit deliberately excluded
+`tests/functional/**` because this lane was in flight there. P7-D's own diff is
+test files and these two documents, and `make deadcode` reports the identical
+487 at this branch's head, so the packet contributes zero findings either way.
+
 No baseline or manifest row required editing for the Workers deletion: only
 functions were removed, no package or file, so every package-keyed baseline
 (`backend-package-file-count.json`, both coverage minimums,
 `ownership-inventory.json`, `package-target-manifest.json`,
 `backend-exemption-budget.json`) stays valid and entry-complete.
+
+## P7-D reconciliation against the merged tree
+
+BTRC P7-D re-verified every row above against the tree as merged through
+`75d51e97d` (#2051), which includes both P6 merges (`7018644b3` #2046 and
+`6fb128ab3` #2047) and the three fixes that landed while P7 was in flight
+(`fd0e46ab9` #2049, `217066ad6` #2050, `75d51e97d` #2051). Each row's symbol,
+package, file-line and test-name claim was re-run. Five rows had drifted and
+are corrected in place; the corrections are surgical edits to those rows, not a
+regeneration of the document.
+
+| Corrected row | What it said | What the merged tree shows |
+| --- | --- | --- |
+| Header, *Reconciliation base* | Pinned the whole document to `469c3bbcb` | The body was rewritten at `6fb128ab3` when P6-D closed the projection-fallback rows, so the stated base no longer described the text it headed. Replaced with the reconciliation history above. |
+| `Runtime legacy owner surface (APIFactory)` | "sole non-test production reference is the interface embed at `host/engine.go:17`" | 14 non-test production references. The row was true before the projection-fallback closure in the row beneath it and was left behind when that closure landed, so it contradicted this document's own `APIFactory` paragraph. Enumerated in the corrected row. |
+| `workers/internal.NewInvocationWithProgress` | Caller at `conductor_invocation.go:28` | The call is at `pkg/services/workers/internal/conductor_invocation.go:31`; line 28 is a parameter. Wrong when written, not drift. |
+| `Opened HTTP service bags and Sessions application roles` | "`roles` has ~58 importers" | 57 Go files outside the package's own directory import it. An approximate count cannot be re-verified, so it is now stated exactly. |
+| *Static-gate state* | `deadcode` baseline 342, main 548, packet head 545 | `75d51e97d` (#2051) dropped 56 phantom baseline entries and 58 unreachable test helpers: baseline 257, current 487. Recorded as a *Superseded on main* note rather than by overwriting what P6 measured. |
+
+Re-verification was mechanical, not a re-read: every file-line claim in this
+document was checked by reading that exact line and matching the symbol it is
+supposed to carry. All 14 of them still resolve — including the four in
+`factory_runtime/internal/root.go` (53, 558, 575, 617) and the four in
+`runtimebinding/binding.go` (361, 362, 373, 384) — because `217066ad6` (#2050)
+touched `pkg/platform/process` and the provider adapters, not the composition
+seams this register tracks.
+
+Two wording imprecisions were also corrected rather than left to mislead a
+future audit: rows claiming a symbol has "zero matches repo-wide" are true only
+for code (retired names persist in plan prose under `docs/**`), and
+`BuildRuntime` appears in a fourth markdown file
+(`docs/internal/projects/worker-session-convergence/README.md`).
+
+Everything else holds exactly as written, including the four `Already deleted`
+rows, the retained-with-caller `runtimeEventSubscriber` site at
+`pkg/transports/mapping/runtime_api.go:45` with its caller at
+`pkg/wire/profiles.go:896`, the Sessions runtime-opening package table
+(25/3/9/4 Go files with the named external importers), the runtime-opening
+reduction clause table, the migrated `LiveRuntime.WorkAndEventIngress` site
+list with its per-file counts, and all six named guard tests, each of which
+resolves to a live `func Test...` at the stated owner. `TODO(P6-C)` still marks
+exactly the three retained bridges the Workers section names, and no P7-scoped
+TODO marker exists anywhere in the tree. (This sentence deliberately avoids
+writing that marker literally, so a future audit grep for it does not match this
+document.)
+
+P7-D deletes no package and no file, so no row is removed from
+`backend-package-file-count.json`, either coverage minimum,
+`ownership-inventory.json`, `package-target-manifest.json`, or
+`backend-exemption-budget.json`, and every coverage manifest stays sorted and
+entry-complete. There is no remaining stale test-only adapter or scaffolding
+from P7-A, P7-B or P7-C: none of those slices introduced a shadow fixture,
+dual-path probe or temporary race harness, and each landed its guards directly
+on the canonical path. This register has zero stale rows as of this slice.

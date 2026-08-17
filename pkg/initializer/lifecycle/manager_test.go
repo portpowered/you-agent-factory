@@ -38,31 +38,63 @@ func TestManagerRunsAndClosesInReverseOrder(t *testing.T) {
 	}
 }
 
+// TestManagerUnwindsStartFailureAndJoinsCleanupErrors proves a failed
+// activation unwinds exactly once: every component that actually started is
+// stopped exactly once in reverse declaration order, the component whose Start
+// failed is never stopped, no component declared after the failure is started,
+// the primary component never runs, every acquired resource closes exactly
+// once in reverse declaration order, and the primary start failure is retained
+// alongside each cleanup failure it did not mask.
 func TestManagerUnwindsStartFailureAndJoinsCleanupErrors(t *testing.T) {
 	startErr := errors.New("start failed")
 	stopErr := errors.New("stop failed")
 	closeErr := errors.New("close failed")
-	started := lifecycle.Functions{
-		StartFunc: func(context.Context) error { return nil },
-		StopFunc:  func(context.Context) error { return stopErr },
+	var order []string
+	record := func(step string) { order = append(order, step) }
+	first := lifecycle.Functions{
+		StartFunc: func(context.Context) error { record("start-first"); return nil },
+		StopFunc:  func(context.Context) error { record("stop-first"); return nil },
 	}
-	failing := lifecycle.Functions{StartFunc: func(context.Context) error { return startErr }}
-	primary := lifecycle.NewRunner(func(context.Context) error { return nil })
+	second := lifecycle.Functions{
+		StartFunc: func(context.Context) error { record("start-second"); return nil },
+		StopFunc:  func(context.Context) error { record("stop-second"); return stopErr },
+	}
+	failing := lifecycle.Functions{
+		StartFunc: func(context.Context) error { record("start-failing"); return startErr },
+		StopFunc:  func(context.Context) error { record("stop-failing"); return nil },
+	}
+	unreached := lifecycle.Functions{
+		StartFunc: func(context.Context) error { record("start-unreached"); return nil },
+		StopFunc:  func(context.Context) error { record("stop-unreached"); return nil },
+	}
+	primary := lifecycle.NewRunner(func(context.Context) error { record("run-primary"); return nil })
 
 	err := lifecycle.NewManager().Run(context.Background(), lifecycle.Plan{
 		Components: []lifecycle.NamedComponent{
-			{Name: "started", Component: started},
+			{Name: "first", Component: first},
+			{Name: "second", Component: second},
 			{Name: "failing", Component: failing},
+			{Name: "unreached", Component: unreached},
 			{Name: "primary", Component: primary, Primary: true},
 		},
-		Resources: []lifecycle.NamedResource{{
-			Name: "owned", Resource: closerFunc(func() error { return closeErr }),
-		}},
+		Resources: []lifecycle.NamedResource{
+			{Name: "outer", Resource: closerFunc(func() error { record("close-outer"); return nil })},
+			{Name: "inner", Resource: closerFunc(func() error { record("close-inner"); return closeErr })},
+		},
 	})
+
 	for _, cause := range []error{startErr, stopErr, closeErr} {
 		if !errors.Is(err, cause) {
 			t.Fatalf("Run() error = %v, want cause %v", err, cause)
 		}
+	}
+	want := []string{
+		"start-first", "start-second", "start-failing",
+		"stop-second", "stop-first",
+		"close-inner", "close-outer",
+	}
+	if !reflect.DeepEqual(order, want) {
+		t.Fatalf("start-failure unwind = %v, want %v", order, want)
 	}
 }
 
