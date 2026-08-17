@@ -59,6 +59,8 @@ Canonical path: `Process.Execute` plus the Initializer lifecycle.
 | Cleanup continuation (composed lifecycle) | The lifecycle Wire actually composes reaches Providers then Events exactly once per `Close`, and an earlier owner's teardown failure neither skips nor masks the later one | `pkg/wire/session_runtime_providers_test.go:TestProvideApplicationProcessLifecycle_ClosesProvidersAndEventsExactlyOnceAfterAFailure`, `...:TestProcessCloseContinuesThroughEveryLifecycleOwnerAfterFailure` | `pkg/wire` | **Closed by P7-C** |
 | Activation failure | An already-opened Runtime is closed exactly once when the Visualization sink cannot be resolved, and the runtime adapter is never reached | `tests/functional/sessions/root_composition/application_opening_failure_test.go:TestApplicationOpeningClosesRuntimeWhenVisualizationSinkIsUnavailable` | `pkg/services/factory_sessions` | Guarded |
 | Activation failure (owner tier) | Every other opening-failure branch -- adapter failure and lifecycle-planning failure -- also closes the opened runtime exactly once and preserves the primary error | `pkg/services/factory_sessions/internal/applicationopening/service_test.go:TestOpenApplicationClosesOpenedResourcesOnBindingFailure`, `...:TestOpenApplicationClosesOpenedResourcesWhenLifecyclePlanningFails` | `pkg/services/factory_sessions` | Guarded |
+| Post-activation cleanup (transport role) | After a real activation, process shutdown releases the acquired API transport exactly once, a repeated `Close` neither fails nor releases it again, and the released listener refuses a fresh connection | `tests/functional/sessions/root_composition/p3_p7_behavior_matrix_test.go:TestP3P7CanonicalPathPreservesTerminalCleanupAndReplayIsolation` | `pkg/root`, `pkg/initializer` | **Closed by P7-D** |
+| Shutdown under an in-flight dispatch | A dispatch parked inside the provider boundary observes `context.Canceled` on process shutdown instead of being left running, and no success terminal outcome is reported | `tests/functional/sessions/root_composition/p3_p7_behavior_matrix_test.go:TestP3P7CanonicalPathPreservesTerminalCleanupAndReplayIsolation` | `pkg/root`, `pkg/services/workers` | **Closed by P7-D** |
 
 ## 2. HTTP generated server and SSE response-event routes
 
@@ -147,6 +149,8 @@ history/projection/replay.
 | Scope isolation | Recording-scope queries stay isolated across concurrent scopes and concurrent sessions | `pkg/services/recordings/internal/projection_query_contract_test.go:TestRecordingScopeQueriesRemainIsolatedAcrossConcurrentScopes`, `pkg/services/recordings/internal/canonical_recording_lifecycle_test.go:TestRecordingScopesKeepConcurrentSessionsIsolated` | `pkg/services/recordings` | Guarded |
 | Replay equivalence under concurrent access | Several concurrent canonical replays of two distinct finalized scopes each complete with exactly their own scope's retained world state, never another scope's | `pkg/services/recordings/internal/canonical_recording_lifecycle_test.go:TestRecordingScopeReplayIsEquivalentAndIsolatedUnderConcurrentAccess` | `pkg/services/recordings` | **Closed by P7-C** |
 | Multi-part Work content | A terminal result with two differently typed ordered parts (text then JSON) keeps both discriminated types and their order through the public boundary, and a failure terminal outcome is never reported as success | `tests/functional/transport/http/server/work_terminal_response_test.go:TestWorkTerminalResponsePreservesOrderedTypedContentThroughPublicBoundary` | `pkg/services/work` | **Closed by P7-B** |
+| Cross-process replay isolation | Two Factory Sessions built from one authored Factory in two independent root processes replay to equal ordered workstation outcomes, the same terminal state and the same work-correlated canonical vocabulary, while sharing no session or Work identity and never referencing each other | `tests/functional/sessions/root_composition/p3_p7_behavior_matrix_test.go:TestP3P7CanonicalPathPreservesTerminalCleanupAndReplayIsolation` | `pkg/services/recordings`, `pkg/services/factory_sessions` | **Closed by P7-D** |
+| Projection/replay agreement | The workstation outcome derived from the retained canonical stream alone classifies the Work the same way the served projection does | `tests/functional/sessions/root_composition/p3_p7_behavior_matrix_test.go:TestP3P7CanonicalPathPreservesTerminalCleanupAndReplayIsolation` | `pkg/services/recordings`, `pkg/services/work` | **Closed by P7-D** |
 
 ## 8. CLI and API invocation parity
 
@@ -172,7 +176,7 @@ silently re-pointed at a lookalike.
 | `pkg/services/workers/internal/services/workstations/executor/agentrun/executor_test.go:TestAgentRunExecutor_TimeoutSurfacesAgentRunTimeoutClass` | Neither the file nor the test exists. The nearest coverage, `agentrun/failure_test.go:TestFailureClassForError_RawDeadlineRemainsAgentRunTimeout`, tests the class mapping as a pure function and never runs a detached agent loop. | **Closed by P7-A** as `agentrun/detached_test.go:TestExecuteDetachedTimeoutSurfacesAgentRunTimeoutClass`, which drives `ExecuteDetached` and then asserts the class, metadata, and diagnostics of the error it actually returns. No new file was added to `agentrun` (the package is at 14 Go files against a limit of 15). |
 | `.../runtime/dispatch_worker_sessions_idempotency_test.go:TestFactoryImpl_WorkerSessionCompletionRacesExplicitAcceptanceAndCanonicalReplay` | Absent **under that exact name**. P7-A recorded the cell as unguarded; **P7-C corrects that**: the same file already carries `TestFactoryImpl_WorkerSessionCompletionRacesExplicitAcceptanceAndCanonicalIdempotency`, which holds a Worker Session terminal callback and an explicit Runtime-root acceptance behind one barrier and asserts exactly one RETIRED, one DUPLICATE_IDEMPOTENT, one recorded association and one recorded response. Its own doc comment defers the *canonical replay* half to the Recordings owner package, and that half had no concurrent-access guard. | **Closed by P7-C** in two halves: the Runtime race is the existing `...AndCanonicalIdempotency` guard, extended by the new direct-vs-child duplicate-completion guard; the canonical replay half is closed at its owner by `pkg/services/recordings/internal/canonical_recording_lifecycle_test.go:TestRecordingScopeReplayIsEquivalentAndIsolatedUnderConcurrentAccess`. No duplicate of the existing Runtime guard was added under the plan's name. |
 | `tests/functional/transport/http/server/work_terminal_response_test.go:TestWorkTerminalResponsePreservesOrderedTypedContentThroughPublicBoundary` | Absent, and the plan already marks it *planned*. | **Closed by P7-B** at the named path. |
-| `tests/functional/sessions/root_composition/p3_p7_behavior_matrix_test.go:TestP3P7CanonicalPathPreservesTerminalCleanupAndReplayIsolation` | Absent, and the plan already marks it *planned*. | **P7-D** owns this cell. |
+| `tests/functional/sessions/root_composition/p3_p7_behavior_matrix_test.go:TestP3P7CanonicalPathPreservesTerminalCleanupAndReplayIsolation` | Absent, and the plan already marks it *planned*. | **Closed by P7-D** at the named path. |
 
 One further gap was found by walking the caller table rather than the guard
 table: **`cmd/factory/main.go:runProcess` had no direct guard of any kind.**
@@ -258,7 +262,62 @@ to the started set before `Start` succeeds (double-stop), returning early from
 the composed `Close` on the first failure, classifying duplicate retirement as
 RETIRED, and crossing the two replay scopes each produced the expected failure.
 
-## Cells deliberately left to later slices
+## Gap closure delivered by P7-D
 
-- **P7-D** — the cross-packet corpus test, the full `-race`/`-count>=2` rerun,
-  and deletion-register closure.
+P7-D adds the plan's named cross-packet corpus and closes the deletion register.
+One test file, one register, and this matrix changed; no production file
+changed.
+
+`tests/functional/sessions/root_composition/p3_p7_behavior_matrix_test.go:TestP3P7CanonicalPathPreservesTerminalCleanupAndReplayIsolation`
+drives four canonical root processes through `root.BuildProcess` and
+`Process.Execute`, replacing external effects only through `edges.Edges`
+(`APIServerStarter`, `FactorySessionRuntimeInstanceIDGenerator`,
+`ProviderCommandRunner`). It asserts, in one place, the four cross-packet claims
+that individually belong to different owners:
+
+| Claim | How the corpus observes it |
+| --- | --- |
+| One terminal outcome | Served status categories report exactly one terminal (or failed) Work and zero of the other, the served Work state type matches, and exactly one workstation outcome replayed from the retained canonical stream alone classifies the same way. |
+| Post-activation cleanup | The API transport is activated exactly once, released exactly once by process shutdown, not released again by a repeated `Close` (which also must not fail), and the released listener refuses a fresh connection. A non-zero Factory Session runtime-activation count is required first, so the cleanup claim cannot pass vacuously on a process that never activated. |
+| Cancellation and failure | A provider `ExitCode 1` terminalizes as FAILED with zero terminal outcomes, and a dispatch parked inside the provider boundary observes `context.Canceled` when the process shuts down, with zero terminal outcomes observed while it was held. |
+| Replay isolation | Two Factory Sessions built from one authored Factory in two independent root processes produce equal ordered workstation outcomes, the same terminal state name, and the same work-correlated canonical event vocabulary, while sharing no session identity and no Work identity, with no event of either session referencing the other's Work and no session sequence regressing. |
+
+Three findings recorded rather than worked around:
+
+- **`WORK_STATE_CHANGE` is not the normal workstation transition fact.** It is
+  emitted only for operator moves (`factoryImpl.MoveWork`) and cascading
+  failure, so a corpus that derives a work-state path from it observes nothing
+  on the ordinary dispatch path. The replayable terminal fact for a
+  workstation-driven transition is `DISPATCH_RESPONSE.outcome`.
+- **The Work projection and the canonical stream are separate reads.** A
+  terminal projection read does not imply the workstation outcome is already
+  committed to retained history, so the corpus waits for the canonical fact
+  itself before deriving from it.
+- **Session-scoped canonical events carry either the run's canonical session
+  UUID or the `~default` alias.** `SESSION_STARTED` and `WORK_REQUEST` carry the
+  alias. The alias is resolved per process, so it can never name another
+  process's session, and the isolation assertion accepts it explicitly rather
+  than being weakened to "any session".
+
+Every corpus claim was falsified once before being trusted: suppressing
+cancellation propagation into the transport edge (release never observed),
+replacing the second isolated session's history with the first's (foreign Work
+reference detected), truncating one session's retained history (outcome
+sequences diverge), and returning the parked provider dispatch immediately
+instead of holding it (cancellation never observed).
+
+### Deletion-register closure
+
+`docs/internal/packaged-service-structure/btrc-p6-secondary-graph-register.md`
+was re-verified row by row against the tree as merged through `fd0e46ab9`
+(#2049). Three rows had drifted and were corrected surgically — the pinned
+reconciliation base, the `APIFactory` reference count (one row claimed a single
+production reference while the same document's prose enumerated the post-P6-D
+set), and a wrong caller line for `NewInvocationWithProgress`. Every other row
+holds exactly as written. That register now carries a *P7-D reconciliation*
+section stating what was re-checked and what changed.
+
+P7-D deletes no package and no file, so no manifest or baseline row required
+removal, and no stale test-only adapter or scaffolding remains from P7-A, P7-B
+or P7-C — none of those slices created a shadow fixture, dual-path probe or
+temporary race harness.
