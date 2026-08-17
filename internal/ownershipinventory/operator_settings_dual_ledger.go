@@ -36,7 +36,12 @@ func VerifyOperatorSettingsDualLedgerAlignment(root string) error {
 		}
 		ownershipRow, ok := ownershipByPath[manifestRow.PackagePath]
 		if !ok {
-			return fmt.Errorf("ownership inventory missing committed manifest row %q", manifestRow.PackagePath)
+			// No row means "retain where it already is"; reconstruct that
+			// default rather than demanding the registry restate it.
+			ownershipRow, ok = DerivedPackageRow(manifestRow.PackagePath)
+			if !ok {
+				return fmt.Errorf("ownership inventory cannot derive an owner for manifest row %q", manifestRow.PackagePath)
+			}
 		}
 		if err := validateOperatorSettingsDualLedgerRow(manifestRow, ownershipRow); err != nil {
 			return err

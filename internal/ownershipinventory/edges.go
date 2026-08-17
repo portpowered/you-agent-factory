@@ -48,11 +48,14 @@ func ClassifyEdge(fromOwner, toOwner string) CrossServiceEdge {
 
 // DiscoverCrossServiceEdges walks production (non-test) Go imports under pkg and
 // returns one stable-sorted edge per distinct destination-owner pair.
+//
+// Ownership is derived from the tree by OwnerForPackage, so every live package
+// participates without needing a registry row. The supplied rows only override
+// that derivation, which is how an unfinished "move" row keeps attributing a
+// package to the owner it is migrating towards rather than the directory it
+// still sits in.
 func DiscoverCrossServiceEdges(root string, packages []PackageRow) ([]CrossServiceEdge, error) {
-	ownerByPackage := map[string]string{}
-	for _, row := range packages {
-		ownerByPackage[row.PackagePath] = row.Destination
-	}
+	ownerFor := packageOwnerResolver(packages)
 
 	evidenceByPair := map[string]string{}
 	err := filepath.WalkDir(filepath.Join(root, "pkg"), func(path string, entry fs.DirEntry, walkErr error) error {
@@ -74,7 +77,7 @@ func DiscoverCrossServiceEdges(root string, packages []PackageRow) ([]CrossServi
 		if err != nil {
 			return err
 		}
-		fromOwner, ok := ownerByPackage[fromPackage]
+		fromOwner, ok := ownerFor(fromPackage)
 		if !ok {
 			return nil
 		}
@@ -84,7 +87,7 @@ func DiscoverCrossServiceEdges(root string, packages []PackageRow) ([]CrossServi
 			return err
 		}
 		for _, importPath := range imports {
-			toPackage, toOwner, ok := resolveImportedOwner(importPath, ownerByPackage)
+			toPackage, toOwner, ok := resolveImportedOwner(importPath, ownerFor)
 			if !ok || toOwner == fromOwner {
 				continue
 			}
@@ -160,26 +163,31 @@ func productionImports(path string) ([]string, error) {
 	return out, nil
 }
 
-func resolveImportedOwner(importPath string, ownerByPackage map[string]string) (packagePath, owner string, ok bool) {
-	if !strings.HasPrefix(importPath, repositoryImportPrefix) {
-		return "", "", false
+// packageOwnerResolver resolves a production package path to its destination
+// owner: an explicit row wins, otherwise the owner is derived from the tree.
+func packageOwnerResolver(packages []PackageRow) func(string) (string, bool) {
+	overrides := make(map[string]string, len(packages))
+	for _, row := range packages {
+		overrides[row.PackagePath] = row.Destination
 	}
-	candidate := strings.TrimPrefix(importPath, repositoryImportPrefix)
-	if owner, found := ownerByPackage[candidate]; found {
-		return candidate, owner, true
-	}
-	best := ""
-	for packagePath := range ownerByPackage {
-		if candidate == packagePath || strings.HasPrefix(candidate, packagePath+"/") {
-			if len(packagePath) > len(best) {
-				best = packagePath
-			}
+	return func(packagePath string) (string, bool) {
+		if owner, ok := overrides[packagePath]; ok {
+			return owner, true
 		}
+		return OwnerForPackage(packagePath)
 	}
-	if best == "" {
+}
+
+func resolveImportedOwner(importPath string, ownerFor func(string) (string, bool)) (packagePath, owner string, ok bool) {
+	candidate, isRepositoryImport := strings.CutPrefix(importPath, repositoryImportPrefix)
+	if !isRepositoryImport {
 		return "", "", false
 	}
-	return best, ownerByPackage[best], true
+	owner, resolved := ownerFor(candidate)
+	if !resolved {
+		return "", "", false
+	}
+	return candidate, owner, true
 }
 
 func compareCrossServiceEdges(a, b CrossServiceEdge) int {

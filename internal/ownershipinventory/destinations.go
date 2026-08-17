@@ -1,6 +1,9 @@
 package ownershipinventory
 
-import "slices"
+import (
+	"slices"
+	"strings"
+)
 
 // ProductOwners is the closed destination vocabulary. Chat Sessions, Events,
 // and Worker Sessions are confirmed as distinct L1 ACP Core owners in
@@ -91,6 +94,47 @@ func closedDestinationSet() map[string]string {
 func isKnownDestination(destination string) bool {
 	_, ok := closedDestinationSet()[destination]
 	return ok
+}
+
+// OwnerForPackage derives the destination a production package belongs to from
+// the repository tree layout alone: pkg/services/<owner>/... belongs to <owner>
+// (or to the Process Edges architecture exception), and pkg/<family>/... belongs
+// to that approved non-service family. Reporting false means the path sits
+// outside the closed destination vocabulary and has no derivable owner.
+//
+// This is why the inventory no longer carries a "retain" row per package: a row
+// that only restates the directory the package already lives in adds nothing
+// this function cannot compute.
+func OwnerForPackage(packagePath string) (string, bool) {
+	const pkgPrefix = "pkg/"
+	const servicesPrefix = "services/"
+
+	remainder, ok := strings.CutPrefix(strings.TrimSpace(packagePath), pkgPrefix)
+	if !ok || remainder == "" {
+		return "", false
+	}
+	closed := closedDestinationSet()
+	if serviceRemainder, isService := strings.CutPrefix(remainder, servicesPrefix); isService {
+		owner := firstPathSegment(serviceRemainder)
+		switch closed[owner] {
+		case DestinationKindOwner, DestinationKindArchitectureException:
+			return owner, true
+		default:
+			return "", false
+		}
+	}
+	family := firstPathSegment(remainder)
+	if closed[family] == DestinationKindFamily {
+		return family, true
+	}
+	return "", false
+}
+
+func firstPathSegment(path string) string {
+	if index := strings.Index(path, "/"); index >= 0 {
+		return path[:index]
+	}
+	return path
 }
 
 func defaultDestinationVocabulary() DestinationVocabulary {

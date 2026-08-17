@@ -33,7 +33,16 @@ func TestVerificationGateFailsWhenInventoryBroken(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
-	inventory.Packages = inventory.Packages[1:]
+	// A live package with no row is now valid, so the surviving package-row
+	// failure mode is the reverse: a row naming a package absent from disk.
+	inventory.Packages = append(append([]ownershipinventory.PackageRow(nil), inventory.Packages...), ownershipinventory.PackageRow{
+		PackagePath:       "pkg/services/workers/dcp2deletedpackage",
+		Disposition:       ownershipinventory.DispositionMove,
+		Destination:       "workers",
+		DestinationKind:   ownershipinventory.DestinationKindOwner,
+		Successor:         "pkg/services/workers/internal",
+		DeletionCondition: "delete after cutover proof",
+	})
 	freeze, err := ownershipinventory.LoadPathLeaseFreeze(root)
 	if err != nil {
 		t.Fatalf("LoadPathLeaseFreeze() error = %v", err)
@@ -41,13 +50,31 @@ func TestVerificationGateFailsWhenInventoryBroken(t *testing.T) {
 
 	report := ownershipinventory.VerifyFreezeArtifacts(inventory, freeze, mustListPackages(t, root))
 	if report.OK() {
-		t.Fatal("VerifyFreezeArtifacts() unexpectedly passed with incomplete inventory")
+		t.Fatal("VerifyFreezeArtifacts() unexpectedly passed with a row naming an absent package")
 	}
 	if report.Completeness {
-		t.Fatal("completeness unexpectedly proved with missing package")
+		t.Fatal("completeness unexpectedly proved with a row naming an absent package")
 	}
 	if report.InventoryOK {
-		t.Fatal("inventoryOK unexpectedly true with missing package")
+		t.Fatal("inventoryOK unexpectedly true with a row naming an absent package")
+	}
+}
+
+func TestVerificationGatePassesWhenLivePackageHasNoRow(t *testing.T) {
+	root := repositoryRoot(t)
+	inventory, err := ownershipinventory.Load(root)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	freeze, err := ownershipinventory.LoadPathLeaseFreeze(root)
+	if err != nil {
+		t.Fatalf("LoadPathLeaseFreeze() error = %v", err)
+	}
+	packages := append(mustListPackages(t, root), "pkg/services/workers/dcp2scratchpackage")
+
+	report := ownershipinventory.VerifyFreezeArtifacts(inventory, freeze, packages)
+	if !report.OK() {
+		t.Fatalf("VerifyFreezeArtifacts() rejected a new package that has no registry row; report=%#v", report)
 	}
 }
 

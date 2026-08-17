@@ -53,23 +53,21 @@ func ValidateInventory(inventory Inventory, packages []string) Report {
 	slices.Sort(report.DuplicatePackages)
 	slices.Sort(report.InvalidMappings)
 
-	expected := map[string]struct{}{}
+	// A live package with no row is valid, expected state: its owner is derived
+	// from the tree by OwnerForPackage. Only the reverse direction still fails —
+	// a row naming a package path that no longer exists on disk is stale.
+	live := make(map[string]struct{}, len(packages))
 	for _, packagePath := range packages {
-		expected[packagePath] = struct{}{}
-		if seen[packagePath] == 0 {
-			report.MissingPackages = append(report.MissingPackages, packagePath)
-		}
+		live[packagePath] = struct{}{}
 	}
-	slices.Sort(report.MissingPackages)
-
 	for packagePath := range seen {
-		if _, ok := expected[packagePath]; !ok {
+		if _, ok := live[packagePath]; !ok {
 			report.UnexpectedPackages = append(report.UnexpectedPackages, packagePath)
 		}
 	}
 	slices.Sort(report.UnexpectedPackages)
 
-	if !hasProcessEdgesException(inventory) {
+	if !hasProcessEdgesException(inventory, packages) {
 		report.MissingProcessEdgesException = true
 	}
 
@@ -638,7 +636,11 @@ func validateRow(row PackageRow) string {
 	return ""
 }
 
-func hasProcessEdgesException(inventory Inventory) bool {
+// hasProcessEdgesException proves the declared architecture exception against
+// the live tree rather than against a package row. The declaration carries the
+// decision; the tree carries the fact that Process Edges still exists and still
+// derives to the exception destination.
+func hasProcessEdgesException(inventory Inventory, livePackages []string) bool {
 	exception := inventory.ProcessEdgesException
 	if exception.PackagePath != ProcessEdgesPackagePath ||
 		exception.Destination != DestinationEdges ||
@@ -646,13 +648,9 @@ func hasProcessEdgesException(inventory Inventory) bool {
 		strings.TrimSpace(exception.Note) == "" {
 		return false
 	}
-	for _, row := range inventory.Packages {
-		if row.PackagePath != ProcessEdgesPackagePath {
-			continue
-		}
-		return row.Destination == DestinationEdges &&
-			row.DestinationKind == DestinationKindArchitectureException &&
-			row.Disposition == DispositionRetain
+	owner, ok := OwnerForPackage(ProcessEdgesPackagePath)
+	if !ok || owner != DestinationEdges {
+		return false
 	}
-	return false
+	return slices.Contains(livePackages, ProcessEdgesPackagePath)
 }

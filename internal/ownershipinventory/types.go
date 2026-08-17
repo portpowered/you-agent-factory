@@ -216,7 +216,10 @@ type PackageRow struct {
 
 // Report is the focused ownership-inventory validation result.
 type Report struct {
-	MissingPackages               []string
+	// UnexpectedPackages lists package rows whose packagePath is absent from the
+	// live tree. There is deliberately no "missing package" counterpart: package
+	// ownership is derived by OwnerForPackage, so a live package without a row is
+	// valid.
 	UnexpectedPackages            []string
 	DuplicatePackages             []string
 	InvalidMappings               []string
@@ -257,7 +260,6 @@ type Report struct {
 // count once each so a consolidated diagnostic cannot hide added debt.
 func (r Report) ViolationCount() int {
 	return countStrings(
-		r.MissingPackages,
 		r.UnexpectedPackages,
 		r.DuplicatePackages,
 		r.InvalidMappings,
@@ -314,8 +316,7 @@ func countFlags(flags ...bool) int {
 
 // OK reports whether validation found no defects.
 func (r Report) OK() bool {
-	return len(r.MissingPackages) == 0 &&
-		len(r.UnexpectedPackages) == 0 &&
+	return len(r.UnexpectedPackages) == 0 &&
 		len(r.DuplicatePackages) == 0 &&
 		len(r.InvalidMappings) == 0 &&
 		len(r.MissingSeedServices) == 0 &&

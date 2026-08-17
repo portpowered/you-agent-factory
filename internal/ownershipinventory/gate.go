@@ -86,8 +86,7 @@ func composeVerificationGate(inventory Report, pathLease PathLeaseFreezeReport) 
 }
 
 func completenessProved(inventory Report) bool {
-	return len(inventory.MissingPackages) == 0 &&
-		len(inventory.UnexpectedPackages) == 0 &&
+	return len(inventory.UnexpectedPackages) == 0 &&
 		len(inventory.DuplicatePackages) == 0 &&
 		len(inventory.InvalidMappings) == 0 &&
 		len(inventory.MissingSeedServices) == 0 &&

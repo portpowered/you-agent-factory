@@ -137,6 +137,23 @@ func legacyServiceImplementationMapping(packagePath string) (PackageRow, bool) {
 	), true
 }
 
+// DerivedPackageRow returns the implicit retain row for a package that carries
+// no inventory row. Retaining a package where it already sits is the default,
+// so the registry only records departures from it; callers that need a row for
+// every live package reconstruct the default here instead of reading one back
+// out of the registry.
+func DerivedPackageRow(packagePath string) (PackageRow, bool) {
+	owner, ok := OwnerForPackage(packagePath)
+	if !ok {
+		return PackageRow{}, false
+	}
+	kind, known := closedDestinationSet()[owner]
+	if !known {
+		return PackageRow{}, false
+	}
+	return retainRow(packagePath, owner, kind), true
+}
+
 func retainRow(packagePath, destination, kind string) PackageRow {
 	return PackageRow{
 		PackagePath:     packagePath,
@@ -159,12 +176,19 @@ func moveRow(packagePath, destination, successor, condition string) PackageRow {
 
 // BuildInventory constructs the frozen ownership inventory for the provided
 // production package list using FND-01 destination vocabulary and plan mappings.
+//
+// Only packages with unfinished migration intent get a row. A "retain" package
+// stays exactly where OwnerForPackage already says it belongs, so writing that
+// down would restate the tree rather than record a decision.
 func BuildInventory(root string, packages []string) (Inventory, error) {
 	rows := make([]PackageRow, 0, len(packages))
 	for _, packagePath := range packages {
 		row, err := MapPackage(packagePath)
 		if err != nil {
 			return Inventory{}, err
+		}
+		if row.Disposition == DispositionRetain {
+			continue
 		}
 		rows = append(rows, row)
 	}

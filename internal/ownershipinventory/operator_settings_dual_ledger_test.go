@@ -44,7 +44,7 @@ func TestVerifyOperatorSettingsDualLedgerAlignmentFailsWhenMoveSuccessorDrifts(t
 	}
 }
 
-func TestVerifyOperatorSettingsDualLedgerAlignmentFailsWhenManifestMissingOwnershipRow(t *testing.T) {
+func TestVerifyOperatorSettingsDualLedgerAlignmentFailsWhenManifestMoveRowHasNoOwnershipCounterpart(t *testing.T) {
 	t.Parallel()
 
 	root := t.TempDir()
@@ -63,11 +63,11 @@ func TestVerifyOperatorSettingsDualLedgerAlignmentFailsWhenManifestMissingOwners
 
 	err = ownershipinventory.VerifyOperatorSettingsDualLedgerAlignment(root)
 	if err == nil {
-		t.Fatal("VerifyOperatorSettingsDualLedgerAlignment() error = nil, want missing ownership row failure")
+		t.Fatal("VerifyOperatorSettingsDualLedgerAlignment() error = nil, want disposition drift failure")
 	}
-	if !strings.Contains(err.Error(), "ownership inventory missing committed manifest row") ||
+	if !strings.Contains(err.Error(), "dual-ledger disposition drift") ||
 		!strings.Contains(err.Error(), "hypothetical") {
-		t.Fatalf("VerifyOperatorSettingsDualLedgerAlignment() error = %v, want missing ownership row failure", err)
+		t.Fatalf("VerifyOperatorSettingsDualLedgerAlignment() error = %v, want disposition drift failure", err)
 	}
 }
 

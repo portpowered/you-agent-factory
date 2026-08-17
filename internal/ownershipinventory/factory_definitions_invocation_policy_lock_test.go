@@ -100,7 +100,12 @@ func TestFactoryDefinitionsResidualInvocationPolicyPackagesLocked(t *testing.T) 
 
 		ownershipRow, ok := ownershipByPath[packagePath]
 		if !ok {
-			t.Fatalf("frozen inventory missing row for %q", packagePath)
+			// Retain is the derived default, so a package staying put carries no
+			// row. Reconstruct the implicit row and hold it to the same contract.
+			ownershipRow, ok = ownershipinventory.DerivedPackageRow(packagePath)
+			if !ok {
+				t.Fatalf("frozen inventory has no row for %q and no derivable owner", packagePath)
+			}
 		}
 		if ownershipRow.Disposition != ownershipinventory.DispositionRetain {
 			t.Fatalf("frozen inventory %q disposition = %q, want retain", packagePath, ownershipRow.Disposition)

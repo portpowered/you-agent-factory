@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 
 	"github.com/portpowered/infinite-you/internal/ownershipinventory"
@@ -20,29 +21,72 @@ func TestValidateAcceptsFrozenRepositoryInventory(t *testing.T) {
 	}
 }
 
-func TestValidateFailsWhenProductionPackageMissing(t *testing.T) {
+func TestValidateAcceptsLivePackageWithNoInventoryRow(t *testing.T) {
 	inventory, packages := loadedInventoryAndPackages(t)
-	inventory.Packages = inventory.Packages[1:]
+	// pkg/initializer used to carry a "retain" row that only restated the
+	// directory it already lives in. It must now be absent from the registry and
+	// still validate.
+	const retired = "pkg/initializer"
+	if !slices.Contains(packages, retired) {
+		t.Fatalf("%q is not a live production package; pick another rowless package", retired)
+	}
+	for _, row := range inventory.Packages {
+		if row.PackagePath == retired {
+			t.Fatalf("%q still carries a registry row %#v; retain rows were meant to be retired", retired, row)
+		}
+	}
+
+	report := ownershipinventory.ValidateInventory(inventory, packages)
+	if !report.OK() {
+		t.Fatalf("ValidateInventory() rejected rowless live package %q; report=%#v", retired, report)
+	}
+}
+
+func TestValidateAcceptsPackageAddedInsideExistingServiceWithNoRegistryEdit(t *testing.T) {
+	inventory, packages := loadedInventoryAndPackages(t)
+	added := "pkg/services/workers/dcp2scratchpackage"
+	packages = append(append([]string(nil), packages...), added)
+
+	report := ownershipinventory.ValidateInventory(inventory, packages)
+	if !report.OK() {
+		t.Fatalf("ValidateInventory() rejected new package %q that has no registry row; report=%#v", added, report)
+	}
+	owner, ok := ownershipinventory.OwnerForPackage(added)
+	if !ok || owner != "workers" {
+		t.Fatalf("OwnerForPackage(%q) = %q, %v; want \"workers\", true", added, owner, ok)
+	}
+}
+
+func TestValidateFailsWhenMoveRowNamesAbsentPackage(t *testing.T) {
+	inventory, packages := loadedInventoryAndPackages(t)
+	inventory.Packages = append(append([]ownershipinventory.PackageRow(nil), inventory.Packages...), ownershipinventory.PackageRow{
+		PackagePath:       "pkg/services/workers/dcp2deletedpackage",
+		Disposition:       ownershipinventory.DispositionMove,
+		Destination:       "workers",
+		DestinationKind:   ownershipinventory.DestinationKindOwner,
+		Successor:         "pkg/services/workers/internal",
+		DeletionCondition: "delete after cutover proof",
+	})
 
 	report := ownershipinventory.ValidateInventory(inventory, packages)
 	if report.OK() {
-		t.Fatal("ValidateInventory() unexpectedly passed with a missing package mapping")
+		t.Fatal("ValidateInventory() unexpectedly passed with a move row naming a package that is absent from disk")
 	}
-	if len(report.MissingPackages) == 0 {
-		t.Fatalf("missing packages empty; report=%#v", report)
+	if len(report.UnexpectedPackages) == 0 {
+		t.Fatalf("unexpected packages empty; report=%#v", report)
 	}
 }
 
 func TestViolationCountCountsStructuredFindingsIndividually(t *testing.T) {
 	report := ownershipinventory.Report{
-		MissingPackages:             []string{"pkg/a", "pkg/b"},
+		UnexpectedPackages:          []string{"pkg/a", "pkg/b"},
 		MissingCrossServiceEdges:    []string{"runtime->models", "recordings->events"},
 		UnexpectedCrossServiceEdges: []string{"workers->sessions"},
 	}
 	if got := report.ViolationCount(); got != 5 {
 		t.Fatalf("ViolationCount() = %d, want 5 structured findings", got)
 	}
-	report.MissingPackages = append(report.MissingPackages, "pkg/c")
+	report.UnexpectedPackages = append(report.UnexpectedPackages, "pkg/c")
 	if got := report.ViolationCount(); got != 6 {
 		t.Fatalf("ViolationCount() after one added package = %d, want 6", got)
 	}

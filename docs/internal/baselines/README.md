@@ -22,8 +22,14 @@ That map names focused Make/`go test` entry points and marks success vs
 typed-failure coverage; it does not own PR #1262 CLI-manifest baselines.
 
 `ownership-inventory.json` is the PSS-F01 frozen package-destination inventory.
-It maps every production `pkg` package to one committed owner, approved family,
-Process Edges exception, or deletion/move successor. It also freezes owner and
+Its `packages` list records only packages with unfinished migration intent —
+`move` and `delete` rows carrying a successor and a deletion condition. A
+package that simply stays where it already sits has no row: its owner is derived
+from the tree by `ownershipinventory.OwnerForPackage`, so adding or removing a
+package inside an existing service requires no edit here. The surviving package
+check runs the other way: a row naming a `packagePath` that is absent from the
+live tree is stale and fails. This list is expected to shrink to zero as the
+Packaged Service Structure migration completes. It also freezes owner and
 nested-subservice rationale cards (authority, state/store, lifecycle, consumers,
 transaction boundary, failure/recovery), large responsibility clusters, a
 cross-service edge table that classifies each distinct-owner production import
