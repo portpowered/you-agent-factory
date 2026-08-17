@@ -53,6 +53,20 @@ migrate-and-reduce, not wholesale deletion: resolve Definitions values, call
 through the Runtime operation, with the private `instance_host` permitted to
 remain. Nothing in this family is presently deletable.
 
+**Reduction delivered in this packet.** Each clause of that instruction now
+holds in the tree:
+
+| Clause | Where it holds |
+| --- | --- |
+| Resolve Definitions values | `runtimeOpeningRequestFromActivation` builds the opening request from the activation request's resolved Definition directory, source path, and execution base dir. |
+| Call `Runtime.Activate` | `openActivatedRuntimeWithReplayInput` calls `f.runtimeRoot.Activate`. |
+| Retain only the returned opaque binding | `runtimeProducts` dropped the four plan-named retained construction handles — `replacement` (ReplacementBuilder), `lifecycle` (Lifecycle), `sidecars` (Sidecars), and `buildSpec` (SessionBuildSpec) — each proved written-never-read, and narrowed `startup` (HostedInstance) to the `engine factoryruntime.Service` it actually reads. |
+| Route cleanup through the Runtime operation | `activationCloser` deactivates through `binding.Deactivate`; all three opened role cleanup edges resolve to that single closer, pinned by `TestOpenActivatedRuntimeRoutesRoleCleanupThroughRuntimeDeactivation`. |
+| Private `instance_host` may remain | Untouched. |
+
+No sub-package of `runtimeopening` reached zero callers as a result, so none is
+deleted and no baseline or manifest row changed.
+
 ## Root cause of the remaining projection-fallback shape
 
 `factoryruntime.Service` does not declare `SubmitWorkRequest` or
@@ -63,28 +77,51 @@ populated as a compatibility fallback while callers migrate off hosted runtime
 products"), so every holder of a `Service` must type-assert to reach those two
 methods.
 
-The shape therefore has **17 production sites across 8 files**, wider than the
-two files the plan names. Any lane closing this row must sweep siblings by
-signature rather than fixing the two named files:
+The shape had **17 production sites across 8 files**, wider than the two files
+the plan names. Any lane closing this row must sweep siblings by signature
+rather than fixing the two named files.
 
-- `pkg/services/factory_runtime/internal/root.go:497,511,671,683`
+**Closed in this packet — the Runtime activation seam (6 sites).** The
+activation contract now carries a declared `RuntimeActivation.WorkAndEventIngress`
+of the named `APIFactory` type. The activation operation resolves it once, at
+construction, and the Runtime root stores it per activation, so the four
+operation-time assertions in `factory_runtime/internal/root.go` (`Root` and
+`boundRuntimeService`) and the two in
+`factory_sessions/internal/runtimeopening/runtime_activation.go` are gone,
+along with all four anonymous `runtimeWorkSubmitter` / `runtimeEventSubscriber`
+interface declarations in those two packages. The Sessions handoff wrapper
+`activatedRuntimeService` no longer carries the widened operations at all, so
+no peer can recover them from that type — pinned by
+`TestRuntimeActivationUsesEngineServiceForDetachedHandoff`. An activation that
+declares no ingress reports `ErrNotRunning`, preserving the previous
+failed-assertion outcome, and an opened engine that cannot serve the two
+operations still fails activation, pinned by
+`TestRuntimeActivationRejectsEngineWithoutDeclaredWorkAndEventIngress`.
+
+**Retained with caller — the `LiveRuntime.Factory` carrier (9 sites).** These
+all cast a `factory.Service` obtained from `LiveRuntime.Factory` or the bound
+Runtime service, so they close only when `factoryruntime.Service` declares the
+two operations or each owner takes an injected port. Named successor:
+`factoryruntime.Service` detached values for Work submission and Recordings for
+canonical history.
+
 - `pkg/services/factory_sessions/internal/sessionservice/runtime_factory_state.go:33,53,206`
 - `pkg/services/factory_sessions/internal/sessionservice/runtime_sessions.go:58,98`
 - `pkg/services/factory_sessions/internal/sessionservice/runtime_gateway.go:55`
 - `pkg/services/factory_sessions/internal/sessionservice/work_runtime_adapter.go:43`
-- `pkg/services/factory_sessions/internal/runtimeopening/runtime_activation.go:78,82`
-- `pkg/services/work/internal/live_session_runtime.go:40` and `work/internal/service.go:293`
-- `pkg/services/factory_visualization/internal/service/runtime_source.go:37`
+- `pkg/services/work/internal/live_session_runtime.go:40`
 - `pkg/transports/mapping/runtime_api.go:45`
 
-Two observations matter for whoever closes this row. First,
-`factory_runtime/internal/root.go` already implements `SubmitWorkRequest`
-(line 493) and `SubscribeFactoryEvents` (line 509) canonically, so migrating
-callers needs an explicitly declared and injected owner port rather than new
-behavior. Second, `root.go:489-492` justifies its own bridge as retained "for
-the legacy HTTP mapping until that representation migrates" — that legacy HTTP
-mapping is exactly what P5B deleted (row 1 above), so the stated justification
-is stale and the row is ready to migrate.
+Two observations matter for whoever closes the remaining row. First,
+`factory_runtime/internal/root.go` already implements `SubmitWorkRequest` and
+`SubscribeFactoryEvents` canonically, so migrating callers needs an explicitly
+declared and injected owner port rather than new behavior — the
+`WorkAndEventIngress` value above is that port for the activation seam and is
+the pattern the remaining callers should follow. Second, `root.go` used to
+justify its bridge as retained "for the legacy HTTP mapping until that
+representation migrates" — that legacy HTTP mapping is exactly what P5B deleted
+(row 1 above), so the stale justification has been replaced with the actual
+retirement condition (`APIFactory` retires once Work admission owns the read).
 
 An existing characterization test already pins the legacy cast:
 `TestRuntimeSubscribeUsesMigrationOnlyAPIFactoryCast` at
