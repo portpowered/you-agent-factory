@@ -745,6 +745,14 @@ func commandInputValue[T any](values map[string]any, inputID string) (T, error) 
 	return typed, nil
 }
 
+func optionalCommandInputValue[T any](values map[string]any, inputID string) (T, error) {
+	if _, ok := values[inputID]; !ok {
+		var zero T
+		return zero, nil
+	}
+	return commandInputValue[T](values, inputID)
+}
+
 func generatedCommandInputs(cmd *cobra.Command) (map[string]any, error) {
 	values, err := climanifestcobra.InputValues(cmd)
 	if err != nil {

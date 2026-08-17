@@ -136,6 +136,7 @@ type CommandOperations struct {
 	ResolveFactoryConfigRoot          interfaces.FactoryConfigRootResolver
 	LoadFactoryConfigFile             interfaces.FactoryConfigFileLoader
 	WorkRequestFileLoader             work.RequestFileLoader
+	PrepareSingleWorkTarget           work.SingleWorkTargetPreparation
 	PrepareInvocationInput            work.InvocationInputPreparation
 	BuildTerminalLogger               terminalpolicy.LoggerBuilder
 	RunDefaults                       runcli.RunConfig
@@ -207,6 +208,7 @@ type CommandFactory struct {
 	resolveFactoryConfigRoot          interfaces.FactoryConfigRootResolver
 	loadFactoryConfigFile             interfaces.FactoryConfigFileLoader
 	workRequestFileLoader             work.RequestFileLoader
+	prepareSingleWorkTarget           work.SingleWorkTargetPreparation
 	prepareInvocationInput            work.InvocationInputPreparation
 	buildTerminalLogger               terminalpolicy.LoggerBuilder
 	runDefaults                       runcli.RunConfig
@@ -276,6 +278,7 @@ func NewCommandFactory(operations CommandOperations) CommandFactory {
 		resolveFactoryConfigRoot:          operations.ResolveFactoryConfigRoot,
 		loadFactoryConfigFile:             operations.LoadFactoryConfigFile,
 		workRequestFileLoader:             operations.WorkRequestFileLoader,
+		prepareSingleWorkTarget:           operations.PrepareSingleWorkTarget,
 		prepareInvocationInput:            operations.PrepareInvocationInput,
 		buildTerminalLogger:               operations.BuildTerminalLogger,
 		runDefaults:                       operations.RunDefaults,
@@ -583,8 +586,9 @@ func runFactoryWithOptions(cmd *cobra.Command, cfg runcli.RunConfig, promptArgs 
 	cfg.Diagnostics = runPolicy.DiagnosticsWriter(cmd.ErrOrStderr())
 	cfg.JSONOutput = globals.json
 	if remotePlacementSelected(globals) {
-		return runcli.RunRemoteInvocation(
-			cmd.Context(), cfg, globals.server, rootOptions.remoteInvocation, rootOptions.responsePresentation,
+		return runcli.RunRemoteInvocationWithWorkTarget(
+			cmd.Context(), cfg, globals.server, rootOptions.remoteInvocation,
+			rootOptions.prepareSingleWorkTarget, rootOptions.responsePresentation,
 		)
 	}
 	if rootOptions.initializer == nil {

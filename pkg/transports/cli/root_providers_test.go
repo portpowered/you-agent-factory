@@ -272,7 +272,6 @@ func TestWorkerSessionsInvokeAndContinueReadersReportTypedInputErrors(t *testing
 	}
 	for _, key := range []string{
 		"you.worker-sessions.continue.arg.0",
-		"you.worker-sessions.continue.arg.1",
 		"you.worker-sessions.continue.flag.async",
 	} {
 		candidate := cloneCLIInputValues(continueValues)
@@ -280,6 +279,12 @@ func TestWorkerSessionsInvokeAndContinueReadersReportTypedInputErrors(t *testing
 		if _, err := readGeneratedWorkerSessionsContinueInputs(candidate); err == nil {
 			t.Errorf("readGeneratedWorkerSessionsContinueInputs(missing %s) = nil error, want typed input error", key)
 		}
+	}
+	delete(continueValues, "you.worker-sessions.continue.arg.1")
+	if got, err := readGeneratedWorkerSessionsContinueInputs(continueValues); err != nil {
+		t.Fatalf("readGeneratedWorkerSessionsContinueInputs(missing optional prompt) error = %v", err)
+	} else if len(got.followUpInput) != 0 {
+		t.Fatalf("optional continue prompt = %#v, want empty", got.followUpInput)
 	}
 }
 

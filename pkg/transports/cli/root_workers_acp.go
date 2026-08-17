@@ -495,7 +495,7 @@ func readGeneratedWorkerSessionsContinueInputs(values map[string]any) (generated
 		}
 	}
 	var err error
-	inputs.followUpInput, err = commandInputValue[[]string](values, "you.worker-sessions.continue.arg.1")
+	inputs.followUpInput, err = optionalCommandInputValue[[]string](values, "you.worker-sessions.continue.arg.1")
 	if err != nil {
 		return generatedWorkerSessionsContinueInputs{}, err
 	}
@@ -568,7 +568,7 @@ func readGeneratedWorkerSessionsInterruptInputs(values map[string]any) (generate
 		}
 	}
 	var err error
-	inputs.replacementInput, err = commandInputValue[[]string](values, "you.worker-sessions.interrupt.arg.1")
+	inputs.replacementInput, err = optionalCommandInputValue[[]string](values, "you.worker-sessions.interrupt.arg.1")
 	if err != nil {
 		return generatedWorkerSessionsInterruptInputs{}, err
 	}

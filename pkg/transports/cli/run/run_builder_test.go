@@ -2,13 +2,14 @@ package run
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
 	"time"
 
 	"github.com/portpowered/infinite-you/pkg/initializer"
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
-	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	"github.com/portpowered/infinite-you/pkg/platform/metrics"
 	platformmetrics "github.com/portpowered/infinite-you/pkg/platform/metrics"
@@ -435,7 +436,7 @@ func runWithTestRuntimeRunnerAndMockWorkersLoader(
 ) error {
 	cfg = ensureTestRecordingsCLI(cfg)
 	if cfg.WorkRequestFileLoader == nil && cfg.WorkFile != "" {
-		cfg.WorkRequestFileLoader = work.NewRequestFileLoader(platformfilesystem.Local{})
+		cfg.WorkRequestFileLoader = loadRunTestWorkRequestFile
 	}
 	if cfg.Clock == nil {
 		cfg.Clock = platformclock.Real{}
@@ -475,6 +476,18 @@ func ensureTestRecordingsCLI(cfg RunConfig) RunConfig {
 		cfg.RecordingsCLI = recordingscli.New()
 	}
 	return cfg
+}
+
+func loadRunTestWorkRequestFile(path string) (work.WorkRequest, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return work.WorkRequest{}, err
+	}
+	var request work.WorkRequest
+	if err := json.Unmarshal(data, &request); err != nil {
+		return work.WorkRequest{}, err
+	}
+	return request, nil
 }
 
 func prepareSingleWorkTargetForTest(request work.WorkRequest) (work.SingleWorkTarget, error) {

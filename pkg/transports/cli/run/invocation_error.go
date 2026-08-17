@@ -856,10 +856,34 @@ func RunRemoteInvocation(
 	remote RemoteInvocationOperation,
 	presentations ...factoryvisualization.ResponsePresentation,
 ) error {
+	return runRemoteInvocation(ctx, cfg, server, remote, nil, presentations...)
+}
+
+// RunRemoteInvocationWithWorkTarget runs a remote invocation with the
+// Work-owned single-target preparation role supplied by the composition root.
+func RunRemoteInvocationWithWorkTarget(
+	ctx context.Context,
+	cfg RunConfig,
+	server string,
+	remote RemoteInvocationOperation,
+	prepareWorkTarget work.SingleWorkTargetPreparation,
+	presentations ...factoryvisualization.ResponsePresentation,
+) error {
+	return runRemoteInvocation(ctx, cfg, server, remote, prepareWorkTarget, presentations...)
+}
+
+func runRemoteInvocation(
+	ctx context.Context,
+	cfg RunConfig,
+	server string,
+	remote RemoteInvocationOperation,
+	prepareWorkTarget work.SingleWorkTargetPreparation,
+	presentations ...factoryvisualization.ResponsePresentation,
+) error {
 	if remote == nil {
 		return fmt.Errorf("run remote durable start: operation is required")
 	}
-	request, invocationMode, err := ResolveFactoryInvocationRequest(cfg)
+	request, invocationMode, err := resolveFactoryInvocationRequestForRun(cfg, prepareWorkTarget)
 	if err != nil {
 		return err
 	}

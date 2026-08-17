@@ -351,7 +351,7 @@
     },
     {
       "packagePath": "pkg/transports/cli/run",
-      "fileCount": 32,
+      "fileCount": 31,
       "owner": "cli-maintainers",
       "removalReason": "Split run invocation, presentation, and input behavior."
     },

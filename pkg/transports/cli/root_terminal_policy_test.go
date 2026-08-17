@@ -742,7 +742,6 @@ func TestWorkerSessionsInterruptInputReaderReportsTypedInputErrors(t *testing.T)
 		"you.worker-sessions.interrupt.flag.successor-worker-session-id",
 		"you.worker-sessions.interrupt.flag.replacement-message",
 		"you.worker-sessions.interrupt.flag.output",
-		"you.worker-sessions.interrupt.arg.1",
 		"you.worker-sessions.interrupt.flag.async",
 	} {
 		candidate := make(map[string]any, len(values))
@@ -753,6 +752,12 @@ func TestWorkerSessionsInterruptInputReaderReportsTypedInputErrors(t *testing.T)
 		if _, err := readGeneratedWorkerSessionsInterruptInputs(candidate); err == nil {
 			t.Errorf("readGeneratedWorkerSessionsInterruptInputs(missing %s) = nil error, want typed input error", key)
 		}
+	}
+	delete(values, "you.worker-sessions.interrupt.arg.1")
+	if got, err := readGeneratedWorkerSessionsInterruptInputs(values); err != nil {
+		t.Fatalf("readGeneratedWorkerSessionsInterruptInputs(missing optional prompt) error = %v", err)
+	} else if len(got.replacementInput) != 0 {
+		t.Fatalf("optional interrupt prompt = %#v, want empty", got.replacementInput)
 	}
 }
 

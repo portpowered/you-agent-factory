@@ -86,6 +86,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	authoredFactorySourceLoader := provideAuthoredFactorySourceLoader(authoredLayoutReaderFileSystem)
 	factoryConfigFileLoader := provideFactoryConfigFileLoader(authoredFactorySourceLoader)
 	requestFileLoader := provideWorkRequestFileLoader()
+	singleWorkTargetPreparation := work.NewSingleWorkTargetPreparation()
 	submittedFileReader := provideWorkSubmittedFileReader(edges2)
 	submittedFilePathInspector := provideWorkSubmittedFilePathInspector(edges2)
 	invocationInputPreparation := work.NewInvocationInputPreparation(submittedFileReader, submittedFilePathInspector)
@@ -523,7 +524,6 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	resumeWorkerSessionOperation := provideResumeWorkerSessionOperation(wireStandardCLIHTTPProtocol, wireLocalWorkerSessionsBoundary)
 	cancelWorkerSessionOperation := provideCancelWorkerSessionOperation(wireStandardCLIHTTPProtocol, wireLocalWorkerSessionsBoundary)
 	terminateWorkerSessionOperation := provideTerminateWorkerSessionOperation(wireStandardCLIHTTPProtocol, wireLocalWorkerSessionsBoundary)
-	singleWorkTargetPreparation := work.NewSingleWorkTargetPreparation()
 	mockWorkersConfigFileSystem := provideWorkersMockWorkersConfigFileSystem(edges2)
 	mockWorkersConfigLoader, err := workers.NewMockWorkersConfigLoader(mockWorkersConfigFileSystem)
 	if err != nil {
@@ -624,6 +624,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 		ResolveFactoryConfigRoot:          factoryConfigRootResolver,
 		LoadFactoryConfigFile:             factoryConfigFileLoader,
 		WorkRequestFileLoader:             requestFileLoader,
+		PrepareSingleWorkTarget:           singleWorkTargetPreparation,
 		PrepareInvocationInput:            invocationInputPreparation,
 		BuildTerminalLogger:               loggerBuilder,
 		RunDefaults:                       v6,
