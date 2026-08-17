@@ -75,7 +75,11 @@ If the change involves modification to the website, you should use the playwrigh
   started — that routes the work back to the processor, which has nothing to
   do, and burns a process/review round trip.
 - Only if checks are STILL non-terminal after the bounded wait: end with
-  `<REJECTED>` without posting a comment, so the loop re-enters review later.
+  `<CONTINUE>` and post no comment. That is a HOLD, not a verdict: it returns
+  this work item to review so the loop re-enters review later once CI has
+  moved, without a failed worker session and without a rejection strike.
+  Waiting on CI is never executor rework, so it must never take the rejection
+  route.
 - Known-baseline flake policy: if a required check fails ONLY on a test in a
   package the PR diff does not touch, and that test is a known baseline flake
   (see the deflake lane list in docs/temp/scale-program-rules.md in the root
@@ -83,8 +87,10 @@ If the change involves modification to the website, you should use the playwrigh
   (`gh run rerun <id> --failed`) and watch again. If it greens, proceed. If
   the same untouched-package flake fails twice, post ONE comment naming the
   test and the owning deflake lane, state explicitly "NO EXECUTOR ACTION
-  REQUIRED — waiting on baseline deflake", and end `<REJECTED>`. Never demand
-  code changes for a baseline flake in a package the diff does not touch.
+  REQUIRED — waiting on baseline deflake", and end `<CONTINUE>`. That is a wait
+  on another lane, not executor rework, so it takes the hold route; post that
+  comment at most once and stay silent on later holds for the same flake. Never
+  demand code changes for a baseline flake in a package the diff does not touch.
 
 ### Step 3 — Verify project acceptance criteria
 
@@ -121,6 +127,18 @@ operator to file separately. From the third review pass onward the decision
 bar is: MERGE unless an unfixed previously-flagged blocker or red required CI
 remains.
 
+Route a converged repeat review as a HOLD. If the head has not moved since
+your last pass and you have no NEW independent finding — including the case
+where you are only re-confirming a blocker set the executor was already told
+about — end with `<CONTINUE>` and post no new PR comment. Re-sending an
+unchanged blocker set is a no-op that hands the processor nothing to act on,
+and taking the rejection route for it counts a consecutive-failure strike that
+can kill a healthy lane. `<REJECTED>` is for delivering concrete executor work
+the executor does not already have: the first time you raise a blocker set, or
+a new blocker on a head pushed since your last pass. Holds are bounded by the
+review visit cap, so a genuinely stuck lane still surfaces without you forcing
+a rejection.
+
 ### Step 5 - handle feedback
 
 - Post a PR comment with your review summary, including the acceptance criteria checklist results, only after the required CI state is terminal for the current head or you have concrete independent review findings to report.
@@ -128,6 +146,7 @@ remains.
 - If you would have requested changes in a normal review, describe the required fixes plainly in the comment so the executor can act on them.
 - If earlier blocking feedback is no longer applicable, say so explicitly in a newer PR conversation comment so the processor has clear resolution evidence.
 - Do not post a PR comment whose only content is that required CI is still pending or in progress.
+- A hold (`<CONTINUE>`) is silent by definition: when you hold for non-terminal CI or for an unchanged head with no new findings, post no PR comment at all.
 
 Use `gh pr comment` for the comment post. Do not use `gh pr review --approve` or `gh pr review --request-changes`.
 
@@ -139,22 +158,31 @@ If the PR has merge conflicts, please tell the processor to fix the merge confli
 
 ### Step 7 - respond back
 
-End your final response with exactly one review routing marker:
+End your final response with exactly one review routing marker, alone on the
+final line:
 
 - `<COMPLETE>` when the PR is complete, approved, and merged.
-- `<REJECTED>` when concrete executor work remains, required CI is still
-  running, or the change is otherwise not ready to approve.
+- `<CONTINUE>` to HOLD, because required CI is still non-terminal after the
+  bounded watcher, or because this is a repeat pass on an unchanged head with
+  no new independent findings. A hold posts no PR comment and re-enters review
+  with no failed worker session and no consecutive-failure strike. Holds are
+  bounded by the review visit cap, so holding cannot loop forever.
+- `<REJECTED>` when concrete executor rework remains that the executor has not
+  already been given — a blocker set you are raising for the first time, or a
+  new blocker on a head pushed since your last pass. Rejection routes the work
+  back to the processor, so use it only when the processor has something to do.
+  Never use it as a way to wait.
 
 Write the review summary and acceptance-criteria checklist before the marker.
-Do not return a JSON decision envelope. The runtime derives the review outcome
-from the worker's `<COMPLETE>` stop token; a response without that stop token
-follows the review rejection route. Do not use `<CONTINUE>` from this
-workstation because review rework belongs on the rejection route.
+Do not return a JSON decision envelope.
 
-If CI is still pending or in progress and you have no concrete independent
-review findings to report yet, end with `<REJECTED>` without posting a new PR
-comment so the workflow waits silently instead of creating premature review
-noise.
+The runtime scans your whole response for these markers, so emit exactly one of
+them and put it alone on the final line. Do not quote or mention the other
+markers anywhere in your summary text: a stray `<COMPLETE>` inside a checklist
+line can be read as approval-and-merge even when you meant to hold. `<COMPLETE>`
+takes precedence over `<CONTINUE>`, and a response carrying neither marker
+follows the rejection route — which is why `<REJECTED>` is a marker you write
+for the human reader rather than a separate runtime token.
 
 ## addenda
 
