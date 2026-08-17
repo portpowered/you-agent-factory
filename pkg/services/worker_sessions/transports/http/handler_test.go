@@ -108,6 +108,75 @@ func TestListWorkerSessionsBySessionIDPreservesBoundedFailureKinds(t *testing.T)
 	}
 }
 
+// TestListWorkerSessionsBySessionIDNamesEachTerminalReason covers the API half
+// of the operator diagnosis path: an operator-canceled session must arrive
+// with its own named reason rather than a null failure, which reads exactly
+// like a cause that was never recorded.
+func TestListWorkerSessionsBySessionIDNamesEachTerminalReason(t *testing.T) {
+	reasons := []struct {
+		state workersessions.State
+		kind  workersessions.FailureCauseKind
+	}{
+		{state: workersessions.StateCanceled, kind: workersessions.FailureCauseOperatorCanceled},
+		{state: workersessions.StateTerminated, kind: workersessions.FailureCauseOperatorTerminated},
+		{state: workersessions.StateFailed, kind: workersessions.FailureCauseProcessGone},
+		{state: workersessions.StateFailed, kind: workersessions.FailureCauseTimeout},
+	}
+	observations := make([]workersessions.Observation, 0, len(reasons))
+	for _, reason := range reasons {
+		observations = append(observations, workersessions.Observation{
+			WorkerSessionID: "worker-session-" + string(reason.kind),
+			AttemptID:       "attempt-" + string(reason.kind),
+			WorkIDs:         []string{"work-1"},
+			State:           reason.state,
+			DurationBasis:   workersessions.DurationBasisRecordedTimestamps,
+			Transcript:      workersessions.TranscriptAvailabilityUnavailable,
+			Failure:         &workersessions.FailureCause{Kind: reason.kind, Detail: "safe bounded detail"},
+		})
+	}
+	service := &fakeObservationService{result: workersessions.ListObservationsResult{Observations: observations}}
+	handler := NewHandler(NewAdapter(service, workServiceStub{}), zap.NewNop())
+	recorder := httptest.NewRecorder()
+	request := httptest.NewRequest("GET", "/factory-sessions/session-1/worker-sessions?workId=work-1", nil)
+
+	handler.ListWorkerSessionsBySessionId(
+		recorder,
+		request,
+		factoryapi.SessionID("session-1"),
+		factoryapi.ListWorkerSessionsBySessionIdParams{WorkId: "work-1"},
+	)
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body=%s", recorder.Code, recorder.Body.String())
+	}
+	var response factoryapi.ListWorkerSessionsResponse
+	if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if len(response.Sessions) != len(reasons) {
+		t.Fatalf("session count = %d, want %d", len(response.Sessions), len(reasons))
+	}
+	byWorkerSessionID := make(map[string]factoryapi.WorkerSessionObservation, len(response.Sessions))
+	for _, session := range response.Sessions {
+		byWorkerSessionID[session.WorkerSessionId] = session
+	}
+	for _, reason := range reasons {
+		session, ok := byWorkerSessionID["worker-session-"+string(reason.kind)]
+		if !ok {
+			t.Fatalf("response is missing the %q session", reason.kind)
+		}
+		if session.Failure == nil {
+			t.Fatalf("session ended by %q reports no named reason", reason.kind)
+		}
+		if session.Failure.Kind != string(reason.kind) {
+			t.Fatalf("session reason kind = %q, want %q", session.Failure.Kind, reason.kind)
+		}
+		if string(session.State) != string(reason.state) {
+			t.Fatalf("session state = %q, want %q", session.State, reason.state)
+		}
+	}
+}
+
 func assertPopulatedListResponse(t *testing.T, payload []byte, total int) {
 	t.Helper()
 	var response factoryapi.ListWorkerSessionsResponse

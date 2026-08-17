@@ -396,6 +396,35 @@ var genericFailureDetail = map[workersessions.FailureCauseKind]string{
 	workersessions.FailureCauseEventPublicationFailure: "the Worker Session opening record could not be published",
 	workersessions.FailureCauseProcessGone:             "the worker process exited before dispatch completion",
 	workersessions.FailureCauseTimeout:                 "the worker execution exceeded its hard deadline",
+	workersessions.FailureCauseOperatorCanceled:        "an operator cancel control ended the Worker Session",
+	workersessions.FailureCauseOperatorTerminated:      "an operator terminate control ended the Worker Session",
+}
+
+// controlTerminalCause maps the two absorbing control states to the operator
+// control outcome that produced them.
+var controlTerminalCause = map[workersessions.State]workersessions.FailureCauseKind{
+	workersessions.StateCanceled:   workersessions.FailureCauseOperatorCanceled,
+	workersessions.StateTerminated: workersessions.FailureCauseOperatorTerminated,
+}
+
+// observedTerminalCause names why a session ended, for the inspection surface
+// only. A committed FailureCause is authoritative. A session ended by an
+// operator control never has one: commitControlTerminal deliberately keeps
+// Result nil to preserve the "cancel invents no result" invariant, and the
+// boundary cancel path commits an empty TerminalResult. Deriving the control
+// outcome from the absorbing state keeps that invariant while still naming the
+// reason, so an operator no longer reads "unavailable" — which is
+// indistinguishable from a failure whose cause was never recorded.
+func observedTerminalCause(session workersessions.Session) *workersessions.FailureCause {
+	if session.Result != nil && session.Result.Cause != nil {
+		cause := *session.Result.Cause
+		return &cause
+	}
+	kind, ok := controlTerminalCause[session.State]
+	if !ok {
+		return nil
+	}
+	return &workersessions.FailureCause{Kind: kind, Detail: boundedFailureDetail(kind, "")}
 }
 
 // knownFailureFamilies whitelists the exact WorkFailureFamily constants

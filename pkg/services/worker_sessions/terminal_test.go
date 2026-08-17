@@ -33,6 +33,9 @@ func TestFailureCauseKind_Valid(t *testing.T) {
 		workersessions.FailureCauseExecutorPanic,
 		workersessions.FailureCauseEventPublicationFailure,
 		workersessions.FailureCauseProcessGone,
+		workersessions.FailureCauseTimeout,
+		workersessions.FailureCauseOperatorCanceled,
+		workersessions.FailureCauseOperatorTerminated,
 	}
 	for _, kind := range valid {
 		if !kind.Valid() {
@@ -43,6 +46,56 @@ func TestFailureCauseKind_Valid(t *testing.T) {
 		if kind.Valid() {
 			t.Errorf("FailureCauseKind(%q).Valid() = true, want false", kind)
 		}
+	}
+}
+
+func TestFailureCauseKind_ControlTerminal(t *testing.T) {
+	control := []workersessions.FailureCauseKind{
+		workersessions.FailureCauseOperatorCanceled,
+		workersessions.FailureCauseOperatorTerminated,
+	}
+	for _, kind := range control {
+		if !kind.ControlTerminal() {
+			t.Errorf("FailureCauseKind(%q).ControlTerminal() = false, want true", kind)
+		}
+	}
+	execution := []workersessions.FailureCauseKind{
+		workersessions.FailureCauseStartFailure,
+		workersessions.FailureCauseWorkersExecutionFailure,
+		workersessions.FailureCauseProcessGone,
+		workersessions.FailureCauseTimeout,
+		"",
+		"UNKNOWN_FAILURE",
+	}
+	for _, kind := range execution {
+		if kind.ControlTerminal() {
+			t.Errorf("FailureCauseKind(%q).ControlTerminal() = true, want false", kind)
+		}
+	}
+}
+
+// TestTerminalResult_Validate_RejectsControlOutcomeOnFailed keeps the FAILED
+// vocabulary execution-only: the operator control outcomes name why a CANCELED
+// or TERMINATED session ended and must never be fabricated as a failure cause.
+func TestTerminalResult_Validate_RejectsControlOutcomeOnFailed(t *testing.T) {
+	for _, kind := range []workersessions.FailureCauseKind{
+		workersessions.FailureCauseOperatorCanceled,
+		workersessions.FailureCauseOperatorTerminated,
+	} {
+		result := workersessions.TerminalResult{
+			Outcome: workersessions.TerminalOutcomeFailed,
+			Cause:   &workersessions.FailureCause{Kind: kind, Detail: "ended by an operator control"},
+		}
+		if err := result.Validate(); !errors.Is(err, workersessions.ErrInvalidTerminalResult) {
+			t.Errorf("TerminalResult{FAILED, %q}.Validate() = %v, want ErrInvalidTerminalResult", kind, err)
+		}
+	}
+	execution := workersessions.TerminalResult{
+		Outcome: workersessions.TerminalOutcomeFailed,
+		Cause:   &workersessions.FailureCause{Kind: workersessions.FailureCauseProcessGone, Detail: "the worker process exited"},
+	}
+	if err := execution.Validate(); err != nil {
+		t.Errorf("TerminalResult{FAILED, PROCESS_GONE}.Validate() = %v, want nil", err)
 	}
 }
 

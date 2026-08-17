@@ -81,14 +81,38 @@ const (
 	// FailureCauseTimeout reports that the resolved hard execution deadline
 	// elapsed before Workers observed a terminal dispatch result.
 	FailureCauseTimeout FailureCauseKind = "TIMEOUT"
+	// FailureCauseOperatorCanceled reports that an operator cancel control
+	// ended the Worker Session. It is a control outcome, not an execution
+	// failure: it names why a CANCELED session ended and is never carried by
+	// a FAILED TerminalResult.
+	FailureCauseOperatorCanceled FailureCauseKind = "OPERATOR_CANCELED"
+	// FailureCauseOperatorTerminated reports that an operator terminate
+	// control ended the Worker Session. It follows the same control-outcome
+	// rules as FailureCauseOperatorCanceled and names why a TERMINATED
+	// session ended.
+	FailureCauseOperatorTerminated FailureCauseKind = "OPERATOR_TERMINATED"
 )
 
-// Valid reports whether k is one of the nine bounded W2+W3 failure kinds.
+// Valid reports whether k is one of the bounded W2+W3 execution failure kinds
+// or one of the two operator control outcomes.
 func (k FailureCauseKind) Valid() bool {
 	switch k {
 	case FailureCauseStartFailure, FailureCauseWorkersExecutionFailure, FailureCauseRejected, FailureCauseAdapterFailure,
 		FailureCauseIncompleteOutput, FailureCauseExecutorPanic, FailureCauseEventPublicationFailure, FailureCauseProcessGone,
 		FailureCauseTimeout:
+		return true
+	default:
+		return k.ControlTerminal()
+	}
+}
+
+// ControlTerminal reports whether k names an operator control outcome rather
+// than an execution failure. A control kind describes why a CANCELED or
+// TERMINATED Worker Session ended, so TerminalResult.Validate rejects it on a
+// FAILED result and the FAILED vocabulary stays execution-only.
+func (k FailureCauseKind) ControlTerminal() bool {
+	switch k {
+	case FailureCauseOperatorCanceled, FailureCauseOperatorTerminated:
 		return true
 	default:
 		return false
@@ -242,6 +266,9 @@ func (r TerminalResult) Validate() error {
 		}
 		if err := r.Cause.Validate(); err != nil {
 			return err
+		}
+		if r.Cause.Kind.ControlTerminal() {
+			return fmt.Errorf("%w: FAILED must not carry the operator control outcome %q", ErrInvalidTerminalResult, r.Cause.Kind)
 		}
 	case TerminalOutcomeCompleted:
 		if r.Cause != nil {

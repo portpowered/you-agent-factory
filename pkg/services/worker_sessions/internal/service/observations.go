@@ -449,10 +449,7 @@ func (r *registry) projectWorkerSessionIdentity(ctx context.Context, id string) 
 
 	projected := baseObservation(id, session, metadata)
 	applyObservationTiming(&projected, session, metadata, r.clock)
-	if session.Result != nil && session.Result.Cause != nil {
-		failure := *session.Result.Cause
-		projected.Failure = &failure
-	}
+	projected.Failure = observedTerminalCause(session)
 	return projected, nil
 }
 

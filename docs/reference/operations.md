@@ -305,6 +305,22 @@ Cancel and terminate do not require the session to have published a Provider
 Session yet: a `RUNNING` session whose `providerSessionAvailable` is still
 `false` is cancelled by its `workerSessionId` like any other.
 
+Every ended Worker Session names why it ended. `show` reports the reason on its
+`Failure` line and `list` reports it in the failure column; the API returns the
+same value as `failure.kind` on the observation. The reasons that distinguish
+the common endings are:
+
+| Reason | Meaning |
+| --- | --- |
+| `OPERATOR_CANCELED` | A `cancel` control ended the session. |
+| `OPERATOR_TERMINATED` | A `terminate` control ended the session. |
+| `PROCESS_GONE` | The worker process exited before the attempt completed. |
+| `TIMEOUT` | The attempt exceeded its hard execution deadline. |
+
+A session that has not ended reports no reason. Use this instead of re-deriving
+the cause from process forensics: an ended session never reports its reason as
+`unavailable`.
+
 Local placement is the default. `--remote` selects exactly the configured
 `--server`; a failed remote continuation never falls back to a new local
 request. The JSON response includes the source, successor, predecessor, event
