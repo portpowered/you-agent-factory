@@ -177,21 +177,23 @@ func moveRow(packagePath, destination, successor, condition string) PackageRow {
 // BuildInventory constructs the frozen ownership inventory for the provided
 // production package list using FND-01 destination vocabulary and plan mappings.
 //
-// Only packages with unfinished migration intent get a row. A "retain" package
-// stays exactly where OwnerForPackage already says it belongs, so writing that
-// down would restate the tree rather than record a decision.
+// Package rows are not part of the artifact this builds. Open moves are
+// authored migration intent, so they are read from the consolidated ledger
+// rather than re-derived here; every other package is where it already belongs
+// and OwnerForPackage computes that from the tree.
 func BuildInventory(root string, packages []string) (Inventory, error) {
-	rows := make([]PackageRow, 0, len(packages))
+	// Every live package must still resolve to a committed destination, even
+	// though the resolved row is no longer written down for the retain case.
 	for _, packagePath := range packages {
-		row, err := MapPackage(packagePath)
-		if err != nil {
+		if _, err := MapPackage(packagePath); err != nil {
 			return Inventory{}, err
 		}
-		if row.Disposition == DispositionRetain {
-			continue
-		}
-		rows = append(rows, row)
 	}
+	moves, err := LoadUnfinishedMoves(root)
+	if err != nil {
+		return Inventory{}, err
+	}
+	rows := moves.PackageRows()
 	edges, err := DiscoverCrossServiceEdges(root, rows)
 	if err != nil {
 		return Inventory{}, err
@@ -200,7 +202,6 @@ func BuildInventory(root string, packages []string) (Inventory, error) {
 		Version:                 1,
 		Stage:                   "pss-f01-ownership-inventory",
 		SortKey:                 SortKeyDescription,
-		FND01SeedPath:           FND01SeedRelativePath,
 		Destinations:            defaultDestinationVocabulary(),
 		ProcessEdgesException:   defaultProcessEdgesException(),
 		SeedServices:            append([]SeedService(nil), StructuresSeedServices...),
@@ -212,6 +213,7 @@ func BuildInventory(root string, packages []string) (Inventory, error) {
 		MisplacedGuards:         BuildMisplacedGuards(),
 		PublicSurfaces:          BuildPublicSurfaces(),
 		OwnedRoles:              BuildOwnedRoles(),
+		UnfinishedMoves:         moves,
 		Packages:                rows,
 	}, nil
 }

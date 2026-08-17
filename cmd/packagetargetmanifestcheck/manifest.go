@@ -12,10 +12,9 @@ import (
 const (
 	manifestStage                  = "pss-fnd-01-package-target-manifest"
 	manifestRelativePath           = "docs/internal/packaged-service-structure/package-target-manifest.json"
+	unfinishedMovesStage           = "pss-unfinished-package-moves"
+	unfinishedMovesRelativePath    = "docs/internal/baselines/unfinished-package-moves.json"
 	edgesArchitectureExceptionNote = "Process Edges (pkg/services/edges) is the sole broad external-effect architecture exception for the Packaged Service Structure program."
-	DispositionRetain              = "retain"
-	DispositionMove                = "move"
-	DispositionDelete              = "delete"
 )
 
 // DestinationVocabulary is the closed set of destinations inventory rows may claim.
@@ -25,16 +24,24 @@ type DestinationVocabulary struct {
 	ArchitectureExceptions []string `json:"architectureExceptions"`
 }
 
-// PackageMapping maps one production pkg path to a destination or deletion queue entry.
+// PackageMapping is one open-move row from the consolidated move ledger.
+//
+// Destination is the owner-relative committed destination bucket; Successor is
+// the repository-relative package path that replaces PackagePath once the move
+// lands. DeletionCondition names the closing cutover proof when the migration
+// packet named one.
 type PackageMapping struct {
 	PackagePath       string `json:"packagePath"`
-	Disposition       string `json:"disposition"`
 	Destination       string `json:"destination"`
-	DeletionSuccessor string `json:"deletionSuccessor,omitempty"`
+	Successor         string `json:"successor"`
 	DeletionCondition string `json:"deletionCondition,omitempty"`
 }
 
-// Manifest is the package-to-target and deletion inventory document.
+// Manifest is the package-target destination vocabulary and future-debt document.
+//
+// It no longer carries package rows. Open moves live in one consolidated
+// ledger (unfinishedMovesRelativePath) shared with the ownership-inventory
+// checker, so a package that still has to move is recorded exactly once.
 type Manifest struct {
 	Version                    int                   `json:"version"`
 	Stage                      string                `json:"stage"`
@@ -43,12 +50,15 @@ type Manifest struct {
 	// FutureDebt records deferred migration work intentionally left outside
 	// this packet (for example FND-06 Edges narrowing).
 	FutureDebt []FutureDebt `json:"futureDebt"`
-	// Packages records the packages that still carry unfinished migration
-	// intent. A package that stays where it already lives carries no row: its
-	// destination is derivable from its own path, so restating it here would be
-	// a registration tax rather than a decision. The list is expected to shrink
-	// to zero as the remaining moves land.
-	Packages []PackageMapping `json:"packages"`
+}
+
+// UnfinishedMoves is the consolidated open-move ledger. The ledger only
+// shrinks: landing a move deletes its row, and when Moves is empty the file and
+// its checks are deleted outright.
+type UnfinishedMoves struct {
+	Version int              `json:"version"`
+	Stage   string           `json:"stage"`
+	Moves   []PackageMapping `json:"moves"`
 }
 
 func closedDestinationVocabulary() DestinationVocabulary {
@@ -112,16 +122,35 @@ func loadManifest(relativePath string) (Manifest, error) {
 	return manifest, nil
 }
 
+func loadUnfinishedMoves(path string) (UnfinishedMoves, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			// Every migration landed. That is this ledger's intended end state.
+			return UnfinishedMoves{}, nil
+		}
+		return UnfinishedMoves{}, fmt.Errorf("read unfinished package moves %s: %w", path, err)
+	}
+	var moves UnfinishedMoves
+	if err := json.Unmarshal(data, &moves); err != nil {
+		return UnfinishedMoves{}, fmt.Errorf("decode unfinished package moves %s: %w", path, err)
+	}
+	return moves, nil
+}
+
 func validateManifest(manifest Manifest) error {
 	// Schema-only validation used by unit fixtures that do not bind a repo tree.
 	return validateManifestSchema(manifest)
 }
 
-func validateManifestAt(repoRoot string, manifest Manifest) error {
+func validateManifestAt(repoRoot string, manifest Manifest, moves UnfinishedMoves) error {
 	if err := validateManifestSchema(manifest); err != nil {
 		return err
 	}
-	return validateRowsNamePackagesThatExist(repoRoot, manifest.Packages)
+	if err := validateUnfinishedMovesSchema(moves); err != nil {
+		return err
+	}
+	return validateRowsNamePackagesThatExist(repoRoot, moves.Moves)
 }
 
 func validateManifestSchema(manifest Manifest) error {
@@ -137,16 +166,26 @@ func validateManifestSchema(manifest Manifest) error {
 	if note := manifest.ArchitectureExceptionNotes["edges"]; note != edgesArchitectureExceptionNote {
 		return fmt.Errorf("architectureExceptionNotes.edges must record the Process Edges exception exactly")
 	}
-	if err := validateFutureDebt(manifest.FutureDebt); err != nil {
-		return err
+	return validateFutureDebt(manifest.FutureDebt)
+}
+
+func validateUnfinishedMovesSchema(moves UnfinishedMoves) error {
+	if len(moves.Moves) == 0 {
+		return nil
+	}
+	if moves.Version != 1 {
+		return fmt.Errorf("unfinished package moves version %d is unsupported; want 1", moves.Version)
+	}
+	if moves.Stage != unfinishedMovesStage {
+		return fmt.Errorf("unfinished package moves stage %q is unsupported; want %q", moves.Stage, unfinishedMovesStage)
 	}
 	closed := closedDestinationSet()
-	for i, row := range manifest.Packages {
+	for i, row := range moves.Moves {
 		if err := validatePackageMapping(i, row, closed); err != nil {
 			return err
 		}
 	}
-	return validatePackageCoverage(manifest)
+	return validatePackageCoverage(moves)
 }
 
 func validateVocabulary(got DestinationVocabulary) error {
@@ -164,20 +203,10 @@ func validateVocabulary(got DestinationVocabulary) error {
 }
 
 func validatePackageMapping(index int, row PackageMapping, closed map[string]struct{}) error {
-	prefix := fmt.Sprintf("packages[%d]", index)
-	if strings.TrimSpace(row.PackagePath) == "" {
+	prefix := fmt.Sprintf("moves[%d]", index)
+	packagePath := strings.TrimSpace(row.PackagePath)
+	if packagePath == "" {
 		return fmt.Errorf("%s.packagePath is required", prefix)
-	}
-	switch row.Disposition {
-	case DispositionMove, DispositionDelete:
-	case DispositionRetain:
-		return fmt.Errorf(
-			"%s.disposition %q is retired: a package that stays where it already lives derives its destination from its own path and carries no row",
-			prefix,
-			row.Disposition,
-		)
-	default:
-		return fmt.Errorf("%s.disposition %q is invalid; want move or delete", prefix, row.Disposition)
 	}
 	if strings.TrimSpace(row.Destination) == "" {
 		return fmt.Errorf("%s.destination is required", prefix)
@@ -185,15 +214,16 @@ func validatePackageMapping(index int, row PackageMapping, closed map[string]str
 	if err := validateDestination(row.Destination, closed); err != nil {
 		return fmt.Errorf("%s.destination: %w", prefix, err)
 	}
-	if row.Disposition == DispositionDelete {
-		if strings.TrimSpace(row.DeletionSuccessor) == "" {
-			return fmt.Errorf("%s.deletionSuccessor is required when disposition is delete", prefix)
-		}
-		if strings.TrimSpace(row.DeletionCondition) == "" {
-			return fmt.Errorf("%s.deletionCondition is required when disposition is delete", prefix)
-		}
-	} else if row.DeletionSuccessor != "" || row.DeletionCondition != "" {
-		return fmt.Errorf("%s deletionSuccessor/deletionCondition are only valid when disposition is delete", prefix)
+	successor := strings.TrimSpace(row.Successor)
+	if successor == "" {
+		return fmt.Errorf("%s.successor is required: an open move must name the package path that replaces it", prefix)
+	}
+	// A successor may equal its own packagePath: the transitional top-level
+	// fold rows record that a package folds into the tree it already sits in.
+	owner, _, _ := splitDestination(row.Destination)
+	ownerRoot := "pkg/services/" + owner
+	if successor != ownerRoot && !strings.HasPrefix(successor, ownerRoot+"/") {
+		return fmt.Errorf("%s.successor %q must sit under %s for destination %q", prefix, successor, ownerRoot, row.Destination)
 	}
 	return nil
 }

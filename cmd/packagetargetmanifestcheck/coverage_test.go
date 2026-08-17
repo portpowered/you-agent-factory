@@ -4,6 +4,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/portpowered/infinite-you/internal/ownershipinventory"
 )
 
 func TestValidatePackageCoverageRejectsDuplicateAndUnsortedRows(t *testing.T) {
@@ -11,78 +13,56 @@ func TestValidatePackageCoverageRejectsDuplicateAndUnsortedRows(t *testing.T) {
 
 	alpha := PackageMapping{
 		PackagePath: "pkg/services/work/alpha",
-		Disposition: DispositionMove,
 		Destination: "work/internal",
+		Successor:   "pkg/services/work/internal",
 	}
 	beta := PackageMapping{
 		PackagePath: "pkg/services/work/beta",
-		Disposition: DispositionMove,
 		Destination: "work/internal",
+		Successor:   "pkg/services/work/internal",
 	}
 
-	duplicate := Manifest{Packages: []PackageMapping{alpha, alpha, beta}}
+	duplicate := UnfinishedMoves{Moves: []PackageMapping{alpha, alpha, beta}}
 	if err := validatePackageCoverage(duplicate); err == nil || !strings.Contains(err.Error(), "duplicate") {
-		t.Fatalf("duplicate packages error = %v, want duplicate rejection", err)
+		t.Fatalf("duplicate moves error = %v, want duplicate rejection", err)
 	}
 
-	unsorted := Manifest{Packages: []PackageMapping{beta, alpha}}
+	unsorted := UnfinishedMoves{Moves: []PackageMapping{beta, alpha}}
 	if err := validatePackageCoverage(unsorted); err == nil || !strings.Contains(err.Error(), "stable-sorted") {
-		t.Fatalf("unsorted packages error = %v, want sort rejection", err)
+		t.Fatalf("unsorted moves error = %v, want sort rejection", err)
 	}
 
-	sorted := Manifest{Packages: []PackageMapping{alpha, beta}}
+	sorted := UnfinishedMoves{Moves: []PackageMapping{alpha, beta}}
 	if err := validatePackageCoverage(sorted); err != nil {
-		t.Fatalf("sorted, duplicate-free packages error = %v", err)
+		t.Fatalf("sorted, duplicate-free moves error = %v", err)
 	}
 }
 
 // TestValidatePackageCoverageAcceptsNoRows is the shrink-to-zero end state: the
-// manifest tracks unfinished migration intent, so an empty list is success, not
+// ledger tracks unfinished migration intent, so an empty list is success, not
 // a missing-inventory failure.
 func TestValidatePackageCoverageAcceptsNoRows(t *testing.T) {
 	t.Parallel()
 
-	if err := validatePackageCoverage(Manifest{}); err != nil {
+	if err := validatePackageCoverage(UnfinishedMoves{}); err != nil {
 		t.Fatalf("validatePackageCoverage() on an empty row list error = %v", err)
 	}
 }
 
-func TestValidateManifestRejectsInvalidDestinationAndIncompleteDelete(t *testing.T) {
+func TestValidateMoveLedgerRejectsInvalidDestination(t *testing.T) {
 	t.Parallel()
 
-	base := Manifest{
-		Version:               1,
-		Stage:                 manifestStage,
-		DestinationVocabulary: closedDestinationVocabulary(),
-		ArchitectureExceptionNotes: map[string]string{
-			"edges": edgesArchitectureExceptionNote,
-		},
-		FutureDebt: []FutureDebt{edgesFutureDebtEntry()},
-	}
-
-	invalidDestination := base
-	invalidDestination.Packages = []PackageMapping{{
+	invalidDestination := moveLedgerFixture(PackageMapping{
 		PackagePath: "pkg/services/work/alpha",
-		Disposition: DispositionMove,
 		Destination: "not_a_closed_destination",
-	}}
-	if err := validateManifest(invalidDestination); err == nil || !strings.Contains(err.Error(), "destination") {
+		Successor:   "pkg/services/work/internal",
+	})
+	if err := validateUnfinishedMovesSchema(invalidDestination); err == nil || !strings.Contains(err.Error(), "destination") {
 		t.Fatalf("invalid destination error = %v", err)
-	}
-
-	incompleteDelete := base
-	incompleteDelete.Packages = []PackageMapping{{
-		PackagePath:       "pkg/services/work/alpha",
-		Disposition:       DispositionDelete,
-		Destination:       "platform",
-		DeletionCondition: "delete when no importers remain",
-	}}
-	if err := validateManifest(incompleteDelete); err == nil || !strings.Contains(err.Error(), "deletionSuccessor") {
-		t.Fatalf("incomplete delete error = %v", err)
 	}
 }
 
-func TestCommittedManifestTracksOnlyUnfinishedMigrationIntent(t *testing.T) {
+func TestCommittedLedgerTracksOnlyUnfinishedMigrationIntent(t *testing.T) {
 	t.Parallel()
 
 	repoRoot := findRepoRoot(t)
@@ -90,24 +70,23 @@ func TestCommittedManifestTracksOnlyUnfinishedMigrationIntent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("loadManifest() error = %v", err)
 	}
-	if err := validateManifestAt(repoRoot, manifest); err != nil {
+	moves, err := loadUnfinishedMoves(filepath.Join(repoRoot, unfinishedMovesRelativePath))
+	if err != nil {
+		t.Fatalf("loadUnfinishedMoves() error = %v", err)
+	}
+	if err := validateManifestAt(repoRoot, manifest, moves); err != nil {
 		t.Fatalf("committed manifest validateManifestAt() error = %v", err)
 	}
 
-	live, err := listProductionPkgPackages(repoRoot)
+	live, err := ownershipinventory.ListProductionPackages(repoRoot)
 	if err != nil {
-		t.Fatalf("listProductionPkgPackages() error = %v", err)
+		t.Fatalf("ListProductionPackages() error = %v", err)
 	}
-	if len(manifest.Packages) >= len(live) {
+	if len(moves.Moves) >= len(live) {
 		t.Fatalf(
-			"committed manifest still enumerates the tree: %d rows for %d live packages",
-			len(manifest.Packages),
+			"committed move ledger still enumerates the tree: %d rows for %d live packages",
+			len(moves.Moves),
 			len(live),
 		)
-	}
-	for _, row := range manifest.Packages {
-		if row.Disposition == DispositionRetain {
-			t.Fatalf("committed manifest still carries a derivable retain row for %q", row.PackagePath)
-		}
 	}
 }

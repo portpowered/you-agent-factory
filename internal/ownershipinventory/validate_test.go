@@ -174,54 +174,93 @@ func TestValidateFailsWhenInventoryNotStableSorted(t *testing.T) {
 	}
 }
 
-func TestFrozenInventoryReusesFND01SeedWhenPresent(t *testing.T) {
+// The ownership-inventory artifact no longer carries package rows at all: open
+// moves live in one consolidated ledger. Loading a root whose inventory file has
+// no rows must still produce the ledger's rows.
+func TestLoadReadsPackageRowsFromConsolidatedMoveLedger(t *testing.T) {
 	root := repositoryRoot(t)
 	inventory, err := ownershipinventory.Load(root)
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
-	packages, err := ownershipinventory.ListProductionPackages(root)
+
+	tmp := t.TempDir()
+	writeJSON(t, filepath.Join(tmp, ownershipinventory.InventoryRelativePath), inventory)
+	writeJSON(t, filepath.Join(tmp, ownershipinventory.UnfinishedMovesRelativePath), ownershipinventory.UnfinishedMoves{
+		Version:  1,
+		Stage:    ownershipinventory.UnfinishedMovesStage,
+		EndState: "shrinks to zero, then the file is deleted",
+		SortKey:  ownershipinventory.SortKeyDescription,
+		Moves: []ownershipinventory.UnfinishedMoveRow{{
+			PackagePath:       "pkg/services/workers/service",
+			Destination:       "workers/internal",
+			Successor:         "pkg/services/workers/internal",
+			DeletionCondition: "delete after cutover proof",
+		}},
+	})
+
+	reloaded, err := ownershipinventory.Load(tmp)
 	if err != nil {
-		t.Fatalf("ListProductionPackages() error = %v", err)
+		t.Fatalf("Load() error = %v", err)
+	}
+	if len(reloaded.Packages) != 1 {
+		t.Fatalf("Load() attached %d package row(s) from the move ledger, want 1: %#v", len(reloaded.Packages), reloaded.Packages)
+	}
+	row := reloaded.Packages[0]
+	if row.PackagePath != "pkg/services/workers/service" {
+		t.Fatalf("row packagePath = %q, want pkg/services/workers/service", row.PackagePath)
+	}
+	if row.Disposition != ownershipinventory.DispositionMove {
+		t.Fatalf("row disposition = %q, want move", row.Disposition)
+	}
+	// Owner and destination kind are derived from the destination bucket rather
+	// than restated on every ledger row.
+	if row.Destination != "workers" || row.DestinationKind != ownershipinventory.DestinationKindOwner {
+		t.Fatalf("row destination = %q/%q, want workers/owner", row.Destination, row.DestinationKind)
+	}
+	if row.Successor != "pkg/services/workers/internal" {
+		t.Fatalf("row successor = %q, want pkg/services/workers/internal", row.Successor)
+	}
+}
+
+// A landed migration deletes its row, so the ledger's own end state — no file at
+// all — has to load as an empty row set rather than an error.
+func TestLoadTreatsAbsentMoveLedgerAsNoOpenMoves(t *testing.T) {
+	root := repositoryRoot(t)
+	inventory, err := ownershipinventory.Load(root)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
 	}
 
 	tmp := t.TempDir()
 	writeJSON(t, filepath.Join(tmp, ownershipinventory.InventoryRelativePath), inventory)
-	writeJSON(t, filepath.Join(tmp, ownershipinventory.FND01SeedRelativePath), ownershipinventory.PackageTargetManifest{
-		Version:  1,
-		Stage:    "pss-fnd-01-package-target-manifest",
-		SortKey:  ownershipinventory.SortKeyDescription,
-		Packages: inventory.Packages,
-	})
 
-	// Corrupt the ownership-inventory package rows so validation can only pass
-	// by reusing the FND-01 seed destinations.
-	corrupted := inventory
-	corrupted.Packages = append([]ownershipinventory.PackageRow(nil), inventory.Packages...)
-	corrupted.Packages[0].Destination = ""
-	writeJSON(t, filepath.Join(tmp, ownershipinventory.InventoryRelativePath), corrupted)
-
-	// Point package discovery at a tiny pkg tree that mirrors the frozen paths
-	// without copying the full repository.
-	for _, pkgPath := range packages {
-		dir := filepath.Join(tmp, filepath.FromSlash(pkgPath))
-		if err := os.MkdirAll(dir, 0o755); err != nil {
-			t.Fatalf("mkdir %s: %v", dir, err)
-		}
-		if err := os.WriteFile(filepath.Join(dir, "doc.go"), []byte("package "+filepath.Base(dir)+"\n"), 0o644); err != nil {
-			t.Fatalf("write %s: %v", dir, err)
-		}
-	}
-
-	report, err := ownershipinventory.Validate(tmp)
+	reloaded, err := ownershipinventory.Load(tmp)
 	if err != nil {
-		t.Fatalf("Validate() error = %v", err)
+		t.Fatalf("Load() error = %v", err)
 	}
-	if !report.OK() {
-		t.Fatalf("Validate() should reuse FND-01 seed; report=%#v", report)
+	if len(reloaded.Packages) != 0 {
+		t.Fatalf("Load() attached %d package row(s) with no ledger present, want 0", len(reloaded.Packages))
 	}
-	if !report.ReusedFND01Seed {
-		t.Fatal("Validate() did not report FND-01 seed reuse")
+}
+
+func TestValidateFailsWhenMoveLedgerSuccessorLeavesItsDestinationOwner(t *testing.T) {
+	inventory, packages := loadedInventoryAndPackages(t)
+	inventory.UnfinishedMoves.Moves = append(
+		append([]ownershipinventory.UnfinishedMoveRow(nil), inventory.UnfinishedMoves.Moves...),
+		ownershipinventory.UnfinishedMoveRow{
+			PackagePath: "pkg/services/workers/service",
+			Destination: "workers/internal",
+			Successor:   "pkg/services/recordings/internal",
+		},
+	)
+
+	report := ownershipinventory.ValidateInventory(inventory, packages)
+	if report.OK() {
+		t.Fatal("ValidateInventory() unexpectedly passed with a successor outside its destination owner")
+	}
+	if len(report.InvalidMappings) == 0 {
+		t.Fatalf("invalid mappings empty; report=%#v", report)
 	}
 }
 

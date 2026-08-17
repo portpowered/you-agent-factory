@@ -58,47 +58,20 @@ func TestOperatorSettingsCommittedBaselinesAlignMoveDestinationsForUnexpectedSib
 	if err != nil {
 		t.Fatalf("LoadOperatorSettingsTopLevelInventory() error = %v", err)
 	}
-	inventory, err := ownershipinventory.Load(root)
-	if err != nil {
-		t.Fatalf("Load() error = %v", err)
-	}
-	manifest, err := loadPackageTargetManifest(root)
-	if err != nil {
-		t.Fatalf("loadPackageTargetManifest() error = %v", err)
-	}
-
-	ownershipByPath := make(map[string]ownershipinventory.PackageRow, len(inventory.Packages))
-	for _, row := range inventory.Packages {
-		ownershipByPath[row.PackagePath] = row
-	}
-	manifestByPath := make(map[string]packageTargetManifestRow, len(manifest.Packages))
-	for _, row := range manifest.Packages {
-		manifestByPath[row.PackagePath] = row
-	}
+	moveByPath := committedMoveLedger(t, root)
 
 	for _, packagePath := range ownershipinventory.OperatorSettingsUnexpectedPublicSiblingPackagePaths(topLevel) {
-		manifestRow, ok := manifestByPath[packagePath]
+		moveRow, ok := moveByPath[packagePath]
 		if !ok {
-			t.Fatalf("package-target manifest missing unexpected public sibling %q", packagePath)
+			t.Fatalf("move ledger missing unexpected public sibling %q; it must still carry an open move", packagePath)
 		}
-		if manifestRow.Disposition == ownershipinventory.DispositionRetain && manifestRow.Destination == "operator_settings" {
-			t.Fatalf("committed manifest row retain→operator_settings for %q", packagePath)
+		if moveRow.Destination == "operator_settings" {
+			t.Fatalf("move ledger row %q destination = owner root, want nested plan path", packagePath)
 		}
-		if manifestRow.Disposition != ownershipinventory.DispositionMove {
-			t.Fatalf("committed manifest row %q disposition = %q, want move", packagePath, manifestRow.Disposition)
-		}
-		if manifestRow.Destination == "operator_settings" {
-			t.Fatalf("committed manifest row %q move destination = owner root, want nested plan path", packagePath)
-		}
-
-		ownershipRow, ok := ownershipByPath[packagePath]
-		if !ok {
-			t.Fatalf("ownership inventory missing committed manifest move row %q", packagePath)
-		}
-		wantSuccessor := "pkg/services/" + manifestRow.Destination
-		if ownershipRow.Successor != wantSuccessor {
-			t.Fatalf("dual-ledger drift for %q: manifest destination %q => successor %q, ownership has %q",
-				packagePath, manifestRow.Destination, wantSuccessor, ownershipRow.Successor)
+		wantSuccessor := "pkg/services/" + moveRow.Destination
+		if moveRow.Successor != wantSuccessor {
+			t.Fatalf("move ledger drift for %q: destination %q => successor %q, ledger has %q",
+				packagePath, moveRow.Destination, wantSuccessor, moveRow.Successor)
 		}
 	}
 }

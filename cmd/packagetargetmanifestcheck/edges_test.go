@@ -20,11 +20,6 @@ func TestValidateManifestRequiresExactEdgesExceptionNote(t *testing.T) {
 			PackagePath: "pkg/services/edges",
 			Description: "Narrow Edges implementation imports; deferred to FND-06.",
 		}},
-		Packages: []PackageMapping{{
-			PackagePath: "pkg/services/edges/legacy",
-			Disposition: DispositionMove,
-			Destination: "edges",
-		}},
 	}
 	err := validateManifest(manifest)
 	if err == nil || !strings.Contains(err.Error(), "architectureExceptionNotes.edges") {
@@ -42,11 +37,6 @@ func TestValidateManifestRequiresFND06FutureDebt(t *testing.T) {
 		ArchitectureExceptionNotes: map[string]string{
 			"edges": edgesArchitectureExceptionNote,
 		},
-		Packages: []PackageMapping{{
-			PackagePath: "pkg/services/edges/legacy",
-			Disposition: DispositionMove,
-			Destination: "edges",
-		}},
 	}
 	err := validateManifest(manifest)
 	if err == nil || !strings.Contains(err.Error(), "FND-06") {

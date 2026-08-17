@@ -4,7 +4,6 @@ package ownershipinventory
 
 const (
 	InventoryRelativePath = "docs/internal/baselines/ownership-inventory.json"
-	FND01SeedRelativePath = "docs/internal/baselines/package-target-manifest.json"
 
 	SortKeyDescription = "packagePath ascending byte order (path slash-separated)"
 
@@ -56,11 +55,15 @@ var AllowedEdgeClasses = []string{
 }
 
 // Inventory is the frozen PSS-F01 ownership inventory artifact.
+//
+// UnfinishedMoves and Packages are not part of the artifact on disk. Open moves
+// live in one consolidated ledger (UnfinishedMovesRelativePath) shared with the
+// packaged-service-structure checker; Load attaches them here so inventory
+// consumers keep a single row view.
 type Inventory struct {
 	Version                 int                      `json:"version"`
 	Stage                   string                   `json:"stage"`
 	SortKey                 string                   `json:"sortKey"`
-	FND01SeedPath           string                   `json:"fnd01SeedPath"`
 	Destinations            DestinationVocabulary    `json:"destinations"`
 	ProcessEdgesException   ProcessEdgesException    `json:"processEdgesException"`
 	SeedServices            []SeedService            `json:"seedServices"`
@@ -72,7 +75,8 @@ type Inventory struct {
 	MisplacedGuards         []MisplacedGuardEntry    `json:"misplacedGuards"`
 	PublicSurfaces          []PublicSurfaceEntry     `json:"publicSurfaces"`
 	OwnedRoles              []OwnedRoleEntry         `json:"ownedRoles"`
-	Packages                []PackageRow             `json:"packages"`
+	UnfinishedMoves         UnfinishedMoves          `json:"-"`
+	Packages                []PackageRow             `json:"-"`
 }
 
 // MisplacedGuardEntry records one normative standard, allowlist, package guard,
@@ -169,16 +173,6 @@ type ResponsibilityCluster struct {
 	Note      string `json:"note"`
 }
 
-// PackageTargetManifest is the FND-01 package-to-target/deletion seed shape.
-// When present on disk, PSS-F01 reuses its package rows instead of inventing a
-// second destination catalog.
-type PackageTargetManifest struct {
-	Version  int          `json:"version"`
-	Stage    string       `json:"stage"`
-	SortKey  string       `json:"sortKey"`
-	Packages []PackageRow `json:"packages"`
-}
-
 // DestinationVocabulary is the closed destination set for inventory rows.
 type DestinationVocabulary struct {
 	Owners    []string `json:"owners"`
@@ -252,7 +246,6 @@ type Report struct {
 	UnstableMisplacedGuardSort    bool
 	UnstablePublicSurfaceSort     bool
 	UnstableOwnedRoleSort         bool
-	ReusedFND01Seed               bool
 }
 
 // ViolationCount returns the number of independently reported inventory

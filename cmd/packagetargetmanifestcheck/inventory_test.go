@@ -61,22 +61,23 @@ func TestListProductionPkgPackagesIncludesProductionAndOmitsTestOnly(t *testing.
 	}
 }
 
-// TestCheckPassesWhenPackageIsAddedInsideExistingServiceWithNoManifestEdit is the
+// TestCheckPassesWhenPackageIsAddedInsideExistingServiceWithNoRegistryEdit is the
 // core of the registration-tax retirement: package churn inside a service must
-// not require a manifest edit. The check runs before and after a new package
-// appears, against a byte-identical manifest.
-func TestCheckPassesWhenPackageIsAddedInsideExistingServiceWithNoManifestEdit(t *testing.T) {
+// not require a registry edit. The check runs before and after a new package
+// appears, against byte-identical registry files.
+func TestCheckPassesWhenPackageIsAddedInsideExistingServiceWithNoRegistryEdit(t *testing.T) {
 	t.Parallel()
 
 	repoRoot := t.TempDir()
 	writeGoPackage(t, repoRoot, "pkg/services/work", "package work\n")
 	writeGoPackage(t, repoRoot, "pkg/services/work/internal/lineagegraph", "package lineagegraph\n")
-	manifestPath := writeFixtureManifest(t, repoRoot, []PackageMapping{{
+	manifestPath, movesPath := writeFixtureRegistries(t, repoRoot, []PackageMapping{{
 		PackagePath: "pkg/services/work/internal/lineagegraph",
-		Disposition: DispositionMove,
 		Destination: "work/internal",
+		Successor:   "pkg/services/work/internal",
 	}})
-	before := readFileBytes(t, manifestPath)
+	manifestBefore := readFileBytes(t, manifestPath)
+	movesBefore := readFileBytes(t, movesPath)
 
 	if err := runCheck(t, repoRoot); err != nil {
 		t.Fatalf("check on the starting tree error = %v", err)
@@ -85,7 +86,7 @@ func TestCheckPassesWhenPackageIsAddedInsideExistingServiceWithNoManifestEdit(t 
 	// A brand-new package inside an existing service, with no registry edit.
 	writeGoPackage(t, repoRoot, "pkg/services/work/internal/newsubsystem", "package newsubsystem\n")
 	if err := runCheck(t, repoRoot); err != nil {
-		t.Fatalf("check after adding a package with no manifest edit error = %v", err)
+		t.Fatalf("check after adding a package with no registry edit error = %v", err)
 	}
 
 	// Deleting a package that never had a row is likewise a no-edit change.
@@ -93,11 +94,14 @@ func TestCheckPassesWhenPackageIsAddedInsideExistingServiceWithNoManifestEdit(t 
 		t.Fatalf("remove added package: %v", err)
 	}
 	if err := runCheck(t, repoRoot); err != nil {
-		t.Fatalf("check after deleting a package with no manifest edit error = %v", err)
+		t.Fatalf("check after deleting a package with no registry edit error = %v", err)
 	}
 
-	if after := readFileBytes(t, manifestPath); !bytes.Equal(before, after) {
+	if after := readFileBytes(t, manifestPath); !bytes.Equal(manifestBefore, after) {
 		t.Fatal("the check rewrote the manifest; it must be read-only")
+	}
+	if after := readFileBytes(t, movesPath); !bytes.Equal(movesBefore, after) {
+		t.Fatal("the check rewrote the move ledger; it must be read-only")
 	}
 }
 
@@ -108,10 +112,10 @@ func TestCheckFailsWhenMoveRowNamesAbsentPackage(t *testing.T) {
 
 	repoRoot := t.TempDir()
 	writeGoPackage(t, repoRoot, "pkg/services/work", "package work\n")
-	writeFixtureManifest(t, repoRoot, []PackageMapping{{
+	writeFixtureRegistries(t, repoRoot, []PackageMapping{{
 		PackagePath: "pkg/services/work/internal/alreadymoved",
-		Disposition: DispositionMove,
 		Destination: "work/internal",
+		Successor:   "pkg/services/work/internal",
 	}})
 
 	err := runCheck(t, repoRoot)
@@ -126,30 +130,38 @@ func TestCheckFailsWhenMoveRowNamesAbsentPackage(t *testing.T) {
 	}
 }
 
-// TestCheckRejectsRetainDisposition locks the retirement in place: a row that
-// only restates where a package already lives is no longer accepted, so the
-// enumeration cannot creep back one row at a time.
-func TestCheckRejectsRetainDisposition(t *testing.T) {
+// TestCheckRejectsResurrectedRetainRow locks the retirement in place. An
+// old-style row that only restates where a package already lives carries no
+// successor, so pasting the retired enumeration back in fails the check rather
+// than passing as a no-op.
+func TestCheckRejectsResurrectedRetainRow(t *testing.T) {
 	t.Parallel()
 
 	repoRoot := t.TempDir()
 	writeGoPackage(t, repoRoot, "pkg/services/work", "package work\n")
-	writeFixtureManifest(t, repoRoot, []PackageMapping{{
-		PackagePath: "pkg/services/work",
-		Disposition: DispositionRetain,
-		Destination: "work",
-	}})
+	writeFixtureRegistries(t, repoRoot, nil)
+	writeRawMoveLedger(t, repoRoot, `{
+  "version": 1,
+  "stage": "`+unfinishedMovesStage+`",
+  "moves": [
+    {
+      "packagePath": "pkg/services/work",
+      "disposition": "retain",
+      "destination": "work"
+    }
+  ]
+}`)
 
 	err := runCheck(t, repoRoot)
 	if err == nil {
-		t.Fatal("check error = nil, want retain disposition rejection")
+		t.Fatal("check error = nil, want rejection of a rowless retain restatement")
 	}
-	if !strings.Contains(err.Error(), "retired") {
-		t.Fatalf("check error = %v, want a retired-disposition message", err)
+	if !strings.Contains(err.Error(), "successor is required") {
+		t.Fatalf("check error = %v, want a missing-successor message", err)
 	}
 }
 
-// TestCommittedManifestPassesTheCheck runs the real committed manifest against
+// TestCommittedManifestPassesTheCheck runs the real committed registries against
 // the real tree, which is what the packaged-service-structure lint target does.
 func TestCommittedManifestPassesTheCheck(t *testing.T) {
 	t.Parallel()
@@ -162,12 +174,16 @@ func TestCommittedManifestPassesTheCheck(t *testing.T) {
 
 func runCheck(t *testing.T, repoRoot string) error {
 	t.Helper()
-	return run(config{root: repoRoot, manifestPath: manifestRelativePath}, &bytes.Buffer{}, &bytes.Buffer{})
+	return run(config{
+		root:         repoRoot,
+		manifestPath: manifestRelativePath,
+		movesPath:    unfinishedMovesRelativePath,
+	}, &bytes.Buffer{}, &bytes.Buffer{})
 }
 
-// writeFixtureManifest writes a schema-valid manifest carrying only the given
-// rows and returns its path.
-func writeFixtureManifest(t *testing.T, repoRoot string, rows []PackageMapping) string {
+// writeFixtureRegistries writes a schema-valid manifest plus an open-move ledger
+// carrying only the given rows, and returns both paths.
+func writeFixtureRegistries(t *testing.T, repoRoot string, rows []PackageMapping) (manifestPath, movesPath string) {
 	t.Helper()
 	manifest := Manifest{
 		Version:               1,
@@ -177,20 +193,43 @@ func writeFixtureManifest(t *testing.T, repoRoot string, rows []PackageMapping) 
 			"edges": edgesArchitectureExceptionNote,
 		},
 		FutureDebt: []FutureDebt{edgesFutureDebtEntry()},
-		Packages:   rows,
 	}
-	data, err := json.MarshalIndent(manifest, "", "  ")
+	moves := UnfinishedMoves{
+		Version: 1,
+		Stage:   unfinishedMovesStage,
+		Moves:   rows,
+	}
+	return writeFixtureJSON(t, repoRoot, manifestRelativePath, manifest),
+		writeFixtureJSON(t, repoRoot, unfinishedMovesRelativePath, moves)
+}
+
+func writeFixtureJSON(t *testing.T, repoRoot, relativePath string, value any) string {
+	t.Helper()
+	data, err := json.MarshalIndent(value, "", "  ")
 	if err != nil {
-		t.Fatalf("encode fixture manifest: %v", err)
+		t.Fatalf("encode fixture %s: %v", relativePath, err)
 	}
-	path := filepath.Join(repoRoot, filepath.FromSlash(manifestRelativePath))
+	path := filepath.Join(repoRoot, filepath.FromSlash(relativePath))
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		t.Fatalf("mkdir fixture manifest dir: %v", err)
+		t.Fatalf("mkdir fixture dir for %s: %v", relativePath, err)
 	}
 	if err := os.WriteFile(path, append(data, '\n'), 0o644); err != nil {
-		t.Fatalf("write fixture manifest: %v", err)
+		t.Fatalf("write fixture %s: %v", relativePath, err)
 	}
 	return path
+}
+
+// writeRawMoveLedger writes ledger JSON verbatim so a test can express a shape
+// the Go structs no longer model, such as a resurrected retain row.
+func writeRawMoveLedger(t *testing.T, repoRoot, payload string) {
+	t.Helper()
+	path := filepath.Join(repoRoot, filepath.FromSlash(unfinishedMovesRelativePath))
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatalf("mkdir move ledger dir: %v", err)
+	}
+	if err := os.WriteFile(path, []byte(payload+"\n"), 0o644); err != nil {
+		t.Fatalf("write raw move ledger: %v", err)
+	}
 }
 
 func readFileBytes(t *testing.T, path string) []byte {

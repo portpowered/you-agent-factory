@@ -21,15 +21,22 @@ baseline suite map (CLI, HTTP, MCP, replay, visualization activation) lives in
 That map names focused Make/`go test` entry points and marks success vs
 typed-failure coverage; it does not own PR #1262 CLI-manifest baselines.
 
-`ownership-inventory.json` is the PSS-F01 frozen package-destination inventory.
-Its `packages` list records only packages with unfinished migration intent —
-`move` and `delete` rows carrying a successor and a deletion condition. A
-package that simply stays where it already sits has no row: its owner is derived
+`unfinished-package-moves.json` is the single ledger of unfinished Packaged
+Service Structure migration intent. Each row names a `packagePath` under `pkg/`
+that still has to move, together with its `destination` bucket, its `successor`
+path, and — where a cutover packet closes it — a `deletionCondition`. A package
+that simply stays where it already sits has **no row**: its owner is derived
 from the tree by `ownershipinventory.OwnerForPackage`, so adding or removing a
-package inside an existing service requires no edit here. The surviving package
-check runs the other way: a row naming a `packagePath` that is absent from the
-live tree is stale and fails. This list is expected to shrink to zero as the
-Packaged Service Structure migration completes. It also freezes owner and
+package inside an existing service requires no edit here. The surviving check
+runs the other way: a row naming a `packagePath` that is absent from the live
+tree is stale and fails. The ledger only shrinks. Landing a move deletes its
+row, and when `moves` is empty the file is deleted together with its loaders and
+checks. Both `ownership-inventory-check` and `package-target-manifest-check`
+read this one file, so there is no second destination catalog to keep in sync.
+
+`ownership-inventory.json` is the PSS-F01 frozen ownership inventory. It no
+longer enumerates packages — that moved to `unfinished-package-moves.json`
+above. It freezes owner and
 nested-subservice rationale cards (authority, state/store, lifecycle, consumers,
 transaction boundary, failure/recovery), large responsibility clusters, a
 cross-service edge table that classifies each distinct-owner production import
@@ -43,10 +50,8 @@ polling to Workers (replacement owners Providers or Automations), public
 CLI/HTTP/MCP/replay/visualization and behavior-test surfaces mapped to durable
 owners, and constructor/datastore/lifecycle-role/protocol-adapter ownership
 rows. Process Edges edges are marked as the architecture exception and
-restricted to construction or external effect. When
-`package-target-manifest.json` (FND-01) is present, validators reuse that seed
-for package rows instead of inventing a second destination catalog. Regenerate
-with `go run ./cmd/ownershipinventoryfreeze` and prove with
+restricted to construction or external effect. Regenerate with
+`go run ./cmd/ownershipinventoryfreeze` and prove with
 `go test ./internal/ownershipinventory` or `make ownership-inventory-check`.
 
 The initial path-lease freeze published from that inventory lives at

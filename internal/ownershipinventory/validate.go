@@ -10,7 +10,7 @@ import (
 // Validate loads the effective ownership inventory for root and checks it
 // against production packages under pkg.
 func Validate(root string) (Report, error) {
-	inventory, reused, err := LoadEffective(root)
+	inventory, err := Load(root)
 	if err != nil {
 		return Report{}, err
 	}
@@ -24,7 +24,6 @@ func Validate(root string) (Report, error) {
 	}
 	report := ValidateInventory(inventory, packages)
 	validateCrossServiceEdgeCoverage(inventory, discovered, &report)
-	report.ReusedFND01Seed = reused
 	return report, nil
 }
 
@@ -37,6 +36,8 @@ func ValidateInventory(inventory Inventory, packages []string) Report {
 	if !slices.IsSorted(packagePaths(inventory.Packages)) {
 		report.UnstableSort = true
 	}
+
+	report.InvalidMappings = append(report.InvalidMappings, ValidateUnfinishedMoves(inventory.UnfinishedMoves)...)
 
 	seen := map[string]int{}
 	for _, row := range inventory.Packages {
@@ -625,8 +626,11 @@ func validateRow(row PackageRow) string {
 		if row.Destination == DestinationDeletionQueue {
 			return fmt.Sprintf("%s: move disposition requires an owner/family/exception destination", row.PackagePath)
 		}
-		if strings.TrimSpace(row.Successor) == "" || strings.TrimSpace(row.DeletionCondition) == "" {
-			return fmt.Sprintf("%s: move mapping requires successor and deletionCondition", row.PackagePath)
+		// deletionCondition stays optional: the consolidated move ledger carries
+		// rows that only ever existed in the package-target manifest, which
+		// never recorded a closing condition for them.
+		if strings.TrimSpace(row.Successor) == "" {
+			return fmt.Sprintf("%s: move mapping requires a successor", row.PackagePath)
 		}
 	case DispositionRetain:
 		if row.Destination == DestinationDeletionQueue {

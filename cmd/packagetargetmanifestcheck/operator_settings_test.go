@@ -1,14 +1,13 @@
 package main
 
 import (
-	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/portpowered/infinite-you/internal/ownershipinventory"
 )
 
-func TestCommittedManifestOperatorSettingsRejectsRetainToOwnerRootForUnexpectedSiblings(t *testing.T) {
+func TestCommittedLedgerOperatorSettingsMovesUnexpectedSiblingsOffTheOwnerRoot(t *testing.T) {
 	t.Parallel()
 
 	repoRoot := findRepoRoot(t)
@@ -16,39 +15,25 @@ func TestCommittedManifestOperatorSettingsRejectsRetainToOwnerRootForUnexpectedS
 	if err != nil {
 		t.Fatalf("LoadOperatorSettingsTopLevelInventory() error = %v", err)
 	}
-	manifest, err := loadManifest(filepath.Join(repoRoot, manifestRelativePath))
-	if err != nil {
-		t.Fatalf("loadManifest() error = %v", err)
-	}
-
-	manifestByPath := make(map[string]PackageMapping, len(manifest.Packages))
-	for _, row := range manifest.Packages {
-		manifestByPath[row.PackagePath] = row
-	}
+	moveByPath := committedMoveLedgerRows(t, repoRoot)
 
 	for _, packagePath := range ownershipinventory.OperatorSettingsUnexpectedPublicSiblingPackagePaths(topLevel) {
-		row, ok := manifestByPath[packagePath]
+		row, ok := moveByPath[packagePath]
 		if !ok {
-			t.Fatalf("committed manifest missing unexpected public sibling %q", packagePath)
-		}
-		if row.Disposition == DispositionRetain && row.Destination == "operator_settings" {
-			t.Fatalf("committed manifest row retain→operator_settings for %q", packagePath)
-		}
-		if row.Disposition != DispositionMove {
-			t.Fatalf("committed manifest row %q disposition = %q, want move", packagePath, row.Disposition)
+			t.Fatalf("move ledger missing unexpected public sibling %q; it must still carry an open move", packagePath)
 		}
 		if row.Destination == "operator_settings" {
-			t.Fatalf("committed manifest row %q move destination = owner root, want nested plan path", packagePath)
+			t.Fatalf("move ledger row %q destination = owner root, want nested plan path", packagePath)
 		}
 	}
 }
 
-func TestVerifyOperatorSettingsDualLedgerAlignmentPassesOnRepository(t *testing.T) {
+func TestVerifyOperatorSettingsUnexpectedPublicSiblingRemapsPassesOnRepository(t *testing.T) {
 	t.Parallel()
 
 	repoRoot := findRepoRoot(t)
-	if err := ownershipinventory.VerifyOperatorSettingsDualLedgerAlignment(repoRoot); err != nil {
-		t.Fatalf("VerifyOperatorSettingsDualLedgerAlignment() error = %v", err)
+	if err := ownershipinventory.VerifyOperatorSettingsUnexpectedPublicSiblingRemaps(repoRoot); err != nil {
+		t.Fatalf("VerifyOperatorSettingsUnexpectedPublicSiblingRemaps() error = %v", err)
 	}
 }
 
@@ -92,37 +77,23 @@ func TestOperatorSettingsCommittedBaselinesAlignMoveDestinations(t *testing.T) {
 	t.Parallel()
 
 	repoRoot := findRepoRoot(t)
-	manifest, err := loadManifest(filepath.Join(repoRoot, manifestRelativePath))
-	if err != nil {
-		t.Fatalf("loadManifest() error = %v", err)
-	}
-	ownership, err := ownershipinventory.Load(repoRoot)
-	if err != nil {
-		t.Fatalf("ownershipinventory.Load() error = %v", err)
-	}
-
-	ownershipByPath := make(map[string]ownershipinventory.PackageRow, len(ownership.Packages))
-	for _, row := range ownership.Packages {
-		ownershipByPath[row.PackagePath] = row
-	}
+	moveByPath := committedMoveLedgerRows(t, repoRoot)
 
 	const ownerPrefix = "pkg/services/operator_settings/"
-	for _, row := range manifest.Packages {
-		if row.PackagePath != "pkg/services/operator_settings" && !strings.HasPrefix(row.PackagePath, ownerPrefix) {
+	checked := 0
+	for packagePath, row := range moveByPath {
+		if packagePath != "pkg/services/operator_settings" && !strings.HasPrefix(packagePath, ownerPrefix) {
 			continue
 		}
-		if row.Disposition != DispositionMove {
-			continue
-		}
-		ownershipRow, ok := ownershipByPath[row.PackagePath]
-		if !ok {
-			t.Fatalf("ownership inventory missing committed manifest move row %q", row.PackagePath)
-		}
+		checked++
 		wantSuccessor := "pkg/services/" + row.Destination
-		if ownershipRow.Successor != wantSuccessor {
-			t.Fatalf("dual-ledger drift for %q: manifest destination %q => successor %q, ownership has %q",
-				row.PackagePath, row.Destination, wantSuccessor, ownershipRow.Successor)
+		if row.Successor != wantSuccessor {
+			t.Fatalf("move ledger drift for %q: destination %q => successor %q, ledger has %q",
+				packagePath, row.Destination, wantSuccessor, row.Successor)
 		}
+	}
+	if checked == 0 {
+		t.Fatal("no Operator Settings rows found in the move ledger; the alignment check proved nothing")
 	}
 }
 

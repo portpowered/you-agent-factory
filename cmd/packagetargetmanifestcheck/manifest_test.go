@@ -45,141 +45,106 @@ func TestClosedDestinationVocabularyMatchesCommittedOwners(t *testing.T) {
 	assertExactStrings(t, "architectureExceptions", vocab.ArchitectureExceptions, wantExceptions)
 }
 
-func TestValidateManifestAcceptsMoveAndNestedOwnerDestination(t *testing.T) {
+func TestValidateMoveLedgerAcceptsMoveAndNestedOwnerDestination(t *testing.T) {
 	t.Parallel()
 
-	manifest := Manifest{
-		Version:               1,
-		Stage:                 manifestStage,
-		DestinationVocabulary: closedDestinationVocabulary(),
-		ArchitectureExceptionNotes: map[string]string{
-			"edges": edgesArchitectureExceptionNote,
+	moves := moveLedgerFixture(
+		PackageMapping{
+			PackagePath: "pkg/services/work/content_staging",
+			Destination: "work/internal/services/content_staging",
+			Successor:   "pkg/services/work/internal/services/content_staging",
 		},
-		FutureDebt: []FutureDebt{edgesFutureDebtEntry()},
-		Packages: []PackageMapping{
-			{
-				PackagePath: "pkg/services/work/content_staging",
-				Disposition: DispositionMove,
-				Destination: "work/internal/services/content_staging",
-			},
-			{
-				PackagePath: "pkg/services/work/legacy_lineage",
-				Disposition: DispositionMove,
-				Destination: "work/internal",
-			},
+		PackageMapping{
+			PackagePath: "pkg/services/work/legacy_lineage",
+			Destination: "work/internal",
+			Successor:   "pkg/services/work/internal",
 		},
-	}
+	)
 
-	if err := validateManifest(manifest); err != nil {
-		t.Fatalf("validateManifest() error = %v", err)
+	if err := validateUnfinishedMovesSchema(moves); err != nil {
+		t.Fatalf("validateUnfinishedMovesSchema() error = %v", err)
 	}
 }
 
-func TestValidateManifestRejectsDestinationOutsideClosedSet(t *testing.T) {
+func TestValidateMoveLedgerRejectsDestinationOutsideClosedSet(t *testing.T) {
 	t.Parallel()
 
-	manifest := Manifest{
-		Version:               1,
-		Stage:                 manifestStage,
-		DestinationVocabulary: closedDestinationVocabulary(),
-		ArchitectureExceptionNotes: map[string]string{
-			"edges": edgesArchitectureExceptionNote,
-		},
-		FutureDebt: []FutureDebt{edgesFutureDebtEntry()},
-		Packages: []PackageMapping{
-			{
-				PackagePath: "pkg/services/mystery",
-				Disposition: DispositionMove,
-				Destination: "mystery_service",
-			},
-		},
-	}
+	moves := moveLedgerFixture(PackageMapping{
+		PackagePath: "pkg/services/mystery",
+		Destination: "mystery_service",
+		Successor:   "pkg/services/mystery_service",
+	})
 
-	err := validateManifest(manifest)
+	err := validateUnfinishedMovesSchema(moves)
 	if err == nil {
-		t.Fatal("validateManifest() error = nil, want closed-set rejection")
+		t.Fatal("validateUnfinishedMovesSchema() error = nil, want closed-set rejection")
 	}
 	if !strings.Contains(err.Error(), "mystery_service") {
-		t.Fatalf("validateManifest() error = %v, want destination name", err)
+		t.Fatalf("validateUnfinishedMovesSchema() error = %v, want destination name", err)
 	}
 	if !strings.Contains(err.Error(), "outside closed destination set") {
-		t.Fatalf("validateManifest() error = %v, want closed-set message", err)
+		t.Fatalf("validateUnfinishedMovesSchema() error = %v, want closed-set message", err)
 	}
 }
 
-func TestValidateManifestRejectsNestedDestinationWithUnknownOwner(t *testing.T) {
+func TestValidateMoveLedgerRejectsNestedDestinationWithUnknownOwner(t *testing.T) {
 	t.Parallel()
 
-	manifest := Manifest{
-		Version:               1,
-		Stage:                 manifestStage,
-		DestinationVocabulary: closedDestinationVocabulary(),
-		ArchitectureExceptionNotes: map[string]string{
-			"edges": edgesArchitectureExceptionNote,
-		},
-		FutureDebt: []FutureDebt{edgesFutureDebtEntry()},
-		Packages: []PackageMapping{
-			{
-				PackagePath: "pkg/services/work/legacy",
-				Disposition: DispositionMove,
-				Destination: "mystery/internal/services/admission",
-			},
-		},
-	}
+	moves := moveLedgerFixture(PackageMapping{
+		PackagePath: "pkg/services/work/legacy",
+		Destination: "mystery/internal/services/admission",
+		Successor:   "pkg/services/mystery/internal/services/admission",
+	})
 
-	err := validateManifest(manifest)
+	err := validateUnfinishedMovesSchema(moves)
 	if err == nil {
-		t.Fatal("validateManifest() error = nil, want nested owner rejection")
+		t.Fatal("validateUnfinishedMovesSchema() error = nil, want nested owner rejection")
 	}
 	if !strings.Contains(err.Error(), "mystery") {
-		t.Fatalf("validateManifest() error = %v, want unknown owner", err)
+		t.Fatalf("validateUnfinishedMovesSchema() error = %v, want unknown owner", err)
 	}
 }
 
-func TestValidateManifestRequiresDeletionSuccessorAndCondition(t *testing.T) {
+// An open move has to say where the package goes. Without a successor the row
+// records intent that can never be closed out.
+func TestValidateMoveLedgerRequiresSuccessor(t *testing.T) {
 	t.Parallel()
 
-	base := Manifest{
-		Version:               1,
-		Stage:                 manifestStage,
-		DestinationVocabulary: closedDestinationVocabulary(),
-		ArchitectureExceptionNotes: map[string]string{
-			"edges": edgesArchitectureExceptionNote,
-		},
-		FutureDebt: []FutureDebt{edgesFutureDebtEntry()},
-	}
+	moves := moveLedgerFixture(PackageMapping{
+		PackagePath: "pkg/services/work/legacy_lineage",
+		Destination: "work/internal",
+	})
 
-	missingBoth := base
-	missingBoth.Packages = []PackageMapping{{
-		PackagePath: "pkg/legacy",
-		Disposition: DispositionDelete,
-		Destination: "work",
-	}}
-	if err := validateManifest(missingBoth); err == nil || !strings.Contains(err.Error(), "deletionSuccessor") {
-		t.Fatalf("missing deletion fields error = %v", err)
+	err := validateUnfinishedMovesSchema(moves)
+	if err == nil || !strings.Contains(err.Error(), "successor is required") {
+		t.Fatalf("missing successor error = %v, want successor requirement", err)
 	}
+}
 
-	missingCondition := base
-	missingCondition.Packages = []PackageMapping{{
-		PackagePath:       "pkg/legacy",
-		Disposition:       DispositionDelete,
-		Destination:       "work",
-		DeletionSuccessor: "pkg/services/work",
-	}}
-	if err := validateManifest(missingCondition); err == nil || !strings.Contains(err.Error(), "deletionCondition") {
-		t.Fatalf("missing deletionCondition error = %v", err)
+// The destination bucket and the successor path describe the same target, so a
+// successor that lands under a different owner is a contradiction.
+func TestValidateMoveLedgerRejectsSuccessorOutsideDestinationOwner(t *testing.T) {
+	t.Parallel()
+
+	moves := moveLedgerFixture(PackageMapping{
+		PackagePath: "pkg/services/work/legacy_lineage",
+		Destination: "work/internal",
+		Successor:   "pkg/services/recordings/internal",
+	})
+
+	err := validateUnfinishedMovesSchema(moves)
+	if err == nil || !strings.Contains(err.Error(), "must sit under pkg/services/work") {
+		t.Fatalf("successor owner mismatch error = %v, want owner-root requirement", err)
 	}
+}
 
-	validDelete := base
-	validDelete.Packages = []PackageMapping{{
-		PackagePath:       "pkg/legacy",
-		Disposition:       DispositionDelete,
-		Destination:       "work",
-		DeletionSuccessor: "pkg/services/work",
-		DeletionCondition: "delete when no importers remain",
-	}}
-	if err := validateManifest(validDelete); err != nil {
-		t.Fatalf("valid delete mapping error = %v", err)
+// The ledger's end state is zero rows and then no file at all, so an empty
+// ledger has to validate rather than trip the schema.
+func TestValidateMoveLedgerAcceptsEmptyLedger(t *testing.T) {
+	t.Parallel()
+
+	if err := validateUnfinishedMovesSchema(UnfinishedMoves{}); err != nil {
+		t.Fatalf("validateUnfinishedMovesSchema() on an empty ledger error = %v", err)
 	}
 }
 
@@ -215,7 +180,11 @@ func TestCommittedManifestDeclaresClosedVocabulary(t *testing.T) {
 	if err != nil {
 		t.Fatalf("loadManifest() error = %v", err)
 	}
-	if err := validateManifestAt(repoRoot, manifest); err != nil {
+	moves, err := loadUnfinishedMoves(filepath.Join(repoRoot, unfinishedMovesRelativePath))
+	if err != nil {
+		t.Fatalf("loadUnfinishedMoves() error = %v", err)
+	}
+	if err := validateManifestAt(repoRoot, manifest, moves); err != nil {
 		t.Fatalf("committed manifest validateManifestAt() error = %v", err)
 	}
 	assertExactStrings(t, "productOwners", manifest.DestinationVocabulary.ProductOwners, closedDestinationVocabulary().ProductOwners)
@@ -250,6 +219,32 @@ func assertExactStrings(t *testing.T, label string, got, want []string) {
 		if got[i] != want[i] {
 			t.Fatalf("%s[%d] = %q, want %q", label, i, got[i], want[i])
 		}
+	}
+}
+
+// committedMoveLedgerRows loads the committed open-move ledger keyed by package
+// path. Every row in it is an open move; a package that is settled where it
+// already lives carries no row at all.
+func committedMoveLedgerRows(t *testing.T, repoRoot string) map[string]PackageMapping {
+	t.Helper()
+	moves, err := loadUnfinishedMoves(filepath.Join(repoRoot, unfinishedMovesRelativePath))
+	if err != nil {
+		t.Fatalf("loadUnfinishedMoves() error = %v", err)
+	}
+	byPath := make(map[string]PackageMapping, len(moves.Moves))
+	for _, row := range moves.Moves {
+		byPath[row.PackagePath] = row
+	}
+	return byPath
+}
+
+// moveLedgerFixture builds a schema-valid open-move ledger around the supplied
+// rows so each test only has to state the row property under test.
+func moveLedgerFixture(rows ...PackageMapping) UnfinishedMoves {
+	return UnfinishedMoves{
+		Version: 1,
+		Stage:   unfinishedMovesStage,
+		Moves:   rows,
 	}
 }
 

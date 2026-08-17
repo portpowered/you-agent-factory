@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+
+	"github.com/portpowered/infinite-you/internal/ownershipinventory"
 )
 
 // listProductionPkgPackages returns every production Go package under pkg/ in
@@ -72,10 +74,15 @@ func listProductionPkgPackages(repoRoot string) ([]string, error) {
 //
 // Completeness is deliberately asserted in one direction only. A live package
 // with no row is valid, expected state: its destination is derivable from its
-// own path, so adding or deleting a package inside a service needs no manifest
+// own path, so adding or deleting a package inside a service needs no registry
 // edit.
 func validateRowsNamePackagesThatExist(repoRoot string, packages []PackageMapping) error {
-	live, err := listProductionPkgPackages(repoRoot)
+	// The open-move ledger is shared with the ownership-inventory checker, so
+	// "this package still exists" has to mean the same thing in both tools.
+	// ListProductionPackages counts any directory under pkg/ that holds a .go
+	// file, which keeps test-helper packages (…/clonetests, …/fixturetests)
+	// from reading as stale rows.
+	live, err := ownershipinventory.ListProductionPackages(repoRoot)
 	if err != nil {
 		return err
 	}
@@ -88,10 +95,10 @@ func validateRowsNamePackagesThatExist(repoRoot string, packages []PackageMappin
 	for i, row := range packages {
 		packagePath := row.PackagePath
 		if strings.Contains(packagePath, "\\") {
-			return fmt.Errorf("packages[%d] %q must use slash separators", i, packagePath)
+			return fmt.Errorf("moves[%d] %q must use slash separators", i, packagePath)
 		}
 		if !strings.HasPrefix(packagePath, "pkg/") {
-			return fmt.Errorf("packages[%d] %q must be repository-relative under pkg/", i, packagePath)
+			return fmt.Errorf("moves[%d] %q must be repository-relative under pkg/", i, packagePath)
 		}
 		if _, alive := liveSet[packagePath]; !alive {
 			stale = append(stale, packagePath)
@@ -100,7 +107,7 @@ func validateRowsNamePackagesThatExist(repoRoot string, packages []PackageMappin
 	if len(stale) > 0 {
 		slices.Sort(stale)
 		return fmt.Errorf(
-			"packages name %d package(s) that no longer exist in the live tree: %s\nLINT_VIOLATION_COUNT: %d",
+			"moves name %d package(s) that no longer exist in the live tree: %s\nLINT_VIOLATION_COUNT: %d",
 			len(stale),
 			strings.Join(stale, ", "),
 			len(stale),

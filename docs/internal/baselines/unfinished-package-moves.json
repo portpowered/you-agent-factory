@@ -1,0 +1,275 @@
+{
+  "version": 1,
+  "stage": "pss-unfinished-package-moves",
+  "purpose": "Packages under pkg/ that still carry unfinished Packaged Service Structure migration intent. This is the single consolidated ledger for open moves; it replaces the per-package rows that ownership-inventory.json and package-target-manifest.json used to each carry separately.",
+  "endState": "This ledger only shrinks. Landing a move deletes its row; it is never a place to register a package that already lives where it belongs. When moves is empty, delete this file together with its loaders and checks.",
+  "sortKey": "packagePath ascending byte order (path slash-separated)",
+  "fieldNotes": {
+    "destination": "Committed destination bucket, owner-relative: either <owner> or <owner>/internal or <owner>/internal/services/<subservice>. Validated against the closed destination vocabulary.",
+    "successor": "Repository-relative package path that replaces this package once the move lands. Always sits under pkg/services/<owner> for the destination owner.",
+    "deletionCondition": "The named cutover proof that closes this row, when the migration packet named one. Optional: three factory_sessions runtimeopening rows were only ever tracked by package-target-manifest.json, which recorded no condition for them."
+  },
+  "moves": [
+    {
+      "packagePath": "pkg/services/factory_definitions/clonetests",
+      "destination": "factory_definitions/internal",
+      "successor": "pkg/services/factory_definitions/internal",
+      "deletionCondition": "delete transitional top-level package after CLN-DEF-FOLD-TOPLEVEL cutover proof"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/definition",
+      "destination": "factory_definitions/internal",
+      "successor": "pkg/services/factory_definitions/internal",
+      "deletionCondition": "delete transitional top-level package after CLN-DEF-FOLD-TOPLEVEL cutover proof"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/internal/services/runtime_snapshot",
+      "destination": "factory_definitions/internal",
+      "successor": "pkg/services/factory_definitions/internal",
+      "deletionCondition": "delete transitional top-level package after CLN-DEF-FOLD-TOPLEVEL cutover proof"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/internal/services/runtime_snapshot/internal",
+      "destination": "factory_definitions/internal",
+      "successor": "pkg/services/factory_definitions/internal",
+      "deletionCondition": "delete transitional top-level package after CLN-DEF-FOLD-TOPLEVEL cutover proof"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/internal/services/runtime_snapshot/wire",
+      "destination": "factory_definitions/internal",
+      "successor": "pkg/services/factory_definitions/internal",
+      "deletionCondition": "delete transitional top-level package after CLN-DEF-FOLD-TOPLEVEL cutover proof"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/internal/testcomposition",
+      "destination": "factory_definitions/internal",
+      "successor": "pkg/services/factory_definitions/internal",
+      "deletionCondition": "delete transitional top-level package after CLN-DEF-FOLD-TOPLEVEL cutover proof"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/systeminitializationtests",
+      "destination": "factory_definitions/internal",
+      "successor": "pkg/services/factory_definitions/internal",
+      "deletionCondition": "delete transitional top-level package after CLN-DEF-FOLD-TOPLEVEL cutover proof"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/internal/factorystatus",
+      "destination": "factory_runtime/internal",
+      "successor": "pkg/services/factory_runtime/internal",
+      "deletionCondition": "delete transitional top-level package after CLN-RUN-FOLD-TOPLEVEL cutover proof"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/internal/legacysnapshot",
+      "destination": "factory_runtime/internal",
+      "successor": "pkg/services/factory_runtime/internal",
+      "deletionCondition": "delete transitional top-level package after CLN-RUN-FOLD-TOPLEVEL cutover proof"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/internal/orchestrators/petri",
+      "destination": "factory_runtime/internal/services/orchestration",
+      "successor": "pkg/services/factory_runtime/internal/services/orchestration",
+      "deletionCondition": "delete public package after IMP-RUN-orchestration private subservice cutover proof"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/internal/rootobservation",
+      "destination": "factory_runtime/internal",
+      "successor": "pkg/services/factory_runtime/internal",
+      "deletionCondition": "delete transitional top-level package after CLN-RUN-FOLD-TOPLEVEL cutover proof"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/internal/service",
+      "destination": "factory_runtime/internal",
+      "successor": "pkg/services/factory_runtime/internal",
+      "deletionCondition": "delete transitional top-level package after CLN-RUN-FOLD-TOPLEVEL cutover proof"
+    },
+    {
+      "packagePath": "pkg/services/factory_sessions/internal/runtimeopening",
+      "destination": "factory_sessions/internal/services/runtime_opening",
+      "successor": "pkg/services/factory_sessions/internal/services/runtime_opening"
+    },
+    {
+      "packagePath": "pkg/services/factory_sessions/internal/runtimeopening/invocation",
+      "destination": "factory_sessions/internal/services/runtime_opening",
+      "successor": "pkg/services/factory_sessions/internal/services/runtime_opening"
+    },
+    {
+      "packagePath": "pkg/services/factory_sessions/internal/runtimeopening/operatordefaults",
+      "destination": "factory_sessions/internal/services/runtime_opening",
+      "successor": "pkg/services/factory_sessions/internal/services/runtime_opening"
+    },
+    {
+      "packagePath": "pkg/services/operator_settings/internal",
+      "destination": "operator_settings/internal",
+      "successor": "pkg/services/operator_settings/internal",
+      "deletionCondition": "delete transitional top-level package after CLN-OPS-FOLD-TOPLEVEL cutover proof"
+    },
+    {
+      "packagePath": "pkg/services/operator_settings/internal/construct",
+      "destination": "operator_settings/internal",
+      "successor": "pkg/services/operator_settings/internal",
+      "deletionCondition": "delete transitional top-level package after CLN-OPS-FOLD-TOPLEVEL cutover proof"
+    },
+    {
+      "packagePath": "pkg/services/operator_settings/internal/identityinputinventory",
+      "destination": "operator_settings/internal",
+      "successor": "pkg/services/operator_settings/internal",
+      "deletionCondition": "delete transitional top-level package after CLN-OPS-FOLD-TOPLEVEL cutover proof"
+    },
+    {
+      "packagePath": "pkg/services/operator_settings/internal/service",
+      "destination": "operator_settings/internal",
+      "successor": "pkg/services/operator_settings/internal",
+      "deletionCondition": "delete transitional top-level package after CLN-OPS-FOLD-TOPLEVEL cutover proof"
+    },
+    {
+      "packagePath": "pkg/services/operator_settings/internal/testlink",
+      "destination": "operator_settings/internal",
+      "successor": "pkg/services/operator_settings/internal",
+      "deletionCondition": "delete transitional top-level package after CLN-OPS-FOLD-TOPLEVEL cutover proof"
+    },
+    {
+      "packagePath": "pkg/services/operator_settings/internal/testproviders",
+      "destination": "operator_settings/internal",
+      "successor": "pkg/services/operator_settings/internal",
+      "deletionCondition": "delete transitional top-level package after CLN-OPS-FOLD-TOPLEVEL cutover proof"
+    },
+    {
+      "packagePath": "pkg/services/providers/internal/services/execution/internal/adapters/agy/agypty",
+      "destination": "providers/internal/services/execution",
+      "successor": "pkg/services/providers",
+      "deletionCondition": "delete Workers provider packages after Providers root cutover proof (IMP-providers-*)"
+    },
+    {
+      "packagePath": "pkg/services/recordings/internal/artifacts",
+      "destination": "recordings/internal/services/artifacts_export",
+      "successor": "pkg/services/recordings/internal/services/artifacts_export",
+      "deletionCondition": "delete public package after IMP-REC-artifacts_export private subservice cutover proof"
+    },
+    {
+      "packagePath": "pkg/services/recordings/internal/events",
+      "destination": "recordings/internal/services/canonical_ledger",
+      "successor": "pkg/services/recordings/internal/services/canonical_ledger",
+      "deletionCondition": "delete public package after IMP-REC-canonical_ledger private subservice cutover proof"
+    },
+    {
+      "packagePath": "pkg/services/recordings/internal/events/kinds",
+      "destination": "recordings/internal/services/canonical_ledger",
+      "successor": "pkg/services/recordings/internal/services/canonical_ledger",
+      "deletionCondition": "delete public package after IMP-REC-canonical_ledger private subservice cutover proof"
+    },
+    {
+      "packagePath": "pkg/services/recordings/internal/events/snapshot",
+      "destination": "recordings/internal/services/canonical_ledger",
+      "successor": "pkg/services/recordings/internal/services/canonical_ledger",
+      "deletionCondition": "delete public package after IMP-REC-canonical_ledger private subservice cutover proof"
+    },
+    {
+      "packagePath": "pkg/services/recordings/internal/projections",
+      "destination": "recordings/internal/services/projection_query",
+      "successor": "pkg/services/recordings/internal/services/projection_query",
+      "deletionCondition": "delete public package after IMP-REC-projection_query private subservice cutover proof"
+    },
+    {
+      "packagePath": "pkg/services/recordings/internal/projections/dashboard",
+      "destination": "recordings/internal/services/projection_query",
+      "successor": "pkg/services/recordings/internal/services/projection_query",
+      "deletionCondition": "delete public package after IMP-REC-projection_query private subservice cutover proof"
+    },
+    {
+      "packagePath": "pkg/services/recordings/internal/projections/projectiontests",
+      "destination": "recordings/internal/services/projection_query",
+      "successor": "pkg/services/recordings/internal/services/projection_query",
+      "deletionCondition": "delete public package after IMP-REC-projection_query private subservice cutover proof"
+    },
+    {
+      "packagePath": "pkg/services/recordings/internal/projections/workstation",
+      "destination": "recordings/internal/services/projection_query",
+      "successor": "pkg/services/recordings/internal/services/projection_query",
+      "deletionCondition": "delete public package after IMP-REC-projection_query private subservice cutover proof"
+    },
+    {
+      "packagePath": "pkg/services/recordings/internal/replay",
+      "destination": "recordings/internal/services/replay",
+      "successor": "pkg/services/recordings/internal/services/replay",
+      "deletionCondition": "delete public package after IMP-REC-replay private subservice cutover proof"
+    },
+    {
+      "packagePath": "pkg/services/recordings/internal/replay/clocktests",
+      "destination": "recordings/internal/services/replay",
+      "successor": "pkg/services/recordings/internal/services/replay",
+      "deletionCondition": "delete public package after IMP-REC-replay private subservice cutover proof"
+    },
+    {
+      "packagePath": "pkg/services/recordings/internal/replay/configtests",
+      "destination": "recordings/internal/services/replay",
+      "successor": "pkg/services/recordings/internal/services/replay",
+      "deletionCondition": "delete public package after IMP-REC-replay private subservice cutover proof"
+    },
+    {
+      "packagePath": "pkg/services/recordings/internal/replay/fixturetests",
+      "destination": "recordings/internal/services/replay",
+      "successor": "pkg/services/recordings/internal/services/replay",
+      "deletionCondition": "delete public package after IMP-REC-replay private subservice cutover proof"
+    },
+    {
+      "packagePath": "pkg/services/work/internal/contenturl",
+      "destination": "work/internal",
+      "successor": "pkg/services/work/internal",
+      "deletionCondition": "delete transitional top-level package after CLN-WORK-FOLD-TOPLEVEL cutover proof"
+    },
+    {
+      "packagePath": "pkg/services/work/internal/invocationreturnpolicy",
+      "destination": "work/internal",
+      "successor": "pkg/services/work/internal",
+      "deletionCondition": "delete transitional top-level package after CLN-WORK-FOLD-TOPLEVEL cutover proof"
+    },
+    {
+      "packagePath": "pkg/services/work/internal/lineagegraph",
+      "destination": "work/internal",
+      "successor": "pkg/services/work/internal",
+      "deletionCondition": "delete transitional top-level package after CLN-WORK-FOLD-TOPLEVEL cutover proof"
+    },
+    {
+      "packagePath": "pkg/services/work/internal/proposalmaterialization",
+      "destination": "work/internal",
+      "successor": "pkg/services/work/internal",
+      "deletionCondition": "delete transitional top-level package after CLN-WORK-FOLD-TOPLEVEL cutover proof"
+    },
+    {
+      "packagePath": "pkg/services/work/internal/requestadmission",
+      "destination": "work/internal",
+      "successor": "pkg/services/work/internal",
+      "deletionCondition": "delete transitional top-level package after CLN-WORK-FOLD-TOPLEVEL cutover proof"
+    },
+    {
+      "packagePath": "pkg/services/work/internal/stateaccessquery",
+      "destination": "work/internal",
+      "successor": "pkg/services/work/internal",
+      "deletionCondition": "delete transitional top-level package after CLN-WORK-FOLD-TOPLEVEL cutover proof"
+    },
+    {
+      "packagePath": "pkg/services/workers/internal",
+      "destination": "workers/internal",
+      "successor": "pkg/services/workers/internal",
+      "deletionCondition": "delete transitional top-level package after CLN-WRK-FOLD-TOPLEVEL cutover proof"
+    },
+    {
+      "packagePath": "pkg/services/workers/internal/diagnostics",
+      "destination": "workers/internal",
+      "successor": "pkg/services/workers/internal",
+      "deletionCondition": "delete transitional top-level package after CLN-WRK-FOLD-TOPLEVEL cutover proof"
+    },
+    {
+      "packagePath": "pkg/services/workers/internal/interface",
+      "destination": "workers/internal",
+      "successor": "pkg/services/workers/internal",
+      "deletionCondition": "delete transitional top-level package after CLN-WRK-FOLD-TOPLEVEL cutover proof"
+    },
+    {
+      "packagePath": "pkg/services/workers/internal/service",
+      "destination": "workers/internal",
+      "successor": "pkg/services/workers/internal",
+      "deletionCondition": "delete transitional top-level package after CLN-WRK-FOLD-TOPLEVEL cutover proof"
+    }
+  ]
+}
