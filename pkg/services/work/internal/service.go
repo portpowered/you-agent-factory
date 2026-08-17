@@ -289,15 +289,11 @@ func (s *Service) SubscribeFactoryEventsForSession(ctx context.Context, sessionI
 		return nil, err
 	}
 	// TODO(P5B): source canonical event reads from Recordings and remove this
-	// compatibility capability assertion from Work.
-	legacyRuntime, ok := runtime.Factory.(interface {
-		SubscribeFactoryEvents(
-			context.Context,
-			*interfaces.FactoryEventReconnectCursor,
-			interfaces.FactoryEventReconnectScope,
-		) (*interfaces.FactoryEventStream, error)
-	})
-	if !ok {
+	// compatibility capability from Work. Until then Work reads the event
+	// boundary Factory Sessions declares on the live runtime rather than
+	// recovering one from the runtime value.
+	legacyRuntime := runtime.WorkAndEventIngress
+	if legacyRuntime == nil {
 		return nil, fmt.Errorf("Factory Runtime event subscription is required until Recordings migration")
 	}
 	stream, err := legacyRuntime.SubscribeFactoryEvents(ctx, reconnect, interfaces.FactoryEventReconnectScope{SessionID: sessionID})

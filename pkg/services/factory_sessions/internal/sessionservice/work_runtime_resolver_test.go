@@ -3,11 +3,13 @@ package service
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"sync"
 	"testing"
 
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
+	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responsestream"
@@ -276,9 +278,17 @@ func (f *submitWorkFactory) SubmitWorkRequest(_ context.Context, request work.Wo
 	return f.result, f.err
 }
 
+func (f *submitWorkFactory) SubscribeFactoryEvents(
+	context.Context,
+	*interfaces.FactoryEventReconnectCursor,
+	interfaces.FactoryEventReconnectScope,
+) (*interfaces.FactoryEventStream, error) {
+	return nil, fmt.Errorf("not implemented")
+}
+
 func TestWorkRuntimeAdapterSubmitWorkRequestDelegatesToCanonicalRuntime(t *testing.T) {
 	canonical := &submitWorkFactory{result: work.WorkRequestSubmitResult{RequestID: "request-1"}}
-	adapter := workRuntimeAdapter{runtime: canonical}
+	adapter := workRuntimeAdapter{runtime: canonical, ingress: canonical}
 
 	got, err := adapter.SubmitWorkRequest(context.Background(), work.WorkRequest{RequestID: "request-1"})
 	if err != nil {

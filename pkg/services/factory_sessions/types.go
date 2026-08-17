@@ -41,7 +41,14 @@ type LiveRuntime struct {
 	// Binding is the opaque activation capability published by Factory
 	// Runtime. Factory remains populated as a compatibility fallback while
 	// callers migrate off hosted runtime products.
-	Binding               factory.RuntimeBinding
+	Binding factory.RuntimeBinding
+	// WorkAndEventIngress is the migration-only Work-submission and event-
+	// subscription boundary published alongside the opaque runtime capability.
+	// Factory Sessions resolves it once when it binds Factory so peers read a
+	// declared capability instead of recovering one from the runtime value.
+	// It retires together with factory.APIFactory once Work admission owns
+	// submission and Recordings owns canonical event reads.
+	WorkAndEventIngress   factory.APIFactory
 	Clock                 factory.Clock
 	BackendScopeID        string
 	RuntimeConfig         interfaces.LoadedFactorySource

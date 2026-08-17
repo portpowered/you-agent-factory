@@ -22,15 +22,17 @@ func TestCurrentRuntimeSourceBindsThroughSessionRuntimeReader(t *testing.T) {
 	reader := sessionRuntimeReaderStub{
 		withRuntimeRead: func(fn func(*factorysessions.LiveRuntime) error) error {
 			runtimeReadCalls++
-			return fn(&factorysessions.LiveRuntime{
-				Factory: &sessionBoundRuntimeFactory{
-					stream: &factorydefinitions.FactoryEventStream{
-						Events: make(chan factorydefinitions.FactoryEvent),
-					},
-					observation: factoryruntime.Observation{
-						Progress: factoryruntime.ObservationProgress{TickCount: 5},
-					},
+			runtimeFactory := &sessionBoundRuntimeFactory{
+				stream: &factorydefinitions.FactoryEventStream{
+					Events: make(chan factorydefinitions.FactoryEvent),
 				},
+				observation: factoryruntime.Observation{
+					Progress: factoryruntime.ObservationProgress{TickCount: 5},
+				},
+			}
+			return fn(&factorysessions.LiveRuntime{
+				Factory:             runtimeFactory,
+				WorkAndEventIngress: runtimeFactory,
 			})
 		},
 	}
@@ -89,16 +91,18 @@ func TestActivateThroughSessionBoundSourceReachesStarted(t *testing.T) {
 	subscribeCalls := 0
 	reader := sessionRuntimeReaderStub{
 		withRuntimeRead: func(fn func(*factorysessions.LiveRuntime) error) error {
-			return fn(&factorysessions.LiveRuntime{
-				Factory: &sessionBoundRuntimeFactory{
-					subscribeHook: func() { subscribeCalls++ },
-					stream: &factorydefinitions.FactoryEventStream{
-						Events: make(chan factorydefinitions.FactoryEvent),
-					},
-					observation: factoryruntime.Observation{
-						Progress: factoryruntime.ObservationProgress{TickCount: 2},
-					},
+			runtimeFactory := &sessionBoundRuntimeFactory{
+				subscribeHook: func() { subscribeCalls++ },
+				stream: &factorydefinitions.FactoryEventStream{
+					Events: make(chan factorydefinitions.FactoryEvent),
 				},
+				observation: factoryruntime.Observation{
+					Progress: factoryruntime.ObservationProgress{TickCount: 2},
+				},
+			}
+			return fn(&factorysessions.LiveRuntime{
+				Factory:             runtimeFactory,
+				WorkAndEventIngress: runtimeFactory,
 			})
 		},
 	}

@@ -3,10 +3,12 @@ package internal
 import (
 	"context"
 	"fmt"
+	"strings"
 	"testing"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 )
 
@@ -37,7 +39,7 @@ func (legacyMoveFactory) ControlMoveWork(_ context.Context, request factory.Move
 
 func TestLiveSessionRuntimeAdapterFulfillsWorkRuntimePort(t *testing.T) {
 	factory := &legacyMoveFactory{}
-	adapter := liveSessionRuntimeAdapter{runtime: factory}
+	adapter := liveSessionRuntimeAdapter{runtime: factory, ingress: factory}
 	ctx := context.Background()
 
 	request := work.WorkRequest{RequestID: "request-legacy-adapter"}
@@ -54,5 +56,65 @@ func TestLiveSessionRuntimeAdapterFulfillsWorkRuntimePort(t *testing.T) {
 	}
 	if result.FromState != "draft" || result.ToState != "review" {
 		t.Fatalf("adapter move = %#v, want detached state facts from Runtime", result)
+	}
+}
+
+type liveRuntimeStub struct {
+	runtime *factorysessions.LiveRuntime
+}
+
+func (r liveRuntimeStub) Resolve(string) *factorysessions.LiveRuntime { return r.runtime }
+
+// TestLiveSessionRuntimeResolverUsesDeclaredWorkAndEventIngress proves Work
+// submits through the ingress Factory Sessions declared on the live runtime.
+func TestLiveSessionRuntimeResolverUsesDeclaredWorkAndEventIngress(t *testing.T) {
+	runtimeValue := &legacyMoveFactory{}
+	resolver := liveSessionRuntimeResolver{
+		sessions: liveRuntimeStub{runtime: &factorysessions.LiveRuntime{
+			Factory:             runtimeValue,
+			WorkAndEventIngress: runtimeValue,
+		}},
+	}
+
+	runtime, err := resolver.ResolveWorkRuntime("session-1")
+	if err != nil {
+		t.Fatalf("ResolveWorkRuntime: %v", err)
+	}
+	if _, err := runtime.SubmitWorkRequest(
+		context.Background(), work.WorkRequest{RequestID: "request-declared"},
+	); err != nil {
+		t.Fatalf("SubmitWorkRequest: %v", err)
+	}
+	if runtimeValue.submitted.RequestID != "request-declared" {
+		t.Fatalf("submitted = %q, want request-declared", runtimeValue.submitted.RequestID)
+	}
+}
+
+// TestLiveSessionRuntimeResolverDoesNotRecoverSubmitterFromRuntimeValue is the
+// guard that the retired Work projection fallback stays retired. The bound
+// runtime value here does serve SubmitWorkRequest, so the legacy type
+// assertion would have succeeded; Work must instead fail closed because
+// Factory Sessions declared no Work and event ingress for it.
+func TestLiveSessionRuntimeResolverDoesNotRecoverSubmitterFromRuntimeValue(t *testing.T) {
+	runtimeValue := &legacyMoveFactory{}
+	resolver := liveSessionRuntimeResolver{
+		sessions: liveRuntimeStub{runtime: &factorysessions.LiveRuntime{
+			Factory: runtimeValue,
+		}},
+	}
+
+	runtime, err := resolver.ResolveWorkRuntime("session-1")
+	if err != nil {
+		t.Fatalf("ResolveWorkRuntime: %v", err)
+	}
+	_, err = runtime.SubmitWorkRequest(context.Background(), work.WorkRequest{RequestID: "request-1"})
+	if err == nil || !strings.Contains(err.Error(), "Factory Runtime work submission is required") {
+		t.Fatalf("SubmitWorkRequest error = %v, want submission-required error", err)
+	}
+	if runtimeValue.submitted.RequestID != "" {
+		t.Fatalf(
+			"submitted = %q, want the runtime value untouched without a declared ingress",
+			runtimeValue.submitted.RequestID,
+		)
 	}
 }

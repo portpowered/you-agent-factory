@@ -197,6 +197,7 @@ func Replace(
 		},
 		Runtime: &factorysessions.LiveRuntime{
 			Factory: replacement.RuntimeService(), BackendScopeID: replacement.BackendScope(),
+			WorkAndEventIngress:   DeclaredWorkAndEventIngress(replacement.RuntimeService()),
 			Clock:                 state.Clock(),
 			RuntimeConfig:         loadedFactorySnapshotSource(replacement.LoadedRuntimeConfig()),
 			LiveChangeEvents:      NewLiveChangeEventLog(replacement.RecordingLedger()),
@@ -318,6 +319,7 @@ func Register(state *sessionruntime.Service, input Registration) string {
 		Handle: &SessionState{Instance: bundle, Handle: input.Handle, Spec: metadata.PreparedSpec},
 		Runtime: &factorysessions.LiveRuntime{
 			Factory: runtimeService, Binding: input.Binding, BackendScopeID: bundle.BackendScope(),
+			WorkAndEventIngress:   DeclaredWorkAndEventIngress(runtimeService),
 			Clock:                 state.Clock(),
 			RuntimeConfig:         loadedFactorySnapshotSource(bundle.LoadedRuntimeConfig()),
 			LiveChangeEvents:      NewLiveChangeEventLog(bundle.RecordingLedger()),
@@ -349,6 +351,44 @@ func ServiceForSession(session *livesession.LiveSession) factory.Service {
 		return nil
 	}
 	return ServiceForLiveRuntime(session.Runtime)
+}
+
+// WorkAndEventIngressForService isolates the migration-only Work-submission
+// and event-subscription boundary from the singular Factory Runtime Service
+// contract. It is the one place Factory Sessions resolves that capability, so
+// consumers hold the named factory.APIFactory contract instead of declaring
+// their own narrow interfaces and recovering it per call.
+func WorkAndEventIngressForService(runtime factory.Service) (factory.APIFactory, bool) {
+	ingress, ok := runtime.(factory.APIFactory)
+	if !ok || ingress == nil {
+		return nil, false
+	}
+	return ingress, true
+}
+
+// DeclaredWorkAndEventIngress resolves the ingress a producer publishes on
+// LiveRuntime.WorkAndEventIngress. It returns nil when the bound runtime does
+// not serve the migration-only capability, which peers report exactly as the
+// prior per-call recovery failure did.
+func DeclaredWorkAndEventIngress(runtime factory.Service) factory.APIFactory {
+	ingress, ok := WorkAndEventIngressForService(runtime)
+	if !ok {
+		return nil
+	}
+	return ingress
+}
+
+// WorkAndEventIngressForLiveRuntime returns the ingress declared when Factory
+// Sessions bound the runtime, falling back to the bound Runtime capability
+// while older openings that predate the declared field are still in flight.
+func WorkAndEventIngressForLiveRuntime(runtime *factorysessions.LiveRuntime) (factory.APIFactory, bool) {
+	if runtime == nil {
+		return nil, false
+	}
+	if runtime.WorkAndEventIngress != nil {
+		return runtime.WorkAndEventIngress, true
+	}
+	return WorkAndEventIngressForService(ServiceForLiveRuntime(runtime))
 }
 
 // BindingForSession returns the opaque binding published for a live session.
