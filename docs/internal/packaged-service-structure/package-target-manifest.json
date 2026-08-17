@@ -428,6 +428,9 @@
     "pkg/services/recordings/internal/services/canonical_ledger",
     "pkg/services/recordings/internal/services/canonical_ledger/internal/service",
     "pkg/services/recordings/internal/services/canonical_ledger/wire",
+    "pkg/services/recordings/internal/services/historical_query",
+    "pkg/services/recordings/internal/services/historical_query/internal/service",
+    "pkg/services/recordings/internal/services/historical_query/wire",
     "pkg/services/recordings/internal/services/projection_query",
     "pkg/services/recordings/internal/services/projection_query/internal/service",
     "pkg/services/recordings/internal/services/projection_query/wire",
@@ -557,7 +560,6 @@
     "pkg/transports/http/client",
     "pkg/transports/http/generated",
     "pkg/transports/http/servertests/factorysessionsse",
-    "pkg/transports/http/workstationprojection",
     "pkg/transports/mapping",
     "pkg/transports/mapping/composition",
     "pkg/transports/mapping/factoryconfig",
@@ -2508,6 +2510,21 @@
       "destination": "recordings/internal/services/canonical_ledger"
     },
     {
+      "packagePath": "pkg/services/recordings/internal/services/historical_query",
+      "disposition": "retain",
+      "destination": "recordings/internal/services/historical_query"
+    },
+    {
+      "packagePath": "pkg/services/recordings/internal/services/historical_query/internal/service",
+      "disposition": "retain",
+      "destination": "recordings/internal/services/historical_query"
+    },
+    {
+      "packagePath": "pkg/services/recordings/internal/services/historical_query/wire",
+      "disposition": "retain",
+      "destination": "recordings/internal/services/historical_query"
+    },
+    {
       "packagePath": "pkg/services/recordings/internal/services/projection_query",
       "disposition": "retain",
       "destination": "recordings/internal/services/projection_query"
@@ -3149,11 +3166,6 @@
     },
     {
       "packagePath": "pkg/transports/http/servertests/factorysessionsse",
-      "disposition": "retain",
-      "destination": "transports"
-    },
-    {
-      "packagePath": "pkg/transports/http/workstationprojection",
       "disposition": "retain",
       "destination": "transports"
     },

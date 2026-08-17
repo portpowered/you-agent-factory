@@ -67,6 +67,7 @@ var committedNestedSubservices = map[string][]string{
 	},
 	"recordings": {
 		"canonical_ledger",
+		"historical_query",
 		"projection_query",
 		"recording_lifecycle",
 		"replay",
