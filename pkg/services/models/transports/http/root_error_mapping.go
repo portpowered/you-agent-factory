@@ -35,9 +35,8 @@ func RootErrorResponse(err error, operation modelsHTTPOperation) (int, factoryap
 	}
 
 	if operation == modelsHTTPOperationInvoke {
-		var failure *models.InferenceFailure
-		if errors.As(err, &failure) && failure != nil {
-			return inferenceFailureErrorResponse(failure)
+		if status, response, ok := classifiedInferenceErrorResponse(err); ok {
+			return status, response, ok
 		}
 	}
 

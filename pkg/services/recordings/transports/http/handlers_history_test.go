@@ -595,8 +595,8 @@ func TestWriteLegacyError_MapsEverySessionFailureSentinel(t *testing.T) {
 			wantCode: "BAD_REQUEST", wantFamily: factoryapi.ErrorFamilyBadRequest,
 		},
 		{
-			name: "wrapped dispatch not found stays classified",
-			err:  fmt.Errorf("read durable dispatch: %w", factorysessions.ErrDispatchNotFound),
+			name:       "wrapped dispatch not found stays classified",
+			err:        fmt.Errorf("read durable dispatch: %w", factorysessions.ErrDispatchNotFound),
 			wantStatus: http.StatusNotFound, wantMessage: "dispatch not found",
 			wantCode: "NOT_FOUND", wantFamily: factoryapi.ErrorFamilyNotFound,
 		},
@@ -730,11 +730,12 @@ func historicalResultTestAdapter(worldState string, dispatches []recordings.Hist
 // decoded result body for a failed session: the failure detail, the partial
 // result flag, the primary result content, the requested mode, and the
 // include-artifacts echo. The prior suite asserted only three substrings, so
-// the failure and primary-result projections had no behavioral coverage.
-func TestGetFactorySessionResults_ProjectsFailureAndPrimaryResult(t *testing.T) {
-	t.Parallel()
+// readFailedHistoricalResult drives the historical results handler over a
+// failed-with-partial bracket and returns the decoded public projection, so
+// each assertion below states one claim about that projection.
+func readFailedHistoricalResult(t *testing.T, sessionID string) factoryapi.FactorySessionResult {
+	t.Helper()
 
-	sessionID := "dur-sess-history-http-failure-001"
 	includeArtifacts := true
 	mode := factoryapi.FactorySessionResultModePartial
 	worldState, err := json.Marshal(interfaces.FactoryWorldState{
@@ -766,6 +767,19 @@ func TestGetFactorySessionResults_ProjectsFailureAndPrimaryResult(t *testing.T) 
 	if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil {
 		t.Fatalf("decode body %q: %v", recorder.Body.String(), err)
 	}
+	return response
+}
+
+// TestGetFactorySessionResults_ProjectsFailedIdentityAndEchoesRequest pins the
+// identity half of the failed projection: the session identity and both status
+// fields come from the recorded bracket, while mode and include-artifacts echo
+// what the caller asked for.
+func TestGetFactorySessionResults_ProjectsFailedIdentityAndEchoesRequest(t *testing.T) {
+	t.Parallel()
+
+	sessionID := "dur-sess-history-http-failure-001"
+	response := readFailedHistoricalResult(t, sessionID)
+
 	if response.SessionId != sessionID ||
 		response.ResultStatus != factoryapi.FactorySessionResultStatus("FAILED_WITH_PARTIAL") {
 		t.Fatalf("identity = %q %q, want the failed-with-partial projection", response.SessionId, response.ResultStatus)
@@ -779,6 +793,16 @@ func TestGetFactorySessionResults_ProjectsFailureAndPrimaryResult(t *testing.T) 
 	if response.IncludeArtifacts == nil || !*response.IncludeArtifacts {
 		t.Fatalf("includeArtifacts = %v, want the requested true echo", response.IncludeArtifacts)
 	}
+}
+
+// TestGetFactorySessionResults_ProjectsFailureDetailAndPartialPayload pins the
+// payload half: the recorded failure reason and message survive to the public
+// shape, and a partial result is reported alongside its artifact ids.
+func TestGetFactorySessionResults_ProjectsFailureDetailAndPartialPayload(t *testing.T) {
+	t.Parallel()
+
+	response := readFailedHistoricalResult(t, "dur-sess-history-http-failure-002")
+
 	if response.FailureDetail == nil ||
 		string(response.FailureDetail.Reason) != string(workerexecution.WorkFailureTypeTimeout) ||
 		response.FailureDetail.Message != "timed out" {
