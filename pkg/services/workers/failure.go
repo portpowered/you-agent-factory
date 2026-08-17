@@ -12,42 +12,6 @@ import (
 	workerinferencefailure "github.com/portpowered/infinite-you/pkg/services/workers/internal/inferencefailure"
 )
 
-// InferenceFailureClass is the stable customer-facing inference failure category.
-type InferenceFailureClass string
-
-const (
-	InferenceFailureClassMissingModel         InferenceFailureClass = "missing_model"
-	InferenceFailureClassLoadingModel         InferenceFailureClass = "loading_model"
-	InferenceFailureClassUnsupportedOperation InferenceFailureClass = "unsupported_operation"
-	InferenceFailureClassTimeout              InferenceFailureClass = "timeout"
-	InferenceFailureClassRuntimeFailure       InferenceFailureClass = "runtime_failure"
-)
-
-// InferenceFailure is the detached, customer-safe outcome of Worker-owned
-// inference failure classification.
-type InferenceFailure struct {
-	Class      InferenceFailureClass
-	Message    string
-	ModelName  string
-	WorkerName string
-	Operation  string
-	Cause      error
-}
-
-func (e *InferenceFailure) Error() string {
-	if e == nil {
-		return ""
-	}
-	return e.Message
-}
-
-func (e *InferenceFailure) Unwrap() error {
-	if e == nil {
-		return nil
-	}
-	return e.Cause
-}
-
 // InferenceFailureContext identifies the inference target for failure messages.
 type InferenceFailureContext struct {
 	ModelName  string
@@ -55,20 +19,15 @@ type InferenceFailureContext struct {
 	Operation  string
 }
 
-// AsInferenceFailure reports whether err contains a classified inference failure.
-func AsInferenceFailure(err error) (*InferenceFailure, bool) {
-	var failure *InferenceFailure
-	if errors.As(err, &failure) && failure != nil {
-		return failure, true
-	}
-	return nil, false
-}
-
 // ClassifyInferenceFailure owns the conversion of model-readiness and Worker
-// execution failures into one detached customer-safe result.
-func ClassifyInferenceFailure(err error, ctx InferenceFailureContext) (*InferenceFailure, bool) {
-	if failure, ok := AsInferenceFailure(err); ok {
-		return failure, true
+// execution failures into one detached customer-safe result. Workers performs
+// the classification; the classified value is Models-owned vocabulary
+// (models.InferenceFailure) so outward adapters can consume it without
+// depending on Workers.
+func ClassifyInferenceFailure(err error, ctx InferenceFailureContext) (*models.InferenceFailure, bool) {
+	var classified *models.InferenceFailure
+	if errors.As(err, &classified) && classified != nil {
+		return classified, true
 	}
 	failure, ok := workerinferencefailure.ClassifyInferenceFailure(
 		adaptClassificationError(err),
@@ -84,7 +43,7 @@ func ClassifyInferenceFailure(err error, ctx InferenceFailureContext) (*Inferenc
 	return convertInferenceFailure(failure), true
 }
 
-func ClassifyInferenceWorkResultFailure(result WorkResult, ctx InferenceFailureContext) (*InferenceFailure, bool) {
+func ClassifyInferenceWorkResultFailure(result WorkResult, ctx InferenceFailureContext) (*models.InferenceFailure, bool) {
 	failure, ok := workerinferencefailure.ClassifyInferenceWorkResultFailure(
 		workerinferencefailure.WorkResult{
 			Outcome:         workerinferencefailure.WorkResultOutcome(result.Outcome),
@@ -112,12 +71,12 @@ func convertInferenceFailureMetadata(metadata *WorkFailureMetadata) *workerinfer
 	}
 }
 
-func convertInferenceFailure(failure *workerinferencefailure.InferenceFailure) *InferenceFailure {
+func convertInferenceFailure(failure *workerinferencefailure.InferenceFailure) *models.InferenceFailure {
 	if failure == nil {
 		return nil
 	}
-	return &InferenceFailure{
-		Class:      InferenceFailureClass(failure.Class),
+	return &models.InferenceFailure{
+		Class:      models.InferenceFailureClass(failure.Class),
 		Message:    failure.Message,
 		ModelName:  failure.ModelName,
 		WorkerName: failure.WorkerName,

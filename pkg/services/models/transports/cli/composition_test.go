@@ -9,7 +9,6 @@ import (
 	"testing"
 	"time"
 
-	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	modelinference "github.com/portpowered/infinite-you/pkg/services/models"
 	modelscli "github.com/portpowered/infinite-you/pkg/services/models/transports/cli"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/clihttp"
@@ -163,7 +162,7 @@ type compositionInvocation struct {
 
 func (inv compositionInvocation) InvokeModel(
 	context.Context,
-	factorysessions.InvocationTarget,
+	modelscli.InvocationTarget,
 	string,
 	modelinference.Request,
 ) (modelinference.Result, error) {
@@ -342,7 +341,7 @@ type factorySessionPresentationInvocation struct {
 
 func (inv factorySessionPresentationInvocation) InvokeModel(
 	context.Context,
-	factorysessions.InvocationTarget,
+	modelscli.InvocationTarget,
 	string,
 	modelinference.Request,
 ) (modelinference.Result, error) {

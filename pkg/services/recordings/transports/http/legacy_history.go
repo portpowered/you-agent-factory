@@ -8,7 +8,6 @@ import (
 	"strings"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
@@ -21,6 +20,14 @@ func (a *Adapter) hasLegacyHistory() bool {
 
 func (a *Adapter) hasLegacyLiveEvents() bool {
 	return a != nil && a.legacyLiveEvents != nil
+}
+
+// isLegacyReconnectCursorFailure reports whether a durable compatibility read
+// failed because its reconnect cursor no longer matches retained history.
+func isLegacyReconnectCursorFailure(err error) bool {
+	return factorysessionmapping.ClassifyDurableHistoryFailure(err) ==
+		factorysessionmapping.DurableHistoryFailureReconnectCursorNotFound ||
+		errors.Is(err, apisurface.ErrInvalidEventReconnectCursor)
 }
 
 func isExpectedLiveFallback(err error) bool {
@@ -61,7 +68,7 @@ func (a *Adapter) legacyResult(
 	sessionID string,
 	params factoryapi.GetFactorySessionResultsParams,
 ) (factoryapi.FactorySessionResult, error) {
-	request, err := factorysessionmapping.ResultRequestFromAPI(params)
+	request, err := factorysessionmapping.DurableResultInputFromAPI(params)
 	if err != nil {
 		return factoryapi.FactorySessionResult{}, err
 	}
@@ -79,7 +86,7 @@ func (a *Adapter) legacyEvents(
 	sessionID string,
 	params factoryapi.GetEventsBySessionIdParams,
 ) (*interfaces.FactoryEventStream, error) {
-	request, err := factorysessionmapping.EventReconnectRequestFromAPI(params)
+	request, err := factorysessionmapping.DurableEventReconnectInputFromAPI(params)
 	if err != nil {
 		return nil, err
 	}
@@ -97,7 +104,7 @@ func (a *Adapter) legacyProbe(
 	sessionID string,
 	params factoryapi.GetEventsBySessionIdParams,
 ) error {
-	request, err := factorysessionmapping.EventReconnectRequestFromAPI(params)
+	request, err := factorysessionmapping.DurableEventReconnectInputFromAPI(params)
 	if err != nil {
 		return err
 	}
@@ -141,14 +148,16 @@ func (a *Adapter) writeLegacyError(w http.ResponseWriter, err error, fallback st
 	var status int
 	message := "factory session not found"
 	code := string(factoryapi.ErrorResponseCodeNOTFOUND)
+	failure := factorysessionmapping.ClassifyDurableHistoryFailure(err)
 	switch {
-	case errors.Is(err, factorysessions.ErrDurableSessionNotFound), errors.Is(err, factorysessions.ErrSessionNotFound), errors.Is(err, apisurface.ErrFactorySessionNotFound):
+	case failure == factorysessionmapping.DurableHistoryFailureSessionNotFound,
+		errors.Is(err, apisurface.ErrFactorySessionNotFound):
 		status = http.StatusNotFound
-	case errors.Is(err, factorysessions.ErrDispatchNotFound):
+	case failure == factorysessionmapping.DurableHistoryFailureDispatchNotFound:
 		status, message = http.StatusNotFound, "dispatch not found"
-	case errors.Is(err, factorysessions.ErrArtifactNotFound):
+	case failure == factorysessionmapping.DurableHistoryFailureArtifactNotFound:
 		status, message = http.StatusNotFound, "factory session artifact not found"
-	case errors.Is(err, factorysessions.ErrReconnectCursorNotFound),
+	case failure == factorysessionmapping.DurableHistoryFailureReconnectCursorNotFound,
 		errors.Is(err, recordings.ErrReconnectCursorNotFound),
 		errors.Is(err, apisurface.ErrInvalidEventReconnectCursor):
 		status, message, code = http.StatusBadRequest, "invalid event reconnect cursor", string(factoryapi.ErrorResponseCodeBADREQUEST)
@@ -171,7 +180,7 @@ func (a *Adapter) probeLegacyLiveEventRecovery(
 		omitCursor := false
 		if errors.Is(err, apisurface.ErrFactorySessionNotFound) {
 			outcome = factoryapi.FactorySessionEventStreamRecoveryOutcomeUNKNOWNSESSION
-		} else if errors.Is(err, factorysessions.ErrReconnectCursorNotFound) || errors.Is(err, apisurface.ErrInvalidEventReconnectCursor) || errors.Is(err, recordings.ErrReconnectCursorNotFound) {
+		} else if isLegacyReconnectCursorFailure(err) || errors.Is(err, recordings.ErrReconnectCursorNotFound) {
 			outcome = factoryapi.FactorySessionEventStreamRecoveryOutcomeCURSORSTALE
 			omitCursor = true
 		}
@@ -213,7 +222,7 @@ func writeLegacyStreamHeaders(
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
 	w.Header().Set("X-Accel-Buffering", "no")
-	w.Header().Set(factorysessions.SessionEventStreamRetainedCountHeader, strconv.Itoa(len(stream.History)))
+	w.Header().Set(SessionEventStreamRetainedCountHeader, strconv.Itoa(len(stream.History)))
 	if value := strings.TrimSpace(stream.BackendScopeID); value != "" {
 		w.Header().Set("X-Factory-Session-Backend-Scope-Id", value)
 	}
@@ -284,9 +293,10 @@ func (a *Adapter) probeLegacyEventRecovery(
 	if err != nil {
 		outcome := factoryapi.FactorySessionEventStreamRecoveryOutcomeINTERNALERROR
 		omitCursor := false
-		if errors.Is(err, factorysessions.ErrDurableSessionNotFound) || errors.Is(err, factorysessions.ErrSessionNotFound) {
+		if factorysessionmapping.ClassifyDurableHistoryFailure(err) ==
+			factorysessionmapping.DurableHistoryFailureSessionNotFound {
 			outcome = factoryapi.FactorySessionEventStreamRecoveryOutcomeUNKNOWNSESSION
-		} else if errors.Is(err, factorysessions.ErrReconnectCursorNotFound) || errors.Is(err, apisurface.ErrInvalidEventReconnectCursor) {
+		} else if isLegacyReconnectCursorFailure(err) {
 			outcome = factoryapi.FactorySessionEventStreamRecoveryOutcomeCURSORSTALE
 			omitCursor = true
 		}

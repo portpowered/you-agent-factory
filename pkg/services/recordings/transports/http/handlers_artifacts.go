@@ -6,10 +6,14 @@ import (
 	"net/http"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
+
+// errHistoricalArtifactNotFound reports that no artifact in a detached
+// historical world state matched the requested id. It stays inside this
+// transport because both the read and its 404 mapping are owned here.
+var errHistoricalArtifactNotFound = errors.New("factory session artifact not found")
 
 // ListFactorySessionArtifacts decodes one session-scoped artifact list request,
 // invokes the accepted Recordings root, and encodes the public HTTP success
@@ -87,7 +91,7 @@ func (a *Adapter) GetFactorySessionArtifact(
 			a.writeLegacyError(w, err, "failed to get factory session artifact")
 			return
 		}
-		if errors.Is(err, factorysessions.ErrArtifactNotFound) {
+		if errors.Is(err, errHistoricalArtifactNotFound) {
 			a.writeError(w, http.StatusNotFound, "factory session artifact not found", "NOT_FOUND")
 			return
 		}
@@ -113,7 +117,7 @@ func (a *Adapter) factorySessionArtifact(
 	}
 	artifact, ok := findArtifactStateByID(artifacts, artifactID)
 	if !ok {
-		return factoryapi.FactorySessionArtifactDetail{}, factorysessions.ErrArtifactNotFound, false
+		return factoryapi.FactorySessionArtifactDetail{}, errHistoricalArtifactNotFound, false
 	}
 	return ArtifactDetailResponseToAPI(sessionID, artifact), nil, false
 }

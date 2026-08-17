@@ -12,6 +12,11 @@ import (
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 )
 
+// SessionEventStreamRetainedCountHeader re-exports the durable Factory Session
+// retained-event-count response header so compatibility transports can publish
+// the same header without naming the Factory Sessions service contract.
+const SessionEventStreamRetainedCountHeader = factorysessions.SessionEventStreamRetainedCountHeader
+
 // LiveAPI maps generated live-session contracts onto the canonical Factory
 // Session application gateway and registry.
 type LiveAPI struct {

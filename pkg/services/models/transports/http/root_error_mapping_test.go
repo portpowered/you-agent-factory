@@ -10,7 +10,6 @@ import (
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/services/models"
-	"github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"go.uber.org/zap"
 )
@@ -106,8 +105,8 @@ func assertRootErrorMapping(t *testing.T, tt rootErrorMappingCase) {
 func TestRootErrorResponse_MapsInferenceFailureForInvoke(t *testing.T) {
 	t.Parallel()
 
-	failure := &workers.InferenceFailure{
-		Class:   workers.InferenceFailureClassTimeout,
+	failure := &models.InferenceFailure{
+		Class:   models.InferenceFailureClassTimeout,
 		Message: "model inference timed out",
 	}
 	status, response, ok := RootErrorResponse(failure, modelsHTTPOperationInvoke)
@@ -119,6 +118,117 @@ func TestRootErrorResponse_MapsInferenceFailureForInvoke(t *testing.T) {
 		response.Code != factoryapi.ErrorResponseCode("MODEL_INFERENCE_TIMEOUT") ||
 		response.Message != failure.Error() {
 		t.Fatalf("RootErrorResponse(InferenceFailure) = %d %#v, want timeout inference failure", status, response)
+	}
+}
+
+// TestRootErrorResponse_MapsEveryInferenceFailureClassForInvoke pins the public
+// HTTP outcome of every classified inference failure the invoke operation can
+// surface. inference_failure_mapping.go routes five classes to five distinct
+// status/code pairs, so a table over the complete class set is what makes a
+// later change to where the failure type lives provably behavior preserving.
+func TestRootErrorResponse_MapsEveryInferenceFailureClassForInvoke(t *testing.T) {
+	t.Parallel()
+
+	for _, tt := range []struct {
+		name       string
+		class      models.InferenceFailureClass
+		wantStatus int
+		wantCode   string
+		wantFamily factoryapi.ErrorFamily
+	}{
+		{
+			name: "missing model", class: models.InferenceFailureClassMissingModel,
+			wantStatus: http.StatusNotFound, wantCode: "MODEL_NOT_AVAILABLE",
+			wantFamily: factoryapi.ErrorFamilyNotFound,
+		},
+		{
+			name: "loading model", class: models.InferenceFailureClassLoadingModel,
+			wantStatus: http.StatusConflict, wantCode: "MODEL_RUNTIME_LOADING",
+			wantFamily: factoryapi.ErrorFamilyConflict,
+		},
+		{
+			name: "unsupported operation", class: models.InferenceFailureClassUnsupportedOperation,
+			wantStatus: http.StatusBadRequest, wantCode: "BAD_REQUEST",
+			wantFamily: factoryapi.ErrorFamilyBadRequest,
+		},
+		{
+			name: "timeout", class: models.InferenceFailureClassTimeout,
+			wantStatus: http.StatusGatewayTimeout, wantCode: "MODEL_INFERENCE_TIMEOUT",
+			wantFamily: factoryapi.ErrorFamilyInternalServerError,
+		},
+		{
+			name: "runtime failure", class: models.InferenceFailureClassRuntimeFailure,
+			wantStatus: http.StatusInternalServerError, wantCode: "MODEL_INFERENCE_RUNTIME_FAILURE",
+			wantFamily: factoryapi.ErrorFamilyInternalServerError,
+		},
+		{
+			name: "unrecognized class falls back to runtime failure", class: models.InferenceFailureClass("not_a_known_class"),
+			wantStatus: http.StatusInternalServerError, wantCode: "MODEL_INFERENCE_RUNTIME_FAILURE",
+			wantFamily: factoryapi.ErrorFamilyInternalServerError,
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			failure := &models.InferenceFailure{
+				Class:      tt.class,
+				Message:    "inference failed for " + string(tt.class),
+				ModelName:  "voice",
+				WorkerName: "narrator",
+				Operation:  "TTS",
+			}
+			status, response, ok := RootErrorResponse(failure, modelsHTTPOperationInvoke)
+			if !ok {
+				t.Fatalf("RootErrorResponse(class %q) = not handled, want typed invoke failure", tt.class)
+			}
+			if status != tt.wantStatus ||
+				string(response.Code) != tt.wantCode ||
+				response.Family != tt.wantFamily ||
+				response.Message != failure.Error() {
+				t.Fatalf("RootErrorResponse(class %q) = %d %#v, want %d code=%s family=%s message=%q",
+					tt.class, status, response, tt.wantStatus, tt.wantCode, tt.wantFamily, failure.Error())
+			}
+		})
+	}
+}
+
+// TestRootErrorResponse_WrappedInferenceFailureStaysClassified pins that the
+// invoke mapping unwraps a classified failure carried inside another error,
+// which is how the runtime surfaces it through the Worker path.
+func TestRootErrorResponse_WrappedInferenceFailureStaysClassified(t *testing.T) {
+	t.Parallel()
+
+	failure := &models.InferenceFailure{
+		Class:   models.InferenceFailureClassMissingModel,
+		Message: "model voice is not installed",
+	}
+	wrapped := fmt.Errorf("invoke model: %w", failure)
+
+	status, response, ok := RootErrorResponse(wrapped, modelsHTTPOperationInvoke)
+	if !ok {
+		t.Fatal("RootErrorResponse(wrapped InferenceFailure) = not handled, want typed invoke failure")
+	}
+	if status != http.StatusNotFound ||
+		string(response.Code) != "MODEL_NOT_AVAILABLE" ||
+		response.Message != failure.Error() {
+		t.Fatalf("RootErrorResponse(wrapped InferenceFailure) = %d %#v, want 404 MODEL_NOT_AVAILABLE with the classified message", status, response)
+	}
+}
+
+// TestRootErrorResponse_IgnoresInferenceFailureOutsideInvoke pins that the
+// classified failure is an invoke-only mapping: the catalog and pull
+// operations must not adopt it.
+func TestRootErrorResponse_IgnoresInferenceFailureOutsideInvoke(t *testing.T) {
+	t.Parallel()
+
+	failure := &models.InferenceFailure{
+		Class:   models.InferenceFailureClassTimeout,
+		Message: "model inference timed out",
+	}
+	for _, operation := range []modelsHTTPOperation{modelsHTTPOperationCatalog, modelsHTTPOperationPull} {
+		if _, _, ok := RootErrorResponse(failure, operation); ok {
+			t.Fatalf("RootErrorResponse(InferenceFailure, %v) = handled, want invoke-only mapping", operation)
+		}
 	}
 }
 

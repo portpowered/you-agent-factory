@@ -8,7 +8,6 @@ import (
 	"strings"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	recordingshttp "github.com/portpowered/infinite-you/pkg/services/recordings/transports/http"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
@@ -109,9 +108,9 @@ type FactorySessionInspectionService interface {
 // standalone fixture opener. It is deliberately kept beside the Recordings
 // adapter so Factory Sessions does not retain a peer-facing history contract.
 type LegacyFactorySessionInspection interface {
-	QueryDispatches(context.Context, factorysessions.DispatchQueryRequest) (factorysessions.ListDispatchesResult, error)
-	ListArtifacts(context.Context, string) (factorysessions.ListArtifactsResult, error)
-	ReadEvents(context.Context, string, factorysessions.EventReconnectRequest) (factorysessions.EventReadResult, error)
+	QueryDispatches(context.Context, string) ([]factorysessionmapping.HistoricalDispatchInput, error)
+	ListArtifacts(context.Context, string) ([]factorysessionmapping.DurableArtifactFact, error)
+	ReadEvents(context.Context, string, factorysessionmapping.DurableEventReconnectInput) ([]json.RawMessage, error)
 }
 
 type legacyFactorySessionInspection struct {
@@ -157,9 +156,7 @@ func (adapter legacyFactorySessionInspection) QueryHistoricalRecording(
 	if err != nil {
 		return recordings.HistoricalRecordingQueryResult{}, err
 	}
-	dispatches, err := adapter.legacy.QueryDispatches(context.Background(), factorysessions.DispatchQueryRequest{
-		SessionID: sessionID,
-	})
+	dispatches, err := adapter.legacy.QueryDispatches(context.Background(), sessionID)
 	if err != nil {
 		return recordings.HistoricalRecordingQueryResult{}, err
 	}
@@ -173,7 +170,7 @@ func (adapter legacyFactorySessionInspection) QueryHistoricalRecording(
 		},
 		Events: events,
 	}
-	for _, dispatch := range dispatches.Dispatches {
+	for _, dispatch := range dispatches {
 		result.Dispatches = append(result.Dispatches, recordings.HistoricalDispatch{
 			ID: dispatch.ID, Status: recordings.FactoryDispatchStatus(dispatch.Status),
 			DispatchKind: recordings.FactoryDispatchKind(dispatch.DispatchKind),
@@ -216,8 +213,8 @@ func (adapter legacyFactorySessionInspection) ReconstructWorldState(
 	if err != nil {
 		return recordings.ReconstructWorldStateResult{}, err
 	}
-	states := make([]factorydefinitions.FactorySessionArtifactState, 0, len(artifacts.Artifacts))
-	for _, artifact := range artifacts.Artifacts {
+	states := make([]factorydefinitions.FactorySessionArtifactState, 0, len(artifacts))
+	for _, artifact := range artifacts {
 		states = append(states, factorydefinitions.FactorySessionArtifactState{
 			ID: artifact.ID, Kind: artifact.Kind, Visibility: artifact.Visibility,
 			Label: artifact.Label, ContentHash: artifact.ContentHash,
@@ -243,7 +240,7 @@ func (adapter legacyFactorySessionInspection) SubscribeFrom(
 	ctx context.Context,
 	request recordings.SubscribeRequest,
 ) (recordings.SubscribeResult, error) {
-	reconnect := factorysessions.EventReconnectRequest{}
+	reconnect := factorysessionmapping.DurableEventReconnectInput{}
 	if request.Cursor != nil {
 		sequence := int(request.Cursor.Sequence)
 		reconnect.AfterSequence = &sequence
@@ -276,7 +273,7 @@ func (adapter legacyFactorySessionInspection) canonicalEvents(
 	ctx context.Context,
 	sessionID string,
 ) ([]recordings.CanonicalEvent, error) {
-	result, err := adapter.legacy.ReadEvents(ctx, sessionID, factorysessions.EventReconnectRequest{})
+	result, err := adapter.legacy.ReadEvents(ctx, sessionID, factorysessionmapping.DurableEventReconnectInput{})
 	if err != nil {
 		return nil, err
 	}
@@ -285,10 +282,10 @@ func (adapter legacyFactorySessionInspection) canonicalEvents(
 
 func (legacyFactorySessionInspection) canonicalEventsFromResult(
 	sessionID string,
-	result factorysessions.EventReadResult,
+	events []json.RawMessage,
 ) ([]recordings.CanonicalEvent, error) {
-	events := make([]recordings.CanonicalEvent, 0, len(result.Events))
-	for _, raw := range result.Events {
+	canonical := make([]recordings.CanonicalEvent, 0, len(events))
+	for _, raw := range events {
 		var event factorydefinitions.FactoryEvent
 		if err := json.Unmarshal(raw, &event); err != nil {
 			return nil, fmt.Errorf("decode standalone Factory Event: %w", err)
@@ -302,7 +299,7 @@ func (legacyFactorySessionInspection) canonicalEventsFromResult(
 			eventSessionID = *event.Context.SessionID
 		}
 		sequence := recordings.CanonicalEventSequence(event.Context.Sequence)
-		events = append(events, recordings.CanonicalEvent{
+		canonical = append(canonical, recordings.CanonicalEvent{
 			ID: recordings.CanonicalEventID(event.Id), Sequence: sequence,
 			FactoryTick: event.Context.Tick,
 			Scope:       recordings.CanonicalEventScope{FactorySessionID: eventSessionID},
@@ -314,7 +311,7 @@ func (legacyFactorySessionInspection) canonicalEventsFromResult(
 			Payload: string(event.Payload), SourceContext: string(contextPayload),
 		})
 	}
-	return events, nil
+	return canonical, nil
 }
 
 // ErrServiceUnavailable keeps the compatibility envelope stable when the
@@ -367,7 +364,7 @@ func ListFactorySessionDispatches(
 	if err != nil {
 		return factoryapi.ListFactorySessionDispatchesResponse{}, err
 	}
-	dispatches := make([]factorysessions.DispatchSummary, 0, len(history.Dispatches))
+	dispatches := make([]factorysessionmapping.HistoricalDispatchInput, 0, len(history.Dispatches))
 	for _, dispatch := range history.Dispatches {
 		// HistoricalDispatch deliberately exposes no mutable workflow phase. An
 		// explicit phase filter therefore has the same empty-result behavior as
@@ -382,13 +379,11 @@ func ListFactorySessionDispatches(
 		if kind == "" {
 			kind = "PETRI_TRANSITION"
 		}
-		dispatches = append(dispatches, factorysessions.DispatchSummary{
-			ID: dispatch.ID, Status: factorysessions.DispatchStatus(dispatch.Status), DispatchKind: kind,
+		dispatches = append(dispatches, factorysessionmapping.HistoricalDispatchInput{
+			ID: dispatch.ID, Status: string(dispatch.Status), DispatchKind: kind,
 		})
 	}
-	return factorysessionmapping.ListDispatchesResponseToAPI(factorysessions.ListDispatchesResult{
-		SessionID: input.SessionID, Dispatches: dispatches,
-	}), nil
+	return factorysessionmapping.HistoricalDispatchListToAPI(input.SessionID, dispatches), nil
 }
 
 // ListFactorySessionArtifacts serves the compatibility tool from detached
@@ -503,7 +498,7 @@ func validateDispatchStatus(status string) error {
 	case "", "COMPLETED", "FAILED", "INTERRUPTED", "QUEUED", "RUNNING":
 		return nil
 	default:
-		return &factorysessions.ExecutionValidationError{Field: "status", Message: "invalid status"}
+		return factorysessionmapping.NewExecutionValidationError("status", "invalid status")
 	}
 }
 

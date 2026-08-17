@@ -162,7 +162,7 @@ func (rootModelInvocationOperation) ResolveModelInvocationFactoryDir(dir string)
 	return dir, nil
 }
 func (rootModelInvocationOperation) ExportModelInvocationArtifact(string, string) error { return nil }
-func (rootModelInvocationOperation) InvokeModel(context.Context, factorysessions.InvocationTarget, string, modelcontract.Request) (modelcontract.Result, error) {
+func (rootModelInvocationOperation) InvokeModel(context.Context, modelscli.InvocationTarget, string, modelcontract.Request) (modelcontract.Result, error) {
 	return modelcontract.Result{}, fmt.Errorf("model invocation test operation is not configured")
 }
 

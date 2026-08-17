@@ -8,7 +8,6 @@ import (
 	"testing"
 
 	managedruntime "github.com/portpowered/infinite-you/pkg/services/models"
-	"github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"go.uber.org/zap"
 )
@@ -223,19 +222,19 @@ func classifiedBootstrapInvokeFailure(
 	case factoryapi.ManagedRuntimeReadinessStateLOADING:
 		message = "model \"OMNIVOICE_Q4_K_M\" is still loading: wait for the managed runtime to finish loading and retry the invocation"
 	}
-	return &workers.InferenceFailure{
+	return &managedruntime.InferenceFailure{
 		Class: readinessFailureClass(readiness), Message: message,
 		ModelName: "OMNIVOICE_Q4_K_M", WorkerName: "voice-local", Operation: "TTS", Cause: readinessErr,
 	}
 }
 
-func readinessFailureClass(readiness factoryapi.ManagedRuntimeReadinessState) workers.InferenceFailureClass {
+func readinessFailureClass(readiness factoryapi.ManagedRuntimeReadinessState) managedruntime.InferenceFailureClass {
 	switch readiness {
 	case factoryapi.ManagedRuntimeReadinessStateMISSING:
-		return workers.InferenceFailureClassMissingModel
+		return managedruntime.InferenceFailureClassMissingModel
 	case factoryapi.ManagedRuntimeReadinessStateLOADING:
-		return workers.InferenceFailureClassLoadingModel
+		return managedruntime.InferenceFailureClassLoadingModel
 	default:
-		return workers.InferenceFailureClassRuntimeFailure
+		return managedruntime.InferenceFailureClassRuntimeFailure
 	}
 }

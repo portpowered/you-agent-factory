@@ -7,13 +7,17 @@ import (
 	"net/http"
 	"strings"
 
-	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	factorysessionmapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factorysession"
 )
 
 const durableHistorySessionPrefix = "dur-sess-"
+
+// errHistoricalDispatchNotFound reports that no dispatch in a detached
+// historical recording matched the requested id. It stays inside this
+// transport because both the read and its 404 mapping are owned here.
+var errHistoricalDispatchNotFound = errors.New("dispatch not found")
 
 func isDurableHistorySession(sessionID string) bool {
 	return strings.HasPrefix(strings.TrimSpace(sessionID), durableHistorySessionPrefix)
@@ -129,7 +133,7 @@ func (a *Adapter) GetFactorySessionDispatch(
 			a.writeLegacyError(w, err, "failed to get factory session dispatch")
 			return
 		}
-		if errors.Is(err, factorysessions.ErrDispatchNotFound) {
+		if errors.Is(err, errHistoricalDispatchNotFound) {
 			a.writeError(w, http.StatusNotFound, "factory session dispatch not found", "NOT_FOUND")
 			return
 		}
@@ -177,19 +181,14 @@ func (a *Adapter) factorySessionDispatches(
 		}
 		return factoryapi.ListFactorySessionDispatchesResponse{}, err, false
 	}
-	dispatches := make([]factorysessions.DispatchSummary, 0, len(history.Dispatches))
+	dispatches := make([]factorysessionmapping.HistoricalDispatchInput, 0, len(history.Dispatches))
 	for _, dispatch := range history.Dispatches {
 		if params.Status != nil && string(*params.Status) != string(dispatch.Status) {
 			continue
 		}
-		dispatches = append(dispatches, factorysessions.DispatchSummary{
-			ID: dispatch.ID, Status: factorysessions.DispatchStatus(dispatch.Status),
-			DispatchKind: historicalDispatchKind(dispatch),
-		})
+		dispatches = append(dispatches, historicalDispatchInput(dispatch))
 	}
-	return factorysessionmapping.ListDispatchesResponseToAPI(
-		factorysessions.ListDispatchesResult{SessionID: sessionID, Dispatches: dispatches},
-	), nil, false
+	return factorysessionmapping.HistoricalDispatchListToAPI(sessionID, dispatches), nil, false
 }
 
 func (a *Adapter) factorySessionDispatch(
@@ -213,15 +212,21 @@ func (a *Adapter) factorySessionDispatch(
 		if dispatch.ID != dispatchID {
 			continue
 		}
-		return factorysessionmapping.DispatchDetailResponseToAPI(factorysessions.DispatchDetail{
-			DispatchSummary: factorysessions.DispatchSummary{
-				ID: dispatch.ID, Status: factorysessions.DispatchStatus(dispatch.Status),
-				DispatchKind: historicalDispatchKind(dispatch),
-			},
-			SessionID: sessionID, OrchestratorKind: historicalOrchestratorKind(dispatch),
-		}), nil, false
+		return factorysessionmapping.HistoricalDispatchDetailToAPI(
+			sessionID, historicalDispatchInput(dispatch), historicalOrchestratorKind(dispatch),
+		), nil, false
 	}
-	return factoryapi.FactoryDispatch{}, factorysessions.ErrDispatchNotFound, false
+	return factoryapi.FactoryDispatch{}, errHistoricalDispatchNotFound, false
+}
+
+func historicalDispatchInput(
+	dispatch recordings.HistoricalDispatch,
+) factorysessionmapping.HistoricalDispatchInput {
+	return factorysessionmapping.HistoricalDispatchInput{
+		ID:           dispatch.ID,
+		Status:       string(dispatch.Status),
+		DispatchKind: historicalDispatchKind(dispatch),
+	}
 }
 
 func historicalDispatchKind(dispatch recordings.HistoricalDispatch) string {
@@ -249,15 +254,15 @@ func historicalResultResponse(
 			return factoryapi.FactorySessionResult{}, err
 		}
 	}
-	read := factorysessions.ResultReadResult{
+	read := factorysessionmapping.HistoricalResultInput{
 		SessionID:        sessionID,
-		ResultStatus:     factorysessions.ResultStatus(historicalResultStatus(result, state)),
-		SessionStatus:    factorysessions.LifecycleStatus(historicalSessionStatus(result, state)),
-		Mode:             factorysessions.ResultMode("final"),
+		ResultStatus:     historicalResultStatus(result, state),
+		SessionStatus:    historicalSessionStatus(result, state),
+		Mode:             "final",
 		IncludeArtifacts: params.IncludeArtifacts != nil && bool(*params.IncludeArtifacts),
 	}
 	if params.Mode != nil {
-		read.Mode = factorysessions.ResultMode(*params.Mode)
+		read.Mode = string(*params.Mode)
 	}
 	if state.SessionBracket != nil {
 		if len(state.SessionBracket.ResultSummary) > 0 {
@@ -269,13 +274,13 @@ func historicalResultResponse(
 		}
 		read.ArtifactIDs = append([]string(nil), state.SessionBracket.ArtifactIDs...)
 		if failure := state.SessionBracket.FailureDetail; failure != nil {
-			read.Failure = &factorysessions.FailureSummary{
+			read.Failure = &factorysessionmapping.HistoricalFailureInput{
 				Reason: string(failure.Reason), Message: failure.Message,
 				PartialResultAvailable: len(state.SessionBracket.ResultSummary) > 0,
 			}
 		}
 	}
-	return factorysessionmapping.ResultResponseToAPI(read), nil
+	return factorysessionmapping.HistoricalResultToAPI(read), nil
 }
 
 func historicalResultStatus(

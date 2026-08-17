@@ -5,7 +5,6 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/services/models"
 	"github.com/portpowered/infinite-you/pkg/services/work"
-	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"go.uber.org/zap"
 )
 
@@ -14,10 +13,20 @@ import (
 // packages.
 type ModelsRoot = models.Service
 
+// ModelInvoker is the one capability this transport needs from whichever
+// service executes a model operation: run one named model operation and return
+// its result. It is declared here rather than imported so the Models HTTP
+// transport depends only on Models' own request/result vocabulary; the
+// composition root supplies the Worker-backed implementation, which satisfies
+// this port structurally.
+type ModelInvoker interface {
+	InvokeModel(context.Context, string, models.Request) (models.Result, error)
+}
+
 // RootBinding binds the HTTP adapter to one injected Models root.
 type RootBinding struct {
 	Models  ModelsRoot
-	Invoker workers.ModelInvoker
+	Invoker ModelInvoker
 	Content work.ContentPreparation
 	Scope   models.RuntimeScopeRef
 }

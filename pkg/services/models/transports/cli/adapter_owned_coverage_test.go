@@ -10,7 +10,6 @@ import (
 	"testing"
 	"time"
 
-	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	modelinference "github.com/portpowered/infinite-you/pkg/services/models"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/clihttp"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
@@ -175,7 +174,7 @@ type ownedCoverageCompositionInvocation struct {
 
 func (inv ownedCoverageCompositionInvocation) InvokeModel(
 	context.Context,
-	factorysessions.InvocationTarget,
+	InvocationTarget,
 	string,
 	modelinference.Request,
 ) (modelinference.Result, error) {

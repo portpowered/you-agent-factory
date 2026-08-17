@@ -38,7 +38,6 @@ import (
 	factorysessionwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire"
 	factoryvisualization "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
 	factoryvisualizationwire "github.com/portpowered/infinite-you/pkg/services/factory_visualization/wire"
-	modelscli "github.com/portpowered/infinite-you/pkg/services/models/transports/cli"
 	modelshttp "github.com/portpowered/infinite-you/pkg/services/models/transports/http"
 	modelswire "github.com/portpowered/infinite-you/pkg/services/models/wire"
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
@@ -597,7 +596,9 @@ func provideMCPServerBuilder() mcpServerBuilder {
 	) (*mcpserver.Server, error) {
 		inspection := factorysessionmcp.RecordingsInspection(recordingsService)
 		if inspection == nil {
-			inspection = recordingmcp.NewLegacyFactorySessionInspection(execution)
+			if bridge := factorysessionmapping.NewDurableInspectionBridge(execution); bridge != nil {
+				inspection = recordingmcp.NewLegacyFactorySessionInspection(bridge)
+			}
 		}
 		return mcpserver.New(mcpserver.Options{
 			ToolOperation: mcpserver.ToolOperation(factorysessionmcp.BindToolOperation(
@@ -806,12 +807,6 @@ func provideRunInvocationOperation(
 	return invocation
 }
 
-func provideModelsCLIInvocationOperation(
-	invocation factorysessionwire.InvocationOperation,
-) modelscli.InvocationOperation {
-	return invocation
-}
-
 func provideRunSelectionFactory(
 	open runcli.Opener,
 	buildRunner runcli.RuntimeRunnerBuilder,
@@ -934,7 +929,10 @@ func newHTTPRuntimeHandler(
 	)
 	legacyDurable := factorysessionmapping.NewDurableAPI(opened.FactorySessions)
 	recordingsAdapter := recordingshttp.NewAdapterWithLegacyFallback(
-		opened.Recordings, legacyDurable, sessionRequests, opened.FactorySessions,
+		opened.Recordings,
+		factorysessionmapping.NewDurableHistoryBridge(legacyDurable),
+		factorysessionshttp.NewDurableRequestPreparation(sessionRequests),
+		opened.FactorySessions,
 	)
 	var workerSessionsHandler *workersessionshttp.Handler
 	if opened.WorkerSessions != nil {

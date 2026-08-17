@@ -8,7 +8,6 @@ import (
 
 	workerconfig "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/models"
-	"github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
@@ -57,7 +56,7 @@ func TestManagedRuntimePullMapping(t *testing.T) {
 }
 
 func TestInferenceFailureMapping(t *testing.T) {
-	failure := &workers.InferenceFailure{Class: workers.InferenceFailureClassLoadingModel, Message: "loading"}
+	failure := &models.InferenceFailure{Class: models.InferenceFailureClassLoadingModel, Message: "loading"}
 	if got := inferenceFailureHTTPStatus(failure); got != http.StatusConflict {
 		t.Fatalf("status = %d, want %d", got, http.StatusConflict)
 	}

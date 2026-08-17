@@ -115,14 +115,11 @@ func (testModelInvocationOperation) InvokeFactory(
 
 func (testModelInvocationOperation) InvokeModel(
 	ctx context.Context,
-	target factorysessions.InvocationTarget,
+	target InvocationTarget,
 	modelName string,
 	request modelinference.Request,
 ) (modelinference.Result, error) {
-	executionBaseDir := target.ExecutionBaseDir
-	if executionBaseDir == "" {
-		executionBaseDir, _ = os.Getwd()
-	}
+	executionBaseDir, _ := os.Getwd()
 	cfg := &testModelRuntimeSelections{
 		Dir:                  target.FactoryDir,
 		SystemConfigHomeDir:  target.HomeDir,

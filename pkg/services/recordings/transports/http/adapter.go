@@ -12,9 +12,9 @@ import (
 	"reflect"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	factorysessionmapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factorysession"
 )
 
 // Adapter maps Recordings service values at the outward HTTP boundary.
@@ -30,9 +30,9 @@ type Adapter struct {
 // Production runtime composition uses NewAdapter and never supplies this
 // bridge; the generated route shell still has one Recordings HTTP owner.
 type LegacyHistory interface {
-	GetDurableFactorySessionResult(context.Context, string, factorysessions.ResultRequest) (factoryapi.FactorySessionResult, error)
-	ReadDurableFactorySessionEvents(context.Context, string, factorysessions.EventReconnectRequest) (*interfaces.FactoryEventStream, error)
-	ProbeDurableFactorySessionEvents(context.Context, string, factorysessions.EventReconnectRequest) error
+	GetDurableFactorySessionResult(context.Context, string, factorysessionmapping.DurableResultInput) (factoryapi.FactorySessionResult, error)
+	ReadDurableFactorySessionEvents(context.Context, string, factorysessionmapping.DurableEventReconnectInput) (*interfaces.FactoryEventStream, error)
+	ProbeDurableFactorySessionEvents(context.Context, string, factorysessionmapping.DurableEventReconnectInput) error
 	ListDurableFactorySessionDispatches(context.Context, string, factoryapi.ListFactorySessionDispatchesParams) (factoryapi.ListFactorySessionDispatchesResponse, error)
 	GetDurableFactorySessionDispatch(context.Context, string, string) (factoryapi.FactoryDispatch, error)
 	ListDurableFactorySessionArtifacts(context.Context, string) (factoryapi.ListFactorySessionArtifactsResponse, error)
@@ -43,8 +43,8 @@ type LegacyHistory interface {
 // the old standalone durable binding. It is intentionally not part of the
 // Recordings Service contract and is only accepted by NewLegacyAdapter.
 type LegacyRequestPreparation interface {
-	PrepareResult(factorysessions.ResultRequest) (factorysessions.ResultRequest, error)
-	PrepareEventReconnect(factorysessions.EventReconnectRequest) (factorysessions.EventReconnectRequest, error)
+	PrepareResult(factorysessionmapping.DurableResultInput) (factorysessionmapping.DurableResultInput, error)
+	PrepareEventReconnect(factorysessionmapping.DurableEventReconnectInput) (factorysessionmapping.DurableEventReconnectInput, error)
 }
 
 // LegacyLiveEvents is the narrow compatibility seam for older focused HTTP

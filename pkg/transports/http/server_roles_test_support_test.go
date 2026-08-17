@@ -14,6 +14,7 @@ import (
 	workhttp "github.com/portpowered/infinite-you/pkg/services/work/transports/http"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
+	factorysessionmapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factorysession"
 	"go.uber.org/zap"
 )
 
@@ -73,7 +74,11 @@ func newServerFromRoles(
 		)
 	}
 	return NewServerWithRecordings(
-		recordingshttp.NewLegacyAdapterWithLive(durableResponseEvents, sessionRequests, workAPI),
+		recordingshttp.NewLegacyAdapterWithLive(
+			factorysessionmapping.NewDurableHistoryBridge(durableResponseEvents),
+			factorysessionshttp.NewDurableRequestPreparation(sessionRequests),
+			workAPI,
+		),
 		handler, workAdapter, modelsHTTP, providerSessionsHTTP, nil, logger,
 	)
 }

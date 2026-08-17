@@ -2,6 +2,7 @@ package http_test
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -12,6 +13,7 @@ import (
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factorysessionshttp "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/http"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	factorysessionmapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factorysession"
 	"go.uber.org/zap"
 )
 
@@ -368,4 +370,95 @@ func (fake *httpSessionsRootFake) GetArtifact(context.Context, string, string) (
 
 func (fake *httpSessionsRootFake) ReadEvents(context.Context, string, factorysessions.EventReconnectRequest) (factorysessions.EventReadResult, error) {
 	return factorysessions.EventReadResult{}, factorysessions.ErrDurableSessionNotFound
+}
+
+type recordingRequestPreparation struct {
+	factorysessionshttp.RequestPreparation
+	resultMode    string
+	afterEventID  string
+	afterSequence *int
+	resultErr     error
+	reconnectErr  error
+}
+
+func (p *recordingRequestPreparation) PrepareResult(
+	request factorysessions.ResultRequest,
+) (factorysessions.ResultRequest, error) {
+	p.resultMode = string(request.Mode)
+	if p.resultErr != nil {
+		return factorysessions.ResultRequest{}, p.resultErr
+	}
+	return factorysessions.ResultRequest{Mode: "final", IncludeArtifacts: !request.IncludeArtifacts}, nil
+}
+
+func (p *recordingRequestPreparation) PrepareEventReconnect(
+	request factorysessions.EventReconnectRequest,
+) (factorysessions.EventReconnectRequest, error) {
+	p.afterEventID = request.AfterEventID
+	p.afterSequence = request.AfterSequence
+	if p.reconnectErr != nil {
+		return factorysessions.EventReconnectRequest{}, p.reconnectErr
+	}
+	normalized := 9
+	return factorysessions.EventReconnectRequest{AfterEventID: "normalized", AfterSequence: &normalized}, nil
+}
+
+func TestDurableRequestPreparation_CarriesResultFieldsThroughTheServiceRole(t *testing.T) {
+	t.Parallel()
+
+	role := &recordingRequestPreparation{}
+	adapter := factorysessionshttp.NewDurableRequestPreparation(role)
+	prepared, err := adapter.PrepareResult(factorysessionmapping.DurableResultInput{
+		Mode: "partial", IncludeArtifacts: true,
+	})
+	if err != nil {
+		t.Fatalf("PrepareResult: %v", err)
+	}
+	if role.resultMode != "partial" {
+		t.Fatalf("service role received mode = %q, want partial", role.resultMode)
+	}
+	if prepared.Mode != "final" || prepared.IncludeArtifacts {
+		t.Fatalf("prepared = %#v, want normalized mode final and includeArtifacts false", prepared)
+	}
+}
+
+func TestDurableRequestPreparation_CarriesReconnectFieldsThroughTheServiceRole(t *testing.T) {
+	t.Parallel()
+
+	role := &recordingRequestPreparation{}
+	adapter := factorysessionshttp.NewDurableRequestPreparation(role)
+	requested := 4
+	prepared, err := adapter.PrepareEventReconnect(factorysessionmapping.DurableEventReconnectInput{
+		AfterEventID: "event-1", AfterSequence: &requested,
+	})
+	if err != nil {
+		t.Fatalf("PrepareEventReconnect: %v", err)
+	}
+	if role.afterEventID != "event-1" || role.afterSequence == nil || *role.afterSequence != 4 {
+		t.Fatalf("service role received %q/%v, want event-1/4", role.afterEventID, role.afterSequence)
+	}
+	if prepared.AfterEventID != "normalized" || prepared.AfterSequence == nil || *prepared.AfterSequence != 9 {
+		t.Fatalf("prepared = %#v, want normalized/9", prepared)
+	}
+}
+
+func TestDurableRequestPreparation_ReportsServiceFailuresAndAbsentRoles(t *testing.T) {
+	t.Parallel()
+
+	failure := errors.New("normalization rejected")
+	role := &recordingRequestPreparation{resultErr: failure, reconnectErr: failure}
+	adapter := factorysessionshttp.NewDurableRequestPreparation(role)
+	if _, err := adapter.PrepareResult(factorysessionmapping.DurableResultInput{}); !errors.Is(err, failure) {
+		t.Fatalf("PrepareResult error = %v, want %v", err, failure)
+	}
+	if _, err := adapter.PrepareEventReconnect(factorysessionmapping.DurableEventReconnectInput{}); !errors.Is(err, failure) {
+		t.Fatalf("PrepareEventReconnect error = %v, want %v", err, failure)
+	}
+	if factorysessionshttp.NewDurableRequestPreparation(nil) != nil {
+		t.Fatal("absent preparation role should not produce a bound adapter")
+	}
+	var typedNil *recordingRequestPreparation
+	if factorysessionshttp.NewDurableRequestPreparation(typedNil) != nil {
+		t.Fatal("typed-nil preparation role should not produce a bound adapter")
+	}
 }

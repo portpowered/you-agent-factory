@@ -16,25 +16,25 @@ func TestWorkersClassifyInferenceFailureOwnsReadinessAndExecutionPolicy(t *testi
 	tests := []struct {
 		name      string
 		err       error
-		wantClass workers.InferenceFailureClass
+		wantClass models.InferenceFailureClass
 		wantText  string
 	}{
 		{
 			name:      "missing managed runtime",
 			err:       &models.InvocationError{Identity: "model-a", ReadinessState: models.ReadinessStateMissing, Cause: models.ErrMissing},
-			wantClass: workers.InferenceFailureClassMissingModel, wantText: "pull or install",
+			wantClass: models.InferenceFailureClassMissingModel, wantText: "pull or install",
 		},
 		{
 			name: "loading managed runtime", err: fmt.Errorf("%w: in progress", models.ErrLoading),
-			wantClass: workers.InferenceFailureClassLoadingModel, wantText: "retry",
+			wantClass: models.InferenceFailureClassLoadingModel, wantText: "retry",
 		},
 		{
 			name: "unsupported operation", err: fmt.Errorf("%w: does not support operation", models.ErrUnsupportedOperation),
-			wantClass: workers.InferenceFailureClassUnsupportedOperation, wantText: "does not support operation",
+			wantClass: models.InferenceFailureClassUnsupportedOperation, wantText: "does not support operation",
 		},
 		{
 			name: "provider timeout", err: workers.NewProviderError(workers.WorkFailureTypeTimeout, "execution timeout", context.DeadlineExceeded),
-			wantClass: workers.InferenceFailureClassTimeout, wantText: "retry",
+			wantClass: models.InferenceFailureClassTimeout, wantText: "retry",
 		},
 	}
 	for _, tt := range tests {
@@ -65,7 +65,7 @@ func TestWorkersClassifyInferenceFailureSuppressesRawSubprocessDiagnostics(t *te
 	t.Parallel()
 	raw := strings.Repeat("subprocess transcript token ", 200) + "exited with code 1"
 	failure, ok := workers.ClassifyInferenceFailure(errors.New(raw), workers.InferenceFailureContext{ModelName: "model-a", Operation: "TTS"})
-	if !ok || failure.Class != workers.InferenceFailureClassRuntimeFailure {
+	if !ok || failure.Class != models.InferenceFailureClassRuntimeFailure {
 		t.Fatalf("failure = %#v, want runtime failure", failure)
 	}
 	if strings.Contains(failure.Message, "transcript token") {
@@ -79,7 +79,7 @@ func TestClassifyInferenceWorkResultFailureOwnsFailureMetadataPolicy(t *testing.
 		Outcome: workers.OutcomeFailed, Error: "execution timeout",
 		FailureMetadata: &workers.WorkFailureMetadata{Type: workers.WorkFailureTypeTimeout},
 	}, workers.InferenceFailureContext{ModelName: "model-a", Operation: "TTS"})
-	if !ok || failure.Class != workers.InferenceFailureClassTimeout {
+	if !ok || failure.Class != models.InferenceFailureClassTimeout {
 		t.Fatalf("failure = %#v, want timeout", failure)
 	}
 }

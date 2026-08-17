@@ -6,7 +6,6 @@ import (
 	"strings"
 
 	"github.com/portpowered/infinite-you/pkg/services/models"
-	"github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
@@ -36,8 +35,8 @@ func RootErrorResponse(err error, operation modelsHTTPOperation) (int, factoryap
 	}
 
 	if operation == modelsHTTPOperationInvoke {
-		if failure, ok := workers.AsInferenceFailure(err); ok {
-			return inferenceFailureErrorResponse(failure)
+		if status, response, ok := classifiedInferenceErrorResponse(err); ok {
+			return status, response, ok
 		}
 	}
 
@@ -70,7 +69,7 @@ func CatalogRootErrorResponse(err error) (int, factoryapi.ErrorResponse, bool) {
 	return RootErrorResponse(err, modelsHTTPOperationCatalog)
 }
 
-func inferenceFailureErrorResponse(failure *workers.InferenceFailure) (int, factoryapi.ErrorResponse, bool) {
+func inferenceFailureErrorResponse(failure *models.InferenceFailure) (int, factoryapi.ErrorResponse, bool) {
 	if failure == nil {
 		return 0, factoryapi.ErrorResponse{}, false
 	}

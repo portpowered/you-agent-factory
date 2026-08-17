@@ -12,8 +12,8 @@ import (
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	"github.com/portpowered/infinite-you/pkg/platform/metrics"
 	modelinference "github.com/portpowered/infinite-you/pkg/services/models"
+	operatorconfig "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
-	"github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 	"go.uber.org/zap"
@@ -168,14 +168,128 @@ func TestInvoke_UnreachableServerDoesNotFailWithTransportUnreachableMessage(t *t
 	}
 }
 
+// capturingModelInvocationOperation records exactly what the CLI hands to the
+// composition-root invocation operation, so the target field mapping can be
+// asserted directly instead of being inferred from downstream runtime effects.
+type capturingModelInvocationOperation struct {
+	factoryDir       string
+	homeDir          string
+	operatorDefaults operatorconfig.ResolvedDefaults
+	verbose          bool
+	modelName        string
+	request          modelinference.Request
+	result           modelinference.Result
+	err              error
+}
+
+func (c *capturingModelInvocationOperation) ResolveModelInvocationFactoryDir(explicit string) (string, error) {
+	return explicit, nil
+}
+
+func (c *capturingModelInvocationOperation) ExportModelInvocationArtifact(string, string) error {
+	return nil
+}
+
+func (c *capturingModelInvocationOperation) InvokeModel(
+	_ context.Context,
+	target InvocationTarget,
+	modelName string,
+	request modelinference.Request,
+) (modelinference.Result, error) {
+	c.factoryDir = target.FactoryDir
+	c.homeDir = target.HomeDir
+	c.operatorDefaults = target.OperatorDefaults
+	c.verbose = target.Verbose
+	c.modelName = modelName
+	c.request = request
+	return c.result, c.err
+}
+
+// TestRunBootstrapModelInvocation_CarriesResolvedInvocationInputs pins the four
+// invocation inputs the bootstrap CLI path actually populates on its way to the
+// composition-root operation, plus the model name and mapped request. This is
+// the observable contract of the boundary: a later change to how the target is
+// carried must keep every one of these values arriving unchanged.
+func TestRunBootstrapModelInvocation_CarriesResolvedInvocationInputs(t *testing.T) {
+	t.Parallel()
+
+	operation := &capturingModelInvocationOperation{
+		result: modelinference.Result{ModelName: "voice", Operation: "TTS", Worker: "narrator"},
+	}
+	defaults := operatorconfig.ResolvedDefaults{
+		WorkerModelProvider: "codex",
+		WorkerModel:         "gpt-5.6",
+	}
+	cfg := InvocationRequest{
+		FactoryDir:       filepath.Join("tmp", "factory"),
+		HomeDir:          filepath.Join("tmp", "home"),
+		OperatorDefaults: defaults,
+		Logger:           zap.NewNop(),
+		Verbose:          true,
+	}
+
+	result, err := runBootstrapModelInvocation(
+		context.Background(),
+		operation,
+		cfg,
+		"voice",
+		factoryapi.ModelInvocationRequest{
+			Operation: "TTS",
+			Content:   &factoryapi.WorkContent{mustGeneratedTextContentPart("speak this")},
+		},
+	)
+	if err != nil {
+		t.Fatalf("runBootstrapModelInvocation() error = %v, want success", err)
+	}
+	if result.ModelName != "voice" || result.Operation != "TTS" || result.Worker != "narrator" {
+		t.Fatalf("result = %#v, want the operation result returned unchanged", result)
+	}
+	if operation.factoryDir != cfg.FactoryDir || operation.homeDir != cfg.HomeDir {
+		t.Fatalf("target dirs = factory %q home %q, want %q and %q",
+			operation.factoryDir, operation.homeDir, cfg.FactoryDir, cfg.HomeDir)
+	}
+	if operation.operatorDefaults != defaults {
+		t.Fatalf("target operator defaults = %#v, want %#v", operation.operatorDefaults, defaults)
+	}
+	if !operation.verbose {
+		t.Fatal("target verbose = false, want the resolved verbose flag carried through")
+	}
+	if operation.modelName != "voice" {
+		t.Fatalf("model name = %q, want voice", operation.modelName)
+	}
+	if operation.request.Operation != "TTS" || len(operation.request.Content) != 1 {
+		t.Fatalf("mapped request = %#v, want the TTS request with one content part", operation.request)
+	}
+}
+
+// TestRunBootstrapModelInvocation_RejectsMissingInputs pins the two guard
+// branches that produce a CLI error before any invocation is attempted.
+func TestRunBootstrapModelInvocation_RejectsMissingInputs(t *testing.T) {
+	t.Parallel()
+
+	// The guard under test is specifically the nil-context branch, so an
+	// explicitly nil Context value is the input being pinned here.
+	var absentContext context.Context
+	if _, err := runBootstrapModelInvocation(
+		absentContext, &capturingModelInvocationOperation{}, InvocationRequest{}, "voice", factoryapi.ModelInvocationRequest{},
+	); err == nil || !strings.Contains(err.Error(), "context is required") {
+		t.Fatalf("runBootstrapModelInvocation(nil ctx) error = %v, want a context requirement", err)
+	}
+	if _, err := runBootstrapModelInvocation(
+		context.Background(), nil, InvocationRequest{}, "voice", factoryapi.ModelInvocationRequest{},
+	); err == nil || !strings.Contains(err.Error(), "models invoke operation is required") {
+		t.Fatalf("runBootstrapModelInvocation(nil operation) error = %v, want an operation requirement", err)
+	}
+}
+
 func TestMapBootstrapModelInvokeError_PreservesInferenceFailureCauseChain(t *testing.T) {
 	readinessErr := (modelinference.Runtime{
 		Identity:       "OMNIVOICE_Q4_K_M",
 		ReadinessState: modelinference.ReadinessStateLoading,
 		LifecycleState: modelinference.LifecycleStateLoading,
 	}).InvocationError()
-	failure := &workers.InferenceFailure{
-		Class: workers.InferenceFailureClassLoadingModel, Message: "managed runtime is loading",
+	failure := &modelinference.InferenceFailure{
+		Class: modelinference.InferenceFailureClassLoadingModel, Message: "managed runtime is loading",
 		ModelName: "OMNIVOICE_Q4_K_M", Operation: "TTS", Cause: readinessErr,
 	}
 
@@ -183,7 +297,8 @@ func TestMapBootstrapModelInvokeError_PreservesInferenceFailureCauseChain(t *tes
 	if !errors.Is(mapped, modelinference.ErrLoading) {
 		t.Fatalf("mapped error = %v, want ErrManagedRuntimeLoading in chain", mapped)
 	}
-	if failure, ok := workers.AsInferenceFailure(mapped); !ok || failure.Class != workers.InferenceFailureClassLoadingModel {
+	var classified *modelinference.InferenceFailure
+	if !errors.As(mapped, &classified) || classified.Class != modelinference.InferenceFailureClassLoadingModel {
 		t.Fatalf("mapped error = %T, want loading_model InferenceFailure", mapped)
 	}
 }

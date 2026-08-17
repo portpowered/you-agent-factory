@@ -2135,11 +2135,6 @@
     {
       "rule": "service-root-exported-function",
       "filePath": "pkg/services/workers/failure.go",
-      "target": "AsInferenceFailure"
-    },
-    {
-      "rule": "service-root-exported-function",
-      "filePath": "pkg/services/workers/failure.go",
       "target": "ClassifyInferenceFailure"
     },
     {

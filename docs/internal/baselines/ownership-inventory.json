@@ -1417,8 +1417,6 @@
       "fromOwner": "factory_sessions",
       "toOwner": "models",
       "class": "command",
-      "bidirectional": true,
-      "unresolved": true,
       "evidence": "pkg/services/factory_sessions/internal/roles -> pkg/services/models"
     },
     {
@@ -1449,8 +1447,6 @@
       "fromOwner": "factory_sessions",
       "toOwner": "recordings",
       "class": "event",
-      "bidirectional": true,
-      "unresolved": true,
       "evidence": "pkg/services/factory_sessions -> pkg/services/recordings"
     },
     {
@@ -1547,14 +1543,6 @@
     },
     {
       "fromOwner": "models",
-      "toOwner": "factory_sessions",
-      "class": "command",
-      "bidirectional": true,
-      "unresolved": true,
-      "evidence": "pkg/services/models/transports/cli -> pkg/services/factory_sessions"
-    },
-    {
-      "fromOwner": "models",
       "toOwner": "initializer",
       "class": "lifecycle",
       "evidence": "pkg/services/models/transports/cli -> pkg/initializer/process"
@@ -1584,14 +1572,6 @@
       "toOwner": "work",
       "class": "command",
       "evidence": "pkg/services/models/internal/local -> pkg/services/work"
-    },
-    {
-      "fromOwner": "models",
-      "toOwner": "workers",
-      "class": "command",
-      "bidirectional": true,
-      "unresolved": true,
-      "evidence": "pkg/services/models/transports/cli -> pkg/services/workers"
     },
     {
       "fromOwner": "operator_settings",
@@ -1680,14 +1660,6 @@
       "bidirectional": true,
       "unresolved": true,
       "evidence": "pkg/services/recordings/internal -> pkg/services/factory_runtime"
-    },
-    {
-      "fromOwner": "recordings",
-      "toOwner": "factory_sessions",
-      "class": "command",
-      "bidirectional": true,
-      "unresolved": true,
-      "evidence": "pkg/services/recordings/transports/http -> pkg/services/factory_sessions"
     },
     {
       "fromOwner": "recordings",
@@ -2165,8 +2137,6 @@
       "fromOwner": "workers",
       "toOwner": "models",
       "class": "command",
-      "bidirectional": true,
-      "unresolved": true,
       "evidence": "pkg/services/workers -> pkg/services/models"
     },
     {
