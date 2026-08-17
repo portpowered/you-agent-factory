@@ -555,12 +555,6 @@
     },
     {
       "rule": "backendsizecheck:ignore-function",
-      "target": "pkg/services/workers/internal/runtime_service.go#New",
-      "owner": "backend-maintainers",
-      "removalReason": "service-ownership migration preserves this orchestration flow; extract focused helpers and remove this exemption."
-    },
-    {
-      "rule": "backendsizecheck:ignore-function",
       "target": "pkg/services/workers/internal/services/runners/internal/services/agent/internal/service/runner_test.go#TestExecuteExactContinuationFailurePreservesClassificationWithoutFallback",
       "owner": "backend-maintainers",
       "removalReason": "pre-existing baseline debt recorded 2026-08-08; split this oversized code into focused units and remove this exemption."
@@ -1953,24 +1947,6 @@
     },
     {
       "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
-      "target": "pkg/services/workers/internal/progress_composition_test.go#TestNewRequiresCompositionSelectedWorkerEffects",
-      "owner": "backend-maintainers",
-      "removalReason": "pre-existing directive relocated by package restructure; refactor the code below the threshold and remove this exemption."
-    },
-    {
-      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
-      "target": "pkg/services/workers/internal/runtime_options.go#Service.BuildRuntimeExecutors",
-      "owner": "backend-maintainers",
-      "removalReason": "pre-existing directive relocated by package restructure; refactor the code below the threshold and remove this exemption."
-    },
-    {
-      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
-      "target": "pkg/services/workers/internal/runtime_service.go#New",
-      "owner": "backend-maintainers",
-      "removalReason": "pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption."
-    },
-    {
-      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
       "target": "pkg/services/workers/internal/services/runners/internal/services/agent/internal/service/live_provider_session_integration_test.go#TestLiveProviderSessionObservationEnablesExactWorkerSessionContinuation",
       "owner": "backend-maintainers",
       "removalReason": "pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption."
@@ -1989,27 +1965,9 @@
     },
     {
       "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
-      "target": "pkg/services/workers/internal/services/runtime_assembly/construction/service.go#Service.Build",
-      "owner": "backend-maintainers",
-      "removalReason": "service-ownership migration preserves this decision flow; simplify branches and remove this exemption."
-    },
-    {
-      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
       "target": "pkg/services/workers/internal/services/workstations/executor/agentrun/tools.go#PolicyToolExecutor.resolveBoundedPath",
       "owner": "backend-maintainers",
       "removalReason": "service-ownership migration preserves this decision flow; simplify branches and remove this exemption."
-    },
-    {
-      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
-      "target": "pkg/services/workers/internal/services/workstations/internal/service/service_logging_test.go#TestPoolLogsCancellationOutcomesIncludingNoOps",
-      "owner": "backend-maintainers",
-      "removalReason": "pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption."
-    },
-    {
-      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
-      "target": "pkg/services/workers/internal/services/workstations/internal/service/service_logging_test.go#TestPoolLogsStartAcceptedAndTerminalDispatchOutcomes",
-      "owner": "backend-maintainers",
-      "removalReason": "pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption."
     },
     {
       "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
@@ -2850,12 +2808,6 @@
       "target": "pkg/services/worker_sessions/publish_test.go#TestPublish_CommitsRemainingWorkerVocabulary",
       "owner": "backend-maintainers",
       "removalReason": "pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption."
-    },
-    {
-      "rule": "pkgmaintcheck:ignore-function-lines",
-      "target": "pkg/services/workers/internal/runtime_service.go#New",
-      "owner": "backend-maintainers",
-      "removalReason": "service-ownership migration preserves this orchestration flow; extract focused helpers and remove this exemption."
     },
     {
       "rule": "pkgmaintcheck:ignore-function-lines",

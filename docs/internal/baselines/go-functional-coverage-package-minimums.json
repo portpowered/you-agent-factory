@@ -2797,44 +2797,6 @@
       "minimum": 53.57
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runtime_assembly",
-      "exception": {
-        "kind": "measurement",
-        "justification": "The active functional coverage profile contains no measurable statements for this package.",
-        "owner": "backend-quality",
-        "deadline": "2027-07-15",
-        "removalGate": "The functional coverage profile reports at least one measurable statement for this package."
-      }
-    },
-    {
-      "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runtime_assembly/construction",
-      "exception": {
-        "kind": "migration",
-        "justification": "This is the legacy executable-binding builder. Its only non-test importers are internal/runtime_service.go, runtime_composition.go, runtime_options.go, and provider_registry_rebind.go, and internal.NewConfiguredRuntime now has zero production callers, so Build/BuildLogical and every option measure 0.0% in the functional profile.",
-        "owner": "backend-quality",
-        "deadline": "2027-06-30",
-        "removalGate": "WSE-09 deletes internal/services/runtime_assembly and the Workstation pool service after consumers are gone."
-      }
-    },
-    {
-      "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runtime_assembly/internal/service",
-      "minimum": 1.21
-    },
-    {
-      "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runtime_assembly/wire",
-      "minimum": 60.00
-    },
-    {
-      "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations",
-      "exception": {
-        "kind": "measurement",
-        "justification": "The active functional coverage profile contains no measurable statements for this package.",
-        "owner": "backend-quality",
-        "deadline": "2027-07-15",
-        "removalGate": "The functional coverage profile reports at least one measurable statement for this package."
-      }
-    },
-    {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/draftvalidation",
       "minimum": 0.00
     },
@@ -2865,10 +2827,6 @@
       "minimum": 0.00
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/internal/service",
-      "minimum": 55.93
-    },
-    {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/invocation",
       "minimum": 65.78
     },
@@ -2887,22 +2845,8 @@
       }
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/wire",
-      "minimum": 100.00
-    },
-    {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/worktree",
       "minimum": 48.96
-    },
-    {
-      "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/testhelpers",
-      "exception": {
-        "kind": "measurement",
-        "justification": "The active functional coverage profile contains no measurable statements for this package.",
-        "owner": "backend-quality",
-        "deadline": "2027-07-15",
-        "removalGate": "The functional coverage profile reports at least one measurable statement for this package."
-      }
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/wire",

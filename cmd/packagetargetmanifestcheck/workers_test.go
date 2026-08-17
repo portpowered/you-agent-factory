@@ -65,14 +65,6 @@ var workersCommittedOwnerPackageMappingCases = []committedOwnerPackageMappingCas
 		},
 	},
 	{
-		path: "pkg/services/workers/construction",
-		want: PackageMapping{
-			PackagePath: "pkg/services/workers/construction",
-			Disposition: DispositionMove,
-			Destination: "workers/internal/services/runtime_assembly",
-		},
-	},
-	{
 		path: "pkg/services/workers/prompting",
 		want: PackageMapping{
 			PackagePath: "pkg/services/workers/prompting",

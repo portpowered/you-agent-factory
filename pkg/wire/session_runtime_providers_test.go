@@ -29,7 +29,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
-	workerswire "github.com/portpowered/infinite-you/pkg/services/workers/wire"
 )
 
 func codexWireTestOutput(content string) []byte {
@@ -683,51 +682,6 @@ func TestWorkerProviderCommandRunnerHonorsInjectedAndDefaultOwnership(t *testing
 	}
 }
 
-func TestProvidersRebinderUsesTheSessionRunner(t *testing.T) {
-	runner := testutil.NewProviderCommandRunner()
-	adaptedRunner := workers.AdaptCommandRunner(runner)
-
-	providersService, err := provideProvidersService(serviceedges.Edges{})
-	if err != nil {
-		t.Fatalf("provideProvidersService() error = %v", err)
-	}
-	rebinder, err := provideProvidersRebinder(providersService, serviceedges.Edges{})
-	if err != nil {
-		t.Fatalf("provideProvidersRebinder() error = %v", err)
-	}
-	if _, err := rebinder(nil); err == nil {
-		t.Fatal("Providers rebinder(nil) error = nil")
-	}
-	if rebound, err := rebinder(adaptedRunner); err != nil || rebound == nil {
-		t.Fatalf("Providers rebinder(valid) = service %T, error %v", rebound, err)
-	}
-}
-
-func TestProviderInvocationEdgeSelectsTheSessionRunner(t *testing.T) {
-	runner := testutil.NewProviderCommandRunner()
-	adaptedRunner := workers.AdaptCommandRunner(runner)
-	providersService, err := provideProvidersService(serviceedges.Edges{})
-	if err != nil {
-		t.Fatalf("provideProvidersService() error = %v", err)
-	}
-
-	if _, gotRunner, err := providerInvocationProviderEdge(nil, nil, adaptedRunner); err != nil || gotRunner != adaptedRunner {
-		t.Fatalf("providerInvocationProviderEdge(no session runner) = runner %v, error %v", gotRunner, err)
-	}
-	if _, _, err := providerInvocationProviderEdge(nil, adaptedRunner, adaptedRunner); err == nil {
-		t.Fatal("providerInvocationProviderEdge(missing rebinder) error = nil")
-	}
-	rebound := func(runner workers.CommandRunner) (providers.Service, error) {
-		if runner != adaptedRunner {
-			return nil, errors.New("unexpected runner")
-		}
-		return providersService, nil
-	}
-	if reboundService, gotRunner, err := providerInvocationProviderEdge(rebound, adaptedRunner, nil); err != nil || reboundService != providersService || gotRunner != adaptedRunner {
-		t.Fatalf("providerInvocationProviderEdge(rebound) = service %T, runner %v, error %v", reboundService, gotRunner, err)
-	}
-}
-
 func TestWorkerInvocationWithProgressFactoryConstructsExecutor(t *testing.T) {
 	runner := testutil.NewProviderCommandRunner()
 	edges := serviceedges.Edges{}
@@ -767,20 +721,15 @@ func TestCanonicalWorkerCompositionBindingsRemainConstructible(t *testing.T) {
 		t.Fatalf("buildProviderRegistry() = registry %T, error %v", registry, err)
 	}
 
-	overrideFactory := provideProviderInvocationExecutorFactory(
-		nil, nil, nil, providersService, workers.AdaptCommandRunner(testutil.NewProviderCommandRunner()),
-	)
-	executor, err := overrideFactory(nil, nil)
+	allocator, err := provideAgyPTYAllocator(serviceedges.Edges{})
+	if err != nil {
+		t.Fatalf("provideAgyPTYAllocator() error = %v", err)
+	}
+	invocationFactory := provideWorkerInvocationFactory(providersService, serviceedges.Edges{})
+	executor, err := invocationFactory(workers.AdaptCommandRunner(testutil.NewProviderCommandRunner()), allocator)
 	if err != nil || executor == nil {
-		t.Fatalf("provider invocation override factory() = executor %T, error %v", executor, err)
+		t.Fatalf("worker invocation factory() = executor %T, error %v", executor, err)
 	}
-
-	noConductorFactory := provideProviderInvocationExecutorFactory(nil, nil, nil, nil, nil)
-	executor, err = noConductorFactory(nil, nil)
-	if err != nil || executor != nil {
-		t.Fatalf("provider invocation no-conductor factory() = executor %T, error %v", executor, err)
-	}
-
 }
 
 func TestRuntimeRunnerAndWorkerSessionFactoriesUseInjectedPorts(t *testing.T) {
@@ -806,7 +755,7 @@ func TestRuntimeRunnerAndWorkerSessionFactoriesUseInjectedPorts(t *testing.T) {
 	if err != nil {
 		t.Fatalf("provider sessions service = %v", err)
 	}
-	execution := workerswire.NewWorkstationPool(logging.NoopLogger{})
+	execution := wireTestWorkersService{}
 	factory := provideWorkerSessionsFactory(eventsService, providerSessions, logging.NoopLogger{}, nil)
 	service, err := factory(execution, platformclock.Real{})
 	if err != nil {
@@ -815,6 +764,17 @@ func TestRuntimeRunnerAndWorkerSessionFactoriesUseInjectedPorts(t *testing.T) {
 	if service == nil {
 		t.Fatal("worker sessions factory() returned nil service")
 	}
+}
+
+type wireTestWorkersService struct {
+	workers.ModelInvoker
+}
+
+func (wireTestWorkersService) Execute(
+	_ context.Context,
+	request workers.ExecuteRequest,
+) (workers.ExecuteResult, error) {
+	return workers.ExecuteResult{Correlation: request.Correlation, Outcome: workers.ExecutionOutcomeAccepted}, nil
 }
 
 // statelessDecisionEnvelopeService resolves the same Factory Definitions

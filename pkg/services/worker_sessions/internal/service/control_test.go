@@ -21,47 +21,38 @@ import (
 type controlledBoundary struct {
 	mu sync.Mutex
 
-	started       chan struct{}
-	startedOnce   sync.Once
-	admitted      chan struct{}
-	admittedOnce  sync.Once
-	request       workers.WorkstationDispatchRequest
-	publishCalls  int
-	cancelCalls   []workers.WorkstationDispatchCancelRequest
-	cancelCalled  chan struct{}
-	cancel        func(context.Context, workers.WorkstationDispatchCancelRequest) (workers.WorkstationDispatchCancelResult, error)
-	publishError  func(int, workers.WorkstationDispatchRequest) error
-	completed     chan struct{}
-	completedOnce sync.Once
-	returned      chan struct{}
-	returnedOnce  sync.Once
-	result        workers.WorkstationDispatchResult
-	resultErr     error
+	started            chan struct{}
+	startedOnce        sync.Once
+	admitted           chan struct{}
+	admittedOnce       sync.Once
+	request            workers.WorkstationDispatchRequest
+	publishCalls       int
+	publishError       func(int, workers.WorkstationDispatchRequest) error
+	completed          chan struct{}
+	completedOnce      sync.Once
+	returned           chan struct{}
+	returnedOnce       sync.Once
+	cancelled          []workers.WorkstationDispatchCancelRequest
+	cancelObserved     chan struct{}
+	cancelObservedOnce sync.Once
+	ignoreCancellation bool
+	result             workers.WorkstationDispatchResult
+	resultErr          error
 }
-
-var _ workers.WorkstationExecutionService = (*controlledBoundary)(nil)
 
 func newControlledBoundary() *controlledBoundary {
 	return &controlledBoundary{
-		started:      make(chan struct{}),
-		admitted:     make(chan struct{}),
-		cancelCalled: make(chan struct{}, 1),
+		started:        make(chan struct{}),
+		admitted:       make(chan struct{}),
+		cancelObserved: make(chan struct{}),
 	}
-}
-
-func (*controlledBoundary) StartWorkstationPool(context.Context, workers.WorkstationPoolStartRequest) (workers.WorkstationPoolStartResult, error) {
-	return workers.WorkstationPoolStartResult{Outcome: workers.WorkstationPoolLifecycleOutcomeStarted}, nil
-}
-
-func (*controlledBoundary) StopWorkstationPool(context.Context) (workers.WorkstationPoolStopResult, error) {
-	return workers.WorkstationPoolStopResult{Outcome: workers.WorkstationPoolLifecycleOutcomeStopped}, nil
 }
 
 func (b *controlledBoundary) DispatchWorkstation(ctx context.Context, request workers.WorkstationDispatchRequest) (workers.WorkstationDispatchResult, error) {
 	return b.DispatchWorkstationWithAdmission(ctx, request, nil)
 }
 
-func (b *controlledBoundary) DispatchWorkstationWithAdmission(_ context.Context, request workers.WorkstationDispatchRequest, admitted workers.WorkstationDispatchAdmissionFunc) (workers.WorkstationDispatchResult, error) {
+func (b *controlledBoundary) DispatchWorkstationWithAdmission(ctx context.Context, request workers.WorkstationDispatchRequest, admitted workers.WorkstationDispatchAdmissionFunc) (workers.WorkstationDispatchResult, error) {
 	completed, err := b.prepare(request)
 	if err != nil {
 		return workers.WorkstationDispatchResult{}, err
@@ -70,15 +61,52 @@ func (b *controlledBoundary) DispatchWorkstationWithAdmission(_ context.Context,
 		admitted()
 		b.admittedOnce.Do(func() { close(b.admitted) })
 	}
-	return b.await(completed)
+	return b.await(ctx, completed, request.Execution.Dispatch.DispatchID)
 }
 
-func (b *controlledBoundary) await(completed chan struct{}) (workers.WorkstationDispatchResult, error) {
+func (b *controlledBoundary) await(ctx context.Context, completed chan struct{}, dispatchID string) (workers.WorkstationDispatchResult, error) {
 	defer b.returnedOnce.Do(func() { close(b.returned) })
-	<-completed
+	select {
+	case <-completed:
+	case <-ctx.Done():
+		b.recordCancellation(dispatchID)
+		b.mu.Lock()
+		ignoreCancellation := b.ignoreCancellation
+		b.mu.Unlock()
+		if ignoreCancellation {
+			<-completed
+			b.mu.Lock()
+			defer b.mu.Unlock()
+			return b.result, b.resultErr
+		}
+		return canceledDispatchResult(dispatchID), ctx.Err()
+	}
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	return b.result, b.resultErr
+}
+
+func (b *controlledBoundary) recordCancellation(dispatchID string) {
+	b.mu.Lock()
+	b.cancelled = append(b.cancelled, workers.WorkstationDispatchCancelRequest{DispatchID: dispatchID})
+	b.mu.Unlock()
+	b.cancelObservedOnce.Do(func() { close(b.cancelObserved) })
+}
+
+func (b *controlledBoundary) cancellations() []workers.WorkstationDispatchCancelRequest {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return append([]workers.WorkstationDispatchCancelRequest(nil), b.cancelled...)
+}
+
+func (b *controlledBoundary) cancellationObserved() <-chan struct{} {
+	return b.cancelObserved
+}
+
+func (b *controlledBoundary) setIgnoreCancellation(ignore bool) {
+	b.mu.Lock()
+	b.ignoreCancellation = ignore
+	b.mu.Unlock()
 }
 
 func (b *controlledBoundary) prepare(request workers.WorkstationDispatchRequest) (chan struct{}, error) {
@@ -102,18 +130,6 @@ func (b *controlledBoundary) prepare(request workers.WorkstationDispatchRequest)
 	return completed, nil
 }
 
-func (b *controlledBoundary) CancelWorkstationDispatch(ctx context.Context, request workers.WorkstationDispatchCancelRequest) (workers.WorkstationDispatchCancelResult, error) {
-	b.mu.Lock()
-	b.cancelCalls = append(b.cancelCalls, request)
-	cancel := b.cancel
-	b.mu.Unlock()
-	b.cancelCalled <- struct{}{}
-	if cancel != nil {
-		return cancel(ctx, request)
-	}
-	return workers.WorkstationDispatchCancelResult{DispatchID: request.DispatchID, Outcome: workers.WorkstationDispatchCancelOutcomeCanceled}, nil
-}
-
 func (b *controlledBoundary) complete(result workers.WorkstationDispatchResult, err error) {
 	b.mu.Lock()
 	completed := b.completed
@@ -126,12 +142,6 @@ func (b *controlledBoundary) complete(result workers.WorkstationDispatchResult, 
 	if returned := b.returned; returned != nil {
 		<-returned
 	}
-}
-
-func (b *controlledBoundary) cancellations() []workers.WorkstationDispatchCancelRequest {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	return append([]workers.WorkstationDispatchCancelRequest(nil), b.cancelCalls...)
 }
 
 func (b *controlledBoundary) publishCount() int {
@@ -149,19 +159,13 @@ func (b *controlledBoundary) currentRequest() workers.WorkstationDispatchRequest
 	}
 }
 
-func (b *controlledBoundary) setCancel(fn func(context.Context, workers.WorkstationDispatchCancelRequest) (workers.WorkstationDispatchCancelResult, error)) {
-	b.mu.Lock()
-	b.cancel = fn
-	b.mu.Unlock()
-}
-
 func (b *controlledBoundary) setPublishError(fn func(int, workers.WorkstationDispatchRequest) error) {
 	b.mu.Lock()
 	b.publishError = fn
 	b.mu.Unlock()
 }
 
-func newControlledRegistry(t *testing.T, execution workers.WorkstationExecutionService) workersessions.Service {
+func newControlledRegistry(t *testing.T, execution any) workersessions.Service {
 	t.Helper()
 	registry, err := newService(execution, newEventsAppender(), logging.NoopLogger{})
 	if err != nil {
@@ -204,23 +208,13 @@ func startControlledSession(t *testing.T, registry workersessions.Service, bound
 	return result
 }
 
-func TestCancel_UsesExactBoundaryDispatchDespiteCanceledCallerContextAndIsIdempotent(t *testing.T) {
+func TestCancel_UsesServerOwnedAttemptContextDespiteCanceledCallerContextAndIsIdempotent(t *testing.T) {
 	boundary := newControlledBoundary()
 	registry := newControlledRegistry(t, boundary)
 	started := startControlledSession(t, registry, boundary, "worker-1", "dispatch-1")
 
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	boundary.setCancel(func(received context.Context, request workers.WorkstationDispatchCancelRequest) (workers.WorkstationDispatchCancelResult, error) {
-		if received.Err() != nil {
-			t.Fatalf("boundary Cancel context = %v, want detached context", received.Err())
-		}
-		if request.DispatchID != "dispatch-1" {
-			t.Fatalf("boundary Cancel dispatch = %q, want dispatch-1", request.DispatchID)
-		}
-		boundary.complete(canceledDispatchResult(request.DispatchID), workers.ErrWorkstationDispatchCanceled)
-		return workers.WorkstationDispatchCancelResult{DispatchID: request.DispatchID, Outcome: workers.WorkstationDispatchCancelOutcomeCanceled}, nil
-	})
 
 	result, err := registry.Cancel(ctx, workersessions.ControlRequest{ID: "worker-1"})
 	if err != nil || result.Outcome != workersessions.ControlOutcomeApplied || result.DispatchID != "dispatch-1" {
@@ -237,141 +231,9 @@ func TestCancel_UsesExactBoundaryDispatchDespiteCanceledCallerContextAndIsIdempo
 	if err != nil || repeated.Outcome != workersessions.ControlOutcomeNoop {
 		t.Fatalf("repeated Cancel() = %#v, %v, want NOOP", repeated, err)
 	}
-	if calls := boundary.cancellations(); len(calls) != 1 || calls[0].DispatchID != "dispatch-1" {
-		t.Fatalf("boundary cancellation calls = %#v, want one exact call", calls)
-	}
 }
 
-func TestTerminate_WaitsForAcceptedDispatchCallbackBeforeReportingTerminal(t *testing.T) {
-	boundary := newControlledBoundary()
-	registry := newControlledRegistry(t, boundary)
-	started := startControlledSession(t, registry, boundary, "worker-1", "dispatch-1")
-
-	terminated := make(chan workersessions.ControlResult, 1)
-	go func() {
-		result, err := registry.Terminate(context.Background(), workersessions.ControlRequest{ID: "worker-1"})
-		if err != nil {
-			t.Errorf("Terminate() error = %v", err)
-		}
-		terminated <- result
-	}()
-	<-boundary.cancelCalled
-	select {
-	case result := <-terminated:
-		t.Fatalf("Terminate() returned before callback joined: %#v", result)
-	default:
-	}
-
-	boundary.complete(canceledDispatchResult("dispatch-1"), workers.ErrWorkstationDispatchCanceled)
-	result := <-terminated
-	if result.Outcome != workersessions.ControlOutcomeApplied || result.Session.State != workersessions.StateTerminated {
-		t.Fatalf("Terminate() = %#v, want applied TERMINATED after callback", result)
-	}
-	if got := <-started; got.Session.State != workersessions.StateTerminated {
-		t.Fatalf("Start() session after terminate = %#v, want TERMINATED", got.Session)
-	}
-}
-
-func TestCancel_WaitsForTheAuthoritativeTerminalCallback(t *testing.T) {
-	boundary := newControlledBoundary()
-	registry := newControlledRegistry(t, boundary)
-	started := startControlledSession(t, registry, boundary, "worker-1", "dispatch-1")
-	boundary.setCancel(func(context.Context, workers.WorkstationDispatchCancelRequest) (workers.WorkstationDispatchCancelResult, error) {
-		return workers.WorkstationDispatchCancelResult{
-			DispatchID: "dispatch-1", Outcome: workers.WorkstationDispatchCancelOutcomeCanceled,
-		}, nil
-	})
-
-	canceled := make(chan workersessions.ControlResult, 1)
-	cancelErr := make(chan error, 1)
-	go func() {
-		result, callErr := registry.Cancel(context.Background(), workersessions.ControlRequest{ID: "worker-1"})
-		canceled <- result
-		cancelErr <- callErr
-	}()
-	<-boundary.cancelCalled
-	select {
-	case result := <-canceled:
-		t.Fatalf("Cancel() returned before its callback: %#v", result)
-	default:
-	}
-
-	boundary.complete(canceledDispatchResult("dispatch-1"), workers.ErrWorkstationDispatchCanceled)
-	result := <-canceled
-	if callErr := <-cancelErr; callErr != nil || result.Outcome != workersessions.ControlOutcomeApplied || result.Session.State != workersessions.StateCanceled {
-		t.Fatalf("Cancel() = %#v, %v, want joined CANCELED APPLIED", result, callErr)
-	}
-
-	terminated, err := registry.Terminate(context.Background(), workersessions.ControlRequest{ID: "worker-1"})
-	if err != nil || terminated.Outcome != workersessions.ControlOutcomeNoop || terminated.Session.State != workersessions.StateCanceled {
-		t.Fatalf("Terminate() = %#v, %v, want joined CANCELED NOOP", terminated, err)
-	}
-	if calls := boundary.cancellations(); len(calls) != 1 || calls[0].DispatchID != "dispatch-1" {
-		t.Fatalf("boundary cancellation calls = %#v, want one exact call", calls)
-	}
-	if final := <-started; final.Session.State != workersessions.StateCanceled {
-		t.Fatalf("Start() after Cancel then Terminate = %#v, want CANCELED", final)
-	}
-}
-
-func TestTerminate_ConcurrentCallsShareOneCancellationAndJoinTheCallback(t *testing.T) {
-	boundary := newControlledBoundary()
-	registry := newControlledRegistry(t, boundary)
-	started := startControlledSession(t, registry, boundary, "worker-1", "dispatch-1")
-	cancelReturned := make(chan struct{})
-	boundary.setCancel(func(context.Context, workers.WorkstationDispatchCancelRequest) (workers.WorkstationDispatchCancelResult, error) {
-		close(cancelReturned)
-		return workers.WorkstationDispatchCancelResult{
-			DispatchID: "dispatch-1", Outcome: workers.WorkstationDispatchCancelOutcomeCanceled,
-		}, nil
-	})
-
-	first := make(chan workersessions.ControlResult, 1)
-	firstErr := make(chan error, 1)
-	go func() {
-		result, callErr := registry.Terminate(context.Background(), workersessions.ControlRequest{ID: "worker-1"})
-		first <- result
-		firstErr <- callErr
-	}()
-	<-boundary.cancelCalled
-	<-cancelReturned
-
-	second := make(chan workersessions.ControlResult, 1)
-	secondErr := make(chan error, 1)
-	go func() {
-		result, callErr := registry.Terminate(context.Background(), workersessions.ControlRequest{ID: "worker-1"})
-		second <- result
-		secondErr <- callErr
-	}()
-	select {
-	case result := <-first:
-		t.Fatalf("first Terminate() returned before callback: %#v", result)
-	default:
-	}
-	select {
-	case result := <-second:
-		t.Fatalf("second Terminate() returned before callback: %#v", result)
-	default:
-	}
-
-	boundary.complete(canceledDispatchResult("dispatch-1"), workers.ErrWorkstationDispatchCanceled)
-	firstResult := <-first
-	if callErr := <-firstErr; callErr != nil || firstResult.Outcome != workersessions.ControlOutcomeApplied || firstResult.Session.State != workersessions.StateTerminated {
-		t.Fatalf("first Terminate() = %#v, %v, want joined TERMINATED applied result", firstResult, callErr)
-	}
-	secondResult := <-second
-	if callErr := <-secondErr; callErr != nil || secondResult.Outcome != workersessions.ControlOutcomeNoop || secondResult.Session.State != workersessions.StateTerminated {
-		t.Fatalf("second Terminate() = %#v, %v, want joined TERMINATED NOOP", secondResult, callErr)
-	}
-	if calls := boundary.cancellations(); len(calls) != 1 || calls[0].DispatchID != "dispatch-1" {
-		t.Fatalf("boundary cancellation calls = %#v, want one exact call", calls)
-	}
-	if final := <-started; final.Session.State != workersessions.StateTerminated {
-		t.Fatalf("Start() after concurrent Terminate() = %#v, want TERMINATED", final)
-	}
-}
-
-func TestControl_UnsupportedPauseResumeAndBoundaryFailureLeaveLifecycleTruthful(t *testing.T) {
+func TestControl_UnsupportedPauseResumeAndCanonicalCancellationLeaveLifecycleTruthful(t *testing.T) {
 	boundary := newControlledBoundary()
 	registry := newControlledRegistry(t, boundary)
 	started := startControlledSession(t, registry, boundary, "worker-1", "dispatch-1")
@@ -391,17 +253,12 @@ func TestControl_UnsupportedPauseResumeAndBoundaryFailureLeaveLifecycleTruthful(
 		})
 	}
 
-	boundary.setCancel(func(context.Context, workers.WorkstationDispatchCancelRequest) (workers.WorkstationDispatchCancelResult, error) {
-		return workers.WorkstationDispatchCancelResult{}, errors.New("boundary unavailable")
-	})
-	failed, err := registry.Cancel(context.Background(), workersessions.ControlRequest{ID: "worker-1"})
-	if err == nil || failed.Outcome != workersessions.ControlOutcomeFailed || failed.Session.State != workersessions.StateRunning {
-		t.Fatalf("Cancel() boundary failure = %#v, %v, want FAILED with unchanged RUNNING", failed, err)
+	canceled, err := registry.Cancel(context.Background(), workersessions.ControlRequest{ID: "worker-1"})
+	if err != nil || canceled.Outcome != workersessions.ControlOutcomeApplied || canceled.Session.State != workersessions.StateCanceled {
+		t.Fatalf("Cancel() canonical context cancellation = %#v, %v, want applied CANCELED", canceled, err)
 	}
-
-	boundary.complete(completedDispatchResult("dispatch-1"), nil)
-	if got := <-started; got.Session.State != workersessions.StateCompleted {
-		t.Fatalf("Start() after ordinary completion = %#v, want COMPLETED", got.Session)
+	if got := <-started; got.Session.State != workersessions.StateCanceled {
+		t.Fatalf("Start() after cancellation = %#v, want CANCELED", got.Session)
 	}
 	terminal, err := registry.Pause(context.Background(), workersessions.ControlRequest{ID: "worker-1"})
 	if err != nil || terminal.Outcome != workersessions.ControlOutcomeNoop {
@@ -429,12 +286,6 @@ func TestPauseResume_ContinuesExactProviderReferenceWithSameWorkerSessionCorrela
 		t.Fatalf("AssociateProviderSession() error = %v", err)
 	}
 
-	boundary.setCancel(func(context.Context, workers.WorkstationDispatchCancelRequest) (workers.WorkstationDispatchCancelResult, error) {
-		boundary.complete(canceledDispatchResult("dispatch-1"), workers.ErrWorkstationDispatchCanceled)
-		return workers.WorkstationDispatchCancelResult{
-			DispatchID: "dispatch-1", Outcome: workers.WorkstationDispatchCancelOutcomeCanceled,
-		}, nil
-	})
 	paused, err := registry.Pause(context.Background(), workersessions.ControlRequest{ID: "worker-1"})
 	if err != nil || paused.Outcome != workersessions.ControlOutcomeApplied || paused.Session.State != workersessions.StatePaused {
 		t.Fatalf("Pause() = %#v, %v, want applied PAUSED", paused, err)
@@ -507,10 +358,6 @@ func TestPausedControl_TerminalizesWithoutRecancelingCompletedPauseDispatch(t *t
 			}); err != nil {
 				t.Fatalf("AssociateProviderSession() error = %v", err)
 			}
-			boundary.setCancel(func(_ context.Context, request workers.WorkstationDispatchCancelRequest) (workers.WorkstationDispatchCancelResult, error) {
-				boundary.complete(canceledDispatchResult(request.DispatchID), workers.ErrWorkstationDispatchCanceled)
-				return workers.WorkstationDispatchCancelResult{DispatchID: request.DispatchID, Outcome: workers.WorkstationDispatchCancelOutcomeCanceled}, nil
-			})
 			if paused, err := registry.Pause(context.Background(), workersessions.ControlRequest{ID: "worker-1"}); err != nil || paused.Session.State != workersessions.StatePaused {
 				t.Fatalf("Pause() = %#v, %v, want PAUSED", paused, err)
 			}
@@ -518,9 +365,6 @@ func TestPausedControl_TerminalizesWithoutRecancelingCompletedPauseDispatch(t *t
 			result, err := test.call(registry, context.Background(), workersessions.ControlRequest{ID: "worker-1"})
 			if err != nil || result.Outcome != workersessions.ControlOutcomeApplied || result.Session.State != test.state {
 				t.Fatalf("%s() = %#v, %v, want applied %s", test.name, result, err, test.state)
-			}
-			if calls := boundary.cancellations(); len(calls) != 1 || calls[0].DispatchID != "dispatch-1" {
-				t.Fatalf("boundary cancellations = %#v, want only the original pause cancellation", calls)
 			}
 			if final := <-started; final.Session.State != test.state {
 				t.Fatalf("Start() after paused %s = %#v, want %s", test.name, final, test.state)
@@ -560,10 +404,6 @@ func TestPauseResume_InvalidContinuationResultFailsAndRetainsAssociation(t *test
 			}); err != nil {
 				t.Fatalf("AssociateProviderSession() error = %v", err)
 			}
-			boundary.setCancel(func(_ context.Context, request workers.WorkstationDispatchCancelRequest) (workers.WorkstationDispatchCancelResult, error) {
-				boundary.complete(canceledDispatchResult(request.DispatchID), workers.ErrWorkstationDispatchCanceled)
-				return workers.WorkstationDispatchCancelResult{DispatchID: request.DispatchID, Outcome: workers.WorkstationDispatchCancelOutcomeCanceled}, nil
-			})
 			if paused, err := registry.Pause(context.Background(), workersessions.ControlRequest{ID: "worker-1"}); err != nil || paused.Session.State != workersessions.StatePaused {
 				t.Fatalf("Pause() = %#v, %v, want PAUSED", paused, err)
 			}
@@ -639,10 +479,6 @@ func TestPauseResume_ContinuationFailureKeepsAssociationAndProviderClassificatio
 			}); err != nil {
 				t.Fatalf("AssociateProviderSession() error = %v", err)
 			}
-			boundary.setCancel(func(context.Context, workers.WorkstationDispatchCancelRequest) (workers.WorkstationDispatchCancelResult, error) {
-				boundary.complete(canceledDispatchResult("dispatch-1"), workers.ErrWorkstationDispatchCanceled)
-				return workers.WorkstationDispatchCancelResult{DispatchID: "dispatch-1", Outcome: workers.WorkstationDispatchCancelOutcomeCanceled}, nil
-			})
 			if paused, err := registry.Pause(context.Background(), workersessions.ControlRequest{ID: "worker-1"}); err != nil || paused.Session.State != workersessions.StatePaused {
 				t.Fatalf("Pause() = %#v, %v, want PAUSED", paused, err)
 			}
@@ -733,82 +569,6 @@ func TestControl_BeforeStartCancellationAndTerminationPreventWorkersHandoff(t *t
 			default:
 			}
 		})
-	}
-}
-
-func TestCancel_BoundaryAlreadyCanceledWaitsForTheCanonicalTerminalSnapshot(t *testing.T) {
-	boundary := newControlledBoundary()
-	registry := newControlledRegistry(t, boundary)
-	started := startControlledSession(t, registry, boundary, "worker-1", "dispatch-1")
-	boundary.setCancel(func(context.Context, workers.WorkstationDispatchCancelRequest) (workers.WorkstationDispatchCancelResult, error) {
-		return workers.WorkstationDispatchCancelResult{
-			DispatchID: "dispatch-1", Outcome: workers.WorkstationDispatchCancelOutcomeAlreadyCanceled,
-		}, nil
-	})
-
-	resultCh := make(chan workersessions.ControlResult, 1)
-	errCh := make(chan error, 1)
-	go func() {
-		result, err := registry.Cancel(context.Background(), workersessions.ControlRequest{ID: "worker-1"})
-		resultCh <- result
-		errCh <- err
-	}()
-	<-boundary.cancelCalled
-	select {
-	case result := <-resultCh:
-		t.Fatalf("Cancel() returned before the canonical callback: %#v", result)
-	default:
-	}
-	boundary.complete(canceledDispatchResult("dispatch-1"), workers.ErrWorkstationDispatchCanceled)
-	result := <-resultCh
-	if err := <-errCh; err != nil || result.Outcome != workersessions.ControlOutcomeNoop || result.Session.State != workersessions.StateCanceled {
-		t.Fatalf("Cancel() = %#v, %v, want joined CANCELED NOOP", result, err)
-	}
-	if final := <-started; final.Session.State != workersessions.StateCanceled {
-		t.Fatalf("Start() after canonical cancellation = %#v, want CANCELED", final)
-	}
-}
-
-func TestCancel_ConcurrentControlsShareOneBoundaryEffect(t *testing.T) {
-	boundary := newControlledBoundary()
-	registry := newControlledRegistry(t, boundary)
-	started := startControlledSession(t, registry, boundary, "worker-1", "dispatch-1")
-	releaseCancel := make(chan struct{})
-	boundary.setCancel(func(context.Context, workers.WorkstationDispatchCancelRequest) (workers.WorkstationDispatchCancelResult, error) {
-		<-releaseCancel
-		boundary.complete(canceledDispatchResult("dispatch-1"), workers.ErrWorkstationDispatchCanceled)
-		return workers.WorkstationDispatchCancelResult{
-			DispatchID: "dispatch-1", Outcome: workers.WorkstationDispatchCancelOutcomeCanceled,
-		}, nil
-	})
-
-	first := make(chan workersessions.ControlResult, 1)
-	firstErr := make(chan error, 1)
-	go func() {
-		result, err := registry.Cancel(context.Background(), workersessions.ControlRequest{ID: "worker-1"})
-		first <- result
-		firstErr <- err
-	}()
-	<-boundary.cancelCalled
-	second := make(chan workersessions.ControlResult, 1)
-	secondErr := make(chan error, 1)
-	go func() {
-		result, err := registry.Cancel(context.Background(), workersessions.ControlRequest{ID: "worker-1"})
-		second <- result
-		secondErr <- err
-	}()
-	close(releaseCancel)
-	if result := <-first; result.Outcome != workersessions.ControlOutcomeApplied || <-firstErr != nil {
-		t.Fatalf("first Cancel() = %#v, want applied", result)
-	}
-	if result := <-second; result.Outcome != workersessions.ControlOutcomeNoop || <-secondErr != nil {
-		t.Fatalf("second Cancel() = %#v, want no-op after the first control", result)
-	}
-	if calls := boundary.cancellations(); len(calls) != 1 || calls[0].DispatchID != "dispatch-1" {
-		t.Fatalf("boundary cancellation calls = %#v, want one exact call", calls)
-	}
-	if final := <-started; final.Session.State != workersessions.StateCanceled {
-		t.Fatalf("Start() after shared cancellation = %#v, want CANCELED", final)
 	}
 }
 

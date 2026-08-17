@@ -24,10 +24,10 @@ type testRuntimeClock struct{}
 func (testRuntimeClock) Now() time.Time { return time.Now() }
 
 type controlledWorkstationBoundary struct {
+	workers.ModelInvoker
 	requests chan workers.WorkstationDispatchRequest
 	results  chan workers.WorkstationDispatchResult
 	cancels  chan workers.WorkstationDispatchCancelRequest
-	stops    atomic.Int32
 }
 
 type countingWorkerExecutor struct {
@@ -86,57 +86,29 @@ func newControlledWorkstationBoundary() *controlledWorkstationBoundary {
 	}
 }
 
-func (*controlledWorkstationBoundary) StartWorkstationPool(
-	context.Context,
-	workers.WorkstationPoolStartRequest,
-) (workers.WorkstationPoolStartResult, error) {
-	return workers.WorkstationPoolStartResult{
-		Outcome: workers.WorkstationPoolLifecycleOutcomeStarted,
-	}, nil
-}
-
-func (b *controlledWorkstationBoundary) StopWorkstationPool(
-	context.Context,
-) (workers.WorkstationPoolStopResult, error) {
-	b.stops.Add(1)
-	return workers.WorkstationPoolStopResult{
-		Outcome: workers.WorkstationPoolLifecycleOutcomeStopped,
-	}, nil
-}
-
-func (b *controlledWorkstationBoundary) DispatchWorkstation(
+func (b *controlledWorkstationBoundary) Execute(
 	ctx context.Context,
-	request workers.WorkstationDispatchRequest,
-) (workers.WorkstationDispatchResult, error) {
-	b.requests <- request
+	request workers.ExecuteRequest,
+) (workers.ExecuteResult, error) {
+	legacy := testLegacyRequestFromExecute(request)
+	b.requests <- legacy
 	select {
 	case result := <-b.results:
-		return result, nil
+		output := workers.ProposedOutputFromLegacyWorkResult(result.Result)
+		executeResult := workers.ExecuteResult{
+			Correlation: request.Correlation,
+			Outcome:     executeOutcomeFromWorkResult(result.Result),
+			Failure:     executeFailureFromWorkResult(result.Result),
+			Output:      output,
+		}
+		if result.TerminalOutcome == workers.WorkstationDispatchTerminalOutcomeCanceled {
+			executeResult.Outcome = workers.ExecutionOutcomeCanceled
+		}
+		return executeResult, nil
 	case <-ctx.Done():
-		return workers.WorkstationDispatchResult{}, ctx.Err()
+		b.cancels <- workers.WorkstationDispatchCancelRequest{DispatchID: legacy.Execution.Dispatch.DispatchID}
+		return workers.ExecuteResult{Correlation: request.Correlation, Outcome: workers.ExecutionOutcomeCanceled}, ctx.Err()
 	}
-}
-
-func (b *controlledWorkstationBoundary) DispatchWorkstationWithAdmission(
-	ctx context.Context,
-	request workers.WorkstationDispatchRequest,
-	admitted workers.WorkstationDispatchAdmissionFunc,
-) (workers.WorkstationDispatchResult, error) {
-	if admitted != nil {
-		admitted()
-	}
-	return b.DispatchWorkstation(ctx, request)
-}
-
-func (b *controlledWorkstationBoundary) CancelWorkstationDispatch(
-	_ context.Context,
-	request workers.WorkstationDispatchCancelRequest,
-) (workers.WorkstationDispatchCancelResult, error) {
-	b.cancels <- request
-	return workers.WorkstationDispatchCancelResult{
-		DispatchID: request.DispatchID,
-		Outcome:    workers.WorkstationDispatchCancelOutcomeCanceled,
-	}, nil
 }
 
 func newRootContractTestFactory(t *testing.T) *factoryImpl {

@@ -7,30 +7,12 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	workersinternal "github.com/portpowered/infinite-you/pkg/services/workers/internal"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers/internal/execution"
-	runtimeassembly "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runtime_assembly"
-	workstationswire "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/wire"
 )
-
-type recordingRuntimeAssembly struct {
-	request workers.RuntimeBuildRequest
-	result  workers.RuntimeBuildResult
-	err     error
-}
-
-var _ runtimeassembly.Service = (*recordingRuntimeAssembly)(nil)
-
-func (assembly *recordingRuntimeAssembly) Build(
-	_ context.Context,
-	request workers.RuntimeBuildRequest,
-) (workers.RuntimeBuildResult, error) {
-	assembly.request = request
-	return assembly.result, assembly.err
-}
 
 func TestNewRootConstructsPublishedWorkersService(t *testing.T) {
 	t.Parallel()
 
-	root, err := workersinternal.NewRoot(&recordingRuntimeAssembly{}, workstationswire.NewService())
+	root, err := workersinternal.NewRoot(&recordingExecuteCapability{})
 	if err != nil {
 		t.Fatalf("NewRoot() error = %v", err)
 	}
@@ -81,41 +63,8 @@ func TestDetachedValuesCloneAndFallback(t *testing.T) {
 func TestNewRootRejectsMissingOwners(t *testing.T) {
 	t.Parallel()
 
-	if _, err := workersinternal.NewRoot(nil, workstationswire.NewService()); err == nil {
-		t.Fatal("NewRoot(nil assembly) error = nil, want missing runtime assembly")
-	}
-	if _, err := workersinternal.NewRoot(&recordingRuntimeAssembly{}, nil); err == nil {
-		t.Fatal("NewRoot(nil workstations) error = nil, want missing workstations owner")
-	}
-}
-
-func TestNewRootBuildRuntimeDelegatesWithoutLifecycle(t *testing.T) {
-	t.Parallel()
-
-	want := workers.RuntimeBuildResult{
-		RunnerSelection: workers.ResolvedRunnerSelection{
-			RunnerID: workers.RunnerIDAntigravity,
-			Source:   workers.RunnerSelectionSourceFactory,
-		},
-	}
-	assembly := &recordingRuntimeAssembly{result: want}
-	root, err := workersinternal.NewRoot(assembly, workstationswire.NewService())
-	if err != nil {
-		t.Fatalf("NewRoot() error = %v", err)
-	}
-
-	got, err := root.BuildRuntime(t.Context(), workers.RuntimeBuildRequest{
-		RunnerID: workers.RunnerIDAntigravity,
-		Roles: []workers.RuntimeBuildRoleRequest{{
-			Name: "writer",
-			Kind: workers.RuntimeBuildRoleKindWorker,
-		}},
-	})
-	if err != nil {
-		t.Fatalf("BuildRuntime() error = %v", err)
-	}
-	if got.RunnerSelection != want.RunnerSelection {
-		t.Fatalf("BuildRuntime() = %#v, want runner selection %#v", got, want.RunnerSelection)
+	if _, err := workersinternal.NewRoot(nil); err == nil {
+		t.Fatal("NewRoot(nil execute) error = nil, want missing execution owner")
 	}
 }
 
@@ -135,8 +84,6 @@ func TestNewRootExecuteDelegatesDetachedAttempt(t *testing.T) {
 		},
 	}
 	root, err := workersinternal.NewRoot(
-		&recordingRuntimeAssembly{},
-		workstationswire.NewService(),
 		execute,
 	)
 	if err != nil {
@@ -169,11 +116,7 @@ func TestWorkersRootExposesDetachedPromptCapabilities(t *testing.T) {
 	t.Parallel()
 
 	execute := &promptExecuteCapability{}
-	service, err := workersinternal.NewRoot(
-		&recordingRuntimeAssembly{},
-		workstationswire.NewService(),
-		execute,
-	)
+	service, err := workersinternal.NewRoot(execute)
 	if err != nil {
 		t.Fatalf("NewRoot() error = %v", err)
 	}
@@ -219,10 +162,7 @@ func TestWorkersRootExposesDetachedPromptCapabilities(t *testing.T) {
 func TestWorkersRootPromptCapabilityErrorsRemainDetached(t *testing.T) {
 	t.Parallel()
 
-	service, err := workersinternal.NewRoot(
-		&recordingRuntimeAssembly{},
-		workstationswire.NewService(),
-	)
+	service, err := workersinternal.NewRoot(&recordingExecuteCapability{})
 	if err != nil {
 		t.Fatalf("NewRoot() error = %v", err)
 	}

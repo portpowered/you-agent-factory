@@ -28,11 +28,6 @@ import (
 const defaultSessionID = "~default"
 
 // RuntimeFactory constructs hosted runtime bundles. It is stateless.
-type runtimeWorkstationService = workers.WorkstationExecutionService
-
-type runtimeExecuteService interface {
-	Execute(context.Context, workers.ExecuteRequest) (workers.ExecuteResult, error)
-}
 
 type RuntimeFactory struct {
 	quorumPolicy             interfaces.QuorumPolicyService
@@ -109,8 +104,6 @@ func (f *RuntimeFactory) Build(
 	runtimeMode interfaces.RuntimeMode,
 	verbose bool,
 	runtimeScheduler scheduler.Scheduler,
-	workerExecutorOverrides map[string]workers.WorkerExecutor,
-	workerExecutorDecorator func(string, workers.WorkerExecutor) workers.WorkerExecutor,
 	inlineDispatch bool,
 	submissionRecorder recordings.SubmissionRecorder,
 	dispatchRecorder recordings.DispatchRecorder,
@@ -131,9 +124,7 @@ func (f *RuntimeFactory) Build(
 	petriMutationRecorder factory.PetriMutationRecorder,
 	worldStateProjector factory.WorldStateProjector,
 	recordingsRuntime recordings.RuntimeOpening,
-	loadWorkerExecutors func(recordings.WorkerEventRecorder, *zap.Logger) (map[string]workers.WorkerExecutor, error),
-	workerService runtimeWorkstationService,
-	providerInvocation workers.WorkstationRequestExecutor,
+	workerService workers.Service,
 	workerSessionsFactory factory.WorkerSessionsFactory,
 	dispatchCompleted func(string),
 	mockWorkersConfigs ...*workers.MockWorkersConfig,
@@ -252,71 +243,21 @@ func (f *RuntimeFactory) Build(
 	if initialFactory != nil {
 		eventHistory.SetInitialStructureFactory(initialFactory)
 	}
-	var workerExecutors map[string]workers.WorkerExecutor
-	if loadWorkerExecutors != nil {
-		workerExecutors, err = loadWorkerExecutors(eventHistory, logger)
-		if err != nil {
-			return nil, err
-		}
-	}
 	var mockWorkersConfig *workers.MockWorkersConfig
 	if len(mockWorkersConfigs) > 0 {
 		mockWorkersConfig = mockWorkersConfigs[0]
 	}
-	var sharedWorkersService workers.Service
-	if service, ok := workerService.(workers.Service); ok {
-		sharedWorkersService = service
-	}
-	var promptRenderer runtime.PromptRenderer
-	if renderer, ok := workerService.(runtime.PromptRenderer); ok {
-		promptRenderer = renderer
-	}
-	var templateFieldResolver runtime.TemplateFieldResolver
-	if resolver, ok := workerService.(runtime.TemplateFieldResolver); ok {
-		templateFieldResolver = resolver
-	}
-	var progressPublisher workers.ProgressPublisher
-	if publisherProvider, ok := workerService.(interface {
-		RuntimeProgressPublisher() workers.ProgressPublisher
-	}); ok {
-		progressPublisher = publisherProvider.RuntimeProgressPublisher()
-	}
-	directWorkstationExecutor := runtime.NewWorkstationRequestExecutor(
-		runtime.WorkstationRequestExecutorConfig{
-			Service:                    sharedWorkersService,
-			RuntimeDefinitions:         loadedFactoryCfg,
-			InvocationInterpolation:    f.invocationInterpolation,
-			InvocationFileReader:       invocationFileReader(f.inputFiles),
-			WorkflowContext:            RuntimeWorkflowContext(loadedFactoryCfg.FactoryConfig(), sessionID),
-			FactorySessionID:           sessionID,
-			RuntimeID:                  runtimeInstanceID,
-			RecordingID:                workerRecordingIdentity(runtimeInstanceID, recordPath),
-			EventHistory:               eventHistory,
-			NewID:                      f.newID,
-			PromptRenderer:             promptRenderer,
-			TemplateFieldResolver:      templateFieldResolver,
-			PromptSourceReader:         invocationFileReader(f.inputFiles),
-			MockWorkers:                mockWorkersConfig,
-			ProgressPublisher:          progressPublisher,
-			Net:                        net,
-			ExpectedArtifactFileSystem: f.inputFiles,
-		},
-	)
-
 	bundle, err := assembleRuntimeBundle(
 		ctx,
 		dir, folderPath, sessionID, runtimeMode, verbose, runtimeScheduler,
-		workerExecutorOverrides, workerExecutorDecorator, inlineDispatch, submissionRecorder,
+		inlineDispatch, submissionRecorder,
 		dispatchRecorder,
 		loadedFactoryCfg, runtimeInstanceID,
 		backendScopeID, clock, recordPath, recording, submissionHooks,
 		completionPlanner, petriMutationRecorder, worldStateProjector,
 		dispatchCompleted, logger, structuredLogger, logSink, metricsSink, net, eventHistory,
-		workerExecutors,
 		workerService,
-		directWorkstationExecutor,
 		mockWorkersConfig,
-		providerInvocation,
 		workerSessionsFactory,
 		f.providerSessions,
 		f.workService,
@@ -367,8 +308,6 @@ func assembleRuntimeBundle(
 	runtimeMode interfaces.RuntimeMode,
 	verbose bool,
 	runtimeScheduler scheduler.Scheduler,
-	workerExecutorOverrides map[string]workers.WorkerExecutor,
-	workerExecutorDecorator func(string, workers.WorkerExecutor) workers.WorkerExecutor,
 	inlineDispatch bool,
 	submissionRecorder recordings.SubmissionRecorder,
 	dispatchRecorder recordings.DispatchRecorder,
@@ -389,11 +328,8 @@ func assembleRuntimeBundle(
 	metricsSink factory.RuntimeMetricsSink,
 	net *state.Net,
 	eventHistory recordings.RuntimeLedger,
-	workerExecutors map[string]workers.WorkerExecutor,
-	workerService runtimeWorkstationService,
-	directWorkstationExecutor workers.WorkstationRequestExecutor,
+	workerService workers.Service,
 	mockWorkersConfig *workers.MockWorkersConfig,
-	providerInvocation workers.WorkstationRequestExecutor,
 	workerSessionsFactory factory.WorkerSessionsFactory,
 	providerSessions providersessions.Service,
 	workService work.Service,
@@ -408,10 +344,6 @@ func assembleRuntimeBundle(
 	decisionEnvelopes interfaces.DecisionEnvelopeService,
 	invocationInterpolation interfaces.InvocationInterpolationService,
 ) (*factoryhost.Bundle, error) {
-	if workerExecutors == nil {
-		workerExecutors = make(map[string]workers.WorkerExecutor)
-	}
-	bindRuntimeLogger(directWorkstationExecutor, structuredLogger)
 	bundle := factoryhost.NewBundle(
 		dir, folderPath, runtimeInstanceID, strings.TrimSpace(backendScopeID),
 		clock.Now().UTC(), eventHistory, net, loadedFactoryCfg,
@@ -426,24 +358,6 @@ func assembleRuntimeBundle(
 			recording.RecordEvent(event)
 		}
 	}
-	for workerType, executor := range workerExecutorOverrides {
-		workerExecutors[workerType] = executor
-	}
-	if workerExecutorDecorator != nil {
-		for workerType, executor := range workerExecutors {
-			workerExecutors[workerType] = workerExecutorDecorator(workerType, executor)
-		}
-	}
-	if err := startRuntimeWorkstationService(
-		ctx,
-		workerService,
-		workerExecutors,
-		net,
-		directWorkstationExecutor,
-		providerInvocation,
-	); err != nil {
-		return nil, fmt.Errorf("start Workers execution service: %w", err)
-	}
 	workerSessions, err := workerSessionsFactory(workerService, clock)
 	if err != nil {
 		return nil, fmt.Errorf("construct Worker Sessions service: %w", err)
@@ -451,7 +365,6 @@ func assembleRuntimeBundle(
 	if workerSessions == nil {
 		return nil, fmt.Errorf("construct Worker Sessions service: factory returned nil")
 	}
-	statelessService := executeServiceFromWorkstation(workerService)
 	effectiveSubmissionRecorder := recordings.SubmissionRecorder(bundle.RecordSubmissionMetric)
 	if submissionRecorder != nil {
 		effectiveSubmissionRecorder = submissionRecorder
@@ -459,7 +372,7 @@ func assembleRuntimeBundle(
 	activeFactory, err := runtime.New(
 		net,
 		runtimeScheduler,
-		statelessService,
+		workerService,
 		workerSessions,
 		loadedFactoryCfg,
 		invocationInterpolation,
@@ -512,14 +425,6 @@ func assembleRuntimeBundle(
 	bundle.InputDirectoryWalker = inputDirectoryWalker
 	bundle.WorkRequestIDs = workRequestIDs
 	return bundle, nil
-}
-
-func bindRuntimeLogger(executor workers.WorkstationRequestExecutor, logger factory.Logger) {
-	if loggerBinder, ok := executor.(interface {
-		SetRuntimeLogger(factory.Logger)
-	}); ok {
-		loggerBinder.SetRuntimeLogger(logger)
-	}
 }
 
 func invocationFileReader(inputFiles factory.InputFileSystem) interfaces.FileReader {

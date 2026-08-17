@@ -40,7 +40,6 @@ var committedNestedSubservices = map[string][]string{
 		"state_access",
 	},
 	"workers": {
-		"runtime_assembly",
 		"workstations",
 		"runners",
 	},
@@ -342,7 +341,6 @@ var nestedOwnerMoveRules = map[string][]nestedPathRule{
 		{exact: "internal/prompting", prefix: "internal/prompting/", dest: "workers/internal"},
 		{exact: "internal/testhelpers", prefix: "internal/testhelpers/", dest: "workers/internal"},
 		{exact: "internal/worktree", prefix: "internal/worktree/", dest: "workers/internal"},
-		{exact: "construction", prefix: "construction/", dest: "workers/internal/services/runtime_assembly"},
 		{exact: "prompting", prefix: "prompting/", dest: "workers/internal/services/workstations"},
 		{exact: "worktree", prefix: "worktree/", dest: "workers/internal/services/workstations"},
 		{exact: "skippermissions", prefix: "skippermissions/", dest: "workers/internal/services/workstations"},
@@ -474,6 +472,13 @@ func mergeOwnerPackageRows(existing []PackageMapping, ownerRows []PackageMapping
 		if _, ok := mapCommittedOwnerPackage(row.PackagePath); ok {
 			// Drop stale owner rows that are no longer emitted.
 			continue
+		}
+		if root, _, ok := splitDestination(row.Destination); ok {
+			if _, isOwner := productOwnerSet()[root]; isOwner && strings.HasPrefix(row.PackagePath, "pkg/services/") {
+				// Product-owner rows are fully regenerated from the live inventory;
+				// this also removes rows for a retired owner subservice.
+				continue
+			}
 		}
 		merged = append(merged, row)
 	}

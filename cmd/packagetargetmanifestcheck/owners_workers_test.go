@@ -16,14 +16,6 @@ var workersTransitionalDebtCommittedOwnerPackageMappingCases = []committedOwnerP
 		},
 	},
 	{
-		path: "pkg/services/workers/construction",
-		want: PackageMapping{
-			PackagePath: "pkg/services/workers/construction",
-			Disposition: DispositionMove,
-			Destination: "workers/internal/services/runtime_assembly",
-		},
-	},
-	{
 		path: "pkg/services/workers/diagnostics",
 		want: PackageMapping{
 			PackagePath: "pkg/services/workers/diagnostics",
@@ -169,7 +161,6 @@ func TestWorkersTopLevelTransitionalDebtDirectoriesMapToMove(t *testing.T) {
 	t.Parallel()
 
 	topLevelDebt := []string{
-		"construction",
 		"diagnostics",
 		"draftvalidation",
 		"execution",
@@ -365,7 +356,6 @@ func TestWorkersInventoryRejectsRetainToOwnerRoot(t *testing.T) {
 				t.Fatalf("canonical workers path %q = %#v, want retain→workers", packagePath, got)
 			}
 		case "pkg/services/workers/internal/services/runners",
-			"pkg/services/workers/internal/services/runtime_assembly",
 			"pkg/services/workers/internal/services/workstations":
 			if got.Disposition != DispositionRetain || !strings.HasPrefix(got.Destination, "workers/internal/services/") {
 				t.Fatalf("committed nested subservice %q = %#v, want retain→workers/internal/services/*", packagePath, got)
@@ -391,9 +381,9 @@ func workersCanonicalRetainRest(rest string) bool {
 	switch {
 	case rest == "wire" || strings.HasPrefix(rest, "wire/"):
 		return true
-	case strings.HasPrefix(rest, "internal/services/runtime_assembly"):
-		return true
 	case strings.HasPrefix(rest, "internal/services/runners"):
+		return true
+	case strings.HasPrefix(rest, "internal/execution"):
 		return true
 	case strings.HasPrefix(rest, "internal/services/workstations"):
 		return true
@@ -404,6 +394,8 @@ func workersCanonicalRetainRest(rest string) bool {
 	case strings.HasPrefix(rest, "internal/prompting"):
 		return true
 	case strings.HasPrefix(rest, "internal/skippermissions"):
+		return true
+	case strings.HasPrefix(rest, "internal/worktree"):
 		return true
 	default:
 		return false

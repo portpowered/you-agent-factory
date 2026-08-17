@@ -7,6 +7,7 @@ import (
 	"reflect"
 	"sync"
 	"testing"
+	"time"
 
 	"go.uber.org/zap"
 
@@ -73,7 +74,8 @@ func TestTerminateFactorySession_FansOutCapturedChildrenBeforeTargetCleanup(t *t
 	default:
 	}
 
-	if _, err := workerSessions.Terminate(context.Background(), workersessions.ControlRequest{ID: "worker-replacement"}); err != nil {
+	_, err = workerSessions.Terminate(context.Background(), workersessions.ControlRequest{ID: "worker-replacement"})
+	if err != nil {
 		t.Fatalf("cleanup replacement Worker Session: %v", err)
 	}
 	replacement := <-starts
@@ -407,15 +409,22 @@ func (*capturedTurnTargetLifecycle) CompleteStartup(context.Context) error { ret
 func (*capturedTurnTargetLifecycle) WaitForRuntime(context.Context) error { return nil }
 
 func (l *capturedTurnTargetLifecycle) StopLifecycle(context.Context) error {
-	for _, wantDispatchID := range l.expectedDispatches {
+	observed := make(map[string]struct{}, len(l.expectedDispatches))
+	for range l.expectedDispatches {
 		select {
 		case cancellation := <-l.cancellationCalls:
-			if cancellation.DispatchID != wantDispatchID {
-				return fmt.Errorf("boundary cancellation dispatch = %q, want %q", cancellation.DispatchID, wantDispatchID)
+			if _, duplicate := observed[cancellation.DispatchID]; duplicate {
+				return fmt.Errorf("duplicate boundary cancellation dispatch = %q", cancellation.DispatchID)
 			}
+			observed[cancellation.DispatchID] = struct{}{}
 			l.cleanupCalls = append(l.cleanupCalls, cancellation)
-		default:
-			return fmt.Errorf("target cleanup began before boundary cancellation for %q", wantDispatchID)
+		case <-time.After(time.Second):
+			return fmt.Errorf("target cleanup did not observe all boundary cancellations: got %#v", observed)
+		}
+	}
+	for _, wantDispatchID := range l.expectedDispatches {
+		if _, ok := observed[wantDispatchID]; !ok {
+			return fmt.Errorf("boundary cancellations = %#v, want dispatch %q", observed, wantDispatchID)
 		}
 	}
 	l.mu.Lock()
@@ -454,18 +463,19 @@ func (i capturedTurnTargetHostedInstance) RuntimeService() factoryruntime.Servic
 // their exact cancellation; resumed attempts publish their detached request
 // before the test supplies their independently controlled terminal result.
 type continuationFanOutExecution struct {
+	workers.ModelInvoker
 	mu sync.Mutex
 
 	initial       map[string]*continuationInitialDispatch
 	continuations map[string]*continuationDispatch
 	started       chan workers.WorkstationDispatchRequest
+	cancelCalls   chan workers.WorkstationDispatchCancelRequest
 }
 
 type continuationInitialDispatch struct {
 	admitted     chan struct{}
 	admittedOnce sync.Once
-	canceled     chan struct{}
-	canceledOnce sync.Once
+	cancel       context.CancelFunc
 }
 
 type continuationDispatch struct {
@@ -477,77 +487,61 @@ type continuationDispatchResult struct {
 	err    error
 }
 
-var _ workers.WorkstationExecutionService = (*continuationFanOutExecution)(nil)
+var _ workers.Service = (*continuationFanOutExecution)(nil)
 
 func newContinuationFanOutExecution(dispatchIDs ...string) *continuationFanOutExecution {
 	execution := &continuationFanOutExecution{
 		initial:       make(map[string]*continuationInitialDispatch, len(dispatchIDs)),
 		continuations: make(map[string]*continuationDispatch),
 		started:       make(chan workers.WorkstationDispatchRequest, len(dispatchIDs)),
+		cancelCalls:   make(chan workers.WorkstationDispatchCancelRequest, len(dispatchIDs)),
 	}
 	for _, dispatchID := range dispatchIDs {
 		execution.initial[dispatchID] = &continuationInitialDispatch{
-			admitted: make(chan struct{}), canceled: make(chan struct{}),
+			admitted: make(chan struct{}),
 		}
 	}
 	return execution
 }
 
-func (*continuationFanOutExecution) StartWorkstationPool(
-	context.Context,
-	workers.WorkstationPoolStartRequest,
-) (workers.WorkstationPoolStartResult, error) {
-	return workers.WorkstationPoolStartResult{Outcome: workers.WorkstationPoolLifecycleOutcomeStarted}, nil
-}
-
-func (*continuationFanOutExecution) StopWorkstationPool(
-	context.Context,
-) (workers.WorkstationPoolStopResult, error) {
-	return workers.WorkstationPoolStopResult{Outcome: workers.WorkstationPoolLifecycleOutcomeStopped}, nil
-}
-
-func (e *continuationFanOutExecution) DispatchWorkstation(
+func (e *continuationFanOutExecution) Execute(
 	ctx context.Context,
-	request workers.WorkstationDispatchRequest,
-) (workers.WorkstationDispatchResult, error) {
-	return e.DispatchWorkstationWithAdmission(ctx, request, nil)
-}
-
-func (e *continuationFanOutExecution) DispatchWorkstationWithAdmission(
-	_ context.Context,
-	request workers.WorkstationDispatchRequest,
-	admitted workers.WorkstationDispatchAdmissionFunc,
-) (workers.WorkstationDispatchResult, error) {
-	if request.Execution.Continuation != nil {
-		return e.dispatchContinuation(request, admitted)
+	request workers.ExecuteRequest,
+) (workers.ExecuteResult, error) {
+	legacy := testLegacyRequestFromExecute(request)
+	if legacy.Execution.Continuation != nil {
+		return e.executeContinuation(ctx, request, legacy)
 	}
-	return e.dispatchInitial(request, admitted)
+	return e.executeInitial(ctx, request, legacy)
 }
 
-func (e *continuationFanOutExecution) dispatchInitial(
-	request workers.WorkstationDispatchRequest,
-	admitted workers.WorkstationDispatchAdmissionFunc,
-) (workers.WorkstationDispatchResult, error) {
-	dispatchID := request.Execution.Dispatch.DispatchID
+func (e *continuationFanOutExecution) executeInitial(
+	ctx context.Context,
+	request workers.ExecuteRequest,
+	legacy workers.WorkstationDispatchRequest,
+) (workers.ExecuteResult, error) {
+	dispatchID := legacy.Execution.Dispatch.DispatchID
 	e.mu.Lock()
 	dispatch := e.initial[dispatchID]
 	e.mu.Unlock()
 	if dispatch == nil {
-		return workers.WorkstationDispatchResult{}, workers.ErrUnknownWorkstationDispatch
+		return workers.ExecuteResult{}, workers.ErrUnknownWorkstationDispatch
 	}
-	if admitted != nil {
-		admitted()
-	}
+	attemptContext, cancel := context.WithCancel(ctx)
+	e.mu.Lock()
+	dispatch.cancel = cancel
+	e.mu.Unlock()
 	dispatch.admittedOnce.Do(func() { close(dispatch.admitted) })
-	<-dispatch.canceled
-	return canceledContinuationDispatch(dispatchID, request.WorkstationName), workers.ErrWorkstationDispatchCanceled
+	<-attemptContext.Done()
+	return workers.ExecuteResult{Correlation: request.Correlation, Outcome: workers.ExecutionOutcomeCanceled}, workers.ErrWorkstationDispatchCanceled
 }
 
-func (e *continuationFanOutExecution) dispatchContinuation(
-	request workers.WorkstationDispatchRequest,
-	admitted workers.WorkstationDispatchAdmissionFunc,
-) (workers.WorkstationDispatchResult, error) {
-	dispatchID := request.Execution.Dispatch.DispatchID
+func (e *continuationFanOutExecution) executeContinuation(
+	ctx context.Context,
+	request workers.ExecuteRequest,
+	legacy workers.WorkstationDispatchRequest,
+) (workers.ExecuteResult, error) {
+	dispatchID := legacy.Execution.Dispatch.DispatchID
 	e.mu.Lock()
 	dispatch := e.continuations[dispatchID]
 	if dispatch == nil {
@@ -555,27 +549,13 @@ func (e *continuationFanOutExecution) dispatchContinuation(
 		e.continuations[dispatchID] = dispatch
 	}
 	e.mu.Unlock()
-	if admitted != nil {
-		admitted()
-	}
-	e.started <- workers.WorkstationDispatchRequest{
-		WorkstationName: request.WorkstationName,
-		Execution:       workers.CloneWorkstationExecutionRequest(request.Execution),
+	select {
+	case e.started <- legacy:
+	case <-ctx.Done():
+		return workers.ExecuteResult{Correlation: request.Correlation, Outcome: workers.ExecutionOutcomeCanceled}, ctx.Err()
 	}
 	completed := <-dispatch.completed
-	return completed.result, completed.err
-}
-
-func (e *continuationFanOutExecution) CancelWorkstationDispatch(
-	_ context.Context,
-	request workers.WorkstationDispatchCancelRequest,
-) (workers.WorkstationDispatchCancelResult, error) {
-	if !e.cancelInitial(request.DispatchID) {
-		return workers.WorkstationDispatchCancelResult{}, workers.ErrUnknownWorkstationDispatch
-	}
-	return workers.WorkstationDispatchCancelResult{
-		DispatchID: request.DispatchID, Outcome: workers.WorkstationDispatchCancelOutcomeCanceled,
-	}, nil
+	return testExecuteResultFromDispatchResult(request, completed.result), completed.err
 }
 
 func (e *continuationFanOutExecution) initialAdmitted(dispatchID string) <-chan struct{} {
@@ -587,11 +567,16 @@ func (e *continuationFanOutExecution) initialAdmitted(dispatchID string) <-chan 
 func (e *continuationFanOutExecution) cancelInitial(dispatchID string) bool {
 	e.mu.Lock()
 	dispatch := e.initial[dispatchID]
+	cancel := func() {}
+	if dispatch != nil && dispatch.cancel != nil {
+		cancel = dispatch.cancel
+	}
 	e.mu.Unlock()
 	if dispatch == nil {
 		return false
 	}
-	dispatch.canceledOnce.Do(func() { close(dispatch.canceled) })
+	e.cancelCalls <- workers.WorkstationDispatchCancelRequest{DispatchID: dispatchID}
+	cancel()
 	return true
 }
 

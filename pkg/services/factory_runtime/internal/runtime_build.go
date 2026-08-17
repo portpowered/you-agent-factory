@@ -3,22 +3,18 @@ package internal
 import (
 	"context"
 	"fmt"
-	"sort"
 	"strings"
 	"time"
 
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
-	"github.com/portpowered/infinite-you/pkg/platform/jsonvalue"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factoryhost "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/host"
 	runtimebuild "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/instance_host/build"
 	runtime "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/runtime"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/scheduler"
-	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/state"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
-	"github.com/portpowered/infinite-you/pkg/services/work"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"go.uber.org/zap"
@@ -152,8 +148,6 @@ func NewRuntimeBuild(
 	mockWorkersConfig *workers.MockWorkersConfig,
 	runtimeMode factorydefinitions.RuntimeMode,
 	runtimeScheduler scheduler.Scheduler,
-	workerExecutors map[string]workers.WorkerExecutor,
-	workerExecutorDecorator func(string, workers.WorkerExecutor) workers.WorkerExecutor,
 	inlineDispatch bool,
 	submissionRecorder recordings.SubmissionRecorder,
 	dispatchRecorder recordings.DispatchRecorder,
@@ -167,15 +161,11 @@ func NewRuntimeBuild(
 	backendScopeID string,
 	factoryRunnerID string,
 	verbose bool,
-	skipRunnerPrerequisiteValidation bool,
-	invocationSkipPermissionsOverride *bool,
 	clock factory.Clock,
 	baseLogger *zap.Logger,
 	runtimeFactory *RuntimeFactory,
 	workerService workers.Service,
 	workerSessionsFactory factory.WorkerSessionsFactory,
-	providerInvocationFactory factory.ProviderInvocationExecutorFactory,
-	runtimeExecutorsFactory factory.WorkersRuntimeExecutorsFactory,
 	mockCommandRunnerFactory factory.WorkersMockCommandRunnerFactory,
 	progressFactory ProgressPublisherFactory,
 	completionFactory DispatchCompletionFactory,
@@ -218,12 +208,8 @@ func NewRuntimeBuild(
 			if progressFactory != nil {
 				progressPublisher = progressFactory(spec.SessionID)
 			}
-			// Workers and the runtime-owned Worker Sessions service are assembled
-			// in opposite dependency order: Workers needs its progress publisher
-			// before the workstation pool exists, while Worker Sessions needs that
-			// pool. This bridge is bound exactly once when the Factory Runtime
-			// creates Worker Sessions, ensuring reference-bearing progress cannot
-			// reach the response stream before its Worker Session association.
+			// Bind the session-local progress bridge before any Worker Session can
+			// admit a dispatch or publish an observation.
 			providerSessionProgress := workersessions.NewProviderSessionObservationPublisher(progressPublisher).WithUnassociatedProgressFallback()
 			if workerService == nil {
 				return nil, fmt.Errorf("Workers service is required")
@@ -245,22 +231,16 @@ func NewRuntimeBuild(
 				defaultSessionID,
 				runtimeMode,
 				runtimeScheduler,
-				workerExecutors,
-				workerExecutorDecorator,
 				inlineDispatch,
 				submissionRecorder,
 				dispatchRecorder,
 				backendScopeID,
 				factoryRunnerID,
 				verbose,
-				skipRunnerPrerequisiteValidation,
-				invocationSkipPermissionsOverride,
 				workerService,
 				mockWorkersConfig,
 				workerSessionsFactory,
-				runtimeExecutorsFactory,
 				providerSessionProgress,
-				providerInvocationFactory,
 				runtimeFactory,
 				dispatchCompleted,
 				worldStateProjector,
@@ -285,22 +265,16 @@ func buildBundle(
 	defaultSessionID string,
 	runtimeMode factorydefinitions.RuntimeMode,
 	runtimeScheduler scheduler.Scheduler,
-	workerExecutors map[string]workers.WorkerExecutor,
-	workerExecutorDecorator func(string, workers.WorkerExecutor) workers.WorkerExecutor,
 	inlineDispatch bool,
 	submissionRecorder recordings.SubmissionRecorder,
 	dispatchRecorder recordings.DispatchRecorder,
 	backendScopeID string,
 	factoryRunnerID string,
 	verbose bool,
-	skipRunnerPrerequisiteValidation bool,
-	invocationSkipPermissionsOverride *bool,
 	workerExecution workers.Service,
 	mockWorkersConfig *workers.MockWorkersConfig,
 	workerSessionsFactory factory.WorkerSessionsFactory,
-	runtimeExecutorsFactory factory.WorkersRuntimeExecutorsFactory,
 	providerSessionProgress *workersessions.ProviderSessionObservationPublisher,
-	providerInvocationFactory factory.ProviderInvocationExecutorFactory,
 	runtimeFactory *RuntimeFactory,
 	dispatchCompleted func(string),
 	worldStateProjector factory.WorldStateProjector,
@@ -313,17 +287,14 @@ func buildBundle(
 	if err != nil {
 		return nil, err
 	}
-	workerSessionsFactory, providerInvocation, err := prepareBundleExecution(
+	workerSessionsFactory, err = prepareBundleExecution(
 		workerSessionsFactory,
 		providerSessionProgress,
-		providerInvocationFactory,
-		spec.ProviderCommandRunner,
 	)
 	if err != nil {
 		return nil, err
 	}
 	workerServiceWithProgress := newRuntimeWorkersService(workerExecution, providerSessionProgress, spec)
-	workerOptions := makeWorkerOptionsLoader(workerExecution, runtimeExecutorsFactory, spec, factoryRunnerID, verbose, skipRunnerPrerequisiteValidation, invocationSkipPermissionsOverride, providerSessionProgress.Publish, runtimeFactory.loggerFactory)
 	bundle, err := runtimeFactory.Build(
 		ctx,
 		spec.Dir,
@@ -333,8 +304,6 @@ func buildBundle(
 		runtimeMode,
 		verbose,
 		runtimeScheduler,
-		workerExecutors,
-		workerExecutorDecorator,
 		inlineDispatch,
 		submissionRecorder,
 		dispatchRecorder,
@@ -358,9 +327,7 @@ func buildBundle(
 			RuntimeOpening: recordingsRuntime,
 			flushInterval:  recordFlushInterval,
 		},
-		workerOptions,
 		workerServiceWithProgress,
-		providerInvocation,
 		workerSessionsFactory,
 		dispatchCompleted,
 		mockWorkersConfig,
@@ -403,54 +370,12 @@ func setReplayEvents(
 func prepareBundleExecution(
 	workerSessionsFactory factory.WorkerSessionsFactory,
 	providerSessionProgress *workersessions.ProviderSessionObservationPublisher,
-	providerInvocationFactory factory.ProviderInvocationExecutorFactory,
-	providerCommandRunner workers.CommandRunner,
-) (factory.WorkerSessionsFactory, workers.WorkstationRequestExecutor, error) {
+) (factory.WorkerSessionsFactory, error) {
 	if err := validateBundleDependencies(providerSessionProgress, workerSessionsFactory); err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 	workerSessionsFactory = bindProviderSessionProgress(workerSessionsFactory, providerSessionProgress)
-	providerInvocation, err := buildProviderInvocation(
-		providerInvocationFactory,
-		providerCommandRunner,
-		providerSessionProgress.Publish,
-	)
-	if err != nil {
-		return nil, nil, err
-	}
-	return workerSessionsFactory, providerInvocation, nil
-}
-
-func makeWorkerOptionsLoader(
-	workerExecution workers.Service,
-	runtimeExecutorsFactory factory.WorkersRuntimeExecutorsFactory,
-	spec runtimebuild.SessionBuildSpec,
-	factoryRunnerID string,
-	verbose bool,
-	skipRunnerPrerequisiteValidation bool,
-	invocationSkipPermissionsOverride *bool,
-	progressPublisher workers.ProgressPublisher,
-	loggerFactory factory.RuntimeLoggerFactory,
-) func(recordings.WorkerEventRecorder, *zap.Logger) (map[string]workers.WorkerExecutor, error) {
-	return func(history recordings.WorkerEventRecorder, logger *zap.Logger) (map[string]workers.WorkerExecutor, error) {
-		runtimeService, ok := workerExecution.(workers.RuntimeService)
-		if !ok || runtimeExecutorsFactory == nil {
-			return nil, nil
-		}
-		return loadWorkerOptions(
-			runtimeService,
-			runtimeExecutorsFactory,
-			spec,
-			factoryRunnerID,
-			verbose,
-			skipRunnerPrerequisiteValidation,
-			invocationSkipPermissionsOverride,
-			progressPublisher,
-			history,
-			logger,
-			loggerFactory,
-		)
-	}
+	return workerSessionsFactory, nil
 }
 
 func setBundleProgressPublisher(bundle *factoryhost.Bundle, publisher workers.ProgressPublisher) {
@@ -514,21 +439,6 @@ func validateBundleDependencies(
 	return nil
 }
 
-func buildProviderInvocation(
-	factory factory.ProviderInvocationExecutorFactory,
-	commandRunner workers.CommandRunner,
-	publisher workers.ProgressPublisher,
-) (workers.WorkstationRequestExecutor, error) {
-	if factory == nil {
-		return nil, nil
-	}
-	providerInvocation, err := factory(commandRunner, publisher)
-	if err != nil {
-		return nil, fmt.Errorf("construct provider-invocation Worker executor: %w", err)
-	}
-	return providerInvocation, nil
-}
-
 // bindProviderSessionProgress keeps the Workers progress bridge session-local:
 // Factory Runtime creates the same Worker Sessions service that owns the
 // execution service and binds it before any dispatch can be admitted or
@@ -537,7 +447,7 @@ func bindProviderSessionProgress(
 	workerSessionsFactory factory.WorkerSessionsFactory,
 	publisher *workersessions.ProviderSessionObservationPublisher,
 ) factory.WorkerSessionsFactory {
-	return func(execution workers.WorkstationExecutionService, clock platformclock.Source) (workersessions.Service, error) {
+	return func(execution workers.Service, clock platformclock.Source) (workersessions.Service, error) {
 		service, err := workerSessionsFactory(execution, clock)
 		if err != nil {
 			return nil, err
@@ -545,386 +455,4 @@ func bindProviderSessionProgress(
 		publisher.Bind(service)
 		return service, nil
 	}
-}
-
-func loadWorkerOptions(
-	workerExecution workers.RuntimeService,
-	runtimeExecutorsFactory factory.WorkersRuntimeExecutorsFactory,
-	spec runtimebuild.SessionBuildSpec,
-	factoryRunnerID string,
-	verbose bool,
-	skipRunnerPrerequisiteValidation bool,
-	invocationSkipPermissionsOverride *bool,
-	progressPublisher workers.ProgressPublisher,
-	history recordings.WorkerEventRecorder,
-	logger *zap.Logger,
-	loggerFactory factory.RuntimeLoggerFactory,
-) (map[string]workers.WorkerExecutor, error) {
-	if workerExecution == nil {
-		return nil, fmt.Errorf("Worker execution service is required")
-	}
-	if runtimeExecutorsFactory == nil {
-		return nil, fmt.Errorf("Workers runtime executors factory is required")
-	}
-	executors, err := runtimeExecutorsFactory(
-		workerExecution,
-		spec.LoadedFactoryCfg,
-		spec.LoadedFactoryCfg.FactoryConfig(),
-		factoryRunnerID,
-		RuntimeWorkflowContext(spec.LoadedFactoryCfg.FactoryConfig(), spec.SessionID),
-		loggerFactory(logger, verbose),
-		skipRunnerPrerequisiteValidation,
-		invocationSkipPermissionsOverride,
-		spec.ProviderOverride,
-		progressPublisher,
-		history.RecordScriptEvent,
-		history.RecordInferenceEvent,
-		history.RecordModelEvent,
-		history.RecordAgentRunEvent,
-		spec.Clock.Now,
-	)
-	if err != nil {
-		logger.Error("failed to load workers from config", zap.Error(err))
-		return nil, fmt.Errorf("load workers: %w", err)
-	}
-	return executors, nil
-}
-func executeServiceFromWorkstation(
-	service runtimeWorkstationService,
-) runtimeExecuteService {
-	if service == nil {
-		return nil
-	}
-	if execute, ok := service.(runtimeExecuteService); ok {
-		return execute
-	}
-	return workstationExecuteAdapter{service: service}
-}
-
-func startRuntimeWorkstationService(
-	ctx context.Context,
-	service runtimeWorkstationService,
-	executors map[string]workers.WorkerExecutor,
-	net *state.Net,
-	requestExecutor workers.WorkstationRequestExecutor,
-	providerInvocation workers.WorkstationRequestExecutor,
-) error {
-	if service == nil {
-		return fmt.Errorf("Workers execution service is unavailable")
-	}
-	bindings := make([]workers.AssembledRuntimeBinding, 0, len(executors)+1)
-	for _, name := range runtimeWorkstationRouteNames(net, executors) {
-		bindings = append(bindings, workers.AssembledRuntimeBinding{
-			RoleName:      name,
-			RoleKind:      workers.RuntimeBuildRoleKindWorkstation,
-			Executor:      requestExecutor,
-			Capacity:      workers.DefaultRuntimePoolBindingCapacity,
-			QueueCapacity: workers.DefaultRuntimePoolBindingCapacity,
-		})
-	}
-	if providerInvocation != nil {
-		bindings = append(bindings, workers.AssembledRuntimeBinding{
-			RoleName:      workers.ProviderInvocationRoute,
-			RoleKind:      workers.RuntimeBuildRoleKindWorkstation,
-			Executor:      providerInvocation,
-			Capacity:      workers.DefaultRuntimePoolBindingCapacity,
-			QueueCapacity: workers.DefaultRuntimePoolBindingCapacity,
-		})
-	}
-	_, err := service.StartWorkstationPool(ctx, workers.WorkstationPoolStartRequest{Bindings: bindings})
-	return err
-}
-
-func runtimeWorkstationRouteNames(
-	net *state.Net,
-	executors map[string]workers.WorkerExecutor,
-) []string {
-	routes := make(map[string]struct{}, len(executors))
-	for name := range executors {
-		if name != "" {
-			routes[name] = struct{}{}
-		}
-	}
-	if net != nil {
-		for id, transition := range net.Transitions {
-			if id != "" {
-				routes[id] = struct{}{}
-			}
-			if transition == nil {
-				continue
-			}
-			if transition.Name != "" {
-				routes[transition.Name] = struct{}{}
-			}
-			if transition.WorkerType != "" {
-				routes[transition.WorkerType] = struct{}{}
-			}
-		}
-	}
-	names := make([]string, 0, len(routes))
-	for name := range routes {
-		names = append(names, name)
-	}
-	sort.Strings(names)
-	return names
-}
-
-// workstationExecuteAdapter is retained only for callers that still provide
-// the pre-stateless Workers test/composition port. The concrete Runtime
-// constructor receives only ExecuteService; production Workers services take
-// the direct branch above.
-type workstationExecuteAdapter struct {
-	service runtimeWorkstationService
-}
-
-func (adapter workstationExecuteAdapter) Execute(
-	ctx context.Context,
-	request workers.ExecuteRequest,
-) (workers.ExecuteResult, error) {
-	if adapter.service == nil {
-		return workers.ExecuteResult{}, fmt.Errorf("Workers Execute service is unavailable")
-	}
-	dispatch := work.CloneWorkDispatch(request.Input.Dispatch)
-	dispatch.DispatchID = request.Correlation.AttemptID
-	dispatch.WorkerType = firstBuildValue(request.Target.WorkerName, request.Target.WorkerType)
-	dispatch.WorkstationName = request.Target.WorkstationName
-	dispatch.Execution.RequestID = request.Correlation.RequestID
-	dispatch.Execution.TraceID = request.Correlation.TraceID
-	if len(dispatch.Execution.WorkIDs) == 0 {
-		dispatch.Execution.WorkIDs = make([]string, 0, len(request.Input.Work))
-	}
-	for _, input := range request.Input.Work {
-		known := false
-		for _, workID := range dispatch.Execution.WorkIDs {
-			if workID == input.WorkID {
-				known = true
-				break
-			}
-		}
-		if !known {
-			dispatch.Execution.WorkIDs = append(dispatch.Execution.WorkIDs, input.WorkID)
-		}
-	}
-	result, err := adapter.service.DispatchWorkstation(ctx, workers.WorkstationDispatchRequest{
-		WorkstationName: request.Target.WorkstationName,
-		Execution: workers.WorkstationExecutionRequest{
-			Dispatch:         dispatch,
-			WorkerName:       request.Target.WorkerName,
-			WorkerType:       request.Target.WorkerType,
-			RunnerID:         request.Target.RunnerID,
-			FactorySessionID: request.Correlation.FactorySessionID,
-			RuntimeID:        request.Correlation.RuntimeID,
-			RecordingID:      request.Input.RecordingID,
-			GenerationID:     request.Correlation.GenerationID,
-			WorkflowContext:  request.Input.WorkflowContext.Clone(),
-			InputTokens:      append([]any(nil), dispatch.InputTokens...),
-		},
-	})
-	if err != nil {
-		return workers.ExecuteResult{}, err
-	}
-	outcome := workers.ExecutionOutcomeAccepted
-	switch result.Result.Outcome {
-	case workers.OutcomeContinue:
-		outcome = workers.ExecutionOutcomeContinue
-	case workers.OutcomeRejected:
-		outcome = workers.ExecutionOutcomeRejected
-	case workers.OutcomeFailed:
-		outcome = workers.ExecutionOutcomeFailed
-	}
-	return workers.ExecuteResult{
-		Correlation:          request.Correlation,
-		Outcome:              outcome,
-		ArtifactVerification: result.Result.ArtifactVerification.Clone(),
-		Output: workers.ProposedOutput{
-			Primary:        []work.WorkContentPart{{Type: work.WorkContentPartTypeText, Text: result.Result.Output}},
-			Feedback:       result.Result.Feedback,
-			Classification: result.Result.SelectedClassificationLabel,
-		},
-		StructuredResult:        jsonvalue.Clone(result.Result.StructuredResult),
-		StructuredResultPresent: jsonvalue.Present(result.Result.StructuredResult, result.Result.StructuredResultPresent),
-	}, nil
-}
-
-func workstationDispatchRequestFromExecute(
-	request workers.ExecuteRequest,
-) workers.WorkstationDispatchRequest {
-	dispatch := work.CloneWorkDispatch(request.Input.Dispatch)
-	// The logical dispatch remains in Correlation.DispatchID, while the
-	// workstation pool needs a unique physical dispatch identity for every
-	// Runtime retry. The first attempt uses the same value; later attempts use
-	// their distinct AttemptID and therefore cannot collide with the terminal
-	// pool record left by an earlier attempt.
-	dispatch.DispatchID = request.Correlation.AttemptID
-	if dispatch.TransitionID == "" {
-		dispatch.TransitionID = request.Target.WorkstationName
-	}
-	dispatch.WorkerType = request.Target.WorkerType
-	dispatch.WorkstationName = request.Target.WorkstationName
-	dispatch.Execution.RequestID = request.Correlation.RequestID
-	dispatch.Execution.TraceID = request.Correlation.TraceID
-	if len(dispatch.Execution.WorkIDs) == 0 {
-		for _, input := range request.Input.Work {
-			dispatch.Execution.WorkIDs = append(dispatch.Execution.WorkIDs, input.WorkID)
-		}
-	}
-	return workers.WorkstationDispatchRequest{
-		WorkstationName: request.Target.WorkstationName,
-		Execution: workers.WorkstationExecutionRequest{
-			Dispatch:                    dispatch,
-			WorkerName:                  request.Target.WorkerName,
-			WorkerType:                  firstBuildValue(request.Target.WorkerName, request.Target.WorkerType),
-			RunnerID:                    request.Target.RunnerID,
-			FactorySessionID:            request.Correlation.FactorySessionID,
-			RuntimeID:                   request.Correlation.RuntimeID,
-			RecordingID:                 request.Input.RecordingID,
-			GenerationID:                request.Correlation.GenerationID,
-			WorkflowContext:             request.Input.WorkflowContext.Clone(),
-			ProjectID:                   dispatch.ProjectID,
-			Capabilities:                cloneBuildCapabilities(request.Target.Capabilities),
-			InputTokens:                 append([]any(nil), dispatch.InputTokens...),
-			ModelOperation:              request.Input.ModelOperation,
-			ModelBindings:               workers.CloneResolvedModelOperationBindings(request.Input.ModelBindings),
-			Model:                       request.Target.Model.Name,
-			ModelProvider:               request.Target.Model.Provider,
-			ReasoningEffort:             request.Target.Model.ReasoningEffort,
-			Command:                     request.Target.Command,
-			Args:                        append([]string(nil), request.Target.Args...),
-			FactoryDirectory:            request.Target.FactoryDirectory,
-			OutputFormat:                request.Target.Output.Format,
-			StopToken:                   request.Target.Output.StopToken,
-			DecisionEnvelope:            request.Target.Output.DecisionEnvelope,
-			GoalRoutingDecisionEnvelope: request.Target.Output.GoalRoutingDecisionEnvelope,
-			SystemPrompt:                request.Target.Prompt.SystemPrompt,
-			UserMessage:                 request.Target.Prompt.UserMessage,
-			OutputSchema:                request.Target.Prompt.OutputSchema,
-			OutputContract:              request.Target.Output.Contract,
-			Timeout:                     request.Target.Timeout,
-			EnvVars:                     cloneBuildStringMap(request.Target.Environment.Vars),
-			ProcessEnvironment:          append([]string(nil), request.Target.Environment.ProcessEnvironment...),
-			Worktree:                    request.Target.Workspace.Worktree,
-			WorkingDirectory:            request.Target.Environment.WorkingDirectory,
-			WorkingDirectoryAuthored:    request.Target.Environment.WorkingDirectorySet,
-			Continuation:                cloneBuildContinuation(request.Input.Resume),
-			SkipPermissions:             request.Target.Permissions.SkipPermissions,
-		},
-	}
-}
-
-func executeResultFromWorkstationDispatch(
-	request workers.ExecuteRequest,
-	result workers.WorkstationDispatchResult,
-	dispatchErr error,
-) (workers.ExecuteResult, error) {
-	outcome := workers.ExecutionOutcomeAccepted
-	switch result.Result.Outcome {
-	case workers.OutcomeContinue:
-		outcome = workers.ExecutionOutcomeContinue
-	case workers.OutcomeRejected:
-		outcome = workers.ExecutionOutcomeRejected
-	case workers.OutcomeFailed:
-		outcome = workers.ExecutionOutcomeFailed
-	}
-	if result.TerminalOutcome == workers.WorkstationDispatchTerminalOutcomeCanceled {
-		outcome = workers.ExecutionOutcomeCanceled
-	}
-	executeResult := workers.ExecuteResult{
-		Correlation:      request.Correlation,
-		Outcome:          outcome,
-		Output:           workers.ProposedOutputFromLegacyWorkResult(result.Result),
-		StructuredResult: jsonvalue.Clone(result.Result.StructuredResult),
-		StructuredResultPresent: jsonvalue.Present(
-			result.Result.StructuredResult,
-			result.Result.StructuredResultPresent,
-		),
-		ArtifactVerification: result.Result.ArtifactVerification.Clone(),
-		Metrics: workers.ExecutionMetrics{
-			Duration:   result.Result.Metrics.Duration,
-			Cost:       result.Result.Metrics.Cost,
-			RetryCount: result.Result.Metrics.RetryCount,
-		},
-		Continuation: cloneBuildContinuation(result.Result.Continuation),
-		Diagnostics:  result.Result.Diagnostics.ToSafeDiagnostics(),
-	}
-	if result.Result.FailureMetadata != nil || strings.TrimSpace(result.Result.Error) != "" {
-		executeResult.Failure = executionFailureFromWorkstationResult(result.Result, dispatchErr)
-	}
-	if dispatchErr != nil {
-		executeResult.Outcome = workers.ExecutionOutcomeFailed
-		if executeResult.Failure == nil {
-			executeResult.Failure = executionFailureFromWorkstationResult(result.Result, dispatchErr)
-		}
-		return executeResult, dispatchErr
-	}
-	return executeResult, nil
-}
-
-func executionFailureFromWorkstationResult(
-	result workers.WorkResult,
-	dispatchErr error,
-) *workers.ExecutionFailure {
-	failure := &workers.ExecutionFailure{Message: strings.TrimSpace(result.Error)}
-	if result.FailureMetadata != nil {
-		failure.Family = result.FailureMetadata.Family
-		failure.Type = result.FailureMetadata.Type
-		failure.RetryHint = workers.FailureDecisionFromMetadata(result.FailureMetadata).Retryable
-	}
-	if failure.Message != "" && result.FailureMetadata != nil {
-		failure.Detail = &workers.FailureDetail{
-			Reason:  result.FailureMetadata.Type,
-			Message: failure.Message,
-		}
-	}
-	if failure.Message == "" && dispatchErr != nil {
-		failure.Message = dispatchErr.Error()
-	}
-	return failure
-}
-
-func canceledExecuteResult(request workers.ExecuteRequest) workers.ExecuteResult {
-	return workers.ExecuteResult{
-		Correlation: request.Correlation,
-		Outcome:     workers.ExecutionOutcomeCanceled,
-		Failure: &workers.ExecutionFailure{
-			Type:    workers.WorkFailureTypeUnknown,
-			Family:  workers.WorkFailureFamilyTerminal,
-			Message: "execution canceled",
-		},
-	}
-}
-
-func cloneBuildCapabilities(value *workers.Capabilities) *workers.Capabilities {
-	if value == nil {
-		return nil
-	}
-	clone := *value
-	return &clone
-}
-
-func cloneBuildStringMap(value map[string]string) map[string]string {
-	if len(value) == 0 {
-		return nil
-	}
-	clone := make(map[string]string, len(value))
-	for key, item := range value {
-		clone[key] = item
-	}
-	return clone
-}
-
-func firstBuildValue(values ...string) string {
-	for _, value := range values {
-		if trimmed := strings.TrimSpace(value); trimmed != "" {
-			return trimmed
-		}
-	}
-	return ""
-}
-
-func cloneBuildContinuation(value *workers.ProviderContinuationRef) *workers.ProviderContinuationRef {
-	if value == nil {
-		return nil
-	}
-	clone := value.Clone()
-	return &clone
 }

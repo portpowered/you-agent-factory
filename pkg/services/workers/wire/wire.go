@@ -1,8 +1,7 @@
 // Package wire is the Workers service composition boundary.
 //
 // Wire performs construction only, returns the singular workers.Service root
-// interface, and starts no lifecycle components. Parent-private runtime_assembly,
-// workstations, and runners (agent/script/inference) owner wiring stays inside
+// interface, and starts no lifecycle components. Runner ownership stays inside
 // the owner service assembly path; peers depend on Service rather than owner
 // internals or construction ports. Hosted runner ownership is not constructed.
 package wire
@@ -22,10 +21,8 @@ import (
 	executeservice "github.com/portpowered/infinite-you/pkg/services/workers/internal/service"
 	"github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners"
 	runnerswire "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/wire"
-	runtimeassemblywire "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runtime_assembly/wire"
 	"github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/executor/agentrun"
 	"github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/invocation"
-	workstationswire "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/wire"
 
 	worktree "github.com/portpowered/infinite-you/pkg/services/workers/internal/worktree"
 )
@@ -88,10 +85,6 @@ func NewService(
 	if len(providerOverrides) > 0 {
 		providerOverride = providerOverrides[0]
 	}
-	runtimeAssembly, err := runtimeassemblywire.NewService(runnerRegistry, defaultBindingAssembler)
-	if err != nil {
-		return nil, err
-	}
 	executeService, err := executeservice.NewWithProviderOverride(
 		runnerRegistry,
 		agentDependencies.Providers,
@@ -109,11 +102,7 @@ func NewService(
 	if err != nil {
 		return nil, fmt.Errorf("construct Workers: %w", err)
 	}
-	return workersinternal.NewRoot(
-		runtimeAssembly,
-		workstationswire.NewService(logger),
-		executeService,
-	)
+	return workersinternal.NewRoot(executeService)
 }
 
 // NewMockService constructs the explicit Workers mock-feature root. The mock
@@ -166,10 +155,6 @@ func NewMockService(
 	if len(providerOverrides) > 0 {
 		providerOverride = providerOverrides[0]
 	}
-	runtimeAssembly, err := runtimeassemblywire.NewService(runnerRegistry, defaultBindingAssembler)
-	if err != nil {
-		return nil, err
-	}
 	executeService, err := executeservice.NewWithProviderOverride(
 		runnerRegistry,
 		agentDependencies.Providers,
@@ -187,11 +172,7 @@ func NewMockService(
 	if err != nil {
 		return nil, fmt.Errorf("construct mock Workers: %w", err)
 	}
-	return workersinternal.NewRoot(
-		runtimeAssembly,
-		workstationswire.NewService(logger),
-		executeService,
-	)
+	return workersinternal.NewRoot(executeService)
 }
 
 func validateConstructionPorts(
@@ -232,19 +213,6 @@ func validateConstructionPorts(
 		return fmt.Errorf("construct Workers: inference Models service is required")
 	}
 	return nil
-}
-
-func defaultBindingAssembler(
-	_ context.Context,
-	role workers.RuntimeBuildRoleRequest,
-	_ workers.RuntimeBuildOpeningOptions,
-	selection workers.ResolvedRunnerSelection,
-) (workers.AssembledRuntimeBinding, error) {
-	return workers.AssembledRuntimeBinding{
-		RoleName:        role.Name,
-		RoleKind:        role.Kind,
-		RunnerSelection: selection,
-	}, nil
 }
 
 var NewFactoryDocsLoader = workerprompting.NewFactoryDocsLoader

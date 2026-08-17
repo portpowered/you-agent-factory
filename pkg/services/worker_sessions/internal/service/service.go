@@ -24,7 +24,7 @@ import (
 )
 
 // ErrMissingExecution reports that New was constructed without the one
-// required directly injected workers.WorkstationExecutionService.
+// required directly injected request-scoped workers.Service.
 var ErrMissingExecution = errors.New("worker sessions: execution service is required")
 
 // ErrMissingEventsAppender reports that New was constructed without the one
@@ -83,7 +83,7 @@ type registry struct {
 	// deliberately do not install Worker Sessions-owned supervision: Runtime
 	// remains the sole admission, cancellation, and execution owner.
 	runtimeAttempts  map[string]struct{}
-	execution        workers.WorkstationExecutionService
+	execution        workers.Service
 	events           EventsAppender
 	eventReader      EventsReader
 	retainedReader   EventsRetainedReader
@@ -118,7 +118,7 @@ var _ workersessions.Service = (*registry)(nil)
 // Provider Sessions service is rejected: the registry cannot truthfully
 // supervise, time, or enrich an observation without each of them.
 func New(
-	execution workers.WorkstationExecutionService,
+	execution workers.Service,
 	eventsAppender EventsAppender,
 	logger logging.Logger,
 	clock platformclock.Source,

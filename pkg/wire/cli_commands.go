@@ -37,7 +37,6 @@ import (
 	workersessionscli "github.com/portpowered/infinite-you/pkg/services/worker_sessions/transports/cli"
 	workersessionswire "github.com/portpowered/infinite-you/pkg/services/worker_sessions/wire"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
-	workerswire "github.com/portpowered/infinite-you/pkg/services/workers/wire"
 	"github.com/portpowered/infinite-you/pkg/transports/cli"
 	acpcli "github.com/portpowered/infinite-you/pkg/transports/cli/acp"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/clihttp"
@@ -263,8 +262,7 @@ func bindWorkerSessionControlOperation(
 // boundary rewrites only the pool route while preserving the execution payload
 // that the provider-invocation executor consumes.
 type localWorkerSessionsBoundary struct {
-	service   workersessions.Service
-	execution workers.WorkstationExecutionService
+	service workersessions.Service
 }
 
 var _ workersessionscli.LocalInvokeBoundary = (*localWorkerSessionsBoundary)(nil)
@@ -353,50 +351,26 @@ func (b *localWorkerSessionsBoundary) StreamObservationsByWorkerSessionID(
 }
 
 func (b *localWorkerSessionsBoundary) Close(ctx context.Context) error {
-	if b == nil || b.execution == nil {
-		return nil
-	}
-	_, err := b.execution.StopWorkstationPool(ctx)
-	return err
+	return nil
 }
 
 func provideLocalWorkerSessionsBoundary(
 	eventsService events.Service,
 	providerSessions providersessions.Service,
 	logger logging.Logger,
-	providerInvocationFactory factoryruntime.ProviderInvocationExecutorFactory,
+	workerService workers.Service,
 	recording recordings.WorkerSessionRecordingService,
 ) (*localWorkerSessionsBoundary, error) {
-	if providerInvocationFactory == nil {
-		return nil, fmt.Errorf("construct local Worker Sessions boundary: provider invocation factory is required")
+	if workerService == nil {
+		return nil, fmt.Errorf("construct local Worker Sessions boundary: Workers service is required")
 	}
 	// The local direct route has no Factory Runtime publisher to supply. Bind
 	// the same Worker Sessions-owned observation bridge used by Factory Runtime
 	// before the first dispatch so provider-session association and source-native
 	// Worker drafts reach the local session topic as well.
 	observationPublisher := workersessions.NewProviderSessionObservationPublisher(nil)
-	providerInvocation, err := providerInvocationFactory(nil, observationPublisher.Publish)
-	if err != nil {
-		return nil, fmt.Errorf("construct local Worker Sessions boundary: %w", err)
-	}
-	if providerInvocation == nil {
-		return nil, fmt.Errorf("construct local Worker Sessions boundary: provider invocation is unavailable")
-	}
-
-	execution := workerswire.NewWorkstationPool(logger)
-	if _, err := execution.StartWorkstationPool(context.Background(), workers.WorkstationPoolStartRequest{
-		Bindings: []workers.AssembledRuntimeBinding{{
-			RoleName:      workers.ProviderInvocationRoute,
-			RoleKind:      workers.RuntimeBuildRoleKindWorkstation,
-			Executor:      providerInvocation,
-			Capacity:      workers.DefaultRuntimePoolBindingCapacity,
-			QueueCapacity: workers.DefaultRuntimePoolBindingCapacity,
-		}},
-	}); err != nil {
-		return nil, fmt.Errorf("start local Workers execution service: %w", err)
-	}
 	service, err := workersessionswire.NewService(
-		execution,
+		workerService,
 		eventsService,
 		logger,
 		platformclock.Real{},
@@ -407,7 +381,7 @@ func provideLocalWorkerSessionsBoundary(
 		return nil, fmt.Errorf("construct local Worker Sessions service: %w", err)
 	}
 	observationPublisher.Bind(service)
-	return &localWorkerSessionsBoundary{service: service, execution: execution}, nil
+	return &localWorkerSessionsBoundary{service: service}, nil
 }
 
 func provideInvokeWorkerSessionOperation(

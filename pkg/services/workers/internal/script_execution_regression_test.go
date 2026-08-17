@@ -16,6 +16,10 @@ import (
 	runnerswire "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/wire"
 )
 
+var testFactoryDocsLoader workers.FactoryDocsLoader = func(string) (map[string]string, error) {
+	return nil, nil
+}
+
 // recordingScriptCommandRunner is a thread-safe fake implementing both
 // workers.CommandRunner and the streaming edge the Script Runner requires.
 // The tests below exercise the request-scoped Workers service, so every

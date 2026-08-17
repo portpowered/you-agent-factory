@@ -677,11 +677,14 @@ type ExecuteResult struct {
 }
 
 type ExecutionFailure struct {
-	Type      WorkFailureType
-	Family    WorkFailureFamily
-	Message   string
-	RetryHint bool
-	Detail    *FailureDetail
+	Type                            WorkFailureType
+	Family                          WorkFailureFamily
+	Message                         string
+	RetryHint                       bool
+	Detail                          *FailureDetail
+	ProviderFailureKind             providers.ExecuteFailureKind
+	ProviderContinuationFailureKind providers.ContinuationFailureKind
+	ProviderContinuationOutcome     providers.ContinuationOutcome
 }
 
 type ExecutionMetrics struct {

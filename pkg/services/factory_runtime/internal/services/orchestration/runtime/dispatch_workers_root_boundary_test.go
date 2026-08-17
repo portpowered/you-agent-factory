@@ -157,23 +157,12 @@ func TestFactoryImpl_PlannedDispatchAcceptsWorkersResultThroughRuntimeRoot(t *te
 	}
 }
 
-// TestWorkersExecutionServiceAdmitsRuntimePlannedDispatchRequest proves the
-// injected Workers execution service executes a dispatch request shaped like
-// Runtime planning publishes without importing nested implementation packages.
-func TestWorkersExecutionServiceAdmitsRuntimePlannedDispatchRequest(t *testing.T) {
+// TestWorkersServiceExecutesRuntimePlannedRequest proves the injected Workers
+// service executes a request shaped like Runtime planning publishes without
+// importing nested implementation packages or assembling a pool in Runtime.
+func TestWorkersServiceExecutesRuntimePlannedRequest(t *testing.T) {
 	executor := &recordingRootBoundaryExecutor{}
-	service := &testWorkstationBoundary{}
-	requestExecutor := testWorkstationRequestExecutor{executors: map[string]workers.WorkerExecutor{"mock": executor}}
-	bindings := make([]workers.AssembledRuntimeBinding, 0, 3)
-	for _, routeName := range []string{"Process", "mock", "t-process"} {
-		bindings = append(bindings, workers.AssembledRuntimeBinding{
-			RoleName: routeName, RoleKind: workers.RuntimeBuildRoleKindWorkstation,
-			Executor: requestExecutor,
-		})
-	}
-	if _, err := service.StartWorkstationPool(t.Context(), workers.WorkstationPoolStartRequest{Bindings: bindings}); err != nil {
-		t.Fatalf("StartWorkstationPool: %v", err)
-	}
+	service := &testWorkstationBoundary{executors: map[string]workers.WorkerExecutor{"mock": executor}}
 
 	dispatch := work.WorkDispatch{
 		DispatchID:      "workers-root-dispatch",
@@ -194,10 +183,10 @@ func TestWorkersExecutionServiceAdmitsRuntimePlannedDispatchRequest(t *testing.T
 		},
 	}
 
-	result, err := service.DispatchWorkstation(t.Context(), request)
-	requireNoRootErr(t, err, "DispatchWorkstation")
-	if result.TerminalOutcome != workers.WorkstationDispatchTerminalOutcomeCompleted {
-		t.Fatalf("terminal outcome = %q, want COMPLETED", result.TerminalOutcome)
+	result, err := service.Execute(t.Context(), testExecuteRequestFromDispatch(request))
+	requireNoRootErr(t, err, "Execute")
+	if result.Outcome != workers.ExecutionOutcomeAccepted {
+		t.Fatalf("execution outcome = %q, want ACCEPTED", result.Outcome)
 	}
 	if executor.calls.Load() != 1 {
 		t.Fatalf("executor calls = %d, want 1 through Workers execution service", executor.calls.Load())

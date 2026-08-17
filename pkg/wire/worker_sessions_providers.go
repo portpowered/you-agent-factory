@@ -98,7 +98,7 @@ func provideWorkerSessionsFactoryWithRecorder(
 	logger logging.Logger,
 	recorder recordings.WorkerSessionRecordingService,
 ) factoryruntime.WorkerSessionsFactory {
-	return func(execution workers.WorkstationExecutionService, clock platformclock.Source) (workersessions.Service, error) {
+	return func(execution workers.Service, clock platformclock.Source) (workersessions.Service, error) {
 		return workersessionswire.NewService(execution, eventsService, logger, clock, providerSessions, recorder)
 	}
 }

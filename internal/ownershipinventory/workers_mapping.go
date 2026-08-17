@@ -16,7 +16,6 @@ type workersMoveRule struct {
 // workersMoveRules mirrors cmd/packagetargetmanifestcheck nestedOwnerMoveRules for
 // workers. Ownership rows keep owner destination with concrete successor paths.
 var workersMoveRules = []workersMoveRule{
-	{exact: "construction", prefix: "construction/", subservice: "runtime_assembly"},
 	{exact: "prompting", prefix: "prompting/", subservice: "workstations"},
 	{exact: "worktree", prefix: "worktree/", subservice: "workstations"},
 	{exact: "skippermissions", prefix: "skippermissions/", subservice: "workstations"},
@@ -67,8 +66,6 @@ func workersMapping(packagePath string) (PackageRow, bool) {
 func isWorkersCanonicalRetain(rest string) bool {
 	switch {
 	case rest == "wire" || strings.HasPrefix(rest, "wire/"):
-		return true
-	case strings.HasPrefix(rest, "internal/services/runtime_assembly"):
 		return true
 	case strings.HasPrefix(rest, "internal/services/workstations"):
 		return true

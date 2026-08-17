@@ -46,9 +46,8 @@ const MaxFailureCauseDetailRunes = 512
 
 const (
 	// FailureCauseStartFailure reports that the resolved attempt could not
-	// be handed off: the injected workers.WorkstationExecutionService
-	// returned no Workers result at all (for example, an unavailable or
-	// misconfigured workstation pool), so no attempt ever ran.
+	// be handed off: the injected workers.Service returned no Workers result at
+	// all (for example, because execution was unavailable), so no attempt ran.
 	FailureCauseStartFailure FailureCauseKind = "START_FAILURE"
 	// FailureCauseWorkersExecutionFailure reports that the injected Workers
 	// boundary returned a WorkResult classified as failed for an ordinary

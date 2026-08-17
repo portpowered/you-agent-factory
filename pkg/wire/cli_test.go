@@ -17,7 +17,6 @@ import (
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	eventswire "github.com/portpowered/infinite-you/pkg/services/events/wire"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	sessioncli "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/cli/session"
 	factorysessionwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire"
 	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
@@ -56,16 +55,12 @@ func TestProvideLocalWorkerSessionsBoundaryUsesProviderInvocationRoute(t *testin
 		t.Fatalf("construct events service: %v", err)
 	}
 	routes := make(chan string, 1)
-	providerInvocationFactory := factoryruntime.ProviderInvocationExecutorFactory(
-		func(workers.CommandRunner, workers.ProgressPublisher) (workers.WorkstationRequestExecutor, error) {
-			return localBoundaryRequestExecutor{routes: routes}, nil
-		},
-	)
+	workerService := localBoundaryWorkersService{routes: routes}
 	boundary, err := provideLocalWorkerSessionsBoundary(
 		eventsService,
 		localBoundaryProviderSessions{},
 		logging.NoopLogger{},
-		providerInvocationFactory,
+		workerService,
 		nil,
 	)
 	if err != nil {
@@ -142,18 +137,19 @@ func TestLocalWorkerSessionsBoundaryRejectsControlsWhenServiceUnavailable(t *tes
 	}
 }
 
-type localBoundaryRequestExecutor struct {
+type localBoundaryWorkersService struct {
+	workers.ModelInvoker
 	routes chan<- string
 }
 
-func (e localBoundaryRequestExecutor) Execute(
+func (e localBoundaryWorkersService) Execute(
 	_ context.Context,
-	request workers.WorkstationExecutionRequest,
-) (workers.WorkResult, error) {
-	e.routes <- request.Dispatch.WorkstationName
-	return workers.WorkResult{
-		DispatchID: request.Dispatch.DispatchID,
-		Outcome:    workers.OutcomeAccepted,
+	request workers.ExecuteRequest,
+) (workers.ExecuteResult, error) {
+	e.routes <- request.Target.WorkstationName
+	return workers.ExecuteResult{
+		Correlation: request.Correlation,
+		Outcome:     workers.ExecutionOutcomeAccepted,
 	}, nil
 }
 

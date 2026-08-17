@@ -82,8 +82,6 @@ type FactoryRuntimePorts struct {
 	Logger                          *zap.Logger
 	FactoryWorkflows                factoryruntime.JavaScriptWorkflowDefinitions
 	WorkflowPreview                 factoryruntime.WorkflowPreviewOperation
-	WorkersRuntimeExecutorsFactory  factoryruntime.WorkersRuntimeExecutorsFactory
-	ProviderInvocationFactory       factoryruntime.ProviderInvocationExecutorFactory
 	WorkersMockCommandRunnerFactory factoryruntime.WorkersMockCommandRunnerFactory
 	FactoryRuntimeAssembler         FactoryRuntimeAssembler
 	RuntimeRootFactory              RuntimeRootFactory
@@ -192,8 +190,6 @@ type Factory struct {
 	recordingsRoot                   recordings.Root
 	replayInputs                     recordings.ReplayInputLoader
 	webhooksService                  webhooks.Service
-	workersRuntimeExecutorsFactory   factoryruntime.WorkersRuntimeExecutorsFactory
-	providerInvocationFactory        factoryruntime.ProviderInvocationExecutorFactory
 	workersMockCommandRunnerFactory  factoryruntime.WorkersMockCommandRunnerFactory
 	factoryDefinitions               factorydefinitions.Service
 	definitionRuntimeRouter          *factorysessions.DefinitionRuntimeRouter
@@ -277,8 +273,6 @@ func NewFactory(
 		recordingsRoot:                   recordingsPorts.Root,
 		replayInputs:                     recordingsPorts.Root,
 		webhooksService:                  webhooksPorts.Service,
-		workersRuntimeExecutorsFactory:   factoryRuntime.WorkersRuntimeExecutorsFactory,
-		providerInvocationFactory:        factoryRuntime.ProviderInvocationFactory,
 		workersMockCommandRunnerFactory:  factoryRuntime.WorkersMockCommandRunnerFactory,
 		factoryDefinitions:               factoryDefinitions.Service,
 		definitionRuntimeRouter:          factoryDefinitions.RuntimeRouter,
@@ -376,8 +370,6 @@ func validateFactoryRuntime(group *FactoryRuntimePorts) error {
 		runtimeOpeningRequirement{"logger", group.Logger},
 		runtimeOpeningRequirement{"JavaScript workflow definitions", group.FactoryWorkflows},
 		runtimeOpeningRequirement{"workflow preview operation", group.WorkflowPreview},
-		runtimeOpeningRequirement{"Workers runtime executors factory", group.WorkersRuntimeExecutorsFactory},
-		runtimeOpeningRequirement{"provider-invocation executor factory", group.ProviderInvocationFactory},
 		runtimeOpeningRequirement{"Workers mock command runner factory", group.WorkersMockCommandRunnerFactory},
 		runtimeOpeningRequirement{"runtime assembler", group.FactoryRuntimeAssembler},
 		runtimeOpeningRequirement{"clock resolver", group.ResolveClock},
@@ -572,8 +564,6 @@ func (f *Factory) openRuntimeWithOptions(
 		f.factorySessionsRuntimeAssembly,
 		f.factorySessionExecutionFactory,
 		f.recordingsRoot,
-		f.workersRuntimeExecutorsFactory,
-		f.providerInvocationFactory,
 		f.workersMockCommandRunnerFactory,
 		f.factoryDefinitions,
 		f.definitionRuntimeRouter,

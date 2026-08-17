@@ -11,6 +11,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	"github.com/portpowered/infinite-you/pkg/services/events"
 	eventswire "github.com/portpowered/infinite-you/pkg/services/events/wire"
+	modelinference "github.com/portpowered/infinite-you/pkg/services/models"
 	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/work"
@@ -23,13 +24,8 @@ func continuationFromProviderMetadata(metadata *providers.SessionMetadata) *prov
 	return (metadata).ContinuationRef()
 }
 
-func continuationFromProviderReference(reference providers.SessionRef) *providers.ContinuationRef {
-	continuation := reference.ContinuationRef()
-	return &continuation
-}
-
 func newService(
-	execution workers.WorkstationExecutionService,
+	execution any,
 	eventsAppender workersessionservice.EventsAppender,
 	logger logging.Logger,
 ) (workersessions.Service, error) {
@@ -37,12 +33,12 @@ func newService(
 }
 
 func newServiceWithClock(
-	execution workers.WorkstationExecutionService,
+	execution any,
 	eventsAppender workersessionservice.EventsAppender,
 	logger logging.Logger,
 	clock platformclock.Source,
 ) (workersessions.Service, error) {
-	return workersessionservice.New(execution, eventsAppender, logger, clock, unavailableProviderSessions{}, nil)
+	return workersessionservice.New(asCanonicalExecution(execution), eventsAppender, logger, clock, unavailableProviderSessions{}, nil)
 }
 
 type unavailableProviderSessions struct {
@@ -53,10 +49,9 @@ func (unavailableProviderSessions) Project(providersessions.ProjectRequest) (pro
 	return providersessions.ProjectResult{}, providersessions.ErrSessionStorageUnavailable
 }
 
-// fakeExecution is a controlled test double for
-// workers.WorkstationExecutionService. dispatch is called for every
-// DispatchWorkstation invocation; a nil dispatch reports an unconfigured
-// double as an error rather than silently succeeding.
+// fakeExecution is a controlled legacy-shaped test double. The
+// executionBoundary adapter below presents it to Worker Sessions as the
+// canonical request-scoped workers.Service.
 type fakeExecution struct {
 	dispatch func(context.Context, workers.WorkstationDispatchRequest) (workers.WorkstationDispatchResult, error)
 	cancel   func(context.Context, workers.WorkstationDispatchCancelRequest) (workers.WorkstationDispatchCancelResult, error)
@@ -70,19 +65,6 @@ type fakeExecution struct {
 	cancelCalls []workers.WorkstationDispatchCancelRequest
 }
 
-var _ workers.WorkstationExecutionService = (*fakeExecution)(nil)
-
-func (f *fakeExecution) StartWorkstationPool(
-	context.Context,
-	workers.WorkstationPoolStartRequest,
-) (workers.WorkstationPoolStartResult, error) {
-	return workers.WorkstationPoolStartResult{}, nil
-}
-
-func (f *fakeExecution) StopWorkstationPool(context.Context) (workers.WorkstationPoolStopResult, error) {
-	return workers.WorkstationPoolStopResult{}, nil
-}
-
 func (f *fakeExecution) DispatchWorkstation(
 	ctx context.Context,
 	req workers.WorkstationDispatchRequest,
@@ -92,7 +74,7 @@ func (f *fakeExecution) DispatchWorkstation(
 	dispatch := f.dispatch
 	f.mu.Unlock()
 	if dispatch == nil {
-		return workers.WorkstationDispatchResult{}, workers.ErrWorkstationPoolUnavailable
+		return workers.WorkstationDispatchResult{}, workers.ErrExecuteUnavailable
 	}
 	return dispatch(ctx, req)
 }
@@ -144,34 +126,31 @@ func (f *fakeExecution) cancellationRequests() []workers.WorkstationDispatchCanc
 	return append([]workers.WorkstationDispatchCancelRequest(nil), f.cancelCalls...)
 }
 
-// executionBoundary is the direct Workers execution double used by the
-// Worker Sessions tests. It deliberately exposes only the supported Workers
-// execution contract; admission and terminal behavior are supplied by the
-// Workers-shaped methods below.
+type legacyExecution interface {
+	DispatchWorkstationWithAdmission(context.Context, workers.WorkstationDispatchRequest, workers.WorkstationDispatchAdmissionFunc) (workers.WorkstationDispatchResult, error)
+}
+
+// executionBoundary is a test-only adapter from the historical dispatch
+// fixture shape to the supported request-scoped Workers service. Production
+// code injects workers.Service directly; this adapter keeps the older session
+// assertions focused on observable results while they migrate incrementally.
 type executionBoundary struct {
-	execution workers.WorkstationExecutionService
+	execution legacyExecution
 }
 
-var _ workers.WorkstationExecutionService = executionBoundary{}
+var _ workers.Service = executionBoundary{}
 
-func (b executionBoundary) StartWorkstationPool(ctx context.Context, request workers.WorkstationPoolStartRequest) (workers.WorkstationPoolStartResult, error) {
-	return b.execution.StartWorkstationPool(ctx, request)
+func (b executionBoundary) Execute(ctx context.Context, request workers.ExecuteRequest) (workers.ExecuteResult, error) {
+	if b.execution == nil {
+		return workers.ExecuteResult{}, workers.ErrExecuteUnavailable
+	}
+	legacy := legacyDispatchRequest(request)
+	result, err := b.execution.DispatchWorkstationWithAdmission(ctx, legacy, func() {})
+	return executeResultFromLegacy(request, result, err), err
 }
 
-func (b executionBoundary) StopWorkstationPool(ctx context.Context) (workers.WorkstationPoolStopResult, error) {
-	return b.execution.StopWorkstationPool(ctx)
-}
-
-func (b executionBoundary) DispatchWorkstation(ctx context.Context, request workers.WorkstationDispatchRequest) (workers.WorkstationDispatchResult, error) {
-	return b.execution.DispatchWorkstation(ctx, request)
-}
-
-func (b executionBoundary) DispatchWorkstationWithAdmission(ctx context.Context, request workers.WorkstationDispatchRequest, admitted workers.WorkstationDispatchAdmissionFunc) (workers.WorkstationDispatchResult, error) {
-	return b.execution.DispatchWorkstationWithAdmission(ctx, request, admitted)
-}
-
-func (b executionBoundary) CancelWorkstationDispatch(ctx context.Context, request workers.WorkstationDispatchCancelRequest) (workers.WorkstationDispatchCancelResult, error) {
-	return b.execution.CancelWorkstationDispatch(ctx, request)
+func (executionBoundary) InvokeModel(context.Context, string, modelinference.Request) (modelinference.Result, error) {
+	return modelinference.Result{}, workers.ErrExecuteUnavailable
 }
 
 // appendOnlyEvents deliberately exposes no Read or Subscribe method. It
@@ -213,49 +192,105 @@ func (e *gatedEvents) Subscribe(ctx context.Context, req events.SubscribeRequest
 	return e.Service.Subscribe(ctx, req)
 }
 
-// noAdmissionBoundary reports a terminal dispatch failure without invoking
-// the admission callback. It models a Workers handoff that fails before the
-// cancellable admission point and lets Start prove that it never returns
-// success for that path.
-type noAdmissionBoundary struct {
-	err error
+func asCanonicalExecution(execution any) workers.Service {
+	if execution == nil {
+		return nil
+	}
+	if service, ok := execution.(workers.Service); ok {
+		return service
+	}
+	if legacy, ok := execution.(legacyExecution); ok {
+		return executionBoundary{execution: legacy}
+	}
+	return nil
 }
 
-var _ workers.WorkstationExecutionService = noAdmissionBoundary{}
-
-func (b noAdmissionBoundary) StartWorkstationPool(context.Context, workers.WorkstationPoolStartRequest) (workers.WorkstationPoolStartResult, error) {
-	return workers.WorkstationPoolStartResult{}, nil
-}
-
-func (b noAdmissionBoundary) StopWorkstationPool(context.Context) (workers.WorkstationPoolStopResult, error) {
-	return workers.WorkstationPoolStopResult{}, nil
-}
-
-func (b noAdmissionBoundary) DispatchWorkstation(
-	ctx context.Context,
-	req workers.WorkstationDispatchRequest,
-) (workers.WorkstationDispatchResult, error) {
-	return b.DispatchWorkstationWithAdmission(ctx, req, nil)
-}
-
-func (b noAdmissionBoundary) DispatchWorkstationWithAdmission(
-	_ context.Context,
-	req workers.WorkstationDispatchRequest,
-	_ workers.WorkstationDispatchAdmissionFunc,
-) (workers.WorkstationDispatchResult, error) {
-	result := workers.WorkstationDispatchResult{
-		DispatchID:      req.Execution.Dispatch.DispatchID,
-		TerminalOutcome: workers.WorkstationDispatchTerminalOutcomeFailed,
-		Result: workers.WorkResult{
-			DispatchID: req.Execution.Dispatch.DispatchID,
-			Outcome:    workers.OutcomeFailed,
+func legacyDispatchRequest(request workers.ExecuteRequest) workers.WorkstationDispatchRequest {
+	target := request.Target
+	return workers.WorkstationDispatchRequest{
+		WorkstationName: target.WorkstationName,
+		Execution: workers.WorkstationExecutionRequest{
+			Dispatch:                 work.CloneWorkDispatch(request.Input.Dispatch),
+			WorkerName:               target.WorkerName,
+			WorkerType:               target.WorkerType,
+			WorkstationType:          target.WorkstationName,
+			RunnerID:                 target.RunnerID,
+			ExecutorProvider:         target.ExecutorProvider,
+			Model:                    target.Model.Name,
+			ModelProvider:            target.Model.Provider,
+			ReasoningEffort:          target.Model.ReasoningEffort,
+			SystemPrompt:             target.Prompt.SystemPrompt,
+			UserMessage:              target.Prompt.UserMessage,
+			OutputSchema:             target.Prompt.OutputSchema,
+			Timeout:                  target.Timeout,
+			EnvVars:                  cloneStringMapForSessionTest(target.Environment.Vars),
+			ProcessEnvironment:       append([]string(nil), target.Environment.ProcessEnvironment...),
+			Worktree:                 target.Workspace.Worktree,
+			WorkingDirectory:         target.Environment.WorkingDirectory,
+			WorkingDirectoryAuthored: target.Environment.WorkingDirectorySet,
+			SkipPermissions:          target.Permissions.SkipPermissions,
+			Continuation:             (request.Input.Resume).ClonePtr(),
 		},
 	}
-	return result, b.err
 }
 
-func (b noAdmissionBoundary) CancelWorkstationDispatch(context.Context, workers.WorkstationDispatchCancelRequest) (workers.WorkstationDispatchCancelResult, error) {
-	return workers.WorkstationDispatchCancelResult{}, nil
+func executeResultFromLegacy(request workers.ExecuteRequest, result workers.WorkstationDispatchResult, err error) workers.ExecuteResult {
+	execution := result.Result
+	executeResult := workers.ExecuteResult{
+		Correlation: request.Correlation,
+		Outcome:     workers.ExecutionOutcomeAccepted,
+		Diagnostics: execution.Diagnostics.ToSafeDiagnostics(),
+		Output: workers.ProposedOutput{Primary: []work.WorkContentPart{{
+			Type: work.WorkContentPartTypeText,
+			Text: execution.Output,
+		}}},
+		Continuation: (execution.Continuation).ClonePtr(),
+	}
+	if execution.Output == "" {
+		executeResult.Output.Primary = nil
+	}
+	if err != nil || result.TerminalOutcome == workers.WorkstationDispatchTerminalOutcomeFailed || execution.Outcome == workers.OutcomeFailed || execution.Outcome == workers.OutcomeRejected {
+		executeResult.Outcome = workers.ExecutionOutcomeFailed
+		message := execution.Error
+		if message == "" && err != nil {
+			message = err.Error()
+		}
+		executeResult.Failure = &workers.ExecutionFailure{
+			Message:                         message,
+			Type:                            workers.WorkFailureTypeUnknown,
+			Family:                          workers.WorkFailureFamilyTerminal,
+			ProviderFailureKind:             execution.ProviderFailureKind,
+			ProviderContinuationFailureKind: execution.ProviderContinuationFailureKind,
+			ProviderContinuationOutcome:     execution.ProviderContinuationOutcome,
+		}
+		if execution.FailureMetadata != nil {
+			executeResult.Failure.Family = execution.FailureMetadata.Family
+			executeResult.Failure.Type = execution.FailureMetadata.Type
+		}
+	}
+	switch execution.Outcome {
+	case workers.OutcomeContinue:
+		executeResult.Outcome = workers.ExecutionOutcomeContinue
+	case workers.OutcomeRejected:
+		executeResult.Outcome = workers.ExecutionOutcomeRejected
+	case workers.OutcomeFailed:
+		executeResult.Outcome = workers.ExecutionOutcomeFailed
+	}
+	if err != nil && errors.Is(err, context.Canceled) || result.TerminalOutcome == workers.WorkstationDispatchTerminalOutcomeCanceled {
+		executeResult.Outcome = workers.ExecutionOutcomeCanceled
+	}
+	return executeResult
+}
+
+func cloneStringMapForSessionTest(value map[string]string) map[string]string {
+	if len(value) == 0 {
+		return nil
+	}
+	clone := make(map[string]string, len(value))
+	for key, item := range value {
+		clone[key] = item
+	}
+	return clone
 }
 
 // validStartRequest returns a minimally well-formed StartRequest for id,
@@ -658,129 +693,6 @@ type continuationAdmissionBoundary struct {
 	readyOnce         sync.Once
 }
 
-type continuationFailureBoundary struct {
-	*controlledBoundary
-	err error
-}
-
-func (b *continuationFailureBoundary) DispatchWorkstationWithAdmission(
-	ctx context.Context,
-	request workers.WorkstationDispatchRequest,
-	admitted workers.WorkstationDispatchAdmissionFunc,
-) (workers.WorkstationDispatchResult, error) {
-	if request.Execution.Continuation == nil {
-		return b.controlledBoundary.DispatchWorkstationWithAdmission(ctx, request, admitted)
-	}
-	_, err := b.controlledBoundary.prepare(request)
-	if err != nil {
-		return workers.WorkstationDispatchResult{}, err
-	}
-	return workers.WorkstationDispatchResult{
-		DispatchID:      request.Execution.Dispatch.DispatchID,
-		TerminalOutcome: workers.WorkstationDispatchTerminalOutcomeFailed,
-		Result: workers.WorkResult{
-			DispatchID: request.Execution.Dispatch.DispatchID,
-			Outcome:    workers.OutcomeFailed,
-		},
-	}, b.err
-}
-
-func TestContinue_PreAdmissionFailureReturnsTerminalSuccessorAndTypedError(t *testing.T) {
-	base := newControlledBoundary()
-	boundary := &continuationFailureBoundary{controlledBoundary: base, err: errors.New("continuation admission rejected")}
-	registry := newControlledRegistry(t, boundary)
-	reference := providers.SessionRef{Provider: providers.IDCodex, Kind: providers.SessionIDKind, ID: "provider-session-failure"}
-	sourceResult := startControlledSession(t, registry, base, "source-session", "dispatch-source")
-	base.complete(completedDispatchWithProviderSession("dispatch-source", reference), nil)
-	if source := <-sourceResult; source.Session.State != workersessions.StateCompleted {
-		t.Fatalf("source result = %#v, want COMPLETED", source.Session)
-	}
-
-	request := workersessions.ContinueRequest{
-		RequestID:                "continue-request-failure",
-		SourceWorkerSessionID:    "source-session",
-		SuccessorWorkerSessionID: "successor-session",
-		FollowUpInput:            "follow-up",
-	}
-	result, err := registry.Continue(context.Background(), request)
-	if !errors.Is(err, workersessions.ErrContinuationNotAccepted) {
-		t.Fatalf("Continue() error = %v, want ErrContinuationNotAccepted", err)
-	}
-	if result.Session.ID != request.SuccessorWorkerSessionID || result.Session.State != workersessions.StateFailed {
-		t.Fatalf("Continue() result = %#v, want failed successor snapshot", result)
-	}
-	if result.Session.Result == nil || result.Session.Result.Cause == nil {
-		t.Fatalf("Continue() result = %#v, want terminal failure cause", result.Session)
-	}
-	source, getErr := registry.Get(context.Background(), workersessions.GetRequest{ID: request.SourceWorkerSessionID})
-	if getErr != nil {
-		t.Fatalf("Get(source after refused continuation) error = %v", getErr)
-	}
-	successor, getErr := registry.Get(context.Background(), workersessions.GetRequest{ID: request.SuccessorWorkerSessionID})
-	if getErr != nil {
-		t.Fatalf("Get(successor after refused continuation) error = %v", getErr)
-	}
-	if source.SuccessorWorkerSessionID != "" || successor.PredecessorWorkerSessionID != "" {
-		t.Fatalf("refused continuation mutated lineage: source=%#v successor=%#v", source, successor)
-	}
-}
-
-func TestContinue_CanceledCallerDoesNotCancelReservedContinuation(t *testing.T) {
-	base := newControlledBoundary()
-	continuationGate := make(chan struct{})
-	boundary := &continuationAdmissionBoundary{
-		controlledBoundary: base,
-		continuationGate:   continuationGate,
-		continuationReady:  make(chan struct{}),
-	}
-	registry := newControlledRegistry(t, boundary)
-	reference := providers.SessionRef{Provider: providers.IDCodex, Kind: providers.SessionIDKind, ID: "provider-session-cancel"}
-	sourceResult := startControlledSession(t, registry, base, "source-session", "dispatch-source")
-	base.complete(completedDispatchWithProviderSession("dispatch-source", reference), nil)
-	if source := <-sourceResult; source.Session.State != workersessions.StateCompleted {
-		t.Fatalf("source result = %#v, want COMPLETED", source.Session)
-	}
-
-	request := workersessions.ContinueRequest{
-		RequestID:                "continue-request-cancel",
-		SourceWorkerSessionID:    "source-session",
-		SuccessorWorkerSessionID: "successor-session",
-		FollowUpInput:            "follow up",
-	}
-	ctx, cancel := context.WithCancel(context.Background())
-	outcomes := make(chan struct {
-		result workersessions.ContinueResult
-		err    error
-	}, 1)
-	go func() {
-		result, err := registry.Continue(ctx, request)
-		outcomes <- struct {
-			result workersessions.ContinueResult
-			err    error
-		}{result: result, err: err}
-	}()
-	select {
-	case <-boundary.continuationReady:
-	case <-time.After(time.Second):
-		t.Fatal("continuation did not reach admission wait")
-	}
-	cancel()
-	select {
-	case outcome := <-outcomes:
-		if !errors.Is(outcome.err, context.Canceled) {
-			t.Fatalf("Continue(canceled caller) error = %v, want context.Canceled", outcome.err)
-		}
-	case <-time.After(time.Second):
-		t.Fatal("Continue(canceled caller) did not return")
-	}
-	close(continuationGate)
-	base.complete(completedDispatchWithProviderSession(base.currentRequest().Execution.Dispatch.DispatchID, reference), nil)
-	final, err := registry.Get(context.Background(), workersessions.GetRequest{ID: request.SuccessorWorkerSessionID})
-	if err != nil || final.State != workersessions.StateCompleted {
-		t.Fatalf("successor after canceled caller = %#v, %v, want server-owned completion", final, err)
-	}
-}
-
 func (b *continuationAdmissionBoundary) DispatchWorkstationWithAdmission(
 	ctx context.Context,
 	request workers.WorkstationDispatchRequest,
@@ -802,7 +714,7 @@ func (b *continuationAdmissionBoundary) DispatchWorkstationWithAdmission(
 		admitted()
 		b.controlledBoundary.admittedOnce.Do(func() { close(b.controlledBoundary.admitted) })
 	}
-	return b.controlledBoundary.await(completed)
+	return b.controlledBoundary.await(ctx, completed, request.Execution.Dispatch.DispatchID)
 }
 
 func TestContinue_ProviderFailureLeavesSuccessorFailedWithExactAssociation(t *testing.T) {
@@ -826,28 +738,7 @@ func TestContinue_ProviderFailureLeavesSuccessorFailedWithExactAssociation(t *te
 	handoff := boundary.currentRequest()
 	boundary.complete(failedContinuationDispatch(handoff.Execution.Dispatch.DispatchID, reference), nil)
 
-	var successor workersessions.Session
-	deadline := time.NewTimer(time.Second)
-	defer deadline.Stop()
-	ticker := time.NewTicker(time.Millisecond)
-	defer ticker.Stop()
-	for {
-		successor, err = registry.Get(context.Background(), workersessions.GetRequest{ID: request.SuccessorWorkerSessionID})
-		if err != nil {
-			t.Fatalf("Get(successor) error = %v", err)
-		}
-		if successor.State == workersessions.StateFailed && successor.Result != nil && successor.Result.Cause != nil {
-			break
-		}
-		select {
-		case <-deadline.C:
-			t.Fatalf("successor after provider failure = %#v, want FAILED with cause", successor)
-		case <-ticker.C:
-		}
-	}
-	if successor.State != workersessions.StateFailed || successor.Result == nil || successor.Result.Cause == nil {
-		t.Fatalf("successor after provider failure = %#v, want FAILED with cause", successor)
-	}
+	successor := waitForFailedContinuation(t, registry, request.SuccessorWorkerSessionID)
 	if successor.Result.Cause.ProviderContinuationFailureKind != providers.ContinuationFailureKindStale {
 		t.Fatalf("successor failure cause = %#v, want stale continuation classification", successor.Result.Cause)
 	}
@@ -863,6 +754,28 @@ func TestContinue_ProviderFailureLeavesSuccessorFailedWithExactAssociation(t *te
 	}
 	if continued.Session.ID != request.SuccessorWorkerSessionID {
 		t.Fatalf("admitted result = %#v, want successor identity", continued)
+	}
+}
+
+func waitForFailedContinuation(t *testing.T, registry workersessions.Service, id string) workersessions.Session {
+	t.Helper()
+	deadline := time.NewTimer(time.Second)
+	defer deadline.Stop()
+	ticker := time.NewTicker(time.Millisecond)
+	defer ticker.Stop()
+	for {
+		session, err := registry.Get(context.Background(), workersessions.GetRequest{ID: id})
+		if err != nil {
+			t.Fatalf("Get(successor) error = %v", err)
+		}
+		if session.State == workersessions.StateFailed && session.Result != nil && session.Result.Cause != nil {
+			return session
+		}
+		select {
+		case <-deadline.C:
+			t.Fatalf("successor after provider failure = %#v, want FAILED with cause", session)
+		case <-ticker.C:
+		}
 	}
 }
 

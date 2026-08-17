@@ -22,8 +22,6 @@ import (
 	factoryruntimejavascript "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/javascript"
 	factoryruntimeorchestrationowner "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/orchestrationowner"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/state"
-	"github.com/portpowered/infinite-you/pkg/services/recordings"
-	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"go.uber.org/zap"
 )
 
@@ -110,18 +108,14 @@ func TestBuildThroughOrchestrationPreservesRunnablePetriTopology(t *testing.T) {
 	}
 	bundle, err := testRuntimeFactory().Build(
 		context.Background(), dir, dir, "~default",
-		"", factorydefinitions.RuntimeModeBatch, false, nil, nil, nil, false, nil, nil,
+		"", factorydefinitions.RuntimeModeBatch, false, nil, false, nil, nil,
 		"", factory.RuntimeLogStorageConfig{},
 		factoryinternal.RuntimeFileLoggingPolicyDisabled,
 		factoryinternal.RuntimeMetricsPolicyDisabled, "", factory.RuntimeMetricsStorageConfig{},
 		loaded, "runtime-cutover", "", clockwork.NewFakeClock(), "", nil, nil, nil, nil,
 		nil,
 		testRuntimeOpening(newTestRuntimeLedger),
-		func(recordings.WorkerEventRecorder, *zap.Logger) (map[string]workers.WorkerExecutor, error) {
-			return nil, nil
-		},
 		testRuntimeWorkers{},
-		nil,
 		testRuntimeWorkerSessionsFactory(t),
 		nil,
 	)
@@ -173,18 +167,14 @@ func TestBuildThroughOrchestrationOpensInlineJavaScriptFactory(t *testing.T) {
 		nil,
 	).Build(
 		context.Background(), dir, dir, "~default",
-		"", factorydefinitions.RuntimeModeBatch, false, nil, nil, nil, false, nil, nil,
+		"", factorydefinitions.RuntimeModeBatch, false, nil, false, nil, nil,
 		"", factory.RuntimeLogStorageConfig{},
 		factoryinternal.RuntimeFileLoggingPolicyDisabled,
 		factoryinternal.RuntimeMetricsPolicyDisabled, "", factory.RuntimeMetricsStorageConfig{},
 		loaded, "runtime-cutover-js", "", clockwork.NewFakeClock(), "", nil, nil, nil, nil,
 		nil,
 		testRuntimeOpening(newTestRuntimeLedger),
-		func(recordings.WorkerEventRecorder, *zap.Logger) (map[string]workers.WorkerExecutor, error) {
-			return nil, nil
-		},
 		testRuntimeWorkers{},
-		nil,
 		testRuntimeWorkerSessionsFactory(t),
 		nil,
 	)

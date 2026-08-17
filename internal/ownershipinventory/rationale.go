@@ -59,7 +59,6 @@ var CommittedNestedServiceIDs = []string{
 	"workers/runners/hosted",
 	"workers/runners/inference",
 	"workers/runners/script",
-	"workers/runtime_assembly",
 	"workers/workstations",
 }
 

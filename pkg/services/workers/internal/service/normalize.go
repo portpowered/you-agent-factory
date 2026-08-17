@@ -307,10 +307,13 @@ func failureFromError(err error) *workers.ExecutionFailure {
 			message = "worker execution failed"
 		}
 		return &workers.ExecutionFailure{
-			Type:      failureType,
-			Family:    family,
-			Message:   message,
-			RetryHint: decision.Retryable,
+			Type:                            failureType,
+			Family:                          family,
+			Message:                         message,
+			RetryHint:                       decision.Retryable,
+			ProviderFailureKind:             providerErr.ProviderFailureKind,
+			ProviderContinuationFailureKind: providerErr.ProviderContinuationFailureKind,
+			ProviderContinuationOutcome:     providerErr.ProviderContinuationOutcome,
 			Detail: &workers.FailureDetail{
 				Reason:  failureType,
 				Message: message,

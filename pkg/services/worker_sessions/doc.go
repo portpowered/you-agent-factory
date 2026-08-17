@@ -7,7 +7,7 @@
 // W1 exposes Reserve, Get, and List. W2 adds the shared supervision
 // foundation: validated identity-before-handoff supervision of one
 // already-resolved Workers attempt through one directly injected
-// workers.WorkstationExecutionService, and result-first terminal
+// workers.Service, and result-first terminal
 // classification into COMPLETED or FAILED with a non-nil typed FailureCause.
 // W3 attaches Start and PublishRecord to one directly injected Events service:
 // before Workers is ever invoked, Start commits a KindSession/PhaseStarted

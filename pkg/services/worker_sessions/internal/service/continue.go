@@ -32,20 +32,20 @@ func (r *registry) reconcileOverdueAttempt(
 	if !supervision.deadlineAttemptActive(attemptID, attemptDone) {
 		return
 	}
-	lifecycleContext := r.lifecycleCtx
-	if lifecycleContext == nil {
-		lifecycleContext = context.Background()
+	_ = attemptID
+	supervision.markDeadlineExceeded()
+	canceled, err := supervision.cancelExecution()
+	if !canceled {
+		supervision.clearDeadlineExceeded()
+		err = workers.ErrUnknownWorkstationDispatch
 	}
-	_, err := r.execution.CancelWorkstationDispatch(
-		context.WithoutCancel(lifecycleContext),
-		workers.WorkstationDispatchCancelRequest{
-			DispatchID: attemptID,
-			Reason:     workers.WorkstationDispatchCancelReasonTimeout,
-		},
-	)
 	if err == nil || errors.Is(err, workers.ErrWorkstationDispatchAlreadyTerminal) || errors.Is(err, workers.ErrWorkstationDispatchCanceled) {
+		if err != nil {
+			supervision.clearDeadlineExceeded()
+		}
 		return
 	}
+	supervision.clearDeadlineExceeded()
 	r.logger.Info(
 		"worker session reconciliation failed",
 		"sessionID", id,
@@ -56,6 +56,18 @@ func (r *registry) reconcileOverdueAttempt(
 		"deadline", deadlineAt.UTC().Format(time.RFC3339Nano),
 		"outcome", "rejected",
 	)
+}
+
+func timeoutDispatchResult(result workers.WorkstationDispatchResult) workers.WorkstationDispatchResult {
+	result.TerminalOutcome = workers.WorkstationDispatchTerminalOutcomeFailed
+	result.ReconciliationReason = workers.WorkstationDispatchReconciliationReasonTimeout
+	result.Result.Outcome = workers.OutcomeFailed
+	result.Result.Error = workers.ErrWorkstationDispatchTimeout.Error()
+	result.Result.FailureMetadata = &workers.WorkFailureMetadata{
+		Family: workers.WorkFailureFamilyRetryable,
+		Type:   workers.WorkFailureTypeTimeout,
+	}
+	return result
 }
 
 // continueTuple is the immutable caller-owned identity of one continuation

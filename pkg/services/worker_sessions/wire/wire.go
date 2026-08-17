@@ -3,7 +3,7 @@
 // Wire performs construction only, returns the singular
 // workersessions.Service root interface, and starts no lifecycle
 // components. It composes the implementation through direct single
-// injection of one workers.WorkstationExecutionService and one
+// injection of one request-scoped workers.Service and one
 // EventsAppender, clock, and Provider Sessions service, with no dependency
 // bag, service locator, or alternate construction path. Factory Runtime is the production consumer (W4
 // dispatch cutover), composed through pkg/services/factory_runtime/internal
@@ -36,7 +36,7 @@ type EventsAppender = internalservice.EventsAppender
 // logging.NoopLogger{}. Provider Sessions remains a required direct
 // dependency even when its implementation reports unavailable storage.
 func NewService(
-	execution workers.WorkstationExecutionService,
+	execution workers.Service,
 	eventsAppender EventsAppender,
 	logger logging.Logger,
 	clock platformclock.Source,

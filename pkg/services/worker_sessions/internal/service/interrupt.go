@@ -580,10 +580,18 @@ func interruptSourceAssociation(source workersessions.Session) (workersessions.P
 
 func (r *registry) runInterrupt(plan interruptPlan) (workersessions.InterruptResult, error) {
 	defer finishInterruptOperation(plan.supervision)
-	boundaryContext := context.WithoutCancel(r.serverOwnedContext())
-	cancelResult, cancelErr := r.execution.CancelWorkstationDispatch(boundaryContext, workers.WorkstationDispatchCancelRequest{
+	cancelResult := workers.WorkstationDispatchCancelResult{
 		DispatchID: plan.dispatchID,
-	})
+		Outcome:    workers.WorkstationDispatchCancelOutcomeCanceled,
+	}
+	var cancelErr error
+	executionCanceled, executionCancelErr := plan.supervision.cancelExecution()
+	if !executionCanceled {
+		cancelResult.Outcome = workers.WorkstationDispatchCancelOutcomeAlreadyTerminal
+		cancelErr = workers.ErrUnknownWorkstationDispatch
+	} else {
+		cancelErr = executionCancelErr
+	}
 	canceled := cancelErr == nil && (cancelResult.Outcome == workers.WorkstationDispatchCancelOutcomeCanceled ||
 		cancelResult.Outcome == workers.WorkstationDispatchCancelOutcomeAlreadyCanceled)
 	finishInterruptExecution(plan.supervision, canceled)
@@ -612,6 +620,7 @@ func (r *registry) runInterrupt(plan interruptPlan) (workersessions.InterruptRes
 		return result, newInterruptError(workersessions.InterruptPhaseSourceCancellation, result, cause)
 	}
 
+	boundaryContext := context.WithoutCancel(r.serverOwnedContext())
 	continued, continueErr := r.Continue(boundaryContext, workersessions.ContinueRequest{
 		RequestID:                interruptContinuationRequestID(plan.request.RequestID),
 		SourceWorkerSessionID:    plan.request.SourceWorkerSessionID,

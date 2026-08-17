@@ -465,18 +465,6 @@ func committedWorkersRationales() []OwnerRationaleCard {
 			"Timeout/process failures are Script Runner facts.",
 		),
 		nested(
-			"workers/runtime_assembly",
-			"workers",
-			"workers",
-			"pkg/services/workers/internal/services/runtime_assembly",
-			"Produce immutable executor roles from a typed Workers-owned runtime build request.",
-			"Immutable assembled executor roles/config snapshots.",
-			"Build/assembly on command; absorbs public clone/config inspection.",
-			"Factory Sessions/Runtime consumers via Workers root.",
-			"Assembly outputs are Workers-owned values, not peer constructors.",
-			"Invalid build requests are Runtime Assembly rejection facts.",
-		),
-		nested(
 			"workers/workstations",
 			"workers",
 			"workers",

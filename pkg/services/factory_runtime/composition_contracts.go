@@ -3,13 +3,9 @@ package factory
 import (
 	"errors"
 	"fmt"
-	"time"
-
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
-	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	dispatchplanning "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/dispatch_planning"
-	"github.com/portpowered/infinite-you/pkg/services/providers"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
@@ -72,24 +68,6 @@ func (e *IncompleteDrainError) Unwrap() error {
 	return ErrIncompleteDrain
 }
 
-type WorkersRuntimeExecutorsFactory func(
-	workers.RuntimeService,
-	factorydefinitions.RuntimeConfigLookup,
-	*factorydefinitions.FactoryConfig,
-	string,
-	*workers.Context,
-	logging.Logger,
-	bool,
-	*bool,
-	providers.Service,
-	workers.ProgressPublisher,
-	workers.ScriptEventRecorder,
-	workers.InferenceEventRecorder,
-	workers.ModelEventRecorder,
-	workers.AgentRunEventRecorder,
-	func() time.Time,
-) (map[string]workers.WorkerExecutor, error)
-
 type WorkersMockCommandRunnerFactory func(
 	*workers.MockWorkersConfig,
 	factorydefinitions.RuntimeDefinitionLookup,
@@ -102,7 +80,7 @@ type WorkersMockCommandRunnerFactory func(
 // the one construction path (worker_sessions/wire.NewService plus its Events,
 // logging, and Provider Sessions dependencies) behind this factory so Factory
 // Runtime never imports a peer service's wire or internal packages directly.
-type WorkerSessionsFactory func(workers.WorkstationExecutionService, platformclock.Source) (workersessions.Service, error)
+type WorkerSessionsFactory func(workers.Service, platformclock.Source) (workersessions.Service, error)
 
 // ProviderInvocationExecutorFactory constructs the executor serving
 // workers.ProviderInvocationRoute for one session, from that session's own
@@ -124,7 +102,3 @@ type WorkerSessionsFactory func(workers.WorkstationExecutionService, platformclo
 // A nil factory, or one returning a nil executor, omits the route entirely.
 // That is the correct shape for a session with no orchestrator able to produce
 // such a Worker: the route is absent rather than present and failing.
-type ProviderInvocationExecutorFactory func(
-	workers.CommandRunner,
-	workers.ProgressPublisher,
-) (workers.WorkstationRequestExecutor, error)

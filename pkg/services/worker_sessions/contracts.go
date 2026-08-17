@@ -315,7 +315,7 @@ type InvokeSessionRequest struct {
 	ID string
 	// Execution is the already-resolved Workers execution request.
 	// InvokeSession hands a detached clone of Execution to the injected
-	// workers.WorkstationExecutionService, so the caller retains exclusive
+	// workers.Service, so the caller retains exclusive
 	// ownership of Execution's reference-backed fields after InvokeSession is
 	// called. Worker Sessions performs no runner selection, prompt
 	// rendering, worktree preparation, provider invocation, or output
@@ -508,7 +508,7 @@ func (req InvokeSessionRequest) Validate() error {
 type InvokeSessionResult struct {
 	Session Session
 	// Dispatch is the raw, detached workers.WorkstationDispatchResult
-	// returned by the underlying workers.WorkstationExecutionService.
+	// returned by the underlying workers.Service.
 	// DispatchWorkstation call. It is populated whenever the attempt was
 	// actually handed off to Workers, and is the zero value when InvokeSession
 	// terminalized before handoff (for example
