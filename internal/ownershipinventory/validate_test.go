@@ -79,9 +79,9 @@ func TestValidateFailsWhenMoveRowNamesAbsentPackage(t *testing.T) {
 
 func TestViolationCountCountsStructuredFindingsIndividually(t *testing.T) {
 	report := ownershipinventory.Report{
-		UnexpectedPackages:          []string{"pkg/a", "pkg/b"},
-		MissingCrossServiceEdges:    []string{"runtime->models", "recordings->events"},
-		UnexpectedCrossServiceEdges: []string{"workers->sessions"},
+		UnexpectedPackages:  []string{"pkg/a", "pkg/b"},
+		MissingSeedServices: []string{"work", "recordings"},
+		InvalidMappings:     []string{"pkg/a: unknown destination"},
 	}
 	if got := report.ViolationCount(); got != 5 {
 		t.Fatalf("ViolationCount() = %d, want 5 structured findings", got)

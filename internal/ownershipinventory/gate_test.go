@@ -18,7 +18,6 @@ func TestVerificationGatePassesOnFrozenArtifacts(t *testing.T) {
 	}
 	assertProved(t, "completeness", report.Completeness)
 	assertProved(t, "stableSortOrder", report.StableSortOrder)
-	assertProved(t, "edgeClassifications", report.EdgeClassifications)
 	assertProved(t, "namedOwnerCoverage", report.NamedOwnerCoverage)
 	assertProved(t, "processEdgesException", report.ProcessEdgesException)
 	assertProved(t, "nonOverlappingActiveLeases", report.NonOverlappingActiveLeases)

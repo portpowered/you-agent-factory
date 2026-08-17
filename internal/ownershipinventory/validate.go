@@ -18,13 +18,7 @@ func Validate(root string) (Report, error) {
 	if err != nil {
 		return Report{}, err
 	}
-	discovered, err := DiscoverCrossServiceEdges(root, inventory.Packages)
-	if err != nil {
-		return Report{}, err
-	}
-	report := ValidateInventory(inventory, packages)
-	validateCrossServiceEdgeCoverage(inventory, discovered, &report)
-	return report, nil
+	return ValidateInventory(inventory, packages), nil
 }
 
 // ValidateInventory checks freeze properties against an explicit package list.
@@ -97,7 +91,6 @@ func ValidateInventory(inventory Inventory, packages []string) Report {
 	}
 	slices.Sort(report.MissingAdditionalRoots)
 
-	validateCrossServiceEdges(inventory, &report)
 	validateNamedOwners(inventory, &report)
 	validateMisplacedGuards(inventory, &report)
 
@@ -285,108 +278,6 @@ func validateResidualPackageRule(owner string, rule ResidualPackageRule, package
 	}
 	if matched == 0 {
 		return owner + ": residual rule " + rule.PackagePrefix + " matches no inventoried packages"
-	}
-	return ""
-}
-
-func validateCrossServiceEdges(inventory Inventory, report *Report) {
-	if len(inventory.CrossServiceEdges) == 0 {
-		report.MissingCrossServiceEdgeTable = true
-		return
-	}
-	if !slices.IsSortedFunc(inventory.CrossServiceEdges, compareCrossServiceEdges) {
-		report.UnstableEdgeSort = true
-	}
-	for _, edge := range inventory.CrossServiceEdges {
-		if msg := validateCrossServiceEdge(edge); msg != "" {
-			report.InvalidEdgeClassifications = append(report.InvalidEdgeClassifications, msg)
-		}
-	}
-	slices.Sort(report.InvalidEdgeClassifications)
-	validateBidirectionalEdgeMarkers(inventory.CrossServiceEdges, report)
-}
-
-func validateBidirectionalEdgeMarkers(edges []CrossServiceEdge, report *Report) {
-	byPair := make(map[string]CrossServiceEdge, len(edges))
-	for _, edge := range edges {
-		byPair[edgePairKey(edge.FromOwner, edge.ToOwner)] = edge
-	}
-
-	for _, edge := range edges {
-		reverseKey := edgePairKey(edge.ToOwner, edge.FromOwner)
-		_, reciprocal := byPair[reverseKey]
-		if !reciprocal && (edge.Bidirectional || edge.Unresolved) {
-			report.InvalidBidirectionalEdges = append(report.InvalidBidirectionalEdges,
-				edgePairKey(edge.FromOwner, edge.ToOwner)+": bidirectional marker has no reciprocal edge")
-			continue
-		}
-		if !reciprocal || strings.Compare(edge.FromOwner, edge.ToOwner) > 0 {
-			continue
-		}
-		reverse := byPair[reverseKey]
-		if !edge.Bidirectional || !edge.Unresolved || !reverse.Bidirectional || !reverse.Unresolved {
-			report.InvalidBidirectionalEdges = append(report.InvalidBidirectionalEdges,
-				bidirectionalPairKey(edge.FromOwner, edge.ToOwner)+": reciprocal edges must remain marked as unresolved bidirectional debt")
-		}
-	}
-	slices.Sort(report.InvalidBidirectionalEdges)
-	report.InvalidBidirectionalEdges = slices.Compact(report.InvalidBidirectionalEdges)
-}
-
-func validateCrossServiceEdgeCoverage(inventory Inventory, discovered []CrossServiceEdge, report *Report) {
-	// Incomplete fixture trees may contain package stubs without real imports.
-	// Skip coverage reconciliation when discovery finds nothing.
-	if len(discovered) == 0 {
-		return
-	}
-	inventoried := map[string]CrossServiceEdge{}
-	for _, edge := range inventory.CrossServiceEdges {
-		inventoried[edgePairKey(edge.FromOwner, edge.ToOwner)] = edge
-	}
-	discoveredKeys := map[string]struct{}{}
-	for _, edge := range discovered {
-		key := edgePairKey(edge.FromOwner, edge.ToOwner)
-		discoveredKeys[key] = struct{}{}
-		if _, ok := inventoried[key]; !ok {
-			report.MissingCrossServiceEdges = append(report.MissingCrossServiceEdges, key)
-		}
-	}
-	for key := range inventoried {
-		if _, ok := discoveredKeys[key]; !ok {
-			report.UnexpectedCrossServiceEdges = append(report.UnexpectedCrossServiceEdges, key)
-		}
-	}
-	slices.Sort(report.MissingCrossServiceEdges)
-	slices.Sort(report.UnexpectedCrossServiceEdges)
-}
-
-func validateCrossServiceEdge(edge CrossServiceEdge) string {
-	key := edgePairKey(edge.FromOwner, edge.ToOwner)
-	if strings.TrimSpace(edge.FromOwner) == "" || strings.TrimSpace(edge.ToOwner) == "" {
-		return key + ": missing fromOwner/toOwner"
-	}
-	if edge.FromOwner == edge.ToOwner {
-		return key + ": edge is not cross-owner"
-	}
-	if strings.TrimSpace(edge.Class) == "" {
-		return key + ": missing class"
-	}
-	if !isAllowedEdgeClass(edge.Class) {
-		return key + ": unknown class " + strconv.Quote(edge.Class)
-	}
-	involvesProcessEdges := edge.FromOwner == DestinationEdges || edge.ToOwner == DestinationEdges
-	if involvesProcessEdges {
-		if !edge.ArchitectureException {
-			return key + ": Process Edges edge must set architectureException"
-		}
-		if edge.Class != EdgeClassConstruction && edge.Class != EdgeClassExternalEffect {
-			return key + ": Process Edges edge class must be construction or external_effect"
-		}
-	} else if edge.ArchitectureException {
-		return key + ": architectureException reserved for Process Edges edges"
-	}
-	if strings.TrimSpace(edge.Evidence) == "" {
-		return key + ": missing evidence"
 	}
 	return ""
 }

@@ -154,10 +154,6 @@ func BuildInventory(root string, packages []string) (Inventory, error) {
 		return Inventory{}, err
 	}
 	rows := moves.PackageRows()
-	edges, err := DiscoverCrossServiceEdges(root, rows)
-	if err != nil {
-		return Inventory{}, err
-	}
 	vocabulary, err := DiscoverDestinationVocabulary(root)
 	if err != nil {
 		return Inventory{}, err
@@ -170,7 +166,6 @@ func BuildInventory(root string, packages []string) (Inventory, error) {
 		ProcessEdgesException:   defaultProcessEdgesException(),
 		SeedServices:            append([]SeedService(nil), StructuresSeedServices...),
 		AdditionalCurrentRoots:  append([]string(nil), AdditionalCurrentRoots...),
-		CrossServiceEdges:       edges,
 		NamedOwnerConfirmations: BuildNamedOwnerConfirmations(),
 		MisplacedGuards:         BuildMisplacedGuards(),
 		UnfinishedMoves:         moves,

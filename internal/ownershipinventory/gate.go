@@ -8,7 +8,6 @@ import "fmt"
 type VerificationGateReport struct {
 	Completeness               bool
 	StableSortOrder            bool
-	EdgeClassifications        bool
 	NamedOwnerCoverage         bool
 	ProcessEdgesException      bool
 	NonOverlappingActiveLeases bool
@@ -22,7 +21,6 @@ type VerificationGateReport struct {
 func (r VerificationGateReport) OK() bool {
 	return r.Completeness &&
 		r.StableSortOrder &&
-		r.EdgeClassifications &&
 		r.NamedOwnerCoverage &&
 		r.ProcessEdgesException &&
 		r.NonOverlappingActiveLeases &&
@@ -45,8 +43,7 @@ func VerifyFreeze(root string) (VerificationGateReport, error) {
 }
 
 // VerifyFreezeArtifacts evaluates pre-loaded freeze artifacts against an
-// explicit production package list. Edge-coverage reconciliation is skipped;
-// use VerifyFreeze for full repository-root gating.
+// explicit production package list.
 func VerifyFreezeArtifacts(inventory Inventory, freeze PathLeaseFreeze, packages []string) VerificationGateReport {
 	return composeVerificationGate(ValidateInventory(inventory, packages), ValidatePathLeaseFreeze(freeze))
 }
@@ -55,15 +52,9 @@ func composeVerificationGate(inventory Report, pathLease PathLeaseFreezeReport) 
 	return VerificationGateReport{
 		Completeness: completenessProved(inventory),
 		StableSortOrder: !inventory.UnstableSort &&
-			!inventory.UnstableEdgeSort &&
 			!inventory.UnstableNamedOwnerSort &&
 			!inventory.UnstableMisplacedGuardSort &&
 			!pathLease.UnstablePacketSort,
-		EdgeClassifications: !inventory.MissingCrossServiceEdgeTable &&
-			len(inventory.MissingCrossServiceEdges) == 0 &&
-			len(inventory.UnexpectedCrossServiceEdges) == 0 &&
-			len(inventory.InvalidEdgeClassifications) == 0 &&
-			len(inventory.InvalidBidirectionalEdges) == 0,
 		NamedOwnerCoverage: len(inventory.MissingNamedOwners) == 0 &&
 			len(inventory.UnconfirmedNamedOwners) == 0 &&
 			len(inventory.InvalidNamedOwnerMaps) == 0,

@@ -21,31 +21,11 @@ const (
 
 	ProcessEdgesPackagePath = "pkg/services/edges"
 
-	CrossServiceEdgeSortKeyDescription = "fromOwner then toOwner ascending byte order"
-	NamedOwnerSortKeyDescription       = "owner ascending byte order"
-	MisplacedGuardSortKeyDescription   = "id ascending byte order"
+	NamedOwnerSortKeyDescription     = "owner ascending byte order"
+	MisplacedGuardSortKeyDescription = "id ascending byte order"
 
 	NamedOwnerStatusConfirmed = "confirmed"
-
-	EdgeClassCommand             = "command"
-	EdgeClassQuery               = "query"
-	EdgeClassEvent               = "event"
-	EdgeClassProtocolComposition = "protocol_composition"
-	EdgeClassConstruction        = "construction"
-	EdgeClassLifecycle           = "lifecycle"
-	EdgeClassExternalEffect      = "external_effect"
 )
-
-// AllowedEdgeClasses is the closed cross-service edge classification set.
-var AllowedEdgeClasses = []string{
-	EdgeClassCommand,
-	EdgeClassQuery,
-	EdgeClassEvent,
-	EdgeClassProtocolComposition,
-	EdgeClassConstruction,
-	EdgeClassLifecycle,
-	EdgeClassExternalEffect,
-}
 
 // Inventory is the frozen PSS-F01 ownership inventory artifact.
 //
@@ -58,6 +38,11 @@ var AllowedEdgeClasses = []string{
 // responsibility clusters, public-surface ownership, and owned roles — is not
 // part of this artifact either. It is prose that no gate counts, so it lives in
 // docs/architecture/service-ownership-rationale.md instead of here.
+//
+// The cross-service import graph is not here either. It was a hand-maintained
+// edge table that documented reciprocal owner imports instead of failing on
+// them; cmd/servicecyclecheck now derives the graph and ratchets its minimum
+// feedback arc weight, which fails on a new back-edge the table never could.
 type Inventory struct {
 	Version                 int                      `json:"version"`
 	Stage                   string                   `json:"stage"`
@@ -66,7 +51,6 @@ type Inventory struct {
 	ProcessEdgesException   ProcessEdgesException    `json:"processEdgesException"`
 	SeedServices            []SeedService            `json:"seedServices"`
 	AdditionalCurrentRoots  []string                 `json:"additionalCurrentRoots"`
-	CrossServiceEdges       []CrossServiceEdge       `json:"crossServiceEdges"`
 	NamedOwnerConfirmations []NamedOwnerConfirmation `json:"namedOwnerConfirmations"`
 	MisplacedGuards         []MisplacedGuardEntry    `json:"misplacedGuards"`
 	UnfinishedMoves         UnfinishedMoves          `json:"-"`
@@ -105,20 +89,6 @@ type ResidualPackageRule struct {
 	Destination   string `json:"destination"`
 	Disposition   string `json:"disposition"`
 	Note          string `json:"note"`
-}
-
-// CrossServiceEdge records one distinct-owner production dependency edge and
-// its Packaged Service Structure interaction class.
-type CrossServiceEdge struct {
-	FromOwner string `json:"fromOwner"`
-	ToOwner   string `json:"toOwner"`
-	Class     string `json:"class"`
-	// Bidirectional and Unresolved keep a reciprocal import pair visible as
-	// convergence debt even when each direction has a valid interaction class.
-	Bidirectional         bool   `json:"bidirectional,omitempty"`
-	Unresolved            bool   `json:"unresolved,omitempty"`
-	ArchitectureException bool   `json:"architectureException,omitempty"`
-	Evidence              string `json:"evidence"`
 }
 
 // DestinationVocabulary is the destination set inventory rows may claim.
@@ -172,19 +142,13 @@ type Report struct {
 	InvalidMappings              []string
 	MissingSeedServices          []string
 	MissingAdditionalRoots       []string
-	MissingCrossServiceEdges     []string
-	UnexpectedCrossServiceEdges  []string
-	InvalidEdgeClassifications   []string
-	InvalidBidirectionalEdges    []string
 	MissingNamedOwners           []string
 	UnconfirmedNamedOwners       []string
 	InvalidNamedOwnerMaps        []string
 	MissingMisplacedGuards       []string
 	InvalidMisplacedGuards       []string
-	MissingCrossServiceEdgeTable bool
 	MissingProcessEdgesException bool
 	UnstableSort                 bool
-	UnstableEdgeSort             bool
 	UnstableNamedOwnerSort       bool
 	UnstableMisplacedGuardSort   bool
 }
@@ -199,20 +163,14 @@ func (r Report) ViolationCount() int {
 		r.InvalidMappings,
 		r.MissingSeedServices,
 		r.MissingAdditionalRoots,
-		r.MissingCrossServiceEdges,
-		r.UnexpectedCrossServiceEdges,
-		r.InvalidEdgeClassifications,
-		r.InvalidBidirectionalEdges,
 		r.MissingNamedOwners,
 		r.UnconfirmedNamedOwners,
 		r.InvalidNamedOwnerMaps,
 		r.MissingMisplacedGuards,
 		r.InvalidMisplacedGuards,
 	) + countFlags(
-		r.MissingCrossServiceEdgeTable,
 		r.MissingProcessEdgesException,
 		r.UnstableSort,
-		r.UnstableEdgeSort,
 		r.UnstableNamedOwnerSort,
 		r.UnstableMisplacedGuardSort,
 	)
@@ -243,19 +201,13 @@ func (r Report) OK() bool {
 		len(r.InvalidMappings) == 0 &&
 		len(r.MissingSeedServices) == 0 &&
 		len(r.MissingAdditionalRoots) == 0 &&
-		len(r.MissingCrossServiceEdges) == 0 &&
-		len(r.UnexpectedCrossServiceEdges) == 0 &&
-		len(r.InvalidEdgeClassifications) == 0 &&
-		len(r.InvalidBidirectionalEdges) == 0 &&
 		len(r.MissingNamedOwners) == 0 &&
 		len(r.UnconfirmedNamedOwners) == 0 &&
 		len(r.InvalidNamedOwnerMaps) == 0 &&
 		len(r.MissingMisplacedGuards) == 0 &&
 		len(r.InvalidMisplacedGuards) == 0 &&
-		!r.MissingCrossServiceEdgeTable &&
 		!r.MissingProcessEdgesException &&
 		!r.UnstableSort &&
-		!r.UnstableEdgeSort &&
 		!r.UnstableNamedOwnerSort &&
 		!r.UnstableMisplacedGuardSort
 }

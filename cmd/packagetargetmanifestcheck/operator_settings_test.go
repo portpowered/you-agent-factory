@@ -96,18 +96,3 @@ func TestOperatorSettingsCommittedBaselinesAlignMoveDestinations(t *testing.T) {
 		t.Fatal("no Operator Settings rows found in the move ledger; the alignment check proved nothing")
 	}
 }
-
-func operatorSettingsCanonicalRetainRest(rest string) bool {
-	switch {
-	case rest == "wire" || strings.HasPrefix(rest, "wire/"):
-		return true
-	case rest == "transports" || strings.HasPrefix(rest, "transports/"):
-		return true
-	case strings.HasPrefix(rest, "internal/services/document"):
-		return true
-	case strings.HasPrefix(rest, "internal/services/resolution"):
-		return true
-	default:
-		return false
-	}
-}
