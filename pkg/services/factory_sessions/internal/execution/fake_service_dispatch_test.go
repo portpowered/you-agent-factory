@@ -856,7 +856,7 @@ func newTerminalWorkerProvider(behavior terminalWorkerBehavior) (providers.Servi
 }
 
 type terminalWorkerExecution struct {
-	service  workers.Service
+	service  WorkerExecution
 	progress []workers.ProgressFragment
 }
 
