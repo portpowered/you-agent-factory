@@ -17,7 +17,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/transports/cli/generated"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/resolvedinput"
 	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
-	workcli "github.com/portpowered/infinite-you/pkg/transports/cli/work"
 	"github.com/spf13/cobra"
 )
 
@@ -695,80 +694,42 @@ func productionWorkCommand(globals *cliGlobalOptions, diagnostics *cliDiagnostic
 	if len(injected) > 0 {
 		dependencies = injected[0]
 	}
-	registry, bindings, err := newWorkHandlerRegistry(globals, diagnostics, dependencies)
-	if err != nil {
-		panic(fmt.Sprintf("build work handler registry: %v", err))
+	// The resolved-input owner adapters are the canonical production path. Cobra
+	// only forwards the generated values to the Work transport handlers.
+	handlers := commandregistry.ResolvedWorkHandlers{
+		ApprovalList: commandregistry.ResolvedApprovalListRunE(commandregistry.ResolvedApprovalListBinding{
+			ListHumanApprovals: dependencies.ListHumanApprovals,
+			DiagnosticsWriter:  diagnostics.writer,
+		}),
+		ApprovalShow: commandregistry.ResolvedApprovalShowRunE(commandregistry.ResolvedApprovalShowBinding{
+			ShowHumanApproval: dependencies.ShowHumanApproval,
+			DiagnosticsWriter: diagnostics.writer,
+		}),
+		List: commandregistry.ResolvedListRunE(commandregistry.ResolvedListBinding{
+			ListWork:          dependencies.ListWork,
+			DiagnosticsWriter: diagnostics.writer,
+		}),
+		Watch: commandregistry.ResolvedWatchRunE(commandregistry.ResolvedWatchBinding{
+			WatchWork:         dependencies.WatchWork,
+			DiagnosticsWriter: diagnostics.writer,
+		}),
+		Show: commandregistry.ResolvedShowRunE(commandregistry.ResolvedShowBinding{
+			ShowWork:          dependencies.ShowWork,
+			DiagnosticsWriter: diagnostics.writer,
+		}),
+		Move: commandregistry.ResolvedMoveRunE(commandregistry.ResolvedMoveBinding{
+			MoveWork:          dependencies.MoveWork,
+			DiagnosticsWriter: diagnostics.writer,
+		}),
+		Visualize: commandregistry.ResolvedVisualizeRunE(commandregistry.ResolvedVisualizeBinding{
+			VisualizeWork: dependencies.VisualizeWork,
+		}),
 	}
-	work, err := climanifestcobra.NewWorkFamilyCommand(registry, bindings)
+	work, err := climanifestcobra.NewResolvedWorkCommand(handlers)
 	if err != nil {
-		panic(fmt.Sprintf("build work family command: %v", err))
+		panic(fmt.Sprintf("build resolved work command: %v", err))
 	}
 	return work
-}
-
-func newWorkFamilyBindings() climanifestcobra.WorkFamilyBindings {
-	format := scalarTarget("mermaid")
-	return climanifestcobra.WorkFamilyBindings{LocalTargets: map[string]any{
-		"you.work.list.flag.state-name":       scalarTarget(""),
-		"you.work.list.flag.state-type":       scalarTarget(""),
-		"you.work.list.flag.name":             scalarTarget(""),
-		"you.work.list.flag.work-type-name":   scalarTarget(""),
-		"you.work.list.flag.trace-id":         scalarTarget(""),
-		"you.work.list.flag.terminal":         scalarTarget(false),
-		"you.work.list.flag.non-terminal":     scalarTarget(false),
-		"you.work.list.flag.sort-by":          scalarTarget(""),
-		"you.work.list.flag.max-results":      scalarTarget(0),
-		"you.work.list.flag.next-token":       scalarTarget(""),
-		"you.work.list.flag.counts":           scalarTarget(false),
-		"you.work.list.flag.session":          scalarTarget(""),
-		"you.work.approval.list.flag.session": scalarTarget(""),
-		"you.work.approval.show.flag.session": scalarTarget(""),
-		"you.work.watch.flag.follow":          scalarTarget(false),
-		"you.work.watch.flag.session":         scalarTarget(""),
-		"you.work.show.flag.session":          scalarTarget(""),
-		"you.work.move.flag.session":          scalarTarget(""),
-		"you.work.move.flag.request-id":       scalarTarget(""),
-		"you.work.visualize.flag.format":      format,
-	}}
-}
-
-func newWorkHandlerRegistry(
-	globals *cliGlobalOptions,
-	diagnostics *cliDiagnosticsOptions,
-	dependencies CommandFactory,
-) (*commandregistry.Registry, climanifestcobra.WorkFamilyBindings, error) {
-	bindings := newWorkFamilyBindings()
-	registry, err := commandregistry.NewWorkRegistry(commandregistry.WorkHandlers{
-		ApprovalListRunE: func(cmd *cobra.Command, _ []string) error {
-			return executeGeneratedHumanApprovalList(cmd, globals, diagnostics, dependencies.ListHumanApprovals)
-		},
-		ApprovalShowRunE: func(cmd *cobra.Command, args []string) error {
-			return executeGeneratedHumanApprovalShow(cmd, args, globals, diagnostics, dependencies.ShowHumanApproval)
-		},
-		ListRunE: func(cmd *cobra.Command, _ []string) error {
-			return executeGeneratedWorkList(cmd, globals, diagnostics, dependencies.ListWork)
-		},
-		WatchRunE: func(cmd *cobra.Command, _ []string) error {
-			return executeGeneratedWorkWatch(cmd, globals, diagnostics, dependencies.WatchWork)
-		},
-		ShowRunE: func(cmd *cobra.Command, args []string) error {
-			return executeGeneratedWorkShow(cmd, args, globals, diagnostics, dependencies.ShowWork)
-		},
-		MoveRunE: func(cmd *cobra.Command, args []string) error {
-			return executeGeneratedWorkMove(cmd, args, globals, diagnostics, dependencies.MoveWork)
-		},
-		VisualizeRunE: func(cmd *cobra.Command, args []string) error {
-			return executeGeneratedWorkVisualize(cmd, args, dependencies.VisualizeWork)
-		},
-	})
-	if err != nil {
-		return nil, climanifestcobra.WorkFamilyBindings{}, err
-	}
-	return registry, bindings, nil
-}
-
-func scalarTarget[T bool | string | int](value T) *T {
-	return &value
 }
 
 func commandInputValue[T any](values map[string]any, inputID string) (T, error) {
@@ -784,180 +745,20 @@ func commandInputValue[T any](values map[string]any, inputID string) (T, error) 
 	return typed, nil
 }
 
+func optionalCommandInputValue[T any](values map[string]any, inputID string) (T, error) {
+	if _, ok := values[inputID]; !ok {
+		var zero T
+		return zero, nil
+	}
+	return commandInputValue[T](values, inputID)
+}
+
 func generatedCommandInputs(cmd *cobra.Command) (map[string]any, error) {
 	values, err := climanifestcobra.InputValues(cmd)
 	if err != nil {
 		return nil, fmt.Errorf("resolve generated command inputs: %w", err)
 	}
 	return values, nil
-}
-
-func executeGeneratedWorkList(
-	cmd *cobra.Command,
-	globals *cliGlobalOptions,
-	diagnostics *cliDiagnosticsOptions,
-	list func(workcli.ListConfig) error,
-) error {
-	if list == nil {
-		return fmt.Errorf("work list service is required")
-	}
-	values, err := generatedCommandInputs(cmd)
-	if err != nil {
-		return err
-	}
-	cfg := workcli.ListConfig{
-		Context: cmd.Context(), Server: globals.server, JSON: globals.json,
-		Output: cmd.OutOrStdout(), Diagnostics: diagnostics.writer(cmd),
-		Verbose: diagnostics.verboseEnabled(), Debug: diagnostics.debug,
-	}
-	fields := []struct {
-		id     string
-		target *string
-	}{
-		{"you.work.list.flag.state-name", &cfg.StateName},
-		{"you.work.list.flag.state-type", &cfg.StateType},
-		{"you.work.list.flag.name", &cfg.Name},
-		{"you.work.list.flag.work-type-name", &cfg.WorkTypeName},
-		{"you.work.list.flag.trace-id", &cfg.TraceID},
-		{"you.work.list.flag.sort-by", &cfg.SortBy},
-		{"you.work.list.flag.next-token", &cfg.NextToken},
-		{"you.work.list.flag.session", &cfg.SessionID},
-	}
-	for _, field := range fields {
-		*field.target, err = commandInputValue[string](values, field.id)
-		if err != nil {
-			return err
-		}
-	}
-	cfg.MaxResults, err = commandInputValue[int](values, "you.work.list.flag.max-results")
-	if err != nil {
-		return err
-	}
-	cfg.Terminal, err = commandInputValue[bool](values, "you.work.list.flag.terminal")
-	if err != nil {
-		return err
-	}
-	cfg.NonTerminal, err = commandInputValue[bool](values, "you.work.list.flag.non-terminal")
-	if err != nil {
-		return err
-	}
-	cfg.Counts, err = commandInputValue[bool](values, "you.work.list.flag.counts")
-	if err != nil {
-		return err
-	}
-	return list(cfg)
-}
-
-func executeGeneratedWorkWatch(
-	cmd *cobra.Command,
-	globals *cliGlobalOptions,
-	diagnostics *cliDiagnosticsOptions,
-	watch func(workcli.WatchConfig) error,
-) error {
-	if watch == nil {
-		return fmt.Errorf("work watch service is required")
-	}
-	values, err := generatedCommandInputs(cmd)
-	if err != nil {
-		return err
-	}
-	sessionID, err := commandInputValue[string](values, "you.work.watch.flag.session")
-	if err != nil {
-		return err
-	}
-	follow, err := commandInputValue[bool](values, "you.work.watch.flag.follow")
-	if err != nil {
-		return err
-	}
-	return watch(workcli.WatchConfig{
-		Context:           cmd.Context(),
-		Server:            globals.server,
-		SessionID:         sessionID,
-		SessionIDExplicit: cmd.Flag("session") != nil && cmd.Flag("session").Changed,
-		Follow:            follow,
-		Output:            cmd.OutOrStdout(),
-		Diagnostics:       diagnostics.writer(cmd),
-		Verbose:           diagnostics.verboseEnabled(),
-		Debug:             diagnostics.debug,
-	})
-}
-
-func executeGeneratedWorkShow(
-	cmd *cobra.Command,
-	args []string,
-	globals *cliGlobalOptions,
-	diagnostics *cliDiagnosticsOptions,
-	show func(workcli.ShowConfig) error,
-) error {
-	if show == nil {
-		return fmt.Errorf("work show service is required")
-	}
-	values, err := generatedCommandInputs(cmd)
-	if err != nil {
-		return err
-	}
-	sessionID, err := commandInputValue[string](values, "you.work.show.flag.session")
-	if err != nil {
-		return err
-	}
-	return show(workcli.ShowConfig{
-		Context: cmd.Context(), Server: globals.server, SessionID: sessionID,
-		WorkID: args[0], JSON: globals.json, Output: cmd.OutOrStdout(),
-		Diagnostics: diagnostics.writer(cmd), Verbose: diagnostics.verboseEnabled(),
-		Debug: diagnostics.debug,
-	})
-}
-
-func executeGeneratedWorkMove(
-	cmd *cobra.Command,
-	args []string,
-	globals *cliGlobalOptions,
-	diagnostics *cliDiagnosticsOptions,
-	move func(workcli.MoveConfig) error,
-) error {
-	if move == nil {
-		return fmt.Errorf("work move service is required")
-	}
-	values, err := generatedCommandInputs(cmd)
-	if err != nil {
-		return err
-	}
-	sessionID, err := commandInputValue[string](values, "you.work.move.flag.session")
-	if err != nil {
-		return err
-	}
-	requestID, err := commandInputValue[string](values, "you.work.move.flag.request-id")
-	if err != nil {
-		return err
-	}
-	return move(workcli.MoveConfig{
-		Context: cmd.Context(), Server: globals.server, SessionID: sessionID,
-		WorkID: args[0], StateName: args[1], RequestID: requestID,
-		JSON: globals.json, Output: cmd.OutOrStdout(),
-		Diagnostics: diagnostics.writer(cmd), Verbose: diagnostics.verboseEnabled(),
-		Debug: diagnostics.debug,
-	})
-}
-
-func executeGeneratedWorkVisualize(
-	cmd *cobra.Command,
-	args []string,
-	visualize func(workcli.VisualizeConfig) error,
-) error {
-	if visualize == nil {
-		return fmt.Errorf("work visualize service is required")
-	}
-	values, err := generatedCommandInputs(cmd)
-	if err != nil {
-		return err
-	}
-	format, err := commandInputValue[string](values, "you.work.visualize.flag.format")
-	if err != nil {
-		return err
-	}
-	return visualize(workcli.VisualizeConfig{
-		BatchFile: args[0], Format: format, Output: cmd.OutOrStdout(),
-	})
 }
 
 func newRepresentativeHandlerRegistry(

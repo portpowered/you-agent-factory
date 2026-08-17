@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	startupcli "github.com/portpowered/infinite-you/pkg/initializer/process"
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
 	providerscli "github.com/portpowered/infinite-you/pkg/services/providers/transports/cli"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
@@ -71,6 +72,38 @@ func (providerServiceStub) ListProviders(context.Context, providers.ListProvider
 	return providers.ListProvidersResult{}, nil
 }
 
+func TestProductionWorkerSessionsUsesResolvedOwnerInputs(t *testing.T) {
+	var got workersessionscli.ListConfig
+	factory := withTestInjectedPlatformRoles(CommandFactory{
+		ModelsCLI: rootModelsCLI,
+		ListWorkerSessions: func(cfg workersessionscli.ListConfig) error {
+			got = cfg
+			return nil
+		},
+	})
+	root := factory.NewCommand(
+		func() (string, error) { return t.TempDir(), nil },
+		func(string) (string, bool) { return "", false },
+		startupcli.Functions{},
+	)
+	root.SetOut(io.Discard)
+	root.SetErr(io.Discard)
+	root.SetArgs([]string{
+		"--server", "https://factory.example",
+		"--json",
+		"worker-sessions", "list", "--work-id", "work-1", "--scope", "all",
+	})
+	if err := root.Execute(); err != nil {
+		t.Fatalf("execute resolved worker-sessions list: %v", err)
+	}
+	if got.WorkID != "work-1" || got.Scope != "all" {
+		t.Fatalf("worker-sessions list config = %+v, want resolved work and scope", got)
+	}
+	if got.Server != "https://factory.example" || !got.JSON {
+		t.Fatalf("worker-sessions list globals = server %q json %t, want resolved values", got.Server, got.JSON)
+	}
+}
+
 func TestWorkerSessionsGeneratedHandlersReportUnavailableCommandInputs(t *testing.T) {
 	cmd := &cobra.Command{}
 	globals := &cliGlobalOptions{}
@@ -80,28 +113,28 @@ func TestWorkerSessionsGeneratedHandlersReportUnavailableCommandInputs(t *testin
 		call func() error
 	}{
 		{name: "invoke", call: func() error {
-			return executeGeneratedWorkerSessionsInvoke(cmd, nil, globals, diagnostics, func(workersessionscli.InvokeConfig) error { return nil }, nil)
+			return executeGeneratedWorkerSessionsInvokeWithValues(cmd, nil, globals, diagnostics, func(workersessionscli.InvokeConfig) error { return nil }, nil, nil)
 		}},
 		{name: "continue", call: func() error {
-			return executeGeneratedWorkerSessionsContinue(cmd, nil, globals, diagnostics, func(workersessionscli.ContinueConfig) error { return nil }, nil)
+			return executeGeneratedWorkerSessionsContinueWithValues(cmd, nil, globals, diagnostics, func(workersessionscli.ContinueConfig) error { return nil }, nil, nil)
 		}},
 		{name: "interrupt", call: func() error {
-			return executeGeneratedWorkerSessionsInterrupt(cmd, nil, globals, diagnostics, func(workersessionscli.InterruptConfig) error { return nil })
+			return executeGeneratedWorkerSessionsInterruptWithValues(cmd, nil, globals, diagnostics, func(workersessionscli.InterruptConfig) error { return nil }, nil)
 		}},
 		{name: "control", call: func() error {
-			return executeGeneratedWorkerSessionsControl(cmd, globals, diagnostics, func(workersessionscli.ControlConfig) error { return nil }, nil, workersessions.ControlActionCancel)
+			return executeGeneratedWorkerSessionsControlWithValues(cmd, globals, diagnostics, func(workersessionscli.ControlConfig) error { return nil }, nil, workersessions.ControlActionCancel, nil)
 		}},
 		{name: "list", call: func() error {
-			return executeGeneratedWorkerSessionsList(cmd, globals, diagnostics, func(workersessionscli.ListConfig) error { return nil })
+			return executeGeneratedWorkerSessionsListWithValues(cmd, globals, diagnostics, func(workersessionscli.ListConfig) error { return nil }, nil)
 		}},
 		{name: "show", call: func() error {
-			return executeGeneratedWorkerSessionsShow(cmd, globals, diagnostics, func(workersessionscli.ShowConfig) error { return nil })
+			return executeGeneratedWorkerSessionsShowWithValues(cmd, globals, diagnostics, func(workersessionscli.ShowConfig) error { return nil }, nil)
 		}},
 		{name: "stream", call: func() error {
-			return executeGeneratedWorkerSessionsStream(cmd, globals, diagnostics, func(workersessionscli.StreamConfig) error { return nil })
+			return executeGeneratedWorkerSessionsStreamWithValues(cmd, globals, diagnostics, func(workersessionscli.StreamConfig) error { return nil }, nil)
 		}},
 		{name: "read", call: func() error {
-			return executeGeneratedWorkerSessionsRead(cmd, globals, diagnostics, func(workersessionscli.ReadConfig) error { return nil })
+			return executeGeneratedWorkerSessionsReadWithValues(cmd, globals, diagnostics, func(workersessionscli.ReadConfig) error { return nil }, nil)
 		}},
 	}
 	for _, check := range checks {
@@ -122,28 +155,28 @@ func TestWorkerSessionsGeneratedHandlersRequireConfiguredServices(t *testing.T) 
 		call func() error
 	}{
 		{name: "invoke", call: func() error {
-			return executeGeneratedWorkerSessionsInvoke(cmd, nil, globals, diagnostics, nil, nil)
+			return executeGeneratedWorkerSessionsInvokeWithValues(cmd, nil, globals, diagnostics, nil, nil, nil)
 		}},
 		{name: "continue", call: func() error {
-			return executeGeneratedWorkerSessionsContinue(cmd, nil, globals, diagnostics, nil, nil)
+			return executeGeneratedWorkerSessionsContinueWithValues(cmd, nil, globals, diagnostics, nil, nil, nil)
 		}},
 		{name: "interrupt", call: func() error {
-			return executeGeneratedWorkerSessionsInterrupt(cmd, nil, globals, diagnostics, nil)
+			return executeGeneratedWorkerSessionsInterruptWithValues(cmd, nil, globals, diagnostics, nil, nil)
 		}},
 		{name: "control", call: func() error {
-			return executeGeneratedWorkerSessionsControl(cmd, globals, diagnostics, nil, nil, workersessions.ControlActionCancel)
+			return executeGeneratedWorkerSessionsControlWithValues(cmd, globals, diagnostics, nil, nil, workersessions.ControlActionCancel, nil)
 		}},
 		{name: "list", call: func() error {
-			return executeGeneratedWorkerSessionsList(cmd, globals, diagnostics, nil)
+			return executeGeneratedWorkerSessionsListWithValues(cmd, globals, diagnostics, nil, nil)
 		}},
 		{name: "show", call: func() error {
-			return executeGeneratedWorkerSessionsShow(cmd, globals, diagnostics, nil)
+			return executeGeneratedWorkerSessionsShowWithValues(cmd, globals, diagnostics, nil, nil)
 		}},
 		{name: "stream", call: func() error {
-			return executeGeneratedWorkerSessionsStream(cmd, globals, diagnostics, nil)
+			return executeGeneratedWorkerSessionsStreamWithValues(cmd, globals, diagnostics, nil, nil)
 		}},
 		{name: "read", call: func() error {
-			return executeGeneratedWorkerSessionsRead(cmd, globals, diagnostics, nil)
+			return executeGeneratedWorkerSessionsReadWithValues(cmd, globals, diagnostics, nil, nil)
 		}},
 	}
 	for _, check := range checks {
@@ -164,28 +197,28 @@ func TestWorkerSessionsGeneratedHandlersRejectNilCommands(t *testing.T) {
 		call func() error
 	}{
 		{name: "invoke", call: func() error {
-			return executeGeneratedWorkerSessionsInvoke(nil, nil, globals, diagnostics, func(workersessionscli.InvokeConfig) error { return nil }, nil)
+			return executeGeneratedWorkerSessionsInvokeWithValues(nil, nil, globals, diagnostics, func(workersessionscli.InvokeConfig) error { return nil }, nil, nil)
 		}},
 		{name: "continue", call: func() error {
-			return executeGeneratedWorkerSessionsContinue(nil, nil, globals, diagnostics, func(workersessionscli.ContinueConfig) error { return nil }, nil)
+			return executeGeneratedWorkerSessionsContinueWithValues(nil, nil, globals, diagnostics, func(workersessionscli.ContinueConfig) error { return nil }, nil, nil)
 		}},
 		{name: "interrupt", call: func() error {
-			return executeGeneratedWorkerSessionsInterrupt(nil, nil, globals, diagnostics, func(workersessionscli.InterruptConfig) error { return nil })
+			return executeGeneratedWorkerSessionsInterruptWithValues(nil, nil, globals, diagnostics, func(workersessionscli.InterruptConfig) error { return nil }, nil)
 		}},
 		{name: "control", call: func() error {
-			return executeGeneratedWorkerSessionsControl(nil, globals, diagnostics, func(workersessionscli.ControlConfig) error { return nil }, nil, workersessions.ControlActionCancel)
+			return executeGeneratedWorkerSessionsControlWithValues(nil, globals, diagnostics, func(workersessionscli.ControlConfig) error { return nil }, nil, workersessions.ControlActionCancel, nil)
 		}},
 		{name: "list", call: func() error {
-			return executeGeneratedWorkerSessionsList(nil, globals, diagnostics, func(workersessionscli.ListConfig) error { return nil })
+			return executeGeneratedWorkerSessionsListWithValues(nil, globals, diagnostics, func(workersessionscli.ListConfig) error { return nil }, nil)
 		}},
 		{name: "show", call: func() error {
-			return executeGeneratedWorkerSessionsShow(nil, globals, diagnostics, func(workersessionscli.ShowConfig) error { return nil })
+			return executeGeneratedWorkerSessionsShowWithValues(nil, globals, diagnostics, func(workersessionscli.ShowConfig) error { return nil }, nil)
 		}},
 		{name: "stream", call: func() error {
-			return executeGeneratedWorkerSessionsStream(nil, globals, diagnostics, func(workersessionscli.StreamConfig) error { return nil })
+			return executeGeneratedWorkerSessionsStreamWithValues(nil, globals, diagnostics, func(workersessionscli.StreamConfig) error { return nil }, nil)
 		}},
 		{name: "read", call: func() error {
-			return executeGeneratedWorkerSessionsRead(nil, globals, diagnostics, func(workersessionscli.ReadConfig) error { return nil })
+			return executeGeneratedWorkerSessionsReadWithValues(nil, globals, diagnostics, func(workersessionscli.ReadConfig) error { return nil }, nil)
 		}},
 	}
 	for _, check := range checks {
@@ -239,7 +272,6 @@ func TestWorkerSessionsInvokeAndContinueReadersReportTypedInputErrors(t *testing
 	}
 	for _, key := range []string{
 		"you.worker-sessions.continue.arg.0",
-		"you.worker-sessions.continue.arg.1",
 		"you.worker-sessions.continue.flag.async",
 	} {
 		candidate := cloneCLIInputValues(continueValues)
@@ -247,6 +279,12 @@ func TestWorkerSessionsInvokeAndContinueReadersReportTypedInputErrors(t *testing
 		if _, err := readGeneratedWorkerSessionsContinueInputs(candidate); err == nil {
 			t.Errorf("readGeneratedWorkerSessionsContinueInputs(missing %s) = nil error, want typed input error", key)
 		}
+	}
+	delete(continueValues, "you.worker-sessions.continue.arg.1")
+	if got, err := readGeneratedWorkerSessionsContinueInputs(continueValues); err != nil {
+		t.Fatalf("readGeneratedWorkerSessionsContinueInputs(missing optional prompt) error = %v", err)
+	} else if len(got.followUpInput) != 0 {
+		t.Fatalf("optional continue prompt = %#v, want empty", got.followUpInput)
 	}
 }
 
@@ -256,13 +294,13 @@ func TestWorkerSessionsGeneratedHandlersRejectMissingResolvedValues(t *testing.T
 	tests := []struct {
 		name   string
 		values map[string]any
-		call   func(*cobra.Command) error
+		call   func(*cobra.Command, map[string]any) error
 	}{
 		{
 			name:   "list missing scope",
 			values: map[string]any{"you.worker-sessions.list.flag.work-id": "work-1"},
-			call: func(cmd *cobra.Command) error {
-				return executeGeneratedWorkerSessionsList(cmd, globals, diagnostics, func(workersessionscli.ListConfig) error { return nil })
+			call: func(cmd *cobra.Command, values map[string]any) error {
+				return executeGeneratedWorkerSessionsListWithValues(cmd, globals, diagnostics, func(workersessionscli.ListConfig) error { return nil }, values)
 			},
 		},
 		{
@@ -272,8 +310,8 @@ func TestWorkerSessionsGeneratedHandlersRejectMissingResolvedValues(t *testing.T
 				"you.worker-sessions.list.flag.scope":   "all",
 				"you.worker-sessions.list.flag.state":   []string{"RUNNING"},
 			},
-			call: func(cmd *cobra.Command) error {
-				return executeGeneratedWorkerSessionsList(cmd, globals, diagnostics, func(workersessionscli.ListConfig) error { return nil })
+			call: func(cmd *cobra.Command, values map[string]any) error {
+				return executeGeneratedWorkerSessionsListWithValues(cmd, globals, diagnostics, func(workersessionscli.ListConfig) error { return nil }, values)
 			},
 		},
 		{
@@ -285,8 +323,8 @@ func TestWorkerSessionsGeneratedHandlersRejectMissingResolvedValues(t *testing.T
 				"you.worker-sessions.show.flag.id":                "provider-1",
 				"you.worker-sessions.show.flag.session":           "session-1",
 			},
-			call: func(cmd *cobra.Command) error {
-				return executeGeneratedWorkerSessionsShow(cmd, globals, diagnostics, func(workersessionscli.ShowConfig) error { return nil })
+			call: func(cmd *cobra.Command, values map[string]any) error {
+				return executeGeneratedWorkerSessionsShowWithValues(cmd, globals, diagnostics, func(workersessionscli.ShowConfig) error { return nil }, values)
 			},
 		},
 		{
@@ -300,8 +338,8 @@ func TestWorkerSessionsGeneratedHandlersRejectMissingResolvedValues(t *testing.T
 				"you.worker-sessions.stream.flag.output":            "json",
 				"you.worker-sessions.stream.flag.replay-only":       false,
 			},
-			call: func(cmd *cobra.Command) error {
-				return executeGeneratedWorkerSessionsStream(cmd, globals, diagnostics, func(workersessionscli.StreamConfig) error { return nil })
+			call: func(cmd *cobra.Command, values map[string]any) error {
+				return executeGeneratedWorkerSessionsStreamWithValues(cmd, globals, diagnostics, func(workersessionscli.StreamConfig) error { return nil }, values)
 			},
 		},
 		{
@@ -313,21 +351,26 @@ func TestWorkerSessionsGeneratedHandlersRejectMissingResolvedValues(t *testing.T
 				"you.worker-sessions.read.flag.id":                "provider-1",
 				"you.worker-sessions.read.flag.session":           "session-1",
 			},
-			call: func(cmd *cobra.Command) error {
-				return executeGeneratedWorkerSessionsRead(cmd, globals, diagnostics, func(workersessionscli.ReadConfig) error { return nil })
+			call: func(cmd *cobra.Command, values map[string]any) error {
+				return executeGeneratedWorkerSessionsReadWithValues(cmd, globals, diagnostics, func(workersessionscli.ReadConfig) error { return nil }, values)
 			},
 		},
 		{
 			name:   "control missing output",
 			values: map[string]any{"you.worker-sessions.cancel.arg.0": "worker-1"},
-			call: func(cmd *cobra.Command) error {
-				return executeGeneratedWorkerSessionsControl(cmd, globals, diagnostics, func(workersessionscli.ControlConfig) error { return nil }, nil, workersessions.ControlActionCancel)
+			call: func(cmd *cobra.Command, values map[string]any) error {
+				return executeGeneratedWorkerSessionsControlWithValues(cmd, globals, diagnostics, func(workersessionscli.ControlConfig) error { return nil }, nil, workersessions.ControlActionCancel, values)
 			},
 		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			err := test.call(commandWithResolvedCLIInputs(test.values))
+			cmd := commandWithResolvedCLIInputs(test.values)
+			values, err := generatedCommandInputs(cmd)
+			if err != nil {
+				t.Fatalf("resolve test worker-session inputs: %v", err)
+			}
+			err = test.call(cmd, values)
 			if err == nil || !strings.Contains(err.Error(), "resolved CLI input") {
 				t.Fatalf("%s error = %v, want missing resolved CLI input", test.name, err)
 			}

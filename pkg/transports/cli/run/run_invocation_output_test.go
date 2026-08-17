@@ -234,6 +234,71 @@ func TestRun_FactoryInvocationWritesPrimaryTextOnly(t *testing.T) {
 	}
 }
 
+func TestRun_FactoryInvocationPreservesOrderedPrimaryContentParts(t *testing.T) {
+	for _, test := range []struct {
+		name       string
+		jsonOutput bool
+		wantText   string
+	}{
+		{name: "text", wantText: "first part\nsecond part"},
+		{name: "json", jsonOutput: true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			preserveRunGlobals(t)
+
+			text := "preserve these parts"
+			var output bytes.Buffer
+			openTestInvocationRunner = func(_ context.Context, _ *testRuntimeSelections, _ serviceedges.Edges) (sessionInvocationRunner, error) {
+				return stubInvocationService{
+					run: func(ctx context.Context) error {
+						<-ctx.Done()
+						return nil
+					},
+					invoke: func(_ context.Context, _ string, _ factoryapi.InvocationRequest) (apisurface.FactoryInvocationResult, error) {
+						return apisurface.FactoryInvocationResult{
+							RequestID: "request-multipart",
+							TraceID:   "trace-multipart",
+							Status:    interfaces.InvocationTerminalStatusCompleted,
+							PrimaryResult: []work.WorkContentPart{
+								{Type: work.WorkContentPartTypeText, Text: "first part"},
+								{Type: work.WorkContentPartTypeText, Text: "second part"},
+							},
+						}, nil
+					},
+				}, nil
+			}
+
+			err := Run(context.Background(), RunConfig{
+				FactoryConfigPath:        "/tmp/factory.json",
+				InvocationPositionalText: &text,
+				StdinIsTTY:               func() bool { return true },
+				JSONOutput:               test.jsonOutput,
+				Output:                   &output,
+				Port:                     7437,
+			})
+			if err != nil {
+				t.Fatalf("Run: %v", err)
+			}
+
+			if !test.jsonOutput {
+				if got := output.String(); got != test.wantText {
+					t.Fatalf("stdout = %q, want ordered text parts", got)
+				}
+				return
+			}
+
+			var response factoryapi.InvocationResponse
+			if err := json.Unmarshal(output.Bytes(), &response); err != nil {
+				t.Fatalf("decode JSON response: %v\n%s", err, output.String())
+			}
+			assertGeneratedWorkContentPartsFromResponse(t, response.PrimaryResult, []work.WorkContentPart{
+				{Type: work.WorkContentPartTypeText, Text: "first part"},
+				{Type: work.WorkContentPartTypeText, Text: "second part"},
+			})
+		})
+	}
+}
+
 func TestRun_FactoryInvocationFailureKeepsStdoutEmpty(t *testing.T) {
 	preserveRunGlobals(t)
 
@@ -890,49 +955,4 @@ func TestSafeRemoteEndpointRedactsCredentialsAndFailsClosedForInvalidInput(t *te
 			}
 		})
 	}
-}
-
-func remoteSuccessHandler(
-	t *testing.T,
-	gotRequest *factoryapi.FactorySessionExecutionRequest,
-	resultCalls *int,
-) http.Handler {
-	t.Helper()
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch {
-		case r.Method == http.MethodPost && r.URL.Path == "/selected/factory-sessions/async":
-			if err := json.NewDecoder(r.Body).Decode(gotRequest); err != nil {
-				t.Fatalf("decode request: %v", err)
-			}
-			w.Header().Set("Content-Type", "application/json")
-			_ = json.NewEncoder(w).Encode(factoryapi.FactorySessionExecutionResponse{
-				SessionId:        "dur-sess-remote",
-				Status:           factoryapi.FactorySessionDurableLifecycleStatusQueued,
-				OrchestratorKind: factoryapi.JAVASCRIPT,
-			})
-		case r.Method == http.MethodGet && r.URL.Path == "/selected/factory-sessions/dur-sess-remote/results":
-			*resultCalls = *resultCalls + 1
-			if *resultCalls == 1 {
-				status := factoryapi.FactorySessionDurableLifecycleStatusRunning
-				retryable := true
-				_ = json.NewEncoder(w).Encode(factoryapi.FactorySessionResult{
-					SessionId:     "dur-sess-remote",
-					ResultStatus:  factoryapi.FactorySessionResultStatusNotReady,
-					SessionStatus: &status,
-					Availability:  &factoryapi.FactorySessionResultAvailabilityDetail{Retryable: &retryable},
-				})
-				return
-			}
-			status := factoryapi.FactorySessionDurableLifecycleStatusSucceeded
-			w.Header().Set("Content-Type", "application/json")
-			_ = json.NewEncoder(w).Encode(factoryapi.FactorySessionResult{
-				SessionId:     "dur-sess-remote",
-				ResultStatus:  factoryapi.FactorySessionResultStatusFinal,
-				SessionStatus: &status,
-				PrimaryResult: remoteTextContent(t, "remote result"),
-			})
-		default:
-			t.Errorf("request = %s %s, want selected durable start or result endpoint", r.Method, r.URL.Path)
-		}
-	})
 }

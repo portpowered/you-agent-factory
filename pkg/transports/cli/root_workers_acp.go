@@ -10,8 +10,10 @@ import (
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	acpcli "github.com/portpowered/infinite-you/pkg/transports/cli/acp"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifestcobra"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/cliserver"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/commandregistry"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/generated"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/resolvedinput"
 	workersessionscli "github.com/portpowered/infinite-you/pkg/transports/cli/worker_sessions"
 	"github.com/spf13/cobra"
 )
@@ -137,61 +139,44 @@ func productionWorkerSessionsCommand(
 	options CommandFactory,
 ) *cobra.Command {
 	registry := commandregistry.NewRegistry()
-	if err := registry.Register("you.worker-sessions.list.handler", func(cmd *cobra.Command, _ []string) error {
-		return executeGeneratedWorkerSessionsList(cmd, globals, diagnostics, options.ListWorkerSessions)
-	}); err != nil {
-		panic(fmt.Sprintf("build worker sessions handler registry: %v", err))
+	register := func(handlerID string, handler commandregistry.ResolvedRunE) {
+		if err := registry.RegisterResolved(handlerID, handler); err != nil {
+			panic(fmt.Sprintf("build worker sessions handler registry: %v", err))
+		}
 	}
-	if err := registry.Register("you.worker-sessions.show.handler", func(cmd *cobra.Command, _ []string) error {
-		return executeGeneratedWorkerSessionsShow(cmd, globals, diagnostics, options.ShowWorkerSession)
-	}); err != nil {
-		panic(fmt.Sprintf("build worker sessions handler registry: %v", err))
-	}
-	if err := registry.Register("you.worker-sessions.read.handler", func(cmd *cobra.Command, _ []string) error {
-		return executeGeneratedWorkerSessionsRead(cmd, globals, diagnostics, options.ReadWorkerSession)
-	}); err != nil {
-		panic(fmt.Sprintf("build worker sessions handler registry: %v", err))
-	}
-	if err := registry.Register("you.worker-sessions.stream.handler", func(cmd *cobra.Command, _ []string) error {
-		return executeGeneratedWorkerSessionsStream(cmd, globals, diagnostics, options.StreamWorkerSession)
-	}); err != nil {
-		panic(fmt.Sprintf("build worker sessions handler registry: %v", err))
-	}
-	if err := registry.Register("you.worker-sessions.invoke.handler", func(cmd *cobra.Command, args []string) error {
-		return executeGeneratedWorkerSessionsInvoke(cmd, args, globals, diagnostics, options.InvokeWorkerSession, options.LocalWorkerSessions)
-	}); err != nil {
-		panic(fmt.Sprintf("build worker sessions handler registry: %v", err))
-	}
-	if err := registry.Register("you.worker-sessions.continue.handler", func(cmd *cobra.Command, args []string) error {
-		return executeGeneratedWorkerSessionsContinue(cmd, args, globals, diagnostics, options.ContinueWorkerSession, options.LocalWorkerSessions)
-	}); err != nil {
-		panic(fmt.Sprintf("build worker sessions handler registry: %v", err))
-	}
-	if err := registry.Register("you.worker-sessions.interrupt.handler", func(cmd *cobra.Command, args []string) error {
-		return executeGeneratedWorkerSessionsInterrupt(cmd, args, globals, diagnostics, options.InterruptWorkerSession)
-	}); err != nil {
-		panic(fmt.Sprintf("build worker sessions handler registry: %v", err))
-	}
-	if err := registry.Register("you.worker-sessions.pause.handler", func(cmd *cobra.Command, _ []string) error {
-		return executeGeneratedWorkerSessionsControl(cmd, globals, diagnostics, options.PauseWorkerSession, options.LocalWorkerSessionControls, workersessions.ControlActionPause)
-	}); err != nil {
-		panic(fmt.Sprintf("build worker sessions handler registry: %v", err))
-	}
-	if err := registry.Register("you.worker-sessions.resume.handler", func(cmd *cobra.Command, _ []string) error {
-		return executeGeneratedWorkerSessionsControl(cmd, globals, diagnostics, options.ResumeWorkerSession, options.LocalWorkerSessionControls, workersessions.ControlActionResume)
-	}); err != nil {
-		panic(fmt.Sprintf("build worker sessions handler registry: %v", err))
-	}
-	if err := registry.Register("you.worker-sessions.cancel.handler", func(cmd *cobra.Command, _ []string) error {
-		return executeGeneratedWorkerSessionsControl(cmd, globals, diagnostics, options.CancelWorkerSession, options.LocalWorkerSessionControls, workersessions.ControlActionCancel)
-	}); err != nil {
-		panic(fmt.Sprintf("build worker sessions handler registry: %v", err))
-	}
-	if err := registry.Register("you.worker-sessions.terminate.handler", func(cmd *cobra.Command, _ []string) error {
-		return executeGeneratedWorkerSessionsControl(cmd, globals, diagnostics, options.TerminateWorkerSession, options.LocalWorkerSessionControls, workersessions.ControlActionTerminate)
-	}); err != nil {
-		panic(fmt.Sprintf("build worker sessions handler registry: %v", err))
-	}
+	register("you.worker-sessions.list.handler", resolvedWorkerSessionsHandler(globals, diagnostics, func(cmd *cobra.Command, resolvedGlobals *cliGlobalOptions, resolvedDiagnostics *cliDiagnosticsOptions, values map[string]any) error {
+		return executeGeneratedWorkerSessionsListWithValues(cmd, resolvedGlobals, resolvedDiagnostics, options.ListWorkerSessions, values)
+	}))
+	register("you.worker-sessions.show.handler", resolvedWorkerSessionsHandler(globals, diagnostics, func(cmd *cobra.Command, resolvedGlobals *cliGlobalOptions, resolvedDiagnostics *cliDiagnosticsOptions, values map[string]any) error {
+		return executeGeneratedWorkerSessionsShowWithValues(cmd, resolvedGlobals, resolvedDiagnostics, options.ShowWorkerSession, values)
+	}))
+	register("you.worker-sessions.read.handler", resolvedWorkerSessionsHandler(globals, diagnostics, func(cmd *cobra.Command, resolvedGlobals *cliGlobalOptions, resolvedDiagnostics *cliDiagnosticsOptions, values map[string]any) error {
+		return executeGeneratedWorkerSessionsReadWithValues(cmd, resolvedGlobals, resolvedDiagnostics, options.ReadWorkerSession, values)
+	}))
+	register("you.worker-sessions.stream.handler", resolvedWorkerSessionsHandler(globals, diagnostics, func(cmd *cobra.Command, resolvedGlobals *cliGlobalOptions, resolvedDiagnostics *cliDiagnosticsOptions, values map[string]any) error {
+		return executeGeneratedWorkerSessionsStreamWithValues(cmd, resolvedGlobals, resolvedDiagnostics, options.StreamWorkerSession, values)
+	}))
+	register("you.worker-sessions.invoke.handler", resolvedWorkerSessionsHandler(globals, diagnostics, func(cmd *cobra.Command, resolvedGlobals *cliGlobalOptions, resolvedDiagnostics *cliDiagnosticsOptions, values map[string]any) error {
+		return executeGeneratedWorkerSessionsInvokeWithValues(cmd, resolvedWorkerSessionPrompt(values, "you.worker-sessions.invoke.arg.0", nil), resolvedGlobals, resolvedDiagnostics, options.InvokeWorkerSession, options.LocalWorkerSessions, values)
+	}))
+	register("you.worker-sessions.continue.handler", resolvedWorkerSessionsHandler(globals, diagnostics, func(cmd *cobra.Command, resolvedGlobals *cliGlobalOptions, resolvedDiagnostics *cliDiagnosticsOptions, values map[string]any) error {
+		return executeGeneratedWorkerSessionsContinueWithValues(cmd, nil, resolvedGlobals, resolvedDiagnostics, options.ContinueWorkerSession, options.LocalWorkerSessions, values)
+	}))
+	register("you.worker-sessions.interrupt.handler", resolvedWorkerSessionsHandler(globals, diagnostics, func(cmd *cobra.Command, resolvedGlobals *cliGlobalOptions, resolvedDiagnostics *cliDiagnosticsOptions, values map[string]any) error {
+		return executeGeneratedWorkerSessionsInterruptWithValues(cmd, nil, resolvedGlobals, resolvedDiagnostics, options.InterruptWorkerSession, values)
+	}))
+	register("you.worker-sessions.pause.handler", resolvedWorkerSessionsHandler(globals, diagnostics, func(cmd *cobra.Command, resolvedGlobals *cliGlobalOptions, resolvedDiagnostics *cliDiagnosticsOptions, values map[string]any) error {
+		return executeGeneratedWorkerSessionsControlWithValues(cmd, resolvedGlobals, resolvedDiagnostics, options.PauseWorkerSession, options.LocalWorkerSessionControls, workersessions.ControlActionPause, values)
+	}))
+	register("you.worker-sessions.resume.handler", resolvedWorkerSessionsHandler(globals, diagnostics, func(cmd *cobra.Command, resolvedGlobals *cliGlobalOptions, resolvedDiagnostics *cliDiagnosticsOptions, values map[string]any) error {
+		return executeGeneratedWorkerSessionsControlWithValues(cmd, resolvedGlobals, resolvedDiagnostics, options.ResumeWorkerSession, options.LocalWorkerSessionControls, workersessions.ControlActionResume, values)
+	}))
+	register("you.worker-sessions.cancel.handler", resolvedWorkerSessionsHandler(globals, diagnostics, func(cmd *cobra.Command, resolvedGlobals *cliGlobalOptions, resolvedDiagnostics *cliDiagnosticsOptions, values map[string]any) error {
+		return executeGeneratedWorkerSessionsControlWithValues(cmd, resolvedGlobals, resolvedDiagnostics, options.CancelWorkerSession, options.LocalWorkerSessionControls, workersessions.ControlActionCancel, values)
+	}))
+	register("you.worker-sessions.terminate.handler", resolvedWorkerSessionsHandler(globals, diagnostics, func(cmd *cobra.Command, resolvedGlobals *cliGlobalOptions, resolvedDiagnostics *cliDiagnosticsOptions, values map[string]any) error {
+		return executeGeneratedWorkerSessionsControlWithValues(cmd, resolvedGlobals, resolvedDiagnostics, options.TerminateWorkerSession, options.LocalWorkerSessionControls, workersessions.ControlActionTerminate, values)
+	}))
 	command, err := climanifestcobra.NewWorkerSessionsFamilyCommand(registry)
 	if err != nil {
 		panic(fmt.Sprintf("build worker sessions family command: %v", err))
@@ -202,19 +187,177 @@ func productionWorkerSessionsCommand(
 	return command
 }
 
-func executeGeneratedWorkerSessionsInvoke(
+type resolvedWorkerSessionsOperation func(
+	*cobra.Command,
+	*cliGlobalOptions,
+	*cliDiagnosticsOptions,
+	map[string]any,
+) error
+
+func resolvedWorkerSessionsHandler(
+	fallbackGlobals *cliGlobalOptions,
+	fallbackDiagnostics *cliDiagnosticsOptions,
+	operation resolvedWorkerSessionsOperation,
+) commandregistry.ResolvedRunE {
+	return func(
+		cmd *cobra.Command,
+		inputs resolvedinput.Inputs,
+		inherited resolvedinput.Inputs,
+	) error {
+		if operation == nil {
+			return fmt.Errorf("worker session operation is required")
+		}
+		globals, diagnostics, err := resolveWorkerSessionGlobals(
+			inherited, fallbackGlobals, fallbackDiagnostics,
+		)
+		if err != nil {
+			return err
+		}
+		values, err := resolvedWorkerSessionValues(inputs)
+		if err != nil {
+			return err
+		}
+		return operation(cmd, &globals, &diagnostics, values)
+	}
+}
+
+func resolveWorkerSessionGlobals(
+	inputs resolvedinput.Inputs,
+	fallbackGlobals *cliGlobalOptions,
+	fallbackDiagnostics *cliDiagnosticsOptions,
+) (cliGlobalOptions, cliDiagnosticsOptions, error) {
+	globals := cliGlobalOptions{server: cliserver.DefaultBaseURI}
+	if fallbackGlobals != nil {
+		globals = *fallbackGlobals
+	}
+	if _, present := inputs.State("you.flag.server"); present {
+		server, err := inputs.String("you.flag.server")
+		if err != nil {
+			return cliGlobalOptions{}, cliDiagnosticsOptions{}, err
+		}
+		globals.server = server
+	}
+	if _, present := inputs.State("you.flag.json"); present {
+		jsonOutput, err := inputs.Bool("you.flag.json")
+		if err != nil {
+			return cliGlobalOptions{}, cliDiagnosticsOptions{}, err
+		}
+		globals.json = jsonOutput
+	}
+	if _, present := inputs.State("you.flag.remote"); present {
+		remote, err := inputs.Bool("you.flag.remote")
+		if err != nil {
+			return cliGlobalOptions{}, cliDiagnosticsOptions{}, err
+		}
+		globals.remote = remote
+	}
+	diagnostics := cliDiagnosticsOptions{}
+	if fallbackDiagnostics != nil {
+		diagnostics = *fallbackDiagnostics
+	}
+	if _, present := inputs.State("you.flag.verbose"); present {
+		verbose, err := inputs.Bool("you.flag.verbose")
+		if err != nil {
+			return cliGlobalOptions{}, cliDiagnosticsOptions{}, err
+		}
+		diagnostics.verbose = verbose
+	}
+	if _, present := inputs.State("you.flag.debug"); present {
+		debug, err := inputs.Bool("you.flag.debug")
+		if err != nil {
+			return cliGlobalOptions{}, cliDiagnosticsOptions{}, err
+		}
+		diagnostics.debug = debug
+	}
+	return globals, diagnostics, nil
+}
+
+func resolvedWorkerSessionValues(inputs resolvedinput.Inputs) (map[string]any, error) {
+	manifest, err := generated.WorkerSessionsFamilyManifest()
+	if err != nil {
+		return nil, fmt.Errorf("resolve worker session inputs: %w", err)
+	}
+	values := make(map[string]any)
+	for _, record := range manifest.Commands {
+		for inputID := range record.Arguments {
+			appendResolvedWorkerSessionValue(values, inputs, inputID)
+		}
+		for inputID, flag := range record.Flags {
+			if flag.Scope == "local" {
+				appendResolvedWorkerSessionValue(values, inputs, inputID)
+			}
+		}
+	}
+	return values, nil
+}
+
+func appendResolvedWorkerSessionValue(
+	values map[string]any,
+	inputs resolvedinput.Inputs,
+	inputID string,
+) {
+	value, present := inputs.Lookup(inputID)
+	if !present {
+		return
+	}
+	switch value.Kind() {
+	case resolvedinput.ValueKindBool:
+		if typed, err := inputs.Bool(inputID); err == nil {
+			values[inputID] = typed
+		}
+	case resolvedinput.ValueKindString:
+		if typed, err := inputs.String(inputID); err == nil {
+			values[inputID] = typed
+		}
+	case resolvedinput.ValueKindInt:
+		if typed, err := inputs.Int(inputID); err == nil {
+			values[inputID] = typed
+		}
+	case resolvedinput.ValueKindInt64:
+		if typed, err := inputs.Int64(inputID); err == nil {
+			values[inputID] = typed
+		}
+	case resolvedinput.ValueKindStringArray:
+		if typed, err := inputs.StringArray(inputID); err == nil {
+			values[inputID] = typed
+		}
+	}
+}
+
+func resolvedWorkerSessionPrompt(values map[string]any, inputID string, fallback []string) []string {
+	value, present := values[inputID]
+	if !present {
+		return fallback
+	}
+	if prompt, ok := value.([]string); ok {
+		return prompt
+	}
+	if prompt, ok := value.(string); ok && prompt != "" {
+		return []string{prompt}
+	}
+	return fallback
+}
+
+func requireWorkerSessionsCommand(cmd *cobra.Command) error {
+	if cmd == nil {
+		return fmt.Errorf("worker sessions command is required")
+	}
+	return nil
+}
+
+func executeGeneratedWorkerSessionsInvokeWithValues(
 	cmd *cobra.Command,
 	args []string,
 	globals *cliGlobalOptions,
 	diagnostics *cliDiagnosticsOptions,
 	invoke workersessionscli.InvokeOperation,
 	local workersessionscli.LocalInvokeBoundary,
+	values map[string]any,
 ) error {
 	if invoke == nil {
 		return fmt.Errorf("worker sessions invoke service is required")
 	}
-	values, err := generatedCommandInputs(cmd)
-	if err != nil {
+	if err := requireWorkerSessionsCommand(cmd); err != nil {
 		return err
 	}
 	inputs, err := readGeneratedWorkerSessionsInvokeInputs(values)
@@ -289,19 +432,19 @@ func readGeneratedWorkerSessionsInvokeInputs(values map[string]any) (generatedWo
 	return inputs, nil
 }
 
-func executeGeneratedWorkerSessionsContinue(
+func executeGeneratedWorkerSessionsContinueWithValues(
 	cmd *cobra.Command,
 	args []string,
 	globals *cliGlobalOptions,
 	diagnostics *cliDiagnosticsOptions,
 	continueOperation workersessionscli.ContinueOperation,
 	local workersessionscli.LocalInvokeBoundary,
+	values map[string]any,
 ) error {
 	if continueOperation == nil {
 		return fmt.Errorf("worker sessions continue service is required")
 	}
-	values, err := generatedCommandInputs(cmd)
-	if err != nil {
+	if err := requireWorkerSessionsCommand(cmd); err != nil {
 		return err
 	}
 	inputs, err := readGeneratedWorkerSessionsContinueInputs(values)
@@ -352,7 +495,7 @@ func readGeneratedWorkerSessionsContinueInputs(values map[string]any) (generated
 		}
 	}
 	var err error
-	inputs.followUpInput, err = commandInputValue[[]string](values, "you.worker-sessions.continue.arg.1")
+	inputs.followUpInput, err = optionalCommandInputValue[[]string](values, "you.worker-sessions.continue.arg.1")
 	if err != nil {
 		return generatedWorkerSessionsContinueInputs{}, err
 	}
@@ -363,18 +506,18 @@ func readGeneratedWorkerSessionsContinueInputs(values map[string]any) (generated
 	return inputs, nil
 }
 
-func executeGeneratedWorkerSessionsInterrupt(
+func executeGeneratedWorkerSessionsInterruptWithValues(
 	cmd *cobra.Command,
 	args []string,
 	globals *cliGlobalOptions,
 	diagnostics *cliDiagnosticsOptions,
 	interrupt workersessionscli.InterruptOperation,
+	values map[string]any,
 ) error {
 	if interrupt == nil {
 		return fmt.Errorf("worker sessions interrupt service is required")
 	}
-	values, err := generatedCommandInputs(cmd)
-	if err != nil {
+	if err := requireWorkerSessionsCommand(cmd); err != nil {
 		return err
 	}
 	inputs, err := readGeneratedWorkerSessionsInterruptInputs(values)
@@ -425,7 +568,7 @@ func readGeneratedWorkerSessionsInterruptInputs(values map[string]any) (generate
 		}
 	}
 	var err error
-	inputs.replacementInput, err = commandInputValue[[]string](values, "you.worker-sessions.interrupt.arg.1")
+	inputs.replacementInput, err = optionalCommandInputValue[[]string](values, "you.worker-sessions.interrupt.arg.1")
 	if err != nil {
 		return generatedWorkerSessionsInterruptInputs{}, err
 	}
@@ -436,19 +579,19 @@ func readGeneratedWorkerSessionsInterruptInputs(values map[string]any) (generate
 	return inputs, nil
 }
 
-func executeGeneratedWorkerSessionsControl(
+func executeGeneratedWorkerSessionsControlWithValues(
 	cmd *cobra.Command,
 	globals *cliGlobalOptions,
 	diagnostics *cliDiagnosticsOptions,
 	operation func(workersessionscli.ControlConfig) error,
 	local workersessionscli.LocalControlBoundary,
 	action workersessions.ControlAction,
+	values map[string]any,
 ) error {
 	if operation == nil {
 		return fmt.Errorf("worker sessions %s service is required", strings.ToLower(string(action)))
 	}
-	values, err := generatedCommandInputs(cmd)
-	if err != nil {
+	if err := requireWorkerSessionsCommand(cmd); err != nil {
 		return err
 	}
 	commandName := strings.ToLower(string(action))
@@ -490,17 +633,17 @@ func installWorkerSessionsStreamModeConflictGuard(command *cobra.Command) error 
 	return nil
 }
 
-func executeGeneratedWorkerSessionsList(
+func executeGeneratedWorkerSessionsListWithValues(
 	cmd *cobra.Command,
 	globals *cliGlobalOptions,
 	diagnostics *cliDiagnosticsOptions,
 	list workersessionscli.ListOperation,
+	values map[string]any,
 ) error {
 	if list == nil {
 		return fmt.Errorf("worker sessions list service is required")
 	}
-	values, err := generatedCommandInputs(cmd)
-	if err != nil {
+	if err := requireWorkerSessionsCommand(cmd); err != nil {
 		return err
 	}
 	workID, err := commandInputValue[string](values, "you.worker-sessions.list.flag.work-id")
@@ -541,17 +684,17 @@ func executeGeneratedWorkerSessionsList(
 	})
 }
 
-func executeGeneratedWorkerSessionsShow(
+func executeGeneratedWorkerSessionsShowWithValues(
 	cmd *cobra.Command,
 	globals *cliGlobalOptions,
 	diagnostics *cliDiagnosticsOptions,
 	show workersessionscli.ShowOperation,
+	values map[string]any,
 ) error {
 	if show == nil {
 		return fmt.Errorf("worker sessions show service is required")
 	}
-	values, err := generatedCommandInputs(cmd)
-	if err != nil {
+	if err := requireWorkerSessionsCommand(cmd); err != nil {
 		return err
 	}
 	provider, err := commandInputValue[string](values, "you.worker-sessions.show.flag.provider")
@@ -587,17 +730,17 @@ func executeGeneratedWorkerSessionsShow(
 	})
 }
 
-func executeGeneratedWorkerSessionsStream(
+func executeGeneratedWorkerSessionsStreamWithValues(
 	cmd *cobra.Command,
 	globals *cliGlobalOptions,
 	diagnostics *cliDiagnosticsOptions,
 	stream workersessionscli.StreamOperation,
+	values map[string]any,
 ) error {
 	if stream == nil {
 		return fmt.Errorf("worker sessions stream service is required")
 	}
-	values, err := generatedCommandInputs(cmd)
-	if err != nil {
+	if err := requireWorkerSessionsCommand(cmd); err != nil {
 		return err
 	}
 	provider, err := commandInputValue[string](values, "you.worker-sessions.stream.flag.provider")
@@ -641,17 +784,17 @@ func executeGeneratedWorkerSessionsStream(
 	})
 }
 
-func executeGeneratedWorkerSessionsRead(
+func executeGeneratedWorkerSessionsReadWithValues(
 	cmd *cobra.Command,
 	globals *cliGlobalOptions,
 	diagnostics *cliDiagnosticsOptions,
 	read workersessionscli.ReadOperation,
+	values map[string]any,
 ) error {
 	if read == nil {
 		return fmt.Errorf("worker sessions read service is required")
 	}
-	values, err := generatedCommandInputs(cmd)
-	if err != nil {
+	if err := requireWorkerSessionsCommand(cmd); err != nil {
 		return err
 	}
 	provider, err := commandInputValue[string](values, "you.worker-sessions.read.flag.provider")

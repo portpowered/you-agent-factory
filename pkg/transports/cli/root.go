@@ -110,57 +110,6 @@ type VisualizeWorkOperation func(workcli.VisualizeConfig) error
 type ListHumanApprovalsOperation func(workcli.ListHumanApprovalsConfig) error
 type ShowHumanApprovalOperation func(workcli.ShowHumanApprovalConfig) error
 
-func executeGeneratedHumanApprovalList(
-	cmd *cobra.Command,
-	globals *cliGlobalOptions,
-	diagnostics *cliDiagnosticsOptions,
-	list func(workcli.ListHumanApprovalsConfig) error,
-) error {
-	if list == nil {
-		return fmt.Errorf("human approval list service is required")
-	}
-	values, err := generatedCommandInputs(cmd)
-	if err != nil {
-		return err
-	}
-	sessionID, err := commandInputValue[string](values, "you.work.approval.list.flag.session")
-	if err != nil {
-		return err
-	}
-	return list(workcli.ListHumanApprovalsConfig{
-		Context: cmd.Context(), Server: globals.server, SessionID: sessionID,
-		JSON: globals.json, Output: cmd.OutOrStdout(),
-		Diagnostics: diagnostics.writer(cmd), Verbose: diagnostics.verboseEnabled(),
-		Debug: diagnostics.debug,
-	})
-}
-
-func executeGeneratedHumanApprovalShow(
-	cmd *cobra.Command,
-	args []string,
-	globals *cliGlobalOptions,
-	diagnostics *cliDiagnosticsOptions,
-	show func(workcli.ShowHumanApprovalConfig) error,
-) error {
-	if show == nil {
-		return fmt.Errorf("human approval show service is required")
-	}
-	values, err := generatedCommandInputs(cmd)
-	if err != nil {
-		return err
-	}
-	sessionID, err := commandInputValue[string](values, "you.work.approval.show.flag.session")
-	if err != nil {
-		return err
-	}
-	return show(workcli.ShowHumanApprovalConfig{
-		Context: cmd.Context(), Server: globals.server, SessionID: sessionID, ApprovalID: args[0],
-		JSON: globals.json, Output: cmd.OutOrStdout(),
-		Diagnostics: diagnostics.writer(cmd), Verbose: diagnostics.verboseEnabled(),
-		Debug: diagnostics.debug,
-	})
-}
-
 type ListWorkerSessionsOperation = workersessionscli.ListOperation
 type ShowWorkerSessionsOperation = workersessionscli.ShowOperation
 type ReadWorkerSessionOperation = workersessionscli.ReadOperation
@@ -187,6 +136,7 @@ type CommandOperations struct {
 	ResolveFactoryConfigRoot          interfaces.FactoryConfigRootResolver
 	LoadFactoryConfigFile             interfaces.FactoryConfigFileLoader
 	WorkRequestFileLoader             work.RequestFileLoader
+	PrepareSingleWorkTarget           work.SingleWorkTargetPreparation
 	PrepareInvocationInput            work.InvocationInputPreparation
 	BuildTerminalLogger               terminalpolicy.LoggerBuilder
 	RunDefaults                       runcli.RunConfig
@@ -258,6 +208,7 @@ type CommandFactory struct {
 	resolveFactoryConfigRoot          interfaces.FactoryConfigRootResolver
 	loadFactoryConfigFile             interfaces.FactoryConfigFileLoader
 	workRequestFileLoader             work.RequestFileLoader
+	prepareSingleWorkTarget           work.SingleWorkTargetPreparation
 	prepareInvocationInput            work.InvocationInputPreparation
 	buildTerminalLogger               terminalpolicy.LoggerBuilder
 	runDefaults                       runcli.RunConfig
@@ -327,6 +278,7 @@ func NewCommandFactory(operations CommandOperations) CommandFactory {
 		resolveFactoryConfigRoot:          operations.ResolveFactoryConfigRoot,
 		loadFactoryConfigFile:             operations.LoadFactoryConfigFile,
 		workRequestFileLoader:             operations.WorkRequestFileLoader,
+		prepareSingleWorkTarget:           operations.PrepareSingleWorkTarget,
 		prepareInvocationInput:            operations.PrepareInvocationInput,
 		buildTerminalLogger:               operations.BuildTerminalLogger,
 		runDefaults:                       operations.RunDefaults,
@@ -634,8 +586,9 @@ func runFactoryWithOptions(cmd *cobra.Command, cfg runcli.RunConfig, promptArgs 
 	cfg.Diagnostics = runPolicy.DiagnosticsWriter(cmd.ErrOrStderr())
 	cfg.JSONOutput = globals.json
 	if remotePlacementSelected(globals) {
-		return runcli.RunRemoteInvocation(
-			cmd.Context(), cfg, globals.server, rootOptions.remoteInvocation, rootOptions.responsePresentation,
+		return runcli.RunRemoteInvocationWithWorkTarget(
+			cmd.Context(), cfg, globals.server, rootOptions.remoteInvocation,
+			rootOptions.prepareSingleWorkTarget, rootOptions.responsePresentation,
 		)
 	}
 	if rootOptions.initializer == nil {

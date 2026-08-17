@@ -14,274 +14,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// WorkFamilyComponents holds detached work-family commands before production
-// wiring attaches the generated work parent to the root.
-type WorkFamilyComponents struct {
-	Work         *cobra.Command
-	Approval     *cobra.Command
-	ApprovalList *cobra.Command
-	ApprovalShow *cobra.Command
-	List         *cobra.Command
-	Watch        *cobra.Command
-	Show         *cobra.Command
-	Move         *cobra.Command
-	Visualize    *cobra.Command
-}
-
-// WorkFamilyBindings supplies parser-only scalar storage keyed by stable
-// manifest input ID. Handlers build typed Work requests per invocation.
-type WorkFamilyBindings struct {
-	LocalTargets map[string]any
-}
-
-// NewWorkFamilyCommand builds the work you.work → approval/list/watch/show/move/visualize tree
-// from generated metadata and attaches handwritten handlers by stable command ID.
-// Only contracted work-family commands are constructed.
-func NewWorkFamilyCommand(registry *commandregistry.Registry, bindings WorkFamilyBindings) (*cobra.Command, error) {
-	components, err := NewWorkFamilyComponents(registry, bindings)
-	if err != nil {
-		return nil, err
-	}
-	components.Work.AddCommand(components.Approval, components.List, components.Watch, components.Show, components.Move, components.Visualize)
-	components.Approval.AddCommand(components.ApprovalList, components.ApprovalShow)
-	return components.Work, nil
-}
-
-// NewWorkFamilyComponents builds detached work-family commands so production
-// wiring can attach the generated work parent without rewriting unrelated roots.
-func NewWorkFamilyComponents(registry *commandregistry.Registry, bindings WorkFamilyBindings) (WorkFamilyComponents, error) {
-	manifest, err := generated.WorkFamilyManifest()
-	if err != nil {
-		return WorkFamilyComponents{}, fmt.Errorf("build work family command: %w", err)
-	}
-	return NewWorkFamilyComponentsFromManifest(manifest, registry, bindings)
-}
-
-// NewWorkFamilyCommandFromManifest builds the work tree from one generated
-// manifest snapshot. Manifest command IDs must stay within the work family.
-func NewWorkFamilyCommandFromManifest(
-	manifest climanifest.Manifest,
-	registry *commandregistry.Registry,
-	bindings WorkFamilyBindings,
-) (*cobra.Command, error) {
-	components, err := NewWorkFamilyComponentsFromManifest(manifest, registry, bindings)
-	if err != nil {
-		return nil, err
-	}
-	components.Work.AddCommand(components.Approval, components.List, components.Watch, components.Show, components.Move, components.Visualize)
-	components.Approval.AddCommand(components.ApprovalList, components.ApprovalShow)
-	return components.Work, nil
-}
-
-// NewWorkFamilyComponentsFromManifest builds detached work-family commands from
-// one generated manifest snapshot.
-func NewWorkFamilyComponentsFromManifest(
-	manifest climanifest.Manifest,
-	registry *commandregistry.Registry,
-	bindings WorkFamilyBindings,
-) (WorkFamilyComponents, error) {
-	if registry == nil {
-		return WorkFamilyComponents{}, fmt.Errorf("build work family command: registry is required")
-	}
-	if err := validateWorkBindings(bindings); err != nil {
-		return WorkFamilyComponents{}, err
-	}
-	if err := validateWorkManifest(manifest); err != nil {
-		return WorkFamilyComponents{}, fmt.Errorf("build work family command: %w", err)
-	}
-	if err := registry.VerifyWorkRunnableCoverage(manifest); err != nil {
-		return WorkFamilyComponents{}, fmt.Errorf("build work family command: %w", err)
-	}
-
-	workRecord, approvalRecord, approvalListRecord, approvalShowRecord, listRecord, watchRecord, showRecord, moveRecord, visualizeRecord, err := workManifestRecordsWithApprovals(manifest)
-	if err != nil {
-		return WorkFamilyComponents{}, err
-	}
-
-	work, err := buildNonRunnableWorkCommand(workRecord)
-	if err != nil {
-		return WorkFamilyComponents{}, err
-	}
-	approval, err := buildNonRunnableWorkCommand(approvalRecord)
-	if err != nil {
-		return WorkFamilyComponents{}, err
-	}
-	leaves, err := buildRunnableWorkLeaves(registry, bindings, approvalListRecord, approvalShowRecord, listRecord, watchRecord, showRecord, moveRecord, visualizeRecord)
-	if err != nil {
-		return WorkFamilyComponents{}, fmt.Errorf("build work family command: %w", err)
-	}
-
-	return WorkFamilyComponents{
-		Work:         work,
-		Approval:     approval,
-		ApprovalList: leaves[0], ApprovalShow: leaves[1], List: leaves[2],
-		Watch: leaves[3], Show: leaves[4], Move: leaves[5], Visualize: leaves[6],
-	}, nil
-}
-
-func buildNonRunnableWorkCommand(record climanifest.Command) (*cobra.Command, error) {
-	cmd, err := buildWorkCommandFromRecord(record)
-	if err != nil {
-		return nil, fmt.Errorf("build work family command: %w", err)
-	}
-	if record.Runnable {
-		return nil, fmt.Errorf("build work family command: %q must remain non-runnable", record.ID)
-	}
-	return cmd, nil
-}
-
-func buildRunnableWorkLeaves(registry *commandregistry.Registry, bindings WorkFamilyBindings, records ...climanifest.Command) ([]*cobra.Command, error) {
-	leaves := make([]*cobra.Command, 0, len(records))
-	for _, record := range records {
-		leaf, err := buildRunnableWorkLeaf(record, registry, bindings)
-		if err != nil {
-			return nil, err
-		}
-		leaves = append(leaves, leaf)
-	}
-	return leaves, nil
-}
-
-func buildRunnableWorkLeaf(
-	record climanifest.Command,
-	registry *commandregistry.Registry,
-	bindings WorkFamilyBindings,
-) (*cobra.Command, error) {
-	cmd, err := buildWorkCommandFromRecord(record)
-	if err != nil {
-		return nil, err
-	}
-	cmd.Args = positionalArgsFromManifest(record)
-	if cmd.Args == nil && record.ID == "you.work.watch" {
-		cmd.Args = cobra.NoArgs
-	}
-	cmd.PreRunE = rejectDeprecatedPortFlag
-	if err := registerWorkLocalFlags(cmd, record, bindings); err != nil {
-		return nil, err
-	}
-	relationships, err := planStandaloneCommandRelationships(record)
-	if err != nil {
-		return nil, err
-	}
-	if err := projectCobraFlagGroupAnnotations(cmd, record.ID, relationships); err != nil {
-		return nil, err
-	}
-	if err := registry.AttachRunE(cmd, record.ID); err != nil {
-		return nil, err
-	}
-	return cmd, nil
-}
-
-func workManifestRecordsWithApprovals(manifest climanifest.Manifest) (
-	work, approval, approvalList, approvalShow, list, watch, show, move, visualize climanifest.Command,
-	err error,
-) {
-	ids := []string{
-		"you.work",
-		"you.work.approval",
-		"you.work.approval.list",
-		"you.work.approval.show",
-		"you.work.list",
-		"you.work.watch",
-		"you.work.show",
-		"you.work.move",
-		"you.work.visualize",
-	}
-	records := make([]climanifest.Command, len(ids))
-	for i, id := range ids {
-		records[i], err = manifest.CommandByID(id)
-		if err != nil {
-			return climanifest.Command{}, climanifest.Command{}, climanifest.Command{}, climanifest.Command{}, climanifest.Command{}, climanifest.Command{}, climanifest.Command{}, climanifest.Command{}, climanifest.Command{}, fmt.Errorf("build work family command: %w", err)
-		}
-	}
-	return records[0], records[1], records[2], records[3], records[4], records[5], records[6], records[7], records[8], nil
-}
-
-// workManifestRecords preserves the legacy internal test/helper shape while
-// the production constructor also consumes the approval subfamily.
-func workManifestRecords(manifest climanifest.Manifest) (
-	work, list, watch, show, move, visualize climanifest.Command,
-	err error,
-) {
-	work, _, _, _, list, watch, show, move, visualize, err = workManifestRecordsWithApprovals(manifest)
-	return work, list, watch, show, move, visualize, err
-}
-
-func validateWorkManifest(manifest climanifest.Manifest) error {
-	if len(manifest.Commands) != len(climanifestgen.WorkFamilyCommandIDs) {
-		return fmt.Errorf(
-			"manifest command count = %d, want %d work-family commands",
-			len(manifest.Commands),
-			len(climanifestgen.WorkFamilyCommandIDs),
-		)
-	}
-	for commandID := range manifest.Commands {
-		if err := climanifestgen.AssertWorkFamilyCommandID(commandID); err != nil {
-			return err
-		}
-	}
-	for _, commandID := range climanifestgen.WorkFamilyCommandIDs {
-		if _, ok := manifest.Commands[commandID]; !ok {
-			return fmt.Errorf("manifest missing work-family command %q", commandID)
-		}
-	}
-	return nil
-}
-
-func validateWorkBindings(bindings WorkFamilyBindings) error {
-	if len(bindings.LocalTargets) == 0 {
-		return fmt.Errorf("build work family command: bindings.LocalTargets is required")
-	}
-	return nil
-}
-
-func buildWorkCommandFromRecord(record climanifest.Command) (*cobra.Command, error) {
-	if err := climanifestgen.AssertWorkFamilyCommandID(record.ID); err != nil {
-		return nil, err
-	}
-	cmd := &cobra.Command{
-		Use:     record.Usage.Line,
-		Short:   record.Documentation.Documentation.Title.CanonicalEnglish,
-		Long:    record.Documentation.Documentation.Description.CanonicalEnglish,
-		Example: record.Usage.Example,
-		Aliases: append([]string(nil), record.Aliases...),
-	}
-	if record.Visibility == "hidden" {
-		cmd.Hidden = true
-	}
-	return cmd, nil
-}
-
-func registerWorkLocalFlags(cmd *cobra.Command, record climanifest.Command, bindings WorkFamilyBindings) error {
-	var deprecatedPort int
-	flags := sortedFlags(record.Flags)
-	for _, flag := range flags {
-		if flag.Scope != "local" {
-			continue
-		}
-		if flag.Long == "port" {
-			registerDeprecatedPortFlag(cmd, &deprecatedPort)
-			annotateStableInput(cmd, flag)
-			if err := applyFlagContract(cmd.Flags().Lookup("port"), flag); err != nil {
-				return fmt.Errorf("apply port flag contract: %w", err)
-			}
-			continue
-		}
-		target, err := flagBindingTarget(flag.ID, bindings.LocalTargets)
-		if err != nil {
-			return err
-		}
-		if err := registerFlag(cmd.Flags(), flag, target, flag.Usage); err != nil {
-			return fmt.Errorf("register local flag %q: %w", flag.Long, err)
-		}
-		annotateStableInput(cmd, flag)
-		if err := applyFlagContract(cmd.Flags().Lookup(flag.Long), flag); err != nil {
-			return fmt.Errorf("apply local flag %q contract: %w", flag.Long, err)
-		}
-	}
-	return nil
-}
-
 // NewResolvedWorkCommandTree is the canonical independently executable
 // `you work` constructor. It uses the generic manifest constructor and contains
 // no command families besides Work.
@@ -359,7 +91,29 @@ func NewResolvedWorkCommand(
 		return nil, fmt.Errorf("build resolved work command: find projected work command: %w", err)
 	}
 	root.RemoveCommand(work)
+	// The generic constructor guards non-runnable groups with a help-producing
+	// RunE. This detached family is attached beneath the existing root, whose
+	// compatibility contract keeps `you work` and `you work approval`
+	// non-runnable; preserve that shape while retaining the generated leaves.
+	if err := clearWorkGroupExecution(work); err != nil {
+		return nil, fmt.Errorf("build resolved work command: preserve group behavior: %w", err)
+	}
 	return work, nil
+}
+
+func clearWorkGroupExecution(work *cobra.Command) error {
+	groups := []*cobra.Command{work}
+	approval, _, err := work.Find([]string{"approval"})
+	if err != nil {
+		return err
+	}
+	groups = append(groups, approval)
+	for _, group := range groups {
+		group.RunE = nil
+		group.Args = nil
+		group.DisableFlagParsing = false
+	}
+	return nil
 }
 
 var resolvedWorkRunnableCommandIDs = [...]string{
@@ -637,23 +391,41 @@ func NewWorkerSessionsFamilyCommandFromManifest(
 	if err != nil {
 		return nil, fmt.Errorf("build worker sessions family command: %w", err)
 	}
+	cobraHandlers := CobraHandlerRegistry{}
+	resolvedHandlers := ResolvedCobraHandlerRegistry{}
+	for _, binding := range []struct {
+		handlerID string
+		handlers  commandregistry.CommandHandlers
+	}{
+		{workerSessionsInvokeHandlerID, registered.invoke},
+		{workerSessionsContinueHandlerID, registered.continueOperation},
+		{workerSessionsInterruptHandlerID, registered.interrupt},
+		{workerSessionsPauseHandlerID, registered.pause},
+		{workerSessionsResumeHandlerID, registered.resume},
+		{workerSessionsCancelHandlerID, registered.cancel},
+		{workerSessionsTerminateHandlerID, registered.terminate},
+		{workerSessionsListHandlerID, registered.list},
+		{workerSessionsShowHandlerID, registered.show},
+		{workerSessionsReadHandlerID, registered.read},
+		{workerSessionsStreamHandlerID, registered.stream},
+	} {
+		cobraHandler, resolvedHandler, bindingErr := workerSessionsHandlerBindings(binding.handlers)
+		if bindingErr != nil {
+			return nil, fmt.Errorf("build worker sessions family command: %w", bindingErr)
+		}
+		if resolvedHandler != nil {
+			resolvedHandlers[binding.handlerID] = resolvedHandler
+		} else {
+			cobraHandlers[binding.handlerID] = cobraHandler
+		}
+	}
+
 	root, err := NewCommandTree(manifest, GenericBindings{
 		Handlers: HandlerRegistry{
 			rootRecord.Handler.ID: func(context.Context, map[string]any) error { return nil },
 		},
-		CobraHandlers: CobraHandlerRegistry{
-			workerSessionsInvokeHandlerID:    resolvedWorkerSessionsHandler(registered.invoke),
-			workerSessionsContinueHandlerID:  resolvedWorkerSessionsHandler(registered.continueOperation),
-			workerSessionsInterruptHandlerID: resolvedWorkerSessionsHandler(registered.interrupt),
-			workerSessionsPauseHandlerID:     resolvedWorkerSessionsHandler(registered.pause),
-			workerSessionsResumeHandlerID:    resolvedWorkerSessionsHandler(registered.resume),
-			workerSessionsCancelHandlerID:    resolvedWorkerSessionsHandler(registered.cancel),
-			workerSessionsTerminateHandlerID: resolvedWorkerSessionsHandler(registered.terminate),
-			workerSessionsListHandlerID:      resolvedWorkerSessionsHandler(registered.list),
-			workerSessionsShowHandlerID:      resolvedWorkerSessionsHandler(registered.show),
-			workerSessionsReadHandlerID:      resolvedWorkerSessionsHandler(registered.read),
-			workerSessionsStreamHandlerID:    resolvedWorkerSessionsHandler(registered.stream),
-		},
+		CobraHandlers:         cobraHandlers,
+		ResolvedCobraHandlers: resolvedHandlers,
 		DeferRequiredValidation: map[string]bool{
 			workerSessionsInvokeHandlerID:    true,
 			workerSessionsContinueHandlerID:  true,
@@ -695,8 +467,11 @@ func lookupWorkerSessionsHandlers(registry *commandregistry.Registry) (workerSes
 		if err != nil {
 			return workerSessionsHandlers{}, err
 		}
-		if handlers.RunE == nil || handlers.ResolvedRunE != nil {
-			return workerSessionsHandlers{}, fmt.Errorf("handler %q must provide RunE", command.handlerID)
+		if (handlers.RunE == nil) == (handlers.ResolvedRunE == nil) {
+			return workerSessionsHandlers{}, fmt.Errorf(
+				"handler %q must provide exactly one of RunE or ResolvedRunE",
+				command.handlerID,
+			)
 		}
 		found[index] = handlers
 	}
@@ -707,15 +482,28 @@ func lookupWorkerSessionsHandlers(registry *commandregistry.Registry) (workerSes
 	}, nil
 }
 
-func resolvedWorkerSessionsHandler(handlers commandregistry.CommandHandlers) func(*cobra.Command, []string, map[string]any, resolvedinput.Inputs) error {
-	return func(cmd *cobra.Command, args []string, _ map[string]any, _ resolvedinput.Inputs) error {
+func workerSessionsHandlerBindings(
+	handlers commandregistry.CommandHandlers,
+) (CobraHandler, ResolvedCobraHandler, error) {
+	if handlers.ResolvedRunE != nil {
+		return nil, handlers.ResolvedRunE, nil
+	}
+	if handlers.RunE == nil {
+		return nil, nil, fmt.Errorf("worker session handler is required")
+	}
+	return func(
+		cmd *cobra.Command,
+		args []string,
+		_ map[string]any,
+		_ resolvedinput.Inputs,
+	) error {
 		if handlers.PreRunE != nil {
 			if err := handlers.PreRunE(cmd, args); err != nil {
 				return err
 			}
 		}
 		return handlers.RunE(cmd, args)
-	}
+	}, nil, nil
 }
 
 func validateWorkerSessionsManifest(manifest climanifest.Manifest) error {

@@ -125,6 +125,91 @@ func TestResolveFactoryInvocationRequest_UsesNormalizedSignatureArgs(t *testing.
 	}
 }
 
+func TestResolveFactoryInvocationRequestForRun_WorkFileProjectsOrderedContent(t *testing.T) {
+	loaded := work.WorkRequest{
+		RequestID: "request-from-file",
+		Type:      work.WorkRequestTypeFactoryRequestBatch,
+		Works: []work.Work{{
+			Name:       "single-work",
+			WorkID:     "work-from-file",
+			WorkTypeID: "task",
+			Content: []work.WorkContentPart{
+				{Type: work.WorkContentPartTypeText, Text: "first part"},
+				{Type: work.WorkContentPartTypeJSON, JSON: []byte(`{"priority":"high"}`)},
+			},
+		}},
+	}
+	prepareCalls := 0
+	prepare := func(request work.WorkRequest) (work.SingleWorkTarget, error) {
+		prepareCalls++
+		if len(request.Works) != 1 || request.Works[0].WorkID != "work-from-file" {
+			t.Fatalf("prepared request = %#v", request)
+		}
+		return work.SingleWorkTarget{WorkID: "work-from-file", WorkTypeID: "task"}, nil
+	}
+
+	request, invocationMode, err := resolveFactoryInvocationRequestForRun(RunConfig{
+		CleanInvocation: true,
+		WorkFile:        "work.json",
+		WorkRequestFileLoader: func(path string) (work.WorkRequest, error) {
+			if path != "work.json" {
+				t.Fatalf("loaded path = %q, want work.json", path)
+			}
+			return loaded, nil
+		},
+	}, prepare)
+	if err != nil {
+		t.Fatalf("resolveFactoryInvocationRequestForRun() error = %v", err)
+	}
+	if !invocationMode || prepareCalls != 1 {
+		t.Fatalf("invocationMode=%t prepareCalls=%d, want true/1", invocationMode, prepareCalls)
+	}
+	assertWorkFileInvocationRequest(t, request)
+}
+
+func assertWorkFileInvocationRequest(t *testing.T, request *factoryapi.InvocationRequest) {
+	t.Helper()
+	if request == nil || request.RequestId == nil || *request.RequestId != "request-from-file" {
+		t.Fatalf("request identity = %#v, want request-from-file", request)
+	}
+	if request.Content == nil || len(*request.Content) != 2 {
+		t.Fatalf("request content = %#v, want two ordered parts", request.Content)
+	}
+	assertWorkFileInvocationContent(t, *request.Content)
+}
+
+func assertWorkFileInvocationContent(t *testing.T, content factoryapi.WorkContent) {
+	t.Helper()
+	first, firstErr := content[0].AsWorkTextContentPart()
+	if firstErr != nil || first.Text != "first part" {
+		t.Fatalf("first content part = %#v/%v", first, firstErr)
+	}
+	second, secondErr := content[1].AsWorkJsonContentPart()
+	if secondErr != nil {
+		t.Fatalf("second content part = %#v/%v", second, secondErr)
+	}
+	if got, ok := second.Json.(map[string]interface{}); !ok || got["priority"] != "high" {
+		t.Fatalf("second JSON content = %#v, want priority=high", second.Json)
+	}
+}
+
+func TestResolveFactoryInvocationRequestForRun_WorkFileStaysBatchInputOutsideCleanMode(t *testing.T) {
+	loaderCalled := false
+	request, invocationMode, err := resolveFactoryInvocationRequestForRun(RunConfig{
+		WorkFile: "work.json",
+		WorkRequestFileLoader: func(string) (work.WorkRequest, error) {
+			loaderCalled = true
+			return work.WorkRequest{}, nil
+		},
+	}, nil)
+	if err != nil {
+		t.Fatalf("resolveFactoryInvocationRequestForRun() error = %v", err)
+	}
+	if request != nil || invocationMode || loaderCalled {
+		t.Fatalf("request=%#v invocationMode=%t loaderCalled=%t, want ordinary batch path", request, invocationMode, loaderCalled)
+	}
+}
+
 func TestRunFactoryInvocationCarriesPreparedCanonicalInputWithoutPlainArgs(t *testing.T) {
 	prepared := work.PreparedInvocationInput{
 		NormalizedArguments: &work.NormalizedArguments{Arguments: map[string]work.NormalizedArgument{

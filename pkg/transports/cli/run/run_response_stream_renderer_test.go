@@ -54,7 +54,10 @@ func TestRunFactoryInvocation_LiveAndReplayPreserveCanonicalJavaScriptOrder(t *t
 				}
 				return factorysessions.FactoryInvocationOutcome{Result: interfaces.FactoryInvocationResult{
 					RequestID: "request-js", Status: interfaces.InvocationTerminalStatusCompleted,
-					PrimaryResult: []work.WorkContentPart{{Type: work.WorkContentPartTypeText, Text: "complete"}},
+					PrimaryResult: []work.WorkContentPart{
+						{Type: work.WorkContentPartTypeText, Text: "first streamed part"},
+						{Type: work.WorkContentPartTypeText, Text: "second streamed part"},
+					},
 				}}, nil
 			}}
 			cfg := RunConfig{
@@ -460,6 +463,14 @@ func assertPhaseCheckpointPhasePresentation(t *testing.T, output string) {
 	if !strings.Contains(lines[6], `"recordType":"invocation_result"`) {
 		t.Fatalf("terminal invocation record = %q", lines[6])
 	}
+	var terminal remoteInvocationNDJSONRecord
+	if err := json.Unmarshal([]byte(lines[6]), &terminal); err != nil {
+		t.Fatalf("decode terminal invocation record: %v", err)
+	}
+	assertGeneratedWorkContentPartsFromResponse(t, terminal.Response.PrimaryResult, []work.WorkContentPart{
+		{Type: work.WorkContentPartTypeText, Text: "first streamed part"},
+		{Type: work.WorkContentPartTypeText, Text: "second streamed part"},
+	})
 }
 
 func TestRunFactoryInvocation_LiveEventIsWrittenBeforeOperationCompletes(t *testing.T) {

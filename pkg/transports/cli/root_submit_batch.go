@@ -12,6 +12,10 @@ import (
 	"github.com/spf13/pflag"
 )
 
+func scalarTarget[T bool | string | int](value T) *T {
+	return &value
+}
+
 func newRunServerFlagBindings() climanifestcobra.RunServerFlagBindings {
 	targets := map[string]any{}
 	stringInputs := []string{

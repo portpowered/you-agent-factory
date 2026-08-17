@@ -10,7 +10,6 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifestcobra"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/commandregistry"
-	cligenerated "github.com/portpowered/infinite-you/pkg/transports/cli/generated"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/resolvedinput"
 	workcli "github.com/portpowered/infinite-you/pkg/transports/cli/work"
 	"github.com/spf13/cobra"
@@ -76,22 +75,6 @@ func TestResolvedWorkAdaptersReportEveryMissingStableInput(t *testing.T) {
 				}
 			})
 		}
-	}
-}
-
-func TestVerifyWorkRunnableCoverageAcceptsCompleteRegistry(t *testing.T) {
-	manifest, err := cligenerated.WorkFamilyManifest()
-	if err != nil {
-		t.Fatalf("WorkFamilyManifest() error = %v", err)
-	}
-	registry := commandregistry.NewRegistry()
-	for _, commandID := range []string{"you.work.approval.list", "you.work.approval.show", "you.work.list", "you.work.watch", "you.work.show", "you.work.move", "you.work.visualize"} {
-		if err := registry.Register(commandID, noopRunE); err != nil {
-			t.Fatalf("Register(%q) error = %v", commandID, err)
-		}
-	}
-	if err := registry.VerifyWorkRunnableCoverage(manifest); err != nil {
-		t.Fatalf("VerifyWorkRunnableCoverage() error = %v", err)
 	}
 }
 
@@ -239,7 +222,7 @@ func TestWorkWatchCommandMapsDefaultAndExplicitSessionModes(t *testing.T) {
 				got = cfg
 				return nil
 			})
-			work.SetArgs(tc.args)
+			work.SetArgs(append([]string{"work"}, tc.args...))
 			if err := work.Execute(); err != nil {
 				t.Fatalf("Execute(%v) error = %v", tc.args, err)
 			}
@@ -256,14 +239,14 @@ func TestWorkWatchCommandRejectsEmptyExplicitSessionAndUnknownFlags(t *testing.T
 		called = true
 		return nil
 	})
-	work.SetArgs([]string{"watch", "--session", ""})
+	work.SetArgs([]string{"work", "watch", "--session", ""})
 	err := work.Execute()
 	if err == nil || called {
 		t.Fatalf("empty explicit session error = %v, operation called = %t; want validation failure before operation", err, called)
 	}
 
 	work = newWatchCommandTree(t, func(workcli.WatchConfig) error { return nil })
-	work.SetArgs([]string{"watch", "--poll"})
+	work.SetArgs([]string{"work", "watch", "--poll"})
 	err = work.Execute()
 	if err == nil {
 		t.Fatal("unknown --poll flag error = nil")
@@ -280,7 +263,7 @@ func TestWorkWatchCommandSeparatesTransitionOutputFromDiagnostics(t *testing.T) 
 	}, stdout, stderr)
 	work.SetOut(stdout)
 	work.SetErr(stderr)
-	work.SetArgs([]string{"watch", "--follow"})
+	work.SetArgs([]string{"work", "watch", "--follow"})
 	if err := work.Execute(); err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}
@@ -289,25 +272,6 @@ func TestWorkWatchCommandSeparatesTransitionOutputFromDiagnostics(t *testing.T) 
 	}
 	if stdout.Len() != 0 || stderr.Len() != 0 {
 		t.Fatalf("command emitted output before a transition: stdout=%q stderr=%q", stdout.String(), stderr.String())
-	}
-}
-
-func TestNewWorkRegistryWatchFallbackHandlerRequiresService(t *testing.T) {
-	registry, err := commandregistry.NewWorkRegistry(commandregistry.WorkHandlers{
-		ListRunE:      noopRunE,
-		ShowRunE:      noopRunE,
-		MoveRunE:      noopRunE,
-		VisualizeRunE: noopRunE,
-	})
-	if err != nil {
-		t.Fatalf("NewWorkRegistry() error = %v", err)
-	}
-	watch, err := registry.Lookup("you.work.watch")
-	if err != nil {
-		t.Fatalf("Lookup(you.work.watch) error = %v", err)
-	}
-	if err := watch(&cobra.Command{}, nil); err == nil || !strings.Contains(err.Error(), "work watch service is required") {
-		t.Fatalf("fallback watch handler error = %v, want required service error", err)
 	}
 }
 
@@ -387,35 +351,6 @@ func TestResolvedWorkWatchRunERejectsMissingInputsAndInvalidConfig(t *testing.T)
 	}
 }
 
-func TestWatchRunERejectsMissingDependenciesAndUsesOptionalBindings(t *testing.T) {
-	if err := commandregistry.WatchRunE(commandregistry.WatchBinding{})(nil, nil); err == nil || !strings.Contains(err.Error(), "work watch service is required") {
-		t.Fatalf("missing service error = %v, want required error", err)
-	}
-	if err := commandregistry.WatchRunE(commandregistry.WatchBinding{
-		WatchWork: func(workcli.WatchConfig) error { return nil },
-	})(nil, nil); err == nil || !strings.Contains(err.Error(), "work watch config is required") {
-		t.Fatalf("missing config error = %v, want required error", err)
-	}
-
-	var got workcli.WatchConfig
-	run := commandregistry.WatchRunE(commandregistry.WatchBinding{
-		Config: &workcli.WatchConfig{SessionID: "session-default"},
-		WatchWork: func(cfg workcli.WatchConfig) error {
-			got = cfg
-			return nil
-		},
-	})
-	cmd := &cobra.Command{}
-	cmd.SetContext(context.Background())
-	cmd.SetOut(io.Discard)
-	if err := run(cmd, nil); err != nil {
-		t.Fatalf("optional bindings execution error = %v", err)
-	}
-	if got.SessionID != "session-default" || got.SessionIDExplicit || got.Follow || got.Output == nil || got.Context == nil {
-		t.Fatalf("watch config = %#v, want config defaults and command-owned context/output", got)
-	}
-}
-
 func resolvedWatchInputs(
 	t *testing.T,
 	missing string,
@@ -491,56 +426,21 @@ func newWatchCommandTreeWithStreams(
 	diagnostics io.Writer,
 ) *cobra.Command {
 	t.Helper()
-	sessionID := ""
-	follow := false
-	registry, err := commandregistry.NewWorkRegistry(commandregistry.WorkHandlers{
-		ListRunE: func(*cobra.Command, []string) error { return nil },
-		WatchRunE: commandregistry.WatchRunE(commandregistry.WatchBinding{
-			Config:            &workcli.WatchConfig{},
-			SessionID:         &sessionID,
-			Follow:            &follow,
+	noop := func(*cobra.Command, resolvedinput.Inputs, resolvedinput.Inputs) error { return nil }
+	root, err := climanifestcobra.NewResolvedWorkCommandTree(commandregistry.ResolvedWorkHandlers{
+		List: noop,
+		Watch: commandregistry.ResolvedWatchRunE(commandregistry.ResolvedWatchBinding{
 			DiagnosticsWriter: func(cmd *cobra.Command) io.Writer { return cmd.ErrOrStderr() },
 			WatchWork:         watch,
 		}),
-		ShowRunE:      func(*cobra.Command, []string) error { return nil },
-		MoveRunE:      func(*cobra.Command, []string) error { return nil },
-		VisualizeRunE: func(*cobra.Command, []string) error { return nil },
+		Show:      noop,
+		Move:      noop,
+		Visualize: noop,
 	})
 	if err != nil {
-		t.Fatalf("NewWorkRegistry() error = %v", err)
+		t.Fatalf("NewResolvedWorkCommandTree() error = %v", err)
 	}
-	work, err := climanifestcobra.NewWorkFamilyCommand(registry, climanifestcobra.WorkFamilyBindings{
-		LocalTargets: map[string]any{
-			"you.work.list.flag.state-name":       stringTarget(""),
-			"you.work.list.flag.state-type":       stringTarget(""),
-			"you.work.list.flag.terminal":         boolTarget(false),
-			"you.work.list.flag.non-terminal":     boolTarget(false),
-			"you.work.list.flag.name":             stringTarget(""),
-			"you.work.list.flag.work-type-name":   stringTarget(""),
-			"you.work.list.flag.trace-id":         stringTarget(""),
-			"you.work.list.flag.sort-by":          stringTarget(""),
-			"you.work.list.flag.max-results":      intTarget(0),
-			"you.work.list.flag.next-token":       stringTarget(""),
-			"you.work.list.flag.counts":           boolTarget(false),
-			"you.work.list.flag.session":          stringTarget(""),
-			"you.work.approval.list.flag.session": stringTarget(""),
-			"you.work.approval.show.flag.session": stringTarget(""),
-			"you.work.watch.flag.follow":          &follow,
-			"you.work.watch.flag.session":         &sessionID,
-			"you.work.show.flag.session":          stringTarget(""),
-			"you.work.move.flag.session":          stringTarget(""),
-			"you.work.move.flag.request-id":       stringTarget(""),
-			"you.work.visualize.flag.format":      stringTarget("mermaid"),
-		},
-	})
-	if err != nil {
-		t.Fatalf("NewWorkFamilyCommand() error = %v", err)
-	}
-	work.SetOut(output)
-	work.SetErr(diagnostics)
-	return work
+	root.SetOut(output)
+	root.SetErr(diagnostics)
+	return root
 }
-
-func stringTarget(value string) *string { return &value }
-func boolTarget(value bool) *bool       { return &value }
-func intTarget(value int) *int          { return &value }

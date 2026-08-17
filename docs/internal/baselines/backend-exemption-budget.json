@@ -2193,12 +2193,6 @@
     },
     {
       "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
-      "target": "pkg/transports/cli/command_factory_injection_test.go#TestNewCommandFactoryPreservesInjectedRuntimeCLIAdapter",
-      "owner": "backend-maintainers",
-      "removalReason": "pre-existing directive relocated by package restructure; refactor the code below the threshold and remove this exemption."
-    },
-    {
-      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
       "target": "pkg/transports/cli/mcp/serve_smoke_test.go#TestRunServe_InstallSmoke_DiscoveryValidateAsyncPoll",
       "owner": "backend-maintainers",
       "removalReason": "Refactor the target to satisfy the pkgmaintcheck:ignore-cyclomatic-complexity threshold. Current rationale: install smoke keeps discovery, validate, async start, and polling assertions on one documented stdio path."

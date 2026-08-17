@@ -265,6 +265,10 @@ func TestHumanFactoryEventRenderer_CustomerLifecycleGolden(t *testing.T) {
 func TestJSONFactoryEventRenderer_EmitsDiscriminatedSafeNDJSON(t *testing.T) {
 	const providerCanary = "PRIVATE_PROVIDER_CHUNK_71f2"
 	providerResponse := providerCanary
+	wantPrimaryResult := []work.WorkContentPart{
+		{Type: work.WorkContentPartTypeText, Text: "first terminal part"},
+		{Type: work.WorkContentPartTypeText, Text: "second terminal part"},
+	}
 	events := append(canonicalJavaScriptFactoryEvents(), canonicalFactoryEventWithPayload(
 		4,
 		factorydefinitions.FactoryEventTypeInferenceResponse,
@@ -283,7 +287,7 @@ func TestJSONFactoryEventRenderer_EmitsDiscriminatedSafeNDJSON(t *testing.T) {
 	renderer.PresentFactoryEvents(events)
 	if err := renderer.WriteFinalInvocationResult(apisurface.FactoryInvocationResult{
 		RequestID: "request-ndjson", Status: factorydefinitions.InvocationTerminalStatusCompleted,
-		PrimaryResult: []work.WorkContentPart{{Type: work.WorkContentPartTypeText, Text: "complete"}},
+		PrimaryResult: wantPrimaryResult,
 	}); err != nil {
 		t.Fatalf("writeFinalInvocationResult: %v", err)
 	}
@@ -295,7 +299,7 @@ func TestJSONFactoryEventRenderer_EmitsDiscriminatedSafeNDJSON(t *testing.T) {
 	for index, line := range lines[:len(events)] {
 		assertFactoryEventNDJSONRecord(t, line, events[index], index)
 	}
-	assertInvocationResultNDJSONRecord(t, lines[len(lines)-1])
+	assertInvocationResultNDJSONRecord(t, lines[len(lines)-1], wantPrimaryResult)
 	for _, forbidden := range []string{providerCanary, "textDelta", "providerSession", "FactoryResponseEvent"} {
 		if strings.Contains(output.String(), forbidden) {
 			t.Fatalf("NDJSON exposed provider-only value %q:\n%s", forbidden, output.String())
@@ -327,7 +331,7 @@ func assertFactoryEventNDJSONRecord(
 	}
 }
 
-func assertInvocationResultNDJSONRecord(t *testing.T, line string) {
+func assertInvocationResultNDJSONRecord(t *testing.T, line string, wantPrimaryResult []work.WorkContentPart) {
 	t.Helper()
 	var record map[string]json.RawMessage
 	if err := json.Unmarshal([]byte(line), &record); err != nil {
@@ -336,6 +340,14 @@ func assertInvocationResultNDJSONRecord(t *testing.T, line string) {
 	if len(record) != 2 || string(record["recordType"]) != `"invocation_result"` || len(record["response"]) == 0 {
 		t.Fatalf("terminal record has invalid discriminator shape: %s", line)
 	}
+	var terminal remoteInvocationNDJSONRecord
+	if err := json.Unmarshal([]byte(line), &terminal); err != nil {
+		t.Fatalf("decode terminal response: %v", err)
+	}
+	if terminal.Response.Status != factoryapi.InvocationTerminalStatusCompleted {
+		t.Fatalf("terminal status = %q, want completed", terminal.Response.Status)
+	}
+	assertGeneratedWorkContentPartsFromResponse(t, terminal.Response.PrimaryResult, wantPrimaryResult)
 }
 
 func TestJSONFactoryEventRenderer_WithoutTerminalWritesOnlyFactoryEvents(t *testing.T) {

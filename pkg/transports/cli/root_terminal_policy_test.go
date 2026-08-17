@@ -14,7 +14,6 @@ import (
 	"testing"
 
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
-	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifestcobra"
 	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
 	submitcli "github.com/portpowered/infinite-you/pkg/transports/cli/submit"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/terminalpolicy"
@@ -420,6 +419,13 @@ func TestProductionWorkCommandUsesGeneratedFamily(t *testing.T) {
 	if work.RunE != nil {
 		t.Fatal("generated work parent must remain non-runnable")
 	}
+	approval, _, err := work.Find([]string{"approval"})
+	if err != nil {
+		t.Fatalf("Find(approval) error = %v", err)
+	}
+	if approval.RunE != nil {
+		t.Fatal("generated work approval parent must remain non-runnable")
+	}
 	for _, path := range []string{"list", "watch", "show", "move", "visualize"} {
 		if _, _, err := work.Find([]string{path}); err != nil {
 			t.Fatalf("generated work tree missing %q: %v", path, err)
@@ -475,6 +481,13 @@ func TestProductionRootUsesGeneratedWorkFamilyCutover(t *testing.T) {
 	if work.RunE != nil {
 		t.Fatal("you work must remain non-runnable through generated cutover")
 	}
+	approval, _, err := work.Find([]string{"approval"})
+	if err != nil {
+		t.Fatalf("Find(work approval) error = %v", err)
+	}
+	if approval.RunE != nil {
+		t.Fatal("you work approval must remain non-runnable through generated cutover")
+	}
 	for _, path := range []string{"list", "watch", "show", "move", "visualize"} {
 		leaf, _, err := root.Find([]string{"work", path})
 		if err != nil {
@@ -485,32 +498,21 @@ func TestProductionRootUsesGeneratedWorkFamilyCutover(t *testing.T) {
 		}
 	}
 }
-func TestProductionWorkHandlerRegistryExecutesWatch(t *testing.T) {
+func TestProductionWorkResolvedHandlerExecutesWatch(t *testing.T) {
 	var got workcli.WatchConfig
-	registry, bindings, err := newWorkHandlerRegistry(
-		&cliGlobalOptions{server: "https://factory.example"},
-		&cliDiagnosticsOptions{verbose: true, debug: true},
-		CommandFactory{
-			WatchWork: func(cfg workcli.WatchConfig) error {
-				got = cfg
-				_, err := io.WriteString(cfg.Output, "watched\n")
-				return err
-			},
+	root := withTestInjectedPlatformRoles(CommandFactory{
+		WatchWork: func(cfg workcli.WatchConfig) error {
+			got = cfg
+			_, err := io.WriteString(cfg.Output, "watched\n")
+			return err
 		},
-	)
-	if err != nil {
-		t.Fatalf("newWorkHandlerRegistry() error = %v", err)
-	}
-	work, err := climanifestcobra.NewWorkFamilyCommand(registry, bindings)
-	if err != nil {
-		t.Fatalf("NewWorkFamilyCommand() error = %v", err)
-	}
+	}).NewCommand(nil, nil, nil)
 
 	var stdout, stderr bytes.Buffer
-	work.SetOut(&stdout)
-	work.SetErr(&stderr)
-	work.SetArgs([]string{"watch", "--session", "session-alpha", "--follow"})
-	if err := work.Execute(); err != nil {
+	root.SetOut(&stdout)
+	root.SetErr(&stderr)
+	root.SetArgs([]string{"--server", "https://factory.example", "--verbose", "--debug", "work", "watch", "--session", "session-alpha", "--follow"})
+	if err := root.Execute(); err != nil {
 		t.Fatalf("work watch Execute() error = %v", err)
 	}
 
@@ -740,7 +742,6 @@ func TestWorkerSessionsInterruptInputReaderReportsTypedInputErrors(t *testing.T)
 		"you.worker-sessions.interrupt.flag.successor-worker-session-id",
 		"you.worker-sessions.interrupt.flag.replacement-message",
 		"you.worker-sessions.interrupt.flag.output",
-		"you.worker-sessions.interrupt.arg.1",
 		"you.worker-sessions.interrupt.flag.async",
 	} {
 		candidate := make(map[string]any, len(values))
@@ -751,6 +752,12 @@ func TestWorkerSessionsInterruptInputReaderReportsTypedInputErrors(t *testing.T)
 		if _, err := readGeneratedWorkerSessionsInterruptInputs(candidate); err == nil {
 			t.Errorf("readGeneratedWorkerSessionsInterruptInputs(missing %s) = nil error, want typed input error", key)
 		}
+	}
+	delete(values, "you.worker-sessions.interrupt.arg.1")
+	if got, err := readGeneratedWorkerSessionsInterruptInputs(values); err != nil {
+		t.Fatalf("readGeneratedWorkerSessionsInterruptInputs(missing optional prompt) error = %v", err)
+	} else if len(got.replacementInput) != 0 {
+		t.Fatalf("optional interrupt prompt = %#v, want empty", got.replacementInput)
 	}
 }
 

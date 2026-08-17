@@ -22,6 +22,7 @@ import (
 	factoryvisualization "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
 	"github.com/portpowered/infinite-you/pkg/services/models"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/batchload"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/runconfig"
 	factorysessionmapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factorysession"
 	contentcontract "github.com/portpowered/infinite-you/pkg/transports/mapping/workcontent"
@@ -192,8 +193,22 @@ func openInvocation(
 }
 
 func resolveFactoryInvocationRequest(cfg RunConfig) (*factoryapi.InvocationRequest, bool, error) {
+	return resolveFactoryInvocationRequestForRun(cfg, nil)
+}
+
+// resolveFactoryInvocationRequestForRun projects the selected run input onto
+// the Sessions invocation contract. A selected, finite --work request is a
+// strict one-item compatibility invocation; ordinary batch/service runs keep
+// their startup Work file and do not enter this path.
+func resolveFactoryInvocationRequestForRun(
+	cfg RunConfig,
+	prepareWorkTarget work.SingleWorkTargetPreparation,
+) (*factoryapi.InvocationRequest, bool, error) {
 	if strings.TrimSpace(cfg.WorkFile) != "" {
-		return nil, false, nil
+		if !cfg.CleanInvocation {
+			return nil, false, nil
+		}
+		return invocationRequestFromWorkFile(cfg, prepareWorkTarget)
 	}
 	if factoryInvocationRoot(cfg) == "" {
 		return nil, false, nil
@@ -217,6 +232,75 @@ func resolveFactoryInvocationRequest(cfg RunConfig) (*factoryapi.InvocationReque
 	}
 	recordCLIInvocationResolved(cfg, work.InputSourceStdinText)
 	return invocationRequestFromText(*cfg.InvocationStdinText), true, nil
+}
+
+func invocationRequestFromWorkFile(
+	cfg RunConfig,
+	prepareWorkTarget work.SingleWorkTargetPreparation,
+) (*factoryapi.InvocationRequest, bool, error) {
+	if cfg.WorkRequestFileLoader == nil {
+		return nil, true, fmt.Errorf("resolve --work invocation: Work Request file loader is required")
+	}
+	request, err := batchload.LoadFromFile(cfg.WorkRequestFileLoader, cfg.WorkFile)
+	if err != nil {
+		return nil, true, err
+	}
+	if prepareWorkTarget == nil {
+		return nil, true, fmt.Errorf("resolve --work invocation: Work single-target preparation is required")
+	}
+	if _, err := prepareWorkTarget(request); err != nil {
+		return nil, true, err
+	}
+	if len(request.Works) != 1 {
+		return nil, true, fmt.Errorf("resolve --work invocation: request requires exactly one work item")
+	}
+
+	item := request.Works[0]
+	content, err := invocationContentFromWorkItem(item)
+	if err != nil {
+		return nil, true, err
+	}
+	if len(content) == 0 {
+		return nil, true, fmt.Errorf("resolve --work invocation: work content is required")
+	}
+
+	sourceKind := factoryapi.InvocationInputSourceKindText
+	generatedContent := *contentcontract.GeneratedPtrFromParts(content)
+	result := &factoryapi.InvocationRequest{
+		Content:    &generatedContent,
+		SourceKind: &sourceKind,
+	}
+	requestID := strings.TrimSpace(request.RequestID)
+	if requestID == "" {
+		requestID = strings.TrimSpace(item.RequestID)
+	}
+	if requestID == "" {
+		// The Sessions contract has no WorkID carrier. Using an authored WorkID
+		// as the idempotency key keeps repeated clean runs addressable without
+		// reconstructing a runtime token or dispatch history in the CLI.
+		requestID = strings.TrimSpace(item.WorkID)
+	}
+	if requestID != "" {
+		result.RequestId = &requestID
+	}
+	return result, true, nil
+}
+
+func invocationContentFromWorkItem(item work.Work) ([]work.WorkContentPart, error) {
+	if len(item.Content) > 0 {
+		return work.CloneWorkContentParts(item.Content), nil
+	}
+	if item.Payload == nil {
+		return nil, nil
+	}
+	if text, ok := item.Payload.(string); ok {
+		return []work.WorkContentPart{{Type: work.WorkContentPartTypeText, Text: text}}, nil
+	}
+	encoded, err := json.Marshal(item.Payload)
+	if err != nil {
+		return nil, fmt.Errorf("resolve --work invocation payload: %w", err)
+	}
+	return []work.WorkContentPart{{Type: work.WorkContentPartTypeJSON, JSON: encoded}}, nil
 }
 
 func factoryInvocationRoot(cfg RunConfig) string {
@@ -381,8 +465,23 @@ func runFactoryInvocation(
 	presentation factoryvisualization.ResponsePresentation,
 	presentations factorysessions.OpeningPresentationOwner,
 ) error {
+	_, err := runFactoryInvocationWithResult(
+		ctx, cfg, target, request, invocation, presentation, presentations,
+	)
+	return err
+}
+
+func runFactoryInvocationWithResult(
+	ctx context.Context,
+	cfg RunConfig,
+	target factorysessions.InvocationTarget,
+	request factoryapi.InvocationRequest,
+	invocation InvocationOperation,
+	presentation factoryvisualization.ResponsePresentation,
+	presentations factorysessions.OpeningPresentationOwner,
+) (apisurface.FactoryInvocationResult, error) {
 	if invocation == nil {
-		return fmt.Errorf("run factory invocation: operation is required")
+		return apisurface.FactoryInvocationResult{}, fmt.Errorf("run factory invocation: operation is required")
 	}
 
 	logPackagedTTSInvocationStart(cfg)
@@ -400,7 +499,7 @@ func runFactoryInvocation(
 
 	streamRenderer, err := invocationFactoryEventRenderer(invocationCfg, presentation)
 	if err != nil {
-		return err
+		return apisurface.FactoryInvocationResult{}, err
 	}
 	if streamRenderer != nil {
 		defer streamRenderer.StopProgressRendering()
@@ -410,7 +509,7 @@ func runFactoryInvocation(
 			Consume: streamRenderer.PresentFactoryEvents,
 		})
 		if registerErr != nil {
-			return fmt.Errorf("register invocation event presentation: %w", registerErr)
+			return apisurface.FactoryInvocationResult{}, fmt.Errorf("register invocation event presentation: %w", registerErr)
 		}
 		defer presentations.Close(scopeID)
 		target.EventScopeID = scopeID
@@ -425,7 +524,7 @@ func runFactoryInvocation(
 	outcome, err := invocation.InvokeFactory(invokeCtx, target, invocationRequest)
 	result := outcome.Result
 	if result.Status == "" {
-		return runFactoryInvocationWithoutTerminalResult(err, outputWriter, streamRenderer)
+		return apisurface.FactoryInvocationResult{}, runFactoryInvocationWithoutTerminalResult(err, outputWriter, streamRenderer)
 	}
 	// A terminal result was determined even though err is non-nil: err is a
 	// post-result failure (for example runtime teardown or resource cleanup)
@@ -434,7 +533,7 @@ func runFactoryInvocation(
 	// err is preserved below so the CLI still reports failure and exit-code
 	// semantics for the cleanup error are not lost.
 	writeErr := writeFactoryInvocationOutcome(invocationCfg, result, streamRenderer)
-	return finishFactoryInvocation(err, writeErr, outputWriter, result)
+	return result, finishFactoryInvocation(err, writeErr, outputWriter, result)
 }
 
 func runFactoryInvocationWithoutTerminalResult(
@@ -883,95 +982,6 @@ func remoteDurableFailureReason(result factoryapi.FactorySessionResult) string {
 		return ""
 	}
 	return string(result.FailureDetail.Reason)
-}
-
-func remoteDurableLifecycleStatus(status *factoryapi.FactorySessionDurableLifecycleStatus) string {
-	if status == nil {
-		return ""
-	}
-	return string(*status)
-}
-
-func writeRemoteInvocationResult(cfg RunConfig, result apisurface.FactoryInvocationResult) error {
-	if cfg.Output == nil {
-		cfg.Output = cfg.StartupOutput
-	}
-	if isResponseStreamOutputMode(cfg.InvocationOutputMode) {
-		if cfg.JSONOutput {
-			if err := writeRemoteInvocationNDJSON(cfg.Output, result); err != nil {
-				return err
-			}
-			if result.Status != interfaces.InvocationTerminalStatusCompleted {
-				return invocationResultFailure(result)
-			}
-			return nil
-		}
-		if result.Status != interfaces.InvocationTerminalStatusCompleted {
-			if err := writeRemoteInvocationHumanFailure(cfg.Output, result); err != nil {
-				return err
-			}
-
-			return invocationResultFailure(result)
-		}
-	}
-	if result.Status != interfaces.InvocationTerminalStatusCompleted {
-		return writeInvocationFailure(cfg, result, nil)
-	}
-	return writeInvocationSuccess(cfg, result, nil)
-}
-
-type remoteInvocationNDJSONRecord struct {
-	RecordType string                        `json:"recordType"`
-	Response   factoryapi.InvocationResponse `json:"response"`
-}
-
-func writeRemoteInvocationNDJSON(output io.Writer, result apisurface.FactoryInvocationResult) error {
-	if output == nil {
-		return fmt.Errorf("write remote invocation response stream: process output is required")
-	}
-	encoded, err := json.Marshal(remoteInvocationNDJSONRecord{
-		RecordType: "invocation_result",
-		Response:   apisurface.InvocationResponseFromResult(result),
-	})
-	if err != nil {
-		return fmt.Errorf("marshal remote invocation terminal record: %w", err)
-	}
-	_, err = fmt.Fprintln(output, string(encoded))
-	return err
-}
-
-func writeRemoteInvocationHumanFailure(output io.Writer, result apisurface.FactoryInvocationResult) error {
-	if output == nil {
-		return fmt.Errorf("write remote invocation outcome: process output is required")
-	}
-	if _, err := fmt.Fprintln(output, "--- invocation outcome ---"); err != nil {
-		return err
-	}
-	lines := []string{"status: " + string(result.Status)}
-	if code := strings.TrimSpace(result.ErrorCode); code != "" {
-		lines = append(lines, "error: "+code)
-	}
-	if message := strings.TrimSpace(result.Message); message != "" {
-		lines = append(lines, "message: "+message)
-	}
-	if sessionID := strings.TrimSpace(result.SessionID); sessionID != "" {
-		lines = append(lines, "session: "+sessionID)
-	}
-	if workID := strings.TrimSpace(result.WorkID); workID != "" {
-		lines = append(lines, "workId: "+workID)
-	}
-	if workName := strings.TrimSpace(result.WorkName); workName != "" {
-		lines = append(lines, "workName: "+workName)
-	}
-	if workState := strings.TrimSpace(result.WorkState); workState != "" {
-		lines = append(lines, "workState: "+workState)
-	}
-	for _, line := range lines {
-		if _, err := fmt.Fprintln(output, line); err != nil {
-			return err
-		}
-	}
-	return nil
 }
 
 // ResolveFactoryInvocationRequest exposes the same request projection used by

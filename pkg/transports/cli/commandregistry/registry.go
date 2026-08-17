@@ -92,19 +92,6 @@ func (r *Registry) LookupHandlers(commandID string) (CommandHandlers, error) {
 	return handlers, nil
 }
 
-// AttachRunE sets cmd.RunE from the registry entry for commandID.
-func (r *Registry) AttachRunE(cmd *cobra.Command, commandID string) error {
-	if cmd == nil {
-		return fmt.Errorf("attach %q: command is nil", commandID)
-	}
-	handler, err := r.Lookup(commandID)
-	if err != nil {
-		return err
-	}
-	cmd.RunE = handler
-	return nil
-}
-
 // AttachHandlers sets cmd.PreRunE and cmd.RunE from the registry entry.
 func (r *Registry) AttachHandlers(cmd *cobra.Command, commandID string) error {
 	if cmd == nil {
