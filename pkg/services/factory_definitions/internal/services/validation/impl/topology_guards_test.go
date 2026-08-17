@@ -107,6 +107,70 @@ func TestRuleGuards_VisitCountZeroMaxVisits(t *testing.T) {
 	assertFindingExists(t, findings, "guard-visit-count-max-visits")
 }
 
+func TestValidate_ReviewRepeaterContinueTopologyWithBoundedLoopBreaker(t *testing.T) {
+	cfg := &factorydefinitions.FactoryConfig{
+		WorkTypes: []factorydefinitions.WorkTypeConfig{
+			{
+				Name: "task",
+				States: []factorydefinitions.StateConfig{
+					{Name: "init", Type: factorydefinitions.StateTypeInitial},
+					{Name: "in-review", Type: factorydefinitions.StateTypeProcessing},
+					{Name: "to-complete", Type: factorydefinitions.StateTypeProcessing},
+					{Name: "complete", Type: factorydefinitions.StateTypeTerminal},
+					{Name: "failed", Type: factorydefinitions.StateTypeFailed},
+				},
+			},
+			{
+				Name: "review",
+				States: []factorydefinitions.StateConfig{
+					{Name: "init", Type: factorydefinitions.StateTypeInitial},
+					{Name: "complete", Type: factorydefinitions.StateTypeTerminal},
+					{Name: "fin", Type: factorydefinitions.StateTypeFailed},
+				},
+			},
+		},
+		Workstations: []factorydefinitions.FactoryWorkstationConfig{
+			{
+				Name: "review",
+				Kind: factorydefinitions.WorkstationKindRepeater,
+				Inputs: []factorydefinitions.IOConfig{
+					{WorkTypeName: "task", StateName: "in-review"},
+					{WorkTypeName: "review", StateName: "init"},
+				},
+				Outputs: []factorydefinitions.IOConfig{
+					{WorkTypeName: "task", StateName: "to-complete"},
+					{WorkTypeName: "review", StateName: "complete"},
+				},
+				OnContinue: []factorydefinitions.IOConfig{
+					{WorkTypeName: "task", StateName: "in-review"},
+					{WorkTypeName: "review", StateName: "init"},
+				},
+				OnRejection: []factorydefinitions.IOConfig{{WorkTypeName: "task", StateName: "init"}},
+				OnFailure: []factorydefinitions.IOConfig{
+					{WorkTypeName: "task", StateName: "failed"},
+					{WorkTypeName: "review", StateName: "fin"},
+				},
+			},
+			{
+				Name:    "review-loop-breaker",
+				Type:    factorydefinitions.WorkstationTypeLogical,
+				Inputs:  []factorydefinitions.IOConfig{{WorkTypeName: "task", StateName: "in-review"}},
+				Outputs: []factorydefinitions.IOConfig{{WorkTypeName: "task", StateName: "failed"}},
+				Guards: []factorydefinitions.GuardConfig{{
+					Type:        factorydefinitions.GuardTypeVisitCount,
+					Workstation: "review",
+					MaxVisits:   10,
+				}},
+			},
+		},
+	}
+
+	result := Validate(cfg)
+	if len(result.Targets) != 0 {
+		t.Fatalf("review hold topology produced validation targets: %#v", result.Targets)
+	}
+}
+
 func TestRuleInvocationBoundLimitsAcceptsNumberStringParameters(t *testing.T) {
 	cfg := testBaseConfig()
 	cfg.InvocationSignature = &factorydefinitions.InvocationSignatureConfig{Parameters: []factorydefinitions.InvocationParameterConfig{

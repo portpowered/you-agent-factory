@@ -120,6 +120,28 @@ func TestBuildHistory_MergesSharedLineageVisitCountsWithMaxNotSum(t *testing.T) 
 	}
 }
 
+func TestBuildHistory_ContinueResetsConsecutiveFailureStrike(t *testing.T) {
+	consumed := []factorytoken.Token{{
+		Color: factorytoken.Color{WorkID: "task-1", WorkTypeID: "task"},
+		History: factorytoken.History{
+			TotalVisits:         map[string]int{"review": 4},
+			ConsecutiveFailures: map[string]int{"review": 2},
+		},
+	}}
+
+	history := buildHistory(consumed, &workerexecution.WorkResult{
+		TransitionID: "review",
+		Outcome:      workerexecution.OutcomeContinue,
+	}, "task-1")
+
+	if got := history.TotalVisits["review"]; got != 5 {
+		t.Fatalf("TotalVisits[review] = %d, want 5 for the continued visit", got)
+	}
+	if got := history.ConsecutiveFailures["review"]; got != 0 {
+		t.Fatalf("ConsecutiveFailures[review] = %d, want 0 for a non-failing continue", got)
+	}
+}
+
 func TestBuildHistory_IncompleteOutputRemainsConsecutiveFailure(t *testing.T) {
 	consumed := []factorytoken.Token{{
 		Color: factorytoken.Color{WorkID: "review-1", WorkTypeID: "review"},
