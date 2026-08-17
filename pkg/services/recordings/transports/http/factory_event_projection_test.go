@@ -89,18 +89,10 @@ func TestCanonicalFactoryEventRejectsMalformedExecutionPayload(t *testing.T) {
 }
 
 func TestGeneratedWorkstationProjectionMapsOptionalRequestAndResponseFields(t *testing.T) {
-	workstationName := "reviewer"
-	traceID := "trace-1"
-	workTypeID := "review"
-	logicalWorkID := "logical-1"
-	lineageParent := "parent-1"
-	state := "READY"
-	displayName := "Review task"
-	command := "verify.sh"
-	scriptRequestID := "script-request-1"
-	feedback := "looks good"
-	outcome := "SUCCEEDED"
-	classification := "accepted"
+	workstationName, traceID, workTypeID := "reviewer", "trace-1", "review"
+	logicalWorkID, lineageParent, state := "logical-1", "parent-1", "READY"
+	displayName, command, scriptRequestID := "Review task", "verify.sh", "script-request-1"
+	feedback, outcome, classification := "looks good", "SUCCEEDED", "accepted"
 	currentTrace := "trace-current"
 	workDepth := 2
 	attempt := 1
@@ -188,25 +180,63 @@ func TestGeneratedWorkstationProjectionMapsOptionalRequestAndResponseFields(t *t
 		},
 	}
 	generated := Generated(recordings.WorkstationFactoryWorldWorkstationRequestProjectionSlice{WorkstationRequestsByDispatchId: &projection})
+	assertGeneratedWorkstationProjection(t, generated, workstationName, runnerID)
+}
+
+func assertGeneratedWorkstationProjection(
+	t *testing.T,
+	generated factoryapi.FactoryWorldWorkstationRequestProjectionSlice,
+	workstationName string,
+	runnerID recordings.WorkstationRunnerID,
+) {
+	t.Helper()
 	if generated.WorkstationRequestsByDispatchId == nil || len(*generated.WorkstationRequestsByDispatchId) != 2 {
 		t.Fatalf("generated projection = %#v, want two dispatch views", generated)
 	}
 	got := (*generated.WorkstationRequestsByDispatchId)["dispatch-rich"]
+	assertGeneratedWorkstationIdentity(t, got, workstationName, runnerID)
+	assertGeneratedWorkstationInputs(t, got)
+	assertGeneratedWorkstationResponse(t, got)
+	assertGeneratedWorkstationSparseAndEmpty(t, generated)
+}
+
+func assertGeneratedWorkstationIdentity(
+	t *testing.T,
+	got factoryapi.FactoryWorldWorkstationRequestView,
+	workstationName string,
+	runnerID recordings.WorkstationRunnerID,
+) {
+	t.Helper()
 	if got.DispatchId != "dispatch-rich" || got.Counts.RespondedCount != 3 || got.WorkstationName == nil || *got.WorkstationName != workstationName {
 		t.Fatalf("generated request view = %#v, want mapped identity/count/name", got)
 	}
 	if got.Request.Runner == nil || got.Request.Runner.RunnerId == nil || *got.Request.Runner.RunnerId != factoryapi.RunnerID(runnerID) {
 		t.Fatalf("generated runner = %#v, want runner identity", got.Request.Runner)
 	}
+}
+
+func assertGeneratedWorkstationInputs(t *testing.T, got factoryapi.FactoryWorldWorkstationRequestView) {
+	t.Helper()
 	if got.Request.ConsumedTokens == nil || len(*got.Request.ConsumedTokens) != 1 || (*got.Request.ConsumedTokens)[0].Tags == nil {
 		t.Fatalf("generated consumed tokens = %#v, want tagged token", got.Request.ConsumedTokens)
 	}
 	if got.Request.InputWorkItems == nil || len(*got.Request.InputWorkItems) != 1 || (*got.Request.InputWorkItems)[0].Content == nil {
 		t.Fatalf("generated input work items = %#v, want content", got.Request.InputWorkItems)
 	}
+}
+
+func assertGeneratedWorkstationResponse(t *testing.T, got factoryapi.FactoryWorldWorkstationRequestView) {
+	t.Helper()
 	if got.Response == nil || got.Response.FailureDetail == nil || got.Response.FailureDetail.Reason != factoryapi.WorkFailureTypeTimeout || got.Response.ScriptResponse == nil {
 		t.Fatalf("generated response = %#v, want failure and script response", got.Response)
 	}
+}
+
+func assertGeneratedWorkstationSparseAndEmpty(
+	t *testing.T,
+	generated factoryapi.FactoryWorldWorkstationRequestProjectionSlice,
+) {
+	t.Helper()
 	if sparse := (*generated.WorkstationRequestsByDispatchId)["dispatch-sparse"]; sparse.Response == nil || sparse.Response.OutputMutations != nil || sparse.Request.InputWorkItems != nil {
 		t.Fatalf("sparse generated projection = %#v, want empty slices omitted", sparse)
 	}

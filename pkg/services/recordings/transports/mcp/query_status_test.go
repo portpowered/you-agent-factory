@@ -457,9 +457,20 @@ func intPointer(value int) *int { return &value }
 func TestQueryHistoryMapsContextAndTypedFailures(t *testing.T) {
 	t.Parallel()
 
-	input := mcprecording.QueryHistoryInput{
+	input := queryHistoryErrorInput()
+	assertQueryHistoryContextErrors(t, input)
+	assertQueryHistoryTypedErrors(t, input)
+	assertQueryHistorySafeErrors(t, input)
+}
+
+func queryHistoryErrorInput() mcprecording.QueryHistoryInput {
+	return mcprecording.QueryHistoryInput{
 		RecordingID: " recording-history-errors-001 ", Artifact: " artifact-1 ", FactorySessionID: " session-1 ",
 	}
+}
+
+func assertQueryHistoryContextErrors(t *testing.T, input mcprecording.QueryHistoryInput) {
+	t.Helper()
 	if response := mcprecording.QueryHistory(nil, fakeRecordingsRoot{}, input); response.Error == nil || response.Error.Code != "BAD_REQUEST" {
 		t.Fatalf("nil-context response = %#v, want bad request envelope", response)
 	}
@@ -471,7 +482,10 @@ func TestQueryHistoryMapsContextAndTypedFailures(t *testing.T) {
 	if response := mcprecording.QueryHistory(context.Background(), nil, input); response.Error == nil || response.Error.Code != "recording.service.unavailable" {
 		t.Fatalf("nil-service response = %#v, want unavailable envelope", response)
 	}
+}
 
+func assertQueryHistoryTypedErrors(t *testing.T, input mcprecording.QueryHistoryInput) {
+	t.Helper()
 	tests := []struct {
 		kind      recordings.HistoricalRecordingQueryErrorKind
 		code      string
@@ -494,7 +508,10 @@ func TestQueryHistoryMapsContextAndTypedFailures(t *testing.T) {
 			t.Fatalf("kind %s response = %#v, want code=%s retryable=%v", test.kind, response, test.code, test.retryable)
 		}
 	}
+}
 
+func assertQueryHistorySafeErrors(t *testing.T, input mcprecording.QueryHistoryInput) {
+	t.Helper()
 	clientError := mcprecording.QueryHistory(context.Background(), fakeRecordingsRoot{
 		queryHistory: func(recordings.HistoricalRecordingQueryRequest) (recordings.HistoricalRecordingQueryResult, error) {
 			return recordings.HistoricalRecordingQueryResult{}, errors.New("invalid scope")
@@ -516,6 +533,16 @@ func TestQueryHistoryMapsContextAndTypedFailures(t *testing.T) {
 func TestLegacyFactorySessionInspectionAdaptsStandaloneReads(t *testing.T) {
 	t.Parallel()
 
+	service, sessionID := newLegacyInspectionService(t)
+	assertLegacyStatus(t, service, sessionID)
+	assertLegacyHistory(t, service, sessionID)
+	assertLegacyPortableArtifact(t, service, sessionID)
+	assertLegacyWorldState(t, service, sessionID)
+	assertLegacySubscription(t, service, sessionID)
+}
+
+func newLegacyInspectionService(t *testing.T) (mcprecording.FactorySessionInspectionService, string) {
+	t.Helper()
 	sessionID := "standalone-session-001"
 	event := json.RawMessage(`{"context":{"eventTime":"2026-08-16T03:00:00Z","sequence":2,"tick":4,"sessionId":"` + sessionID + `"},"id":"event-standalone-001","payload":{"status":"COMPLETED"},"schemaVersion":"agent-factory.event.v1","type":"RUN_RESPONSE"}`)
 	legacy := &legacyInspectionFake{
@@ -527,25 +554,45 @@ func TestLegacyFactorySessionInspectionAdaptsStandaloneReads(t *testing.T) {
 	if service == nil || mcprecording.NewLegacyFactorySessionInspection(nil) != nil || mcprecording.NewLegacyFactorySessionInspection(struct{}{}) != nil {
 		t.Fatal("legacy inspection adapter should accept only the legacy inspection contract")
 	}
+	return service, sessionID
+}
 
+func assertLegacyStatus(t *testing.T, service mcprecording.FactorySessionInspectionService, sessionID string) {
+	t.Helper()
 	status, err := service.QueryRecordingStatus(recordings.RecordingStatusRequest{RecordingID: recordings.RecordingID(sessionID)})
 	if err != nil || string(status.Status.Artifact) != "standalone://"+sessionID || status.Status.LastEvent == nil || status.Status.LastEvent.Sequence != 2 {
 		t.Fatalf("legacy status = %#v err=%v, want artifact and last cursor", status, err)
 	}
+}
+
+func assertLegacyHistory(t *testing.T, service mcprecording.FactorySessionInspectionService, sessionID string) {
+	t.Helper()
 	history, err := service.QueryHistoricalRecording(recordings.HistoricalRecordingQueryRequest{Recording: recordings.HistoricalRecordingIdentity{
 		RecordingID: recordings.RecordingID(sessionID), Artifact: "artifact-standalone-001", Scope: recordings.CanonicalEventScope{FactorySessionID: sessionID},
 	}})
 	if err != nil || len(history.Events) != 1 || len(history.Dispatches) != 1 || history.Dispatches[0].ID != "dispatch-standalone-001" {
 		t.Fatalf("legacy history = %#v err=%v, want event and dispatch", history, err)
 	}
+}
+
+func assertLegacyPortableArtifact(t *testing.T, service mcprecording.FactorySessionInspectionService, sessionID string) {
+	t.Helper()
 	portable, err := service.BuildPortableArtifact(recordings.BuildPortableArtifactRequest{RecordingID: recordings.RecordingID(sessionID)})
 	if err != nil || portable.Artifact.Summary.EventCount != 1 || portable.Artifact.Summary.FirstCursor == nil || portable.Artifact.Summary.LastCursor == nil {
 		t.Fatalf("legacy portable artifact = %#v err=%v, want cursor bounds", portable, err)
 	}
+}
+
+func assertLegacyWorldState(t *testing.T, service mcprecording.FactorySessionInspectionService, sessionID string) {
+	t.Helper()
 	world, err := service.ReconstructWorldState(recordings.ReconstructWorldStateRequest{Scope: recordings.CanonicalEventScope{FactorySessionID: sessionID}})
 	if err != nil || !strings.Contains(world.WorldState.Payload, "artifact-standalone-001") {
 		t.Fatalf("legacy world state = %#v err=%v, want artifact projection", world, err)
 	}
+}
+
+func assertLegacySubscription(t *testing.T, service mcprecording.FactorySessionInspectionService, sessionID string) {
+	t.Helper()
 
 	cursor := recordings.CanonicalEventCursor{Sequence: 1}
 	subscribed, err := service.SubscribeFrom(context.Background(), recordings.SubscribeRequest{Scope: recordings.CanonicalEventScope{FactorySessionID: sessionID}, Cursor: &cursor})
