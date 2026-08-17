@@ -10,7 +10,6 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/work"
-	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 
 	"github.com/portpowered/infinite-you/internal/testutil/recordingfixtures"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
@@ -312,13 +311,6 @@ func assertRuntimeLedgerCallsInOrder(t *testing.T, calls []string, want ...strin
 	}
 }
 
-func assertDispatchResponseCount(t *testing.T, events []factoryapi.FactoryEvent, want int) {
-	t.Helper()
-	if got := countFactoryEventType(events, factoryapi.FactoryEventTypeDispatchResponse); got != want {
-		t.Fatalf("dispatch completed event count = %d, want %d; events = %#v", got, want, events)
-	}
-}
-
 func submitOrderedEventHistoryRequest(t *testing.T, f factoryhost.Engine) {
 	t.Helper()
 	_, err := submitWorkRequests(context.Background(), f, []work.SubmitRequest{{
@@ -345,93 +337,6 @@ func tickAndPauseRuntime(t *testing.T, f factoryhost.Engine) {
 	}
 	if err := f.Pause(context.Background()); err != nil {
 		t.Fatalf("Pause: %v", err)
-	}
-}
-
-func assertOrderedEventSequence(t *testing.T, events []factoryapi.FactoryEvent) {
-	t.Helper()
-	wantTypes := append(append([]factoryapi.FactoryEventType(nil), runtimeStartupEventTypes()...), []factoryapi.FactoryEventType{
-		factoryapi.FactoryEventTypeWorkRequest,
-		factoryapi.FactoryEventTypeRelationshipChangeRequest,
-		factoryapi.FactoryEventTypeDispatchRequest,
-		factoryapi.FactoryEventTypeDispatchResponse,
-		factoryapi.FactoryEventTypeFactoryStateResponse,
-		factoryapi.FactoryEventTypeSessionLifecycleControl,
-		factoryapi.FactoryEventTypeSessionPaused,
-	}...)
-	if len(events) != len(wantTypes) {
-		t.Fatalf("event count = %d, want %d: %#v", len(events), len(wantTypes), events)
-	}
-	for i, wantType := range wantTypes {
-		if events[i].Type != wantType {
-			t.Fatalf("event[%d] type = %q, want %q", i, events[i].Type, wantType)
-		}
-		if events[i].Id == "" {
-			t.Fatalf("event[%d] has empty id", i)
-		}
-		if i > 0 && events[i].Context.Tick < events[i-1].Context.Tick {
-			t.Fatalf("event[%d] tick = %d before event[%d] tick = %d", i, events[i].Context.Tick, i-1, events[i-1].Context.Tick)
-		}
-	}
-}
-
-// pkgmaintcheck:ignore-cyclomatic-complexity this helper intentionally checks the ordered event payload contract in one reviewer-readable pass.
-func assertOrderedEventPayloads(t *testing.T, events []factoryapi.FactoryEvent) {
-	t.Helper()
-	batch, err := events[runtimeEventIndex(0)].Payload.AsWorkRequestEventPayload()
-	if err != nil {
-		t.Fatalf("work request payload: %v", err)
-	}
-	workRequestEvent := events[runtimeEventIndex(0)]
-	if workRequestEvent.Context.RequestId == nil || batch.Type != factoryapi.WorkRequestTypeFactoryRequestBatch || firstRuntimeTestString(workRequestEvent.Context.TraceIds) != "trace-1" {
-		t.Fatalf("work request payload = %#v, want canonical batch identity", batch)
-	}
-	if batch.Works == nil || len(*batch.Works) != 1 || stringValueForRuntimeTest((*batch.Works)[0].WorkId) != "work-1" {
-		t.Fatalf("work request items = %#v, want work-1", batch.Works)
-	}
-
-	relation, err := events[runtimeEventIndex(1)].Payload.AsRelationshipChangeRequestEventPayload()
-	if err != nil {
-		t.Fatalf("relationship payload: %v", err)
-	}
-	relationEvent := events[runtimeEventIndex(1)]
-	if relation.Relation.Type != factoryapi.RelationTypeDependsOn ||
-		relationEvent.Context.WorkIds == nil ||
-		stringValueForRuntimeTest(relation.Relation.TargetWorkId) != "upstream-1" {
-		t.Fatalf("relationship payload = %#v, want submitted dependency", relation)
-	}
-
-	request, err := events[runtimeEventIndex(2)].Payload.AsDispatchRequestEventPayload()
-	if err != nil {
-		t.Fatalf("dispatch created payload: %v", err)
-	}
-	dispatchRequestEvent := events[runtimeEventIndex(2)]
-	if stringValueForRuntimeTest(dispatchRequestEvent.Context.DispatchId) == "" || request.TransitionId != "t-process" {
-		t.Fatalf("workstation request payload = %#v, want dispatch identity", request)
-	}
-	if len(request.Inputs) != 1 || request.Inputs[0].WorkId != "work-1" {
-		t.Fatalf("workstation request inputs = %#v, want consumed work item", request.Inputs)
-	}
-
-	response, err := events[runtimeEventIndex(3)].Payload.AsDispatchResponseEventPayload()
-	if err != nil {
-		t.Fatalf("dispatch completed payload: %v", err)
-	}
-	if stringValueForRuntimeTest(events[runtimeEventIndex(3)].Context.DispatchId) != stringValueForRuntimeTest(dispatchRequestEvent.Context.DispatchId) || response.Outcome != factoryapi.WorkOutcomeAccepted {
-		t.Fatalf("workstation response payload = %#v, want accepted dispatch response", response)
-	}
-	if response.OutputWork == nil || len(*response.OutputWork) == 0 || stringValueForRuntimeTest((*response.OutputWork)[0].WorkId) != "work-1" {
-		t.Fatalf("output work = %#v, want completed work item", response.OutputWork)
-	}
-}
-
-func assertRuntimeEventIDsStable(t *testing.T, f factoryhost.Engine, events []factoryapi.FactoryEvent) {
-	t.Helper()
-	again := runtimeGeneratedEvents(t, f)
-	for i := range events {
-		if again[i].Id != events[i].Id {
-			t.Fatalf("event[%d] id changed from %q to %q", i, events[i].Id, again[i].Id)
-		}
 	}
 }
 
@@ -462,57 +367,6 @@ func assertIdempotentBatchSubmit(t *testing.T, f factoryhost.Engine, request wor
 	}
 }
 
-func assertFactoryEventTypesPrefix(t *testing.T, got []factoryapi.FactoryEventType, want ...factoryapi.FactoryEventType) {
-	t.Helper()
-	if len(got) < len(want) {
-		t.Fatalf("event types = %v, want at least %v", got, want)
-	}
-	for i, expected := range want {
-		if got[i] != expected {
-			t.Fatalf("event[%d] type = %q, want %q (all types %v)", i, got[i], expected, got)
-		}
-	}
-}
-
-// pkgmaintcheck:ignore-cyclomatic-complexity this helper keeps the batch replay event contract visible in one assertion owner.
-func assertBatchRequestReplayEvents(t *testing.T, events []factoryapi.FactoryEvent) {
-	t.Helper()
-	batch, err := events[runtimeEventIndex(0)].Payload.AsWorkRequestEventPayload()
-	if err != nil {
-		t.Fatalf("batch payload: %v", err)
-	}
-	workRequestEvent := events[runtimeEventIndex(0)]
-	if stringValueForRuntimeTest(workRequestEvent.Context.RequestId) != "request-batch-events" ||
-		stringValueForRuntimeTest(batch.Source) != "external-submit" ||
-		firstRuntimeTestString(workRequestEvent.Context.TraceIds) != "trace-batch" {
-		t.Fatalf("batch payload = %#v, want request/source/trace metadata", batch)
-	}
-	if batch.Works == nil || len(*batch.Works) != 2 ||
-		stringValueForRuntimeTest((*batch.Works)[0].WorkId) != "work-first" ||
-		stringValueForRuntimeTest((*batch.Works)[1].WorkId) != "work-second" ||
-		stringValueForRuntimeTest((*batch.Works)[0].WorkTypeName) != "task" ||
-		stringValueForRuntimeTest((*batch.Works)[1].WorkTypeName) != "task" {
-		t.Fatalf("batch work items = %#v, want first and second", batch.Works)
-	}
-	if workRequestEvents := countFactoryEventsByType(events, factoryapi.FactoryEventTypeWorkRequest); workRequestEvents != 1 {
-		t.Fatalf("work request events = %d, want 1 after idempotent retry", workRequestEvents)
-	}
-
-	relation, err := events[runtimeEventIndex(1)].Payload.AsRelationshipChangeRequestEventPayload()
-	if err != nil {
-		t.Fatalf("relationship payload: %v", err)
-	}
-	relationEvent := events[runtimeEventIndex(1)]
-	if relation.Relation.SourceWorkName != "second" ||
-		stringValueForRuntimeTest(relation.Relation.TargetWorkId) != "work-first" ||
-		relation.Relation.TargetWorkName != "first" ||
-		stringValueForRuntimeTest(relation.Relation.RequiredState) != "done" ||
-		stringValueForRuntimeTest(relationEvent.Context.RequestId) != "request-batch-events" ||
-		firstRuntimeTestString(relationEvent.Context.TraceIds) != "trace-batch" {
-		t.Fatalf("relationship payload = %#v, want named batch dependency", relation)
-	}
-}
-
 func generatedRuntimeBatchFixture() work.GeneratedSubmissionBatch {
 	return work.GeneratedSubmissionBatch{
 		Request: work.WorkRequest{
@@ -539,56 +393,6 @@ func generatedRuntimeBatchFixture() work.GeneratedSubmissionBatch {
 			TargetState: "done",
 			Tags:        map[string]string{"runtime": "true"},
 		}},
-	}
-}
-
-// pkgmaintcheck:ignore-cyclomatic-complexity this helper keeps the generated batch event contract together across request, relation, and response assertions.
-func assertGeneratedBatchEvents(t *testing.T, events []factoryapi.FactoryEvent) {
-	t.Helper()
-	requestPayload, err := events[runtimeEventIndex(0)].Payload.AsWorkRequestEventPayload()
-	if err != nil {
-		t.Fatalf("request payload: %v", err)
-	}
-	workRequestEvent := events[runtimeEventIndex(0)]
-	if stringValueForRuntimeTest(workRequestEvent.Context.RequestId) != "generated-request-events" ||
-		stringValueForRuntimeTest(requestPayload.Source) != "worker-output:dispatch-parent" ||
-		firstRuntimeTestString(workRequestEvent.Context.TraceIds) != "trace-generated" {
-		t.Fatalf("request payload = %#v, want generated request metadata", requestPayload)
-	}
-	if got := strings.Join(sliceValueForRuntimeTest(requestPayload.ParentLineage), ","); got != "request-parent,work-parent" {
-		t.Fatalf("parent lineage = %#v, want generated lineage metadata", requestPayload.ParentLineage)
-	}
-	if requestPayload.Works == nil || len(*requestPayload.Works) != 2 {
-		t.Fatalf("request works = %#v, want generated work metadata", requestPayload.Works)
-	}
-	if requestPayload.Relations == nil || len(*requestPayload.Relations) != 1 {
-		t.Fatalf("request relations = %#v, want canonical generated dependency", requestPayload.Relations)
-	}
-	if got := (*requestPayload.Relations)[0]; got.SourceWorkName != "review" ||
-		got.TargetWorkName != "draft" ||
-		stringValueForRuntimeTest(got.TargetWorkId) != "work-draft" ||
-		stringValueForRuntimeTest(got.RequiredState) != "done" {
-		t.Fatalf("request relation = %#v, want review depends on draft", got)
-	}
-	for _, work := range *requestPayload.Works {
-		if stringValueForRuntimeTest(work.CurrentChainingTraceId) != "trace-generated" {
-			t.Fatalf("generated work current chaining trace ID = %q, want trace-generated", stringValueForRuntimeTest(work.CurrentChainingTraceId))
-		}
-		if got := sliceValueForRuntimeTest(work.PreviousChainingTraceIds); len(got) != 0 {
-			t.Fatalf("generated hook work previous chaining trace IDs = %#v, want none without consumed input lineage", got)
-		}
-	}
-
-	relationPayload, err := events[runtimeEventIndex(1)].Payload.AsRelationshipChangeRequestEventPayload()
-	if err != nil {
-		t.Fatalf("relationship payload: %v", err)
-	}
-	relationEvent := events[runtimeEventIndex(1)]
-	if relationPayload.Relation.SourceWorkName != "review" ||
-		stringValueForRuntimeTest(relationPayload.Relation.TargetWorkId) != "work-draft" ||
-		stringValueForRuntimeTest(relationEvent.Context.RequestId) != "generated-request-events" ||
-		firstRuntimeTestString(relationEvent.Context.TraceIds) != "trace-generated" {
-		t.Fatalf("relationship payload = %#v, want generated request dependency", relationPayload)
 	}
 }
 

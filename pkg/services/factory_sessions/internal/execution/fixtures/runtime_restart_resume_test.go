@@ -304,18 +304,6 @@ func assertResumedLiveChildOutputResult(t *testing.T, service *fse.JavaScriptRun
 	}
 }
 
-func assertInterruptedResumePreconditions(t *testing.T, harness interruptedResumableHarness) {
-	t.Helper()
-	if harness.provider.CallCount() < 2 {
-		t.Fatalf("provider infer calls = %d, want at least 2 before interrupt", harness.provider.CallCount())
-	}
-	snapshotPath := filepath.Join(runtimepersist.DirForProjectRoot(harness.projectRoot), harness.sessionID+".json")
-	if _, err := os.Stat(snapshotPath); err != nil {
-		t.Fatalf("interrupted snapshot must be durable before cross-instance resume: %v", err)
-	}
-	getCompletedDispatch(t, harness.initial, harness.sessionID, "dispatch-1")
-}
-
 func getCompletedDispatch(t *testing.T, service fse.Service, sessionID, dispatchID string) fse.DispatchDetail {
 	t.Helper()
 	dispatch, err := service.GetDispatch(context.Background(), sessionID, dispatchID)
@@ -326,13 +314,6 @@ func getCompletedDispatch(t *testing.T, service fse.Service, sessionID, dispatch
 		t.Fatalf("dispatch %s = %#v, want COMPLETED", dispatchID, dispatch)
 	}
 	return dispatch
-}
-
-func assertProviderCallCount(t *testing.T, provider *sequentialBlockingProvider, want int) {
-	t.Helper()
-	if provider.CallCount() != want {
-		t.Fatalf("provider infer calls = %d, want %d", provider.CallCount(), want)
-	}
 }
 
 func assertResumedDispatchParity(
@@ -785,22 +766,6 @@ func assertResumeError(t *testing.T, err error, wantOutcome fse.ResumeOutcome, w
 	}
 }
 
-func waitForPersistedInterruptedSnapshot(t *testing.T, projectRoot, sessionID string) {
-	t.Helper()
-	path := filepath.Join(runtimepersist.DirForProjectRoot(projectRoot), sessionID+".json")
-	deadline := time.Now().Add(5 * time.Second)
-	for time.Now().Before(deadline) {
-		raw, err := os.ReadFile(path)
-		if err == nil {
-			var snapshot fse.PersistedRuntimeSessionState
-			if json.Unmarshal(raw, &snapshot) == nil && snapshot.CheckpointSummary != nil {
-				return
-			}
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
-	t.Fatalf("persisted interrupted snapshot not ready at %s", path)
-}
 func TestJavaScriptRuntimeService_NonResumedFakeChild_PreservesShippedTransportSemantics(t *testing.T) {
 	projectRoot := setupRuntimeWorkflowFixture(t, "agent-run-fake-child.workflow.js", "agent-run-fake-child")
 	service := newConfiguredJavaScriptRuntimeService(runtimeServiceConfig{

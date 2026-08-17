@@ -111,7 +111,7 @@ test("all clean current-main checkers pass the baseline policy", () => {
 
 	assert.equal(summary.ok, true);
 	assert.equal(summary.failures.length, 0);
-	assert.equal(summary.targets.filter((target) => target.policyStatus === "clean").length, 3);
+	assert.equal(summary.targets.filter((target) => target.policyStatus === "clean").length, 2);
 });
 
 test("a measured baseline failure is reported but allowed at its recorded count", () => {
@@ -311,7 +311,7 @@ test("a successful checker always reports zero violations", () => {
 test("a failed checker without a machine-readable count fails closed", () => {
 	const summary = summarizeBackendLintReport(report({
 		targets: baselineTargets({
-			"ownership-inventory-check": {
+			"packaged-factory-consumption-check": {
 				status: "fail",
 				output: "Report{MissingPackages:[]string{\"pkg/a\", \"pkg/b\"}}",
 			},
@@ -319,9 +319,9 @@ test("a failed checker without a machine-readable count fails closed", () => {
 	}));
 
 	assert.equal(summary.ok, false);
-	assert.equal(summary.targets.find((target) => target.name === "ownership-inventory-check").violationCount, null);
+	assert.equal(summary.targets.find((target) => target.name === "packaged-factory-consumption-check").violationCount, null);
 	assert.match(summary.failures.join("\n"), /without a reliable machine-readable violation count/);
-	assert.match(renderBackendLintVerdict(summary), /ownership-inventory-check: baseline 5 -> current unknown \(delta unknown; unmeasured\)/);
+	assert.match(renderBackendLintVerdict(summary), /packaged-factory-consumption-check: baseline 1 -> current unknown \(delta unknown; unmeasured\)/);
 });
 
 test("a missing allowed target is an explicit failed ratchet condition", () => {
@@ -341,21 +341,42 @@ test("a missing allowed target is an explicit failed ratchet condition", () => {
 	);
 });
 
-test("structured finding growth exceeds the ownership allowance even on one diagnostic line", () => {
-	const ownershipTarget = (count) => ({
+test("structured finding growth exceeds an allowance even on one diagnostic line", () => {
+	const structuredTarget = (count) => ({
 		status: "fail",
 		output: `inventory report: Report{MissingPackages:[]string{${Array.from({ length: count }, (_, index) => `\"finding-${index}\"`).join(", ")}}}\nLINT_VIOLATION_COUNT: ${count}`,
 	});
 	const baseline = summarizeBackendLintReport(report({
-		targets: baselineTargets({ "ownership-inventory-check": ownershipTarget(5) }),
+		targets: baselineTargets({ "packaged-factory-consumption-check": structuredTarget(1) }),
 	}));
 	const grown = summarizeBackendLintReport(report({
-		targets: baselineTargets({ "ownership-inventory-check": ownershipTarget(6) }),
+		targets: baselineTargets({ "packaged-factory-consumption-check": structuredTarget(2) }),
 	}));
 
 	assert.equal(baseline.ok, true);
 	assert.equal(grown.ok, false);
-	assert.match(grown.failures.join("\n"), /ownership-inventory-check reported 6 violation\(s\), exceeding its baseline allowance of 5/);
+	assert.match(grown.failures.join("\n"), /packaged-factory-consumption-check reported 2 violation\(s\), exceeding its baseline allowance of 1/);
+});
+
+test("ownership-inventory-check has no allowance left to absorb a regression", () => {
+	assert.equal(BACKEND_LINT_ALLOWANCES["ownership-inventory-check"], undefined);
+
+	const summary = summarizeBackendLintReport(report({
+		targets: [
+			...baselineTargets(),
+			unallowlistedTarget("ownership-inventory-check", "inventory drift\nLINT_VIOLATION_COUNT: 1"),
+		],
+	}));
+
+	assert.equal(summary.ok, false);
+	assert.match(
+		summary.failures.join("\n"),
+		/ownership-inventory-check failed with 1 reported violation\(s\); no baseline allowance exists/,
+	);
+	assert.match(
+		renderBackendLintVerdict(summary),
+		/ownership-inventory-check: baseline 0 -> current 1 \(delta \+1; new failure\)/,
+	);
 });
 
 test("missing or malformed hosted reports fail closed", () => {

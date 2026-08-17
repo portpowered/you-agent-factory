@@ -1065,24 +1065,6 @@
     },
     {
       "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
-      "target": "pkg/services/factory_runtime/internal/services/orchestration/runtime/factory_event_history_test.go#assertBatchRequestReplayEvents",
-      "owner": "backend-maintainers",
-      "removalReason": "pre-existing directive relocated by package restructure; refactor the code below the threshold and remove this exemption."
-    },
-    {
-      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
-      "target": "pkg/services/factory_runtime/internal/services/orchestration/runtime/factory_event_history_test.go#assertGeneratedBatchEvents",
-      "owner": "backend-maintainers",
-      "removalReason": "pre-existing directive relocated by package restructure; refactor the code below the threshold and remove this exemption."
-    },
-    {
-      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
-      "target": "pkg/services/factory_runtime/internal/services/orchestration/runtime/factory_event_history_test.go#assertOrderedEventPayloads",
-      "owner": "backend-maintainers",
-      "removalReason": "pre-existing directive relocated by package restructure; refactor the code below the threshold and remove this exemption."
-    },
-    {
-      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
       "target": "pkg/services/factory_runtime/internal/services/orchestration/runtime/factory_modes_test.go#TestFactoryEventHistory_SubscribeReplaysHistoryThenStreamsLiveEvents",
       "owner": "backend-maintainers",
       "removalReason": "pre-existing directive relocated by package restructure; refactor the code below the threshold and remove this exemption."
@@ -1090,12 +1072,6 @@
     {
       "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
       "target": "pkg/services/factory_runtime/internal/services/orchestration/runtime/factory_modes_test.go#TestGetEngineStateSnapshot_AggregatesRuntimeLifecycleUptimeAndTopology",
-      "owner": "backend-maintainers",
-      "removalReason": "pre-existing directive relocated by package restructure; refactor the code below the threshold and remove this exemption."
-    },
-    {
-      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
-      "target": "pkg/services/factory_runtime/internal/services/orchestration/runtime/factory_runtime_test_helpers_test.go#assertSafeBoundaryRequestView",
       "owner": "backend-maintainers",
       "removalReason": "pre-existing directive relocated by package restructure; refactor the code below the threshold and remove this exemption."
     },
