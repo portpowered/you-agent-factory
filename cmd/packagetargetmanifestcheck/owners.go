@@ -40,7 +40,6 @@ var committedNestedSubservices = map[string][]string{
 		"state_access",
 	},
 	"workers": {
-		"runtime_assembly",
 		"workstations",
 		"runners",
 	},
@@ -185,6 +184,9 @@ func mapKnownNestedOwnerPackage(owner, packagePath, rest string) (PackageMapping
 	}
 	if owner == "workers" && rest == "internal/service" {
 		return moveOrRetainMapping(packagePath, owner+"/internal", DispositionMove), true
+	}
+	if owner == "workers" && (rest == "internal/draftvalidation" || strings.HasPrefix(rest, "internal/draftvalidation/") || rest == "internal/execution" || strings.HasPrefix(rest, "internal/execution/") || rest == "internal/inferencefailure" || strings.HasPrefix(rest, "internal/inferencefailure/") || rest == "internal/prompting" || strings.HasPrefix(rest, "internal/prompting/") || rest == "internal/skippermissions" || strings.HasPrefix(rest, "internal/skippermissions/") || rest == "internal/worktree" || strings.HasPrefix(rest, "internal/worktree/")) {
+		return moveOrRetainMapping(packagePath, owner+"/internal", DispositionRetain), true
 	}
 	if owner == "factory_definitions" && strings.HasPrefix(rest, "internal/lifecycle") {
 		return moveOrRetainMapping(packagePath, owner+"/internal", DispositionRetain), true
@@ -333,9 +335,12 @@ var nestedOwnerMoveRules = map[string][]nestedPathRule{
 	"workers": {
 		{exact: "internal", dest: "workers/internal"},
 		{exact: "internal/diagnostics", prefix: "internal/diagnostics/", dest: "workers/internal"},
+		{exact: "internal/draftvalidation", prefix: "internal/draftvalidation/", dest: "workers/internal"},
+		{exact: "internal/execution", prefix: "internal/execution/", dest: "workers/internal"},
 		{exact: "internal/interface", prefix: "internal/interface/", dest: "workers/internal"},
+		{exact: "internal/prompting", prefix: "internal/prompting/", dest: "workers/internal"},
 		{exact: "internal/testhelpers", prefix: "internal/testhelpers/", dest: "workers/internal"},
-		{exact: "construction", prefix: "construction/", dest: "workers/internal/services/runtime_assembly"},
+		{exact: "internal/worktree", prefix: "internal/worktree/", dest: "workers/internal"},
 		{exact: "prompting", prefix: "prompting/", dest: "workers/internal/services/workstations"},
 		{exact: "worktree", prefix: "worktree/", dest: "workers/internal/services/workstations"},
 		{exact: "skippermissions", prefix: "skippermissions/", dest: "workers/internal/services/workstations"},
@@ -467,6 +472,13 @@ func mergeOwnerPackageRows(existing []PackageMapping, ownerRows []PackageMapping
 		if _, ok := mapCommittedOwnerPackage(row.PackagePath); ok {
 			// Drop stale owner rows that are no longer emitted.
 			continue
+		}
+		if root, _, ok := splitDestination(row.Destination); ok {
+			if _, isOwner := productOwnerSet()[root]; isOwner && strings.HasPrefix(row.PackagePath, "pkg/services/") {
+				// Product-owner rows are fully regenerated from the live inventory;
+				// this also removes rows for a retired owner subservice.
+				continue
+			}
 		}
 		merged = append(merged, row)
 	}

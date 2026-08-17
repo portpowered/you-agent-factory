@@ -8,6 +8,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners"
+	"github.com/portpowered/infinite-you/pkg/services/workers/internal/skippermissions"
 )
 
 // authorizeProviderTarget resolves provider aliases and validates prerequisites
@@ -50,12 +51,19 @@ func (s *Service) authorizeProviderTarget(
 	if err != nil {
 		return fmt.Errorf("%w: %w", workers.ErrInvalidExecuteRequest, err)
 	}
-	if err := s.providers.ValidatePrerequisites(
-		ctx,
-		providers.ValidatePrerequisitesRequest{ID: resolved.ID},
-	); err != nil {
-		return fmt.Errorf("%w: %w", workers.ErrInvalidExecuteRequest, err)
+	if !request.Input.SkipBuiltInPrerequisiteValidation {
+		if err := s.providers.ValidatePrerequisites(
+			ctx,
+			providers.ValidatePrerequisitesRequest{ID: resolved.ID},
+		); err != nil {
+			return fmt.Errorf("%w: %w", workers.ErrInvalidExecuteRequest, err)
+		}
 	}
+	request.Target.Permissions.SkipPermissions = skippermissions.EffectiveSkipPermissions(
+		request.Target.Permissions.SkipPermissions,
+		request.Target.WorkerType,
+		request.Input.InvocationSkipPermissionsOverride,
+	)
 	// Antigravity's catalog intentionally publishes only its stable baseline
 	// capabilities. Its command adapter still accepts authored media and
 	// structured-output flags, so those legacy request capabilities must not be

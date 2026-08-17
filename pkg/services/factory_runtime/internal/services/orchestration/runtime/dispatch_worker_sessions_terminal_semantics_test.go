@@ -290,7 +290,7 @@ func childDispatchTerminalOutcome(
 // no handoff occurred). It embeds the real Workers execution boundary only to
 // prove that boundary is never invoked.
 type preHandoffFailedWorkerSessionsService struct {
-	execution workers.WorkstationExecutionService
+	execution workers.Service
 }
 
 func (s *preHandoffFailedWorkerSessionsService) Reserve(

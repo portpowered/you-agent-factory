@@ -202,13 +202,17 @@ The old public directories recorded in the baseline have mostly been deleted; th
 
 - `internal`
 - `internal/diagnostics`
+- `internal/execution`
 - `internal/interface`
 - `internal/testhelpers`
+- `internal/worktree`
 - `runners/{agents,inference,process,runner,testing}`
 - `runtime_assembly/construction`
-- `workstations/{draftvalidation,envdiagnostics,execution,executor,inferencefailure,invocation,poolboundary,prompting,skippermissions,worktree}`
+- `internal/inferencefailure`
+- `internal/skippermissions`
+- `workstations/{executor,invocation}`
 
-`workstation_pool_boundary_impl.go` remains explicitly documented as a temporary root implementation exception. It should be relocated once a cycle-free bridge exists.
+The Workstation pool boundary and its root implementation were retired in story 004. The remaining Workstations packages own the execution mechanics that story 005 will seal behind the request-scoped Workers service.
 
 ### Automations and Visualization
 

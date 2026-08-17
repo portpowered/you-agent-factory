@@ -1,6 +1,6 @@
 package workers
 
-import workstationenv "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/envdiagnostics"
+import workerniagnostics "github.com/portpowered/infinite-you/pkg/services/workers/internal/diagnostics"
 
 // CommandResult is the observable worker subprocess result.
 type CommandResult struct {
@@ -10,13 +10,13 @@ type CommandResult struct {
 }
 
 const (
-	RedactedCommandEnvValue              = workstationenv.RedactedCommandEnvValue
-	MetadataOnlyCommandEnvValue          = workstationenv.MetadataOnlyCommandEnvValue
-	CommandEnvClassificationSafe         = workstationenv.CommandEnvClassificationSafe
-	CommandEnvClassificationRedacted     = workstationenv.CommandEnvClassificationRedacted
-	CommandEnvClassificationMetadataOnly = workstationenv.CommandEnvClassificationMetadataOnly
+	RedactedCommandEnvValue              = workerniagnostics.RedactedCommandEnvValue
+	MetadataOnlyCommandEnvValue          = workerniagnostics.MetadataOnlyCommandEnvValue
+	CommandEnvClassificationSafe         = workerniagnostics.CommandEnvClassificationSafe
+	CommandEnvClassificationRedacted     = workerniagnostics.CommandEnvClassificationRedacted
+	CommandEnvClassificationMetadataOnly = workerniagnostics.CommandEnvClassificationMetadataOnly
 )
 
-type CommandEnvDiagnosticProjection = workstationenv.CommandEnvDiagnosticProjection
+type CommandEnvDiagnosticProjection = workerniagnostics.CommandEnvDiagnosticProjection
 
-var ProjectCommandEnvForDiagnostics = workstationenv.ProjectCommandEnvForDiagnostics
+var ProjectCommandEnvForDiagnostics = workerniagnostics.ProjectCommandEnvForDiagnostics

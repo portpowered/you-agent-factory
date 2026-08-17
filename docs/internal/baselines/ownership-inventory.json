@@ -970,25 +970,12 @@
       "failureRecovery": "Timeout/process failures are Script Runner facts."
     },
     {
-      "serviceId": "workers/runtime_assembly",
-      "owner": "workers",
-      "kind": "nested",
-      "parentServiceId": "workers",
-      "targetPath": "pkg/services/workers/internal/services/runtime_assembly",
-      "authority": "Produce immutable executor roles from a typed Workers-owned runtime build request.",
-      "stateStore": "Immutable assembled executor roles/config snapshots.",
-      "lifecycle": "Build/assembly on command; absorbs public clone/config inspection.",
-      "consumers": "Factory Sessions/Runtime consumers via Workers root.",
-      "transactionBoundary": "Assembly outputs are Workers-owned values, not peer constructors.",
-      "failureRecovery": "Invalid build requests are Runtime Assembly rejection facts."
-    },
-    {
       "serviceId": "workers/workstations",
       "owner": "workers",
       "kind": "nested",
       "parentServiceId": "workers",
       "targetPath": "pkg/services/workers/internal/services/workstations",
-      "authority": "Context/environment, interpolation, prompting, optional worktree, behavior routing, dispatch, final output.",
+      "authority": "Context/environment, interpolation, behavior routing, dispatch, and final output.",
       "stateStore": "Workstation execution context for a dispatch.",
       "lifecycle": "Dispatch execution path lifecycle under Workers.",
       "consumers": "Runner registry and Factory Runtime dispatch consumers via Workers root.",
@@ -1085,7 +1072,7 @@
       "owner": "workers",
       "clusterId": "prompting_worktree",
       "name": "Prompting and worktree preparation",
-      "note": "Supporting modules under Workstation Execution without independent lifecycle."
+      "note": "Request-scoped Workers modules without independent lifecycle."
     },
     {
       "owner": "workers",
@@ -1350,7 +1337,7 @@
       "fromOwner": "factory_runtime",
       "toOwner": "providers",
       "class": "command",
-      "evidence": "pkg/services/factory_runtime -> pkg/services/providers"
+      "evidence": "pkg/services/factory_runtime/internal -> pkg/services/providers"
     },
     {
       "fromOwner": "factory_runtime",
@@ -1432,7 +1419,7 @@
       "class": "command",
       "bidirectional": true,
       "unresolved": true,
-      "evidence": "pkg/services/factory_sessions -> pkg/services/models"
+      "evidence": "pkg/services/factory_sessions/internal/roles -> pkg/services/models"
     },
     {
       "fromOwner": "factory_sessions",
@@ -1450,7 +1437,7 @@
       "fromOwner": "factory_sessions",
       "toOwner": "provider_sessions",
       "class": "command",
-      "evidence": "pkg/services/factory_sessions -> pkg/services/provider_sessions"
+      "evidence": "pkg/services/factory_sessions/internal/roles -> pkg/services/provider_sessions"
     },
     {
       "fromOwner": "factory_sessions",
@@ -1490,7 +1477,7 @@
       "fromOwner": "factory_sessions",
       "toOwner": "worker_sessions",
       "class": "command",
-      "evidence": "pkg/services/factory_sessions -> pkg/services/worker_sessions"
+      "evidence": "pkg/services/factory_sessions/internal/roles -> pkg/services/worker_sessions"
     },
     {
       "fromOwner": "factory_sessions",
@@ -1741,6 +1728,12 @@
     },
     {
       "fromOwner": "root",
+      "toOwner": "factory_sessions",
+      "class": "construction",
+      "evidence": "pkg/root -> pkg/services/factory_sessions"
+    },
+    {
+      "fromOwner": "root",
       "toOwner": "initializer",
       "class": "construction",
       "evidence": "pkg/root -> pkg/initializer/application"
@@ -1859,7 +1852,7 @@
       "class": "protocol_composition",
       "bidirectional": true,
       "unresolved": true,
-      "evidence": "pkg/transports/http/application -> pkg/services/provider_sessions/transports/http"
+      "evidence": "pkg/transports/http/application -> pkg/services/provider_sessions"
     },
     {
       "fromOwner": "transports",
@@ -1976,7 +1969,7 @@
       "fromOwner": "wire",
       "toOwner": "models",
       "class": "construction",
-      "evidence": "pkg/wire -> pkg/services/models/transports/cli"
+      "evidence": "pkg/wire -> pkg/services/models"
     },
     {
       "fromOwner": "wire",
@@ -2142,7 +2135,7 @@
       "fromOwner": "worker_sessions",
       "toOwner": "work",
       "class": "command",
-      "evidence": "pkg/services/worker_sessions/transports/http -> pkg/services/work"
+      "evidence": "pkg/services/worker_sessions/internal/service -> pkg/services/work"
     },
     {
       "fromOwner": "worker_sessions",
@@ -2156,7 +2149,7 @@
       "class": "query",
       "bidirectional": true,
       "unresolved": true,
-      "evidence": "pkg/services/workers/internal -> pkg/services/factory_definitions"
+      "evidence": "pkg/services/workers/internal/execution/recording -> pkg/services/factory_definitions"
     },
     {
       "fromOwner": "workers",
@@ -4057,6 +4050,12 @@
       "destinationKind": "owner"
     },
     {
+      "packagePath": "pkg/services/factory_sessions/internal/runtimeports",
+      "disposition": "retain",
+      "destination": "factory_sessions",
+      "destinationKind": "owner"
+    },
+    {
       "packagePath": "pkg/services/factory_sessions/internal/scopedlisting",
       "disposition": "retain",
       "destination": "factory_sessions",
@@ -5383,12 +5382,42 @@
       "deletionCondition": "delete transitional top-level package after CLN-WRK-FOLD-TOPLEVEL cutover proof"
     },
     {
+      "packagePath": "pkg/services/workers/internal/draftvalidation",
+      "disposition": "retain",
+      "destination": "workers",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/workers/internal/execution",
+      "disposition": "retain",
+      "destination": "workers",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/workers/internal/execution/recording",
+      "disposition": "retain",
+      "destination": "workers",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/workers/internal/inferencefailure",
+      "disposition": "retain",
+      "destination": "workers",
+      "destinationKind": "owner"
+    },
+    {
       "packagePath": "pkg/services/workers/internal/interface",
       "disposition": "move",
       "destination": "workers",
       "destinationKind": "owner",
       "successor": "pkg/services/workers/internal",
       "deletionCondition": "delete transitional top-level package after CLN-WRK-FOLD-TOPLEVEL cutover proof"
+    },
+    {
+      "packagePath": "pkg/services/workers/internal/prompting",
+      "disposition": "retain",
+      "destination": "workers",
+      "destinationKind": "owner"
     },
     {
       "packagePath": "pkg/services/workers/internal/service",
@@ -5400,18 +5429,6 @@
     },
     {
       "packagePath": "pkg/services/workers/internal/services/runners",
-      "disposition": "retain",
-      "destination": "workers",
-      "destinationKind": "owner"
-    },
-    {
-      "packagePath": "pkg/services/workers/internal/services/runners/agents",
-      "disposition": "retain",
-      "destination": "workers",
-      "destinationKind": "owner"
-    },
-    {
-      "packagePath": "pkg/services/workers/internal/services/runners/inference",
       "disposition": "retain",
       "destination": "workers",
       "destinationKind": "owner"
@@ -5489,60 +5506,6 @@
       "destinationKind": "owner"
     },
     {
-      "packagePath": "pkg/services/workers/internal/services/runtime_assembly",
-      "disposition": "retain",
-      "destination": "workers",
-      "destinationKind": "owner"
-    },
-    {
-      "packagePath": "pkg/services/workers/internal/services/runtime_assembly/construction",
-      "disposition": "retain",
-      "destination": "workers",
-      "destinationKind": "owner"
-    },
-    {
-      "packagePath": "pkg/services/workers/internal/services/runtime_assembly/internal/service",
-      "disposition": "retain",
-      "destination": "workers",
-      "destinationKind": "owner"
-    },
-    {
-      "packagePath": "pkg/services/workers/internal/services/runtime_assembly/wire",
-      "disposition": "retain",
-      "destination": "workers",
-      "destinationKind": "owner"
-    },
-    {
-      "packagePath": "pkg/services/workers/internal/services/workstations",
-      "disposition": "retain",
-      "destination": "workers",
-      "destinationKind": "owner"
-    },
-    {
-      "packagePath": "pkg/services/workers/internal/services/workstations/draftvalidation",
-      "disposition": "retain",
-      "destination": "workers",
-      "destinationKind": "owner"
-    },
-    {
-      "packagePath": "pkg/services/workers/internal/services/workstations/envdiagnostics",
-      "disposition": "retain",
-      "destination": "workers",
-      "destinationKind": "owner"
-    },
-    {
-      "packagePath": "pkg/services/workers/internal/services/workstations/execution",
-      "disposition": "retain",
-      "destination": "workers",
-      "destinationKind": "owner"
-    },
-    {
-      "packagePath": "pkg/services/workers/internal/services/workstations/execution/recording",
-      "disposition": "retain",
-      "destination": "workers",
-      "destinationKind": "owner"
-    },
-    {
       "packagePath": "pkg/services/workers/internal/services/workstations/executor",
       "disposition": "retain",
       "destination": "workers",
@@ -5555,66 +5518,22 @@
       "destinationKind": "owner"
     },
     {
-      "packagePath": "pkg/services/workers/internal/services/workstations/executor/workstation",
-      "disposition": "retain",
-      "destination": "workers",
-      "destinationKind": "owner"
-    },
-    {
-      "packagePath": "pkg/services/workers/internal/services/workstations/inferencefailure",
-      "disposition": "retain",
-      "destination": "workers",
-      "destinationKind": "owner"
-    },
-    {
-      "packagePath": "pkg/services/workers/internal/services/workstations/internal/service",
-      "disposition": "retain",
-      "destination": "workers",
-      "destinationKind": "owner"
-    },
-    {
       "packagePath": "pkg/services/workers/internal/services/workstations/invocation",
       "disposition": "retain",
       "destination": "workers",
       "destinationKind": "owner"
     },
     {
-      "packagePath": "pkg/services/workers/internal/services/workstations/poolboundary",
+      "packagePath": "pkg/services/workers/internal/skippermissions",
       "disposition": "retain",
       "destination": "workers",
       "destinationKind": "owner"
     },
     {
-      "packagePath": "pkg/services/workers/internal/services/workstations/prompting",
+      "packagePath": "pkg/services/workers/internal/worktree",
       "disposition": "retain",
       "destination": "workers",
       "destinationKind": "owner"
-    },
-    {
-      "packagePath": "pkg/services/workers/internal/services/workstations/skippermissions",
-      "disposition": "retain",
-      "destination": "workers",
-      "destinationKind": "owner"
-    },
-    {
-      "packagePath": "pkg/services/workers/internal/services/workstations/wire",
-      "disposition": "retain",
-      "destination": "workers",
-      "destinationKind": "owner"
-    },
-    {
-      "packagePath": "pkg/services/workers/internal/services/workstations/worktree",
-      "disposition": "retain",
-      "destination": "workers",
-      "destinationKind": "owner"
-    },
-    {
-      "packagePath": "pkg/services/workers/internal/testhelpers",
-      "disposition": "move",
-      "destination": "workers",
-      "destinationKind": "owner",
-      "successor": "pkg/services/workers/internal",
-      "deletionCondition": "delete transitional top-level package after CLN-WRK-FOLD-TOPLEVEL cutover proof"
     },
     {
       "packagePath": "pkg/services/workers/wire",

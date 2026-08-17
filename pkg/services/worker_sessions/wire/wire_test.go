@@ -7,6 +7,7 @@ import (
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	eventswire "github.com/portpowered/infinite-you/pkg/services/events/wire"
+	modelinference "github.com/portpowered/infinite-you/pkg/services/models"
 	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/worker_sessions/wire"
@@ -32,59 +33,13 @@ func (unavailableProviderSessions) Project(providersessions.ProjectRequest) (pro
 	return providersessions.ProjectResult{}, providersessions.ErrSessionStorageUnavailable
 }
 
-func (stubExecution) StartWorkstationPool(
-	context.Context,
-	workers.WorkstationPoolStartRequest,
-) (workers.WorkstationPoolStartResult, error) {
-	return workers.WorkstationPoolStartResult{}, nil
+func (stubExecution) Execute(_ context.Context, request workers.ExecuteRequest) (workers.ExecuteResult, error) {
+	return workers.ExecuteResult{Correlation: request.Correlation, Outcome: workers.ExecutionOutcomeAccepted}, nil
 }
 
-func (stubExecution) StopWorkstationPool(context.Context) (workers.WorkstationPoolStopResult, error) {
-	return workers.WorkstationPoolStopResult{}, nil
+func (stubExecution) InvokeModel(context.Context, string, modelinference.Request) (modelinference.Result, error) {
+	return modelinference.Result{}, workers.ErrExecuteUnavailable
 }
-
-func (stubExecution) DispatchWorkstation(
-	context.Context,
-	workers.WorkstationDispatchRequest,
-) (workers.WorkstationDispatchResult, error) {
-	return workers.WorkstationDispatchResult{Result: workers.WorkResult{Outcome: workers.OutcomeAccepted}}, nil
-}
-
-func (stubExecution) DispatchWorkstationWithAdmission(
-	ctx context.Context,
-	request workers.WorkstationDispatchRequest,
-	admitted workers.WorkstationDispatchAdmissionFunc,
-) (workers.WorkstationDispatchResult, error) {
-	if admitted != nil {
-		admitted()
-	}
-	return stubExecution{}.DispatchWorkstation(ctx, request)
-}
-
-func (stubExecution) CancelWorkstationDispatch(
-	context.Context,
-	workers.WorkstationDispatchCancelRequest,
-) (workers.WorkstationDispatchCancelResult, error) {
-	return workers.WorkstationDispatchCancelResult{}, nil
-}
-
-func (stubExecution) Start(context.Context) error { return nil }
-
-func (stubExecution) Publish(ctx context.Context, request workers.WorkstationDispatchRequest, accept workers.WorkstationDispatchAcceptFunc) error {
-	return stubExecution{}.PublishWithAdmission(ctx, request, nil, accept)
-}
-
-func (stubExecution) PublishWithAdmission(ctx context.Context, request workers.WorkstationDispatchRequest, admitted workers.WorkstationDispatchAdmissionFunc, accept workers.WorkstationDispatchAcceptFunc) error {
-	result, err := stubExecution{}.DispatchWorkstationWithAdmission(ctx, request, admitted)
-	accept(context.Background(), request, result, err)
-	return nil
-}
-
-func (stubExecution) Cancel(context.Context, workers.WorkstationDispatchCancelRequest) (workers.WorkstationDispatchCancelResult, error) {
-	return workers.WorkstationDispatchCancelResult{}, nil
-}
-
-func (stubExecution) Stop(context.Context) error { return nil }
 
 func TestNewService_ConstructsAWorkingServiceFromInjectedExecution(t *testing.T) {
 	service, err := wire.NewService(stubExecution{}, newTestEventsAppender(t), logging.NoopLogger{}, platformclock.Real{}, unavailableProviderSessions{}, nil)

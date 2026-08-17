@@ -25,15 +25,6 @@ func (we *WorkstationExecutor) Execute(ctx context.Context, dispatch work.WorkDi
 	return we.executeResolved(ctx, workerexecution.WorkstationExecutionRequest{Dispatch: dispatch})
 }
 
-// ExecuteResolved preserves the workstation pool's resolved request boundary
-// while allowing only workerless logical routes to use this executor.
-func (we *WorkstationExecutor) ExecuteResolved(
-	ctx context.Context,
-	request workerexecution.WorkstationExecutionRequest,
-) (workerexecution.WorkResult, error) {
-	return we.executeResolved(ctx, request)
-}
-
 func (we *WorkstationExecutor) executeResolved(
 	ctx context.Context,
 	request workerexecution.WorkstationExecutionRequest,

@@ -21,8 +21,9 @@ or delete any root-level `.go` files.
 **After cutover delivery proof (story 006):** **33** root-level `.go` files (31 keep + 1 temporary documented keep impl + 1 delivery seal test). Pre-cutover baseline remains **41**.
 
 **Current live reconciliation:** 2026-07-31 UTC. The live root contains **40**
-`.go` files, all retained at the current Workers contract boundary; the
-temporary `workstation_pool_boundary_impl.go` exception remains documented.
+`.go` files, all retained at the current Workers contract boundary; direct
+Worker Sessions execution now uses `workstation_execution_contracts.go`, and
+panic classification is owned by `worker_executor_failure.go`.
 The generator mirrors below are the authoritative exact file inventory for the
 current tree.
 
@@ -50,8 +51,8 @@ fold or delete them.
 | File | Classification | Later target / rationale |
 | --- | --- | --- |
 | `command.go` | keep | Subprocess execution port (`CommandRunner`, `CommandRequest`, `CommandResult`). |
-| `env_diagnostics.go` | *(folded)* | Moved to `internal/services/workstations/envdiagnostics` during story 003. |
-| `env_diagnostics_test.go` | *(folded)* | Moved with `env_diagnostics.go` during story 003. |
+| `env_diagnostics.go` | *(folded)* | Moved to `internal/diagnostics` during the Workers compatibility-retirement slice. |
+| `env_diagnostics_test.go` | *(folded)* | Moved with `env_diagnostics.go` during the Workers compatibility-retirement slice. |
 | `execution_context.go` | keep | Worker execution environment (`Context`, project/session defaults). |
 | `execution_contracts.go` | keep | Canonical inference/script/model/agent event and request vocabulary at the Workers root boundary. |
 | `execution_requests.go` | keep | Runner capability and workstation execution request vocabulary published for selection and dispatch planning. |
@@ -59,8 +60,8 @@ fold or delete them.
 | `execution_tokens.go` | keep | Worker-facing dispatch token/color view shared across execution paths. |
 | `executor_test_helpers_test.go` | *(folded)* | Moved to `internal/testhelpers/workstation_executor.go` during story 004. |
 | `failure.go` | keep | Normalized provider failure type (`ProviderError`) at the public boundary. |
-| `inference_failure.go` | *(folded)* | Root forwards to `internal/services/workstations/inferencefailure` during story 003. |
-| `inference_failure_test.go` | *(folded)* | Moved to internal inferencefailure during story 003. |
+| `inference_failure.go` | *(folded)* | Root forwards to `internal/inferencefailure` after the Workers compatibility-retirement slice. |
+| `inference_failure_test.go` | *(folded)* | Moved to `internal/inferencefailure` during the Workers compatibility-retirement slice. |
 | `interfaces.go` | keep | Primary Workers root contracts (`Service`, hosted poller ports, provider identity, docs loader, and related peer-facing interfaces). |
 | `invocation_executor_test.go` | *(folded)* | Moved to `internal/services/workstations/invocation` during story 003. |
 | `legacy_fold_boundary_test.go` | keep | Post-inventory characterization test locking transitional public sibling retention and published-surface import boundaries after legacy package fold. |
@@ -70,7 +71,7 @@ fold or delete them.
 | `model_invocation.go` | *(folded)* | Workstation pool contracts split to `workstation_contracts.go`; implementation under workstations during story 003. |
 | `opencode_agent_contract_test.go` | *(folded)* | Moved to `internal/services/runners/runner` with runner policy during story 002. |
 | `progress_observations.go` | keep | Provider-neutral progress fragments accepted by Factory Session response streams. |
-| `prompt_template_contracts.go` | keep | Prompt template contract types retained at root; implementation under `internal/services/workstations/prompting`. |
+| `prompt_template_contracts.go` | keep | Prompt template contract types retained at root; implementation under `internal/prompting`. |
 | `prompt_templates.go` | *(folded)* | Split to `prompt_template_contracts.go` + internal prompting during story 003. |
 | `provider_port.go` | keep | `Provider` inference port explicitly documented for cross-service consumers (for example Recordings replay). |
 | `provider_port_test.go` | keep | Root-contract characterization test for `provider_port.go`. |
@@ -93,14 +94,13 @@ fold or delete them.
 | `template_fields_test.go` | *(folded)* | Relocated to root as `template_fields_root_test.go` during story 003. |
 | `token_lineage.go` | *(folded)* | Token lineage inlined in `execution_tokens.go` during story 003. |
 | `validate_draft.go` | keep | Root forwarder for draft validation at the publication boundary. |
+| `worker_executor_failure.go` | keep | Typed Workers-owned panic classification shared by direct execution callers. |
 | `worker_vocabulary_boundary_test.go` | keep | Post-inventory boundary test proving peer consumers import Workers root vocabulary instead of Factory Definitions contracts. |
 | `worker_vocabulary_contract.go` | keep | Package-level documentation anchor for Workers-owned peer execution and diagnostics vocabulary. |
 | `workstation_contracts.go` | keep | Workstation pool lifecycle contracts, runtime-build vocabulary, and `Service` workstation methods at the thin root. |
-| `workstation_pool_boundary_contracts.go` | keep | Published pool-boundary contracts and adapters for Factory Runtime dispatch planning through the thin root. |
-| `workstation_pool_boundary_impl.go` | temporary documented keep | Pool-boundary implementation colocated at root to avoid workers↔poolboundary import cycles until DEL-WRK can relocate it behind a cycle-free bridge. |
-| `workstation_pool_boundary_impl_test.go` | keep | Root-contract characterization test for pool-boundary binding capacity defaults. |
-| `workstation_pool_boundary.go` | *(folded)* | Moved to `internal/services/workstations/poolboundary` during story 003; peers use published root contracts after story 005 retarget. |
-| `workstation_pool_boundary_test.go` | *(folded)* | Moved to internal poolboundary during story 003. |
+| `workstation_execution_contracts.go` | keep | Direct Workers execution service, admission callback, and root capability adapter used by Worker Sessions and Factory Runtime. |
+| `workstation_pool_boundary.go` | removed | Retired with the Workstation pool boundary in story 004; Worker Sessions now consume the direct Workers execution service. |
+| `workstation_pool_boundary_test.go` | removed | Boundary tests retired with the boundary in story 004; direct execution admission and failure behavior remains covered by Worker Sessions and Workers tests. |
 | `workstation_result_contract_test.go` | keep | Root-contract characterization test for `WorkstationResult` round-trip through published Workers root types. |
 
 ## Current live root-level `.go` inventory
@@ -144,11 +144,10 @@ sessions_consumer_contracts.go
 template_fields.go
 template_fields_root_test.go
 validate_draft.go
+worker_executor_failure.go
 worker_vocabulary_contract.go
 workstation_contracts.go
-workstation_pool_boundary_contracts.go
-workstation_pool_boundary_impl.go
-workstation_pool_boundary_impl_test.go
+workstation_execution_contracts.go
 workstation_result_contract_test.go
 ```
 

@@ -16,14 +16,6 @@ var workersTransitionalDebtCommittedOwnerPackageMappingCases = []committedOwnerP
 		},
 	},
 	{
-		path: "pkg/services/workers/construction",
-		want: PackageMapping{
-			PackagePath: "pkg/services/workers/construction",
-			Disposition: DispositionMove,
-			Destination: "workers/internal/services/runtime_assembly",
-		},
-	},
-	{
 		path: "pkg/services/workers/diagnostics",
 		want: PackageMapping{
 			PackagePath: "pkg/services/workers/diagnostics",
@@ -169,7 +161,6 @@ func TestWorkersTopLevelTransitionalDebtDirectoriesMapToMove(t *testing.T) {
 	t.Parallel()
 
 	topLevelDebt := []string{
-		"construction",
 		"diagnostics",
 		"draftvalidation",
 		"execution",
@@ -239,6 +230,38 @@ func TestMapCommittedOwnerPackageWorkersCanonicalRetains(t *testing.T) {
 				PackagePath: "pkg/services/workers/wire",
 				Disposition: DispositionRetain,
 				Destination: "workers",
+			},
+		},
+		{
+			path: "pkg/services/workers/internal/draftvalidation",
+			want: PackageMapping{
+				PackagePath: "pkg/services/workers/internal/draftvalidation",
+				Disposition: DispositionRetain,
+				Destination: "workers/internal",
+			},
+		},
+		{
+			path: "pkg/services/workers/internal/inferencefailure",
+			want: PackageMapping{
+				PackagePath: "pkg/services/workers/internal/inferencefailure",
+				Disposition: DispositionRetain,
+				Destination: "workers/internal",
+			},
+		},
+		{
+			path: "pkg/services/workers/internal/prompting",
+			want: PackageMapping{
+				PackagePath: "pkg/services/workers/internal/prompting",
+				Disposition: DispositionRetain,
+				Destination: "workers/internal",
+			},
+		},
+		{
+			path: "pkg/services/workers/internal/skippermissions",
+			want: PackageMapping{
+				PackagePath: "pkg/services/workers/internal/skippermissions",
+				Disposition: DispositionRetain,
+				Destination: "workers/internal",
 			},
 		},
 		{
@@ -318,6 +341,9 @@ func TestWorkersInventoryRejectsRetainToOwnerRoot(t *testing.T) {
 		if _, extracted := mapProvidersExtraction(packagePath); extracted {
 			continue
 		}
+		if workersCanonicalRetainRest(strings.TrimPrefix(packagePath, "pkg/services/workers/")) {
+			continue
+		}
 
 		got, ok := mapCommittedOwnerPackage(packagePath)
 		if !ok {
@@ -330,7 +356,6 @@ func TestWorkersInventoryRejectsRetainToOwnerRoot(t *testing.T) {
 				t.Fatalf("canonical workers path %q = %#v, want retain→workers", packagePath, got)
 			}
 		case "pkg/services/workers/internal/services/runners",
-			"pkg/services/workers/internal/services/runtime_assembly",
 			"pkg/services/workers/internal/services/workstations":
 			if got.Disposition != DispositionRetain || !strings.HasPrefix(got.Destination, "workers/internal/services/") {
 				t.Fatalf("committed nested subservice %q = %#v, want retain→workers/internal/services/*", packagePath, got)
@@ -356,11 +381,21 @@ func workersCanonicalRetainRest(rest string) bool {
 	switch {
 	case rest == "wire" || strings.HasPrefix(rest, "wire/"):
 		return true
-	case strings.HasPrefix(rest, "internal/services/runtime_assembly"):
-		return true
 	case strings.HasPrefix(rest, "internal/services/runners"):
 		return true
+	case strings.HasPrefix(rest, "internal/execution"):
+		return true
 	case strings.HasPrefix(rest, "internal/services/workstations"):
+		return true
+	case strings.HasPrefix(rest, "internal/draftvalidation"):
+		return true
+	case strings.HasPrefix(rest, "internal/inferencefailure"):
+		return true
+	case strings.HasPrefix(rest, "internal/prompting"):
+		return true
+	case strings.HasPrefix(rest, "internal/skippermissions"):
+		return true
+	case strings.HasPrefix(rest, "internal/worktree"):
 		return true
 	default:
 		return false

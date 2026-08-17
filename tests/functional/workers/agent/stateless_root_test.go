@@ -2,7 +2,6 @@ package agent_test
 
 import (
 	"context"
-	"errors"
 	"strings"
 	"testing"
 	"time"
@@ -170,60 +169,93 @@ func TestBuildProcessExecutesProviderAttemptThroughRuntimeRoot(t *testing.T) {
 	}
 }
 
-// TestBuildStatelessWorkersExposesDetachedRuntimeAndPoolContracts proves the
-// public root keeps runtime assembly and workstation-pool lifecycle separate
-// from one detached Execute attempt.
-func TestBuildStatelessWorkersExposesDetachedRuntimeAndPoolContracts(t *testing.T) {
-	service, err := root.BuildStatelessWorkers(t.Context(), serviceedges.Edges{})
+// TestBuildStatelessWorkersSealsRuntimeAndPoolCapabilities proves supported
+// production and mock roots execute through the same canonical request-scoped
+// boundary and do not expose retired operational capabilities.
+func TestBuildStatelessWorkersSealsRuntimeAndPoolCapabilities(t *testing.T) {
+	production, err := root.BuildStatelessWorkers(t.Context(), serviceedges.Edges{
+		ScriptCommandRunner: functionalStatelessCommandRunner{},
+	})
 	if err != nil {
 		t.Fatalf("root.BuildStatelessWorkers() error = %v", err)
 	}
+	productionResult, err := production.Execute(context.Background(), workers.ExecuteRequest{
+		Correlation: workers.ExecutionCorrelation{
+			FactorySessionID: "sealed-production-session",
+			RuntimeID:        "sealed-production-runtime",
+			GenerationID:     "sealed-production-generation",
+			DispatchID:       "sealed-production-dispatch",
+			AttemptID:        "sealed-production-attempt",
+		},
+		Target: workers.ExecutionTarget{
+			WorkerName: "sealed-script-worker",
+			RunnerID:   "script",
+			Command:    "sealed-script-command",
+		},
+	})
+	if err != nil || productionResult.Outcome != workers.ExecutionOutcomeAccepted {
+		t.Fatalf("production Execute() = %#v, error %v; want accepted canonical outcome", productionResult, err)
+	}
 
-	built, err := service.BuildRuntime(context.Background(), workers.RuntimeBuildRequest{
-		RunnerID: "agent",
-		Roles: []workers.RuntimeBuildRoleRequest{{
-			Name: "functional-agent",
-			Kind: workers.RuntimeBuildRoleKindWorker,
+	mock, err := root.BuildMockStatelessWorkers(t.Context(), serviceedges.Edges{}, &workers.MockWorkersConfig{
+		MockWorkers: []workers.MockWorkerConfig{{
+			WorkerName: "sealed-mock-worker",
+			RunType:    workers.MockWorkerRunTypeAccept,
 		}},
 	})
 	if err != nil {
-		t.Fatalf("BuildRuntime() error = %v", err)
+		t.Fatalf("root.BuildMockStatelessWorkers() error = %v", err)
 	}
-	if built.RunnerSelection.RunnerID != "agent" || len(built.Bindings) != 1 ||
-		built.Bindings[0].RoleName != "functional-agent" {
-		t.Fatalf("BuildRuntime() = %#v, want one agent binding", built)
+	mockResult, err := mock.Execute(context.Background(), workers.ExecuteRequest{
+		Correlation: workers.ExecutionCorrelation{
+			FactorySessionID: "sealed-mock-session",
+			RuntimeID:        "sealed-mock-runtime",
+			GenerationID:     "sealed-mock-generation",
+			DispatchID:       "sealed-mock-dispatch",
+			AttemptID:        "sealed-mock-attempt",
+		},
+		Target: workers.ExecutionTarget{
+			WorkerName: "sealed-mock-worker",
+			RunnerID:   "mock",
+		},
+	})
+	if err != nil || mockResult.Outcome != workers.ExecutionOutcomeAccepted {
+		t.Fatalf("mock Execute() = %#v, error %v; want accepted canonical outcome", mockResult, err)
 	}
 
-	started, err := service.StartWorkstationPool(context.Background(), workers.WorkstationPoolStartRequest{
-		Bindings: []workers.AssembledRuntimeBinding{{
-			RoleName:        "functional-route",
-			RoleKind:        workers.RuntimeBuildRoleKindWorkstation,
-			RunnerSelection: workers.ResolvedRunnerSelection{RunnerID: "agent", Source: workers.RunnerSelectionSourceFactory},
-			Executor:        functionalRootExecutor{},
-		}},
-	})
-	if err != nil || started.Outcome != workers.WorkstationPoolLifecycleOutcomeStarted {
-		t.Fatalf("StartWorkstationPool() = %#v, error %v; want STARTED", started, err)
-	}
-	route, err := service.WorkstationRoute(context.Background(), workers.WorkstationRouteRequest{WorkstationName: "functional-route"})
-	if err != nil || !route.Available {
-		t.Fatalf("WorkstationRoute() = %#v, error %v; want available route", route, err)
-	}
-	stopped, err := service.StopWorkstationPool(context.Background())
-	if err != nil || stopped.Outcome != workers.WorkstationPoolLifecycleOutcomeStopped {
-		t.Fatalf("StopWorkstationPool() = %#v, error %v; want STOPPED", stopped, err)
-	}
-	if _, err := service.WorkstationRoute(context.Background(), workers.WorkstationRouteRequest{WorkstationName: "functional-route"}); !errors.Is(err, workers.ErrWorkstationPoolStopped) {
-		t.Fatalf("WorkstationRoute() after stop error = %v, want stopped error", err)
-	}
+	assertSealedWorkersCapabilities(t, production)
+	assertSealedWorkersCapabilities(t, mock)
 }
 
 type functionalStatelessCommandRunner struct{}
 
-type functionalRootExecutor struct{}
+// retiredWorkersDispatchCapability is deliberately local to this external
+// package. If the old dispatch/pool operational surface is put back on a
+// supported root, this assertion fails without inspecting source or routes.
+type retiredWorkersDispatchCapability interface {
+	DispatchWorkstation(context.Context, workers.WorkstationDispatchRequest) (workers.WorkstationDispatchResult, error)
+	DispatchWorkstationWithAdmission(context.Context, workers.WorkstationDispatchRequest, workers.WorkstationDispatchAdmissionFunc) (workers.WorkstationDispatchResult, error)
+	CancelWorkstationDispatch(context.Context, workers.WorkstationDispatchCancelRequest) (workers.WorkstationDispatchCancelResult, error)
+}
 
-func (functionalRootExecutor) Execute(context.Context, workers.WorkstationExecutionRequest) (workers.WorkResult, error) {
-	return workers.WorkResult{Outcome: workers.OutcomeAccepted}, nil
+// retiredWorkersAssemblyCapability names the alternate operational method
+// family with detached value contracts so the test remains external to the
+// Workers implementation after those contracts are removed.
+type retiredWorkersAssemblyCapability interface {
+	BuildRuntime(context.Context, workers.ExecuteRequest) (workers.ExecuteResult, error)
+	StartWorkstationPool(context.Context, workers.WorkstationDispatchRequest) (workers.WorkstationDispatchResult, error)
+	StopWorkstationPool(context.Context) (workers.WorkstationDispatchResult, error)
+	WorkstationRoute(context.Context, workers.WorkstationDispatchRequest) (workers.WorkstationDispatchResult, error)
+}
+
+func assertSealedWorkersCapabilities(t *testing.T, service workers.Service) {
+	t.Helper()
+	if _, ok := service.(retiredWorkersDispatchCapability); ok {
+		t.Fatal("Workers root exposes retired dispatch/pool operational capability")
+	}
+	if _, ok := service.(retiredWorkersAssemblyCapability); ok {
+		t.Fatal("Workers root exposes retired runtime assembly capability")
+	}
 }
 
 func (functionalStatelessCommandRunner) Run(

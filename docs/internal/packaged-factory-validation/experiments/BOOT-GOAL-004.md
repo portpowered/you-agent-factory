@@ -48,7 +48,7 @@ Parent-side verification confirmed the production helper search was empty,
 `git diff --check` passed, and the following focused test command passed:
 
 ```text
-go test ./pkg/services/provider_sessions/... ./pkg/services/workers ./pkg/services/workers/internal/services/workstations/execution ./pkg/services/factory_sessions ./pkg/services/factory_sessions/internal/stream -count=1
+go test ./pkg/services/provider_sessions/... ./pkg/services/workers ./pkg/services/workers/internal/execution ./pkg/services/factory_sessions ./pkg/services/factory_sessions/internal/stream -count=1
 ```
 
 `make pkg-structure` still reports the pinned base's unrelated 21 new violations

@@ -194,10 +194,6 @@ pkg/services/recordings/internal/replay/factory_snapshot.go: unreachable func: r
 pkg/services/recordings/internal/replay/recorder.go: unreachable func: Recorder.BindRecordingLifecycle
 pkg/services/work/internal/services/content_materialization/internal/service/materialize.go: unreachable func: Options.maxRedirects
 pkg/services/work/internal/services/content_materialization/internal/service/materialize.go: unreachable func: Options.timeout
-pkg/services/workers/internal/services/workstations/prompting/prompt.go: unreachable func: NewDefaultPromptRenderer
-pkg/services/workers/internal/services/workstations/prompting/prompt_contract.go: unreachable func: NewService
-pkg/services/workers/internal/services/workstations/prompting/prompt_contract.go: unreachable func: Service.BuildPromptTemplateContract
-pkg/services/workers/internal/services/workstations/prompting/prompt_contract.go: unreachable func: Service.ValidatePromptTemplate
 pkg/services/workers/internal/services/runners/testing/runner_test.go: unreachable func: shellArgsForTest
 pkg/services/workers/internal/services/runners/testing/runner_test.go: unreachable func: shellCommandForTest
 pkg/transports/cli/baseline/command_tree.go: unreachable func: SerializeCommandTree

@@ -20,12 +20,12 @@ import (
 )
 
 // startThroughWorkerSessions is the W4 Runtime dispatch cutover seam. For
-// every resolved dispatch it: boots the underlying Workers pool if needed,
-// reserves one stable, control-addressable Worker Session identity, commits
+// every resolved dispatch it reserves one stable, control-addressable Worker
+// Session identity, commits
 // that association to canonical Factory Events before Start can publish Worker
 // Session lifecycle records, then hands the resolved request to
-// worker_sessions.Service.Start (which drives the existing Workers
-// workstation-pool boundary underneath).
+// worker_sessions.Service.Start (which drives the injected Workers execution
+// service underneath).
 // The Worker Sessions terminal outcome is translated back into the exact
 // workers.WorkstationDispatchResult shape the pre-cutover accept callback
 // expects, so existing Work materialization and Factory result behavior is
@@ -34,15 +34,11 @@ func startThroughWorkerSessions(
 	ctx context.Context,
 	cfg *runtimeConfig,
 	eventHistory recordings.RuntimeLedger,
-	workersBoundary workers.WorkstationPoolBoundary,
 	request workers.WorkstationDispatchRequest,
 	accept workers.WorkstationDispatchAcceptFunc,
 ) error {
 	if strings.TrimSpace(request.Execution.RecordingID) == "" && cfg != nil {
 		request.Execution.RecordingID = strings.TrimSpace(cfg.recordingID)
-	}
-	if err := workersBoundary.Start(ctx); err != nil {
-		return err
 	}
 	dispatchID := request.Execution.Dispatch.DispatchID
 	sessionID := dispatchID

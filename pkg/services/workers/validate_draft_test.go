@@ -8,7 +8,7 @@ import (
 
 // legalKindPhasePairs mirrors the pairs declared by the existing internal
 // draft-validation policy owner (allowedPhasesByKind in
-// pkg/services/workers/internal/services/workstations/draftvalidation). It is
+// pkg/services/workers/internal/draftvalidation). It is
 // duplicated here only as fixture data for exercising the public boundary;
 // the policy itself has exactly one owner.
 func legalKindPhasePairs() []struct {

@@ -2339,16 +2339,6 @@
     },
     {
       "rule": "service-root-exported-function",
-      "filePath": "pkg/services/workers/workstation_pool_boundary_contracts.go",
-      "target": "WorkstationExecutionServiceFromRoot"
-    },
-    {
-      "rule": "service-root-exported-function",
-      "filePath": "pkg/services/workers/workstation_pool_boundary_impl.go",
-      "target": "NewWorkstationPoolBoundary"
-    },
-    {
-      "rule": "service-root-exported-function",
       "filePath": "pkg/services/factory_sessions/service_contracts.go",
       "target": "NewLiveChangeError"
     },
@@ -2450,7 +2440,17 @@
     {
       "rule": "service-root-interface-count",
       "filePath": "pkg/services/workers",
-      "target": "pkg/services/workers/command.go:CommandRunner,pkg/services/workers/interfaces.go:AgentToolFileSystem,pkg/services/workers/interfaces.go:FactoryWorktreePreparer,pkg/services/workers/interfaces.go:InvocationExecutor,pkg/services/workers/interfaces.go:Runner,pkg/services/workers/interfaces.go:WorkerExecutor,pkg/services/workers/interfaces.go:WorkstationRequestExecutor,pkg/services/workers/interfaces.go:WorktreeFileSystem,pkg/services/workers/interfaces.go:WorktreeGitCommander,pkg/services/workers/mock_workers_contracts.go:MockWorkersConfigFileSystem,pkg/services/workers/prompt_template_contracts.go:PromptTemplates,pkg/services/workers/pty_contracts.go:PTYAllocator,pkg/services/workers/pty_contracts.go:PTYSession,pkg/services/workers/runner_process.go:Clock,pkg/services/workers/runtime_service.go:RuntimeService,pkg/services/workers/workstation_contracts.go:ModelInvoker,pkg/services/workers/workstation_contracts.go:Service,pkg/services/workers/workstation_pool_boundary_contracts.go:WorkstationExecutionService,pkg/services/workers/workstation_pool_boundary_contracts.go:WorkstationPoolBoundary"
+      "target": "pkg/services/workers/command.go:CommandRunner,pkg/services/workers/interfaces.go:AgentToolFileSystem,pkg/services/workers/interfaces.go:FactoryWorktreePreparer,pkg/services/workers/interfaces.go:InvocationExecutor,pkg/services/workers/interfaces.go:Runner,pkg/services/workers/interfaces.go:WorkerExecutor,pkg/services/workers/interfaces.go:WorkstationRequestExecutor,pkg/services/workers/interfaces.go:WorktreeFileSystem,pkg/services/workers/interfaces.go:WorktreeGitCommander,pkg/services/workers/mock_workers_contracts.go:MockWorkersConfigFileSystem,pkg/services/workers/prompt_template_contracts.go:PromptTemplates,pkg/services/workers/pty_contracts.go:PTYAllocator,pkg/services/workers/pty_contracts.go:PTYSession,pkg/services/workers/runner_process.go:Clock,pkg/services/workers/workstation_contracts.go:ModelInvoker,pkg/services/workers/workstation_contracts.go:Service"
+    },
+    {
+      "rule": "service-root-interface-count",
+      "filePath": "pkg/services/workers/internal/services/workstations",
+      "target": "\u003cnone\u003e"
+    },
+    {
+      "rule": "service-root-missing-internal",
+      "filePath": "pkg/services/workers/internal/services/workstations/internal",
+      "target": "pkg/services/workers/internal/services/workstations"
     },
     {
       "rule": "service-root-unexpected-directory",
@@ -2789,57 +2789,12 @@
     },
     {
       "rule": "service-root-unexpected-directory",
-      "filePath": "pkg/services/workers/internal/services/runtime_assembly/construction",
-      "target": "pkg/services/workers/internal/services/runtime_assembly"
-    },
-    {
-      "rule": "service-root-unexpected-directory",
-      "filePath": "pkg/services/workers/internal/services/workstations/draftvalidation",
-      "target": "pkg/services/workers/internal/services/workstations"
-    },
-    {
-      "rule": "service-root-unexpected-directory",
-      "filePath": "pkg/services/workers/internal/services/workstations/envdiagnostics",
-      "target": "pkg/services/workers/internal/services/workstations"
-    },
-    {
-      "rule": "service-root-unexpected-directory",
-      "filePath": "pkg/services/workers/internal/services/workstations/execution",
-      "target": "pkg/services/workers/internal/services/workstations"
-    },
-    {
-      "rule": "service-root-unexpected-directory",
       "filePath": "pkg/services/workers/internal/services/workstations/executor",
       "target": "pkg/services/workers/internal/services/workstations"
     },
     {
       "rule": "service-root-unexpected-directory",
-      "filePath": "pkg/services/workers/internal/services/workstations/inferencefailure",
-      "target": "pkg/services/workers/internal/services/workstations"
-    },
-    {
-      "rule": "service-root-unexpected-directory",
       "filePath": "pkg/services/workers/internal/services/workstations/invocation",
-      "target": "pkg/services/workers/internal/services/workstations"
-    },
-    {
-      "rule": "service-root-unexpected-directory",
-      "filePath": "pkg/services/workers/internal/services/workstations/poolboundary",
-      "target": "pkg/services/workers/internal/services/workstations"
-    },
-    {
-      "rule": "service-root-unexpected-directory",
-      "filePath": "pkg/services/workers/internal/services/workstations/prompting",
-      "target": "pkg/services/workers/internal/services/workstations"
-    },
-    {
-      "rule": "service-root-unexpected-directory",
-      "filePath": "pkg/services/workers/internal/services/workstations/skippermissions",
-      "target": "pkg/services/workers/internal/services/workstations"
-    },
-    {
-      "rule": "service-root-unexpected-directory",
-      "filePath": "pkg/services/workers/internal/services/workstations/worktree",
       "target": "pkg/services/workers/internal/services/workstations"
     }
   ]

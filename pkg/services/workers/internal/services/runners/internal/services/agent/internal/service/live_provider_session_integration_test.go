@@ -10,6 +10,7 @@ import (
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	eventswire "github.com/portpowered/infinite-you/pkg/services/events/wire"
+	modelinference "github.com/portpowered/infinite-you/pkg/services/models"
 	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	providerswire "github.com/portpowered/infinite-you/pkg/services/providers/wire"
@@ -51,8 +52,8 @@ func TestLiveProviderSessionObservationEnablesExactWorkerSessionContinuation(t *
 	if err != nil {
 		t.Fatalf("events wire NewService() error = %v", err)
 	}
-	boundary := newLiveSessionBoundary(runner)
-	sessions, err := workersessionswire.NewService(boundary, eventsService, logging.NoopLogger{}, platformclock.Real{}, unavailableProviderSessions{}, nil)
+	service := newLiveSessionService(runner)
+	sessions, err := workersessionswire.NewService(service, eventsService, logging.NoopLogger{}, platformclock.Real{}, unavailableProviderSessions{}, nil)
 	if err != nil {
 		t.Fatalf("Worker Sessions wire NewService() error = %v", err)
 	}
@@ -166,98 +167,70 @@ func emitLiveSessionChunk(observe workers.OutputChunkObserver, payload string) {
 	}
 }
 
-type liveSessionBoundary struct {
+type liveSessionService struct {
 	runner interface {
 		Execute(context.Context, workers.RunnerExecutionRequest) (workers.RunnerExecutionResult, error)
 	}
-	mu      sync.Mutex
-	cancels map[string]context.CancelFunc
 }
 
-func newLiveSessionBoundary(runner interface {
+func newLiveSessionService(runner interface {
 	Execute(context.Context, workers.RunnerExecutionRequest) (workers.RunnerExecutionResult, error)
-}) *liveSessionBoundary {
-	return &liveSessionBoundary{runner: runner, cancels: make(map[string]context.CancelFunc)}
+}) workers.Service {
+	return &liveSessionService{runner: runner}
 }
 
-func (*liveSessionBoundary) Start(context.Context) error { return nil }
-
-func (b *liveSessionBoundary) Publish(ctx context.Context, request workers.WorkstationDispatchRequest, accept workers.WorkstationDispatchAcceptFunc) error {
-	return b.PublishWithAdmission(ctx, request, nil, accept)
-}
-
-func (b *liveSessionBoundary) PublishWithAdmission(
-	ctx context.Context,
-	request workers.WorkstationDispatchRequest,
-	admitted workers.WorkstationDispatchAdmissionFunc,
-	accept workers.WorkstationDispatchAcceptFunc,
-) error {
-	dispatchID := request.Execution.Dispatch.DispatchID
-	attemptCtx, cancel := context.WithCancel(context.WithoutCancel(ctx))
-	b.mu.Lock()
-	b.cancels[dispatchID] = cancel
-	b.mu.Unlock()
-	if admitted != nil {
-		admitted()
+func (s *liveSessionService) Execute(ctx context.Context, request workers.ExecuteRequest) (workers.ExecuteResult, error) {
+	response, attemptErr := s.runner.Execute(ctx, liveSessionRunnerRequest(request))
+	result := workers.ExecuteResult{
+		Correlation: request.Correlation,
+		Outcome:     workers.ExecutionOutcomeAccepted,
+		Output: workers.ProposedOutput{Primary: []work.WorkContentPart{{
+			Type: work.WorkContentPartTypeText,
+			Text: response.Content,
+		}}},
+		Continuation: cloneContinuation(response.Continuation),
 	}
-	go func() {
-		response, attemptErr := b.runner.Execute(attemptCtx, liveSessionRunnerRequest(request))
-		accept(context.Background(), request, liveSessionDispatchResult(request, response, attemptErr), attemptErr)
-		b.mu.Lock()
-		delete(b.cancels, dispatchID)
-		b.mu.Unlock()
-	}()
-	return nil
-}
-
-func (b *liveSessionBoundary) Cancel(_ context.Context, request workers.WorkstationDispatchCancelRequest) (workers.WorkstationDispatchCancelResult, error) {
-	b.mu.Lock()
-	cancel := b.cancels[request.DispatchID]
-	b.mu.Unlock()
-	if cancel == nil {
-		return workers.WorkstationDispatchCancelResult{DispatchID: request.DispatchID, Outcome: workers.WorkstationDispatchCancelOutcomeAlreadyTerminal}, workers.ErrWorkstationDispatchAlreadyTerminal
-	}
-	cancel()
-	return workers.WorkstationDispatchCancelResult{DispatchID: request.DispatchID, Outcome: workers.WorkstationDispatchCancelOutcomeCanceled}, nil
-}
-
-func (*liveSessionBoundary) Stop(context.Context) error { return nil }
-
-func liveSessionRunnerRequest(request workers.WorkstationDispatchRequest) workers.RunnerExecutionRequest {
-	execution := request.Execution
-	return workers.RunnerExecutionRequest{
-		Dispatch:           work.CloneWorkDispatch(execution.Dispatch),
-		WorkerType:         execution.WorkerType,
-		WorkstationType:    execution.WorkstationType,
-		RunnerID:           execution.RunnerID,
-		Model:              execution.Model,
-		ReasoningEffort:    execution.ReasoningEffort,
-		SystemPrompt:       execution.SystemPrompt,
-		UserMessage:        execution.UserMessage,
-		InputTokens:        append([]any(nil), execution.InputTokens...),
-		OutputSchema:       execution.OutputSchema,
-		WorkingDirectory:   execution.WorkingDirectory,
-		Worktree:           execution.Worktree,
-		ProcessEnvironment: append([]string(nil), execution.ProcessEnvironment...),
-		Continuation:       (execution.Continuation).ClonePtr(),
-	}
-}
-
-func liveSessionDispatchResult(request workers.WorkstationDispatchRequest, response workers.RunnerExecutionResult, attemptErr error) workers.WorkstationDispatchResult {
-	result := workers.WorkResult{
-		DispatchID: request.Execution.Dispatch.DispatchID, TransitionID: request.Execution.Dispatch.TransitionID,
-		Output: response.Content, Continuation: cloneContinuation(response.Continuation), Diagnostics: workers.CloneWorkDiagnostics(response.Diagnostics),
-	}
-	terminal := workers.WorkstationDispatchTerminalOutcomeCompleted
 	if attemptErr != nil {
-		result.Outcome, result.Error, terminal = workers.OutcomeFailed, attemptErr.Error(), workers.WorkstationDispatchTerminalOutcomeFailed
+		result.Outcome = workers.ExecutionOutcomeFailed
 		if errors.Is(attemptErr, context.Canceled) {
-			terminal = workers.WorkstationDispatchTerminalOutcomeCanceled
+			result.Outcome = workers.ExecutionOutcomeCanceled
 		}
-	} else {
-		result.Outcome = workers.OutcomeAccepted
 	}
-	return workers.WorkstationDispatchResult{DispatchID: request.Execution.Dispatch.DispatchID, WorkstationName: request.WorkstationName, TerminalOutcome: terminal, Result: result}
+	return result, attemptErr
+}
+
+func (s *liveSessionService) InvokeModel(context.Context, string, modelinference.Request) (modelinference.Result, error) {
+	return modelinference.Result{}, workers.ErrExecuteUnavailable
+}
+
+func liveSessionRunnerRequest(request workers.ExecuteRequest) workers.RunnerExecutionRequest {
+	return workers.RunnerExecutionRequest{
+		Dispatch:           work.CloneWorkDispatch(request.Input.Dispatch),
+		WorkerType:         request.Target.WorkerType,
+		WorkstationType:    request.Target.WorkstationName,
+		RunnerID:           request.Target.RunnerID,
+		Model:              request.Target.Model.Name,
+		ReasoningEffort:    request.Target.Model.ReasoningEffort,
+		SystemPrompt:       request.Target.Prompt.SystemPrompt,
+		UserMessage:        request.Target.Prompt.UserMessage,
+		OutputSchema:       request.Target.Prompt.OutputSchema,
+		WorkingDirectory:   request.Target.Environment.WorkingDirectory,
+		Worktree:           request.Target.Workspace.Worktree,
+		ProcessEnvironment: append([]string(nil), request.Target.Environment.ProcessEnvironment...),
+		EnvVars:            cloneLiveSessionStringMap(request.Target.Environment.Vars),
+		Continuation:       (request.Input.Resume).ClonePtr(),
+	}
+}
+
+func cloneLiveSessionStringMap(value map[string]string) map[string]string {
+	if len(value) == 0 {
+		return nil
+	}
+	clone := make(map[string]string, len(value))
+	for key, item := range value {
+		clone[key] = item
+	}
+	return clone
 }
 
 func containsLiveSessionSequence(values []string, first, second string) bool {

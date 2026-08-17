@@ -46,18 +46,14 @@ func TestBuild_ConstructsRecordingsRootLedgerAndHostingCapabilities(t *testing.T
 
 	bundle, err := testRuntimeFactory().Build(
 		context.Background(), dir, dir, "~default",
-		"", interfaces.RuntimeModeBatch, false, nil, nil, nil, false, nil, nil,
+		"", interfaces.RuntimeModeBatch, false, nil, false, nil, nil,
 		"", factory.RuntimeLogStorageConfig{},
 		factoryinternal.RuntimeFileLoggingPolicyDisabled,
 		factoryinternal.RuntimeMetricsPolicyDisabled, "", factory.RuntimeMetricsStorageConfig{},
 		loaded, "runtime-recordings-root", "", clockwork.NewFakeClock(),
 		"/recordings/session.json", nil, nil, nil, nil, nil,
 		runtimeOpening,
-		func(recordings.WorkerEventRecorder, *zap.Logger) (map[string]workers.WorkerExecutor, error) {
-			return nil, nil
-		},
 		testRuntimeWorkers{},
-		nil,
 		testRuntimeWorkerSessionsFactory(t),
 		nil,
 	)
@@ -88,18 +84,14 @@ func TestBuild_ConstructsRunnableBundleWithoutRootService(t *testing.T) {
 	}
 	bundle, err := testRuntimeFactory().Build(
 		context.Background(), dir, dir, "~default",
-		"", interfaces.RuntimeModeBatch, false, nil, nil, nil, false, nil, nil,
+		"", interfaces.RuntimeModeBatch, false, nil, false, nil, nil,
 		"", factory.RuntimeLogStorageConfig{},
 		factoryinternal.RuntimeFileLoggingPolicyDisabled,
 		factoryinternal.RuntimeMetricsPolicyDisabled, "", factory.RuntimeMetricsStorageConfig{},
 		loaded, "runtime-test", "", clockwork.NewFakeClock(), "", nil, nil, nil, nil,
 		nil,
 		testRuntimeOpening(newTestRuntimeLedger),
-		func(recordings.WorkerEventRecorder, *zap.Logger) (map[string]workers.WorkerExecutor, error) {
-			return nil, nil
-		},
 		testRuntimeWorkers{},
-		nil,
 		testRuntimeWorkerSessionsFactory(t),
 		nil,
 	)
@@ -143,15 +135,12 @@ func TestBuild_FinalizesRecordingBeforeClosingRuntimeSinksOnPartialFailure(t *te
 		func() { events = append(events, "metrics.close") },
 	).Build(
 		context.Background(), dir, dir, "~default",
-		"", interfaces.RuntimeModeBatch, false, nil, nil, nil, false, nil, nil,
+		"", interfaces.RuntimeModeBatch, false, nil, false, nil, nil,
 		logDir, factory.RuntimeLogStorageConfig{},
 		"", "", metricsDir, factory.RuntimeMetricsStorageConfig{},
 		loaded, "partial-runtime", "", clockwork.NewFakeClock(), "recording.json", nil, nil, nil, nil, nil,
 		runtimeOpening,
-		func(recordings.WorkerEventRecorder, *zap.Logger) (map[string]workers.WorkerExecutor, error) {
-			return nil, errors.New("worker executor loading failed")
-		},
-		testRuntimeWorkers{}, nil, testRuntimeWorkerSessionsFactory(t), nil,
+		testRuntimeWorkers{}, failingRuntimeWorkerSessionsFactory(), nil,
 	)
 	if err == nil {
 		t.Fatal("Build succeeded, want partial-opening failure")
@@ -173,17 +162,13 @@ func TestBuild_ProductionObservabilityPoliciesEnableRuntimeSinksByDefault(t *tes
 	}
 	bundle, err := testRuntimeFactoryWithSinks(logDir, metricsDir).Build(
 		context.Background(), dir, dir, "~default",
-		"", interfaces.RuntimeModeBatch, false, nil, nil, nil, false, nil, nil,
+		"", interfaces.RuntimeModeBatch, false, nil, false, nil, nil,
 		logDir, factory.RuntimeLogStorageConfig{},
 		"", "", metricsDir, factory.RuntimeMetricsStorageConfig{},
 		loaded, "runtime-observability", "", clockwork.NewFakeClock(), "", nil, nil, nil, nil,
 		nil,
 		testRuntimeOpening(newTestRuntimeLedger),
-		func(recordings.WorkerEventRecorder, *zap.Logger) (map[string]workers.WorkerExecutor, error) {
-			return nil, nil
-		},
 		testRuntimeWorkers{},
-		nil,
 		testRuntimeWorkerSessionsFactory(t),
 		nil,
 	)
@@ -214,7 +199,7 @@ func TestBuild_ProductionObservabilityPoliciesEnableRuntimeSinksByDefault(t *tes
 
 	disabledBundle, err := testRuntimeFactory().Build(
 		context.Background(), dir, dir, "~default",
-		"", interfaces.RuntimeModeBatch, false, nil, nil, nil, false, nil, nil,
+		"", interfaces.RuntimeModeBatch, false, nil, false, nil, nil,
 		logDir, factory.RuntimeLogStorageConfig{},
 		factoryinternal.RuntimeFileLoggingPolicyDisabled,
 		factoryinternal.RuntimeMetricsPolicyDisabled,
@@ -222,11 +207,7 @@ func TestBuild_ProductionObservabilityPoliciesEnableRuntimeSinksByDefault(t *tes
 		loaded, "runtime-disabled", "", clockwork.NewFakeClock(), "", nil, nil, nil, nil,
 		nil,
 		testRuntimeOpening(newTestRuntimeLedger),
-		func(recordings.WorkerEventRecorder, *zap.Logger) (map[string]workers.WorkerExecutor, error) {
-			return nil, nil
-		},
 		testRuntimeWorkers{},
-		nil,
 		testRuntimeWorkerSessionsFactory(t),
 		nil,
 	)
@@ -244,111 +225,18 @@ func TestBuild_ProductionObservabilityPoliciesEnableRuntimeSinksByDefault(t *tes
 	}
 }
 
-type testRuntimeWorkers struct{}
-
-func testRuntimePoolBoundaryFactory(cfg workers.WorkstationPoolBoundaryConfig) workers.WorkstationPoolBoundary {
-	return &testRuntimePoolBoundary{service: cfg.Service}
-}
-
-type testRuntimePoolBoundary struct {
-	service workers.WorkstationExecutionService
-}
-
-func (boundary *testRuntimePoolBoundary) Start(ctx context.Context) error {
-	if boundary.service == nil {
-		return nil
-	}
-	_, err := boundary.service.StartWorkstationPool(ctx, workers.WorkstationPoolStartRequest{})
-	return err
-}
-
-func (boundary *testRuntimePoolBoundary) Publish(
-	ctx context.Context,
-	request workers.WorkstationDispatchRequest,
-	accept workers.WorkstationDispatchAcceptFunc,
-) error {
-	return boundary.PublishWithAdmission(ctx, request, nil, accept)
-}
-
-func (boundary *testRuntimePoolBoundary) PublishWithAdmission(
-	ctx context.Context,
-	request workers.WorkstationDispatchRequest,
-	_ workers.WorkstationDispatchAdmissionFunc,
-	accept workers.WorkstationDispatchAcceptFunc,
-) error {
-	if err := boundary.Start(ctx); err != nil {
-		return err
-	}
-	if boundary.service == nil {
-		return nil
-	}
-	result, err := boundary.service.DispatchWorkstationWithAdmission(ctx, request, nil)
-	if accept != nil {
-		accept(context.Background(), request, result, err)
-	}
-	return nil
-}
-
-func (boundary *testRuntimePoolBoundary) Cancel(
-	ctx context.Context,
-	request workers.WorkstationDispatchCancelRequest,
-) (workers.WorkstationDispatchCancelResult, error) {
-	if boundary.service == nil {
-		return workers.WorkstationDispatchCancelResult{}, nil
-	}
-	return boundary.service.CancelWorkstationDispatch(ctx, request)
-}
-
-func (boundary *testRuntimePoolBoundary) Stop(ctx context.Context) error {
-	if boundary.service == nil {
-		return nil
-	}
-	_, err := boundary.service.StopWorkstationPool(ctx)
-	return err
-}
-
-func (testRuntimeWorkers) StartWorkstationPool(
-	context.Context,
-	workers.WorkstationPoolStartRequest,
-) (workers.WorkstationPoolStartResult, error) {
-	return workers.WorkstationPoolStartResult{}, nil
-}
-
-func (testRuntimeWorkers) StopWorkstationPool(
-	context.Context,
-) (workers.WorkstationPoolStopResult, error) {
-	return workers.WorkstationPoolStopResult{}, nil
-}
-
-func (testRuntimeWorkers) DispatchWorkstation(
-	context.Context,
-	workers.WorkstationDispatchRequest,
-) (workers.WorkstationDispatchResult, error) {
-	return workers.WorkstationDispatchResult{}, nil
-}
-
-func (testRuntimeWorkers) DispatchWorkstationWithAdmission(
-	ctx context.Context,
-	request workers.WorkstationDispatchRequest,
-	admitted workers.WorkstationDispatchAdmissionFunc,
-) (workers.WorkstationDispatchResult, error) {
-	if admitted != nil {
-		admitted()
-	}
-	return testRuntimeWorkers{}.DispatchWorkstation(ctx, request)
-}
-
-func (testRuntimeWorkers) CancelWorkstationDispatch(
-	context.Context,
-	workers.WorkstationDispatchCancelRequest,
-) (workers.WorkstationDispatchCancelResult, error) {
-	return workers.WorkstationDispatchCancelResult{}, nil
-}
+type testRuntimeWorkers struct{ workers.Service }
 
 func testRuntimeWorkerSessionsFactory(t *testing.T) factory.WorkerSessionsFactory {
 	t.Helper()
-	return func(boundary workers.WorkstationPoolBoundary, _ platformclock.Source) (workersessions.Service, error) {
-		return &stubWorkerSessionsService{boundary: boundary}, nil
+	return func(execution workers.Service, _ platformclock.Source) (workersessions.Service, error) {
+		return &stubWorkerSessionsService{execution: execution}, nil
+	}
+}
+
+func failingRuntimeWorkerSessionsFactory() factory.WorkerSessionsFactory {
+	return func(workers.Service, platformclock.Source) (workersessions.Service, error) {
+		return nil, errors.New("worker sessions construction failed")
 	}
 }
 
@@ -357,7 +245,7 @@ func testRuntimeWorkerSessionsFactory(t *testing.T) factory.WorkerSessionsFactor
 // Workers execution boundary, mirroring the real cutover seam's shape
 // without pulling in the peer worker_sessions implementation package.
 type stubWorkerSessionsService struct {
-	boundary workers.WorkstationPoolBoundary
+	execution workers.Service
 }
 
 func (s *stubWorkerSessionsService) Reserve(context.Context, workersessions.ReserveRequest) (workersessions.Session, error) {
@@ -405,21 +293,8 @@ func (s *stubWorkerSessionsService) ReadTranscriptByWorkerSessionID(context.Cont
 }
 
 func (s *stubWorkerSessionsService) InvokeSession(ctx context.Context, req workersessions.InvokeSessionRequest) (workersessions.InvokeSessionResult, error) {
-	handoff := workers.WorkstationDispatchRequest{
-		WorkstationName: req.Execution.WorkstationName,
-		Execution:       req.Execution.Execution,
-	}
-	var dispatchResult workers.WorkstationDispatchResult
-	var dispatchErr error
-	if err := s.boundary.Publish(ctx, handoff, func(_ context.Context, _ workers.WorkstationDispatchRequest, result workers.WorkstationDispatchResult, err error) {
-		dispatchResult, dispatchErr = result, err
-	}); err != nil {
-		return workersessions.InvokeSessionResult{}, err
-	}
 	return workersessions.InvokeSessionResult{
-		Session:     workersessions.Session{ID: req.ID, State: workersessions.StateCompleted},
-		Dispatch:    dispatchResult,
-		DispatchErr: dispatchErr,
+		Session: workersessions.Session{ID: req.ID, State: workersessions.StateCompleted},
 	}, nil
 }
 
@@ -497,7 +372,7 @@ func testRuntimeFactory() *factoryinternal.RuntimeFactory {
 		nil, nil, outputAsPayloadPolicy(), nil, nil, nil, zap.NewNop(), testRuntimeLoggerFactory, nil, nil,
 		testRuntimeID, testRuntimeID, localRuntimeFiles{}, localRuntimeFiles{}, filepath.WalkDir,
 		testOrchestrationCompilation(),
-		nil, testRuntimePoolBoundaryFactory,
+		nil,
 	)
 }
 
@@ -517,7 +392,7 @@ func testRuntimeFactoryWithSinkCallbacks(
 		testRuntimeMetricsOwner{root: metricsDir, onClose: onMetricsClose},
 		testRuntimeID, testRuntimeID, localRuntimeFiles{}, localRuntimeFiles{}, filepath.WalkDir,
 		testOrchestrationCompilation(),
-		nil, testRuntimePoolBoundaryFactory,
+		nil,
 	)
 }
 

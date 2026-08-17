@@ -97,6 +97,13 @@ func processGoneDispatchResult(
 type PromptRenderer = runtimePromptRenderer
 type TemplateFieldResolver = runtimeTemplateFieldResolver
 
+// WorkstationExecutionResolver resolves a minimal direct Worker Session
+// request into the detached Workers execution contract. Factory Runtime owns
+// this definition lookup; Workers remains unaware of Factory configuration.
+type WorkstationExecutionResolver interface {
+	ResolveExecutionRequest(workers.WorkstationExecutionRequest) (workers.ExecuteRequest, error)
+}
+
 // SetReplayEvents binds the immutable canonical history loaded for a legacy
 // replay. Runtime execution may regenerate derived events, while observation
 // streams continue to expose the persisted event positions.
@@ -145,6 +152,37 @@ type workstationRequestExecutor struct {
 	service   executeCapability
 	cfg       *runtimeConfig
 	sessionID string
+}
+
+// ResolveExecutionRequest resolves a direct Worker Session request without
+// executing it. The Factory Runtime wrapper uses this narrow capability to
+// preserve the public direct Worker Session route after Worker Sessions hands
+// execution to the request-scoped Workers service.
+func (executor workstationRequestExecutor) ResolveExecutionRequest(
+	request workers.WorkstationExecutionRequest,
+) (workers.ExecuteRequest, error) {
+	if executor.service == nil || executor.cfg == nil {
+		return workers.ExecuteRequest{}, workers.ErrExecuteUnavailable
+	}
+	request = executor.normalizeExecutionRequest(request)
+	return executeRequestFromWorkstationRequest(executor.cfg, workers.WorkstationDispatchRequest{
+		WorkstationName: firstRuntimeValue(request.Dispatch.WorkstationName, request.WorkstationType),
+		Execution:       request,
+	})
+}
+
+func (executor workstationRequestExecutor) normalizeExecutionRequest(
+	request workers.WorkstationExecutionRequest,
+) workers.WorkstationExecutionRequest {
+	request = workers.CloneWorkstationExecutionRequest(request)
+	if strings.TrimSpace(request.FactorySessionID) == "" {
+		request.FactorySessionID = executor.sessionID
+	}
+	request.WorkerType = firstRuntimeValue(request.WorkerType, request.Dispatch.WorkerType)
+	if strings.TrimSpace(request.WorkstationType) == "" {
+		request.WorkstationType = firstRuntimeValue(request.WorkstationType, request.Dispatch.WorkstationName)
+	}
+	return runtimeRecordingExecutionRequest(executor.cfg, request)
 }
 
 // SetRuntimeLogger binds the opened Runtime's log sink to this compatibility
@@ -198,20 +236,8 @@ func (executor workstationRequestExecutor) Execute(
 	if executor.service == nil || executor.cfg == nil {
 		return workers.WorkResult{}, workers.ErrExecuteUnavailable
 	}
-	request = workers.CloneWorkstationExecutionRequest(request)
-	if strings.TrimSpace(request.FactorySessionID) == "" {
-		request.FactorySessionID = executor.sessionID
-	}
-	request.WorkerType = firstRuntimeValue(request.WorkerType, request.Dispatch.WorkerType)
-	if strings.TrimSpace(request.WorkstationType) == "" {
-		request.WorkstationType = firstRuntimeValue(request.WorkstationType, request.Dispatch.WorkstationName)
-	}
-	request = runtimeRecordingExecutionRequest(executor.cfg, request)
-	workstationRequest := workers.WorkstationDispatchRequest{
-		WorkstationName: firstRuntimeValue(request.Dispatch.WorkstationName, request.WorkstationType),
-		Execution:       request,
-	}
-	executeRequest, err := executeRequestFromWorkstationRequest(executor.cfg, workstationRequest)
+	request = executor.normalizeExecutionRequest(request)
+	executeRequest, err := executor.ResolveExecutionRequest(request)
 	if err != nil {
 		result := workers.WorkResult{
 			DispatchID:   request.Dispatch.DispatchID,
@@ -228,7 +254,10 @@ func (executor workstationRequestExecutor) Execute(
 	result, executeErr := executor.service.Execute(ctx, executeRequest)
 	result = normalizeDetachedExecutionResult(executor.cfg, executeRequest, result)
 	dispatchResult, dispatchErr := workstationDispatchResultFromExecute(
-		workstationDispatchRequestForResult(workstationRequest, executeRequest),
+		workstationDispatchRequestForResult(workers.WorkstationDispatchRequest{
+			WorkstationName: firstRuntimeValue(request.Dispatch.WorkstationName, request.WorkstationType),
+			Execution:       request,
+		}, executeRequest),
 		result,
 		executeErr,
 	)

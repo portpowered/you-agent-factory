@@ -15,9 +15,11 @@ import (
 	"time"
 
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	"github.com/portpowered/infinite-you/pkg/services/events"
+	modelinference "github.com/portpowered/infinite-you/pkg/services/models"
 	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
@@ -26,12 +28,22 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
-// unusedExecution is a workers.WorkstationExecutionService double that fails
+// unusedExecution is a Workers service double that fails
 // the test if it is ever called. reserveIfAbsent and transitionToStarting
 // never reach Workers, so this proves the reservation and starting
 // transition are genuinely separate, Workers-free steps.
 type unusedExecution struct {
 	t *testing.T
+}
+
+func (u unusedExecution) Execute(context.Context, workers.ExecuteRequest) (workers.ExecuteResult, error) {
+	u.t.Fatal("unexpected Execute call")
+	return workers.ExecuteResult{}, workers.ErrExecuteUnavailable
+}
+
+func (u unusedExecution) InvokeModel(context.Context, string, modelinference.Request) (modelinference.Result, error) {
+	u.t.Fatal("unexpected InvokeModel call")
+	return modelinference.Result{}, workers.ErrExecuteUnavailable
 }
 
 type unavailableProviderSessions struct {
@@ -47,83 +59,8 @@ type failingPublishBoundary struct {
 	err error
 }
 
-func (b failingPublishBoundary) Publish(context.Context, workers.WorkstationDispatchRequest, workers.WorkstationDispatchAcceptFunc) error {
-	return b.err
-}
-
-func (b failingPublishBoundary) PublishWithAdmission(context.Context, workers.WorkstationDispatchRequest, workers.WorkstationDispatchAdmissionFunc, workers.WorkstationDispatchAcceptFunc) error {
-	return b.err
-}
-
-type noAdmissionBoundary struct {
-	unusedExecution
-}
-
-func (noAdmissionBoundary) PublishWithAdmission(context.Context, workers.WorkstationDispatchRequest, workers.WorkstationDispatchAdmissionFunc, workers.WorkstationDispatchAcceptFunc) error {
-	return nil
-}
-
-// cancellationResultBoundary supplies one deterministic boundary cancellation
-// result without starting or publishing any Workers attempt. It lets the
-// control tests exercise only the already-admitted control effect.
-type cancellationResultBoundary struct {
-	unusedExecution
-	result workers.WorkstationDispatchCancelResult
-	err    error
-}
-
-func (b cancellationResultBoundary) Cancel(context.Context, workers.WorkstationDispatchCancelRequest) (workers.WorkstationDispatchCancelResult, error) {
-	return b.result, b.err
-}
-
-func (u unusedExecution) StartWorkstationPool(context.Context, workers.WorkstationPoolStartRequest) (workers.WorkstationPoolStartResult, error) {
-	u.t.Fatal("unexpected StartWorkstationPool call")
-	return workers.WorkstationPoolStartResult{}, nil
-}
-
-func (u unusedExecution) StopWorkstationPool(context.Context) (workers.WorkstationPoolStopResult, error) {
-	u.t.Fatal("unexpected StopWorkstationPool call")
-	return workers.WorkstationPoolStopResult{}, nil
-}
-
-func (u unusedExecution) DispatchWorkstation(context.Context, workers.WorkstationDispatchRequest) (workers.WorkstationDispatchResult, error) {
-	u.t.Fatal("unexpected DispatchWorkstation call")
-	return workers.WorkstationDispatchResult{}, nil
-}
-
-func (u unusedExecution) DispatchWorkstationWithAdmission(context.Context, workers.WorkstationDispatchRequest, workers.WorkstationDispatchAdmissionFunc) (workers.WorkstationDispatchResult, error) {
-	u.t.Fatal("unexpected DispatchWorkstationWithAdmission call")
-	return workers.WorkstationDispatchResult{}, nil
-}
-
-func (u unusedExecution) CancelWorkstationDispatch(context.Context, workers.WorkstationDispatchCancelRequest) (workers.WorkstationDispatchCancelResult, error) {
-	u.t.Fatal("unexpected CancelWorkstationDispatch call")
-	return workers.WorkstationDispatchCancelResult{}, nil
-}
-
-func (u unusedExecution) Start(context.Context) error {
-	u.t.Fatal("unexpected boundary Start call")
-	return nil
-}
-
-func (u unusedExecution) Publish(context.Context, workers.WorkstationDispatchRequest, workers.WorkstationDispatchAcceptFunc) error {
-	u.t.Fatal("unexpected boundary Publish call")
-	return nil
-}
-
-func (u unusedExecution) PublishWithAdmission(context.Context, workers.WorkstationDispatchRequest, workers.WorkstationDispatchAdmissionFunc, workers.WorkstationDispatchAcceptFunc) error {
-	u.t.Fatal("unexpected boundary PublishWithAdmission call")
-	return nil
-}
-
-func (u unusedExecution) Cancel(context.Context, workers.WorkstationDispatchCancelRequest) (workers.WorkstationDispatchCancelResult, error) {
-	u.t.Fatal("unexpected boundary Cancel call")
-	return workers.WorkstationDispatchCancelResult{}, nil
-}
-
-func (u unusedExecution) Stop(context.Context) error {
-	u.t.Fatal("unexpected boundary Stop call")
-	return nil
+func (b failingPublishBoundary) Execute(context.Context, workers.ExecuteRequest) (workers.ExecuteResult, error) {
+	return workers.ExecuteResult{}, b.err
 }
 
 // newTestRegistry returns the concrete *registry (not just the Service
@@ -621,14 +558,14 @@ func TestControlGuards_RejectInvalidTransitionsAndPreserveObservableSessionState
 		t.Fatal("registerSupervision(missing) unexpectedly succeeded")
 	}
 	supervision.requestedAction = workersessions.ControlActionCancel
-	if r.beginBoundaryPublish("worker-2", supervision) {
+	if r.beginExecutionPublish("worker-2", supervision) {
 		t.Fatal("beginBoundaryPublish() succeeded after a control request")
 	}
 	r.reserveIfAbsent("worker-3")
 	if workerSession, err := r.Get(ctx, workersessions.GetRequest{ID: "worker-3"}); err != nil || workerSession.State != workersessions.StateReserved {
 		t.Fatalf("Get(worker-3) = %#v, %v, want RESERVED", workerSession, err)
 	}
-	if r.beginBoundaryPublish("worker-3", newSupervision("dispatch-3", "")) {
+	if r.beginExecutionPublish("worker-3", newSupervision("dispatch-3", "")) {
 		t.Fatal("beginBoundaryPublish() succeeded for a session that never started")
 	}
 	if session, err := r.Get(ctx, workersessions.GetRequest{ID: "worker-2"}); err != nil || session.State != workersessions.StateStarting {
@@ -676,7 +613,7 @@ func TestDriveInvocation_ControlAndPublishFailureHaveTerminalObservableOutcomes(
 
 	t.Run("boundary publication failure", func(t *testing.T) {
 		r := newTestRegistry(t)
-		r.boundary = failingPublishBoundary{unusedExecution: unusedExecution{t: t}, err: errors.New("boundary publish failed")}
+		r.execution = failingPublishBoundary{unusedExecution: unusedExecution{t: t}, err: errors.New("execution publish failed")}
 		r.reserveIfAbsent("worker-1")
 		if _, err := r.transitionToStarting("worker-1"); err != nil {
 			t.Fatalf("transitionToStarting: %v", err)
@@ -989,7 +926,7 @@ func TestBeginCancellationClassifiesAdmissionAndPreAdmissionStates(t *testing.T)
 	}
 }
 
-func TestCancelBoundaryReturnsNoopForNonCanceledWorkersOutcome(t *testing.T) {
+func TestCancelBoundaryFailsWhenTheAttemptHasNoInstalledCancellation(t *testing.T) {
 	r := newTestRegistry(t)
 	const sessionID = "worker-noop"
 	const dispatchID = "dispatch-noop"
@@ -1001,17 +938,10 @@ func TestCancelBoundaryReturnsNoopForNonCanceledWorkersOutcome(t *testing.T) {
 	wait := make(chan struct{})
 	supervision.controlDone = wait
 	r.supervisions[sessionID] = supervision
-	r.boundary = cancellationResultBoundary{
-		unusedExecution: unusedExecution{t: t},
-		result: workers.WorkstationDispatchCancelResult{
-			DispatchID: dispatchID,
-			Outcome:    workers.WorkstationDispatchCancelOutcome("not-canceled"),
-		},
-	}
 
 	result, retry, err := r.cancelBoundary(context.Background(), workersessions.ControlRequest{ID: sessionID}, workersessions.ControlActionCancel, false, supervision, cancellationAttempt{wait: wait, dispatchID: dispatchID})
-	if err != nil || retry || result.Outcome != workersessions.ControlOutcomeNoop || result.Session.State != workersessions.StateRunning {
-		t.Fatalf("cancelBoundary(non-canceled outcome) = %#v, %t, %v, want noop", result, retry, err)
+	if !errors.Is(err, workers.ErrUnknownWorkstationDispatch) || retry || result.Outcome != workersessions.ControlOutcomeFailed || result.Session.State != workersessions.StateRunning {
+		t.Fatalf("cancelBoundary(without cancellation handle) = %#v, %t, %v, want failed unknown-dispatch result", result, retry, err)
 	}
 }
 
@@ -2020,33 +1950,6 @@ func TestContinuationControl_GuardsPreserveThePausedSession(t *testing.T) {
 		}
 	})
 
-	t.Run("publication failure restores the exact paused continuation", func(t *testing.T) {
-		r, supervision, _ := newPausedContinuationRegistry(t)
-		publishErr := errors.New("continuation publish failed")
-		r.boundary = failingPublishBoundary{unusedExecution: unusedExecution{t: t}, err: publishErr}
-		result, err := r.Resume(context.Background(), workersessions.ControlRequest{ID: "worker-1"})
-		if !errors.Is(err, publishErr) || result.Outcome != workersessions.ControlOutcomeFailed || result.DispatchID != "dispatch-1/resume/1" {
-			t.Fatalf("Resume() = %#v, %v, want failed fresh continuation dispatch", result, err)
-		}
-		if result.Session.State != workersessions.StatePaused || supervision.dispatchID != "dispatch-1" {
-			t.Fatalf("Resume() after publish failure = %#v with dispatch %q, want restored PAUSED dispatch-1", result, supervision.dispatchID)
-		}
-	})
-
-	t.Run("missing admission restores the exact paused continuation", func(t *testing.T) {
-		r, supervision, _ := newPausedContinuationRegistry(t)
-		r.boundary = noAdmissionBoundary{unusedExecution: unusedExecution{t: t}}
-
-		result, err := r.Resume(context.Background(), workersessions.ControlRequest{ID: "worker-1"})
-		if !errors.Is(err, workersessions.ErrStartAdmissionFailed) || result.Outcome != workersessions.ControlOutcomeFailed ||
-			result.Session.State != workersessions.StatePaused {
-			t.Fatalf("Resume() = %#v, %v, want failed PAUSED admission result", result, err)
-		}
-		if supervision.dispatchID != "dispatch-1" || supervision.continuing || supervision.publishing {
-			t.Fatalf("Resume() after missing admission left supervision = %#v, want restored paused attempt", supervision)
-		}
-	})
-
 	t.Run("unsupported control distinguishes invalid missing and terminal sessions", func(t *testing.T) {
 		r := newTestRegistry(t)
 		if _, err := r.unsupportedControl(context.Background(), workersessions.ControlRequest{ID: " "}, workersessions.ControlActionPause); !errors.Is(err, workersessions.ErrInvalidSessionID) {
@@ -2093,9 +1996,9 @@ func TestPause_ControlOutcomesKeepTheLifecycleTruthful(t *testing.T) {
 	})
 
 	t.Run("boundary error returns a failed control without changing the session", func(t *testing.T) {
-		r, _ := newRunningPauseRegistry(t)
+		r, supervision := newRunningPauseRegistry(t)
 		boundaryErr := errors.New("cancel boundary failed")
-		r.boundary = cancellationResultBoundary{unusedExecution: unusedExecution{t: t}, err: boundaryErr}
+		supervision.installCancelFailure(func() error { return boundaryErr })
 		result, err := r.Pause(context.Background(), workersessions.ControlRequest{ID: "worker-1"})
 		if !errors.Is(err, boundaryErr) || result.Outcome != workersessions.ControlOutcomeFailed || result.Session.State != workersessions.StateRunning {
 			t.Fatalf("Pause() = %#v, %v, want failed RUNNING result", result, err)
@@ -2105,10 +2008,7 @@ func TestPause_ControlOutcomesKeepTheLifecycleTruthful(t *testing.T) {
 	t.Run("already-terminal cancellation is a no-op", func(t *testing.T) {
 		r, supervision := newRunningPauseRegistry(t)
 		supervision.signalDone()
-		r.boundary = cancellationResultBoundary{
-			unusedExecution: unusedExecution{t: t},
-			result:          workers.WorkstationDispatchCancelResult{DispatchID: "dispatch-1", Outcome: workers.WorkstationDispatchCancelOutcomeAlreadyCanceled},
-		}
+		supervision.installCancel(func() {})
 		result, err := r.Pause(context.Background(), workersessions.ControlRequest{ID: "worker-1"})
 		if err != nil || result.Outcome != workersessions.ControlOutcomeNoop || result.Session.State != workersessions.StateRunning {
 			t.Fatalf("Pause() = %#v, %v, want RUNNING NOOP", result, err)
@@ -2118,10 +2018,7 @@ func TestPause_ControlOutcomesKeepTheLifecycleTruthful(t *testing.T) {
 	t.Run("cancellation without a paused callback remains a no-op", func(t *testing.T) {
 		r, supervision := newRunningPauseRegistry(t)
 		supervision.signalDone()
-		r.boundary = cancellationResultBoundary{
-			unusedExecution: unusedExecution{t: t},
-			result:          workers.WorkstationDispatchCancelResult{DispatchID: "dispatch-1", Outcome: workers.WorkstationDispatchCancelOutcomeCanceled},
-		}
+		supervision.installCancel(func() {})
 		result, err := r.Pause(context.Background(), workersessions.ControlRequest{ID: "worker-1"})
 		if err != nil || result.Outcome != workersessions.ControlOutcomeNoop || result.Session.State != workersessions.StateRunning {
 			t.Fatalf("Pause() = %#v, %v, want RUNNING NOOP", result, err)
@@ -3556,6 +3453,7 @@ func TestRunInterruptRejectsSuccessorWithConflictingCapturedReference(t *testing
 	wrongReference := providers.SessionRef{Provider: providers.IDCodex, Kind: providers.SessionIDKind, ID: "provider-other"}
 	supervision := newSupervision("dispatch-source", "turn-1", execution)
 	supervision.signalDone()
+	supervision.installCancel(func() {})
 	r.sessions[sourceID] = workersessions.Session{
 		ID:    sourceID,
 		State: workersessions.StateCanceled,
@@ -3571,7 +3469,7 @@ func TestRunInterruptRejectsSuccessorWithConflictingCapturedReference(t *testing
 	r.dispatchOwners["dispatch-source"] = sourceID
 	boundary := &admitBeforeCompletionBoundary{ready: make(chan struct{}), release: make(chan struct{})}
 	close(boundary.release)
-	r.boundary = boundary
+	r.execution = boundary
 
 	result, err := r.runInterrupt(interruptPlan{
 		request: workersessions.InterruptRequest{
@@ -3638,7 +3536,7 @@ func TestContinue_ReturnsAtTheAdmissionBarrierBeforeCompletion(t *testing.T) {
 	r := newContinuationSource(t, request)
 	r.supervisions[request.SourceWorkerSessionID] = newSupervision("dispatch-1", "turn-1", continuationValidExecution("dispatch-1"))
 	boundary := &admitBeforeCompletionBoundary{ready: make(chan struct{}), release: make(chan struct{})}
-	r.boundary = boundary
+	r.execution = boundary
 
 	outcomes := make(chan struct {
 		result workersessions.ContinueResult
@@ -3735,42 +3633,19 @@ type admitBeforeCompletionBoundary struct {
 	once    sync.Once
 }
 
-func (boundary *admitBeforeCompletionBoundary) Start(context.Context) error { return nil }
-
-func (boundary *admitBeforeCompletionBoundary) Publish(ctx context.Context, request workers.WorkstationDispatchRequest, accept workers.WorkstationDispatchAcceptFunc) error {
-	return boundary.PublishWithAdmission(ctx, request, nil, accept)
-}
-
-func (boundary *admitBeforeCompletionBoundary) PublishWithAdmission(
-	ctx context.Context,
-	request workers.WorkstationDispatchRequest,
-	admitted workers.WorkstationDispatchAdmissionFunc,
-	accept workers.WorkstationDispatchAcceptFunc,
-) error {
-	if admitted != nil {
-		admitted()
-		boundary.once.Do(func() { close(boundary.ready) })
-		select {
-		case <-boundary.release:
-		case <-ctx.Done():
-			return ctx.Err()
-		}
+func (boundary *admitBeforeCompletionBoundary) Execute(ctx context.Context, request workers.ExecuteRequest) (workers.ExecuteResult, error) {
+	boundary.once.Do(func() { close(boundary.ready) })
+	select {
+	case <-boundary.release:
+		return workers.ExecuteResult{Correlation: request.Correlation, Outcome: workers.ExecutionOutcomeAccepted}, nil
+	case <-ctx.Done():
+		return workers.ExecuteResult{Correlation: request.Correlation, Outcome: workers.ExecutionOutcomeCanceled}, ctx.Err()
 	}
-	accept(context.Background(), request, workers.WorkstationDispatchResult{
-		DispatchID: request.Execution.Dispatch.DispatchID,
-		Result: workers.WorkResult{
-			DispatchID: request.Execution.Dispatch.DispatchID,
-			Outcome:    workers.OutcomeAccepted,
-		},
-	}, nil)
-	return nil
 }
 
-func (*admitBeforeCompletionBoundary) Cancel(context.Context, workers.WorkstationDispatchCancelRequest) (workers.WorkstationDispatchCancelResult, error) {
-	return workers.WorkstationDispatchCancelResult{Outcome: workers.WorkstationDispatchCancelOutcomeCanceled}, nil
+func (*admitBeforeCompletionBoundary) InvokeModel(context.Context, string, modelinference.Request) (modelinference.Result, error) {
+	return modelinference.Result{}, workers.ErrExecuteUnavailable
 }
-
-func (*admitBeforeCompletionBoundary) Stop(context.Context) error { return nil }
 
 type continuationLineageRecordingStub struct {
 	recordErr error
@@ -4027,45 +3902,9 @@ func TestStreamObservationsByWorkerSessionIDRejectsDurableCursorOnLiveFallback(t
 	}
 }
 
-type deadlineBoundary struct {
-	err       error
-	cancelled chan struct{}
-}
-
 type sourceOnlyClock struct{}
 
 func (sourceOnlyClock) Now() time.Time { return time.Now() }
-
-func (deadlineBoundary) Start(context.Context) error { return nil }
-
-func (deadlineBoundary) Publish(
-	context.Context,
-	workers.WorkstationDispatchRequest,
-	workers.WorkstationDispatchAcceptFunc,
-) error {
-	return nil
-}
-
-func (deadlineBoundary) PublishWithAdmission(
-	context.Context,
-	workers.WorkstationDispatchRequest,
-	workers.WorkstationDispatchAdmissionFunc,
-	workers.WorkstationDispatchAcceptFunc,
-) error {
-	return nil
-}
-
-func (boundary deadlineBoundary) Cancel(
-	context.Context,
-	workers.WorkstationDispatchCancelRequest,
-) (workers.WorkstationDispatchCancelResult, error) {
-	if boundary.cancelled != nil {
-		close(boundary.cancelled)
-	}
-	return workers.WorkstationDispatchCancelResult{}, boundary.err
-}
-
-func (deadlineBoundary) Stop(context.Context) error { return nil }
 
 func TestDeadlineSupervisionCoversInactiveAndHostTimerPaths(t *testing.T) {
 	clock := sourceOnlyClock{}
@@ -4104,7 +3943,9 @@ func TestDeadlineSupervisionCoversInactiveAndHostTimerPaths(t *testing.T) {
 	})
 	expired.accepted = true
 	expired.attemptDone = make(chan struct{})
-	serviceRegistry.boundary = deadlineBoundary{cancelled: expiredCancellation}
+	expired.installCancel(func() {
+		close(expiredCancellation)
+	})
 	serviceRegistry.startDeadlineWatcher("session", expired, time.Now().Add(-time.Hour))
 	expiredWait := time.NewTimer(time.Second)
 	defer expiredWait.Stop()
@@ -4141,7 +3982,7 @@ func TestDeadlineSupervisionCoversInactiveAndHostTimerPaths(t *testing.T) {
 		workers.ErrWorkstationDispatchCanceled,
 		errors.New("cancel failed"),
 	} {
-		serviceRegistry.boundary = deadlineBoundary{err: cancelErr}
+		reconciliationSupervision.installCancelFailure(func() error { return cancelErr })
 		serviceRegistry.logger = logging.NoopLogger{}
 		serviceRegistry.reconcileOverdueAttempt("session", reconciliationSupervision, "dispatch", reconciliationAttemptDone, time.Now())
 	}
@@ -4169,9 +4010,825 @@ func TestOpeningSessionContinuationPreservesExactResumeIdentity(t *testing.T) {
 	}
 }
 
+type coverageExecution struct {
+	execute func(context.Context, workers.ExecuteRequest) (workers.ExecuteResult, error)
+}
+
+func (execution coverageExecution) Execute(ctx context.Context, request workers.ExecuteRequest) (workers.ExecuteResult, error) {
+	if execution.execute == nil {
+		return workers.ExecuteResult{}, workers.ErrExecuteUnavailable
+	}
+	return execution.execute(ctx, request)
+}
+
+func (coverageExecution) InvokeModel(context.Context, string, modelinference.Request) (modelinference.Result, error) {
+	return modelinference.Result{}, workers.ErrExecuteUnavailable
+}
+
+type coverageProcessObserver struct {
+	started int
+	exited  int
+}
+
+func (observer *coverageProcessObserver) ProcessStarted(platformprocess.ProcessInfo) {
+	observer.started++
+}
+
+func (observer *coverageProcessObserver) ProcessExited(platformprocess.ProcessInfo) {
+	observer.exited++
+}
+
+type coverageRecording struct {
+	awaitErr error
+	abortErr error
+	closeErr error
+}
+
+func (recording *coverageRecording) AwaitOpening(context.Context) error { return recording.awaitErr }
+func (recording *coverageRecording) Abort(context.Context, error) error { return recording.abortErr }
+func (recording *coverageRecording) Close(context.Context) error        { return recording.closeErr }
+
+type coverageFinalizingRecording struct {
+	coverageRecording
+	terminalErr error
+}
+
+func (recording *coverageFinalizingRecording) CloseWithTerminal(context.Context, recordings.WorkerRecordingTerminal) error {
+	return recording.terminalErr
+}
+
+type coverageClock struct{ now time.Time }
+
+func (clock coverageClock) Now() time.Time { return clock.now }
+
+type coverageReadReader struct {
+	readErr error
+}
+
+func (reader coverageReadReader) Read(context.Context, events.ReadRequest) (events.ReadResult, error) {
+	return events.ReadResult{}, reader.readErr
+}
+
+type coverageSubscribeReader struct {
+	subscribeErr error
+}
+
+func (reader coverageSubscribeReader) Subscribe(context.Context, events.SubscribeRequest) (events.Subscription, error) {
+	return nil, reader.subscribeErr
+}
+
+type coverageGatedReader struct {
+	inner   EventsReader
+	started chan struct{}
+	release chan struct{}
+	once    sync.Once
+}
+
+func (reader *coverageGatedReader) Subscribe(ctx context.Context, request events.SubscribeRequest) (events.Subscription, error) {
+	reader.once.Do(func() { close(reader.started) })
+	select {
+	case <-reader.release:
+		return reader.inner.Subscribe(ctx, request)
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
+}
+
+func setCoverageAccepted(supervision *supervision, accepted bool) {
+	supervision.mu.Lock()
+	supervision.accepted = accepted
+	supervision.mu.Unlock()
+}
+
+func coverageExecutionResult(request workers.ExecuteRequest, outcome workers.ExecutionOutcome) workers.ExecuteResult {
+	return workers.ExecuteResult{Correlation: request.Correlation, Outcome: outcome}
+}
+
+func TestWorkerExecutionHandoff_CoversAdmissionFailuresAndProcessLifecycle(t *testing.T) {
+	t.Run("admission failures", testWorkerExecutionHandoffAdmissionFailures)
+	t.Run("process lifecycle", testWorkerExecutionHandoffProcessLifecycle)
+}
+
+func testWorkerExecutionHandoffAdmissionFailures(t *testing.T) {
+	request := dispatchHandoff("handoff-dispatch")
+
+	t.Run("missing execution", func(t *testing.T) {
+		result, err := executeWithService(context.Background(), nil, request, newSupervision("handoff-dispatch", ""), func() {})
+		if !errors.Is(err, workers.ErrExecuteUnavailable) || result.TerminalOutcome != workers.WorkstationDispatchTerminalOutcomeFailed {
+			t.Fatalf("executeWithService(nil) = %#v, %v, want failed unavailable result", result, err)
+		}
+	})
+
+	t.Run("invalid dispatch", func(t *testing.T) {
+		invalid := request
+		invalid.Execution.Dispatch.DispatchID = "  "
+		result, err := executeWithService(context.Background(), coverageExecution{}, invalid, newSupervision("handoff-dispatch", ""), func() {})
+		if !errors.Is(err, workers.ErrInvalidExecuteRequest) || result.TerminalOutcome != workers.WorkstationDispatchTerminalOutcomeFailed {
+			t.Fatalf("executeWithService(invalid) = %#v, %v, want invalid failed result", result, err)
+		}
+	})
+
+	t.Run("canceled before admission", func(t *testing.T) {
+		supervision := newSupervision("handoff-dispatch", "")
+		supervision.preAdmissionAction = workersessions.ControlActionPause
+		admitted := false
+		result, err := executeWithService(context.Background(), coverageExecution{}, request, supervision, func() { admitted = true })
+		if !errors.Is(err, workers.ErrWorkstationDispatchCanceled) || admitted || result.TerminalOutcome != workers.WorkstationDispatchTerminalOutcomeCanceled {
+			t.Fatalf("executeWithService(pre-admission cancel) = %#v, %v, admitted=%t", result, err, admitted)
+		}
+	})
+
+	t.Run("admission callback declines", func(t *testing.T) {
+		supervision := newSupervision("handoff-dispatch", "")
+		result, err := executeWithService(context.Background(), coverageExecution{}, request, supervision, func() {})
+		if !errors.Is(err, workers.ErrWorkstationDispatchCanceled) || result.TerminalOutcome != workers.WorkstationDispatchTerminalOutcomeCanceled {
+			t.Fatalf("executeWithService(unaccepted) = %#v, %v, want canceled result", result, err)
+		}
+	})
+
+	t.Run("executor panic is normalized", func(t *testing.T) {
+		supervision := newSupervision("handoff-dispatch", "")
+		setCoverageAccepted(supervision, true)
+		_, err := executeWithService(context.Background(), coverageExecution{
+			execute: func(context.Context, workers.ExecuteRequest) (workers.ExecuteResult, error) {
+				panic("test executor panic")
+			},
+		}, request, supervision, func() {})
+		var panicErr *workers.WorkerExecutorPanicError
+		if !errors.As(err, &panicErr) {
+			t.Fatalf("executeWithService(panic) error = %v, want WorkerExecutorPanicError", err)
+		}
+	})
+}
+
+func testWorkerExecutionHandoffProcessLifecycle(t *testing.T) {
+	request := dispatchHandoff("handoff-dispatch")
+	t.Run("process exit wins over executor result", func(t *testing.T) {
+		supervision := newSupervision("handoff-dispatch", "")
+		setCoverageAccepted(supervision, true)
+		result, err := executeWithService(context.Background(), coverageExecution{
+			execute: func(_ context.Context, request workers.ExecuteRequest) (workers.ExecuteResult, error) {
+				request.Input.ProcessLifecycleObserver.ProcessStarted(platformprocess.ProcessInfo{PID: 7})
+				request.Input.ProcessLifecycleObserver.ProcessExited(platformprocess.ProcessInfo{PID: 7})
+				return coverageExecutionResult(request, workers.ExecutionOutcomeAccepted), nil
+			},
+		}, request, supervision, func() {})
+		if !errors.Is(err, workers.ErrWorkstationDispatchProcessGone) || result.ReconciliationReason != workers.WorkstationDispatchReconciliationReasonProcessGone || result.Result.Outcome != workers.OutcomeFailed {
+			t.Fatalf("executeWithService(process exit) = %#v, %v, want process-gone failure", result, err)
+		}
+	})
+	t.Run("preserves a caller process observer", testWorkerExecutionHandoffPreservesProcessObserver)
+}
+
+func testWorkerExecutionHandoffPreservesProcessObserver(t *testing.T) {
+	request := dispatchHandoff("handoff-dispatch")
+	var nilObserver processLifecycleObserver
+	nilObserver.ProcessExited(platformprocess.ProcessInfo{})
+
+	customObserver := &coverageProcessObserver{}
+	customRequest := request
+	customRequest.Execution.ProcessLifecycleObserver = customObserver
+	supervision := newSupervision("handoff-dispatch", "")
+	setCoverageAccepted(supervision, true)
+	_, err := executeWithService(context.Background(), coverageExecution{
+		execute: func(_ context.Context, request workers.ExecuteRequest) (workers.ExecuteResult, error) {
+			if request.Input.ProcessLifecycleObserver != customObserver {
+				t.Fatalf("Execute replaced a caller-provided process observer")
+			}
+			return coverageExecutionResult(request, workers.ExecutionOutcomeAccepted), nil
+		},
+	}, customRequest, supervision, func() {})
+	if err != nil || customObserver.started != 0 || customObserver.exited != 0 {
+		t.Fatalf("executeWithService(custom observer) = %v, observer=%#v, want success without replacement", err, customObserver)
+	}
+}
+
+func TestWorkerExecutionHandoff_MapsWorkerOutcomesAndDetachesProcessGoneResults(t *testing.T) {
+	t.Run("maps worker outcomes", testWorkerExecutionHandoffMapsWorkerOutcomes)
+	t.Run("detaches process-gone results", testWorkerExecutionHandoffDetachesProcessGoneResults)
+}
+
+func testWorkerExecutionHandoffMapsWorkerOutcomes(t *testing.T) {
+	request := dispatchHandoff("result-dispatch")
+	output := workers.ProposedOutput{Primary: []work.WorkContentPart{
+		{Type: work.WorkContentPartTypeText, Text: "primary output"},
+	}}
+	cases := []struct {
+		name           string
+		result         workers.ExecuteResult
+		executeErr     error
+		terminal       workers.WorkstationDispatchTerminalOutcome
+		outcome        workers.WorkOutcome
+		reconciliation workers.WorkstationDispatchReconciliationReason
+		wantError      error
+	}{
+		{name: "continue", result: workers.ExecuteResult{Outcome: workers.ExecutionOutcomeContinue, Output: output}, terminal: workers.WorkstationDispatchTerminalOutcomeCompleted, outcome: workers.OutcomeContinue},
+		{name: "rejected", result: workers.ExecuteResult{Outcome: workers.ExecutionOutcomeRejected}, terminal: workers.WorkstationDispatchTerminalOutcomeCompleted, outcome: workers.OutcomeRejected},
+		{name: "failed result", result: workers.ExecuteResult{Outcome: workers.ExecutionOutcomeFailed, Failure: &workers.ExecutionFailure{Message: "failed", Family: workers.WorkFailureFamilyTerminal, Type: workers.WorkFailureTypeUnknown}}, terminal: workers.WorkstationDispatchTerminalOutcomeFailed, outcome: workers.OutcomeFailed},
+		{name: "canceled result", result: workers.ExecuteResult{Outcome: workers.ExecutionOutcomeCanceled}, terminal: workers.WorkstationDispatchTerminalOutcomeCanceled, outcome: workers.OutcomeFailed},
+		{name: "context cancellation", result: workers.ExecuteResult{Outcome: workers.ExecutionOutcomeAccepted}, executeErr: context.Canceled, terminal: workers.WorkstationDispatchTerminalOutcomeCanceled, outcome: workers.OutcomeAccepted, wantError: context.Canceled},
+		{name: "process gone", result: workers.ExecuteResult{Outcome: workers.ExecutionOutcomeAccepted}, executeErr: workers.ErrWorkstationDispatchProcessGone, terminal: workers.WorkstationDispatchTerminalOutcomeFailed, outcome: workers.OutcomeAccepted, reconciliation: workers.WorkstationDispatchReconciliationReasonProcessGone, wantError: workers.ErrWorkstationDispatchProcessGone},
+	}
+	for _, test := range cases {
+		t.Run(test.name, func(t *testing.T) {
+			result, err := dispatchResultFromExecute(request, test.result, test.executeErr)
+			if result.TerminalOutcome != test.terminal || result.Result.Outcome != test.outcome || result.ReconciliationReason != test.reconciliation {
+				t.Fatalf("dispatchResultFromExecute() = %#v, want terminal=%q outcome=%q reconciliation=%q", result, test.terminal, test.outcome, test.reconciliation)
+			}
+			if test.wantError != nil && !errors.Is(err, test.wantError) {
+				t.Fatalf("dispatchResultFromExecute() error = %v, want %v", err, test.wantError)
+			}
+		})
+	}
+
+	requestWithOutput := request
+	result, err := dispatchResultFromExecute(requestWithOutput, workers.ExecuteResult{Output: output}, nil)
+	if err != nil || result.Result.Output != "primary output" {
+		t.Fatalf("dispatchResultFromExecute(primary text) = %#v, %v, want copied text", result, err)
+	}
+}
+
+func testWorkerExecutionHandoffDetachesProcessGoneResults(t *testing.T) {
+	request := dispatchHandoff("result-dispatch")
+	output := workers.ProposedOutput{Primary: []work.WorkContentPart{
+		{Type: work.WorkContentPartTypeText, Text: "primary output"},
+	}}
+	gone := processGoneExecuteResult(
+		workers.ExecuteRequest{Correlation: workers.ExecutionCorrelation{DispatchID: "gone-dispatch"}},
+		workers.ExecuteResult{Output: output, StructuredResult: map[string]any{"value": true}, StructuredResultPresent: true, Continuation: &workers.ProviderContinuationRef{Provider: "codex", ProviderSessionID: "provider-session"}},
+	)
+	if gone.Outcome != workers.ExecutionOutcomeFailed || gone.Output.Primary != nil || gone.StructuredResult != nil || gone.StructuredResultPresent || gone.Continuation != nil || gone.Failure == nil {
+		t.Fatalf("processGoneExecuteResult() = %#v, want detached retryable failure", gone)
+	}
+
+	if _, err := executeRequestFromSessionDispatch(workers.WorkstationDispatchRequest{WorkstationName: "review"}); !errors.Is(err, workers.ErrInvalidExecuteRequest) {
+		t.Fatalf("executeRequestFromSessionDispatch(blank dispatch) error = %v, want invalid request", err)
+	}
+	if _, err := failedDispatchResult(request, nil); !errors.Is(err, workers.ErrExecuteUnavailable) {
+		t.Fatalf("failedDispatchResult(nil) error = %v, want execute unavailable", err)
+	}
+	if _, err := canceledDispatchResult(request); !errors.Is(err, workers.ErrWorkstationDispatchCanceled) {
+		t.Fatalf("canceledDispatchResult() error = %v, want canceled", err)
+	}
+}
+
+func TestWorkerExecutionHandoff_PublishExecutionReportsPreAdmissionFailure(t *testing.T) {
+	r := newTestRegistry(t)
+	r.execution = nil
+	request := dispatchHandoff("publish-failure")
+	err := r.publishExecution(nil, "missing-session", request, newSupervision("publish-failure", "", request))
+	if !errors.Is(err, workers.ErrExecuteUnavailable) {
+		t.Fatalf("publishExecution(nil execution) error = %v, want execute unavailable", err)
+	}
+}
+
+func TestWorkerSessionClassification_CoversStructuredFallbackAndAssociationRejection(t *testing.T) {
+	if got := safeFailureClassificationForDispatch(workersessions.FailureCauseAdapterFailure, workers.WorkResult{}, nil); got != "" {
+		t.Fatalf("safeFailureClassificationForDispatch(empty) = %q, want empty generic classification", got)
+	}
+	providerErr := workers.NewProviderError(workers.WorkFailureTypeTimeout, "provider timeout", errors.New("transport"))
+	metadata := &workers.WorkFailureMetadata{Family: workers.WorkFailureFamilyTerminal, Type: workers.WorkFailureTypeUnknown}
+	if got := failureMetadataForDispatch(workers.WorkResult{FailureMetadata: metadata}, providerErr, false); got != metadata {
+		t.Fatalf("failureMetadataForDispatch(prefer=false) = %#v, want existing metadata", got)
+	}
+	if got := failureMetadataForDispatch(workers.WorkResult{}, providerErr, false); got == nil || got.Type != workers.WorkFailureTypeTimeout {
+		t.Fatalf("failureMetadataForDispatch(missing metadata) = %#v, want provider metadata", got)
+	}
+	if got := safeFailureClassificationForDispatch(workersessions.FailureCauseAdapterFailure, workers.WorkResult{FailureMetadata: &workers.WorkFailureMetadata{Family: workers.WorkFailureFamilyTerminal, Type: workers.WorkFailureTypeUnknown}}, nil); got == "" {
+		t.Fatal("safeFailureClassificationForDispatch(known metadata) returned empty classification")
+	}
+	if got := contradictorySuccessDetail(false, "context=provider"); got == "" {
+		t.Fatal("contradictorySuccessDetail() returned an empty detail")
+	}
+
+	ref := providers.SessionRef{Provider: providers.IDCodex, Kind: providers.SessionIDKind, ID: "provider-session"}
+	continuation := ref.ContinuationRef()
+	r := newTestRegistry(t)
+	r.associateProviderSessionFromResult("missing-session", "dispatch", workers.WorkstationDispatchResult{
+		Result: workers.WorkResult{Continuation: &continuation},
+	})
+}
+
+func TestWorkerSessionRecordingPublication_CleansUpAndPreservesErrors(t *testing.T) {
+	r := newTestRegistry(t)
+	r.reserveIfAbsent("opening-cleanup")
+	openingErr := errors.New("opening barrier failed")
+	abortErr := errors.New("abort failed")
+	if err := r.publishOpeningRecord(context.Background(), "opening-cleanup", "dispatch", workers.SessionPayload{Status: string(workersessions.StateStarting)}, "codex", &coverageRecording{awaitErr: openingErr, abortErr: abortErr}); !errors.Is(err, openingErr) {
+		t.Fatalf("publishOpeningRecord() error = %v, want opening barrier error", err)
+	}
+
+	r.reserveIfAbsent("terminal-cleanup")
+	terminalPub := r.publications["terminal-cleanup"]
+	terminalPub.open = true
+	closeRecording := &coverageRecording{closeErr: errors.New("close failed")}
+	terminalPub.recording = closeRecording
+	terminalPub.provider = string(providers.IDCodex)
+	appendErr := errors.New("terminal append failed")
+	r.events = &runtimeAttemptBrokenAppender{err: appendErr}
+	err := r.publishTerminalRecord(context.Background(), "terminal-cleanup", "dispatch", workersessions.StateCompleted, workersessions.TerminalResult{Outcome: workersessions.TerminalOutcomeCompleted})
+	if !errors.Is(err, appendErr) || !errors.Is(err, closeRecording.closeErr) {
+		t.Fatalf("publishTerminalRecord() error = %v, want append and close errors", err)
+	}
+
+	finalizing := &coverageFinalizingRecording{terminalErr: errors.New("terminal finalizer failed")}
+	if err := r.closeWorkerRecording(context.Background(), finalizing, workersessions.State("UNKNOWN"), 0); err == nil {
+		t.Fatal("closeWorkerRecording(invalid terminal state) error = nil, want phase error")
+	}
+}
+
+func TestWorkerSessionContinuationAndReconciliation_CoversAdmissionFailurePaths(t *testing.T) {
+	r := newTestRegistry(t)
+	r.execution = nil
+	plan := continuePlan{
+		request:   workersessions.ContinueRequest{RequestID: "continue-request", SourceWorkerSessionID: "source", SuccessorWorkerSessionID: "successor"},
+		execution: dispatchHandoff("continue-dispatch"),
+	}
+	if _, err := r.continueReserved(plan); err == nil {
+		t.Fatal("continueReserved(no execution) error = nil, want admission failure")
+	}
+
+	supervision := newSupervision("deadline-dispatch", "")
+	attemptDone := supervision.beginAttempt()
+	setCoverageAccepted(supervision, true)
+	r.reconcileOverdueAttempt("deadline-session", supervision, "deadline-dispatch", attemptDone, time.Now().Add(-time.Minute))
+	if supervision.deadlineExceeded {
+		t.Fatal("reconcileOverdueAttempt() retained deadlineExceeded after unavailable cancellation")
+	}
+
+	failureSupervision := newSupervision("deadline-failure", "")
+	failureAttemptDone := failureSupervision.beginAttempt()
+	setCoverageAccepted(failureSupervision, true)
+	failureSupervision.installCancelFailure(func() error { return errors.New("cancel effect failed") })
+	r.reconcileOverdueAttempt("deadline-session", failureSupervision, "deadline-failure", failureAttemptDone, time.Now())
+}
+
+func TestWorkerSessionInvocationAndReplay_CoversDetachedFailurePaths(t *testing.T) {
+	r := newTestRegistry(t)
+	r.execution = nil
+	result, err := r.InvokeSession(context.Background(), workersessions.InvokeSessionRequest{ID: "invoke-no-execution", Execution: dispatchHandoff("invoke-dispatch")})
+	if err != nil || result.Session.State != workersessions.StateFailed {
+		t.Fatalf("InvokeSession(no execution) = %#v, %v, want failed terminal result", result, err)
+	}
+
+	startReplay := &startReplay{done: make(chan struct{})}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if _, err := awaitStartReplay(ctx, startReplay); !errors.Is(err, context.Canceled) {
+		t.Fatalf("awaitStartReplay(canceled) error = %v, want context.Canceled", err)
+	}
+	if got := startReplayOutcome(errors.New("rejected")); got != "rejected" {
+		t.Fatalf("startReplayOutcome(error) = %q, want rejected", got)
+	}
+	if got := providerIdentityForExecution(workers.WorkstationExecutionRequest{RunnerID: workers.ExecutorProviderACP, ExecutorProvider: "SCRIPT_WRAP"}); got != "" {
+		t.Fatalf("providerIdentityForExecution(reserved providers) = %q, want empty", got)
+	}
+}
+
+func TestWorkerSessionInterrupt_CoversCancellationAndSuccessorRejection(t *testing.T) {
+	r := newTestRegistry(t)
+	ref := providers.SessionRef{Provider: providers.IDCodex, Kind: providers.SessionIDKind, ID: "interrupt-provider"}
+	association := validAssociation("interrupt-source", "interrupt-dispatch", ref)
+	supervision := newSupervision("interrupt-dispatch", "", dispatchHandoff("interrupt-dispatch"))
+	setCoverageAccepted(supervision, true)
+	supervision.installCancelFailure(func() error { return errors.New("cancel failed") })
+	r.sessions["interrupt-source"] = workersessions.Session{ID: "interrupt-source", State: workersessions.StateRunning, ProviderSessionAssociation: &association}
+	r.supervisions["interrupt-source"] = supervision
+	if _, err := r.runInterrupt(interruptPlan{request: workersessions.InterruptRequest{RequestID: "interrupt-request", SourceWorkerSessionID: "interrupt-source", SuccessorWorkerSessionID: "interrupt-successor"}, dispatchID: "interrupt-dispatch", supervision: supervision}); err == nil {
+		t.Fatal("runInterrupt(cancel failure) error = nil, want source cancellation failure")
+	}
+
+	successSupervision := newSupervision("success-dispatch", "", dispatchHandoff("success-dispatch"))
+	setCoverageAccepted(successSupervision, true)
+	successSupervision.installCancel(func() {})
+	successSupervision.signalDone()
+	successAssociation := validAssociation("success-source", "success-dispatch", ref)
+	r.sessions["success-source"] = workersessions.Session{ID: "success-source", State: workersessions.StateCanceled, ProviderSessionAssociation: &successAssociation}
+	r.sessions["success-successor"] = workersessions.Session{ID: "success-successor", State: workersessions.StateReserved}
+	r.supervisions["success-source"] = successSupervision
+	if _, err := r.runInterrupt(interruptPlan{request: workersessions.InterruptRequest{RequestID: "success-request", SourceWorkerSessionID: "success-source", SuccessorWorkerSessionID: "success-successor"}, dispatchID: "success-dispatch", reference: ref, execution: dispatchHandoff("success-dispatch"), supervision: successSupervision}); err == nil {
+		t.Fatal("runInterrupt(existing successor) error = nil, want successor admission failure")
+	}
+}
+
+func TestWorkerSessionInterrupt_WaitCancellationIsReplaySafe(t *testing.T) {
+	r := newTestRegistry(t)
+	ref := providers.SessionRef{Provider: providers.IDCodex, Kind: providers.SessionIDKind, ID: "interrupt-provider"}
+	association := validAssociation("interrupt-wait-source", "interrupt-wait-dispatch", ref)
+	supervision := newSupervision("interrupt-wait-dispatch", "", dispatchHandoff("interrupt-wait-dispatch"))
+	setCoverageAccepted(supervision, true)
+	cancelStarted := make(chan struct{})
+	supervision.installCancel(func() { close(cancelStarted) })
+	r.sessions["interrupt-wait-source"] = workersessions.Session{ID: "interrupt-wait-source", State: workersessions.StateRunning, ProviderSessionAssociation: &association}
+	r.supervisions["interrupt-wait-source"] = supervision
+
+	ctx, cancel := context.WithCancel(context.Background())
+	outcomes := make(chan error, 1)
+	go func() {
+		_, err := r.Interrupt(ctx, workersessions.InterruptRequest{RequestID: "interrupt-wait-request", SourceWorkerSessionID: "interrupt-wait-source", SuccessorWorkerSessionID: "interrupt-wait-successor", ReplacementMessage: "replacement"})
+		outcomes <- err
+	}()
+	select {
+	case <-cancelStarted:
+	case <-time.After(2 * time.Second):
+		t.Fatal("Interrupt() did not reach the cancellation effect")
+	}
+	cancel()
+	select {
+	case err := <-outcomes:
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("Interrupt(canceled caller) error = %v, want context.Canceled", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("Interrupt(canceled caller) did not return")
+	}
+	supervision.signalDone()
+	r.mu.RLock()
+	replay := r.interruptReplays["interrupt-wait-request"]
+	r.mu.RUnlock()
+	if replay != nil {
+		<-replay.done
+	}
+}
+
+func TestWorkerSessionObservationAndControlErrorMappings(t *testing.T) {
+	r := newTestRegistry(t)
+	if _, err := r.parseObservationListQuery(context.Background(), workersessions.ListWorkerSessionObservationsRequest{NextToken: "not-base64"}); !errors.Is(err, workersessions.ErrInvalidObservationPagination) {
+		t.Fatalf("parseObservationListQuery(invalid cursor) error = %v, want invalid pagination", err)
+	}
+
+	if _, err := newReplayObservationSubscription(context.Background(), coverageReadReader{readErr: events.ErrUnresolvableCursor}, workersessions.Topic("worker"), workersessions.StateRunning, 1, &workersessions.ObservationCursor{Position: 1}); !errors.Is(err, workersessions.ErrObservationCursorFuture) {
+		t.Fatalf("newReplayObservationSubscription(future cursor) error = %v, want future cursor", err)
+	}
+	r.eventReader = coverageSubscribeReader{subscribeErr: events.ErrUnresolvableCursor}
+	if _, err := r.liveObservationStream(context.Background(), workersessions.Topic("worker"), 1, false, nil); !errors.Is(err, workersessions.ErrObservationCursorFuture) {
+		t.Fatalf("liveObservationStream(unresolvable cursor) error = %v, want future cursor", err)
+	}
+
+	r.clock = coverageClock{now: time.Date(2026, time.January, 1, 0, 0, 0, 0, time.UTC)}
+	r.logReconciliation("worker", "dispatch", workers.WorkstationDispatchResult{ReconciliationReason: workers.WorkstationDispatchReconciliationReasonTimeout}, workersessions.StateRunning, workersessions.StateFailed, time.Date(2026, time.January, 2, 0, 0, 0, 0, time.UTC), time.Time{})
+
+	supervision := newSupervision("pause-dispatch", "")
+	supervision.accepted = true
+	if _, _, err := r.pauseBoundary(context.Background(), workersessions.ControlRequest{ID: "missing"}, supervision, cancellationAttempt{kind: cancellationAttemptBoundary, dispatchID: "pause-dispatch", wait: make(chan struct{})}); !errors.Is(err, workers.ErrUnknownWorkstationDispatch) {
+		t.Fatalf("pauseBoundary(without cancel) error = %v, want unknown dispatch", err)
+	}
+}
+
+func TestWorkerSessionCallerCancellation_DetachesStartAndContinueAfterReadinessBarrier(t *testing.T) {
+	t.Run("start", func(t *testing.T) {
+		r := newTestRegistry(t)
+		r.execution = coverageExecution{execute: func(_ context.Context, request workers.ExecuteRequest) (workers.ExecuteResult, error) {
+			return coverageExecutionResult(request, workers.ExecutionOutcomeAccepted), nil
+		}}
+		inner := r.eventReader
+		reader := &coverageGatedReader{inner: inner, started: make(chan struct{}), release: make(chan struct{})}
+		r.eventReader = reader
+
+		ctx, cancel := context.WithCancel(context.Background())
+		outcomes := make(chan error, 1)
+		go func() {
+			_, err := r.Start(ctx, workersessions.StartRequest{
+				RequestID: "start-cancel-request",
+				ID:        "start-cancel-session",
+				Execution: dispatchHandoff("start-cancel-dispatch"),
+			})
+			outcomes <- err
+		}()
+		select {
+		case <-reader.started:
+		case <-time.After(2 * time.Second):
+			t.Fatal("Start() did not reach the readiness subscription")
+		}
+		cancel()
+		select {
+		case err := <-outcomes:
+			if !errors.Is(err, context.Canceled) {
+				t.Fatalf("Start(canceled caller) error = %v, want context.Canceled", err)
+			}
+		case <-time.After(2 * time.Second):
+			t.Fatal("Start(canceled caller) did not return")
+		}
+		close(reader.release)
+		r.mu.RLock()
+		replay := r.startReplays["start-cancel-request"]
+		r.mu.RUnlock()
+		if replay != nil {
+			<-replay.done
+		}
+	})
+
+	t.Run("continue", func(t *testing.T) {
+		r := newTestRegistry(t)
+		r.execution = coverageExecution{execute: func(_ context.Context, request workers.ExecuteRequest) (workers.ExecuteResult, error) {
+			return coverageExecutionResult(request, workers.ExecutionOutcomeAccepted), nil
+		}}
+		inner := r.eventReader
+		reader := &coverageGatedReader{inner: inner, started: make(chan struct{}), release: make(chan struct{})}
+		r.eventReader = reader
+		ref := providers.SessionRef{Provider: providers.IDCodex, Kind: providers.SessionIDKind, ID: "continue-cancel-provider"}
+		association := validAssociation("continue-cancel-source", "continue-cancel-dispatch", ref)
+		supervision := newSupervision("continue-cancel-dispatch", "", dispatchHandoff("continue-cancel-dispatch"))
+		setCoverageAccepted(supervision, true)
+		r.sessions["continue-cancel-source"] = workersessions.Session{ID: "continue-cancel-source", State: workersessions.StateCompleted, ProviderSessionAssociation: &association}
+		r.supervisions["continue-cancel-source"] = supervision
+
+		ctx, cancel := context.WithCancel(context.Background())
+		outcomes := make(chan error, 1)
+		go func() {
+			_, err := r.Continue(ctx, workersessions.ContinueRequest{
+				RequestID:                "continue-cancel-request",
+				SourceWorkerSessionID:    "continue-cancel-source",
+				SuccessorWorkerSessionID: "continue-cancel-successor",
+				FollowUpInput:            "follow up",
+			})
+			outcomes <- err
+		}()
+		select {
+		case <-reader.started:
+		case <-time.After(2 * time.Second):
+			t.Fatal("Continue() did not reach the readiness subscription")
+		}
+		cancel()
+		select {
+		case err := <-outcomes:
+			if !errors.Is(err, context.Canceled) {
+				t.Fatalf("Continue(canceled caller) error = %v, want context.Canceled", err)
+			}
+		case <-time.After(2 * time.Second):
+			t.Fatal("Continue(canceled caller) did not return")
+		}
+		close(reader.release)
+		r.mu.RLock()
+		replay := r.continueReplays["continue-cancel-request"]
+		r.mu.RUnlock()
+		if replay != nil {
+			<-replay.done
+		}
+	})
+}
+
+func TestWorkerSessionControlCompletion_CoversResumeReservationAndInvalidContinuation(t *testing.T) {
+	r := newTestRegistry(t)
+	r.reserveIfAbsent("control-history")
+	supervision := newSupervision("control-history-dispatch", "")
+	supervision.controlHistory = &controlHistoryReservation{
+		pub:       r.publications["control-history"],
+		sessionID: "control-history",
+		action:    workersessions.ControlActionResume,
+		requestID: "control-request",
+	}
+	r.finishSupervisionControl(supervision, completionSnapshot{dispatchID: "control-history-dispatch"}, workersessions.ControlOutcomeApplied, workersessions.StateFailed)
+
+	if r.continuationResultMatchesAssociation("worker", workers.WorkstationDispatchResult{
+		Result: workers.WorkResult{Outcome: workers.OutcomeAccepted, Continuation: &workers.ProviderContinuationRef{}},
+	}) {
+		t.Fatal("continuationResultMatchesAssociation(invalid continuation) = true, want false")
+	}
+	if got := openingSessionContinuation(workers.WorkstationExecutionRequest{Continuation: &workers.ProviderContinuationRef{}}); got == nil || got.Kind != providers.SessionIDKind {
+		t.Fatalf("openingSessionContinuation(empty) = %#v, want normalized continuation kind", got)
+	}
+	if got := providerIdentityForExecution(workers.WorkstationExecutionRequest{ExecutorProvider: "provider"}); got != "provider" {
+		t.Fatalf("providerIdentityForExecution(provider) = %q, want provider", got)
+	}
+}
+
+func TestWorkerSessionInterruptAndStartCompletion_CoversEarlyBranches(t *testing.T) {
+	r := newTestRegistry(t)
+	supervision := newSupervision("interrupt-no-cancel", "")
+	supervision.requestedAction = workersessions.ControlActionCancel
+	if _, err := r.runInterrupt(interruptPlan{
+		request:     workersessions.InterruptRequest{RequestID: "interrupt-no-cancel-request", SourceWorkerSessionID: "source", SuccessorWorkerSessionID: "successor", ReplacementMessage: "replacement"},
+		dispatchID:  "interrupt-no-cancel",
+		supervision: supervision,
+	}); err == nil {
+		t.Fatal("runInterrupt(no cancellation handle) error = nil, want failure")
+	}
+
+	r.execution = nil
+	result, err := r.startReserved(context.Background(), workersessions.StartRequest{
+		RequestID: "start-no-execution-request",
+		ID:        "start-no-execution-session",
+		Execution: dispatchHandoff("start-no-execution-dispatch"),
+	})
+	if err == nil || result.Session.State != workersessions.StateFailed {
+		t.Fatalf("startReserved(no execution) = %#v, %v, want failed admission result", result, err)
+	}
+}
+
+func TestWorkerSessionStartAdmissionCompletionRemainsObservable(t *testing.T) {
+	r := newTestRegistry(t)
+	r.execution = coverageExecution{execute: func(_ context.Context, request workers.ExecuteRequest) (workers.ExecuteResult, error) {
+		return coverageExecutionResult(request, workers.ExecutionOutcomeAccepted), nil
+	}}
+	result, err := r.Start(context.Background(), workersessions.StartRequest{
+		RequestID: "start-admission-request",
+		ID:        "start-admission-session",
+		Execution: dispatchHandoff("start-admission-dispatch"),
+	})
+	if err != nil || result.Session.ID == "" {
+		t.Fatalf("Start(successful attempt) = %#v, %v, want admitted session", result, err)
+	}
+	r.mu.RLock()
+	supervision := r.supervisions[result.Session.ID]
+	r.mu.RUnlock()
+	if supervision == nil {
+		t.Fatal("Start(successful attempt) did not retain supervision")
+	}
+	<-supervision.done
+	final, getErr := r.Get(context.Background(), workersessions.GetRequest{ID: result.Session.ID})
+	if getErr != nil || final.State != workersessions.StateCompleted {
+		t.Fatalf("Start(successful attempt) final session = %#v, %v, want completed", final, getErr)
+	}
+}
+
+type directControlStartOutcome struct {
+	result workersessions.StartResult
+	err    error
+}
+
+type directControlOutcome struct {
+	result workersessions.ControlResult
+	err    error
+}
+
+func TestWorkerSessionDirectExecutionControlsCancelContextAndJoinTerminal(t *testing.T) {
+	t.Run("cancel", func(t *testing.T) {
+		runWorkerSessionDirectExecutionControl(t, workersessions.ControlActionCancel, func(service workersessions.Service, ctx context.Context, req workersessions.ControlRequest) (workersessions.ControlResult, error) {
+			return service.Cancel(ctx, req)
+		})
+	})
+	t.Run("terminate", func(t *testing.T) {
+		runWorkerSessionDirectExecutionControl(t, workersessions.ControlActionTerminate, func(service workersessions.Service, ctx context.Context, req workersessions.ControlRequest) (workersessions.ControlResult, error) {
+			return service.Terminate(ctx, req)
+		})
+	})
+}
+
+func runWorkerSessionDirectExecutionControl(t *testing.T, action workersessions.ControlAction, call func(workersessions.Service, context.Context, workersessions.ControlRequest) (workersessions.ControlResult, error)) {
+	t.Helper()
+	started := make(chan struct{})
+	cancellationObserved := make(chan struct{})
+	release := make(chan struct{})
+	var startedOnce sync.Once
+	var cancellationOnce sync.Once
+	var releaseOnce sync.Once
+	defer releaseOnce.Do(func() { close(release) })
+
+	r := newTestRegistry(t)
+	r.execution = coverageExecution{execute: func(ctx context.Context, request workers.ExecuteRequest) (workers.ExecuteResult, error) {
+		startedOnce.Do(func() { close(started) })
+		<-ctx.Done()
+		cancellationOnce.Do(func() { close(cancellationObserved) })
+		<-release
+		return coverageExecutionResult(request, workers.ExecutionOutcomeCanceled), ctx.Err()
+	}}
+
+	startOutcome := startDirectControlSession(t, r, string(action))
+	startedResult := awaitDirectControlStart(t, started, startOutcome)
+	if startedResult.err != nil || startedResult.result.Session.State != workersessions.StateRunning {
+		t.Fatalf("Start() = %#v, %v, want admitted RUNNING session", startedResult.result, startedResult.err)
+	}
+
+	callerCtx, cancelCaller := context.WithCancel(context.Background())
+	cancelCaller()
+	controlOutcome := invokeDirectControl(r, callerCtx, startedResult.result.Session.ID, call)
+	awaitDirectControlCancellation(t, action, cancellationObserved, controlOutcome, release, &releaseOnce)
+	outcome := <-controlOutcome
+	assertDirectControlTerminal(t, r, action, startedResult.result.Session.ID, outcome, call)
+}
+
+func startDirectControlSession(t *testing.T, r *registry, controlName string) <-chan directControlStartOutcome {
+	t.Helper()
+	startOutcome := make(chan directControlStartOutcome, 1)
+	go func() {
+		result, err := r.Start(context.Background(), workersessions.StartRequest{
+			RequestID: "direct-control-start-" + controlName,
+			ID:        "direct-control-session-" + controlName,
+			Execution: dispatchHandoff("direct-control-dispatch-" + controlName),
+		})
+		startOutcome <- directControlStartOutcome{result: result, err: err}
+	}()
+	return startOutcome
+}
+
+func awaitDirectControlStart(t *testing.T, started <-chan struct{}, startOutcome <-chan directControlStartOutcome) directControlStartOutcome {
+	t.Helper()
+	select {
+	case <-started:
+	case <-time.After(2 * time.Second):
+		t.Fatal("direct Workers execution did not start")
+	}
+	select {
+	case outcome := <-startOutcome:
+		return outcome
+	case <-time.After(2 * time.Second):
+		t.Fatal("Start() did not return at the direct Workers admission barrier")
+		return directControlStartOutcome{}
+	}
+}
+
+func invokeDirectControl(r workersessions.Service, callerCtx context.Context, sessionID string, call func(workersessions.Service, context.Context, workersessions.ControlRequest) (workersessions.ControlResult, error)) <-chan directControlOutcome {
+	controlOutcome := make(chan directControlOutcome, 1)
+	go func() {
+		result, err := call(r, callerCtx, workersessions.ControlRequest{ID: sessionID})
+		controlOutcome <- directControlOutcome{result: result, err: err}
+	}()
+	return controlOutcome
+}
+
+func awaitDirectControlCancellation(t *testing.T, action workersessions.ControlAction, cancellationObserved <-chan struct{}, controlOutcome <-chan directControlOutcome, release chan struct{}, releaseOnce *sync.Once) {
+	t.Helper()
+	select {
+	case <-cancellationObserved:
+	case <-time.After(2 * time.Second):
+		t.Fatal("direct Workers execution did not observe the server-owned cancellation context")
+	}
+	select {
+	case outcome := <-controlOutcome:
+		t.Fatalf("%s returned before the direct execution callback joined: %#v", action, outcome.result)
+	default:
+	}
+	releaseOnce.Do(func() { close(release) })
+}
+
+func assertDirectControlTerminal(t *testing.T, r *registry, action workersessions.ControlAction, sessionID string, outcome directControlOutcome, call func(workersessions.Service, context.Context, workersessions.ControlRequest) (workersessions.ControlResult, error)) {
+	t.Helper()
+	if outcome.err != nil || outcome.result.Outcome != workersessions.ControlOutcomeApplied {
+		t.Fatalf("%s() = %#v, %v, want applied control after callback", action, outcome.result, outcome.err)
+	}
+	wantState := workersessions.StateCanceled
+	if action == workersessions.ControlActionTerminate {
+		wantState = workersessions.StateTerminated
+	}
+	if outcome.result.Session.State != wantState {
+		t.Fatalf("%s() state = %q, want %q", action, outcome.result.Session.State, wantState)
+	}
+	final, err := r.Get(context.Background(), workersessions.GetRequest{ID: sessionID})
+	if err != nil || final.State != wantState {
+		t.Fatalf("Get() after %s = %#v, %v, want %q", action, final, err, wantState)
+	}
+	repeated, err := call(r, context.Background(), workersessions.ControlRequest{ID: sessionID})
+	if err != nil || repeated.Outcome != workersessions.ControlOutcomeNoop || repeated.Session.State != wantState {
+		t.Fatalf("repeated %s() = %#v, %v, want terminal NOOP", action, repeated, err)
+	}
+}
+
+func TestWorkerSessionResumeAndReplayCompletion_CoversFailureSnapshots(t *testing.T) {
+	const sessionID = "resume-failure-session"
+	r := newTestRegistry(t)
+	ref := providers.SessionRef{Provider: providers.IDCodex, Kind: providers.SessionIDKind, ID: "resume-provider"}
+	association := validAssociation(sessionID, "resume-dispatch", ref)
+	request := dispatchHandoff("resume-dispatch")
+	r.sessions[sessionID] = workersessions.Session{ID: sessionID, State: workersessions.StatePaused, ProviderSessionAssociation: &association}
+	r.publications[sessionID] = &publication{open: true}
+	supervision := newSupervision("resume-dispatch", "", request)
+	setCoverageAccepted(supervision, true)
+	r.supervisions[sessionID] = supervision
+	r.dispatchOwners["resume-dispatch"] = sessionID
+
+	r.execution = nil
+	if _, err := r.resumeReserved(context.Background(), workersessions.ControlRequest{ID: sessionID, RequestID: "resume-failure-request"}, nil); err == nil {
+		t.Fatal("resumeReserved(no execution) error = nil, want publication failure")
+	}
+
+	current := r.sessions[sessionID]
+	current.State = workersessions.StateStarting
+	r.sessions[sessionID] = current
+	supervision.mu.Lock()
+	supervision.dispatchID = "resume-next-dispatch"
+	supervision.accepted = false
+	supervision.continuing = true
+	supervision.attemptsMade = 1
+	supervision.publishing = true
+	supervision.mu.Unlock()
+	continuation := dispatchHandoff("resume-next-dispatch")
+	result, err := r.resumeAdmissionResult(
+		workersessions.ControlRequest{ID: sessionID},
+		nil,
+		supervision,
+		continuation,
+		"resume-dispatch",
+	)
+	if !errors.Is(err, workersessions.ErrStartAdmissionFailed) || result.Outcome != workersessions.ControlOutcomeFailed || result.Session.State != workersessions.StatePaused {
+		t.Fatalf("resumeAdmissionResult(unadmitted) = %#v, %v, want failed paused snapshot", result, err)
+	}
+
+	replay := &replayObservationSubscription{topic: "", next: events.Cursor{}}
+	if err := replay.appendPage(events.ReadResult{Outcome: events.ReadOutcomeInvalidCursor}); !errors.Is(err, workersessions.ErrObservationSourceUnavailable) {
+		t.Fatalf("replayObservationSubscription.appendPage(invalid cursor) error = %v, want source unavailable", err)
+	}
+}
+
 func TestWorkerSessionSmallBoundaryBranchesRemainObservable(t *testing.T) {
+	if _, err := newTestRegistry(t).parseObservationListQuery(context.Background(), workersessions.ListWorkerSessionObservationsRequest{NextToken: "not-base64"}); !errors.Is(err, workersessions.ErrInvalidObservationPagination) {
+		t.Fatalf("parseObservationListQuery(invalid cursor) error = %v, want invalid pagination", err)
+	}
 	if _, err := decodeObservationListCursor("not-base64"); !errors.Is(err, workersessions.ErrInvalidObservationPagination) {
 		t.Fatalf("decodeObservationListCursor(invalid) error = %v, want invalid pagination", err)
+	}
+	if err := replayReadError(events.ErrUnresolvableCursor); !errors.Is(err, workersessions.ErrObservationCursorFuture) {
+		t.Fatalf("replayReadError(unresolvable cursor) = %v, want future cursor", err)
 	}
 	if got := (&registry{}).sessionState("missing"); got != "" {
 		t.Fatalf("sessionState(missing) = %q, want empty", got)

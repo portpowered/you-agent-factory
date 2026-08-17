@@ -5,8 +5,8 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
+	workerrecording "github.com/portpowered/infinite-you/pkg/services/workers/internal/execution/recording"
 	"github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners"
-	workerrecording "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/execution/recording"
 	workerexecutor "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/executor"
 	"github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/executor/agentrun"
 )
@@ -19,7 +19,6 @@ import (
 //
 // The harness owns provider retry for the turns it drives, matching the
 // behavior the workstation router produced before dispatch became detached.
-//
 func (s *Service) runAgentLoop(
 	ctx context.Context,
 	request workers.ExecuteRequest,

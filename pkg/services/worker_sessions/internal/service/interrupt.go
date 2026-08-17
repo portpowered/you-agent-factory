@@ -580,13 +580,21 @@ func interruptSourceAssociation(source workersessions.Session) (workersessions.P
 
 func (r *registry) runInterrupt(plan interruptPlan) (workersessions.InterruptResult, error) {
 	defer finishInterruptOperation(plan.supervision)
-	boundaryContext := context.WithoutCancel(r.serverOwnedContext())
-	cancelResult, cancelErr := r.boundary.Cancel(boundaryContext, workers.WorkstationDispatchCancelRequest{
+	cancelResult := workers.WorkstationDispatchCancelResult{
 		DispatchID: plan.dispatchID,
-	})
+		Outcome:    workers.WorkstationDispatchCancelOutcomeCanceled,
+	}
+	var cancelErr error
+	executionCanceled, executionCancelErr := plan.supervision.cancelExecution()
+	if !executionCanceled {
+		cancelResult.Outcome = workers.WorkstationDispatchCancelOutcomeAlreadyTerminal
+		cancelErr = workers.ErrUnknownWorkstationDispatch
+	} else {
+		cancelErr = executionCancelErr
+	}
 	canceled := cancelErr == nil && (cancelResult.Outcome == workers.WorkstationDispatchCancelOutcomeCanceled ||
 		cancelResult.Outcome == workers.WorkstationDispatchCancelOutcomeAlreadyCanceled)
-	finishInterruptBoundary(plan.supervision, canceled)
+	finishInterruptExecution(plan.supervision, canceled)
 	if !canceled {
 		cause := interruptCancellationCause(cancelResult, cancelErr)
 		r.finishInterruptControlHistory(
@@ -612,6 +620,7 @@ func (r *registry) runInterrupt(plan interruptPlan) (workersessions.InterruptRes
 		return result, newInterruptError(workersessions.InterruptPhaseSourceCancellation, result, cause)
 	}
 
+	boundaryContext := context.WithoutCancel(r.serverOwnedContext())
 	continued, continueErr := r.Continue(boundaryContext, workersessions.ContinueRequest{
 		RequestID:                interruptContinuationRequestID(plan.request.RequestID),
 		SourceWorkerSessionID:    plan.request.SourceWorkerSessionID,
@@ -667,7 +676,7 @@ func interruptSuccessorMatches(
 		session.ProviderSessionAssociation.DispatchID == continuationDispatchID(sourceDispatchID, session.ID)
 }
 
-func finishInterruptBoundary(supervision *supervision, canceled bool) {
+func finishInterruptExecution(supervision *supervision, canceled bool) {
 	supervision.mu.Lock()
 	wait := supervision.controlDone
 	supervision.controlDone = nil
@@ -912,16 +921,7 @@ func (r *registry) publishResumeDispatch(
 	supervision *supervision,
 	continuation workers.WorkstationDispatchRequest,
 ) error {
-	return r.boundary.PublishWithAdmission(
-		context.WithoutCancel(ctx),
-		continuation,
-		func() {
-			r.acceptSupervision(req.ID, supervision)
-		},
-		func(_ context.Context, _ workers.WorkstationDispatchRequest, result workers.WorkstationDispatchResult, dispatchErr error) {
-			r.completeSupervision(req.ID, supervision, result, dispatchErr)
-		},
-	)
+	return r.publishExecution(context.WithoutCancel(ctx), req.ID, continuation, supervision)
 }
 
 func (r *registry) resumePublicationFailure(

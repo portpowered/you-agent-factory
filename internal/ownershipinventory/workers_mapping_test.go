@@ -29,12 +29,47 @@ var workersMappingCases = []packageMappingCase{
 		retainOwner: "workers",
 	},
 	{
-		path:        "pkg/services/workers/internal/services/runtime_assembly/wire",
+		path:        "pkg/services/workers/internal/services/workstations/internal/service",
 		wantRetain:  true,
 		retainOwner: "workers",
 	},
 	{
-		path:        "pkg/services/workers/internal/services/workstations/internal/service",
+		path:        "pkg/services/workers/internal/execution",
+		wantRetain:  true,
+		retainOwner: "workers",
+	},
+	{
+		path:        "pkg/services/workers/internal/execution/recording",
+		wantRetain:  true,
+		retainOwner: "workers",
+	},
+	{
+		path:        "pkg/services/workers/internal/draftvalidation",
+		wantRetain:  true,
+		retainOwner: "workers",
+	},
+	{
+		path:        "pkg/services/workers/internal/inferencefailure",
+		wantRetain:  true,
+		retainOwner: "workers",
+	},
+	{
+		path:        "pkg/services/workers/internal/prompting",
+		wantRetain:  true,
+		retainOwner: "workers",
+	},
+	{
+		path:        "pkg/services/workers/internal/skippermissions",
+		wantRetain:  true,
+		retainOwner: "workers",
+	},
+	{
+		path:        "pkg/services/workers/internal/worktree",
+		wantRetain:  true,
+		retainOwner: "workers",
+	},
+	{
+		path:        "pkg/services/workers/internal/worktree/paths",
 		wantRetain:  true,
 		retainOwner: "workers",
 	},
@@ -47,17 +82,6 @@ var workersMappingCases = []packageMappingCase{
 			DestinationKind:   ownershipinventory.DestinationKindOwner,
 			Successor:         "pkg/services/workers/internal",
 			DeletionCondition: "delete transitional service/ package after owner wire retargets to internal implementation and DEL cutover proof completes",
-		},
-	},
-	{
-		path: "pkg/services/workers/construction",
-		wantMove: &ownershipinventory.PackageRow{
-			PackagePath:       "pkg/services/workers/construction",
-			Disposition:       ownershipinventory.DispositionMove,
-			Destination:       "workers",
-			DestinationKind:   ownershipinventory.DestinationKindOwner,
-			Successor:         "pkg/services/workers/internal/services/runtime_assembly",
-			DeletionCondition: "delete public package after IMP-WRK-runtime_assembly private subservice cutover proof",
 		},
 	},
 	{
@@ -214,11 +238,21 @@ func workersCanonicalRetainRest(rest string) bool {
 	switch {
 	case rest == "wire" || strings.HasPrefix(rest, "wire/"):
 		return true
-	case strings.HasPrefix(rest, "internal/services/runtime_assembly"):
-		return true
 	case strings.HasPrefix(rest, "internal/services/workstations"):
 		return true
 	case strings.HasPrefix(rest, "internal/services/runners"):
+		return true
+	case strings.HasPrefix(rest, "internal/execution"):
+		return true
+	case strings.HasPrefix(rest, "internal/draftvalidation"):
+		return true
+	case strings.HasPrefix(rest, "internal/inferencefailure"):
+		return true
+	case strings.HasPrefix(rest, "internal/prompting"):
+		return true
+	case strings.HasPrefix(rest, "internal/skippermissions"):
+		return true
+	case strings.HasPrefix(rest, "internal/worktree"):
 		return true
 	default:
 		return false

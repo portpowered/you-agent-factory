@@ -36,7 +36,6 @@ func NewRuntimeFactory(
 	inputDirectoryWalker factoryruntime.InputDirectoryWalker,
 	orchestrationCompilation factoryruntime.OrchestrationCompilation,
 	providerSessions providersessions.Service,
-	workerPoolBoundaryFactory factoryruntime.WorkstationPoolBoundaryFactory,
 ) *RuntimeFactory {
 	return factoryruntimeinternal.NewRuntimeFactory(
 		quorumPolicy,
@@ -56,7 +55,6 @@ func NewRuntimeFactory(
 		inputDirectoryWalker,
 		orchestrationCompilation,
 		providerSessions,
-		workerPoolBoundaryFactory,
 	)
 }
 

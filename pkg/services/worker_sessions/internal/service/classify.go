@@ -803,8 +803,8 @@ func isTerminalLifecycleRecord(record events.Record) bool {
 
 // publishOpeningRecord commits the one opening KindSession/PhaseStarted
 // workers.Draft onto workersessions.Topic(id), detached from any
-// caller-owned backing array, before Start ever calls
-// workers.WorkstationExecutionService.DispatchWorkstation. It runs under
+// caller-owned backing array, before Start ever calls the injected
+// workers.Service. It runs under
 // id's publication lock, the same lock PublishRecord and
 // publishTerminalRecord use, and opens id's publication window only once
 // the append itself has committed: no PublishRecord call can be accepted for

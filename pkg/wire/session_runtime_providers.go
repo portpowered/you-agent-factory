@@ -220,23 +220,6 @@ func buildProviderRegistry(
 	return provideProviderRegistry(serviceedges.Edges{}, providersService)
 }
 
-func provideProvidersRebinder(
-	_ providers.Service,
-	edges serviceedges.Edges,
-
-) (workerswire.ProvidersRebinder, error) {
-	return func(providerRunner workers.CommandRunner) (providers.Service, error) {
-		if providerRunner == nil {
-			return nil, fmt.Errorf("Providers rebind requires command runner")
-		}
-		rebound, err := provideConfiguredProvidersService(edges, nil, providerRunner)
-		if err != nil {
-			return nil, err
-		}
-		return rebound, nil
-	}, nil
-}
-
 type providerIdentityProjection struct {
 	service providers.Service
 }
@@ -1046,89 +1029,8 @@ func provideWorkerCurrentWorkingDirectory() func() (string, error) {
 	return os.Getwd
 }
 
-func provideWorkersRuntimeExecutorsFactory() factoryruntime.WorkersRuntimeExecutorsFactory {
-	return workerswire.BuildRuntimeExecutors
-}
-
 func provideWorkersMockCommandRunnerFactory() factoryruntime.WorkersMockCommandRunnerFactory {
 	return workerswire.NewMockCommandRunner
-}
-
-// provideProviderInvocationExecutorFactory composes the executor behind
-// workers.ProviderInvocationRoute -- the route a Worker takes when its caller,
-// not an authored workstation, resolved its prompt, model, and provider.
-//
-// It is deliberately built from the same conductor invocation boundary a Petri
-// Worker's provider execution uses, over the session's own command runner, so
-// a JavaScript workflow child and a Petri Worker differ in what schedules them
-// and in nothing else.
-//
-// An explicit process provider override is already the complete invocation
-// edge, so the route is built directly on it and no registered-provider path is
-// constructed alongside it. Skipping the route entirely there would leave every
-// provider-invocation Worker unroutable in exactly the compositions that
-// substitute a provider on purpose -- functional API servers and replays.
-func provideProviderInvocationExecutorFactory(
-	conductorInvocation factorysessionwire.ConductorInvocationWithProgressFactory,
-	providersRebinder workerswire.ProvidersRebinder,
-	allocator workers.PTYAllocator,
-	providerOverride providerOverrideService,
-	defaultProviderCommandRunner factorysessionwire.ProviderCommandRunner,
-) factoryruntime.ProviderInvocationExecutorFactory {
-	return func(
-		sessionCommandRunner workers.CommandRunner,
-		publisher workers.ProgressPublisher,
-	) (workers.WorkstationRequestExecutor, error) {
-		if providerOverride != nil {
-			return workerswire.NewProviderInvocationExecutor(
-				workerswire.NewExecutor(providerOverride),
-			), nil
-		}
-		if conductorInvocation == nil || allocator == nil {
-			return nil, nil
-		}
-		selectedProviders, runner, err := providerInvocationProviderEdge(
-			providersRebinder, sessionCommandRunner, defaultProviderCommandRunner,
-		)
-		if err != nil {
-			return nil, err
-		}
-		invocation, err := conductorInvocation(selectedProviders, runner, allocator, publisher)
-		if err != nil {
-			return nil, fmt.Errorf("construct provider-invocation Worker boundary: %w", err)
-		}
-		return workerswire.NewProviderInvocationExecutor(invocation), nil
-	}
-}
-
-// providerInvocationProviderEdge resolves the provider edge one session's
-// provider-invocation Workers run through.
-//
-// A session that composed its own provider command runner -- which is what
-// --with-mock-workers does -- must also have the Providers root rebuilt around
-// that runner. Providers resolves its execution effect when the root is
-// constructed, so handing only the conductor the session's runner reaches the
-// adapter but never the process the provider actually starts, and every mocked
-// Worker would run for real. A session that composed none takes the process
-// edge and the Providers root already built.
-func providerInvocationProviderEdge(
-	providersRebinder workerswire.ProvidersRebinder,
-	sessionCommandRunner workers.CommandRunner,
-	defaultProviderCommandRunner factorysessionwire.ProviderCommandRunner,
-) (providers.Service, workers.CommandRunner, error) {
-	if sessionCommandRunner == nil {
-		return nil, defaultProviderCommandRunner, nil
-	}
-	if providersRebinder == nil {
-		return nil, nil, fmt.Errorf(
-			"provider-invocation Worker requires a Providers rebinder for a session-composed runner",
-		)
-	}
-	rebound, err := providersRebinder(sessionCommandRunner)
-	if err != nil {
-		return nil, nil, fmt.Errorf("rebind Providers service for provider-invocation Worker: %w", err)
-	}
-	return rebound, sessionCommandRunner, nil
 }
 
 func provideWorkerInvocationWithProgressFactory(

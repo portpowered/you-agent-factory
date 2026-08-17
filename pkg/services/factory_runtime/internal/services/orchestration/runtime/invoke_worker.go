@@ -432,7 +432,6 @@ func executionCorrelationFromDispatch(
 // everything else executes one provider attempt. Runtime resolves it here and
 // hands Workers a detached tool policy, so the routing survives without
 // Workers reading a Factory definition or a workstation pool.
-//
 func applyRuntimeAgentRunSelection(
 	selection *runtimeExecutionSelection,
 	workstation *interfaces.FactoryWorkstationConfig,
@@ -663,11 +662,10 @@ func (f *factoryImpl) InvokeWorker(
 	)
 
 	// The caller's cancellation reaches the Worker through the Worker Session's
-	// own control, not through the invocation context. Workers deliberately
-	// detaches the dispatch context -- a dispatch is cancelled by
-	// CancelWorkstationDispatch, never by its caller going away -- so passing a
-	// cancellable context down would be ignored, and the running provider would
-	// keep going after the workflow that asked for it had stopped.
+	// own control, not through the invocation context. Workers owns the
+	// request-scoped execution context, and Worker Sessions cancels it through
+	// its supervision boundary, so a provider cannot outlive the workflow that
+	// asked it to stop.
 	stopWatching := f.cancelSessionWhenCallerStops(ctx, sessionID)
 	defer stopWatching()
 

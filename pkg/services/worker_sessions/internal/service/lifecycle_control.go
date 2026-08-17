@@ -69,15 +69,23 @@ func (r *registry) pauseIteration(
 }
 
 func (r *registry) pauseBoundary(
-	ctx context.Context,
+	_ context.Context,
 	req workersessions.ControlRequest,
 	supervision *supervision,
 	attempt cancellationAttempt,
 ) (workersessions.ControlResult, bool, error) {
-	cancelResult, cancelErr := r.boundary.Cancel(
-		context.WithoutCancel(ctx),
-		workers.WorkstationDispatchCancelRequest{DispatchID: attempt.dispatchID},
-	)
+	cancelResult := workers.WorkstationDispatchCancelResult{
+		DispatchID: attempt.dispatchID,
+		Outcome:    workers.WorkstationDispatchCancelOutcomeCanceled,
+	}
+	var cancelErr error
+	canceled, executionCancelErr := supervision.cancelExecution()
+	if !canceled {
+		cancelResult.Outcome = workers.WorkstationDispatchCancelOutcomeAlreadyTerminal
+		cancelErr = workers.ErrUnknownWorkstationDispatch
+	} else {
+		cancelErr = executionCancelErr
+	}
 	alreadyTerminal := supervision.finishCancellation(
 		workersessions.ControlActionPause,
 		attempt.wait,
@@ -361,18 +369,25 @@ func (r *registry) cancelControlIteration(
 }
 
 func (r *registry) cancelBoundary(
-	ctx context.Context,
+	_ context.Context,
 	req workersessions.ControlRequest,
 	action workersessions.ControlAction,
-	detachContext bool,
+	_ bool,
 	supervision *supervision,
 	attempt cancellationAttempt,
 ) (workersessions.ControlResult, bool, error) {
-	boundaryContext := ctx
-	if detachContext {
-		boundaryContext = context.WithoutCancel(ctx)
+	cancelResult := workers.WorkstationDispatchCancelResult{
+		DispatchID: attempt.dispatchID,
+		Outcome:    workers.WorkstationDispatchCancelOutcomeCanceled,
 	}
-	cancelResult, cancelErr := r.boundary.Cancel(boundaryContext, workers.WorkstationDispatchCancelRequest{DispatchID: attempt.dispatchID})
+	var cancelErr error
+	canceled, executionCancelErr := supervision.cancelExecution()
+	if !canceled {
+		cancelResult.Outcome = workers.WorkstationDispatchCancelOutcomeAlreadyTerminal
+		cancelErr = workers.ErrUnknownWorkstationDispatch
+	} else {
+		cancelErr = executionCancelErr
+	}
 	alreadyTerminal := supervision.finishCancellation(action, attempt.wait, cancelResult, cancelErr, sessionIsTerminal(r, req.ID))
 
 	// Every terminal control promises to return only after the authoritative
@@ -526,11 +541,15 @@ type supervision struct {
 	controlActive      bool
 	controlDone        chan struct{}
 	controlHistory     *controlHistoryReservation
+	deadlineExceeded   bool
+	processGone        bool
 	interrupting       bool
 	interruptRequestID string
 	interruptDone      chan struct{}
 	result             workers.WorkstationDispatchResult
 	err                error
+	cancel             context.CancelFunc
+	cancelFailure      func() error
 
 	// retryBudget is the total attempt allowance for this supervision and
 	// attemptsMade counts the attempts actually published. retryPending records
@@ -598,8 +617,10 @@ func (s *supervision) beginAttempt() chan struct{} {
 	defer s.mu.Unlock()
 	s.attemptsMade++
 	s.retryPending = false
+	s.processGone = false
 	s.attemptDone = make(chan struct{})
 	s.deadlineAt = time.Time{}
+	s.deadlineExceeded = false
 	return s.attemptDone
 }
 
@@ -646,6 +667,75 @@ func (s *supervision) signalDone() {
 
 func (s *supervision) signalDriverDone() {
 	s.driverDoneOnce.Do(func() { close(s.driverDone) })
+}
+
+func (s *supervision) installCancel(cancel context.CancelFunc) {
+	s.mu.Lock()
+	s.cancel = cancel
+	s.cancelFailure = nil
+	s.mu.Unlock()
+}
+
+// installCancelFailure is a narrow internal seam for exercising cancellation
+// failure handling. Production execution installs a context.CancelFunc;
+// tests can model a failed cancellation effect without restoring a Workers
+// pool or boundary dependency.
+func (s *supervision) installCancelFailure(failure func() error) {
+	s.mu.Lock()
+	s.cancel = nil
+	s.cancelFailure = failure
+	s.mu.Unlock()
+}
+
+func (s *supervision) admissionAllowed() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.preAdmissionAction == "" && s.requestedAction == "" && s.controlAction == ""
+}
+
+func (s *supervision) isAccepted() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.accepted
+}
+
+func (s *supervision) cancelExecution() (bool, error) {
+	s.mu.Lock()
+	cancel := s.cancel
+	cancelFailure := s.cancelFailure
+	s.mu.Unlock()
+	if cancelFailure != nil {
+		return true, cancelFailure()
+	}
+	if cancel == nil {
+		return false, nil
+	}
+	cancel()
+	return true, nil
+}
+
+func (s *supervision) markDeadlineExceeded() {
+	s.mu.Lock()
+	s.deadlineExceeded = true
+	s.mu.Unlock()
+}
+
+func (s *supervision) markProcessGone() {
+	s.mu.Lock()
+	s.processGone = true
+	s.mu.Unlock()
+}
+
+func (s *supervision) processGoneObserved() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.processGone
+}
+
+func (s *supervision) clearDeadlineExceeded() {
+	s.mu.Lock()
+	s.deadlineExceeded = false
+	s.mu.Unlock()
 }
 
 func (s *supervision) beginCancellation(action workersessions.ControlAction) cancellationAttempt {
@@ -728,7 +818,8 @@ func (s *supervision) lastResult() workers.WorkstationDispatchResult {
 }
 
 // acceptSupervision records Workers' exact cancellable-admission point. It
-// deliberately runs from the pool boundary callback rather than after Publish
+// deliberately runs from the Workers admission callback rather than after the
+// execution call
 // returns: synchronous Publish waits for terminal completion, but its admitted
 // dispatch must remain controllable throughout that wait.
 func (r *registry) acceptSupervision(id string, supervision *supervision) {
@@ -814,7 +905,7 @@ func (r *registry) registerSupervisionOwned(
 	return supervision, true
 }
 
-func (r *registry) beginBoundaryPublish(id string, supervision *supervision) bool {
+func (r *registry) beginExecutionPublish(id string, supervision *supervision) bool {
 	r.mu.RLock()
 	session := r.sessions[id]
 	r.mu.RUnlock()
@@ -877,120 +968,4 @@ func (r *registry) logReconciliation(
 		fields = append(fields, "configured_timeout_ms", configuredTimeoutMS)
 	}
 	r.logger.Info("worker session reconciliation", fields...)
-}
-
-func (r *registry) completeSupervision(id string, supervision *supervision, result workers.WorkstationDispatchResult, dispatchErr error) {
-	supervision.mu.Lock()
-	action := supervision.requestedAction
-	continuing := supervision.continuing
-	dispatchID := supervision.dispatchID
-	serverOwned := supervision.serverOwned
-	startedAt := supervision.startedAt
-	deadlineAt := supervision.deadlineAt
-	supervision.mu.Unlock()
-	priorState := r.sessionState(id)
-	if continuing && !r.continuationResultMatchesAssociation(id, result) {
-		result = invalidContinuationResult(result)
-		r.logger.Info("worker session continuation result rejected", "sessionID", id, "attemptID", dispatchID, "outcome", "reference_mismatch")
-	}
-	supervision.mu.Lock()
-	supervision.result = result
-	supervision.err = dispatchErr
-	supervision.mu.Unlock()
-	if !continuing {
-		r.associateProviderSessionFromResult(id, dispatchID, result)
-	}
-
-	if action == workersessions.ControlActionPause && dispatchCanceled(result, dispatchErr) {
-		if r.transitionToPaused(id) {
-			r.finishControlHistory(controlReservationFor(supervision), workersessions.ControlOutcomeApplied, dispatchID, workersessions.StatePaused)
-			supervision.mu.Lock()
-			supervision.requestedAction = ""
-			supervision.mu.Unlock()
-			r.logger.Info("worker session control", "sessionID", id, "attemptID", dispatchID, "action", string(action), "outcome", string(workersessions.ControlOutcomeApplied))
-			supervision.signalPaused()
-			return
-		}
-	}
-
-	// A retryable failure with budget left is deliberately not terminal: the
-	// session stays open, its publication window stays open, and the driver
-	// publishes the next attempt. Releasing only the attempt -- never done --
-	// is what keeps controls waiting for the session's real terminal outcome
-	// rather than being satisfied by an attempt that is about to be retried.
-	if r.claimRetryAttempt(supervision, action, result, dispatchErr) {
-		r.logReconciliationIfNeeded(id, dispatchID, result, priorState, workersessions.StateRunning, startedAt, deadlineAt)
-		r.logger.Info(
-			"worker session attempt",
-			"sessionID", id,
-			"attemptID", dispatchID,
-			"outcome", "retryable_failure",
-		)
-		supervision.finishAttempt()
-		return
-	}
-
-	state, terminal := dispatchedTerminal(action, result, dispatchErr)
-	controlOutcome := controlOutcomeFromDispatch(action, result, dispatchErr)
-	if action == workersessions.ControlActionPause && state != workersessions.StatePaused {
-		controlOutcome = workersessions.ControlOutcomeNoop
-	}
-	if reservation := controlReservationFor(supervision); reservation != nil {
-		if reservation.action == workersessions.ControlActionResume && action == "" {
-			controlOutcome = workersessions.ControlOutcomeFailed
-		}
-		r.finishControlHistory(reservation, controlOutcome, dispatchID, state)
-	}
-	final, committed := r.commitTerminal(id, state, terminal)
-	if committed {
-		r.logTerminal(id, dispatchID, final)
-		r.logReconciliationIfNeeded(id, dispatchID, result, priorState, state, startedAt, deadlineAt)
-		terminalContext := context.Background()
-		if serverOwned {
-			terminalContext = r.serverOwnedContext()
-		}
-		r.publishTerminalRecordOrLog(terminalContext, id, dispatchID, state, *final.Result)
-	}
-	supervision.finishAttempt()
-	supervision.signalDone()
-}
-
-// continuationResultMatchesAssociation keeps every Workers execution path
-// accountable to the exact reference that admitted the continuation. Agent
-// runners reject a provider mismatch before progress is published, while this
-// final check prevents another Workers adapter from committing a plausible
-// success under a stale or foreign retained association.
-func (r *registry) continuationResultMatchesAssociation(id string, result workers.WorkstationDispatchResult) bool {
-	if result.Result.Outcome != workers.OutcomeAccepted && result.Result.Outcome != workers.OutcomeContinue {
-		return true
-	}
-	continuation := result.Result.Continuation
-	if continuation == nil {
-		return false
-	}
-	reference, err := continuation.ToSessionRef()
-	if err != nil {
-		return false
-	}
-	r.mu.RLock()
-	session, exists := r.sessions[id]
-	r.mu.RUnlock()
-	return exists && session.ProviderSessionAssociation != nil &&
-		session.ProviderSessionAssociation.Reference == reference
-}
-
-func invalidContinuationResult(result workers.WorkstationDispatchResult) workers.WorkstationDispatchResult {
-	result.Result.Outcome = workers.OutcomeFailed
-	result.Result.FailureMetadata = &workers.WorkFailureMetadata{
-		Family: workers.WorkFailureFamilyTerminal,
-		Type:   workers.WorkFailureTypePermanentBadRequest,
-	}
-	result.Result.ProviderContinuationFailureKind = providers.ContinuationFailureKindInvalid
-	result.Result.ProviderContinuationOutcome = ""
-	return result
-}
-
-func dispatchCanceled(result workers.WorkstationDispatchResult, dispatchErr error) bool {
-	return result.TerminalOutcome == workers.WorkstationDispatchTerminalOutcomeCanceled ||
-		errors.Is(dispatchErr, workers.ErrWorkstationDispatchCanceled)
 }

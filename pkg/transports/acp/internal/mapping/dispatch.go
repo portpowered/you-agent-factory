@@ -10,7 +10,7 @@ import (
 )
 
 // legalPhasesByKind mirrors
-// pkg/services/workers/internal/services/workstations/draftvalidation's
+// pkg/services/workers/internal/draftvalidation's
 // allowedPhasesByKind -- the one legal Kind/Phase pair policy owner -- so
 // this outbound projector rejects exactly the pairs response-draft
 // validation already rejects before a record can be published. It is

@@ -19,8 +19,8 @@ func newRegistry() workersessions.Service {
 	return newRegistryWithExecution(succeedingExecution())
 }
 
-func newRegistryWithExecution(execution workers.WorkstationExecutionService) workersessions.Service {
-	registry, err := newService(executionBoundary{execution: execution}, newEventsAppender(), logging.NoopLogger{})
+func newRegistryWithExecution(execution any) workersessions.Service {
+	registry, err := newService(execution, newEventsAppender(), logging.NoopLogger{})
 	if err != nil {
 		panic(fmt.Sprintf("service.New() error = %v, want nil", err))
 	}
@@ -674,16 +674,6 @@ func prepareInterruptSource(
 	}); err != nil {
 		t.Fatalf("AssociateProviderSession() error = %v", err)
 	}
-	boundary.setCancel(func(_ context.Context, request workers.WorkstationDispatchCancelRequest) (workers.WorkstationDispatchCancelResult, error) {
-		if request.DispatchID != "dispatch-source" {
-			t.Errorf("cancel dispatch = %q, want dispatch-source", request.DispatchID)
-		}
-		if got := boundary.publishCount(); got != 1 {
-			t.Errorf("publish count during source cancellation = %d, want 1", got)
-		}
-		boundary.complete(canceledDispatchResult("dispatch-source"), workers.ErrWorkstationDispatchCanceled)
-		return workers.WorkstationDispatchCancelResult{DispatchID: "dispatch-source", Outcome: workers.WorkstationDispatchCancelOutcomeCanceled}, nil
-	})
 	return sourceResult, reference
 }
 
@@ -763,10 +753,6 @@ func TestInterrupt_IdempotencyAndRequestConflictAvoidDuplicateEffects(t *testing
 	}); err != nil {
 		t.Fatalf("AssociateProviderSession() error = %v", err)
 	}
-	boundary.setCancel(func(_ context.Context, request workers.WorkstationDispatchCancelRequest) (workers.WorkstationDispatchCancelResult, error) {
-		boundary.complete(canceledDispatchResult(request.DispatchID), workers.ErrWorkstationDispatchCanceled)
-		return workers.WorkstationDispatchCancelResult{DispatchID: request.DispatchID, Outcome: workers.WorkstationDispatchCancelOutcomeCanceled}, nil
-	})
 	request := workersessions.InterruptRequest{
 		RequestID: "interrupt-request-idempotent", SourceWorkerSessionID: "source-session",
 		SuccessorWorkerSessionID: "successor-session", ReplacementMessage: "first replacement",
@@ -802,100 +788,6 @@ func TestInterrupt_IdempotencyAndRequestConflictAvoidDuplicateEffects(t *testing
 	}
 }
 
-func TestInterrupt_ReportsSourceCancellationPhaseWithoutSuccessor(t *testing.T) {
-	boundary := newControlledBoundary()
-	registry := newControlledRegistry(t, boundary)
-	sourceResult := startControlledSession(t, registry, boundary, "source-session", "dispatch-source")
-	reference := providers.SessionRef{Provider: providers.IDCodex, Kind: providers.SessionIDKind, ID: "provider-session-cancel-failure"}
-	if _, err := registry.AssociateProviderSession(context.Background(), workersessions.ProviderSessionAssociationRequest{
-		WorkerSessionID: "source-session", DispatchID: "dispatch-source", Reference: reference,
-	}); err != nil {
-		t.Fatalf("AssociateProviderSession() error = %v", err)
-	}
-	boundary.setCancel(func(context.Context, workers.WorkstationDispatchCancelRequest) (workers.WorkstationDispatchCancelResult, error) {
-		return workers.WorkstationDispatchCancelResult{}, errors.New("cancel boundary unavailable")
-	})
-	result, err := registry.Interrupt(context.Background(), workersessions.InterruptRequest{
-		RequestID: "interrupt-cancel-failure", SourceWorkerSessionID: "source-session",
-		SuccessorWorkerSessionID: "successor-session", ReplacementMessage: "replacement",
-	})
-	var interruptErr *workersessions.InterruptError
-	if !errors.As(err, &interruptErr) || interruptErr.Phase != workersessions.InterruptPhaseSourceCancellation ||
-		!errors.Is(err, workersessions.ErrInterruptSourceCancellation) || result.Phase != workersessions.InterruptPhaseSourceCancellation ||
-		result.Source.State != workersessions.StateRunning || result.Successor.ID != "" {
-		t.Fatalf("source cancellation failure = %#v, %v, want SOURCE_CANCELLATION with running source", result, err)
-	}
-	if boundary.publishCount() != 1 || len(boundary.cancellations()) != 1 {
-		t.Fatalf("source cancellation failure effects = publishes %d, cancels %d, want 1/1", boundary.publishCount(), len(boundary.cancellations()))
-	}
-	boundary.setCancel(nil)
-	boundary.complete(completedDispatchResult("dispatch-source"), nil)
-	if got := <-sourceResult; got.Session.State != workersessions.StateCompleted {
-		t.Fatalf("source cleanup InvokeSession() = %#v, want COMPLETED", got.Session)
-	}
-}
-
-func TestInterrupt_RejectsSuccessfulCancelWhenAuthoritativeSourceIsNotCanceled(t *testing.T) {
-	boundary := newControlledBoundary()
-	registry := newControlledRegistry(t, boundary)
-	sourceResult, _ := prepareInterruptSource(t, registry, boundary)
-	boundary.setCancel(func(_ context.Context, request workers.WorkstationDispatchCancelRequest) (workers.WorkstationDispatchCancelResult, error) {
-		boundary.complete(completedDispatchResult(request.DispatchID), nil)
-		return workers.WorkstationDispatchCancelResult{DispatchID: request.DispatchID, Outcome: workers.WorkstationDispatchCancelOutcomeCanceled}, nil
-	})
-
-	result, err := registry.Interrupt(context.Background(), workersessions.InterruptRequest{
-		RequestID: "interrupt-source-not-canceled", SourceWorkerSessionID: "source-session",
-		SuccessorWorkerSessionID: "successor-session", ReplacementMessage: "replacement",
-	})
-	var interruptErr *workersessions.InterruptError
-	if !errors.As(err, &interruptErr) || interruptErr.Phase != workersessions.InterruptPhaseSourceCancellation ||
-		!errors.Is(err, workersessions.ErrInterruptSourceCancellation) || result.Source.State != workersessions.StateCompleted {
-		t.Fatalf("non-canceled authoritative source = %#v, %v, want source cancellation failure", result, err)
-	}
-	if got := <-sourceResult; got.Session.State != workersessions.StateCompleted {
-		t.Fatalf("source InvokeSession() = %#v, want COMPLETED", got.Session)
-	}
-}
-
-func TestInterruptReturnsCallerCancellationWhileServerOwnedOperationFinishes(t *testing.T) {
-	boundary := newControlledBoundary()
-	registry := newControlledRegistry(t, boundary)
-	sourceResult, _ := prepareInterruptSource(t, registry, boundary)
-	release := make(chan struct{})
-	boundary.setCancel(func(context.Context, workers.WorkstationDispatchCancelRequest) (workers.WorkstationDispatchCancelResult, error) {
-		<-release
-		return workers.WorkstationDispatchCancelResult{}, errors.New("cancel boundary unavailable")
-	})
-
-	ctx, cancel := context.WithCancel(context.Background())
-	type outcome struct {
-		result workersessions.InterruptResult
-		err    error
-	}
-	outcomes := make(chan outcome, 1)
-	go func() {
-		result, err := registry.Interrupt(ctx, workersessions.InterruptRequest{
-			RequestID: "interrupt-caller-canceled", SourceWorkerSessionID: "source-session",
-			SuccessorWorkerSessionID: "successor-session", ReplacementMessage: "replacement",
-		})
-		outcomes <- outcome{result: result, err: err}
-	}()
-	<-boundary.cancelCalled
-	cancel()
-	operation := <-outcomes
-	if !errors.Is(operation.err, context.Canceled) {
-		t.Fatalf("caller-canceled Interrupt() = %#v, %v, want context.Canceled", operation.result, operation.err)
-	}
-
-	close(release)
-	boundary.setCancel(nil)
-	boundary.complete(completedDispatchResult("dispatch-source"), nil)
-	if got := <-sourceResult; got.Session.State != workersessions.StateCompleted {
-		t.Fatalf("server-owned cleanup InvokeSession() = %#v, want COMPLETED", got.Session)
-	}
-}
-
 func TestInterrupt_ReportsSuccessorAdmissionPhaseAfterSourceCancellation(t *testing.T) {
 	boundary := newControlledBoundary()
 	registry := newControlledRegistry(t, boundary)
@@ -906,10 +798,6 @@ func TestInterrupt_ReportsSuccessorAdmissionPhaseAfterSourceCancellation(t *test
 	}); err != nil {
 		t.Fatalf("AssociateProviderSession() error = %v", err)
 	}
-	boundary.setCancel(func(_ context.Context, request workers.WorkstationDispatchCancelRequest) (workers.WorkstationDispatchCancelResult, error) {
-		boundary.complete(canceledDispatchResult(request.DispatchID), workers.ErrWorkstationDispatchCanceled)
-		return workers.WorkstationDispatchCancelResult{DispatchID: request.DispatchID, Outcome: workers.WorkstationDispatchCancelOutcomeCanceled}, nil
-	})
 	boundary.setPublishError(func(call int, _ workers.WorkstationDispatchRequest) error {
 		if call == 2 {
 			return errors.New("successor admission unavailable")
@@ -944,10 +832,6 @@ func TestInterrupt_ConcurrentIdenticalRequestsReplayOneOperation(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("AssociateProviderSession() error = %v", err)
 	}
-	boundary.setCancel(func(_ context.Context, request workers.WorkstationDispatchCancelRequest) (workers.WorkstationDispatchCancelResult, error) {
-		boundary.complete(canceledDispatchResult(request.DispatchID), workers.ErrWorkstationDispatchCanceled)
-		return workers.WorkstationDispatchCancelResult{DispatchID: request.DispatchID, Outcome: workers.WorkstationDispatchCancelOutcomeCanceled}, nil
-	})
 	request := workersessions.InterruptRequest{
 		RequestID: "interrupt-concurrent", SourceWorkerSessionID: "source-session",
 		SuccessorWorkerSessionID: "successor-session", ReplacementMessage: "replacement",

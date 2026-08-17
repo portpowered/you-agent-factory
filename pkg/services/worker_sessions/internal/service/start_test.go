@@ -204,16 +204,27 @@ func assertTerminalDeliveryAt(t *testing.T, subscription events.Subscription, po
 
 func assertSessionRecords(t *testing.T, eventsSvc events.Service, id string) {
 	t.Helper()
-	read, err := eventsSvc.Read(context.Background(), events.ReadRequest{
-		Topic: workersessions.Topic(id),
-		From:  events.Cursor{Topic: workersessions.Topic(id)},
-		Limit: 10,
-	})
-	if err != nil {
-		t.Fatalf("session records for %q read error = %v", id, err)
-	}
-	if len(read.Records) != 2 {
-		t.Fatalf("session records for %q = %+v, want one opening and one terminal", id, read.Records)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	ticker := time.NewTicker(time.Millisecond)
+	defer ticker.Stop()
+	for {
+		read, err := eventsSvc.Read(ctx, events.ReadRequest{
+			Topic: workersessions.Topic(id),
+			From:  events.Cursor{Topic: workersessions.Topic(id)},
+			Limit: 10,
+		})
+		if err != nil {
+			t.Fatalf("session records for %q read error = %v", id, err)
+		}
+		if len(read.Records) == 2 {
+			return
+		}
+		select {
+		case <-ctx.Done():
+			t.Fatalf("session records for %q = %+v, want one opening and one terminal", id, read.Records)
+		case <-ticker.C:
+		}
 	}
 }
 
@@ -379,76 +390,16 @@ func TestStart_AdmittedExecutionOutlivesSubmittingContext(t *testing.T) {
 	}
 }
 
-func TestStart_DisconnectBeforeAcceptanceLeavesReplayAuthoritative(t *testing.T) {
-	eventsSvc := newEventsAppender()
-	admissionStarted := make(chan struct{})
-	releaseAdmission := make(chan struct{})
-	var releaseOnce sync.Once
-	execution := &fakeExecution{
-		admissionStarted: admissionStarted,
-		releaseAdmission: releaseAdmission,
-		dispatch: func(_ context.Context, req workers.WorkstationDispatchRequest) (workers.WorkstationDispatchResult, error) {
-			return workers.WorkstationDispatchResult{
-				DispatchID:      req.Execution.Dispatch.DispatchID,
-				TerminalOutcome: workers.WorkstationDispatchTerminalOutcomeCompleted,
-				Result: workers.WorkResult{
-					DispatchID: req.Execution.Dispatch.DispatchID,
-					Outcome:    workers.OutcomeAccepted,
-				},
-			}, nil
-		},
-	}
-	registry, err := newService(executionBoundary{execution: execution}, eventsSvc, nil)
-	if err != nil {
-		t.Fatalf("service.New() error = %v, want nil", err)
-	}
-	lifecycle := registry.(interface{ Stop(context.Context) error })
-	defer func() {
-		releaseOnce.Do(func() { close(releaseAdmission) })
-		_ = lifecycle.Stop(context.Background())
-	}()
-
-	request := validAsyncStartRequest("worker-before-202", "dispatch-before-202")
-	submittingContext, cancelSubmitting := context.WithCancel(context.Background())
-	outcomes := make(chan asyncStartOutcome, 1)
-	go func() {
-		result, startErr := registry.Start(submittingContext, request)
-		outcomes <- asyncStartOutcome{result: result, err: startErr}
-	}()
-	waitForStartSignal(t, admissionStarted, "Start did not reach the admission wait")
-	cancelSubmitting()
-	outcome := waitForAsyncStart(t, outcomes)
-	if !errors.Is(outcome.err, context.Canceled) {
-		t.Fatalf("Start() after pre-acceptance disconnect error = %v, want context.Canceled", outcome.err)
-	}
-
-	terminalSubscription := subscribeForTerminal(t, eventsSvc, workersessions.Topic(request.ID))
-	releaseOnce.Do(func() { close(releaseAdmission) })
-	replay, replayErr := registry.Start(context.Background(), request)
-	if replayErr != nil {
-		t.Fatalf("same-key replay after pre-acceptance disconnect error = %v, want authoritative acceptance", replayErr)
-	}
-	if replay.Session.ID != request.ID || replay.Session.State == workersessions.StateReserved {
-		t.Fatalf("same-key replay after pre-acceptance disconnect = %+v, want admitted session %q", replay.Session, request.ID)
-	}
-	if got := execution.callCount(); got != 1 {
-		t.Fatalf("Workers dispatch count after pre-acceptance disconnect = %d, want 1", got)
-	}
-	assertTerminalDelivery(t, terminalSubscription)
-	assertSessionRecords(t, eventsSvc, request.ID)
-}
-
 func TestWorkerSessionsLifecycleStop_RejectsNewStartsAndJoinsAsyncTerminal(t *testing.T) {
 	eventsSvc := newEventsAppender()
 	dispatchStarted := make(chan struct{})
-	releaseDispatch := make(chan struct{})
 	var dispatchOnce sync.Once
-	var releaseOnce sync.Once
-	cancelCalled := make(chan struct{})
+	executionCanceled := make(chan struct{})
 	execution := &fakeExecution{
-		dispatch: func(_ context.Context, req workers.WorkstationDispatchRequest) (workers.WorkstationDispatchResult, error) {
+		dispatch: func(ctx context.Context, req workers.WorkstationDispatchRequest) (workers.WorkstationDispatchResult, error) {
 			dispatchOnce.Do(func() { close(dispatchStarted) })
-			<-releaseDispatch
+			<-ctx.Done()
+			close(executionCanceled)
 			return workers.WorkstationDispatchResult{
 				DispatchID:      req.Execution.Dispatch.DispatchID,
 				TerminalOutcome: workers.WorkstationDispatchTerminalOutcomeCanceled,
@@ -458,13 +409,6 @@ func TestWorkerSessionsLifecycleStop_RejectsNewStartsAndJoinsAsyncTerminal(t *te
 					Error:      workers.ErrWorkstationDispatchCanceled.Error(),
 				},
 			}, workers.ErrWorkstationDispatchCanceled
-		},
-		cancel: func(context.Context, workers.WorkstationDispatchCancelRequest) (workers.WorkstationDispatchCancelResult, error) {
-			close(cancelCalled)
-			releaseOnce.Do(func() { close(releaseDispatch) })
-			return workers.WorkstationDispatchCancelResult{
-				Outcome: workers.WorkstationDispatchCancelOutcomeCanceled,
-			}, nil
 		},
 	}
 	registry, err := newService(executionBoundary{execution: execution}, eventsSvc, nil)
@@ -488,9 +432,9 @@ func TestWorkerSessionsLifecycleStop_RejectsNewStartsAndJoinsAsyncTerminal(t *te
 		t.Fatalf("Lifecycle.Stop() error = %v, want nil", err)
 	}
 	select {
-	case <-cancelCalled:
+	case <-executionCanceled:
 	default:
-		t.Fatal("Lifecycle.Stop() returned before signaling Workers cancellation")
+		t.Fatal("Lifecycle.Stop() returned before signaling execution cancellation")
 	}
 	assertTerminalDeliveryAt(t, terminalSubscription, 4)
 	final, err := registry.Get(context.Background(), workersessions.GetRequest{ID: request.ID})
@@ -529,28 +473,6 @@ func TestStart_RequiresReadableAndSubscribableEventsTopic(t *testing.T) {
 	}
 	if execution.callCount() != 0 {
 		t.Fatalf("Workers call count = %d, want 0 when topic readiness fails", execution.callCount())
-	}
-}
-
-func TestStart_PreAdmissionFailureDoesNotReturnAccepted(t *testing.T) {
-	registry, err := newService(
-		noAdmissionBoundary{err: errors.New("admission rejected")},
-		newEventsAppender(),
-		nil,
-	)
-	if err != nil {
-		t.Fatalf("service.New() error = %v, want nil", err)
-	}
-
-	result, err := registry.Start(context.Background(), validAsyncStartRequest("worker-1", "dispatch-1"))
-	if !errors.Is(err, workersessions.ErrStartNotAccepted) || !errors.Is(err, workersessions.ErrStartAdmissionFailed) {
-		t.Fatalf("Start() error = %v, want ErrStartNotAccepted and ErrStartAdmissionFailed", err)
-	}
-	if result.Session.State != workersessions.StateFailed {
-		t.Fatalf("Start() session state = %q, want FAILED", result.Session.State)
-	}
-	if result.Session.Result == nil || result.Session.Result.Cause == nil {
-		t.Fatalf("Start() result = %+v, want a terminal failure cause", result.Session.Result)
 	}
 }
 
@@ -625,14 +547,17 @@ func TestStart_RequestIDReplayAfterTerminalReturnsOriginalAcceptanceWithoutRepea
 	}
 }
 
-func TestStart_RequestIDConflictBeforeAdmissionHasNoSecondSideEffect(t *testing.T) {
+func TestStart_RequestIDConflictHasNoSecondSideEffect(t *testing.T) {
 	eventsSvc := newEventsAppender()
 	admissionStarted := make(chan struct{})
 	releaseAdmission := make(chan struct{})
+	dispatchFinished := make(chan struct{})
+	var dispatchFinishedOnce sync.Once
 	execution := &fakeExecution{
 		admissionStarted: admissionStarted,
 		releaseAdmission: releaseAdmission,
 		dispatch: func(_ context.Context, req workers.WorkstationDispatchRequest) (workers.WorkstationDispatchResult, error) {
+			dispatchFinishedOnce.Do(func() { close(dispatchFinished) })
 			return workers.WorkstationDispatchResult{
 				DispatchID:      req.Execution.Dispatch.DispatchID,
 				TerminalOutcome: workers.WorkstationDispatchTerminalOutcomeCompleted,
@@ -669,40 +594,9 @@ func TestStart_RequestIDConflictBeforeAdmissionHasNoSecondSideEffect(t *testing.
 	if first.err != nil || first.result.Session.ID != firstRequest.ID {
 		t.Fatalf("initial Start() = %+v, %v, want accepted %q", first.result, first.err, firstRequest.ID)
 	}
+	waitForStartSignal(t, dispatchFinished, "canonical execution did not run after the conflict")
 	if execution.callCount() != 1 {
 		t.Fatalf("Workers dispatch count after conflict = %d, want exactly one", execution.callCount())
-	}
-}
-
-func TestStart_RequestIDFailureReplayDoesNotReserveReplacementWork(t *testing.T) {
-	eventsSvc := newEventsAppender()
-	registry, err := newService(
-		noAdmissionBoundary{err: errors.New("admission rejected")},
-		eventsSvc,
-		nil,
-	)
-	if err != nil {
-		t.Fatalf("service.New() error = %v, want nil", err)
-	}
-	req := validAsyncStartRequest("worker-failed-replay", "dispatch-failed-replay")
-	first, firstErr := registry.Start(context.Background(), req)
-	if !errors.Is(firstErr, workersessions.ErrStartNotAccepted) || !errors.Is(firstErr, workersessions.ErrStartAdmissionFailed) {
-		t.Fatalf("initial Start() error = %v, want stable admission failure", firstErr)
-	}
-	second, secondErr := registry.Start(context.Background(), req)
-	if !errors.Is(secondErr, workersessions.ErrStartNotAccepted) || !errors.Is(secondErr, workersessions.ErrStartAdmissionFailed) {
-		t.Fatalf("failure replay error = %v, want original stable admission failure", secondErr)
-	}
-	if first.Session.ID != second.Session.ID || first.Session.State != second.Session.State {
-		t.Fatalf("failure replay session = %+v, want original %+v", second.Session, first.Session)
-	}
-	read, err := eventsSvc.Read(context.Background(), events.ReadRequest{
-		Topic: workersessions.Topic(req.ID),
-		From:  events.Cursor{Topic: workersessions.Topic(req.ID)},
-		Limit: 10,
-	})
-	if err != nil || len(read.Records) != 2 {
-		t.Fatalf("failure replay topic = %+v, %v, want one opening and one terminal record", read, err)
 	}
 }
 
@@ -1083,10 +977,6 @@ func TestStart_ProviderProgressCommitsAssociationBeforeOutputAndEnablesResume(t 
 		t.Fatalf("forwarded provider output after foreign dispatch = %#v, want no cross-session output", forwarded)
 	}
 
-	boundary.setCancel(func(context.Context, workers.WorkstationDispatchCancelRequest) (workers.WorkstationDispatchCancelResult, error) {
-		boundary.complete(canceledDispatchResult("dispatch-1"), workers.ErrWorkstationDispatchCanceled)
-		return workers.WorkstationDispatchCancelResult{DispatchID: "dispatch-1", Outcome: workers.WorkstationDispatchCancelOutcomeCanceled}, nil
-	})
 	paused, err := registry.Pause(context.Background(), workersessions.ControlRequest{ID: "worker-1"})
 	if err != nil || paused.Outcome != workersessions.ControlOutcomeApplied || paused.Session.State != workersessions.StatePaused {
 		t.Fatalf("Pause() = %#v, %v, want associated PAUSED session", paused, err)
@@ -1503,7 +1393,7 @@ func (l *gatingLogger) Info(message string, keysAndValues ...any) {
 // public Start API and a controlled Workers fake (never calling
 // reserveIfAbsent/transitionToStarting directly), that a brand-new identity
 // is committed and observable as RESERVED strictly before the injected
-// workers.WorkstationExecutionService receives DispatchWorkstation. The
+// workers.Service receives Execute. The
 // production "worker session start accepted" log -- emitted right after the
 // RESERVED write and before the STARTING transition -- gates the Start
 // goroutine so a concurrent Get() can observe RESERVED, and the fake's own
@@ -1659,10 +1549,10 @@ func TestStart_SuccessfulWorkersResult_TerminalizesCompleted(t *testing.T) {
 	}
 }
 
-func TestStart_DispatchAdmissionFailure_TerminalizesFailedWithStartFailureCauseAndNoRunningObservation(t *testing.T) {
+func TestStart_ExecuteUnavailable_TerminalizesFailedWithAdapterCauseAndNoRunningObservation(t *testing.T) {
 	execution := &fakeExecution{
 		dispatch: func(context.Context, workers.WorkstationDispatchRequest) (workers.WorkstationDispatchResult, error) {
-			return workers.WorkstationDispatchResult{}, workers.ErrWorkstationPoolUnavailable
+			return workers.WorkstationDispatchResult{}, workers.ErrExecuteUnavailable
 		},
 	}
 	registry := newRegistryWithExecution(execution)
@@ -1678,8 +1568,8 @@ func TestStart_DispatchAdmissionFailure_TerminalizesFailedWithStartFailureCauseA
 	if result.Session.Result == nil || result.Session.Result.Cause == nil {
 		t.Fatalf("Start() result = %+v, want a non-nil Cause", result.Session.Result)
 	}
-	if got := result.Session.Result.Cause.Kind; got != workersessions.FailureCauseStartFailure {
-		t.Fatalf("Start() cause kind = %q, want START_FAILURE", got)
+	if got := result.Session.Result.Cause.Kind; got != workersessions.FailureCauseAdapterFailure {
+		t.Fatalf("Start() cause kind = %q, want ADAPTER_FAILURE", got)
 	}
 }
 
@@ -2337,50 +2227,6 @@ func TestInvokeSessionAndStartShareLifecycleAndReturnTiming(t *testing.T) {
 	releaseDispatchOnce.Do(func() { close(asyncReleaseDispatch) })
 	assertTerminalDelivery(t, terminalSubscription)
 	assertSessionRecords(t, asyncEvents, "async-worker")
-}
-
-// TestInvokeSessionAndStartSharePreAdmissionFailureClassification proves a
-// Workers handoff that never reaches admission produces the same committed
-// failure/session event history; only Start additionally reports that its
-// acceptance barrier was not reached.
-func TestInvokeSessionAndStartSharePreAdmissionFailureClassification(t *testing.T) {
-	admissionErr := errors.New("admission rejected")
-	syncEvents := newEventsAppender()
-	syncRegistry, err := newService(noAdmissionBoundary{err: admissionErr}, syncEvents, nil)
-	if err != nil {
-		t.Fatalf("synchronous service.New() error = %v", err)
-	}
-	syncResult, err := syncRegistry.InvokeSession(context.Background(), validStartRequest("sync-failure", "sync-failure-dispatch"))
-	if err != nil {
-		t.Fatalf("InvokeSession() error = %v, want nil with terminal failure result", err)
-	}
-
-	asyncEvents := newEventsAppender()
-	asyncRegistry, err := newService(noAdmissionBoundary{err: admissionErr}, asyncEvents, nil)
-	if err != nil {
-		t.Fatalf("asynchronous service.New() error = %v", err)
-	}
-	asyncResult, asyncErr := asyncRegistry.Start(context.Background(), validAsyncStartRequest("async-failure", "async-failure-dispatch"))
-	if !errors.Is(asyncErr, workersessions.ErrStartNotAccepted) || !errors.Is(asyncErr, workersessions.ErrStartAdmissionFailed) {
-		t.Fatalf("Start() error = %v, want not-accepted admission failure", asyncErr)
-	}
-
-	if syncResult.Session.State != workersessions.StateFailed || asyncResult.Session.State != workersessions.StateFailed {
-		t.Fatalf("terminal states = %q and %q, want FAILED for both entry points", syncResult.Session.State, asyncResult.Session.State)
-	}
-	if syncResult.Session.Result == nil || asyncResult.Session.Result == nil ||
-		syncResult.Session.Result.Cause == nil || asyncResult.Session.Result.Cause == nil {
-		t.Fatalf("terminal results = %#v and %#v, want classified causes", syncResult.Session.Result, asyncResult.Session.Result)
-	}
-	if syncResult.Session.Result.Cause.Kind != asyncResult.Session.Result.Cause.Kind ||
-		syncResult.Session.Result.Cause.Detail != asyncResult.Session.Result.Cause.Detail {
-		t.Fatalf("terminal causes = %#v and %#v, want matching classification", syncResult.Session.Result.Cause, asyncResult.Session.Result.Cause)
-	}
-	assertSessionRecords(t, syncEvents, "sync-failure")
-	assertSessionRecords(t, asyncEvents, "async-failure")
-	if stopErr := asyncRegistry.(interface{ Stop(context.Context) error }).Stop(context.Background()); stopErr != nil {
-		t.Fatalf("Worker Sessions Stop() error = %v", stopErr)
-	}
 }
 
 // decodeDraft decodes a committed record's payload as a workers.Draft for
@@ -3205,8 +3051,6 @@ var _ recordings.WorkerSessionRecordingService = (*controlledRecordingService)(n
 
 var _ recordings.WorkerSessionRecordingService = (*failingRecordingService)(nil)
 
-var _ workers.WorkstationPoolBoundary = executionBoundary{}
-
 var _ platformclock.Source = platformclock.Real{}
 
 var _ logging.Logger = logging.NoopLogger{}
@@ -3281,16 +3125,6 @@ func TestInvokeSession_DeadlineReconcilesTerminallyWithBoundedDiagnostics(t *tes
 	boundary := newControlledBoundary()
 	request := validStartRequest("worker-timeout", "dispatch-timeout")
 	request.Execution.Execution.Timeout = 5 * time.Second
-	boundary.setCancel(func(_ context.Context, cancel workers.WorkstationDispatchCancelRequest) (workers.WorkstationDispatchCancelResult, error) {
-		if cancel.Reason != workers.WorkstationDispatchCancelReasonTimeout {
-			return workers.WorkstationDispatchCancelResult{}, workers.ErrWorkstationDispatchAlreadyTerminal
-		}
-		boundary.complete(timeoutResult(cancel.DispatchID), workers.ErrWorkstationDispatchTimeout)
-		return workers.WorkstationDispatchCancelResult{
-			DispatchID: cancel.DispatchID,
-			Outcome:    workers.WorkstationDispatchCancelOutcomeReconciled,
-		}, nil
-	})
 	registry, err := newServiceWithClock(boundary, eventsSvc, logger, clock)
 	if err != nil {
 		t.Fatalf("service.New() error = %v", err)
@@ -3331,31 +3165,21 @@ func TestInvokeSession_DeadlineReconcilesTerminallyWithBoundedDiagnostics(t *tes
 func TestInvokeSession_DeadlineFailureRemainsEligibleForExistingRetryPolicy(t *testing.T) {
 	base := time.Date(2035, time.March, 4, 5, 6, 7, 0, time.UTC)
 	clock := platformclock.NewDeterministic(base, time.Second)
-	releaseFirst := make(chan struct{})
-	var releaseFirstOnce sync.Once
 	dispatchStarted := make(chan struct{})
+	executionCanceled := make(chan struct{})
 	var attempts atomic.Int32
 	execution := &fakeExecution{
 		admissionStarted: make(chan struct{}),
 		releaseAdmission: make(chan struct{}),
-		dispatch: func(_ context.Context, request workers.WorkstationDispatchRequest) (workers.WorkstationDispatchResult, error) {
+		dispatch: func(ctx context.Context, request workers.WorkstationDispatchRequest) (workers.WorkstationDispatchResult, error) {
 			if attempts.Add(1) == 1 {
 				close(dispatchStarted)
-				<-releaseFirst
+				<-ctx.Done()
+				close(executionCanceled)
 				return timeoutResult(request.Execution.Dispatch.DispatchID), workers.ErrWorkstationDispatchTimeout
 			}
 			return acceptedResult(request), nil
 		},
-	}
-	execution.cancel = func(_ context.Context, request workers.WorkstationDispatchCancelRequest) (workers.WorkstationDispatchCancelResult, error) {
-		if request.Reason != workers.WorkstationDispatchCancelReasonTimeout {
-			return workers.WorkstationDispatchCancelResult{}, workers.ErrWorkstationDispatchAlreadyTerminal
-		}
-		releaseFirstOnce.Do(func() { close(releaseFirst) })
-		return workers.WorkstationDispatchCancelResult{
-			DispatchID: request.DispatchID,
-			Outcome:    workers.WorkstationDispatchCancelOutcomeReconciled,
-		}, nil
 	}
 	registry, err := newServiceWithClock(executionBoundary{execution: execution}, newEventsAppender(), nil, clock)
 	if err != nil {
@@ -3392,7 +3216,7 @@ func TestInvokeSession_DeadlineFailureRemainsEligibleForExistingRetryPolicy(t *t
 	case <-time.After(time.Second):
 		t.Fatal("timeout retry did not complete")
 	}
-	assertTimeoutRetry(t, result, execution, attempts.Load())
+	assertTimeoutRetry(t, result, execution, attempts.Load(), executionCanceled)
 }
 
 func assertTimeoutInvokeResult(t *testing.T, result workersessions.InvokeSessionResult) {
@@ -3416,7 +3240,7 @@ func assertTimeoutInvokeResult(t *testing.T, result workersessions.InvokeSession
 	}
 }
 
-func assertTimeoutRetry(t *testing.T, result workersessions.InvokeSessionResult, execution *fakeExecution, calls int32) {
+func assertTimeoutRetry(t *testing.T, result workersessions.InvokeSessionResult, execution *fakeExecution, calls int32, executionCanceled <-chan struct{}) {
 	t.Helper()
 	if result.Session.State != workersessions.StateCompleted || result.Attempts != 2 {
 		t.Fatalf("timeout retry result = %#v, want COMPLETED after two attempts", result)
@@ -3428,9 +3252,10 @@ func assertTimeoutRetry(t *testing.T, result workersessions.InvokeSessionResult,
 	if len(requests) != 2 || requests[1].Execution.Dispatch.DispatchID != "dispatch-timeout-retry/attempt/2" {
 		t.Fatalf("timeout retry requests = %#v, want /attempt/2 dispatch identity", requests)
 	}
-	cancellations := execution.cancellationRequests()
-	if len(cancellations) != 1 || cancellations[0].Reason != workers.WorkstationDispatchCancelReasonTimeout {
-		t.Fatalf("timeout reconciliation cancellations = %#v, want one timeout request", cancellations)
+	select {
+	case <-executionCanceled:
+	default:
+		t.Fatal("timeout reconciliation did not cancel the canonical execution context")
 	}
 }
 
@@ -3992,14 +3817,6 @@ func TestControlHistory_OrdersPauseResumeBracketsBeforeTerminalAndDeduplicatesRe
 	}); err != nil {
 		t.Fatalf("AssociateProviderSession() error = %v", err)
 	}
-	boundary.setCancel(func(_ context.Context, request workers.WorkstationDispatchCancelRequest) (workers.WorkstationDispatchCancelResult, error) {
-		boundary.complete(canceledDispatchResult(request.DispatchID), workers.ErrWorkstationDispatchCanceled)
-		return workers.WorkstationDispatchCancelResult{
-			DispatchID: request.DispatchID,
-			Outcome:    workers.WorkstationDispatchCancelOutcomeCanceled,
-		}, nil
-	})
-
 	paused, err := registry.Pause(context.Background(), workersessions.ControlRequest{ID: "worker-1", RequestID: "pause-1"})
 	if err != nil || paused.Outcome != workersessions.ControlOutcomeApplied || paused.Session.State != workersessions.StatePaused {
 		t.Fatalf("Pause() = %#v, %v, want applied PAUSED", paused, err)
@@ -4054,13 +3871,7 @@ func TestControlHistory_NaturalCompletionWinsAfterControlRequestAndBeforeTermina
 	}); err != nil {
 		t.Fatalf("AssociateProviderSession() error = %v", err)
 	}
-	cancelEntered := make(chan struct{})
-	releaseCancel := make(chan struct{})
-	boundary.setCancel(func(_ context.Context, request workers.WorkstationDispatchCancelRequest) (workers.WorkstationDispatchCancelResult, error) {
-		close(cancelEntered)
-		<-releaseCancel
-		return workers.WorkstationDispatchCancelResult{DispatchID: request.DispatchID}, nil
-	})
+	boundary.setIgnoreCancellation(true)
 
 	controlResult := make(chan struct {
 		result workersessions.ControlResult
@@ -4073,10 +3884,9 @@ func TestControlHistory_NaturalCompletionWinsAfterControlRequestAndBeforeTermina
 			err    error
 		}{result: result, err: err}
 	}()
-	<-cancelEntered
+	<-boundary.cancellationObserved()
 
 	boundary.complete(completedDispatchResult("dispatch-natural"), nil)
-	close(releaseCancel)
 	control := <-controlResult
 	if control.err != nil || control.result.Outcome != workersessions.ControlOutcomeNoop || control.result.Session.State != workersessions.StateCompleted {
 		t.Fatalf("racing Pause() = %#v, %v, want natural COMPLETED NOOP", control.result, control.err)
@@ -4109,14 +3919,6 @@ func TestControlHistory_RecordsInterruptBracketBeforeSourceTerminal(t *testing.T
 	}); err != nil {
 		t.Fatalf("AssociateProviderSession() error = %v", err)
 	}
-	boundary.setCancel(func(_ context.Context, request workers.WorkstationDispatchCancelRequest) (workers.WorkstationDispatchCancelResult, error) {
-		boundary.complete(canceledDispatchResult(request.DispatchID), workers.ErrWorkstationDispatchCanceled)
-		return workers.WorkstationDispatchCancelResult{
-			DispatchID: request.DispatchID,
-			Outcome:    workers.WorkstationDispatchCancelOutcomeCanceled,
-		}, nil
-	})
-
 	interrupted, err := registry.Interrupt(context.Background(), workersessions.InterruptRequest{
 		RequestID:                "interrupt-history-1",
 		SourceWorkerSessionID:    "source-interrupt",

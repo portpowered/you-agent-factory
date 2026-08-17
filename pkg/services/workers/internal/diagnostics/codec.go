@@ -6,8 +6,6 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
-
-	workerenvdiagnostics "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/envdiagnostics"
 )
 
 // CloneSafeWorkDiagnostics returns a detached safe diagnostics snapshot.
@@ -305,7 +303,7 @@ func safeDiagnosticMetadataValue(key, value string) string {
 	switch key {
 	case "working_directory", "worktree":
 		if isHostSpecificDiagnosticPath(value) {
-			return workerenvdiagnostics.MetadataOnlyCommandEnvValue
+			return MetadataOnlyCommandEnvValue
 		}
 	}
 	switch key {

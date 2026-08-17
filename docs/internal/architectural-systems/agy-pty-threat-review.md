@@ -92,7 +92,7 @@ outside the intended factory worktree.
    configured workspace paths. Reject empty paths.
 2. **Containment checks.** When the factory designates a workspace root, resolved
    paths must remain under that root (same pattern as
-   `pkg/services/workers/worktree/paths.go` `cleanWorktreeName` — reject `..` traversal,
+   `pkg/services/workers/internal/worktree/paths.go` `cleanWorktreeName` — reject `..` traversal,
    reject absolute names where relative names are required).
 3. **Process working directory.** Set `cmd.Dir` only after normalization and
    containment validation; never pass raw user strings.
@@ -322,6 +322,5 @@ Checked against `docs/internal/standards/code/general-backend-standards.md`:
 | Story 003 interface proposal (`agy-pty-interface.md`, `pkg/services/providers/internal/services/execution/internal/adapters/agy/agypty`) | Mock seams, `maxCaptureBytes`, fixture locations |
 | `pkg/services/workers/process/doc.go` | Supervision and cleanup escape documentation |
 | `pkg/services/providers/internal/services/execution/internal/commandenv/environment.go` | Environment merge policy |
-| `pkg/services/workers/worktree/paths.go` | Path normalization reference for workspace containment |
-
+| `pkg/services/workers/internal/worktree/paths.go` | Path normalization reference for workspace containment |
 
