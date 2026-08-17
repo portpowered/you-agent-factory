@@ -245,6 +245,24 @@ func (f *factoryImpl) SetReplayEvents(events []interfaces.FactoryEvent) {
 	f.cfg.replayEvents = cloneAndSortFactoryEvents(events)
 }
 
+// canonicalWorkerSessionControlEvents applies the same replay precedence used
+// by recorded Worker Session observations to control-target capture. A resumed
+// Factory must identify completed children from the replayed association
+// history even when the live Runtime ledger is empty or only contains events
+// emitted after recovery.
+func (f *factoryImpl) canonicalWorkerSessionControlEvents() []interfaces.FactoryEvent {
+	if f == nil || f.cfg == nil {
+		return nil
+	}
+	if len(f.cfg.replayEvents) > 0 {
+		return cloneAndSortFactoryEvents(f.cfg.replayEvents)
+	}
+	if f.eventHistory == nil {
+		return nil
+	}
+	return f.eventHistory.CanonicalEvents()
+}
+
 // NewWorkstationRequestExecutor creates the Runtime-owned compatibility
 // adapter used by top-level Worker Session routes. It resolves minimal legacy
 // direct requests from the immutable Factory definition and then invokes the
