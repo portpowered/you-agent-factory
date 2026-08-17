@@ -28,8 +28,10 @@ test that runs a real operation.
   `*_test.go`. A plan-named guard that is absent, or that lives at a different
   path than the plan states, is recorded in *Reconciliation findings* rather
   than silently substituted.
-- Reconciliation base: `7018644b3`, the merge-base of this branch and
-  `origin/main` (BTRC P6, #2046).
+- Reconciliation base: the matrix was first frozen against `7018644b3`, the
+  merge-base of this branch and `origin/main` when P7-A landed (BTRC P6, #2046).
+  P7-D rebased the branch onto `75d51e97d` and re-ran every cell there, so the
+  statuses below describe that tree.
 
 ## Status vocabulary
 
@@ -309,13 +311,22 @@ instead of holding it (cancellation never observed).
 ### Deletion-register closure
 
 `docs/internal/packaged-service-structure/btrc-p6-secondary-graph-register.md`
-was re-verified row by row against the tree as merged through `fd0e46ab9`
-(#2049). Three rows had drifted and were corrected surgically — the pinned
+was re-verified row by row against the tree as merged through `75d51e97d`
+(#2051). Five rows had drifted and were corrected surgically — the pinned
 reconciliation base, the `APIFactory` reference count (one row claimed a single
 production reference while the same document's prose enumerated the post-P6-D
-set), and a wrong caller line for `NewInvocationWithProgress`. Every other row
-holds exactly as written. That register now carries a *P7-D reconciliation*
-section stating what was re-checked and what changed.
+set), a wrong caller line for `NewInvocationWithProgress`, an approximate
+importer count that cannot be re-verified, and the `deadcode` static-gate
+numbers that `75d51e97d` superseded. Every other row holds exactly as written.
+That register now carries a *P7-D reconciliation* section stating what was
+re-checked and what changed.
+
+The re-verification was mechanical: each of the register's 14 file-line claims
+was checked by reading that exact line and matching the symbol it should carry.
+All 14 still resolve on the rebased base, because the three commits that landed
+while P7 was in flight (`fd0e46ab9` #2049, `217066ad6` #2050, `75d51e97d` #2051)
+touched the staging lease, `pkg/platform/process` and the provider adapters, and
+unreachable test helpers — none of the composition seams this register tracks.
 
 P7-D deletes no package and no file, so no manifest or baseline row required
 removal, and no stale test-only adapter or scaffolding remains from P7-A, P7-B
