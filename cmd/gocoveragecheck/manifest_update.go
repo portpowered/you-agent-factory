@@ -138,7 +138,12 @@ func planCoverageManifestUpdate(manifest coverageManifest, minimums map[string]p
 	}
 	slices.Sort(packages)
 
-	updated := coverageManifest{Version: manifest.Version, Lane: manifest.Lane, Packages: make([]coverageManifestEntry, 0, len(packages))}
+	updated := coverageManifest{
+		Version:             manifest.Version,
+		Lane:                manifest.Lane,
+		DefaultFloorPercent: manifest.DefaultFloorPercent,
+		Packages:            make([]coverageManifestEntry, 0, len(packages)),
+	}
 	updates := make([]coverageManifestUpdate, 0, len(packages))
 	for _, importPath := range packages {
 		entry, found := existing[importPath]
@@ -147,9 +152,12 @@ func planCoverageManifestUpdate(manifest coverageManifest, minimums map[string]p
 			if !ok {
 				return manifest, updates, fmt.Errorf("update %s coverage manifest: package %q has no compatible sample measurement", manifest.Lane, importPath)
 			}
-			entry, err := newCoverageManifestEntry(manifest.Lane, importPath, totals)
+			entry, required, err := newCoverageManifestEntry(manifest.Lane, importPath, totals)
 			if err != nil {
 				return manifest, updates, fmt.Errorf("update %s coverage manifest for new package %s: %w", manifest.Lane, importPath, err)
+			}
+			if !required {
+				continue
 			}
 			updated.Packages = append(updated.Packages, entry)
 			updates = append(updates, coverageManifestUpdate{

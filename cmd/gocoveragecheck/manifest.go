@@ -21,9 +21,13 @@ const unmeasurablePackageDeadline = "2027-07-15"
 type coverageFloor int64
 
 type coverageManifest struct {
-	Version  int                     `json:"version"`
-	Lane     string                  `json:"lane"`
-	Packages []coverageManifestEntry `json:"packages"`
+	Version int    `json:"version"`
+	Lane    string `json:"lane"`
+	// DefaultFloorPercent is the floor applied to a measured package with no
+	// entry in Packages. It is optional; when absent the lane's built-in
+	// default applies. Explicit Packages entries always win over it.
+	DefaultFloorPercent json.RawMessage         `json:"defaultFloorPercent,omitempty"`
+	Packages            []coverageManifestEntry `json:"packages"`
 }
 
 type coverageManifestEntry struct {
@@ -90,33 +94,40 @@ func newCoverageManifest(lane string, totals map[string]packageCoverageTotals, p
 	slices.Sort(packages)
 	entries := make([]coverageManifestEntry, 0, len(packages))
 	for _, importPath := range packages {
-		entry, err := newCoverageManifestEntry(lane, importPath, totals[importPath])
+		entry, required, err := newCoverageManifestEntry(lane, importPath, totals[importPath])
 		if err != nil {
 			return coverageManifest{}, fmt.Errorf("generate %s coverage manifest for %s: %w", lane, importPath, err)
 		}
+		if !required {
+			continue
+		}
 		entries = append(entries, entry)
 	}
-	return coverageManifest{Version: coverageManifestVersion, Lane: lane, Packages: entries}, nil
+	return coverageManifest{
+		Version:             coverageManifestVersion,
+		Lane:                lane,
+		DefaultFloorPercent: laneDefaultCoverageFloorRaw(lane),
+		Packages:            entries,
+	}, nil
 }
 
-func newCoverageManifestEntry(lane string, importPath string, totals packageCoverageTotals) (coverageManifestEntry, error) {
+// newCoverageManifestEntry builds the manifest row for importPath and reports
+// whether the package requires a row at all. A package whose profile reports no
+// measurable statements passes vacuously and needs no row, so none is minted
+// for it. A service root always declares a row, because per-service
+// completeness is satisfied by that root entry.
+func newCoverageManifestEntry(lane string, importPath string, totals packageCoverageTotals) (coverageManifestEntry, bool, error) {
 	floor, err := coverageFloorFromTotals(totals)
 	if err == nil {
-		return coverageManifestEntry{Package: importPath, Minimum: json.RawMessage(floor.String())}, nil
+		return coverageManifestEntry{Package: importPath, Minimum: json.RawMessage(floor.String())}, true, nil
 	}
 	if totals.totalStatements != 0 || totals.coveredStatements != 0 {
-		return coverageManifestEntry{}, err
+		return coverageManifestEntry{}, false, err
 	}
-	return coverageManifestEntry{
-		Package: importPath,
-		Exception: &coverageManifestException{
-			Kind:          "measurement",
-			Justification: fmt.Sprintf("The active %s coverage profile contains no measurable statements for this package.", lane),
-			Owner:         "backend-quality",
-			Deadline:      unmeasurablePackageDeadline,
-			RemovalGate:   fmt.Sprintf("The %s coverage profile reports at least one measurable statement for this package.", lane),
-		},
-	}, nil
+	if isCoverageManifestServiceRoot(importPath) {
+		return coverageManifestServiceRootEntry(importPath), true, nil
+	}
+	return coverageManifestEntry{}, false, nil
 }
 
 func coverageFloorFromTotals(totals packageCoverageTotals) (coverageFloor, error) {
@@ -213,6 +224,9 @@ func validateCoverageManifestAtModeWithTotals(manifest coverageManifest, expecte
 	if manifest.Lane != expectedLane {
 		return fmt.Errorf("validate go coverage manifest: lane %q does not match active lane %q", manifest.Lane, expectedLane)
 	}
+	if err := validateCoverageManifestDefaultFloor(manifest); err != nil {
+		return err
+	}
 	measured := make(map[string]struct{}, len(measuredPackages))
 	for _, importPath := range measuredPackages {
 		measured[importPath] = struct{}{}
@@ -244,44 +258,13 @@ func validateCoverageManifestAtModeWithTotals(manifest coverageManifest, expecte
 		seen[entry.Package] = struct{}{}
 		previous = entry.Package
 	}
+	// A measured package with no entry is not a completeness gap: it resolves to
+	// the lane default floor. Completeness only requires that every measured
+	// service declares a floor at its root.
 	if requireComplete {
-		missing := make([]string, 0)
-		for importPath := range measured {
-			if _, ok := seen[importPath]; !ok {
-				missing = append(missing, importPath)
-			}
-		}
-		if len(missing) > 0 {
-			slices.Sort(missing)
-			return formatMissingCoverageManifestEntries(expectedLane, missing, measuredTotals)
-		}
+		return validateCoverageManifestServiceRoots(expectedLane, measuredPackages, seen, measuredTotals)
 	}
 	return nil
-}
-
-func formatMissingCoverageManifestEntries(lane string, missing []string, measuredTotals map[string]packageCoverageTotals) error {
-	lines := make([]string, 0, len(missing))
-	for _, importPath := range missing {
-		line := fmt.Sprintf("- measured %s package %q has no manifest entry", lane, importPath)
-		if measuredTotals != nil {
-			totals := measuredTotals[importPath]
-			switch {
-			case totals.totalStatements == 0 && totals.coveredStatements == 0:
-				line += "; no measurable statements"
-			case totals.totalStatements > 0:
-				floor, err := coverageFloorFromTotals(totals)
-				if err != nil {
-					line += fmt.Sprintf("; measured coverage unavailable: %v", err)
-				} else {
-					line += fmt.Sprintf("; measured coverage %s%%", floor)
-				}
-			default:
-				line += "; measured coverage unavailable"
-			}
-		}
-		lines = append(lines, line)
-	}
-	return fmt.Errorf("validate go coverage manifest: measured %s packages have no manifest entry:\n%s", lane, strings.Join(lines, "\n"))
 }
 
 func dateOnlyUTC(value time.Time) time.Time {
@@ -343,7 +326,9 @@ func checkCoverageManifestWithEpsilonAndBlocks(manifest coverageManifest, totals
 		}
 		minimum, _ := parseCoverageFloor(entry.Minimum)
 		actual := totals[entry.Package]
-		if actual.totalStatements > 0 && int64(actual.coveredStatements)*10000 >= int64(minimum)*int64(actual.totalStatements) {
+		// A package with no measurable statements passes vacuously: the floor
+		// has no denominator to be evaluated against.
+		if coveragePassesFloor(minimum, actual) {
 			continue
 		}
 		actualPercent := 0.0
@@ -376,6 +361,7 @@ func checkCoverageManifestWithEpsilonAndBlocks(manifest coverageManifest, totals
 			manifest.Lane, manifestPath,
 		))
 	}
+	failures = append(failures, checkCoverageDefaultFloor(manifest, totals, manifestPath, coverageBlocks)...)
 	return failures, warnings
 }
 

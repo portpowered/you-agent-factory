@@ -10,9 +10,10 @@ import (
 )
 
 const (
-	settingsWirePackagePath = "pkg/services/operator_settings/wire"
-	settingsWireImportPath  = "github.com/portpowered/infinite-you/pkg/services/operator_settings/wire"
-	settingsOwner           = "operator_settings"
+	settingsWirePackagePath           = "pkg/services/operator_settings/wire"
+	settingsWireImportPath            = "github.com/portpowered/infinite-you/pkg/services/operator_settings/wire"
+	settingsWireServiceRootImportPath = "github.com/portpowered/infinite-you/pkg/services/operator_settings"
+	settingsOwner                     = "operator_settings"
 )
 
 type coverageMinimumManifest struct {
@@ -132,13 +133,13 @@ func assertCoverageMinimumRegistration(t *testing.T, lane string, relativePath s
 	}
 
 	for _, entry := range manifest.Packages {
-		if entry.Package != settingsWireImportPath {
+		if entry.Package != settingsWireServiceRootImportPath {
 			continue
 		}
 		if entry.Minimum < 0 {
-			t.Fatalf("%s coverage minimum for %q must be non-negative", lane, settingsWireImportPath)
+			t.Fatalf("%s coverage minimum for %q must be non-negative", lane, settingsWireServiceRootImportPath)
 		}
 		return
 	}
-	t.Fatalf("%s coverage manifest missing %q", lane, settingsWireImportPath)
+	t.Fatalf("%s coverage manifest missing service root %q declaring %q", lane, settingsWireServiceRootImportPath, settingsWireImportPath)
 }

@@ -10,9 +10,10 @@ import (
 )
 
 const (
-	cliAdapterPackagePath     = "pkg/services/system_initialization/transports/cli"
-	cliAdapterImportPath      = "github.com/portpowered/infinite-you/pkg/services/system_initialization/transports/cli"
-	systemInitializationOwner = "system_initialization"
+	cliAdapterPackagePath           = "pkg/services/system_initialization/transports/cli"
+	cliAdapterImportPath            = "github.com/portpowered/infinite-you/pkg/services/system_initialization/transports/cli"
+	cliAdapterServiceRootImportPath = "github.com/portpowered/infinite-you/pkg/services/system_initialization"
+	systemInitializationOwner       = "system_initialization"
 )
 
 type coverageMinimumManifest struct {
@@ -132,13 +133,13 @@ func assertCoverageMinimumRegistration(t *testing.T, lane string, relativePath s
 	}
 
 	for _, entry := range manifest.Packages {
-		if entry.Package != cliAdapterImportPath {
+		if entry.Package != cliAdapterServiceRootImportPath {
 			continue
 		}
 		if entry.Minimum < 0 {
-			t.Fatalf("%s coverage minimum for %q must be non-negative", lane, cliAdapterImportPath)
+			t.Fatalf("%s coverage minimum for %q must be non-negative", lane, cliAdapterServiceRootImportPath)
 		}
 		return
 	}
-	t.Fatalf("%s coverage manifest missing %q", lane, cliAdapterImportPath)
+	t.Fatalf("%s coverage manifest missing service root %q declaring %q", lane, cliAdapterServiceRootImportPath, cliAdapterImportPath)
 }

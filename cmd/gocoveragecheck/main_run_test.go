@@ -73,9 +73,9 @@ func TestExecuteReportsPackageSummariesWhenManifestValidationFails(t *testing.T)
 		stderrWriter = originalStderr
 	}()
 
-	configPackage := modulePath + "/pkg/config"
-	servicePackage := modulePath + "/pkg/service"
-	manifestPath := writePackageMinimumManifest(t, "unit", configPackage, "100.00")
+	workRootPackage := modulePath + "/pkg/services/work"
+	workInternalPackage := modulePath + "/pkg/services/work/internal"
+	manifestPath := writePackageMinimumManifest(t, "unit", workInternalPackage, "100.00")
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
 	commandRunner = fakeGoCoverageCommandPassing
@@ -85,16 +85,16 @@ func TestExecuteReportsPackageSummariesWhenManifestValidationFails(t *testing.T)
 	err := execute(config{
 		min:             0,
 		suite:           "unit",
-		coverpkg:        strings.Join([]string{configPackage, servicePackage}, ","),
-		packages:        "./pkg/config",
+		coverpkg:        strings.Join([]string{workRootPackage, workInternalPackage}, ","),
+		packages:        "./pkg/services/work/internal",
 		packageManifest: manifestPath,
 	})
-	if err == nil || !strings.Contains(err.Error(), "measured unit package \""+servicePackage+"\" has no manifest entry") {
-		t.Fatalf("execute() error = %v, want missing-manifest validation failure", err)
+	if err == nil || !strings.Contains(err.Error(), "measured unit service \""+workRootPackage+"\" has no root manifest entry") {
+		t.Fatalf("execute() error = %v, want missing-service-root validation failure", err)
 	}
 
-	wantSummaries := configPackage + "\tcoverage: 100.0% of statements\n" + servicePackage + "\tcoverage: 100.0% of statements\n"
-	if got := stdout.String(); !strings.Contains(got, "total: (statements) 100.0%") || !strings.Contains(got, wantSummaries) {
+	wantSummaries := workRootPackage + "\tcoverage: 0.0% of statements\n" + workInternalPackage + "\tcoverage: 0.0% of statements\n"
+	if got := stdout.String(); !strings.Contains(got, "total: (statements) 0.0%") || !strings.Contains(got, wantSummaries) {
 		t.Fatalf("execute() stdout = %q, want total and exact package summaries", got)
 	}
 	if strings.Contains(stdout.String(), "meets minimum") {
@@ -256,7 +256,10 @@ func TestExecuteReportsRootObservationCoverageRegressionWithExactCountsAndBlocks
 	}()
 
 	rootObservationPackage := modulePath + "/pkg/services/factory_runtime/internal/rootobservation"
-	manifestPath := writePackageMinimumManifest(t, "unit", rootObservationPackage, "100.00")
+	manifestPath := writePackageMinimumManifestWithEntries(t, "unit", []manifestPackageSpec{
+		{importPath: modulePath + "/pkg/services/factory_runtime", minimum: "0.00"},
+		{importPath: rootObservationPackage, minimum: "100.00"},
+	})
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
 	commandRunner = fakeGoCoverageCommandWithRootObservationRegression
@@ -266,7 +269,7 @@ func TestExecuteReportsRootObservationCoverageRegressionWithExactCountsAndBlocks
 	err := execute(config{
 		min:             0,
 		suite:           "unit",
-		coverpkg:        rootObservationPackage,
+		coverpkg:        strings.Join([]string{modulePath + "/pkg/services/factory_runtime", rootObservationPackage}, ","),
 		packages:        "./pkg/services/factory_runtime/internal/rootobservation",
 		packageManifest: manifestPath,
 	})
@@ -288,8 +291,9 @@ func TestExecuteReportsRootObservationCoverageRegressionWithExactCountsAndBlocks
 	if !strings.Contains(stdout.String(), rootObservationPackage+"\tcoverage: 95.6% of statements") {
 		t.Fatalf("execute() stdout = %q, want rootobservation package summary", stdout.String())
 	}
-	if stderr.Len() != 0 {
-		t.Fatalf("execute() stderr = %q, want empty stderr", stderr.String())
+	wantDiagnostic := "coverage not evaluated: package=" + modulePath + "/pkg/services/factory_runtime lane=unit (no measurement in profile)\n"
+	if got := stderr.String(); got != wantDiagnostic {
+		t.Fatalf("execute() stderr = %q, want the service-root unmeasured diagnostic %q", got, wantDiagnostic)
 	}
 }
 
@@ -475,9 +479,8 @@ func TestExecuteEnforcesAggregateAndManifestMinimumsIndependently(t *testing.T) 
 			name:         "aggregate pass cannot mask package regression",
 			minimum:      "1.00",
 			aggregateMin: 0,
-			command:      fakeGoCoverageCommand,
-			wantFailure:  "package coverage regression: package=" + modulePath + "/pkg/config lane=unit expected-minimum=1.00%",
-			wantStderr:   "coverage not evaluated: package=" + modulePath + "/pkg/config lane=unit (no measurement in profile)\n",
+			command:      fakeGoCoverageCommandWithMeasuredZeroConfig,
+			wantFailure:  "package coverage regression: package=" + modulePath + "/pkg/config lane=unit expected-minimum=1.00% actual=0.0000%",
 		},
 		{
 			name:         "package pass cannot mask aggregate regression",

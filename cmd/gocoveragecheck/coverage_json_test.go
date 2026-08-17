@@ -347,7 +347,7 @@ func TestExecuteWritesJSONWhenPackageFloorFails(t *testing.T) {
 
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
-	commandRunner = fakeGoCoverageCommand
+	commandRunner = fakeGoCoverageCommandWithMeasuredZeroConfig
 	stdoutWriter = &stdout
 	stderrWriter = &stderr
 
@@ -396,9 +396,8 @@ func TestExecuteWritesJSONWhenPackageFloorFails(t *testing.T) {
 	if strings.Contains(stdout.String(), "meets minimum") {
 		t.Fatalf("execute() stdout = %q, did not expect success message", stdout.String())
 	}
-	wantDiagnostic := "coverage not evaluated: package=" + configPackage + " lane=unit (no measurement in profile)\n"
-	if got := stderr.String(); got != wantDiagnostic {
-		t.Fatalf("execute() stderr = %q, want unmeasured-package diagnostic %q", got, wantDiagnostic)
+	if stderr.Len() != 0 {
+		t.Fatalf("execute() stderr = %q, want empty stderr for a measured package", stderr.String())
 	}
 }
 
