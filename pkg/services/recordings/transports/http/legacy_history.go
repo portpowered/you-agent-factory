@@ -2,7 +2,6 @@ package http
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"net/http"
 	"strconv"
@@ -229,12 +228,8 @@ func writeLegacyStreamHeaders(
 
 func legacyFactoryEventWriter(w http.ResponseWriter) func(interfaces.FactoryEvent) error {
 	return func(event interfaces.FactoryEvent) error {
-		var apiEvent factoryapi.FactoryEvent
-		encoded, err := json.Marshal(event)
+		apiEvent, err := apisurface.FactoryEventToAPI(event)
 		if err != nil {
-			return err
-		}
-		if err := json.Unmarshal(encoded, &apiEvent); err != nil {
 			return err
 		}
 		return writeSSEDataJSON(w, apiEvent)
