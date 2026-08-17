@@ -26,17 +26,20 @@ func TestRuntimeActivationUsesEngineServiceForDetachedHandoff(t *testing.T) {
 		application: roles.OpenedApplicationRuntime{
 			FactoryRuntime: proxy,
 		},
-		startup: activationRuntimeRecord{service: engine},
+		engine: engine,
 	}
 
 	if got := runtimeEngineService(products); got != engine {
 		t.Fatalf("runtimeEngineService() = %T, want concrete engine %T", got, engine)
 	}
-	handoff := &activatedRuntimeService{
-		Service:              engine,
-		runtimeWorkSubmitter: engine,
+	activation, err := newRuntimeActivation(products)
+	if err != nil {
+		t.Fatalf("newRuntimeActivation() error = %v", err)
 	}
-	if _, err := handoff.SubmitWorkRequest(context.Background(), work.WorkRequest{}); err != nil {
+	if activation.WorkAndEventIngress != factoryruntime.APIFactory(engine) {
+		t.Fatalf("published ingress = %T, want concrete engine %T", activation.WorkAndEventIngress, engine)
+	}
+	if _, err := activation.WorkAndEventIngress.SubmitWorkRequest(context.Background(), work.WorkRequest{}); err != nil {
 		t.Fatalf("SubmitWorkRequest() error = %v", err)
 	}
 	if got := engine.submitCalls.Load(); got != 1 {
@@ -45,6 +48,24 @@ func TestRuntimeActivationUsesEngineServiceForDetachedHandoff(t *testing.T) {
 	if got := proxy.submitCalls.Load(); got != 0 {
 		t.Fatalf("session proxy SubmitWorkRequest calls = %d, want 0", got)
 	}
+	if _, ok := activation.Service.(factoryruntime.APIFactory); ok {
+		t.Fatal("published activation service must not expose the migration-only Work and event ingress")
+	}
+}
+
+func TestRuntimeActivationRejectsEngineWithoutDeclaredWorkAndEventIngress(t *testing.T) {
+	t.Parallel()
+
+	products := runtimeProducts{engine: controlOnlyEngineFake{}}
+	if _, err := newRuntimeActivation(products); err == nil {
+		t.Fatal("newRuntimeActivation() error = nil, want a missing-ingress failure")
+	}
+}
+
+// controlOnlyEngineFake serves the Runtime Service contract without the
+// migration-only Work submission and event subscription operations.
+type controlOnlyEngineFake struct {
+	factoryruntime.Service
 }
 
 func TestRuntimeBindingPublicationErrorPreservesPrimaryAndCleanupFailures(t *testing.T) {
@@ -101,23 +122,24 @@ func TestActivationCloserDeactivatesConcurrentCallsExactlyOnce(t *testing.T) {
 	}
 }
 
-type activationRuntimeRecord struct {
-	factoryruntime.RuntimeRecord
-	service factoryruntime.Service
-}
-
-func (record activationRuntimeRecord) RuntimeService() factoryruntime.Service {
-	return record.service
-}
-
 type activationServiceFake struct {
 	factoryruntime.Service
-	submitCalls atomic.Int32
+	submitCalls    atomic.Int32
+	subscribeCalls atomic.Int32
 }
 
 func (service *activationServiceFake) SubmitWorkRequest(context.Context, work.WorkRequest) (work.WorkRequestSubmitResult, error) {
 	service.submitCalls.Add(1)
 	return work.WorkRequestSubmitResult{}, nil
+}
+
+func (service *activationServiceFake) SubscribeFactoryEvents(
+	context.Context,
+	*factorydefinitions.FactoryEventReconnectCursor,
+	factorydefinitions.FactoryEventReconnectScope,
+) (*factorydefinitions.FactoryEventStream, error) {
+	service.subscribeCalls.Add(1)
+	return nil, nil
 }
 
 func TestActivationRequestCarriesExplicitRuntimeInputs(t *testing.T) {

@@ -17,16 +17,18 @@ import (
 	"go.uber.org/zap"
 )
 
+// runtimeProducts is the Factory Sessions side of a completed runtime opening.
+// It retains the opened role bundles, the Runtime binding publication edge, and
+// the opaque Runtime service published by the activation. The hosted-instance,
+// replacement-builder, session build spec, lifecycle, and sidecar handles that
+// opening used to retain are Runtime-owned construction values; Sessions no
+// longer holds them, so it cannot re-enter Runtime construction through them.
 type runtimeProducts struct {
 	application roles.OpenedApplicationRuntime
 	invocation  roles.OpenedInvocationRuntime
 	execution   roles.OpenedExecutionRuntime
 	bindRuntime func(factoryruntime.RuntimeBinding) error
-	startup     runtimeports.RuntimeInstance
-	replacement runtimeports.RuntimeReplacementBuilder
-	buildSpec   factoryruntime.SessionBuildSpec
-	lifecycle   runtimeports.RuntimeLifecycle
-	sidecars    runtimeports.RuntimeSidecarService
+	engine      factoryruntime.Service
 }
 
 type workerSessionsObservationProvider interface {

@@ -432,11 +432,7 @@ func openRuntime(
 		cleanup.Close,
 		sessionID,
 	)
-	opened.startup = startupRuntime
-	opened.replacement = runtimebuildService
-	opened.buildSpec = startupSpec
-	opened.lifecycle = runtimeLifecycle
-	opened.sidecars = runtimeSidecars
+	opened.engine = startupRuntime.RuntimeService()
 	opened.application.Resources.Clock = clock
 	opened.application.Recordings = recordingsService
 	opened.execution.Recordings = recordingsService

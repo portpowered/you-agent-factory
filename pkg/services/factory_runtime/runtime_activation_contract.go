@@ -247,6 +247,14 @@ func (e *RuntimeActivationError) Is(target error) bool {
 // invokes during deactivation or failed publication.
 type RuntimeActivation struct {
 	Service Service
+	// WorkAndEventIngress is the activated Runtime's declared migration-only
+	// Work submission and canonical event subscription boundary. The activation
+	// operation resolves it once, at construction, so the Runtime root never
+	// recovers a legacy owner through a request-time type assertion. An
+	// activation that leaves it nil reports ErrNotRunning for those two widened
+	// operations. It retires together with APIFactory once Work admission and
+	// Recordings own these reads.
+	WorkAndEventIngress APIFactory
 	// Close is retained by the Runtime root as its private cleanup edge. It is
 	// deliberately not returned to callers in RuntimeActivationResult.
 	Close func(context.Context) error
