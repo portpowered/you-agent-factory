@@ -6,8 +6,10 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers/internal/execution"
 )
@@ -205,6 +207,131 @@ func TestCanonicalMockCommandRunnerRequiresNextCommandRunner(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "next command runner is required") {
 		t.Fatalf("Run(no next runner) error = %v, want a required-next-runner failure", err)
 	}
+}
+
+// TestCanonicalConductorInvocationIsTheRetainedDirectInvocationSuccessor
+// characterizes the one direct-invocation constructor that still has a
+// production caller (pkg/wire/session_runtime_providers.go). Its zero-caller
+// siblings NewInvocation and NewInvocationWithProgress were retired, so this
+// guard pins the surviving successor's observable construction contract: a
+// usable executor when its required edges are supplied, and a loud failure
+// naming the missing edge otherwise.
+func TestCanonicalConductorInvocationIsTheRetainedDirectInvocationSuccessor(t *testing.T) {
+	t.Parallel()
+
+	executor, err := newCanonicalConductorInvocation(nil)
+	if err != nil {
+		t.Fatalf("NewConductorInvocationWithProgress() error = %v", err)
+	}
+	if executor == nil {
+		t.Fatal("NewConductorInvocationWithProgress() returned no invocation executor")
+	}
+
+	published := make(chan workers.ProgressFragment, 1)
+	withProgress, err := newCanonicalConductorInvocation(func(fragment workers.ProgressFragment) {
+		select {
+		case published <- fragment:
+		default:
+		}
+	})
+	if err != nil {
+		t.Fatalf("NewConductorInvocationWithProgress(publisher) error = %v", err)
+	}
+	if withProgress == nil {
+		t.Fatal("NewConductorInvocationWithProgress(publisher) returned no invocation executor")
+	}
+}
+
+// TestCanonicalConductorInvocationRejectsMissingRequiredEdges proves the
+// retained bridge refuses to build a half-wired executor. A constructor that
+// returned a usable value here would defer the failure to dispatch time, where
+// it would surface as a silent worker attempt instead of a construction error.
+func TestCanonicalConductorInvocationRejectsMissingRequiredEdges(t *testing.T) {
+	t.Parallel()
+
+	for _, testCase := range []struct {
+		name    string
+		mutate  func(*canonicalInvocationEdges)
+		wantErr string
+	}{
+		{
+			name:    "command runner",
+			mutate:  func(edges *canonicalInvocationEdges) { edges.commandRunner = nil },
+			wantErr: "command runner is required",
+		},
+		{
+			name:    "command clock",
+			mutate:  func(edges *canonicalInvocationEdges) { edges.commandClock = nil },
+			wantErr: "command clock is required",
+		},
+		{
+			name:    "PTY allocator",
+			mutate:  func(edges *canonicalInvocationEdges) { edges.allocator = nil },
+			wantErr: "PTY allocator is required",
+		},
+		{
+			name:    "Providers service",
+			mutate:  func(edges *canonicalInvocationEdges) { edges.providers = nil },
+			wantErr: "Providers service is required",
+		},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			edges := canonicalInvocationTestEdges()
+			testCase.mutate(&edges)
+
+			executor, err := NewConductorInvocationWithProgress(
+				edges.providers,
+				edges.commandRunner,
+				edges.commandClock,
+				edges.allocator,
+				nil, nil, nil, nil, "",
+				nil,
+			)
+			if err == nil {
+				t.Fatalf("NewConductorInvocationWithProgress(no %s) error = nil, want a required-edge failure", testCase.name)
+			}
+			if !strings.Contains(err.Error(), testCase.wantErr) {
+				t.Fatalf("NewConductorInvocationWithProgress(no %s) error = %v, want it to name %q", testCase.name, err, testCase.wantErr)
+			}
+			if executor != nil {
+				t.Fatalf("NewConductorInvocationWithProgress(no %s) returned executor %#v, want nil", testCase.name, executor)
+			}
+		})
+	}
+}
+
+// canonicalInvocationEdges collects the edges the retained direct-invocation
+// constructor validates before it yields an executor.
+type canonicalInvocationEdges struct {
+	providers     providers.Service
+	commandRunner workers.CommandRunner
+	commandClock  workers.Clock
+	allocator     workers.PTYAllocator
+}
+
+func canonicalInvocationTestEdges() canonicalInvocationEdges {
+	return canonicalInvocationEdges{
+		providers:     &statelessTestProviders{},
+		commandRunner: stubCanonicalCommandRunner{},
+		commandClock:  workers.ClockFunc(time.Now),
+		allocator:     &workers.MockPTYAllocator{},
+	}
+}
+
+func newCanonicalConductorInvocation(
+	publisher workers.ProgressPublisher,
+) (workers.InvocationExecutor, error) {
+	edges := canonicalInvocationTestEdges()
+	return NewConductorInvocationWithProgress(
+		edges.providers,
+		edges.commandRunner,
+		edges.commandClock,
+		edges.allocator,
+		nil, nil, nil, nil, "",
+		publisher,
+	)
 }
 
 // canonicalStreamingCommandRunner is the contract Workers resolves from the

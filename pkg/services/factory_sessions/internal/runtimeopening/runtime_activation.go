@@ -21,11 +21,11 @@ import (
 // activatedRuntimeService is the private handoff stored by the Runtime root.
 // The embedded service is the completed Factory Sessions runtime; the product
 // roles remain private to this opener and are exposed only through the same
-// activation result that published the service.
+// activation result that published the service. The wrapper deliberately does
+// not carry the widened Work and event operations: those are published as the
+// activation's declared ingress so no peer recovers them from this type.
 type activatedRuntimeService struct {
 	factoryruntime.Service
-	runtimeWorkSubmitter
-	runtimeEventSubscriber
 	products runtimeProducts
 }
 
@@ -38,18 +38,6 @@ func (s *activatedRuntimeService) RuntimeDelegate() factoryruntime.Service {
 		return nil
 	}
 	return s.Service
-}
-
-type runtimeWorkSubmitter interface {
-	SubmitWorkRequest(context.Context, work.WorkRequest) (work.WorkRequestSubmitResult, error)
-}
-
-type runtimeEventSubscriber interface {
-	SubscribeFactoryEvents(
-		context.Context,
-		*factorydefinitions.FactoryEventReconnectCursor,
-		factorydefinitions.FactoryEventReconnectScope,
-	) (*factorydefinitions.FactoryEventStream, error)
 }
 
 func (s *activatedRuntimeService) runtimeProducts() runtimeProducts {
@@ -71,25 +59,31 @@ func (f *Factory) activateRuntime(
 	if err != nil {
 		return nil, err
 	}
+	return newRuntimeActivation(products)
+}
+
+// newRuntimeActivation publishes the opened engine as the Runtime activation.
+// It resolves the migration-only Work and event ingress once here, at
+// construction, and hands it to the Runtime root as a declared activation
+// value so no later Work submission or event subscription has to recover a
+// legacy owner from the published service.
+func newRuntimeActivation(products runtimeProducts) (*factoryruntime.RuntimeActivation, error) {
 	service := runtimeEngineService(products)
 	if service == nil {
 		return nil, fmt.Errorf("activate Factory Runtime: opened Runtime engine service is required")
 	}
-	legacySubmission, ok := service.(runtimeWorkSubmitter)
+	ingress, ok := service.(factoryruntime.APIFactory)
 	if !ok {
-		return nil, fmt.Errorf("activate Factory Runtime: opened runtime work submission is required")
-	}
-	legacyEvents, ok := service.(runtimeEventSubscriber)
-	if !ok {
-		return nil, fmt.Errorf("activate Factory Runtime: opened runtime event subscription is required until Recordings migration")
+		return nil, fmt.Errorf(
+			"activate Factory Runtime: opened runtime Work submission and event subscription are required until Recordings migration",
+		)
 	}
 	return &factoryruntime.RuntimeActivation{
 		Service: &activatedRuntimeService{
-			Service:                service,
-			runtimeWorkSubmitter:   legacySubmission,
-			runtimeEventSubscriber: legacyEvents,
-			products:               products,
+			Service:  service,
+			products: products,
 		},
+		WorkAndEventIngress: ingress,
 		Close: func(closeCtx context.Context) error {
 			if products.application.Resources.Close == nil {
 				return nil
@@ -99,16 +93,13 @@ func (f *Factory) activateRuntime(
 	}, nil
 }
 
-// runtimeEngineService selects the live engine from the detached opening
-// record. The application HTTP view is intentionally not used here: during
-// the migration it is allowed to be a Factory Sessions resolver proxy, and
-// publishing that proxy as the binding would re-enter the same session lookup
-// for every Work or Worker operation.
+// runtimeEngineService returns the live engine the opening resolved from the
+// Runtime instance. The application HTTP view is intentionally not used here:
+// during the migration it is allowed to be a Factory Sessions resolver proxy,
+// and publishing that proxy as the binding would re-enter the same session
+// lookup for every Work or Worker operation.
 func runtimeEngineService(products runtimeProducts) factoryruntime.Service {
-	if products.startup == nil {
-		return nil
-	}
-	return products.startup.RuntimeService()
+	return products.engine
 }
 
 func runtimeOpeningRequestFromActivation(

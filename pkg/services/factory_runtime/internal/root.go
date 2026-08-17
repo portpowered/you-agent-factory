@@ -18,18 +18,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/work"
 )
 
-type runtimeWorkSubmitter interface {
-	SubmitWorkRequest(context.Context, work.WorkRequest) (work.WorkRequestSubmitResult, error)
-}
-
-type runtimeEventSubscriber interface {
-	SubscribeFactoryEvents(
-		context.Context,
-		*interfaces.FactoryEventReconnectCursor,
-		interfaces.FactoryEventReconnectScope,
-	) (*interfaces.FactoryEventStream, error)
-}
-
 // runtimeDelegateProvider is the narrow handoff used when an activation
 // retains a compatibility wrapper around the concrete Runtime service. Bound
 // capabilities must route widened legacy operations to that concrete service,
@@ -59,6 +47,10 @@ var _ factoryruntime.Service = (*Root)(nil)
 type runtimeActivationState struct {
 	request factoryruntime.RuntimeActivationRequest
 	service factoryruntime.Service
+	// ingress is the activation's declared migration-only Work submission and
+	// event subscription boundary. It is resolved once by the activation
+	// operation so widened operations never type-assert the published service.
+	ingress factoryruntime.APIFactory
 	view    factoryruntime.RuntimeActivationView
 	close   func(context.Context) error
 }
@@ -267,6 +259,7 @@ func (r *Root) finishActivation(
 	r.active[request.RuntimeID] = &runtimeActivationState{
 		request: request,
 		service: activation.Service,
+		ingress: activation.WorkAndEventIngress,
 		view:    view,
 		close:   activation.Close,
 	}
@@ -487,32 +480,32 @@ func (r *Root) AcceptDispatchResult(
 }
 
 // SubmitWorkRequest preserves the migration-only Factory Sessions ingress
-// while routing the request through the activated Runtime delegate. The
-// process root remains the canonical Service authority; this narrow bridge is
-// retained for the legacy HTTP mapping until that representation migrates.
+// while routing the request through the ingress the activation operation
+// declared. The process root remains the canonical Service authority; this
+// narrow bridge retires with APIFactory once Work admission owns the read.
 func (r *Root) SubmitWorkRequest(
 	ctx context.Context,
 	request work.WorkRequest,
 ) (work.WorkRequestSubmitResult, error) {
-	service, ok := r.delegate().(runtimeWorkSubmitter)
-	if !ok {
+	ingress := r.activeIngress()
+	if ingress == nil {
 		return work.WorkRequestSubmitResult{}, factoryruntime.ErrNotRunning
 	}
-	return service.SubmitWorkRequest(ctx, request)
+	return ingress.SubmitWorkRequest(ctx, request)
 }
 
 // SubscribeFactoryEvents preserves the migration-only Factory Sessions event
-// stream through the activated Runtime delegate for the legacy HTTP mapping.
+// stream through the ingress the activation operation declared.
 func (r *Root) SubscribeFactoryEvents(
 	ctx context.Context,
 	reconnect *interfaces.FactoryEventReconnectCursor,
 	scope interfaces.FactoryEventReconnectScope,
 ) (*interfaces.FactoryEventStream, error) {
-	service, ok := r.delegate().(runtimeEventSubscriber)
-	if !ok {
+	ingress := r.activeIngress()
+	if ingress == nil {
 		return nil, factoryruntime.ErrNotRunning
 	}
-	return service.SubscribeFactoryEvents(ctx, reconnect, scope)
+	return ingress.SubscribeFactoryEvents(ctx, reconnect, scope)
 }
 
 // InvokeWorker delegates one orchestrator-resolved Worker invocation to the
@@ -559,6 +552,39 @@ func (r *Root) serviceForRuntime(runtimeID string) factoryruntime.Service {
 	return runtimeDelegate(active.service)
 }
 
+// activeIngress returns the single active Runtime's declared migration-only
+// Work and event boundary. It mirrors delegate's single-active rule and
+// returns nil when no activation published one.
+func (r *Root) activeIngress() factoryruntime.APIFactory {
+	if r == nil || r.orchestration == nil || r.instanceHost == nil || r.dispatchPlan == nil {
+		return nil
+	}
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	if len(r.active) != 1 {
+		return nil
+	}
+	for _, active := range r.active {
+		return active.ingress
+	}
+	return nil
+}
+
+// ingressForRuntime returns the named Runtime's declared migration-only Work
+// and event boundary, or nil when that Runtime is not active.
+func (r *Root) ingressForRuntime(runtimeID string) factoryruntime.APIFactory {
+	if r == nil || r.orchestration == nil || r.instanceHost == nil || r.dispatchPlan == nil {
+		return nil
+	}
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	active := r.active[runtimeID]
+	if active == nil {
+		return nil
+	}
+	return active.ingress
+}
+
 func runtimeDelegate(service factoryruntime.Service) factoryruntime.Service {
 	if provider, ok := service.(runtimeDelegateProvider); ok {
 		if delegate := provider.RuntimeDelegate(); delegate != nil {
@@ -584,6 +610,15 @@ func (service *boundRuntimeService) target() factoryruntime.Service {
 		return nil
 	}
 	return service.root.serviceForRuntime(service.runtimeID)
+}
+
+// ingress returns the bound Runtime's declared migration-only Work and event
+// boundary without re-deriving it from the published service.
+func (service *boundRuntimeService) ingress() factoryruntime.APIFactory {
+	if service == nil {
+		return nil
+	}
+	return service.root.ingressForRuntime(service.runtimeID)
 }
 
 func (service *boundRuntimeService) ControlPause(ctx context.Context, req factoryruntime.PauseRequest) (factoryruntime.PauseResult, error) {
@@ -668,11 +703,11 @@ func (service *boundRuntimeService) InvokeWorker(ctx context.Context, req factor
 }
 
 func (service *boundRuntimeService) SubmitWorkRequest(ctx context.Context, request work.WorkRequest) (work.WorkRequestSubmitResult, error) {
-	target, ok := service.target().(runtimeWorkSubmitter)
-	if !ok {
+	ingress := service.ingress()
+	if ingress == nil {
 		return work.WorkRequestSubmitResult{}, factoryruntime.ErrNotRunning
 	}
-	return target.SubmitWorkRequest(ctx, request)
+	return ingress.SubmitWorkRequest(ctx, request)
 }
 
 func (service *boundRuntimeService) SubscribeFactoryEvents(
@@ -680,11 +715,11 @@ func (service *boundRuntimeService) SubscribeFactoryEvents(
 	reconnect *interfaces.FactoryEventReconnectCursor,
 	scope interfaces.FactoryEventReconnectScope,
 ) (*interfaces.FactoryEventStream, error) {
-	target, ok := service.target().(runtimeEventSubscriber)
-	if !ok {
+	ingress := service.ingress()
+	if ingress == nil {
 		return nil, factoryruntime.ErrNotRunning
 	}
-	return target.SubscribeFactoryEvents(ctx, reconnect, scope)
+	return ingress.SubscribeFactoryEvents(ctx, reconnect, scope)
 }
 
 func closeActivation(activation *factoryruntime.RuntimeActivation, ctx context.Context) error {

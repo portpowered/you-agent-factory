@@ -99,7 +99,7 @@ func TestBoundRuntimeServiceUsesConcreteDelegateForWideOperations(t *testing.T) 
 	}
 	engine := &wideOperationRuntimeFake{}
 	wrapper := &runtimeDelegateWrapper{Service: engine, delegate: engine}
-	root.active["runtime-1"] = &runtimeActivationState{service: wrapper}
+	root.active["runtime-1"] = &runtimeActivationState{service: wrapper, ingress: engine}
 
 	binding := &boundRuntimeService{root: root, runtimeID: "runtime-1"}
 	if _, err := binding.SubmitWorkRequest(context.Background(), work.WorkRequest{}); err != nil {

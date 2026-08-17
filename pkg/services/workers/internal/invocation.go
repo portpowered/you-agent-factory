@@ -13,31 +13,13 @@ import (
 	workerinvocation "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/invocation"
 )
 
-// TODO(P6-C): retire the provider-backed compatibility invocation bridge after
-// Runtime and Sessions caller families pass detached values to Service.Execute.
-// NewInvocation constructs the narrow direct-invocation role used by
-// standalone Factory Session execution.
-func NewInvocation(
-	providersService providers.Service,
-	commandRunner workers.CommandRunner,
-	commandClock workers.Clock,
-	allocator workers.PTYAllocator,
-	resolveSymlinks workers.ResolveExecutableSymlinks,
-	executableLocator platformprocess.ExecutableLocator,
-	executableInspector platformfilesystem.PathInspector,
-	executableFiles platformfilesystem.ReadOpener,
-	operatingSystem workers.OperatingSystem,
-	temporaryFileSystems ...platformfilesystem.TemporaryFileSystem,
-) (workers.InvocationExecutor, error) {
-	return newInvocation(
-		providersService, commandRunner, commandClock, allocator, resolveSymlinks,
-		executableLocator, executableInspector, executableFiles, operatingSystem,
-		nil, temporaryFileSystems...,
-	)
-}
-
 // NewInvocationWithProgress constructs one direct-invocation role that publishes
-// provider progress fragments through the supplied publisher.
+// provider progress fragments through the supplied publisher. It is reached
+// only through NewConductorInvocationWithProgress, whose remaining production
+// caller is named in workers/wire/runtime_bridge.go.
+//
+// TODO(P6-C): retire this bridge after that caller passes detached values to
+// Service.Execute.
 func NewInvocationWithProgress(
 	providersService providers.Service,
 	commandRunner workers.CommandRunner,
