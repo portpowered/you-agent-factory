@@ -19,11 +19,14 @@ import (
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	sessioncli "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/cli/session"
 	factorysessionwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire"
+	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
+	acpcli "github.com/portpowered/infinite-you/pkg/transports/cli/acp"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/completionprojection"
 	factorycli "github.com/portpowered/infinite-you/pkg/transports/cli/factory"
 	cliobservation "github.com/portpowered/infinite-you/pkg/transports/cli/observation"
@@ -460,4 +463,179 @@ func TestProvideListFactoriesOperationCallsFactoryDefinitionsOwner(t *testing.T)
 	if calls != 1 || len(entries) != 1 || entries[0].Name != "owned" {
 		t.Fatalf("service calls = %d, entries = %#v", calls, entries)
 	}
+}
+
+// TestACPCLIOperationsPersistAndProjectConfiguredWorkers proves the
+// Wire-composed ACP CLI operations reach the Operator Settings and Providers
+// owner roots rather than joining them inside the CLI transport: adding an
+// integration persists it at the service-owned configuration path, listing
+// projects it back as a custom ACP worker, and deleting it removes it from
+// both the persisted document and the projected catalog.
+func TestACPCLIOperationsPersistAndProjectConfiguredWorkers(t *testing.T) {
+	t.Parallel()
+
+	home := t.TempDir()
+	ctx := context.Background()
+	settings, providersRoot := newACPCLIOwnerRoots(t)
+	operations := provideACPCLIService(
+		settings,
+		providersRoot,
+		provideOperatorSettingsIDGenerator(serviceedges.Edges{}),
+	)
+
+	const workerName = "acme-acp"
+	if err := operations.Add(ctx, home, workerName, "stdio", acpCLITestCommand); err != nil {
+		t.Fatalf("Add(%q) error = %v", workerName, err)
+	}
+	assertOnlyPersistedACPIntegration(t, settings, home, workerName)
+
+	catalog := listACPCLIWorkers(t, operations, home)
+	if !catalog.Custom[providers.ID(workerName)] || len(catalog.Providers) == 0 {
+		t.Fatalf(
+			"ListWorkers() custom = %#v with %d descriptors, want %q projected alongside the Providers catalog",
+			catalog.Custom, len(catalog.Providers), workerName,
+		)
+	}
+
+	if err := operations.Delete(ctx, home, workerName); err != nil {
+		t.Fatalf("Delete(%q) error = %v", workerName, err)
+	}
+	if remaining := loadPersistedACPIntegrations(t, settings, home); len(remaining) != 0 {
+		t.Fatalf("persisted ACP integrations after delete = %#v, want none", remaining)
+	}
+	if listACPCLIWorkers(t, operations, home).Custom[providers.ID(workerName)] {
+		t.Fatalf("ListWorkers() after delete still projects %q as a custom worker", workerName)
+	}
+}
+
+// TestACPCLIOperationsRequireTheirOwnerRoots proves each composed ACP CLI
+// operation refuses to run when Wire has not supplied the owner root it
+// delegates to, so an incomplete composition surfaces as a customer-visible
+// diagnostic instead of a nil dereference inside a command handler.
+func TestACPCLIOperationsRequireTheirOwnerRoots(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	home := t.TempDir()
+	settings, providersRoot := newACPCLIOwnerRoots(t)
+	generateID := provideOperatorSettingsIDGenerator(serviceedges.Edges{})
+	withoutSettings := provideACPCLIService(nil, providersRoot, generateID)
+	withoutProviders := provideACPCLIService(settings, nil, generateID)
+	withoutIDs := provideACPCLIService(settings, providersRoot, nil)
+
+	for _, testCase := range []struct {
+		operation string
+		call      func() error
+		wantOwner string
+	}{
+		{"ListWorkers without Operator Settings", func() error {
+			_, err := withoutSettings.ListWorkers(ctx, home)
+			return err
+		}, "Operator Settings"},
+		{"Add without Operator Settings", func() error {
+			return withoutSettings.Add(ctx, home, "acme-acp", "stdio", acpCLITestCommand)
+		}, "Operator Settings"},
+		{"Delete without Operator Settings", func() error {
+			return withoutSettings.Delete(ctx, home, "acme-acp")
+		}, "Operator Settings"},
+		{"ListWorkers without Providers", func() error {
+			_, err := withoutProviders.ListWorkers(ctx, home)
+			return err
+		}, "Providers"},
+		{"Configure without Providers", func() error {
+			return withoutProviders.Configure(ctx, nil)
+		}, "Providers"},
+		{"Add without an ID generator", func() error {
+			return withoutIDs.Add(ctx, home, "acme-acp", "stdio", acpCLITestCommand)
+		}, "ID generator"},
+	} {
+		err := testCase.call()
+		if err == nil || !strings.Contains(err.Error(), testCase.wantOwner) {
+			t.Fatalf("%s error = %v, want a %q diagnostic", testCase.operation, err, testCase.wantOwner)
+		}
+	}
+}
+
+// acpCLITestCommand is the launch command the ACP CLI operation tests persist
+// and read back through the Operator Settings owner root.
+const acpCLITestCommand = "acme --acp"
+
+// loadPersistedACPIntegrations reads the ACP integrations Operator Settings
+// persisted at its own service-owned configuration path for home.
+func loadPersistedACPIntegrations(
+	t *testing.T,
+	settings operatorsettings.Service,
+	home string,
+) []operatorsettings.ACPIntegration {
+	t.Helper()
+
+	configPath := settings.DefaultConfigPath(home)
+	loaded, err := settings.LoadDocument(operatorsettings.LoadDocumentRequest{Path: configPath})
+	if err != nil {
+		t.Fatalf("LoadDocument(%q) error = %v", configPath, err)
+	}
+	return loaded.Document.Workers.ACP.Integrations
+}
+
+// assertOnlyPersistedACPIntegration asserts the named worker is the single
+// persisted ACP integration and that Operator Settings assigned it an ID.
+func assertOnlyPersistedACPIntegration(
+	t *testing.T,
+	settings operatorsettings.Service,
+	home string,
+	name string,
+) {
+	t.Helper()
+
+	persisted := loadPersistedACPIntegrations(t, settings, home)
+	if len(persisted) != 1 {
+		t.Fatalf("persisted ACP integrations = %#v, want exactly the added %q worker", persisted, name)
+	}
+	added := persisted[0]
+	if added.Name != name || added.Transport != "stdio" || added.Command != acpCLITestCommand || added.ID == "" {
+		t.Fatalf("persisted ACP integration = %#v, want %q on stdio with its command and a generated ID", added, name)
+	}
+}
+
+// listACPCLIWorkers drives the composed list operation and fails the test on
+// any error so callers can assert directly on the projected catalog.
+func listACPCLIWorkers(t *testing.T, operations acpcli.Operations, home string) acpcli.WorkerCatalog {
+	t.Helper()
+
+	catalog, err := operations.ListWorkers(context.Background(), home)
+	if err != nil {
+		t.Fatalf("ListWorkers() error = %v", err)
+	}
+	return catalog
+}
+
+// newACPCLIOwnerRoots composes the real Operator Settings and Providers roots
+// through their production Wire providers, so tests observe the same owner
+// behavior the composed CLI operations reach at runtime.
+func newACPCLIOwnerRoots(t *testing.T) (operatorsettings.Service, providers.Service) {
+	t.Helper()
+
+	edges := serviceedges.Edges{}
+	providersRoot, err := provideProvidersService(edges)
+	if err != nil {
+		t.Fatalf("provideProvidersService() error = %v", err)
+	}
+	zapLogger, err := logging.NewDefaultLogger()
+	if err != nil {
+		t.Fatalf("logging.NewDefaultLogger() error = %v", err)
+	}
+	settings, err := provideOperatorSettingsService(
+		provideOperatorSettingsFileSystem(edges),
+		provideOperatorSettingsCreateTemporaryFile(edges),
+		provideOperatorSettingsProviderCatalog(providersRoot),
+		provideOperatorConfigDecoder(),
+		provideOperatorConfigEncoder(),
+		provideOperatorSettingsIDGenerator(edges),
+		providersRoot,
+		logging.NewZapLogger(zapLogger, false),
+	)
+	if err != nil {
+		t.Fatalf("provideOperatorSettingsService() error = %v", err)
+	}
+	return settings, providersRoot
 }

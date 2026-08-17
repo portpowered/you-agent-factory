@@ -13,7 +13,6 @@ import (
 
 	acpsdk "github.com/coder/acp-go-sdk"
 
-	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
@@ -122,31 +121,7 @@ func seedInstalledPackagedFactories(t *testing.T, home string, names ...string) 
 func seedACPAgentProfile(t *testing.T, home, defaultTarget string, allowedTargets []string) {
 	t.Helper()
 
-	zapLogger, err := logging.NewDefaultLogger()
-	if err != nil {
-		t.Fatalf("logging.NewDefaultLogger() error = %v", err)
-	}
-	logger := logging.NewZapLogger(zapLogger, false)
-
-	edges := serviceedges.Edges{}
-	files := provideOperatorSettingsFileSystem(edges)
-	providersRoot, err := provideProvidersService(edges)
-	if err != nil {
-		t.Fatalf("provideProvidersService() error = %v", err)
-	}
-	service, err := provideOperatorSettingsService(
-		files,
-		provideOperatorSettingsCreateTemporaryFile(edges),
-		provideOperatorSettingsProviderCatalog(providersRoot),
-		provideOperatorConfigDecoder(),
-		provideOperatorConfigEncoder(),
-		provideOperatorSettingsIDGenerator(edges),
-		providersRoot,
-		logger,
-	)
-	if err != nil {
-		t.Fatalf("provideOperatorSettingsService() error = %v", err)
-	}
+	service, _ := newACPCLIOwnerRoots(t)
 
 	configPath := operatorsettings.DefaultConfigPath(home)
 	if _, err := service.UpdateACPAgentProfile(context.Background(), configPath, operatorsettings.ACPAgentProfile{
