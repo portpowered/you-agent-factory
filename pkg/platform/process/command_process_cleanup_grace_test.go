@@ -646,7 +646,7 @@ func runCommandHelperChildMode(mode string) {
 		time.Sleep(10 * time.Second)
 		os.Exit(0)
 	}
-	time.Sleep(800 * time.Millisecond)
+	time.Sleep(commandHelperDelayedSideEffectDelay)
 	if err := os.WriteFile(os.Getenv("COMMAND_HELPER_SIDE_EFFECT_FILE"), []byte("unexpected"), 0o600); err != nil {
 		fmt.Fprintf(os.Stderr, "write delayed side effect: %v\n", err)
 		os.Exit(2)
