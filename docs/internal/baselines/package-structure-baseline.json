@@ -2448,6 +2448,11 @@
       "target": "\u003cnone\u003e"
     },
     {
+      "rule": "service-root-missing-internal",
+      "filePath": "pkg/services/workers/internal/services/workstations/internal",
+      "target": "pkg/services/workers/internal/services/workstations"
+    },
+    {
       "rule": "service-root-unexpected-directory",
       "filePath": "pkg/services/factory_definitions/clonetests",
       "target": "pkg/services/factory_definitions"

@@ -1419,7 +1419,7 @@
       "class": "command",
       "bidirectional": true,
       "unresolved": true,
-      "evidence": "pkg/services/factory_sessions -> pkg/services/models"
+      "evidence": "pkg/services/factory_sessions/internal/roles -> pkg/services/models"
     },
     {
       "fromOwner": "factory_sessions",
@@ -1437,7 +1437,7 @@
       "fromOwner": "factory_sessions",
       "toOwner": "provider_sessions",
       "class": "command",
-      "evidence": "pkg/services/factory_sessions -> pkg/services/provider_sessions"
+      "evidence": "pkg/services/factory_sessions/internal/roles -> pkg/services/provider_sessions"
     },
     {
       "fromOwner": "factory_sessions",
@@ -1477,7 +1477,7 @@
       "fromOwner": "factory_sessions",
       "toOwner": "worker_sessions",
       "class": "command",
-      "evidence": "pkg/services/factory_sessions -> pkg/services/worker_sessions"
+      "evidence": "pkg/services/factory_sessions/internal/roles -> pkg/services/worker_sessions"
     },
     {
       "fromOwner": "factory_sessions",
@@ -1728,6 +1728,12 @@
     },
     {
       "fromOwner": "root",
+      "toOwner": "factory_sessions",
+      "class": "construction",
+      "evidence": "pkg/root -> pkg/services/factory_sessions"
+    },
+    {
+      "fromOwner": "root",
       "toOwner": "initializer",
       "class": "construction",
       "evidence": "pkg/root -> pkg/initializer/application"
@@ -1846,7 +1852,7 @@
       "class": "protocol_composition",
       "bidirectional": true,
       "unresolved": true,
-      "evidence": "pkg/transports/http/application -> pkg/services/provider_sessions/transports/http"
+      "evidence": "pkg/transports/http/application -> pkg/services/provider_sessions"
     },
     {
       "fromOwner": "transports",
@@ -1963,7 +1969,7 @@
       "fromOwner": "wire",
       "toOwner": "models",
       "class": "construction",
-      "evidence": "pkg/wire -> pkg/services/models/transports/cli"
+      "evidence": "pkg/wire -> pkg/services/models"
     },
     {
       "fromOwner": "wire",
