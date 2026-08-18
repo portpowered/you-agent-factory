@@ -68,6 +68,14 @@ func coverageLaneLabel(suite string) string {
 	}
 }
 
+// coverageLaneNoun names the lane in prose. The timing capture notes are
+// produced by code both suites share, so a hard-coded "functional" tells a
+// reader of the unit lane's timing artifact that some other suite was
+// interrupted.
+func coverageLaneNoun(suite string) string {
+	return strings.ToLower(coverageLaneLabel(suite))
+}
+
 // writePackageCoverageSummaries prints one raw coverage line per measured
 // package. It remains the report for every non-functional lane and for the
 // malformed-manifest abort path, which never reaches the JSON summary.

@@ -275,6 +275,48 @@ func TestUnitCoverageLaneCreatesItsArtifactDirectory(t *testing.T) {
 	}
 }
 
+// TestUnitCoverageLaneNamesItsOwnLaneInItsCaptureNote pins the prose the unit
+// report renders when a capture ends early. The note is written by code both
+// suites share, and the rendered summary shows it to a reader who is looking
+// at the unit job, so naming the functional suite there reads as evidence that
+// the wrong lane was measured.
+func TestUnitCoverageLaneNamesItsOwnLaneInItsCaptureNote(t *testing.T) {
+	outputDir := t.TempDir()
+	timingPath := filepath.Join(outputDir, "unit-timing-summary.json")
+
+	stdout, _, err := captureUnitReportRun(
+		t,
+		unitReportConfig(
+			unitReportManifest(t),
+			filepath.Join(outputDir, "coverage-summary.json"),
+			timingPath,
+		),
+		unitReportTimingEvents(t, timingOutcomePass),
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("execute() error = %v\n%s", err, stdout)
+	}
+
+	var timing struct {
+		Complete      bool   `json:"complete"`
+		CaptureReason string `json:"captureReason"`
+	}
+	readUnitReportJSON(t, timingPath, &timing)
+	if timing.Complete {
+		t.Fatal("timing capture reported complete; this fixture must end early or it stops covering the capture note")
+	}
+	if !strings.HasPrefix(timing.CaptureReason, "unit ") {
+		t.Fatalf("unit lane capture note = %q, want it to name the unit lane", timing.CaptureReason)
+	}
+
+	// The note is shared with the functional lane, whose wording this change
+	// must leave byte-identical.
+	if got := coverageLaneNoun(functionalCoverageSuite); got != "functional" {
+		t.Fatalf("functional lane noun = %q, want the wording its reports already carry", got)
+	}
+}
+
 // TestInterruptedTimingSnapshotEmitsAnEmptyTestArray pins the artifact an
 // if: always() upload preserves when a lane is cut short. A snapshot has no
 // per-test rows yet, and a nil slice marshals to JSON null, which a consumer

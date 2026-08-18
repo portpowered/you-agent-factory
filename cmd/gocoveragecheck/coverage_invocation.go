@@ -429,7 +429,7 @@ func configureFunctionalTimingSnapshot(plan *coverageInvocationPlan, cfg config,
 			return writePartialCoverageSnapshot(cfg.jsonOutput, profilePath, repoRoot, coverPackages, partialCoverageReason(nil))
 		},
 	)
-	snapshotter.publish(false, "functional run started", false)
+	snapshotter.publish(false, coverageLaneNoun(cfg.suite)+" run started", false)
 	return snapshotter
 }
 
@@ -444,7 +444,7 @@ func finalizeFunctionalTiming(cfg config, snapshotter *functionalTimingSnapshott
 	summary := buildFunctionalTimingSummary(stdout, testPackages, wallSeconds)
 	timingReason := ""
 	if !summary.Complete {
-		timingReason = "functional timing capture ended before every package reported a terminal result"
+		timingReason = coverageLaneNoun(cfg.suite) + " timing capture ended before every package reported a terminal result"
 		if laneErr != nil {
 			timingReason += ": " + compactDiagnosticError(laneErr)
 		}
