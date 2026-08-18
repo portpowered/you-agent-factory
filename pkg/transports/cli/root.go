@@ -38,7 +38,7 @@ import (
 	factorycli "github.com/portpowered/infinite-you/pkg/transports/cli/factory"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/factoryload"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/generated"
-	"github.com/portpowered/infinite-you/pkg/transports/cli/initsetup"
+	"github.com/portpowered/infinite-you/pkg/services/operator_settings/transports/cli/initsetup"
 	mcpcli "github.com/portpowered/infinite-you/pkg/transports/cli/mcp"
 	cliobservation "github.com/portpowered/infinite-you/pkg/transports/cli/observation"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/resolvedinput"

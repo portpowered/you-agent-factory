@@ -916,6 +916,10 @@
       "minimum": 100.00
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/services/operator_settings/transports/cli/initsetup",
+      "minimum": 82.43
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/services/operator_settings/transports/globalconfig",
       "minimum": 83.69
     },
@@ -1320,10 +1324,6 @@
     {
       "package": "github.com/portpowered/infinite-you/pkg/transports/cli/generated",
       "minimum": 90.40
-    },
-    {
-      "package": "github.com/portpowered/infinite-you/pkg/transports/cli/initsetup",
-      "minimum": 82.43
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/transports/cli/mcp",
