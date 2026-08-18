@@ -17,10 +17,11 @@ import (
 const cronSubmissionNamePrefix = "cron:"
 
 func (*service) ParseCronJitter(cronConfig *interfaces.CronConfig) (time.Duration, error) {
-	if cronConfig == nil {
-		return 0, nil
+	authored := ""
+	if cronConfig != nil {
+		authored = cronConfig.Jitter
 	}
-	return cronschedule.ParseJitter(cronConfig.Jitter)
+	return cronschedule.ParseJitter(authored)
 }
 
 func (s *service) ParseCronExpiryWindow(cronConfig *interfaces.CronConfig, scheduleWindow time.Duration) (time.Duration, error) {

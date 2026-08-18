@@ -574,3 +574,30 @@ func TestCronTimeWorkRequest_EveryMinuteScheduleDeterministicWithFakeClock(t *te
 		}
 	}
 }
+
+// A workstation can reach these accessors with no cron block at all. Neither is
+// a failure: an absent config means no jitter, and an absent expiry window
+// falls back to the schedule window the caller supplies.
+func TestParseCronJitterAndExpiryWindow_TreatAMissingCronConfigAsUnset(t *testing.T) {
+	svc := testCronService()
+
+	jitter, err := svc.ParseCronJitter(nil)
+	if err != nil {
+		t.Fatalf("ParseCronJitter(nil) error = %v, want nil", err)
+	}
+	if jitter != 0 {
+		t.Fatalf("ParseCronJitter(nil) = %s, want 0", jitter)
+	}
+
+	expiryWindow, err := svc.ParseCronExpiryWindow(nil, 90*time.Second)
+	if err != nil {
+		t.Fatalf("ParseCronExpiryWindow(nil) error = %v, want nil", err)
+	}
+	if expiryWindow != 90*time.Second {
+		t.Fatalf("ParseCronExpiryWindow(nil) = %s, want the 90s schedule window", expiryWindow)
+	}
+
+	if _, err := svc.ParseCronExpiryWindow(nil, 0); !errors.Is(err, cron.ErrInvalidExpiryWindow) {
+		t.Fatalf("ParseCronExpiryWindow(nil, 0) error = %v, want ErrInvalidExpiryWindow", err)
+	}
+}
