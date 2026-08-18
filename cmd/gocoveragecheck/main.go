@@ -152,6 +152,9 @@ func execute(cfg config) error {
 		writeCoverageTestFailureWarning(err)
 		var validationErr *coverageManifestValidationError
 		if errors.As(err, &validationErr) {
+			// A malformed manifest aborts before the coverage-summary JSON is
+			// written, so this path keeps the complete per-package listing: it
+			// is the only surviving copy of the measurement.
 			writePackageCoverageSummaries(result.packageSummaries)
 		}
 		return err
@@ -166,7 +169,7 @@ func execute(cfg config) error {
 	}
 	failures = append(failures, result.packageMinimumFailures...)
 
-	writePackageCoverageSummaries(result.packageSummaries)
+	writeCoverageLaneReport(cfg, result, failures)
 	if cfg.generateManifest != "" {
 		if err := createCoverageManifest(cfg.generateManifest, cfg.suite, result.packageTotals, packageImportPaths(result.packageSummaries)); err != nil {
 			return err
@@ -403,12 +406,6 @@ func runCoverageProfile(cfg config, targetOS string, profilePath string) (covera
 		result.packageGates = packageGatesFromLegacyMin(result.packageSummaries, cfg.packageCoverageMin(), baselinePackages)
 	}
 	return result, nil
-}
-
-func writePackageCoverageSummaries(summaries []packageCoverageSummary) {
-	for _, summary := range summaries {
-		fmt.Fprintf(stdoutWriter, "%s\tcoverage: %.1f%% of statements\n", summary.importPath, summary.coverage)
-	}
 }
 
 func (cfg config) testJobs(targetOS string) int {

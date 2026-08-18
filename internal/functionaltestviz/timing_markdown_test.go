@@ -1,6 +1,7 @@
 package functionaltestviz_test
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
@@ -129,5 +130,116 @@ func TestRenderFunctionalTimingMarkdownZeroDurationPackagesNotHiddenAsMissing(t 
 	got := functionaltestviz.RenderFunctionalTimingMarkdown(summary)
 	if !strings.Contains(got, "| `github.com/portpowered/infinite-you/tests/functional/empty` | 0.000 | skip |") {
 		t.Fatalf("zero-duration package must still render, not be treated as missing:\n%s", got)
+	}
+}
+
+func TestRenderFunctionalTimingMarkdownRendersSlowestTopLevelTests(t *testing.T) {
+	t.Parallel()
+
+	summary := functionaltestviz.FunctionalTimingSummary{
+		Version:       functionaltestviz.FunctionalTimingSummaryVersion,
+		Complete:      true,
+		WallSeconds:   30.0,
+		PackageCount:  1,
+		TestCount:     3,
+		TestPassCount: 2,
+		TestFailCount: 1,
+		Packages: []functionaltestviz.FunctionalPackageTiming{
+			{Package: "github.com/portpowered/infinite-you/tests/functional/alpha", Seconds: 30.0, Outcome: "fail"},
+		},
+		Tests: []functionaltestviz.FunctionalTestTiming{
+			{Package: "github.com/portpowered/infinite-you/tests/functional/alpha", Test: "TestQuick", Seconds: 0.5, Outcome: "pass"},
+			{Package: "github.com/portpowered/infinite-you/tests/functional/alpha", Test: "TestSlowest", Seconds: 21.25, Outcome: "pass"},
+			{Package: "github.com/portpowered/infinite-you/tests/functional/alpha", Test: "TestMiddle", Seconds: 8.125, Outcome: "fail", Reason: "assertion failed"},
+		},
+	}
+
+	rendered := functionaltestviz.RenderFunctionalTimingMarkdown(summary)
+
+	if !strings.Contains(rendered, "### Slowest top-level tests\n") {
+		t.Fatalf("slowest top-level tests section missing:\n%s", rendered)
+	}
+	if !strings.Contains(rendered, "- Showing the 3 slowest of 3 observed top-level tests by elapsed time; 0 additional row(s) omitted.\n") {
+		t.Fatalf("slowest-tests section must state its cap and omitted count:\n%s", rendered)
+	}
+	if !strings.Contains(rendered, "| Test | Package | Elapsed (s) | Outcome |\n") {
+		t.Fatalf("slowest-tests table header missing:\n%s", rendered)
+	}
+	if !strings.Contains(rendered, "| `TestSlowest` | `github.com/portpowered/infinite-you/tests/functional/alpha` | 21.250 | pass |\n") {
+		t.Fatalf("slowest test row missing:\n%s", rendered)
+	}
+
+	// Scope the ordering assertion to the new section: the failed-tests table
+	// above it names the same tests in a different order by design.
+	section := rendered[strings.Index(rendered, "### Slowest top-level tests\n"):]
+	slowest := strings.Index(section, "| `TestSlowest` |")
+	middle := strings.Index(section, "| `TestMiddle` |")
+	quick := strings.Index(section, "| `TestQuick` |")
+	if slowest < 0 || middle < 0 || quick < 0 || slowest >= middle || middle >= quick {
+		t.Fatalf("slowest tests must render in elapsed-descending order:\n%s", rendered)
+	}
+
+	// The package table and its scalar counts stay exactly where they were.
+	packageTable := strings.Index(rendered, "| Package | Elapsed (s) | Outcome |\n")
+	if packageTable < 0 || packageTable >= strings.Index(rendered, "### Slowest top-level tests\n") {
+		t.Fatalf("the per-package timing table must be preserved above the slowest-tests section:\n%s", rendered)
+	}
+	if !strings.Contains(rendered, "- Top-level tests with observed outcomes: 3\n") {
+		t.Fatalf("scalar test counts must be preserved:\n%s", rendered)
+	}
+}
+
+func TestRenderFunctionalTimingMarkdownCapsSlowestTopLevelTests(t *testing.T) {
+	t.Parallel()
+
+	summary := functionaltestviz.FunctionalTimingSummary{
+		Version:      functionaltestviz.FunctionalTimingSummaryVersion,
+		Complete:     true,
+		WallSeconds:  100.0,
+		PackageCount: 1,
+		Packages: []functionaltestviz.FunctionalPackageTiming{
+			{Package: "github.com/portpowered/infinite-you/tests/functional/alpha", Seconds: 100.0, Outcome: "pass"},
+		},
+	}
+	const observed = 20
+	for index := range observed {
+		summary.Tests = append(summary.Tests, functionaltestviz.FunctionalTestTiming{
+			Package: "github.com/portpowered/infinite-you/tests/functional/alpha",
+			Test:    fmt.Sprintf("TestCase%02d", index),
+			Seconds: float64(index),
+			Outcome: "pass",
+		})
+	}
+
+	rendered := functionaltestviz.RenderFunctionalTimingMarkdown(summary)
+
+	if rows := strings.Count(rendered, "| `TestCase"); rows != 15 {
+		t.Fatalf("slowest-tests rows = %d, want the 15-row cap:\n%s", rows, rendered)
+	}
+	if !strings.Contains(rendered, "- Showing the 15 slowest of 20 observed top-level tests by elapsed time; 5 additional row(s) omitted.\n") {
+		t.Fatalf("capped slowest-tests section must state its omitted count:\n%s", rendered)
+	}
+	if strings.Contains(rendered, "| `TestCase04` |") {
+		t.Fatalf("the five fastest tests must be the omitted rows:\n%s", rendered)
+	}
+}
+
+func TestRenderFunctionalTimingMarkdownOmitsSlowestSectionWithoutPerTestRows(t *testing.T) {
+	t.Parallel()
+
+	rendered := functionaltestviz.RenderFunctionalTimingMarkdown(functionaltestviz.FunctionalTimingSummary{
+		Version:      functionaltestviz.FunctionalTimingSummaryVersion,
+		Complete:     true,
+		WallSeconds:  1.0,
+		PackageCount: 1,
+		Packages: []functionaltestviz.FunctionalPackageTiming{
+			{Package: "github.com/portpowered/infinite-you/tests/functional/alpha", Seconds: 1.0, Outcome: "pass"},
+		},
+	})
+	if strings.Contains(rendered, "### Slowest top-level tests") {
+		t.Fatalf("a run with no per-test rows must not render an empty slowest-tests table:\n%s", rendered)
+	}
+	if !strings.Contains(rendered, "| Package | Elapsed (s) | Outcome |\n") {
+		t.Fatalf("the per-package timing table must still render:\n%s", rendered)
 	}
 }
