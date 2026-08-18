@@ -2,9 +2,11 @@ package internal
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
+	recordingevents "github.com/portpowered/infinite-you/pkg/services/recordings/internal/events"
 	"strings"
 	"testing"
 	"time"
@@ -89,14 +91,40 @@ func TestLifecycleRuntimeRecorderRecordsRuntimeEventsAndTerminalEvent(t *testing
 	}
 
 	finishedEvent := built.Artifact.Events[len(built.Artifact.Events)-1]
-	if finishedEvent.ID != recordings.CanonicalEventID(recordings.RunFinishedFactoryEventID) {
-		t.Fatalf("finished event id = %q, want %q", finishedEvent.ID, recordings.RunFinishedFactoryEventID)
+	if finishedEvent.ID != recordings.CanonicalEventID(recordingevents.RunFinishedFactoryEventID) {
+		t.Fatalf("finished event id = %q, want %q", finishedEvent.ID, recordingevents.RunFinishedFactoryEventID)
 	}
 	if finishedEvent.Kind != recordings.CanonicalEventKind(recordings.FactoryEventTypeRunResponse) {
 		t.Fatalf("finished event kind = %q, want %q", finishedEvent.Kind, recordings.FactoryEventTypeRunResponse)
 	}
 	if !strings.Contains(finishedEvent.Payload, string(recordings.FactoryStateCompleted)) {
 		t.Fatalf("finished event payload = %q, want completed state", finishedEvent.Payload)
+	}
+
+	assertTerminalRunPayload(t, finishedEvent.Payload, startedAt, finishedAt)
+}
+
+// assertTerminalRunPayload checks the decoded body of the terminal run event.
+// The terminal event is the only record of how long a run took, so its wall
+// clock has to survive into the portable artifact with both ends intact.
+func assertTerminalRunPayload(t *testing.T, rawPayload string, startedAt, finishedAt time.Time) {
+	t.Helper()
+
+	var payload recordings.RunResponseEventPayload
+	if err := json.Unmarshal([]byte(rawPayload), &payload); err != nil {
+		t.Fatalf("decode finished event payload %q: %v", rawPayload, err)
+	}
+	if payload.State == nil || *payload.State != recordings.FactoryStateCompleted {
+		t.Fatalf("finished event state = %#v, want completed", payload.State)
+	}
+	if payload.WallClock == nil {
+		t.Fatalf("finished event has no wall clock, want %s..%s", startedAt, finishedAt)
+	}
+	if payload.WallClock.StartedAt == nil || !payload.WallClock.StartedAt.Equal(startedAt) {
+		t.Fatalf("finished event started at = %v, want %s", payload.WallClock.StartedAt, startedAt)
+	}
+	if payload.WallClock.FinishedAt == nil || !payload.WallClock.FinishedAt.Equal(finishedAt) {
+		t.Fatalf("finished event finished at = %v, want %s", payload.WallClock.FinishedAt, finishedAt)
 	}
 }
 

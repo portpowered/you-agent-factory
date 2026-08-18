@@ -11,6 +11,49 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/work"
 )
 
+// RunFinishedFactoryEventID is the stable identity of the terminal run
+// completion event in the canonical Factory Event ledger.
+const RunFinishedFactoryEventID = "factory-event/run-finished"
+
+// RunFinishedFactoryEvent constructs the terminal RUN_RESPONSE event appended
+// to a recording when the Factory Runtime instance it records completes.
+//
+// The shape belongs to Recordings because Recordings owns the canonical
+// Factory Event ledger: this is the event a replay reads back to learn that a
+// run reached a terminal state, and this package already owns every other
+// Factory Event identity. Producers take the definition from here rather than
+// restating the identity, schema version, and payload shape of a ledger entry.
+//
+// Both instants are normalized to UTC so a recording made in one host zone
+// replays identically in another. A payload that somehow fails to marshal
+// degrades to an empty JSON object rather than dropping the terminal event,
+// because a recording that never reports completion is worse than one whose
+// terminal event carries no wall-clock detail.
+func RunFinishedFactoryEvent(startedAt, finishedAt time.Time) recordings.FactoryEvent {
+	state := recordings.FactoryStateCompleted
+	startedAtUTC := startedAt.UTC()
+	finishedAtUTC := finishedAt.UTC()
+	payload, err := json.Marshal(recordings.RunResponseEventPayload{
+		State: &state,
+		WallClock: &recordings.RunEventWallClock{
+			StartedAt:  &startedAtUTC,
+			FinishedAt: &finishedAtUTC,
+		},
+	})
+	if err != nil {
+		payload = json.RawMessage(`{}`)
+	}
+	return recordings.FactoryEvent{
+		Id:            RunFinishedFactoryEventID,
+		SchemaVersion: recordings.FactoryEventSchemaVersionV1,
+		Type:          recordings.FactoryEventTypeRunResponse,
+		Context: recordings.FactoryEventContext{
+			EventTime: finishedAtUTC,
+		},
+		Payload: payload,
+	}
+}
+
 // NewRuntimeLedger exposes the concrete event ledger through its public port.
 func NewRuntimeLedger(
 	topology recordings.InitialStructureSource,

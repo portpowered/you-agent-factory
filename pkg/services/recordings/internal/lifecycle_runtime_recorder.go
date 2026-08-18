@@ -304,7 +304,7 @@ func (recorder *lifecycleRuntimeRecorder) Finalize(finishedAt time.Time) error {
 	if recorder.finalizeErr != nil {
 		return recorder.finalizeErr
 	}
-	if err := recorder.recordEventLocked(recordings.RunFinishedFactoryEvent(recorder.startedAt, finishedAt)); err != nil {
+	if err := recorder.recordEventLocked(recordingevents.RunFinishedFactoryEvent(recorder.startedAt, finishedAt)); err != nil {
 		recorder.recordErrorLocked("terminal_metadata_failed", "record terminal Factory event", err)
 	}
 	_, recorder.finalizeErr = recorder.lifecycle.Finish(recordings.FinishLifecycleRequest{
