@@ -171,10 +171,10 @@
 - Measurable statements: 10
 - Coverage percent: 80.0%
 
-| Package | Covered | Measurable | Coverage % | Floor | Measurement exception |
-| --- | ---: | ---: | ---: | ---: | --- |
-| `github.com/portpowered/infinite-you/pkg/config` | 3 | 3 | 100.0 | 66.66 | — |
-| `github.com/portpowered/infinite-you/pkg/service` | 0 | 0 | 0.0 | — | measurement: no measurable statements (owner=backend-quality; deadline=2027-07-15; removalGate=profile reports measurable statements) |
+| Package | Covered | Measurable | Coverage % | Floor | Headroom | Measurement exception |
+| --- | ---: | ---: | ---: | ---: | ---: | --- |
+| `github.com/portpowered/infinite-you/pkg/config` | 3 | 3 | 100.0 | 66.66 | 33.34 | — |
+| `github.com/portpowered/infinite-you/pkg/service` | 0 | 0 | 0.0 | — |  | measurement: no measurable statements (owner=backend-quality; deadline=2027-07-15; removalGate=profile reports measurable statements) |
 
 ## Functional test timings
 

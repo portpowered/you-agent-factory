@@ -8,10 +8,12 @@ import (
 )
 
 // RenderPackageCoverageMarkdown renders overall statement totals and a
-// stable-ordered per-production-package table from coverage-summary JSON
-// fields only (no profile recomputation).
+// headroom-ordered per-production-package table from coverage-summary JSON
+// fields only (no profile recomputation). Ordering by headroom puts the
+// packages closest to failing at the top, so a regression among hundreds of
+// rows does not have to be found by scanning.
 func RenderPackageCoverageMarkdown(summary CoverageSummary) string {
-	packages := StableOrderedPackages(summary.Packages)
+	packages := HeadroomOrderedPackages(summary.Packages)
 
 	var b strings.Builder
 	b.WriteString("## Package coverage\n\n")
@@ -24,8 +26,8 @@ func RenderPackageCoverageMarkdown(summary CoverageSummary) string {
 		return b.String()
 	}
 
-	b.WriteString("| Package | Covered | Measurable | Coverage % | Floor | Measurement exception |\n")
-	b.WriteString("| --- | ---: | ---: | ---: | ---: | --- |\n")
+	b.WriteString("| Package | Covered | Measurable | Coverage % | Floor | Headroom | Measurement exception |\n")
+	b.WriteString("| --- | ---: | ---: | ---: | ---: | ---: | --- |\n")
 	for _, pkg := range packages {
 		b.WriteString("| `")
 		b.WriteString(pkg.Package)
@@ -37,6 +39,8 @@ func RenderPackageCoverageMarkdown(summary CoverageSummary) string {
 		b.WriteString(formatCoveragePercent(pkg.CoveragePercent))
 		b.WriteString(" | ")
 		b.WriteString(formatOptionalFloor(pkg.PackageFloor))
+		b.WriteString(" | ")
+		b.WriteString(formatPackageHeadroom(pkg))
 		b.WriteString(" | ")
 		b.WriteString(formatMeasurementException(pkg.MeasurementException))
 		b.WriteString(" |\n")
@@ -52,6 +56,45 @@ func StableOrderedPackages(packages []PackageCoverage) []PackageCoverage {
 		return ordered[i].Package < ordered[j].Package
 	})
 	return ordered
+}
+
+// HeadroomOrderedPackages returns a copy of packages ordered by headroom
+// ascending — the packages closest to their floor first — with import-path
+// order as the deterministic tiebreak. A package with no floor has no distance
+// to report, so it sorts after every gated package, in import-path order.
+func HeadroomOrderedPackages(packages []PackageCoverage) []PackageCoverage {
+	ordered := StableOrderedPackages(packages)
+	sort.SliceStable(ordered, func(i, j int) bool {
+		left, leftGated := packageHeadroom(ordered[i])
+		right, rightGated := packageHeadroom(ordered[j])
+		if leftGated != rightGated {
+			return leftGated
+		}
+		if !leftGated {
+			return false
+		}
+		return left < right
+	})
+	return ordered
+}
+
+// packageHeadroom reports a package's percentage points above its floor and
+// whether a floor applied at all.
+func packageHeadroom(pkg PackageCoverage) (float64, bool) {
+	if pkg.PackageFloor == nil {
+		return 0, false
+	}
+	return pkg.CoveragePercent - *pkg.PackageFloor, true
+}
+
+// formatPackageHeadroom renders the signed distance to the floor, or an empty
+// cell when the package has no floor to be measured against.
+func formatPackageHeadroom(pkg PackageCoverage) string {
+	headroom, gated := packageHeadroom(pkg)
+	if !gated {
+		return ""
+	}
+	return strconv.FormatFloat(headroom, 'f', 2, 64)
 }
 
 func formatCoveragePercent(value float64) string {
