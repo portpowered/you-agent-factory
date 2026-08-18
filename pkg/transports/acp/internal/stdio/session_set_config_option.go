@@ -14,7 +14,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/transports/acp/internal/envelope"
 	"github.com/portpowered/infinite-you/pkg/transports/acp/internal/protocol"
 	"github.com/portpowered/infinite-you/pkg/transports/acp/internal/session"
-	"github.com/portpowered/infinite-you/pkg/transports/mapping/factorytarget"
+	"github.com/portpowered/infinite-you/pkg/services/chat_sessions/transports/acp/factorytarget"
 )
 
 // errSessionSetConfigOptionUnavailable marks a "session/set_config_option"

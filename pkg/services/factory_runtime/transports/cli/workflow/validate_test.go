@@ -8,7 +8,7 @@ import (
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime"
-	"github.com/portpowered/infinite-you/pkg/transports/cli/workflow"
+	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/transports/cli/workflow"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 )

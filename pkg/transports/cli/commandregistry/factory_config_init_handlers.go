@@ -11,7 +11,7 @@ import (
 	factorydefinitionscli "github.com/portpowered/infinite-you/pkg/services/factory_definitions/transports/cli"
 	configcli "github.com/portpowered/infinite-you/pkg/transports/cli/config"
 	factorycli "github.com/portpowered/infinite-you/pkg/transports/cli/factory"
-	"github.com/portpowered/infinite-you/pkg/transports/cli/initsetup"
+	"github.com/portpowered/infinite-you/pkg/services/operator_settings/transports/cli/initsetup"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/resolvedinput"
 	"github.com/spf13/cobra"
 )

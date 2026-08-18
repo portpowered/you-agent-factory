@@ -9,7 +9,7 @@ import (
 
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	"github.com/portpowered/infinite-you/pkg/platform/generatedartifacts"
-	"github.com/portpowered/infinite-you/pkg/transports/mcp/discoverygen"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/mcp/discoverygen"
 )
 
 const successMessage = "[agent-factory:mcp-discovery-generate] MCP discovery metadata generated"

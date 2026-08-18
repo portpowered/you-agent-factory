@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 
 	mcpfactorysession "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/mcp"
-	"github.com/portpowered/infinite-you/pkg/transports/mcp/discoverygen"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/mcp/discoverygen"
 	mcpgenerated "github.com/portpowered/infinite-you/pkg/transports/mcp/generated"
 )
 

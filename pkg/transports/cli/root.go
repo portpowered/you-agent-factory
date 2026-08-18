@@ -38,7 +38,7 @@ import (
 	factorycli "github.com/portpowered/infinite-you/pkg/transports/cli/factory"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/factoryload"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/generated"
-	"github.com/portpowered/infinite-you/pkg/transports/cli/initsetup"
+	"github.com/portpowered/infinite-you/pkg/services/operator_settings/transports/cli/initsetup"
 	mcpcli "github.com/portpowered/infinite-you/pkg/transports/cli/mcp"
 	cliobservation "github.com/portpowered/infinite-you/pkg/transports/cli/observation"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/resolvedinput"
@@ -46,7 +46,7 @@ import (
 	submitcli "github.com/portpowered/infinite-you/pkg/transports/cli/submit"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/terminalpolicy"
 	workcli "github.com/portpowered/infinite-you/pkg/transports/cli/work"
-	workersessionscli "github.com/portpowered/infinite-you/pkg/transports/cli/worker_sessions"
+	workersessionscli "github.com/portpowered/infinite-you/pkg/services/worker_sessions/transports/cli/worker_sessions"
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
 )

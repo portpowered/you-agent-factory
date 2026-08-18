@@ -861,6 +861,12 @@
     },
     {
       "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
+      "target": "pkg/services/chat_sessions/transports/acp/factorytarget/factory_target_option_test.go#TestFromCatalogResultSerializesSelectOptionContract",
+      "owner": "backend-maintainers",
+      "removalReason": "pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
       "target": "pkg/services/chat_sessions/types.go#RequestIdentity.Validate",
       "owner": "backend-maintainers",
       "removalReason": "pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption."
@@ -2242,12 +2248,6 @@
     {
       "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
       "target": "pkg/transports/mapping/factorysession/live_api_test.go#TestLiveAPI_MapsCompleteLifecycleThroughNarrowControl",
-      "owner": "backend-maintainers",
-      "removalReason": "pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption."
-    },
-    {
-      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
-      "target": "pkg/transports/mapping/factorytarget/factory_target_option_test.go#TestFromCatalogResultSerializesSelectOptionContract",
       "owner": "backend-maintainers",
       "removalReason": "pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption."
     },

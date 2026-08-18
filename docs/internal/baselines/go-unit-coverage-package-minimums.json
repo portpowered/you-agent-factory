@@ -202,6 +202,10 @@
       "minimum": 93.05
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/services/chat_sessions/transports/acp/factorytarget",
+      "minimum": 100.00
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/services/chat_sessions/wire",
       "minimum": 100.00
     },
@@ -700,6 +704,10 @@
       "minimum": 86.00
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/transports/cli/workflow",
+      "minimum": 82.73
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/transports/http",
       "minimum": 82.30
     },
@@ -956,6 +964,10 @@
       "minimum": 80.40
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/mcp/discoverygen",
+      "minimum": 82.68
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire",
       "minimum": 69.76
     },
@@ -1170,6 +1182,10 @@
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/operator_settings/transports/cli",
       "minimum": 81.00
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/operator_settings/transports/cli/initsetup",
+      "minimum": 66.66
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/operator_settings/transports/globalconfig",
@@ -1556,6 +1572,10 @@
       "minimum": 69.80
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/services/worker_sessions/transports/cli/worker_sessions",
+      "minimum": 0.00
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/services/worker_sessions/transports/http",
       "minimum": 65.70
     },
@@ -1764,10 +1784,6 @@
       "minimum": 97.60
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/transports/cli/initsetup",
-      "minimum": 66.66
-    },
-    {
       "package": "github.com/portpowered/infinite-you/pkg/transports/cli/mcp",
       "minimum": 100.00
     },
@@ -1802,14 +1818,6 @@
     {
       "package": "github.com/portpowered/infinite-you/pkg/transports/cli/work",
       "minimum": 62.50
-    },
-    {
-      "package": "github.com/portpowered/infinite-you/pkg/transports/cli/worker_sessions",
-      "minimum": 0.00
-    },
-    {
-      "package": "github.com/portpowered/infinite-you/pkg/transports/cli/workflow",
-      "minimum": 82.73
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/transports/http",
@@ -1856,10 +1864,6 @@
       "minimum": 87.50
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/transports/mapping/factorytarget",
-      "minimum": 100.00
-    },
-    {
       "package": "github.com/portpowered/infinite-you/pkg/transports/mapping/optional",
       "minimum": 100.00
     },
@@ -1878,10 +1882,6 @@
     {
       "package": "github.com/portpowered/infinite-you/pkg/transports/mapping/workerinference",
       "minimum": 100.00
-    },
-    {
-      "package": "github.com/portpowered/infinite-you/pkg/transports/mcp/discoverygen",
-      "minimum": 82.68
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/transports/mcp/server",

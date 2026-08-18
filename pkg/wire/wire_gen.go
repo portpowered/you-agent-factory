@@ -25,7 +25,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"github.com/portpowered/infinite-you/pkg/transports/acp"
 	"github.com/portpowered/infinite-you/pkg/transports/cli"
-	"github.com/portpowered/infinite-you/pkg/transports/cli/worker_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/worker_sessions/transports/cli/worker_sessions"
 	"github.com/portpowered/infinite-you/pkg/transports/mcp/stdio"
 )
 

@@ -44,7 +44,7 @@ import (
 	configcli "github.com/portpowered/infinite-you/pkg/transports/cli/config"
 	factorycli "github.com/portpowered/infinite-you/pkg/transports/cli/factory"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/generated"
-	"github.com/portpowered/infinite-you/pkg/transports/cli/initsetup"
+	"github.com/portpowered/infinite-you/pkg/services/operator_settings/transports/cli/initsetup"
 	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
 	submitcli "github.com/portpowered/infinite-you/pkg/transports/cli/submit"
 	workcli "github.com/portpowered/infinite-you/pkg/transports/cli/work"
