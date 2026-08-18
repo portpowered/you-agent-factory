@@ -408,12 +408,6 @@ func runCoverageProfile(cfg config, targetOS string, profilePath string) (covera
 	return result, nil
 }
 
-func writePackageCoverageSummaries(summaries []packageCoverageSummary) {
-	for _, summary := range summaries {
-		fmt.Fprintf(stdoutWriter, "%s\tcoverage: %.1f%% of statements\n", summary.importPath, summary.coverage)
-	}
-}
-
 func (cfg config) testJobs(targetOS string) int {
 	if cfg.jobs > 0 {
 		return cfg.jobs

@@ -49,6 +49,15 @@ func writeCoverageLaneReport(cfg config, result coverageResult, failures []strin
 	writeFunctionalCoverageVerdict(result, failures)
 }
 
+// writePackageCoverageSummaries prints one raw coverage line per measured
+// package. It remains the report for every non-functional lane and for the
+// malformed-manifest abort path, which never reaches the JSON summary.
+func writePackageCoverageSummaries(summaries []packageCoverageSummary) {
+	for _, summary := range summaries {
+		fmt.Fprintf(stdoutWriter, "%s\tcoverage: %.1f%% of statements\n", summary.importPath, summary.coverage)
+	}
+}
+
 // writeFunctionalCoverageVerdict renders the ordered functional verdict block.
 func writeFunctionalCoverageVerdict(result coverageResult, failures []string) {
 	verdicts := collectPackageCoverageVerdicts(result)
