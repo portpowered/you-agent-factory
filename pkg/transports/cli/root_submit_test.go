@@ -11,8 +11,8 @@ import (
 
 	platformmetrics "github.com/portpowered/infinite-you/pkg/platform/metrics"
 	"github.com/portpowered/infinite-you/pkg/services/work"
+	submitcli "github.com/portpowered/infinite-you/pkg/services/work/transports/cli/submit"
 	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
-	submitcli "github.com/portpowered/infinite-you/pkg/transports/cli/submit"
 	"github.com/spf13/cobra"
 )
 

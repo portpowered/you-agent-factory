@@ -33,6 +33,7 @@ import (
 	providerswire "github.com/portpowered/infinite-you/pkg/services/providers/wire"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
+	submitcli "github.com/portpowered/infinite-you/pkg/services/work/transports/cli/submit"
 	workcli "github.com/portpowered/infinite-you/pkg/services/work/transports/cli/work"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	workersessionscli "github.com/portpowered/infinite-you/pkg/services/worker_sessions/transports/cli"
@@ -47,7 +48,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/transports/cli/generated"
 	"github.com/portpowered/infinite-you/pkg/services/operator_settings/transports/cli/initsetup"
 	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
-	submitcli "github.com/portpowered/infinite-you/pkg/transports/cli/submit"
 	factorymapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig"
 )
 

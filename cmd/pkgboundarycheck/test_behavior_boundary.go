@@ -53,7 +53,7 @@ const (
 	rootImportPath                                = repositoryImportPrefix + "pkg/root"
 	builtCLIHarnessImportPath                     = repositoryImportPrefix + "internal/builtcliacceptance"
 	cliHTTPImportPath                             = repositoryImportPrefix + "pkg/transports/cli/clihttp"
-	cliSubmitImportPath                           = repositoryImportPrefix + "pkg/transports/cli/submit"
+	cliSubmitImportPath                           = repositoryImportPrefix + "pkg/services/work/transports/cli/submit"
 	transportImportRoot                           = repositoryImportPrefix + "pkg/transports/"
 	generatedHTTPImportPath                       = repositoryImportPrefix + "pkg/transports/http/generated"
 	generatedHTTPClientPath                       = repositoryImportPrefix + "pkg/transports/http/client"
