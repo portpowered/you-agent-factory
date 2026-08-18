@@ -21,6 +21,11 @@ export const DEFAULT_COVERAGE_REPORT_LIMITS = Object.freeze({
 	slowestTests: 10,
 });
 
+// Absorbs IEEE754 representation error in a headroom subtraction and nothing
+// else: floors are authored to two decimals, so this is seven orders of
+// magnitude below the smallest shortfall that can actually exist.
+const HEADROOM_EPSILON = 1e-9;
+
 /**
  * summarizeCoverageReport reduces a coverage-summary artifact and a timing
  * artifact to the ordered digest a report renders.
@@ -49,7 +54,7 @@ function summarizeCoverageArtifact(coverage, limits) {
 		.filter((entry) => entry && typeof entry.package === "string")
 		.map((entry) => ({
 			package: entry.package,
-			coveragePercent: finiteNumber(entry.coveragePercent),
+			coveragePercent: measuredCoveragePercent(entry),
 			floor:
 				typeof entry.packageFloor === "number" && Number.isFinite(entry.packageFloor)
 					? entry.packageFloor
@@ -63,12 +68,20 @@ function summarizeCoverageArtifact(coverage, limits) {
 				: left.headroom - right.headroom,
 		);
 
-	const allViolations = ranked.filter((entry) => entry.headroom < 0);
+	// A package that lands exactly on its floor meets it. Recomputing coverage
+	// as a ratio means that case arrives as a value like -1.4e-14 rather than a
+	// clean zero, so a bare `< 0` would report a package as failing purely
+	// because 63.75 is not representable in binary. The tolerance is far below
+	// the two decimals a floor is authored with, so it can only absorb
+	// representation error, never a real shortfall.
+	const allViolations = ranked.filter((entry) => entry.headroom < -HEADROOM_EPSILON);
 	// Coverage is never negative, so a package sitting on a 0% floor cannot
 	// regress through it. Both lanes hold packages without an explicit manifest
 	// entry to a 0.00 default floor, so including those would crowd every
 	// genuinely close package out of the table.
-	const contenders = ranked.filter((entry) => entry.headroom >= 0 && entry.floor > 0);
+	const contenders = ranked.filter(
+		(entry) => entry.headroom >= -HEADROOM_EPSILON && entry.floor > 0,
+	);
 	const violations = allViolations.slice(0, limits.violations);
 	const nearFloor = contenders.slice(0, limits.packages);
 	return {
@@ -290,6 +303,31 @@ export function coverageReportProvenance(env, headShaVariable) {
 
 function finiteNumber(value) {
 	return typeof value === "number" && Number.isFinite(value) ? value : 0;
+}
+
+// Headroom is a subtraction between two numbers the producer records at
+// different precisions: coveragePercent is rounded to one decimal, while a
+// package floor carries two (it is authored in basis points and divided by
+// 100). Subtracting them directly manufactures violations that do not exist --
+// a package measured at 73.3333% against a 73.33 floor is comfortably above it,
+// but rounds to 73.3 and reads as 0.03 below. Recomputing from the statement
+// counts the same document already carries makes the comparison exact, so the
+// table agrees with the gate instead of contradicting it. Falls back to the
+// rounded percent when the counts are absent or unusable, because a slightly
+// imprecise row is still better than dropping the package from the report.
+function measuredCoveragePercent(entry) {
+	const covered = entry.coveredStatements;
+	const measurable = entry.measurableStatements;
+	if (
+		typeof covered === "number" &&
+		Number.isFinite(covered) &&
+		typeof measurable === "number" &&
+		Number.isFinite(measurable) &&
+		measurable > 0
+	) {
+		return (covered / measurable) * 100;
+	}
+	return finiteNumber(entry.coveragePercent);
 }
 
 function textValue(value) {

@@ -66,6 +66,73 @@ test("orders gated packages by headroom ascending with violations first", () => 
 	assert.equal(summary.coverage.violationCount, 1);
 });
 
+// Regression: the first real CI run of this report accused 33 passing packages
+// of breaking their floor. The producer rounds coveragePercent to one decimal
+// but authors floors in basis points, so a package measured at 73.3333% against
+// a 73.33 floor arrived as 73.3 and subtracted to 0.03 below. The gate passed
+// while the report it publishes named those packages as violations, which is
+// the one thing this report must never do.
+test("judges a floor by the measured statements, not the rounded percent", () => {
+	const artifact = {
+		complete: true,
+		coveredStatements: 11,
+		measurableStatements: 15,
+		coveragePercent: 73.3,
+		packages: [
+			// Exactly 73.3333%, which clears its floor but rounds below it.
+			{
+				package: "pkg/rounds-below",
+				coveredStatements: 11,
+				measurableStatements: 15,
+				coveragePercent: 73.3,
+				packageFloor: 73.33,
+			},
+			// Genuinely under its floor: it must stay reported.
+			{
+				package: "pkg/truly-under",
+				coveredStatements: 7,
+				measurableStatements: 10,
+				coveragePercent: 70,
+				packageFloor: 73.33,
+			},
+		],
+	};
+	const summary = summarizeUnitCoverage(artifact, timingArtifact());
+	assert.deepEqual(
+		summary.coverage.violations.map((entry) => entry.package),
+		["pkg/truly-under"],
+	);
+	assert.equal(summary.coverage.violationCount, 1);
+	assert.ok(summary.coverage.nearFloor.some((entry) => entry.package === "pkg/rounds-below"));
+});
+
+test("falls back to the reported percent when statement counts are unusable", () => {
+	const artifact = {
+		complete: true,
+		coveredStatements: 0,
+		measurableStatements: 0,
+		coveragePercent: 0,
+		packages: [
+			// No counts at all, so the rounded percent is the only signal left.
+			{ package: "pkg/countless", coveragePercent: 40, packageFloor: 70 },
+			// A zero denominator must not become a division by zero.
+			{
+				package: "pkg/empty",
+				coveredStatements: 0,
+				measurableStatements: 0,
+				coveragePercent: 90,
+				packageFloor: 80,
+			},
+		],
+	};
+	const summary = summarizeUnitCoverage(artifact, timingArtifact());
+	assert.deepEqual(
+		summary.coverage.violations.map((entry) => entry.package),
+		["pkg/countless"],
+	);
+	assert.ok(summary.coverage.nearFloor.some((entry) => entry.package === "pkg/empty"));
+});
+
 test("renders a package table ordered by headroom, not by import path", () => {
 	const body = renderUnitCoverageComment(
 		summarizeUnitCoverage(coverageArtifact(), timingArtifact()),

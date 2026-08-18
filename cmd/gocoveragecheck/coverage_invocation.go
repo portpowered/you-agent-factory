@@ -444,7 +444,7 @@ func finalizeFunctionalTiming(cfg config, snapshotter *functionalTimingSnapshott
 	summary := buildFunctionalTimingSummary(stdout, testPackages, wallSeconds)
 	timingReason := ""
 	if !summary.Complete {
-		timingReason = coverageLaneNoun(cfg.suite) + " timing capture ended before every package reported a terminal result"
+		timingReason = coverageLaneNoun(cfg.suite) + " " + incompleteTimingCaptureCause(summary)
 		if laneErr != nil {
 			timingReason += ": " + compactDiagnosticError(laneErr)
 		}
@@ -459,6 +459,20 @@ func finalizeFunctionalTiming(cfg config, snapshotter *functionalTimingSnapshott
 		writeFunctionalTimingInventorySummary(summary, cfg.short)
 	}
 	return err
+}
+
+// incompleteTimingCaptureCause names why a capture is partial. The two causes
+// are unrelated and a reader acts on them differently, so reporting the wrong
+// one is worse than reporting none: the unit lane's first hosted run recorded
+// every one of its 548 packages and still described itself as having ended
+// early, which sends a reader hunting a truncated run that never happened.
+// Failing to parse a fraction of the child's output is the ordinary case at
+// that size, where one unreadable line among hundreds of thousands is enough.
+func incompleteTimingCaptureCause(summary functionalTimingSummaryJSON) string {
+	if summary.PackageCount < summary.ExpectedPackageCount {
+		return "timing capture ended before every package reported a terminal result"
+	}
+	return "timing capture could not read every go test event, so some per-test rows may be missing"
 }
 
 func publishPartialCoverageIfNeeded(cfg config, profilePath string, repoRoot string, coverPackages []string, laneErr error, mergeErr error) error {

@@ -472,3 +472,26 @@ func TestStreamingTimingObserverStillPublishesPerEvent(t *testing.T) {
 		t.Fatalf("streaming lane emitted no progress line per event; got %q", sink.String())
 	}
 }
+
+// TestIncompleteTimingCaptureNamesTheCauseItObserved covers the report accuracy
+// this lane's first hosted run broke: the unit lane recorded terminal results
+// for all 548 of its packages and still published "ended before every package
+// reported a terminal result", because a single unparseable line marks the whole
+// capture incomplete. A reader acts differently on a truncated run than on a
+// lossy parse, so the message has to follow the counts rather than assume.
+func TestIncompleteTimingCaptureNamesTheCauseItObserved(t *testing.T) {
+	truncated := functionalTimingSummaryJSON{PackageCount: 12, ExpectedPackageCount: 548}
+	if got := incompleteTimingCaptureCause(truncated); !strings.Contains(got, "ended before every package") {
+		t.Fatalf("a lane missing packages must report truncation; got %q", got)
+	}
+
+	// Every expected package reported, so the capture cannot have ended early.
+	lossy := functionalTimingSummaryJSON{PackageCount: 548, ExpectedPackageCount: 548}
+	got := incompleteTimingCaptureCause(lossy)
+	if strings.Contains(got, "ended before every package") {
+		t.Fatalf("a lane that reported every package must not claim it ended early; got %q", got)
+	}
+	if !strings.Contains(got, "could not read every go test event") {
+		t.Fatalf("a lossy parse must say so; got %q", got)
+	}
+}
