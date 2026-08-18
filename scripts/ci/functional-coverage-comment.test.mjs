@@ -6,6 +6,7 @@ import {
 	FUNCTIONAL_COVERAGE_COMMENT_MARKER,
 	FUNCTIONAL_COVERAGE_PACKAGE_LIMIT,
 	FUNCTIONAL_COVERAGE_SLOWEST_TEST_LIMIT,
+	FUNCTIONAL_COVERAGE_VIOLATION_LIMIT,
 	renderFunctionalCoverageComment,
 	summarizeFunctionalCoverage,
 	upsertFunctionalCoverageComment,
@@ -22,6 +23,9 @@ function coverageArtifact() {
 			{ package: "pkg/near", coveragePercent: 80.5, packageFloor: 80 },
 			{ package: "pkg/regressed", coveragePercent: 40, packageFloor: 70 },
 			{ package: "pkg/ungated", coveragePercent: 12, packageFloor: null },
+			// The functional lane holds unlisted packages to a 0.00 default
+			// floor. Those can never regress through it.
+			{ package: "pkg/lane-default", coveragePercent: 0, packageFloor: 0 },
 		],
 	};
 }
@@ -53,7 +57,9 @@ test("orders gated packages by headroom ascending with violations first", () => 
 		summary.coverage.nearFloor.map((entry) => entry.package),
 		["pkg/near", "pkg/ample"],
 	);
-	assert.equal(summary.coverage.gatedCount, 3);
+	assert.equal(summary.coverage.gatedCount, 4);
+	assert.equal(summary.coverage.violationCount, 1);
+	assert.equal(summary.coverage.omittedViolations, 0);
 	assert.equal(summary.coverage.omitted, 0);
 });
 
@@ -83,6 +89,8 @@ test("renders a marked body distinct from the backend lint comment", () => {
 	assert.ok(body.includes("- Hosted head: `abc123`"));
 	assert.ok(body.includes("https://example.test/run/1"));
 	assert.ok(body.indexOf("### Floor violations") < body.indexOf("### Closest to their floor"));
+	// A package held to the 0.00 lane-default floor cannot be close to failing.
+	assert.ok(!body.includes("`pkg/lane-default`"));
 });
 
 test("caps both tables and states the omitted row counts", () => {
@@ -117,6 +125,29 @@ test("caps both tables and states the omitted row counts", () => {
 	assert.ok(body.includes("- 4 additional gated package(s) omitted."));
 	assert.ok(body.includes("- 7 additional row(s) omitted."));
 	assert.ok(!body.includes("`TestCase00`"));
+});
+
+test("caps the violation table while reporting the true violation count", () => {
+	const packages = [];
+	for (let index = 0; index < FUNCTIONAL_COVERAGE_VIOLATION_LIMIT + 3; index += 1) {
+		packages.push({
+			package: `pkg/broken${String(index).padStart(2, "0")}`,
+			coveragePercent: index,
+			packageFloor: 90,
+		});
+	}
+
+	const summary = summarizeFunctionalCoverage({ ...coverageArtifact(), packages }, null);
+	assert.equal(summary.coverage.violations.length, FUNCTIONAL_COVERAGE_VIOLATION_LIMIT);
+	assert.equal(summary.coverage.violationCount, FUNCTIONAL_COVERAGE_VIOLATION_LIMIT + 3);
+	assert.equal(summary.coverage.omittedViolations, 3);
+
+	const body = renderFunctionalCoverageComment(summary);
+	assert.ok(body.includes(`- Floor violations: ${FUNCTIONAL_COVERAGE_VIOLATION_LIMIT + 3}`));
+	assert.ok(body.includes("- 3 additional violation(s) omitted."));
+	// The worst regression is always kept; the mildest ones are dropped.
+	assert.ok(body.includes("`pkg/broken00`"));
+	assert.ok(!body.includes("`pkg/broken27`"));
 });
 
 test("reports missing and malformed artifacts instead of throwing", () => {

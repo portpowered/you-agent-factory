@@ -8,7 +8,9 @@ export const FUNCTIONAL_COVERAGE_COMMENT_MARKER =
 	"<!-- functional-coverage-report -->";
 
 // Row caps for the pull request comment. The rendered text always states how
-// many rows a cap dropped so a truncated table is never read as the whole set.
+// many rows a cap dropped so a truncated table is never read as the whole set,
+// and the body stays well inside GitHub's comment size limit.
+export const FUNCTIONAL_COVERAGE_VIOLATION_LIMIT = 25;
 export const FUNCTIONAL_COVERAGE_PACKAGE_LIMIT = 10;
 export const FUNCTIONAL_COVERAGE_SLOWEST_TEST_LIMIT = 10;
 
@@ -27,7 +29,15 @@ export function summarizeFunctionalCoverage(coverage, timing) {
 
 function summarizeCoverageArtifact(coverage) {
 	if (!coverage || typeof coverage !== "object" || !Array.isArray(coverage.packages)) {
-		return { available: false, violations: [], nearFloor: [], gatedCount: 0, omitted: 0 };
+		return {
+			available: false,
+			violations: [],
+			violationCount: 0,
+			omittedViolations: 0,
+			nearFloor: [],
+			gatedCount: 0,
+			omitted: 0,
+		};
 	}
 	const ranked = coverage.packages
 		.filter((entry) => entry && typeof entry.package === "string")
@@ -46,9 +56,14 @@ function summarizeCoverageArtifact(coverage) {
 				: left.headroom - right.headroom,
 		);
 
-	const violations = ranked.filter((entry) => entry.headroom < 0);
-	const passing = ranked.filter((entry) => entry.headroom >= 0);
-	const nearFloor = passing.slice(0, FUNCTIONAL_COVERAGE_PACKAGE_LIMIT);
+	const allViolations = ranked.filter((entry) => entry.headroom < 0);
+	// Coverage is never negative, so a package sitting on a 0% floor cannot
+	// regress through it. The functional lane holds every package without an
+	// explicit manifest entry to a 0.00 default floor, so including those would
+	// crowd every genuinely close package out of the table.
+	const contenders = ranked.filter((entry) => entry.headroom >= 0 && entry.floor > 0);
+	const violations = allViolations.slice(0, FUNCTIONAL_COVERAGE_VIOLATION_LIMIT);
+	const nearFloor = contenders.slice(0, FUNCTIONAL_COVERAGE_PACKAGE_LIMIT);
 	return {
 		available: true,
 		complete: coverage.complete !== false,
@@ -58,9 +73,11 @@ function summarizeCoverageArtifact(coverage) {
 		coveragePercent: finiteNumber(coverage.coveragePercent),
 		packageCount: coverage.packages.length,
 		gatedCount: ranked.length,
+		violationCount: allViolations.length,
 		violations,
+		omittedViolations: allViolations.length - violations.length,
 		nearFloor,
-		omitted: passing.length - nearFloor.length,
+		omitted: contenders.length - nearFloor.length,
 	};
 }
 
@@ -108,13 +125,14 @@ export function renderFunctionalCoverageComment(summary, metadata = {}) {
 	];
 	const violations = renderPackageTable(summary.coverage.violations);
 	if (violations) {
-		sections.push(`### Floor violations\n\n${violations}`);
+		sections.push(
+			`### Floor violations\n\n${violations}\n- ${summary.coverage.omittedViolations} additional violation(s) omitted.`,
+		);
 	}
 	const nearFloor = renderPackageTable(summary.coverage.nearFloor);
 	if (nearFloor) {
-		const omitted = summary.coverage.omitted;
 		sections.push(
-			`### Closest to their floor\n\n${nearFloor}\n- ${omitted} additional gated package(s) omitted.`,
+			`### Closest to their floor\n\n${nearFloor}\n- ${summary.coverage.omitted} additional gated package(s) omitted.`,
 		);
 	}
 	sections.push(renderTimingOverview(summary.timing));
@@ -138,7 +156,7 @@ function renderCoverageOverview(coverage) {
 	const lines = [
 		`- Coverage: ${coverage.coveragePercent.toFixed(1)}% (${coverage.coveredStatements}/${coverage.measurableStatements} statements) across ${coverage.packageCount} measured package(s)`,
 		`- Gated packages: ${coverage.gatedCount}`,
-		`- Floor violations: ${coverage.violations.length}`,
+		`- Floor violations: ${coverage.violationCount}`,
 	];
 	if (!coverage.complete) {
 		lines.push(
