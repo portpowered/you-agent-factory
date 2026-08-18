@@ -34,19 +34,40 @@ func (a workRuntimeAdapter) SubmitWorkRequest(ctx context.Context, request work.
 }
 
 func (a workRuntimeAdapter) MoveWork(ctx context.Context, workID, state string, source work.WorkStateChangeSource, requestID string) (work.OperatorMoveResult, error) {
+	if a.runtime == nil {
+		return work.OperatorMoveResult{}, fmt.Errorf("Factory Runtime work move is required")
+	}
 	result, err := a.runtime.ControlMoveWork(ctx, factoryruntime.MoveWorkRequest{
 		WorkID: workID, StateName: state, Source: factoryruntime.WorkMoveSource(source), RequestID: requestID,
 	})
 	if err != nil {
-		if errors.Is(err, factoryruntime.ErrMoveWorkRequestConflict) {
-			return work.OperatorMoveResult{}, work.ErrMoveWorkRequestAlreadyApplied
-		}
-		return work.OperatorMoveResult{}, err
+		return work.OperatorMoveResult{}, translateMoveWorkFailure(err)
 	}
 	return work.OperatorMoveResult{
 		WorkID: result.WorkID, WorkTypeID: result.WorkTypeID,
 		FromState: result.FromState, ToState: result.ToState,
 	}, nil
+}
+
+// translateMoveWorkFailure detaches engine-owned operator-move failures into
+// the Work-owned sentinels Work's own surfaces branch on. Engine error identity
+// ends at this adapter, exactly like engine result identity does. Failures the
+// engine does not classify pass through unchanged.
+func translateMoveWorkFailure(err error) error {
+	switch {
+	case errors.Is(err, factoryruntime.ErrMoveWorkRequestConflict):
+		return work.ErrMoveWorkRequestAlreadyApplied
+	case errors.Is(err, factoryruntime.ErrMoveWorkNotFound):
+		return work.ErrMoveWorkNotFound
+	case errors.Is(err, factoryruntime.ErrMoveWorkInvalidState):
+		return work.ErrMoveWorkInvalidState
+	case errors.Is(err, factoryruntime.ErrMoveWorkInFlightDispatch):
+		return work.ErrMoveWorkInFlightDispatch
+	case errors.Is(err, factoryruntime.ErrMoveWorkEngineTerminated):
+		return work.ErrMoveWorkEngineTerminated
+	default:
+		return err
+	}
 }
 
 func (a workRuntimeAdapter) ReadWorkSnapshot(ctx context.Context) (work.ReadSnapshot, error) {

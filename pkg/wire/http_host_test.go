@@ -23,6 +23,8 @@ import (
 	factoryvisualization "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/webhooks"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 )
 
 func TestProvideAPIServerStarterHonorsRootEdgeOverride(t *testing.T) {
@@ -486,5 +488,80 @@ func TestProvideApplicationRuntimeAdapterRejectsAnUnavailableVisualizationSink(t
 	}
 	if build.calls != 0 || runtime.runs != 0 {
 		t.Fatalf("stale sink built %d roles and ran %d transports, want none", build.calls, runtime.runs)
+	}
+}
+
+type defaultWorkTypePolicy struct {
+	id  string
+	err error
+}
+
+func (policy defaultWorkTypePolicy) DefaultWorkType(*factorydefinitions.FactoryConfig) (string, error) {
+	return policy.id, policy.err
+}
+
+type currentFactoryForSessionAPI struct {
+	apisurface.FactorySaveAPI
+	factoryapi.Factory
+	err error
+}
+
+func (api currentFactoryForSessionAPI) GetCurrentFactoryForSession(
+	context.Context,
+	string,
+) (factoryapi.Factory, error) {
+	return api.Factory, api.err
+}
+
+// TestDefaultWorkTypeResolverPreservesSessionAdmissionPolicy pins the
+// omitted-work-type policy the Work HTTP adapter is composed with: a missing
+// collaborator, an unknown session, an unset current Factory, or a policy that
+// cannot name a default all resolve to the empty work type rather than failing
+// admission, while an opaque Factory Definitions failure is surfaced verbatim.
+func TestDefaultWorkTypeResolverPreservesSessionAdmissionPolicy(t *testing.T) {
+	t.Parallel()
+
+	checks := []struct {
+		name        string
+		definitions apisurface.FactorySaveAPI
+		invocation  factorydefinitions.InvocationWorkTypeService
+		want        string
+		wantErr     string
+	}{
+		{name: "missing dependencies"},
+		{name: "session not found", definitions: currentFactoryForSessionAPI{err: apisurface.ErrFactorySessionNotFound}},
+		{name: "current factory not found", definitions: currentFactoryForSessionAPI{err: apisurface.ErrCurrentFactoryNotFound}},
+		{
+			name:        "opaque definition error",
+			definitions: currentFactoryForSessionAPI{err: errors.New("definition failed")},
+			invocation:  defaultWorkTypePolicy{},
+			wantErr:     "definition failed",
+		},
+		{
+			name:        "invocation policy error",
+			definitions: currentFactoryForSessionAPI{},
+			invocation:  defaultWorkTypePolicy{err: errors.New("policy failed")},
+		},
+		{
+			name:        "default type",
+			definitions: currentFactoryForSessionAPI{},
+			invocation:  defaultWorkTypePolicy{id: "default-task"},
+			want:        "default-task",
+		},
+	}
+	for _, check := range checks {
+		t.Run(check.name, func(t *testing.T) {
+			resolver := newDefaultWorkTypeResolver(check.definitions, check.invocation)
+			got, err := resolver(context.Background(), "session-alpha")
+			if check.wantErr != "" {
+				if err == nil || err.Error() != check.wantErr {
+					t.Fatalf("error = %v, want %q", err, check.wantErr)
+				}
+				return
+			}
+			if err != nil || got != check.want {
+				t.Fatalf("resolver = (%q, %v), want (%q, nil)", got, err, check.want)
+			}
+		})
 	}
 }

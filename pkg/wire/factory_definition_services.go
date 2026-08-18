@@ -1,6 +1,8 @@
 package wire
 
 import (
+	"context"
+	"errors"
 	"io"
 	"net/http"
 	"os"
@@ -21,7 +23,42 @@ import (
 	recordingswire "github.com/portpowered/infinite-you/pkg/services/recordings/wire"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workwire "github.com/portpowered/infinite-you/pkg/services/work/wire"
+	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
+	factorymapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig"
 )
+
+// newDefaultWorkTypeResolver binds Work admission's omitted-type policy to the
+// current Factory selected for a Factory Session. Composition owns the binding
+// because it is the only place that holds both the Factory Definitions save API
+// and the invocation work-type policy; Work's HTTP transport keeps consuming it
+// as the plain func(context.Context, string) (string, error) port it already
+// accepts.
+func newDefaultWorkTypeResolver(
+	definitions apisurface.FactorySaveAPI,
+	invocationWorkType factorydefinitions.InvocationWorkTypeService,
+) func(context.Context, string) (string, error) {
+	return func(ctx context.Context, sessionID string) (string, error) {
+		if definitions == nil || invocationWorkType == nil {
+			return "", nil
+		}
+		namedFactory, err := definitions.GetCurrentFactoryForSession(ctx, sessionID)
+		if err != nil {
+			if errors.Is(err, apisurface.ErrFactorySessionNotFound) || errors.Is(err, apisurface.ErrCurrentFactoryNotFound) {
+				return "", nil
+			}
+			return "", err
+		}
+		factoryConfig, err := factorymapping.FactoryConfigFromOpenAPI(namedFactory)
+		if err != nil {
+			return "", err
+		}
+		defaultID, err := invocationWorkType.DefaultWorkType(&factoryConfig)
+		if err != nil {
+			return "", nil
+		}
+		return defaultID, nil
+	}
+}
 
 func provideWorkContentHostPlatform(edges serviceedges.Edges) work.ContentHostPlatform {
 	hostPlatform := edges.WorkContentHostPlatform

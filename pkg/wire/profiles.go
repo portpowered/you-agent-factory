@@ -979,5 +979,5 @@ func workhttpAdapter(
 	return workhttp.NewAdapterWithSessionScope(opened.Work, func(ctx context.Context, sessionID string) error {
 		_, err := factoryDefinitionsAPI.GetCurrentFactoryForSession(ctx, sessionID)
 		return err
-	}).WithDefaultWorkTypeResolver(workhttp.NewDefaultWorkTypeResolver(factoryDefinitionsAPI, invocationWorkType))
+	}).WithDefaultWorkTypeResolver(newDefaultWorkTypeResolver(factoryDefinitionsAPI, invocationWorkType))
 }

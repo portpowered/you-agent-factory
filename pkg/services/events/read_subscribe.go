@@ -2,6 +2,13 @@ package events
 
 import "context"
 
+// RetainedEventCountHeader identifies the response header that bounds the
+// committed retained-history prefix of an event stream. Producers of retained
+// event history (Factory Sessions, Recordings) and consumers that must replay
+// it before switching to live records (the Work CLI watch stream) share this
+// one spelling so the retained-prefix contract cannot drift between them.
+const RetainedEventCountHeader = "X-Factory-Session-Retained-Event-Count"
+
 // ReadRequest asks Events for a bounded slice of a topic's aggregate
 // ordering, starting after From.
 type ReadRequest struct {

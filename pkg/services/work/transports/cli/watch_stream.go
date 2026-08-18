@@ -15,7 +15,7 @@ import (
 	"sync"
 	"time"
 
-	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/events"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/clidiag"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/clihttp"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/cliserver"
@@ -249,7 +249,7 @@ func openHTTPWatchEventStream(
 		defer resp.Body.Close()
 		return nil, &watchProtocolError{message: fmt.Sprintf("work watch stream for session %q returned content type %q", sessionID, resp.Header.Get("Content-Type"))}
 	}
-	retainedEventCount, err := parseWatchRetainedEventCount(resp.Header.Get(factorysessions.SessionEventStreamRetainedCountHeader), sessionID)
+	retainedEventCount, err := parseWatchRetainedEventCount(resp.Header.Get(events.RetainedEventCountHeader), sessionID)
 	if err != nil {
 		defer resp.Body.Close()
 		return nil, err
@@ -267,7 +267,7 @@ func parseWatchRetainedEventCount(headerValue, sessionID string) (int, error) {
 		return 0, &watchProtocolError{message: fmt.Sprintf(
 			"work watch stream for session %q is missing %s",
 			sessionID,
-			factorysessions.SessionEventStreamRetainedCountHeader,
+			events.RetainedEventCountHeader,
 		)}
 	}
 	count, err := strconv.Atoi(value)
@@ -275,7 +275,7 @@ func parseWatchRetainedEventCount(headerValue, sessionID string) (int, error) {
 		return 0, &watchProtocolError{message: fmt.Sprintf(
 			"work watch stream for session %q returned invalid %s %q",
 			sessionID,
-			factorysessions.SessionEventStreamRetainedCountHeader,
+			events.RetainedEventCountHeader,
 			value,
 		)}
 	}

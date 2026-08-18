@@ -331,6 +331,111 @@ func TestWorkRuntimeAdapterMapsRootMoveConflictToWorkContract(t *testing.T) {
 	}
 }
 
+type detachedMoveRuntime struct {
+	factory.Service
+	request factory.MoveWorkRequest
+}
+
+func (r *detachedMoveRuntime) ControlMoveWork(
+	_ context.Context,
+	request factory.MoveWorkRequest,
+) (factory.MoveWorkResult, error) {
+	r.request = request
+	return factory.MoveWorkResult{
+		WorkID: request.WorkID, WorkTypeID: "story",
+		FromState: "draft", ToState: request.StateName,
+	}, nil
+}
+
+// TestWorkRuntimeAdapterMoveWorkReturnsDetachedStateFacts pins the success half
+// of the Work move port: engine identity (place and token ids) ends at this
+// adapter and only detached Work state facts cross into Work.
+func TestWorkRuntimeAdapterMoveWorkReturnsDetachedStateFacts(t *testing.T) {
+	runtime := &detachedMoveRuntime{}
+	adapter := workRuntimeAdapter{runtime: runtime}
+
+	got, err := adapter.MoveWork(
+		context.Background(), "work-1", "review", work.WorkStateChangeSourceAPI, "move-1",
+	)
+	if err != nil {
+		t.Fatalf("MoveWork() error = %v, want nil", err)
+	}
+	if runtime.request.WorkID != "work-1" || runtime.request.StateName != "review" ||
+		runtime.request.RequestID != "move-1" ||
+		runtime.request.Source != factory.WorkMoveSource(work.WorkStateChangeSourceAPI) {
+		t.Fatalf("ControlMoveWork request = %#v, want the caller's move forwarded verbatim", runtime.request)
+	}
+	want := work.OperatorMoveResult{
+		WorkID: "work-1", WorkTypeID: "story", FromState: "draft", ToState: "review",
+	}
+	if got != want {
+		t.Fatalf("MoveWork() = %#v, want %#v", got, want)
+	}
+}
+
+type failingMoveRuntime struct {
+	factory.Service
+	err error
+}
+
+func (r failingMoveRuntime) ControlMoveWork(
+	context.Context,
+	factory.MoveWorkRequest,
+) (factory.MoveWorkResult, error) {
+	return factory.MoveWorkResult{}, r.err
+}
+
+// TestWorkRuntimeAdapterTranslatesEngineMoveFailuresToWorkSentinels pins the
+// failure half of the Work move port: every engine-classified move failure
+// crosses into Work as the matching Work-owned sentinel, so Work's transports
+// branch only on Work error identity. Unclassified failures pass through.
+func TestWorkRuntimeAdapterTranslatesEngineMoveFailuresToWorkSentinels(t *testing.T) {
+	opaque := errors.New("engine unavailable")
+	checks := []struct {
+		name string
+		from error
+		want error
+	}{
+		{name: "request conflict", from: factory.ErrMoveWorkRequestConflict, want: work.ErrMoveWorkRequestAlreadyApplied},
+		{name: "work not found", from: factory.ErrMoveWorkNotFound, want: work.ErrMoveWorkNotFound},
+		{name: "invalid state", from: factory.ErrMoveWorkInvalidState, want: work.ErrMoveWorkInvalidState},
+		{name: "in-flight dispatch", from: factory.ErrMoveWorkInFlightDispatch, want: work.ErrMoveWorkInFlightDispatch},
+		{name: "engine terminated", from: factory.ErrMoveWorkEngineTerminated, want: work.ErrMoveWorkEngineTerminated},
+		{name: "unclassified failure", from: opaque, want: opaque},
+	}
+	for _, check := range checks {
+		t.Run(check.name, func(t *testing.T) {
+			adapter := workRuntimeAdapter{runtime: failingMoveRuntime{err: check.from}}
+
+			_, err := adapter.MoveWork(
+				context.Background(), "work-1", "done", work.WorkStateChangeSourceAPI, "move-1",
+			)
+			if !errors.Is(err, check.want) {
+				t.Fatalf("MoveWork() error = %v, want %v", err, check.want)
+			}
+			if err.Error() != check.from.Error() {
+				t.Fatalf(
+					"MoveWork() error text = %q, want the operator-facing wording %q preserved",
+					err.Error(), check.from.Error(),
+				)
+			}
+		})
+	}
+}
+
+// TestWorkRuntimeAdapterMoveWorkFailsClosedWithoutRuntime keeps Work's move
+// path fail-closed when Factory Sessions bound no runtime for the session.
+func TestWorkRuntimeAdapterMoveWorkFailsClosedWithoutRuntime(t *testing.T) {
+	adapter := workRuntimeAdapter{}
+
+	_, err := adapter.MoveWork(
+		context.Background(), "work-1", "done", work.WorkStateChangeSourceAPI, "move-1",
+	)
+	if err == nil || !strings.Contains(err.Error(), "Factory Runtime work move is required") {
+		t.Fatalf("MoveWork() error = %v, want move-required error", err)
+	}
+}
+
 func TestWorkRuntimeAdapterProjectsDetachedPublicWorkIdentityStateAndRelations(t *testing.T) {
 	tags := map[string]string{"owner": "docs"}
 	previous := []string{"chain-a"}
