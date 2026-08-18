@@ -312,6 +312,28 @@ func TestWorkRuntimeAdapterSubmitWorkRequestRejectsServiceOnlyRuntimeSafely(t *t
 	}
 }
 
+// TestWorkRuntimeAdapterDoesNotRecoverSubmitterFromRuntimeValue is the guard
+// that the retired Work projection fallback stays retired. The bound runtime
+// value here does serve SubmitWorkRequest, so a type assertion on the runtime
+// value would have succeeded; the adapter must instead fail closed because
+// Factory Sessions declared no Work and event ingress when it bound the
+// runtime.
+func TestWorkRuntimeAdapterDoesNotRecoverSubmitterFromRuntimeValue(t *testing.T) {
+	canonical := &submitWorkFactory{result: work.WorkRequestSubmitResult{RequestID: "request-1"}}
+	adapter := workRuntimeAdapter{runtime: canonical}
+
+	_, err := adapter.SubmitWorkRequest(context.Background(), work.WorkRequest{RequestID: "request-1"})
+	if err == nil || !strings.Contains(err.Error(), "Factory Runtime work submission is required") {
+		t.Fatalf("SubmitWorkRequest() error = %v, want submission-required error", err)
+	}
+	if canonical.request.RequestID != "" {
+		t.Fatalf(
+			"submitted request = %#v, want the runtime value untouched without a declared ingress",
+			canonical.request,
+		)
+	}
+}
+
 type conflictingRootRuntime struct {
 	factory.Service
 }
