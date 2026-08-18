@@ -14,7 +14,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/transports/cli/commandregistry"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/generated"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/resolvedinput"
-	workersessionscli "github.com/portpowered/infinite-you/pkg/transports/cli/worker_sessions"
+	workersessionscli "github.com/portpowered/infinite-you/pkg/services/worker_sessions/transports/cli/worker_sessions"
 	"github.com/spf13/cobra"
 )
 

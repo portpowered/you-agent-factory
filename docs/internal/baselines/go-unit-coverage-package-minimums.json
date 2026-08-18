@@ -1564,6 +1564,10 @@
       "minimum": 69.80
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/services/worker_sessions/transports/cli/worker_sessions",
+      "minimum": 0.00
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/services/worker_sessions/transports/http",
       "minimum": 65.70
     },
@@ -1810,10 +1814,6 @@
     {
       "package": "github.com/portpowered/infinite-you/pkg/transports/cli/work",
       "minimum": 62.50
-    },
-    {
-      "package": "github.com/portpowered/infinite-you/pkg/transports/cli/worker_sessions",
-      "minimum": 0.00
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/transports/http",

@@ -13,7 +13,7 @@ import (
 	providerscli "github.com/portpowered/infinite-you/pkg/services/providers/transports/cli"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/generated"
-	workersessionscli "github.com/portpowered/infinite-you/pkg/transports/cli/worker_sessions"
+	workersessionscli "github.com/portpowered/infinite-you/pkg/services/worker_sessions/transports/cli/worker_sessions"
 	"github.com/spf13/cobra"
 )
 
