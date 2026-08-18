@@ -58,20 +58,18 @@ func RenderFunctionalTimingMarkdown(summary FunctionalTimingSummary) string {
 	}
 
 	renderFunctionalTestFailures(&b, summary.Tests)
-	renderSlowestFunctionalTests(&b, summary.Tests)
+	renderFunctionalTestsByElapsed(&b, summary.Tests)
 	return b.String()
 }
 
-// slowestFunctionalTestReportLimit caps how many individual tests the slowest-
-// tests table names. The rendered text always states how many rows the cap
-// dropped so a truncated table is never mistaken for the whole suite.
-const slowestFunctionalTestReportLimit = 15
-
-// renderSlowestFunctionalTests renders the longest-running top-level tests
-// from the per-test rows already captured alongside the package timings.
-// Package totals answer "which package is slow"; this answers "which test".
-// Nothing is rendered when a run captured no per-test rows at all.
-func renderSlowestFunctionalTests(output *strings.Builder, tests []FunctionalTestTiming) {
+// renderFunctionalTestsByElapsed renders every top-level test the run observed,
+// slowest first, from the per-test rows already captured alongside the package
+// timings. Package totals answer "which package is slow"; this answers "how
+// long did each test take". The job summary is the one surface with room for
+// the complete list, so it is not truncated here -- the pull request comment
+// renderer caps its own excerpt separately. Nothing is rendered when a run
+// captured no per-test rows at all.
+func renderFunctionalTestsByElapsed(output *strings.Builder, tests []FunctionalTestTiming) {
 	if len(tests) == 0 {
 		return
 	}
@@ -87,18 +85,15 @@ func renderSlowestFunctionalTests(output *strings.Builder, tests []FunctionalTes
 		return slowest[i].Test < slowest[j].Test
 	})
 
-	shown := min(len(slowest), slowestFunctionalTestReportLimit)
-	output.WriteString("\n### Slowest top-level tests\n\n")
+	output.WriteString("\n### Top-level tests by elapsed time\n\n")
 	fmt.Fprintf(
 		output,
-		"- Showing the %d slowest of %d observed top-level tests by elapsed time; %d additional row(s) omitted.\n\n",
-		shown,
+		"- Showing all %d observed top-level tests by elapsed time, slowest first.\n\n",
 		len(slowest),
-		len(slowest)-shown,
 	)
 	output.WriteString("| Test | Package | Elapsed (s) | Outcome |\n")
 	output.WriteString("| --- | --- | ---: | --- |\n")
-	for _, test := range slowest[:shown] {
+	for _, test := range slowest {
 		output.WriteString("| `")
 		output.WriteString(test.Test)
 		output.WriteString("` | `")

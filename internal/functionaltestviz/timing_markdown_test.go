@@ -156,11 +156,11 @@ func TestRenderFunctionalTimingMarkdownRendersSlowestTopLevelTests(t *testing.T)
 
 	rendered := functionaltestviz.RenderFunctionalTimingMarkdown(summary)
 
-	if !strings.Contains(rendered, "### Slowest top-level tests\n") {
+	if !strings.Contains(rendered, "### Top-level tests by elapsed time\n") {
 		t.Fatalf("slowest top-level tests section missing:\n%s", rendered)
 	}
-	if !strings.Contains(rendered, "- Showing the 3 slowest of 3 observed top-level tests by elapsed time; 0 additional row(s) omitted.\n") {
-		t.Fatalf("slowest-tests section must state its cap and omitted count:\n%s", rendered)
+	if !strings.Contains(rendered, "- Showing all 3 observed top-level tests by elapsed time, slowest first.\n") {
+		t.Fatalf("per-test section must state the full observed count:\n%s", rendered)
 	}
 	if !strings.Contains(rendered, "| Test | Package | Elapsed (s) | Outcome |\n") {
 		t.Fatalf("slowest-tests table header missing:\n%s", rendered)
@@ -171,7 +171,7 @@ func TestRenderFunctionalTimingMarkdownRendersSlowestTopLevelTests(t *testing.T)
 
 	// Scope the ordering assertion to the new section: the failed-tests table
 	// above it names the same tests in a different order by design.
-	section := rendered[strings.Index(rendered, "### Slowest top-level tests\n"):]
+	section := rendered[strings.Index(rendered, "### Top-level tests by elapsed time\n"):]
 	slowest := strings.Index(section, "| `TestSlowest` |")
 	middle := strings.Index(section, "| `TestMiddle` |")
 	quick := strings.Index(section, "| `TestQuick` |")
@@ -181,7 +181,7 @@ func TestRenderFunctionalTimingMarkdownRendersSlowestTopLevelTests(t *testing.T)
 
 	// The package table and its scalar counts stay exactly where they were.
 	packageTable := strings.Index(rendered, "| Package | Elapsed (s) | Outcome |\n")
-	if packageTable < 0 || packageTable >= strings.Index(rendered, "### Slowest top-level tests\n") {
+	if packageTable < 0 || packageTable >= strings.Index(rendered, "### Top-level tests by elapsed time\n") {
 		t.Fatalf("the per-package timing table must be preserved above the slowest-tests section:\n%s", rendered)
 	}
 	if !strings.Contains(rendered, "- Top-level tests with observed outcomes: 3\n") {
@@ -189,7 +189,7 @@ func TestRenderFunctionalTimingMarkdownRendersSlowestTopLevelTests(t *testing.T)
 	}
 }
 
-func TestRenderFunctionalTimingMarkdownCapsSlowestTopLevelTests(t *testing.T) {
+func TestRenderFunctionalTimingMarkdownReportsEveryObservedTest(t *testing.T) {
 	t.Parallel()
 
 	summary := functionaltestviz.FunctionalTimingSummary{
@@ -213,14 +213,17 @@ func TestRenderFunctionalTimingMarkdownCapsSlowestTopLevelTests(t *testing.T) {
 
 	rendered := functionaltestviz.RenderFunctionalTimingMarkdown(summary)
 
-	if rows := strings.Count(rendered, "| `TestCase"); rows != 15 {
-		t.Fatalf("slowest-tests rows = %d, want the 15-row cap:\n%s", rows, rendered)
+	if rows := strings.Count(rendered, "| `TestCase"); rows != observed {
+		t.Fatalf("per-test rows = %d, want every one of the %d observed tests:\n%s", rows, observed, rendered)
 	}
-	if !strings.Contains(rendered, "- Showing the 15 slowest of 20 observed top-level tests by elapsed time; 5 additional row(s) omitted.\n") {
-		t.Fatalf("capped slowest-tests section must state its omitted count:\n%s", rendered)
+	if !strings.Contains(rendered, "- Showing all 20 observed top-level tests by elapsed time, slowest first.\n") {
+		t.Fatalf("per-test section must state the full observed count:\n%s", rendered)
 	}
-	if strings.Contains(rendered, "| `TestCase04` |") {
-		t.Fatalf("the five fastest tests must be the omitted rows:\n%s", rendered)
+	// The job summary is the surface with room for the whole list, so the
+	// fastest tests must survive too -- truncation belongs to the pull
+	// request comment renderer alone.
+	if !strings.Contains(rendered, "| `TestCase00` |") {
+		t.Fatalf("the fastest test must still be reported:\n%s", rendered)
 	}
 }
 
@@ -236,7 +239,7 @@ func TestRenderFunctionalTimingMarkdownOmitsSlowestSectionWithoutPerTestRows(t *
 			{Package: "github.com/portpowered/infinite-you/tests/functional/alpha", Seconds: 1.0, Outcome: "pass"},
 		},
 	})
-	if strings.Contains(rendered, "### Slowest top-level tests") {
+	if strings.Contains(rendered, "### Top-level tests by elapsed time") {
 		t.Fatalf("a run with no per-test rows must not render an empty slowest-tests table:\n%s", rendered)
 	}
 	if !strings.Contains(rendered, "| Package | Elapsed (s) | Outcome |\n") {
