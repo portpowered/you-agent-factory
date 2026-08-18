@@ -323,9 +323,15 @@ func TestExecuteWritesJSONWhenOverallFloorFails(t *testing.T) {
 		t.Fatalf("packages len = %d, want 2", len(summary.Packages))
 	}
 
+	// The complete per-package set is asserted on the JSON summary above. With
+	// that artifact written, stdout carries the collapsed lane verdict rather
+	// than one raw coverage line per measured package.
 	got := stdout.String()
-	if !strings.Contains(got, modulePath+"/pkg/config\tcoverage: 100.0% of statements") {
-		t.Fatalf("execute() stdout = %q, want package summary retained on floor failure", got)
+	if !strings.Contains(got, "Unit package coverage verdict:") {
+		t.Fatalf("execute() stdout = %q, want the lane verdict retained on floor failure", got)
+	}
+	if !strings.Contains(got, "tally: measured-packages=2 gated-packages=2 below-floor=0 near-floor=0 gate-failures=1") {
+		t.Fatalf("execute() stdout = %q, want the verdict tally to count the gate failure", got)
 	}
 	if strings.Contains(got, "meets minimum") {
 		t.Fatalf("execute() stdout = %q, did not expect success message", got)

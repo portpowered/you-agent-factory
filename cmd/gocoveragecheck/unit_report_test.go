@@ -69,10 +69,14 @@ func unitReportTimingEvents(t *testing.T, outcome string) string {
 
 func unitReportManifest(t *testing.T) string {
 	t.Helper()
+	// Measured coverage is config 25.00, service 90.00, wire 100.00, so these
+	// floors put all three inside the near-floor band with headroom ordering
+	// (service 1.00, wire 1.00, config 1.50) deliberately unequal to import-path
+	// ordering (config, service, wire).
 	return writePackageMinimumManifestWithEntries(t, "unit", []manifestPackageSpec{
-		{importPath: modulePath + "/pkg/config", minimum: "10.00"},
+		{importPath: modulePath + "/pkg/config", minimum: "23.50"},
 		{importPath: modulePath + "/pkg/service", minimum: "89.00"},
-		{importPath: modulePath + "/pkg/wire", minimum: "50.00"},
+		{importPath: modulePath + "/pkg/wire", minimum: "99.00"},
 	})
 }
 
@@ -183,6 +187,65 @@ func TestUnitCoverageLaneWritesCoverageAndTimingJSON(t *testing.T) {
 	}
 	if got := slowest["TestFastUnit"]; got != 0.25 {
 		t.Fatalf("TestFastUnit elapsed = %v, want 0.25 (timing rows: %+v)", got, timing.Tests)
+	}
+}
+
+// TestUnitCoverageLaneCollapsesPerPackageLinesWhenTheArtifactIsWritten pins the
+// console half of the unit report: once -json-output preserves the complete
+// per-package measurement, stdout carries one ordered verdict block instead of
+// a raw coverage line per measured package.
+func TestUnitCoverageLaneCollapsesPerPackageLinesWhenTheArtifactIsWritten(t *testing.T) {
+	outputDir := t.TempDir()
+	coveragePath := filepath.Join(outputDir, "coverage-summary.json")
+
+	stdout, _, err := captureUnitReportRun(
+		t,
+		unitReportConfig(unitReportManifest(t), coveragePath, filepath.Join(outputDir, "unit-timing-summary.json")),
+		unitReportTimingEvents(t, timingOutcomePass),
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("execute() error = %v\n%s", err, stdout)
+	}
+
+	if !strings.Contains(stdout, "Unit package coverage verdict:") {
+		t.Fatalf("unit lane did not render its own verdict block:\n%s", stdout)
+	}
+	if strings.Contains(stdout, "Functional package coverage verdict:") {
+		t.Fatalf("unit lane mislabelled its verdict block as functional:\n%s", stdout)
+	}
+	for _, importPath := range unitReportCoverPackages {
+		if strings.Contains(stdout, importPath+"\tcoverage: ") {
+			t.Fatalf("unit lane still printed a raw per-package coverage line for %s:\n%s", importPath, stdout)
+		}
+	}
+
+	// All three packages sit inside the near-floor band with headroom service
+	// 1.00, wire 1.00, config 1.50. Ordering is headroom ascending with an
+	// import-path tiebreak, so the block must read service, wire, config —
+	// deliberately not the import-path order config, service, wire.
+	block := stdout[strings.Index(stdout, "Unit package coverage verdict:"):]
+	var reported []string
+	for _, line := range strings.Split(block, "\n") {
+		if _, importPath, found := strings.Cut(strings.TrimSpace(line), "near floor: package="); found {
+			reported = append(reported, strings.Fields(importPath)[0])
+		}
+	}
+	want := []string{modulePath + "/pkg/service", modulePath + "/pkg/wire", modulePath + "/pkg/config"}
+	if strings.Join(reported, ",") != strings.Join(want, ",") {
+		t.Fatalf("near-floor order = %v, want headroom ascending %v:\n%s", reported, want, stdout)
+	}
+
+	// The collapsed log is only safe because the complete set survives in the
+	// artifact the CI job uploads.
+	var coverage struct {
+		Packages []struct {
+			Package string `json:"package"`
+		} `json:"packages"`
+	}
+	readUnitReportJSON(t, coveragePath, &coverage)
+	if len(coverage.Packages) != len(unitReportCoverPackages) {
+		t.Fatalf("collapsed log lost packages: artifact carries %d, want %d", len(coverage.Packages), len(unitReportCoverPackages))
 	}
 }
 

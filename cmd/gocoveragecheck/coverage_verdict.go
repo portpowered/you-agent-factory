@@ -6,9 +6,11 @@ import (
 	"strings"
 )
 
-// functionalCoverageSuite is the lane whose log is rendered as a compact
-// ordered verdict block instead of one raw coverage line per measured package.
+// functionalCoverageSuite and unitCoverageSuite name the two lanes whose logs
+// are rendered as a compact ordered verdict block instead of one raw coverage
+// line per measured package.
 const functionalCoverageSuite = "functional"
+const unitCoverageSuite = "unit"
 
 // nearFloorCoverageReportLimit caps how many passing near-floor packages the
 // verdict block names. The block stays readable at a glance while the omitted
@@ -33,20 +35,37 @@ type packageCoverageVerdict struct {
 
 // writeCoverageLaneReport prints a lane's per-package coverage result.
 //
-// The functional lane replaces the raw "coverage: N% of statements" line per
+// A reporting lane replaces the raw "coverage: N% of statements" line per
 // measured package — 300+ consecutive lines that bury the one actionable
 // verdict — with a compact ordered block: floor violations first, then the
-// packages closest to their floor, then a single tally line. No per-package
-// data is lost: the complete set is still written to the -json-output
-// coverage-summary artifact that the CI job uploads and renders.
+// packages closest to their floor, then a single tally line.
 //
-// Every other lane keeps the raw per-package listing unchanged.
+// Collapsing the listing is only safe when the complete per-package measurement
+// survives somewhere a reader can still reach. Two lanes qualify: the
+// functional lane, whose CI job always publishes the coverage-summary artifact,
+// and any lane invoked with -json-output, which is that artifact. An invocation
+// without one — an ordinary local `make test-unit-coverage`, or the
+// malformed-manifest abort path that returns before the JSON is written — has
+// the raw listing as the only copy of the measurement, so it keeps it.
 func writeCoverageLaneReport(cfg config, result coverageResult, failures []string) {
-	if cfg.suite != functionalCoverageSuite {
+	if cfg.suite != functionalCoverageSuite && strings.TrimSpace(cfg.jsonOutput) == "" {
 		writePackageCoverageSummaries(result.packageSummaries)
 		return
 	}
-	writeFunctionalCoverageVerdict(result, failures)
+	writeCoverageVerdict(coverageLaneLabel(cfg.suite), result, failures)
+}
+
+// coverageLaneLabel names the lane in its verdict block so a job log that
+// carries both reports stays attributable to the suite that produced it.
+func coverageLaneLabel(suite string) string {
+	switch strings.TrimSpace(suite) {
+	case functionalCoverageSuite:
+		return "Functional"
+	case unitCoverageSuite, "":
+		return "Unit"
+	default:
+		return strings.ToUpper(suite[:1]) + suite[1:]
+	}
 }
 
 // writePackageCoverageSummaries prints one raw coverage line per measured
@@ -58,12 +77,12 @@ func writePackageCoverageSummaries(summaries []packageCoverageSummary) {
 	}
 }
 
-// writeFunctionalCoverageVerdict renders the ordered functional verdict block.
-func writeFunctionalCoverageVerdict(result coverageResult, failures []string) {
+// writeCoverageVerdict renders one lane's ordered verdict block.
+func writeCoverageVerdict(label string, result coverageResult, failures []string) {
 	verdicts := collectPackageCoverageVerdicts(result)
 	belowFloor, nearFloor := partitionPackageCoverageVerdicts(verdicts)
 
-	fmt.Fprintln(stdoutWriter, "Functional package coverage verdict:")
+	fmt.Fprintf(stdoutWriter, "%s package coverage verdict:\n", label)
 	writeBelowFloorCoverageLines(belowFloor)
 	writeNearFloorCoverageLines(nearFloor)
 	fmt.Fprintf(
