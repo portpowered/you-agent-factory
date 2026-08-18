@@ -312,6 +312,28 @@ func TestWorkRuntimeAdapterSubmitWorkRequestRejectsServiceOnlyRuntimeSafely(t *t
 	}
 }
 
+// TestWorkRuntimeAdapterDoesNotRecoverSubmitterFromRuntimeValue is the guard
+// that the retired Work projection fallback stays retired. The bound runtime
+// value here does serve SubmitWorkRequest, so a type assertion on the runtime
+// value would have succeeded; the adapter must instead fail closed because
+// Factory Sessions declared no Work and event ingress when it bound the
+// runtime.
+func TestWorkRuntimeAdapterDoesNotRecoverSubmitterFromRuntimeValue(t *testing.T) {
+	canonical := &submitWorkFactory{result: work.WorkRequestSubmitResult{RequestID: "request-1"}}
+	adapter := workRuntimeAdapter{runtime: canonical}
+
+	_, err := adapter.SubmitWorkRequest(context.Background(), work.WorkRequest{RequestID: "request-1"})
+	if err == nil || !strings.Contains(err.Error(), "Factory Runtime work submission is required") {
+		t.Fatalf("SubmitWorkRequest() error = %v, want submission-required error", err)
+	}
+	if canonical.request.RequestID != "" {
+		t.Fatalf(
+			"submitted request = %#v, want the runtime value untouched without a declared ingress",
+			canonical.request,
+		)
+	}
+}
+
 type conflictingRootRuntime struct {
 	factory.Service
 }
@@ -328,6 +350,128 @@ func TestWorkRuntimeAdapterMapsRootMoveConflictToWorkContract(t *testing.T) {
 	_, err := adapter.MoveWork(context.Background(), "work-1", "done", work.WorkStateChangeSourceAPI, "request-1")
 	if !errors.Is(err, work.ErrMoveWorkRequestAlreadyApplied) {
 		t.Fatalf("MoveWork error = %v, want %v", err, work.ErrMoveWorkRequestAlreadyApplied)
+	}
+}
+
+type detachedMoveRuntime struct {
+	factory.Service
+	request factory.MoveWorkRequest
+}
+
+func (r *detachedMoveRuntime) ControlMoveWork(
+	_ context.Context,
+	request factory.MoveWorkRequest,
+) (factory.MoveWorkResult, error) {
+	r.request = request
+	return factory.MoveWorkResult{
+		WorkID: request.WorkID, WorkTypeID: "story",
+		FromState: "draft", ToState: request.StateName,
+	}, nil
+}
+
+// TestWorkRuntimeAdapterMoveWorkReturnsDetachedStateFacts pins the success half
+// of the Work move port: engine identity (place and token ids) ends at this
+// adapter and only detached Work state facts cross into Work.
+func TestWorkRuntimeAdapterMoveWorkReturnsDetachedStateFacts(t *testing.T) {
+	runtime := &detachedMoveRuntime{}
+	adapter := workRuntimeAdapter{runtime: runtime}
+
+	got, err := adapter.MoveWork(
+		context.Background(), "work-1", "review", work.WorkStateChangeSourceAPI, "move-1",
+	)
+	if err != nil {
+		t.Fatalf("MoveWork() error = %v, want nil", err)
+	}
+	if runtime.request.WorkID != "work-1" || runtime.request.StateName != "review" ||
+		runtime.request.RequestID != "move-1" ||
+		runtime.request.Source != factory.WorkMoveSource(work.WorkStateChangeSourceAPI) {
+		t.Fatalf("ControlMoveWork request = %#v, want the caller's move forwarded verbatim", runtime.request)
+	}
+	want := work.OperatorMoveResult{
+		WorkID: "work-1", WorkTypeID: "story", FromState: "draft", ToState: "review",
+	}
+	if got != want {
+		t.Fatalf("MoveWork() = %#v, want %#v", got, want)
+	}
+}
+
+type failingMoveRuntime struct {
+	factory.Service
+	err error
+}
+
+func (r failingMoveRuntime) ControlMoveWork(
+	context.Context,
+	factory.MoveWorkRequest,
+) (factory.MoveWorkResult, error) {
+	return factory.MoveWorkResult{}, r.err
+}
+
+// TestWorkRuntimeAdapterTranslatesEngineMoveFailuresToWorkSentinels pins the
+// failure half of the Work move port: every engine-classified move failure
+// crosses into Work as the matching Work-owned sentinel, so Work's transports
+// branch only on Work error identity. Unclassified failures pass through.
+func TestWorkRuntimeAdapterTranslatesEngineMoveFailuresToWorkSentinels(t *testing.T) {
+	opaque := errors.New("engine unavailable")
+	checks := []struct {
+		name     string
+		from     error
+		want     error
+		wantText string
+	}{
+		{
+			name: "request conflict",
+			from: factory.ErrMoveWorkRequestConflict,
+			want: work.ErrMoveWorkRequestAlreadyApplied,
+			// The conflict sentinel is the one translation that already
+			// restated the failure in Work's own operator wording.
+			wantText: "operator move request was already applied",
+		},
+		{
+			name: "work not found", from: factory.ErrMoveWorkNotFound,
+			want: work.ErrMoveWorkNotFound, wantText: "work not found",
+		},
+		{
+			name: "invalid state", from: factory.ErrMoveWorkInvalidState,
+			want: work.ErrMoveWorkInvalidState, wantText: "invalid target state for work type",
+		},
+		{
+			name: "in-flight dispatch", from: factory.ErrMoveWorkInFlightDispatch,
+			want: work.ErrMoveWorkInFlightDispatch, wantText: "work is in an active dispatch",
+		},
+		{
+			name: "engine terminated", from: factory.ErrMoveWorkEngineTerminated,
+			want: work.ErrMoveWorkEngineTerminated, wantText: "engine has terminated",
+		},
+		{name: "unclassified failure", from: opaque, want: opaque, wantText: "engine unavailable"},
+	}
+	for _, check := range checks {
+		t.Run(check.name, func(t *testing.T) {
+			adapter := workRuntimeAdapter{runtime: failingMoveRuntime{err: check.from}}
+
+			_, err := adapter.MoveWork(
+				context.Background(), "work-1", "done", work.WorkStateChangeSourceAPI, "move-1",
+			)
+			if !errors.Is(err, check.want) {
+				t.Fatalf("MoveWork() error = %v, want %v", err, check.want)
+			}
+			if err.Error() != check.wantText {
+				t.Fatalf("MoveWork() error text = %q, want %q", err.Error(), check.wantText)
+			}
+		})
+	}
+}
+
+// TestWorkRuntimeAdapterMoveWorkFailsClosedWithoutRuntime keeps Work's move
+// path fail-closed when Factory Sessions bound no runtime for the session.
+func TestWorkRuntimeAdapterMoveWorkFailsClosedWithoutRuntime(t *testing.T) {
+	adapter := workRuntimeAdapter{}
+
+	_, err := adapter.MoveWork(
+		context.Background(), "work-1", "done", work.WorkStateChangeSourceAPI, "move-1",
+	)
+	if err == nil || !strings.Contains(err.Error(), "Factory Runtime work move is required") {
+		t.Fatalf("MoveWork() error = %v, want move-required error", err)
 	}
 }
 

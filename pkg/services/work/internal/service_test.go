@@ -10,7 +10,6 @@ import (
 	"sync"
 	"testing"
 
-	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	internalservice "github.com/portpowered/infinite-you/pkg/services/work/internal"
@@ -25,20 +24,6 @@ type recordingFactory struct {
 type workRuntimeResolver struct {
 	runtime work.Runtime
 	err     error
-}
-
-type rootOnlyRuntime struct{ factoryruntime.Service }
-
-func (rootOnlyRuntime) ControlMoveWork(context.Context, factoryruntime.MoveWorkRequest) (factoryruntime.MoveWorkResult, error) {
-	return factoryruntime.MoveWorkResult{}, errors.New("Factory Runtime work move is required")
-}
-
-type rootRuntimeResolver struct {
-	runtime *factorysessions.LiveRuntime
-}
-
-func (r rootRuntimeResolver) Resolve(string) *factorysessions.LiveRuntime {
-	return r.runtime
 }
 
 func (r workRuntimeResolver) ResolveWorkRuntime(string) (work.Runtime, error) {
@@ -250,26 +235,6 @@ func (r *isolatedWorkRuntime) MoveWork(
 	r.moveIDs = append(r.moveIDs, requestID)
 	r.mu.Unlock()
 	return work.OperatorMoveResult{WorkID: workID, ToState: stateName}, nil
-}
-
-func TestLegacySessionOperationsFailClosedForRootOnlyRuntime(t *testing.T) {
-	service := internalservice.New(rootRuntimeResolver{runtime: &factorysessions.LiveRuntime{
-		Factory: rootOnlyRuntime{},
-	}})
-	ctx := context.Background()
-
-	if _, err := service.SubmitWorkRequestForSession(ctx, "session-1", work.WorkRequest{}); err == nil ||
-		!strings.Contains(err.Error(), "Factory Runtime work submission is required") {
-		t.Fatalf("SubmitWorkRequestForSession error = %v, want missing legacy submission capability", err)
-	}
-	if _, err := service.MoveWorkForSession(ctx, "session-1", "work-1", "done", "move-1"); err == nil ||
-		!strings.Contains(err.Error(), "Factory Runtime work move is required") {
-		t.Fatalf("MoveWorkForSession error = %v, want missing legacy move capability", err)
-	}
-	if _, err := service.SubscribeFactoryEventsForSession(ctx, "session-1", nil); err == nil ||
-		!strings.Contains(err.Error(), "Factory Runtime event subscription is required until Recordings migration") {
-		t.Fatalf("SubscribeFactoryEventsForSession error = %v, want missing legacy event capability", err)
-	}
 }
 
 func TestSubmitFileParsesAndSubmitsCanonicalWorkRequest(t *testing.T) {

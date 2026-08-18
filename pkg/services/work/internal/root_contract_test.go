@@ -4,7 +4,6 @@ import (
 	"context"
 	"testing"
 
-	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	internalservice "github.com/portpowered/infinite-you/pkg/services/work/internal"
 )
@@ -48,13 +47,4 @@ func TestNewServiceSatisfiesPublishedWorkRoot(t *testing.T) {
 	if runtime.submitted.RequestID != request.RequestID {
 		t.Fatalf("submitted request = %q, want %q", runtime.submitted.RequestID, request.RequestID)
 	}
-}
-
-type internalRootOnlyRuntime struct{ factoryruntime.Service }
-
-func TestNewReturnsSessionScopedService(t *testing.T) {
-	t.Parallel()
-
-	_ = internalRootOnlyRuntime{}
-	_ = internalservice.New
 }

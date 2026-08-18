@@ -13,6 +13,27 @@ import (
 // errors.Is on MoveWorkForSession / MoveWorkAndRead.
 var ErrMoveWorkRequestAlreadyApplied = errors.New("operator move request was already applied")
 
+// The remaining typed operator-move failures Work publishes. The runtime that
+// applies the move raises its own engine-owned failures; the adapter that
+// already detaches successful move results also translates those failures into
+// these Work-owned sentinels, so Work's own surfaces never have to match a
+// foreign service's error identity. Messages are the operator-facing wording
+// Work's transports already emitted for each failure.
+var (
+	// ErrMoveWorkNotFound reports that the moved Work is not present in the
+	// session's runtime state.
+	ErrMoveWorkNotFound = errors.New("work not found")
+	// ErrMoveWorkInvalidState reports that the requested target state is not
+	// authored for the Work's work type.
+	ErrMoveWorkInvalidState = errors.New("invalid target state for work type")
+	// ErrMoveWorkInFlightDispatch reports that the Work is currently held by an
+	// active dispatch and cannot be relocated.
+	ErrMoveWorkInFlightDispatch = errors.New("work is in an active dispatch")
+	// ErrMoveWorkEngineTerminated reports that the session's runtime has stopped
+	// accepting state changes.
+	ErrMoveWorkEngineTerminated = errors.New("engine has terminated")
+)
+
 // InvocationReturnConfig selects the Work result returned by one Factory
 // invocation.
 type InvocationReturnConfig struct {

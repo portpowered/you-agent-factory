@@ -502,19 +502,19 @@ func (m *MockFactory) applyMockOperatorMove(workID, stateName, requestID string)
 		}
 	}
 	if m.Marking == nil || m.Marking.Tokens == nil {
-		return work.OperatorMoveResult{}, petri.ErrMoveWorkNotFound
+		return work.OperatorMoveResult{}, work.ErrMoveWorkNotFound
 	}
 	token, ok := findMockWorkToken(m.Marking.Tokens, workID)
 	if !ok {
-		return work.OperatorMoveResult{}, petri.ErrMoveWorkNotFound
+		return work.OperatorMoveResult{}, work.ErrMoveWorkNotFound
 	}
 	if m.Net == nil {
-		return work.OperatorMoveResult{}, petri.ErrMoveWorkInvalidState
+		return work.OperatorMoveResult{}, work.ErrMoveWorkInvalidState
 	}
 	toPlaceID := petri.PlaceID(token.Color.WorkTypeID, stateName)
 	place, ok := m.Net.Places[toPlaceID]
 	if !ok || place.State != stateName {
-		return work.OperatorMoveResult{}, petri.ErrMoveWorkInvalidState
+		return work.OperatorMoveResult{}, work.ErrMoveWorkInvalidState
 	}
 	fromPlaceID := token.PlaceID
 	fromState := ""
