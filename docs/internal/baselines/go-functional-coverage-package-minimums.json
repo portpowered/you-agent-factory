@@ -1152,6 +1152,10 @@
       "minimum": 0.00
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/services/work/transports/cli/climanifest",
+      "minimum": 50.93
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/services/work/wire",
       "minimum": 8.82
     },
@@ -1268,10 +1272,6 @@
     {
       "package": "github.com/portpowered/infinite-you/pkg/transports/cli/clihttp",
       "minimum": 67.50
-    },
-    {
-      "package": "github.com/portpowered/infinite-you/pkg/transports/cli/climanifest",
-      "minimum": 50.93
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/transports/cli/climanifestcobra",

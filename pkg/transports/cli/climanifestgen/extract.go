@@ -3,7 +3,7 @@ package climanifestgen
 import (
 	"fmt"
 
-	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifest"
+	"github.com/portpowered/infinite-you/pkg/services/work/transports/cli/climanifest"
 )
 
 // ExtractRepresentativeFamily returns manifest metadata for exactly the
