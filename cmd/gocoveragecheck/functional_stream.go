@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"strings"
 	"sync"
 )
 
@@ -97,6 +98,12 @@ func (writer *functionalStreamWriter) writeLineLocked(line []byte) error {
 
 	switch event.Action {
 	case "output":
+		if isRedundantCoverageOutputLine(event.Output) {
+			// The per-package coverage percentage is reported authoritatively
+			// by the end-of-run verdict block and the coverage-summary JSON.
+			// Streaming it once per package buries the actionable verdict.
+			return nil
+		}
 		// Keep the child failure text readable in the job log while the
 		// command runner retains the original JSON bytes for timing parsing.
 		return writer.reporter.writeSink([]byte(event.Output))
@@ -125,6 +132,16 @@ func (writer *functionalStreamWriter) writeLineLocked(line []byte) error {
 		// understand yet.
 		return writer.reporter.writeSink(line)
 	}
+}
+
+// isRedundantCoverageOutputLine reports whether a go test output event is the
+// standalone per-package coverage percentage line. Only a line that is
+// entirely that report is suppressed: package result lines ("ok  pkg 1.2s
+// coverage: ..."), test failures, and panics keep their exact text so a hang
+// or crash stays diagnosable from the raw stream.
+func isRedundantCoverageOutputLine(output string) bool {
+	trimmed := strings.TrimSpace(output)
+	return strings.HasPrefix(trimmed, "coverage: ") && strings.Contains(trimmed, "% of statements")
 }
 
 func (writer *lockedFunctionalStreamWriter) Write(data []byte) (int, error) {
