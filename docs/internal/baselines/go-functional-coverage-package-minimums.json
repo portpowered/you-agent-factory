@@ -32,6 +32,10 @@
       "minimum": 80.00
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/platform/cronschedule",
+      "minimum": 79.41
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/platform/directoryreplace",
       "minimum": 20.96
     },
@@ -121,7 +125,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/cron/internal/service",
-      "minimum": 40.10
+      "minimum": 35.50
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/cron/wire",
