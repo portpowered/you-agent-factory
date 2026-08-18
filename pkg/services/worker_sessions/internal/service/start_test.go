@@ -657,10 +657,13 @@ func TestStart_ConcurrentSameRequestIDConvergesOnOneExecution(t *testing.T) {
 	if accepted.ID != req.ID {
 		t.Fatalf("concurrent accepted session ID = %q, want %q", accepted.ID, req.ID)
 	}
+	// Start is async: it returns once admission converges, while the winning
+	// caller dispatches on its own goroutine. Read the dispatch count only after
+	// the terminal event proves that goroutine ran, or the count races to 0.
+	assertTerminalDelivery(t, terminalSubscription)
 	if execution.callCount() != 1 {
 		t.Fatalf("concurrent Workers dispatch count = %d, want exactly one", execution.callCount())
 	}
-	assertTerminalDelivery(t, terminalSubscription)
 	read, err := eventsSvc.Read(context.Background(), events.ReadRequest{
 		Topic: workersessions.Topic(req.ID),
 		From:  events.Cursor{Topic: workersessions.Topic(req.ID)},
