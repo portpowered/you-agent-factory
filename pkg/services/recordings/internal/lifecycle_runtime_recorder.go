@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	canonicalpkg "github.com/portpowered/infinite-you/pkg/services/recordings/internal/canonical"
@@ -34,7 +33,7 @@ type lifecycleRuntimeRecorder struct {
 	now                func() time.Time
 	startedAt          time.Time
 	streamGenerationID string
-	initialEvent       factoryruntime.FactoryEvent
+	initialEvent       recordings.FactoryEvent
 	seen               map[string]struct{}
 	nextSequence       recordings.CanonicalEventSequence
 	finalizeErr        error
@@ -43,7 +42,7 @@ type lifecycleRuntimeRecorder struct {
 }
 
 type pendingRuntimeRecording struct {
-	event *factoryruntime.FactoryEvent
+	event *recordings.FactoryEvent
 	err   error
 }
 
@@ -178,7 +177,7 @@ func (recorder *lifecycleRuntimeRecorder) Stop() {
 	})
 }
 
-func (recorder *lifecycleRuntimeRecorder) RecordEvent(event factoryruntime.FactoryEvent) {
+func (recorder *lifecycleRuntimeRecorder) RecordEvent(event recordings.FactoryEvent) {
 	if recorder == nil {
 		return
 	}
@@ -195,7 +194,7 @@ func (recorder *lifecycleRuntimeRecorder) RecordEvent(event factoryruntime.Facto
 }
 
 func (recorder *lifecycleRuntimeRecorder) recordEventLocked(
-	event factoryruntime.FactoryEvent,
+	event recordings.FactoryEvent,
 ) error {
 	if recorder.lifecycle == nil {
 		return fmt.Errorf("Recordings lifecycle capability is not bound")
@@ -305,7 +304,7 @@ func (recorder *lifecycleRuntimeRecorder) Finalize(finishedAt time.Time) error {
 	if recorder.finalizeErr != nil {
 		return recorder.finalizeErr
 	}
-	if err := recorder.recordEventLocked(factoryruntime.RunFinishedFactoryEvent(recorder.startedAt, finishedAt)); err != nil {
+	if err := recorder.recordEventLocked(recordings.RunFinishedFactoryEvent(recorder.startedAt, finishedAt)); err != nil {
 		recorder.recordErrorLocked("terminal_metadata_failed", "record terminal Factory event", err)
 	}
 	_, recorder.finalizeErr = recorder.lifecycle.Finish(recordings.FinishLifecycleRequest{

@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"strings"
 	"testing"
@@ -16,20 +15,16 @@ type runtimeRoot interface {
 	recordings.RuntimeOpening
 }
 
-const (
-	modulePrefix       = "github.com/portpowered/infinite-you/"
-	factoryRuntimeRoot = modulePrefix + "pkg/services/factory_runtime"
-	lifecycleRecorder  = modulePrefix + "pkg/services/recordings/internal"
-)
-
-// TestLifecycleRuntimeRecorderImportsRuntimeRootOnly seals CUT-REC-RUN story 002:
-// the lifecycle recorder edge may depend on Factory Runtime only through the
-// service root contract.
-
-// TestLifecycleRuntimeRecorderAcceptsRuntimeRootFinishedEvent proves the
-// recorder path accepts Runtime-facing event vocabulary from the Runtime root
-// and preserves observable identity, kind, and payload fields.
-func TestLifecycleRuntimeRecorderAcceptsRuntimeRootFinishedEvent(t *testing.T) {
+// TestLifecycleRuntimeRecorderRecordsRuntimeEventsAndTerminalEvent proves the
+// recorder accepts Factory event vocabulary from a runtime producer and
+// preserves observable identity, kind, and payload fields through to the
+// portable artifact, including the terminal run-finished event it appends
+// itself.
+//
+// The recorder no longer depends on Factory Runtime at all; that constraint is
+// enforced repo-wide by the cross-service cycle ratchet (cmd/servicecyclecheck)
+// rather than by an import-shape assertion here.
+func TestLifecycleRuntimeRecorderRecordsRuntimeEventsAndTerminalEvent(t *testing.T) {
 	t.Parallel()
 
 	startedAt := time.Date(2026, 7, 27, 17, 0, 0, 0, time.UTC)
@@ -49,10 +44,10 @@ func TestLifecycleRuntimeRecorderAcceptsRuntimeRootFinishedEvent(t *testing.T) {
 		t.Fatalf("BindRecordingLifecycle: %v", err)
 	}
 
-	runtimeEvent := factoryruntime.FactoryEvent{
+	runtimeEvent := recordings.FactoryEvent{
 		Id:   "runtime-root-work-event",
-		Type: factoryruntime.FactoryEventTypeWorkRequest,
-		Context: factoryruntime.FactoryEventContext{
+		Type: recordings.FactoryEventTypeWorkRequest,
+		Context: recordings.FactoryEventContext{
 			EventTime: startedAt.Add(time.Second),
 		},
 		Payload: []byte(`{"workId":"work-runtime-root"}`),
@@ -94,13 +89,13 @@ func TestLifecycleRuntimeRecorderAcceptsRuntimeRootFinishedEvent(t *testing.T) {
 	}
 
 	finishedEvent := built.Artifact.Events[len(built.Artifact.Events)-1]
-	if finishedEvent.ID != recordings.CanonicalEventID(factoryruntime.RunFinishedFactoryEventID) {
-		t.Fatalf("finished event id = %q, want %q", finishedEvent.ID, factoryruntime.RunFinishedFactoryEventID)
+	if finishedEvent.ID != recordings.CanonicalEventID(recordings.RunFinishedFactoryEventID) {
+		t.Fatalf("finished event id = %q, want %q", finishedEvent.ID, recordings.RunFinishedFactoryEventID)
 	}
-	if finishedEvent.Kind != recordings.CanonicalEventKind(factoryruntime.FactoryEventTypeRunResponse) {
-		t.Fatalf("finished event kind = %q, want %q", finishedEvent.Kind, factoryruntime.FactoryEventTypeRunResponse)
+	if finishedEvent.Kind != recordings.CanonicalEventKind(recordings.FactoryEventTypeRunResponse) {
+		t.Fatalf("finished event kind = %q, want %q", finishedEvent.Kind, recordings.FactoryEventTypeRunResponse)
 	}
-	if !strings.Contains(finishedEvent.Payload, string(factoryruntime.FactoryStateCompleted)) {
+	if !strings.Contains(finishedEvent.Payload, string(recordings.FactoryStateCompleted)) {
 		t.Fatalf("finished event payload = %q, want completed state", finishedEvent.Payload)
 	}
 }

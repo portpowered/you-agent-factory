@@ -1,4 +1,4 @@
-package factory
+package recordings
 
 import (
 	"encoding/json"
@@ -6,7 +6,7 @@ import (
 	"time"
 )
 
-func TestRunFinishedFactoryEventPublishesRuntimeRootVocabulary(t *testing.T) {
+func TestRunFinishedFactoryEventPublishesCanonicalLedgerVocabulary(t *testing.T) {
 	t.Parallel()
 
 	startedAt := time.Date(2026, 7, 27, 15, 0, 0, 0, time.UTC)
