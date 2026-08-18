@@ -23,29 +23,21 @@ func CanonicalTopologyReplacementEvents() ([]interfaces.FactoryEvent, error) {
 	return []interfaces.FactoryEvent{initial, replacement}, nil
 }
 
-// publicFactoryObject maps one authored fixture Factory through the generated
-// public contract at the transport boundary, matching the representation the
-// backend records in canonical topology events.
-func publicFactoryObject(factoryConfig *interfaces.FactoryConfig) (map[string]any, error) {
-	publicFactory, err := factorymapping.FactoryConfigToOpenAPI(factoryConfig)
-	if err != nil {
-		return nil, fmt.Errorf("map Factory snapshot boundary: %w", err)
-	}
-	payload, err := json.Marshal(publicFactory)
-	if err != nil {
-		return nil, fmt.Errorf("encode Factory snapshot boundary: %w", err)
-	}
-	var object map[string]any
-	if err := json.Unmarshal(payload, &object); err != nil {
-		return nil, fmt.Errorf("decode Factory snapshot boundary: %w", err)
-	}
-	return object, nil
-}
-
 func canonicalTopologyEvent(id string, eventType interfaces.FactoryEventType, tick, sequence int, factory *interfaces.FactoryConfig) (interfaces.FactoryEvent, error) {
-	publicFactory, err := publicFactoryObject(factory)
+	// Map the fixture Factory through the generated public contract at the
+	// transport boundary, matching the representation the backend records in
+	// canonical topology events.
+	generatedFactory, err := factorymapping.FactoryConfigToOpenAPI(factory)
 	if err != nil {
 		return interfaces.FactoryEvent{}, fmt.Errorf("map topology fixture to public Factory: %w", err)
+	}
+	generatedPayload, err := json.Marshal(generatedFactory)
+	if err != nil {
+		return interfaces.FactoryEvent{}, fmt.Errorf("encode topology fixture public Factory: %w", err)
+	}
+	var publicFactory map[string]any
+	if err := json.Unmarshal(generatedPayload, &publicFactory); err != nil {
+		return interfaces.FactoryEvent{}, fmt.Errorf("decode topology fixture public Factory: %w", err)
 	}
 	factorySnapshot, err := interfaces.NewFactorySnapshot(publicFactory)
 	if err != nil {
