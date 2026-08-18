@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/services/automations"
+	"github.com/portpowered/infinite-you/pkg/platform/cronschedule"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 )
 
@@ -437,7 +437,7 @@ func ruleCronWorkstations(cfg *factorydefinitions.FactoryConfig) []Finding {
 
 		findings = append(findings, validateCronTrigger(ws.Cron, basePath)...)
 		if strings.TrimSpace(ws.Cron.Jitter) != "" {
-			if _, err := automations.ParseCronJitter(ws.Cron); err != nil {
+			if _, err := cronschedule.ParseJitter(ws.Cron.Jitter); err != nil {
 				findings = append(findings, Finding{
 					Severity: SeverityError,
 					Path:     basePath + ".cron.jitter",
@@ -447,7 +447,7 @@ func ruleCronWorkstations(cfg *factorydefinitions.FactoryConfig) []Finding {
 			}
 		}
 		if strings.TrimSpace(ws.Cron.ExpiryWindow) != "" {
-			if _, err := automations.ParseCronExpiryWindow(ws.Cron, 1); err != nil {
+			if _, err := cronschedule.ParseExpiryWindow(ws.Cron.ExpiryWindow, 1); err != nil {
 				findings = append(findings, Finding{
 					Severity: SeverityError,
 					Path:     basePath + ".cron.expiry_window",
@@ -484,7 +484,7 @@ func validateCronTrigger(cron *factorydefinitions.CronConfig, basePath string) [
 		return []Finding{{Severity: SeverityError, Path: basePath + ".cron", Message: "cron workstation requires exactly one of 'schedule' or 'every'", Rule: "cron-schedule"}}
 	}
 	if hasSchedule {
-		if err := automations.ValidateCronSchedule(cron.Schedule); err != nil {
+		if err := cronschedule.ValidateSchedule(cron.Schedule); err != nil {
 			return []Finding{{Severity: SeverityError, Path: basePath + ".cron.schedule", Message: err.Error(), Rule: "cron-schedule"}}
 		}
 		return nil

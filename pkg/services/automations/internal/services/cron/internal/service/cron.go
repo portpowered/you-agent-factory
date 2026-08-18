@@ -8,48 +8,31 @@ import (
 	"strings"
 	"time"
 
+	"github.com/portpowered/infinite-you/pkg/platform/cronschedule"
 	croncontract "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/cron"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/work"
-	cronparser "github.com/robfig/cron/v3"
 )
 
 const cronSubmissionNamePrefix = "cron:"
 
 func (*service) ParseCronJitter(cronConfig *interfaces.CronConfig) (time.Duration, error) {
-	if cronConfig == nil || cronConfig.Jitter == "" {
+	if cronConfig == nil {
 		return 0, nil
 	}
-	jitter, err := time.ParseDuration(cronConfig.Jitter)
-	if err != nil {
-		return 0, fmt.Errorf("%w: %v", croncontract.ErrInvalidJitter, err)
-	}
-	if jitter < 0 {
-		return 0, fmt.Errorf("%w: duration must be non-negative", croncontract.ErrInvalidJitter)
-	}
-	return jitter, nil
+	return cronschedule.ParseJitter(cronConfig.Jitter)
 }
 
 func (s *service) ParseCronExpiryWindow(cronConfig *interfaces.CronConfig, scheduleWindow time.Duration) (time.Duration, error) {
-	if cronConfig == nil || cronConfig.ExpiryWindow == "" {
-		if scheduleWindow <= 0 {
-			return 0, fmt.Errorf("%w: schedule window default must be positive", croncontract.ErrInvalidExpiryWindow)
-		}
-		return scheduleWindow, nil
+	authored := ""
+	if cronConfig != nil {
+		authored = cronConfig.ExpiryWindow
 	}
-	expiryWindow, err := time.ParseDuration(cronConfig.ExpiryWindow)
-	if err != nil {
-		return 0, fmt.Errorf("%w: %v", croncontract.ErrInvalidExpiryWindow, err)
-	}
-	if expiryWindow <= 0 {
-		return 0, fmt.Errorf("%w: duration must be positive", croncontract.ErrInvalidExpiryWindow)
-	}
-	return expiryWindow, nil
+	return cronschedule.ParseExpiryWindow(authored, scheduleWindow)
 }
 
 func (s *service) ValidateCronSchedule(schedule string) error {
-	_, err := nextCronScheduleFire(schedule, time.Date(2026, time.January, 1, 0, 0, 0, 0, time.UTC))
-	return err
+	return cronschedule.ValidateSchedule(schedule)
 }
 
 func (s *service) EvaluateCronSchedule(schedule string, lastEvaluatedAt, evaluatedAt time.Time) (croncontract.CronScheduleEvaluation, error) {
@@ -64,7 +47,7 @@ func (s *service) EvaluateCronSchedule(schedule string, lastEvaluatedAt, evaluat
 		)
 	}
 
-	nominalAt, err := nextCronScheduleFire(schedule, lastEvaluatedAt)
+	nominalAt, err := cronschedule.NextFire(schedule, lastEvaluatedAt)
 	if err != nil {
 		return croncontract.CronScheduleEvaluation{}, err
 	}
@@ -76,7 +59,7 @@ func (s *service) EvaluateCronSchedule(schedule string, lastEvaluatedAt, evaluat
 
 func (s *service) CronScheduleWindow(schedule string, nominalAt time.Time) (time.Duration, error) {
 	nominalAt = nominalAt.UTC()
-	next, err := nextCronScheduleFire(schedule, nominalAt)
+	next, err := cronschedule.NextFire(schedule, nominalAt)
 	if err != nil {
 		return 0, err
 	}
@@ -193,27 +176,6 @@ func (s *service) CronTimeWorkRequest(workflowIdentity string, ws interfaces.Fac
 		}},
 	}
 	return request, metadata, nil
-}
-
-func nextCronScheduleFire(schedule string, after time.Time) (time.Time, error) {
-	schedule = strings.TrimSpace(schedule)
-	if schedule == "" {
-		return time.Time{}, fmt.Errorf("%w: schedule is required", croncontract.ErrInvalidSchedule)
-	}
-	after = after.UTC()
-	parseInput := schedule
-	if !strings.HasPrefix(schedule, "TZ=") && !strings.HasPrefix(schedule, "CRON_TZ=") {
-		parseInput = "CRON_TZ=UTC " + schedule
-	}
-	parsed, err := cronparser.ParseStandard(parseInput)
-	if err != nil {
-		return time.Time{}, fmt.Errorf("%w: invalid cron schedule %q: %v", croncontract.ErrInvalidSchedule, schedule, err)
-	}
-	next := parsed.Next(after)
-	if next.IsZero() {
-		return time.Time{}, fmt.Errorf("%w: cron schedule %q produced no next fire", croncontract.ErrInvalidSchedule, schedule)
-	}
-	return next.UTC(), nil
 }
 
 func cronHash(workflowIdentity, workstationName string, nominalAt time.Time) [32]byte {
