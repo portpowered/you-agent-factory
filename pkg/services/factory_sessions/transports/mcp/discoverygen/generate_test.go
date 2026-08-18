@@ -11,7 +11,7 @@ import (
 	"github.com/portpowered/infinite-you/internal/testutil"
 	"github.com/portpowered/infinite-you/pkg/platform/generatedartifacts"
 	mcpfactorysession "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/mcp"
-	"github.com/portpowered/infinite-you/pkg/transports/mcp/discoverygen"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/mcp/discoverygen"
 )
 
 type testFileSystem struct{}

@@ -956,6 +956,10 @@
       "minimum": 80.40
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/mcp/discoverygen",
+      "minimum": 82.68
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire",
       "minimum": 69.76
     },
@@ -1878,10 +1882,6 @@
     {
       "package": "github.com/portpowered/infinite-you/pkg/transports/mapping/workerinference",
       "minimum": 100.00
-    },
-    {
-      "package": "github.com/portpowered/infinite-you/pkg/transports/mcp/discoverygen",
-      "minimum": 82.68
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/transports/mcp/server",

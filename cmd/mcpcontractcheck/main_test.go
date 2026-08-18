@@ -9,7 +9,7 @@ import (
 
 	"github.com/portpowered/infinite-you/internal/mcpcontractcheck"
 	"github.com/portpowered/infinite-you/internal/testutil"
-	"github.com/portpowered/infinite-you/pkg/transports/mcp/discoverygen"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/mcp/discoverygen"
 )
 
 func TestReportReturnsNonZeroForStructuralDiagnostics(t *testing.T) {
