@@ -15,8 +15,8 @@ import (
 
 	fse "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/cli/session"
+	workcli "github.com/portpowered/infinite-you/pkg/services/work/transports/cli/work"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/clihttp"
-	workcli "github.com/portpowered/infinite-you/pkg/transports/cli/work"
 )
 
 type rootTestHTTPClock struct{}

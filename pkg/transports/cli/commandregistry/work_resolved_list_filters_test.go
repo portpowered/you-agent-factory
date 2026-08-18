@@ -8,10 +8,10 @@ import (
 	"strings"
 	"testing"
 
+	workcli "github.com/portpowered/infinite-you/pkg/services/work/transports/cli/work"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifestcobra"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/commandregistry"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/resolvedinput"
-	workcli "github.com/portpowered/infinite-you/pkg/transports/cli/work"
 	"github.com/spf13/cobra"
 )
 

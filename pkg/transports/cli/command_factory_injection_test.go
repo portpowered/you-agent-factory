@@ -18,9 +18,9 @@ import (
 	modelinference "github.com/portpowered/infinite-you/pkg/services/models"
 	modelscli "github.com/portpowered/infinite-you/pkg/services/models/transports/cli"
 	"github.com/portpowered/infinite-you/pkg/services/work"
+	workcmd "github.com/portpowered/infinite-you/pkg/services/work/transports/cli/work"
 	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/terminalpolicy"
-	workcmd "github.com/portpowered/infinite-you/pkg/transports/cli/work"
 	"go.uber.org/zap"
 )
 

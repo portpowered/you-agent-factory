@@ -9,8 +9,8 @@ import (
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
+	workcli "github.com/portpowered/infinite-you/pkg/services/work/transports/cli/work"
 	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
-	workcli "github.com/portpowered/infinite-you/pkg/transports/cli/work"
 )
 
 func TestWorkListCommand_StateFilterFlagsMapToConfig(t *testing.T) {

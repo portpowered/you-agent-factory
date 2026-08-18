@@ -8,10 +8,10 @@ import (
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/services/work/transports/cli/climanifest"
+	submitcli "github.com/portpowered/infinite-you/pkg/services/work/transports/cli/submit"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/commandregistry"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/generated"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/resolvedinput"
-	submitcli "github.com/portpowered/infinite-you/pkg/transports/cli/submit"
 	"github.com/spf13/cobra"
 )
 

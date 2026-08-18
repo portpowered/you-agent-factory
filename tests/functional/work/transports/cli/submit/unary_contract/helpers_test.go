@@ -15,7 +15,7 @@ import (
 
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
-	submitcli "github.com/portpowered/infinite-you/pkg/transports/cli/submit"
+	submitcli "github.com/portpowered/infinite-you/pkg/services/work/transports/cli/submit"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )

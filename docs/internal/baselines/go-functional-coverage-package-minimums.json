@@ -1172,8 +1172,20 @@
       "minimum": 0.00
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/services/work/transports/cli/batchload",
+      "minimum": 0.00
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/services/work/transports/cli/climanifest",
       "minimum": 50.93
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/work/transports/cli/submit",
+      "minimum": 33.33
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/work/transports/cli/work",
+      "minimum": 27.70
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/work/wire",
@@ -1286,10 +1298,6 @@
       "minimum": 77.14
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/transports/cli/batchload",
-      "minimum": 0.00
-    },
-    {
       "package": "github.com/portpowered/infinite-you/pkg/transports/cli/clidiag",
       "minimum": 80.00
     },
@@ -1358,20 +1366,12 @@
       "minimum": 75.00
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/transports/cli/submit",
-      "minimum": 33.33
-    },
-    {
       "package": "github.com/portpowered/infinite-you/pkg/transports/cli/terminalpolicy",
       "minimum": 84.61
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/transports/cli/timedisplay",
       "minimum": 7.69
-    },
-    {
-      "package": "github.com/portpowered/infinite-you/pkg/transports/cli/work",
-      "minimum": 27.70
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/transports/http",

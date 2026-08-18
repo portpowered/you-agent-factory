@@ -272,6 +272,12 @@
       "removalReason": "Continue extracting Work capabilities into focused child packages."
     },
     {
+      "packagePath": "pkg/services/work/transports/cli/submit",
+      "fileCount": 17,
+      "owner": "cli-maintainers",
+      "removalReason": "Consolidate submit command cases or extract stable input behavior."
+    },
+    {
       "packagePath": "pkg/services/work/transports/http",
       "fileCount": 25,
       "owner": "backend-maintainers",
@@ -348,12 +354,6 @@
       "fileCount": 31,
       "owner": "cli-maintainers",
       "removalReason": "Split run invocation, presentation, and input behavior."
-    },
-    {
-      "packagePath": "pkg/transports/cli/submit",
-      "fileCount": 17,
-      "owner": "cli-maintainers",
-      "removalReason": "Consolidate submit command cases or extract stable input behavior."
     },
     {
       "packagePath": "pkg/transports/http/servertests",

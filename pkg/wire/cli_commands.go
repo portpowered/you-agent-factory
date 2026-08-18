@@ -26,6 +26,7 @@ import (
 	modelservice "github.com/portpowered/infinite-you/pkg/services/models"
 	modelscli "github.com/portpowered/infinite-you/pkg/services/models/transports/cli"
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
+	"github.com/portpowered/infinite-you/pkg/services/operator_settings/transports/cli/initsetup"
 	globalconfigmapping "github.com/portpowered/infinite-you/pkg/services/operator_settings/transports/globalconfig"
 	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
@@ -33,6 +34,8 @@ import (
 	providerswire "github.com/portpowered/infinite-you/pkg/services/providers/wire"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
+	submitcli "github.com/portpowered/infinite-you/pkg/services/work/transports/cli/submit"
+	workcli "github.com/portpowered/infinite-you/pkg/services/work/transports/cli/work"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	workersessionscli "github.com/portpowered/infinite-you/pkg/services/worker_sessions/transports/cli"
 	workersessionswire "github.com/portpowered/infinite-you/pkg/services/worker_sessions/wire"
@@ -44,10 +47,7 @@ import (
 	configcli "github.com/portpowered/infinite-you/pkg/transports/cli/config"
 	factorycli "github.com/portpowered/infinite-you/pkg/transports/cli/factory"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/generated"
-	"github.com/portpowered/infinite-you/pkg/services/operator_settings/transports/cli/initsetup"
 	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
-	submitcli "github.com/portpowered/infinite-you/pkg/transports/cli/submit"
-	workcli "github.com/portpowered/infinite-you/pkg/transports/cli/work"
 	factorymapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig"
 )
 

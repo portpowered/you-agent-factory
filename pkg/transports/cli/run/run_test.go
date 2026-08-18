@@ -14,7 +14,7 @@ import (
 
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	"github.com/portpowered/infinite-you/pkg/services/work"
-	"github.com/portpowered/infinite-you/pkg/transports/cli/batchload"
+	"github.com/portpowered/infinite-you/pkg/services/work/transports/cli/batchload"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 	contentcontract "github.com/portpowered/infinite-you/pkg/transports/mapping/workcontent"

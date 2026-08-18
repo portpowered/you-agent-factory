@@ -8,9 +8,9 @@ import (
 	"strings"
 
 	"github.com/portpowered/infinite-you/pkg/services/work/transports/cli/climanifest"
+	submitcli "github.com/portpowered/infinite-you/pkg/services/work/transports/cli/submit"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/cliserver"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/resolvedinput"
-	submitcli "github.com/portpowered/infinite-you/pkg/transports/cli/submit"
 	"github.com/spf13/cobra"
 )
 
