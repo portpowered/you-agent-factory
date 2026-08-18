@@ -249,6 +249,31 @@ func TestUnitCoverageLaneCollapsesPerPackageLinesWhenTheArtifactIsWritten(t *tes
 	}
 }
 
+// TestUnitCoverageLaneCreatesItsArtifactDirectory pins the CI shape: the three
+// output paths point into an artifact directory that does not exist yet, and
+// go test -coverprofile will not create it.
+func TestUnitCoverageLaneCreatesItsArtifactDirectory(t *testing.T) {
+	artifactRoot := filepath.Join(t.TempDir(), ".artifacts", "unit-coverage")
+
+	cfg := unitReportConfig(
+		unitReportManifest(t),
+		filepath.Join(artifactRoot, "coverage-summary.json"),
+		filepath.Join(artifactRoot, "unit-timing-summary.json"),
+	)
+	cfg.profile = filepath.Join(artifactRoot, "coverage.out")
+
+	stdout, _, err := captureUnitReportRun(t, cfg, unitReportTimingEvents(t, timingOutcomePass), nil)
+	if err != nil {
+		t.Fatalf("execute() error = %v\n%s", err, stdout)
+	}
+
+	for _, name := range []string{"coverage.out", "coverage-summary.json", "unit-timing-summary.json"} {
+		if _, statErr := os.Stat(filepath.Join(artifactRoot, name)); statErr != nil {
+			t.Fatalf("unit lane did not publish %s into a fresh artifact directory: %v", name, statErr)
+		}
+	}
+}
+
 func TestUnitCoverageLaneKeepsFailureDetailReadableWithTimingCapture(t *testing.T) {
 	outputDir := t.TempDir()
 	_, _, err := captureUnitReportRun(

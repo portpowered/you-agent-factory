@@ -299,6 +299,14 @@ func runForOS(cfg config, targetOS string) (result coverageResult, runErr error)
 
 func prepareCoverageProfile(profilePath string) (string, func() error, error) {
 	if profilePath != "" {
+		// A caller-named profile routinely points into a CI artifact directory
+		// that does not exist yet. go test -coverprofile does not create it, so
+		// without this the lane would fail before measuring anything.
+		if directory := filepath.Dir(profilePath); directory != "" && directory != "." {
+			if err := os.MkdirAll(directory, 0o755); err != nil {
+				return "", nil, fmt.Errorf("create coverage profile directory: %w", err)
+			}
+		}
 		return profilePath, func() error { return nil }, nil
 	}
 	file, err := os.CreateTemp("", "go-coverage-*.out")
