@@ -9,8 +9,8 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/models"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/pkg/transports/mapping/factorydefinitionentry"
 	contentmapping "github.com/portpowered/infinite-you/pkg/transports/mapping/workcontent"
-	workerinferencemapping "github.com/portpowered/infinite-you/pkg/transports/mapping/workerinference"
 )
 
 type requestValidationError struct{ message string }
@@ -72,7 +72,7 @@ func invocationRequestFromGenerated(request factoryapi.ModelInvocationRequest) m
 }
 
 func modelBindingsFromGenerated(bindings *[]factoryapi.WorkstationOperationBinding) []models.ModelOperationBinding {
-	authored := workerinferencemapping.OperationBindingsFromGenerated(bindings)
+	authored := factorydefinitionentry.OperationBindingsFromGenerated(bindings)
 	result := make([]models.ModelOperationBinding, len(authored))
 	for i := range authored {
 		result[i] = models.ModelOperationBinding{

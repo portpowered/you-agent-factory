@@ -13,6 +13,7 @@ import (
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/transports/mapping/validationentry"
+	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/transports/mapping/workerinference"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
@@ -25,4 +26,13 @@ func ValidateFactoryAPI(
 	operation interfaces.SubmittedDefinitionValidationOperation,
 ) (interfaces.ValidationResult, error) {
 	return validationentry.ValidateFactoryAPI(ctx, factory, operation)
+}
+
+// OperationBindingsFromGenerated maps generated workstation operation bindings
+// onto the Factory Definitions model operation bindings that worker inference
+// reads.
+func OperationBindingsFromGenerated(
+	values *[]factoryapi.WorkstationOperationBinding,
+) []interfaces.ModelOperationBinding {
+	return workerinference.OperationBindingsFromGenerated(values)
 }

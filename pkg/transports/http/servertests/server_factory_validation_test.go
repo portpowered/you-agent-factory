@@ -15,7 +15,7 @@ import (
 	api "github.com/portpowered/infinite-you/pkg/transports/http"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
-	factoryconfig "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig/diagnostics"
+	factoryconfig "github.com/portpowered/infinite-you/pkg/services/factory_definitions/transports/mapping/factoryconfig/diagnostics"
 	"go.uber.org/zap"
 )
 
