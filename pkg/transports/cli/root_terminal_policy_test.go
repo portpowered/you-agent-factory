@@ -13,12 +13,12 @@ import (
 	"strings"
 	"testing"
 
+	workcli "github.com/portpowered/infinite-you/pkg/services/work/transports/cli/work"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
+	workersessionscli "github.com/portpowered/infinite-you/pkg/services/worker_sessions/transports/cli/worker_sessions"
 	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
 	submitcli "github.com/portpowered/infinite-you/pkg/transports/cli/submit"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/terminalpolicy"
-	workcli "github.com/portpowered/infinite-you/pkg/transports/cli/work"
-	workersessionscli "github.com/portpowered/infinite-you/pkg/services/worker_sessions/transports/cli/worker_sessions"
 )
 
 const (

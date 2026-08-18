@@ -16,11 +16,11 @@ import (
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	modelscli "github.com/portpowered/infinite-you/pkg/services/models/transports/cli"
 	operatorconfig "github.com/portpowered/infinite-you/pkg/services/operator_settings"
+	workcli "github.com/portpowered/infinite-you/pkg/services/work/transports/cli/work"
 	acpcli "github.com/portpowered/infinite-you/pkg/transports/cli/acp"
 	factorycli "github.com/portpowered/infinite-you/pkg/transports/cli/factory"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/generated"
 	submitcli "github.com/portpowered/infinite-you/pkg/transports/cli/submit"
-	workcli "github.com/portpowered/infinite-you/pkg/transports/cli/work"
 )
 
 type modelsCLIServiceFunctions struct {
