@@ -400,6 +400,18 @@
       "minimum": 39.72
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/transports/cli/cobracompletion",
+      "minimum": 10.76
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/transports/cli/config",
+      "minimum": 62.22
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/transports/cli/factoryload",
+      "minimum": 77.50
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/transports/mapping/factorydefinition",
       "minimum": 59.09
     },
@@ -414,6 +426,10 @@
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/transports/mapping/validationentry",
       "minimum": 70.31
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/transports/mapping/workerinference",
+      "minimum": 100.00
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire/defaultscaffold",
@@ -1314,16 +1330,8 @@
       "minimum": 71.59
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/transports/cli/cobracompletion",
-      "minimum": 10.76
-    },
-    {
       "package": "github.com/portpowered/infinite-you/pkg/transports/cli/commandregistry",
       "minimum": 60.62
-    },
-    {
-      "package": "github.com/portpowered/infinite-you/pkg/transports/cli/config",
-      "minimum": 62.22
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/transports/cli/dashboard",
@@ -1340,10 +1348,6 @@
     {
       "package": "github.com/portpowered/infinite-you/pkg/transports/cli/factory",
       "minimum": 31.60
-    },
-    {
-      "package": "github.com/portpowered/infinite-you/pkg/transports/cli/factoryload",
-      "minimum": 77.50
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/transports/cli/generated",
@@ -1404,10 +1408,6 @@
     {
       "package": "github.com/portpowered/infinite-you/pkg/transports/mapping/workcontent",
       "minimum": 60.46
-    },
-    {
-      "package": "github.com/portpowered/infinite-you/pkg/transports/mapping/workerinference",
-      "minimum": 100.00
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/transports/mcp/server",

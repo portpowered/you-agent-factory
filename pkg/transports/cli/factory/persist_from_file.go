@@ -8,7 +8,7 @@ import (
 	"strings"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	"github.com/portpowered/infinite-you/pkg/transports/cli/factoryload"
+	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/transports/cli/factoryload"
 )
 
 type persistFromFileMode int

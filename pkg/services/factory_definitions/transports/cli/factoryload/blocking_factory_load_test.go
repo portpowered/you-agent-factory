@@ -7,8 +7,8 @@ import (
 	"testing"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	"github.com/portpowered/infinite-you/pkg/transports/cli/factoryload"
-	configdiagnostics "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig/diagnostics"
+	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/transports/cli/factoryload"
+	configdiagnostics "github.com/portpowered/infinite-you/pkg/services/factory_definitions/transports/mapping/factoryconfig/diagnostics"
 )
 
 func TestBlockingFactoryLoadFindings_PreservesCanonicalTargets(t *testing.T) {

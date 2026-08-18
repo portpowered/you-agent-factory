@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	"github.com/portpowered/infinite-you/pkg/transports/cli/cobracompletion"
+	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/transports/cli/cobracompletion"
 	"github.com/spf13/cobra"
 )
 

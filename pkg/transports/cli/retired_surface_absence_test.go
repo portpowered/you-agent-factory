@@ -7,7 +7,7 @@ import (
 
 	"github.com/portpowered/infinite-you/internal/retiredsurfaceguard"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/commandidentity"
-	configcli "github.com/portpowered/infinite-you/pkg/transports/cli/config"
+	configcli "github.com/portpowered/infinite-you/pkg/services/factory_definitions/transports/cli/config"
 	docscli "github.com/portpowered/infinite-you/pkg/transports/cli/docs"
 	factorycli "github.com/portpowered/infinite-you/pkg/transports/cli/factory"
 )

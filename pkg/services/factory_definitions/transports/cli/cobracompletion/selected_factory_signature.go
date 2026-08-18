@@ -6,7 +6,7 @@ import (
 	"strings"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	"github.com/portpowered/infinite-you/pkg/services/work/transports/cli/climanifest"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifestentry"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/completionprojection"
 	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
 	"github.com/spf13/cobra"
@@ -49,7 +49,7 @@ type SelectedFactorySignatureOperation func(
 // detached selected-Factory signature projection.
 func NewSelectedFactorySignature(
 	catalog factorydefinitions.EffectiveFactoryCatalogOperation,
-	manifest climanifest.Manifest,
+	manifest climanifestentry.Manifest,
 ) SelectedFactorySignatureOperation {
 	return func(
 		ctx context.Context,
@@ -69,7 +69,7 @@ func NewSelectedFactorySignature(
 		if !found {
 			return selectedFactorySignatureFailure()
 		}
-		schema, diagnostics, err := climanifest.ComposeRunInputs(
+		schema, diagnostics, err := climanifestentry.ComposeRunInputs(
 			manifest,
 			"you.run",
 			entry.InvocationSignature,
@@ -77,7 +77,7 @@ func NewSelectedFactorySignature(
 		if err != nil || len(diagnostics) != 0 || completionCancelled(ctx) {
 			return selectedFactorySignatureFailure()
 		}
-		if schema.FactoryInputMode != climanifest.EffectiveFactoryInputModeSignature {
+		if schema.FactoryInputMode != climanifestentry.EffectiveFactoryInputModeSignature {
 			return SelectedFactorySignatureResult{UseFallback: true}
 		}
 
@@ -142,7 +142,7 @@ func selectedFactoryEntry(
 }
 
 func signatureProjectionContext(
-	schema climanifest.EffectiveInputSchema,
+	schema climanifestentry.EffectiveInputSchema,
 	request SelectedFactorySignatureRequest,
 ) (completionprojection.Context, bool) {
 	if request.Target == signatureTargetFlags {

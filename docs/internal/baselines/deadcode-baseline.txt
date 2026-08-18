@@ -167,10 +167,10 @@ pkg/transports/mapping/factoryconfig/authored_helpers.go: unreachable func: Merg
 pkg/transports/mapping/factoryconfig/authored_helpers.go: unreachable func: NormalizeCanonicalWorkstationRuntime
 pkg/transports/mapping/factoryconfig/authored_helpers.go: unreachable func: NormalizeWorkstationTaxonomyKind
 pkg/transports/mapping/factoryconfig/authored_helpers.go: unreachable func: ValidateOpenCodeAgentField
-pkg/transports/mapping/factoryconfig/diagnostics/diagnostics.go: unreachable func: ValidationResult.Error
-pkg/transports/mapping/factoryconfig/diagnostics/diagnostics.go: unreachable func: ValidationResult.Errors
-pkg/transports/mapping/factoryconfig/diagnostics/diagnostics.go: unreachable func: ValidationResult.HasErrors
-pkg/transports/mapping/factoryconfig/diagnostics/diagnostics.go: unreachable func: canonicalTopologyFindings
+pkg/services/factory_definitions/transports/mapping/factoryconfig/diagnostics/diagnostics.go: unreachable func: ValidationResult.Error
+pkg/services/factory_definitions/transports/mapping/factoryconfig/diagnostics/diagnostics.go: unreachable func: ValidationResult.Errors
+pkg/services/factory_definitions/transports/mapping/factoryconfig/diagnostics/diagnostics.go: unreachable func: ValidationResult.HasErrors
+pkg/services/factory_definitions/transports/mapping/factoryconfig/diagnostics/diagnostics.go: unreachable func: canonicalTopologyFindings
 pkg/transports/mapping/factoryconfig/factory_config_mapping_internal.go: unreachable func: cloneFactoryOrchestratorConfig
 pkg/transports/mapping/factorysession/factory_session_mapper_test.go: unreachable func: fixtureDispatchRows
 pkg/transports/mapping/factorysession/factory_session_projection_test.go: unreachable func: resultRequestFromFixture

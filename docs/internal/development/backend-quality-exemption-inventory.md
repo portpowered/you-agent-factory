@@ -64,7 +64,7 @@ blank and `#` comment lines, and deduplicate the remaining full import paths. It
 | `pkg/transports/mapping/factorysession` | 8 | 6 | directive only |
 | `pkg/transports/cli` | 2 | 1 | directive only |
 | `pkg/transports/cli/cliinputs` | 5 | 3 | directive only |
-| `pkg/transports/cli/config` | 2 | 1 | directive + coverage baseline |
+| `pkg/services/factory_definitions/transports/cli/config` | 2 | 1 | directive + coverage baseline |
 | `pkg/transports/cli/init` | 2 | 1 | directive only |
 | `pkg/transports/cli/mcp` | 3 | 3 | directive + coverage baseline |
 | `pkg/transports/cli/run` | 2 | 1 | directive + coverage baseline |
@@ -235,14 +235,14 @@ Owner: `pkg/transports/cli/cliinputs` package maintainers. Status: **directive o
 | `pkg/transports/cli/cliinputs/synthetic_args_relationships_test.go:143` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `assertSyntheticArgumentRecord` | T | T gate |
 | `pkg/transports/cli/cliinputs/synthetic_flags_test.go:437` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `assertSyntheticFlagRecord` | T | T gate |
 
-### `pkg/transports/cli/config`
+### `pkg/services/factory_definitions/transports/cli/config`
 
-Owner: `pkg/transports/cli/config` package maintainers. Status: **directive + coverage baseline**.
+Owner: `pkg/services/factory_definitions/transports/cli/config` package maintainers. Status: **directive + coverage baseline**.
 
 | Source | Directive rule | Target | Reason | Evidence |
 | --- | --- | --- | --- | --- |
-| `pkg/transports/cli/config/config_test.go:228` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `assertDeterministicExpandedRuntimeConfig` | T | T gate |
-| `pkg/transports/cli/config/config_test.go:868` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `assertExistingSplitDefinitionsPreserved` | T | T gate |
+| `pkg/services/factory_definitions/transports/cli/config/config_test.go:228` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `assertDeterministicExpandedRuntimeConfig` | T | T gate |
+| `pkg/services/factory_definitions/transports/cli/config/config_test.go:868` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `assertExistingSplitDefinitionsPreserved` | T | T gate |
 
 ### `pkg/transports/cli/init`
 

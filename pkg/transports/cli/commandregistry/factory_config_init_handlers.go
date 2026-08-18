@@ -9,7 +9,7 @@ import (
 	startupcli "github.com/portpowered/infinite-you/pkg/initializer/process"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorydefinitionscli "github.com/portpowered/infinite-you/pkg/services/factory_definitions/transports/cli"
-	configcli "github.com/portpowered/infinite-you/pkg/transports/cli/config"
+	configcli "github.com/portpowered/infinite-you/pkg/services/factory_definitions/transports/cli/config"
 	factorycli "github.com/portpowered/infinite-you/pkg/transports/cli/factory"
 	"github.com/portpowered/infinite-you/pkg/services/operator_settings/transports/cli/initsetup"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/resolvedinput"
