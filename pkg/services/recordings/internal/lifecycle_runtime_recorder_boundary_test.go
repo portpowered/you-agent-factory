@@ -2,10 +2,11 @@ package internal
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
+	recordingevents "github.com/portpowered/infinite-you/pkg/services/recordings/internal/events"
 	"strings"
 	"testing"
 	"time"
@@ -16,20 +17,16 @@ type runtimeRoot interface {
 	recordings.RuntimeOpening
 }
 
-const (
-	modulePrefix       = "github.com/portpowered/infinite-you/"
-	factoryRuntimeRoot = modulePrefix + "pkg/services/factory_runtime"
-	lifecycleRecorder  = modulePrefix + "pkg/services/recordings/internal"
-)
-
-// TestLifecycleRuntimeRecorderImportsRuntimeRootOnly seals CUT-REC-RUN story 002:
-// the lifecycle recorder edge may depend on Factory Runtime only through the
-// service root contract.
-
-// TestLifecycleRuntimeRecorderAcceptsRuntimeRootFinishedEvent proves the
-// recorder path accepts Runtime-facing event vocabulary from the Runtime root
-// and preserves observable identity, kind, and payload fields.
-func TestLifecycleRuntimeRecorderAcceptsRuntimeRootFinishedEvent(t *testing.T) {
+// TestLifecycleRuntimeRecorderRecordsRuntimeEventsAndTerminalEvent proves the
+// recorder accepts Factory event vocabulary from a runtime producer and
+// preserves observable identity, kind, and payload fields through to the
+// portable artifact, including the terminal run-finished event it appends
+// itself.
+//
+// The recorder no longer depends on Factory Runtime at all; that constraint is
+// enforced repo-wide by the cross-service cycle ratchet (cmd/servicecyclecheck)
+// rather than by an import-shape assertion here.
+func TestLifecycleRuntimeRecorderRecordsRuntimeEventsAndTerminalEvent(t *testing.T) {
 	t.Parallel()
 
 	startedAt := time.Date(2026, 7, 27, 17, 0, 0, 0, time.UTC)
@@ -49,10 +46,10 @@ func TestLifecycleRuntimeRecorderAcceptsRuntimeRootFinishedEvent(t *testing.T) {
 		t.Fatalf("BindRecordingLifecycle: %v", err)
 	}
 
-	runtimeEvent := factoryruntime.FactoryEvent{
+	runtimeEvent := recordings.FactoryEvent{
 		Id:   "runtime-root-work-event",
-		Type: factoryruntime.FactoryEventTypeWorkRequest,
-		Context: factoryruntime.FactoryEventContext{
+		Type: recordings.FactoryEventTypeWorkRequest,
+		Context: recordings.FactoryEventContext{
 			EventTime: startedAt.Add(time.Second),
 		},
 		Payload: []byte(`{"workId":"work-runtime-root"}`),
@@ -94,14 +91,40 @@ func TestLifecycleRuntimeRecorderAcceptsRuntimeRootFinishedEvent(t *testing.T) {
 	}
 
 	finishedEvent := built.Artifact.Events[len(built.Artifact.Events)-1]
-	if finishedEvent.ID != recordings.CanonicalEventID(factoryruntime.RunFinishedFactoryEventID) {
-		t.Fatalf("finished event id = %q, want %q", finishedEvent.ID, factoryruntime.RunFinishedFactoryEventID)
+	if finishedEvent.ID != recordings.CanonicalEventID(recordingevents.RunFinishedFactoryEventID) {
+		t.Fatalf("finished event id = %q, want %q", finishedEvent.ID, recordingevents.RunFinishedFactoryEventID)
 	}
-	if finishedEvent.Kind != recordings.CanonicalEventKind(factoryruntime.FactoryEventTypeRunResponse) {
-		t.Fatalf("finished event kind = %q, want %q", finishedEvent.Kind, factoryruntime.FactoryEventTypeRunResponse)
+	if finishedEvent.Kind != recordings.CanonicalEventKind(recordings.FactoryEventTypeRunResponse) {
+		t.Fatalf("finished event kind = %q, want %q", finishedEvent.Kind, recordings.FactoryEventTypeRunResponse)
 	}
-	if !strings.Contains(finishedEvent.Payload, string(factoryruntime.FactoryStateCompleted)) {
+	if !strings.Contains(finishedEvent.Payload, string(recordings.FactoryStateCompleted)) {
 		t.Fatalf("finished event payload = %q, want completed state", finishedEvent.Payload)
+	}
+
+	assertTerminalRunPayload(t, finishedEvent.Payload, startedAt, finishedAt)
+}
+
+// assertTerminalRunPayload checks the decoded body of the terminal run event.
+// The terminal event is the only record of how long a run took, so its wall
+// clock has to survive into the portable artifact with both ends intact.
+func assertTerminalRunPayload(t *testing.T, rawPayload string, startedAt, finishedAt time.Time) {
+	t.Helper()
+
+	var payload recordings.RunResponseEventPayload
+	if err := json.Unmarshal([]byte(rawPayload), &payload); err != nil {
+		t.Fatalf("decode finished event payload %q: %v", rawPayload, err)
+	}
+	if payload.State == nil || *payload.State != recordings.FactoryStateCompleted {
+		t.Fatalf("finished event state = %#v, want completed", payload.State)
+	}
+	if payload.WallClock == nil {
+		t.Fatalf("finished event has no wall clock, want %s..%s", startedAt, finishedAt)
+	}
+	if payload.WallClock.StartedAt == nil || !payload.WallClock.StartedAt.Equal(startedAt) {
+		t.Fatalf("finished event started at = %v, want %s", payload.WallClock.StartedAt, startedAt)
+	}
+	if payload.WallClock.FinishedAt == nil || !payload.WallClock.FinishedAt.Equal(finishedAt) {
+		t.Fatalf("finished event finished at = %v, want %s", payload.WallClock.FinishedAt, finishedAt)
 	}
 }
 

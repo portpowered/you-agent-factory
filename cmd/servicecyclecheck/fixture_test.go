@@ -108,3 +108,28 @@ func withRemovedBackEdge() []fixtureFile {
 	}
 	return kept
 }
+
+// acyclicFixtureFiles is a synthetic graph with no cycle at all: alpha depends
+// on beta and gamma, beta depends on gamma, and a second component points
+// delta at epsilon. Every arc runs forward along one order, so the minimum
+// feedback arc weight is exactly 0 -- the boundary the decoupling program
+// drives the repository service graph toward.
+func acyclicFixtureFiles() []fixtureFile {
+	return []fixtureFile{
+		{path: "pkg/services/alpha/internal/client.go", imports: []string{"pkg/services/beta"}},
+		{path: "pkg/services/alpha/wire/provider.go", imports: []string{"pkg/services/gamma"}},
+		{path: "pkg/services/beta/contract.go", imports: []string{"pkg/services/gamma"}},
+		{path: "pkg/services/delta/reader.go", imports: []string{"pkg/services/epsilon"}},
+	}
+}
+
+// withSingleBackEdge returns the acyclic fixture plus one gamma->alpha import,
+// the single arc that closes alpha -> beta -> gamma -> alpha. Both cycles it
+// creates run through that one arc, so the minimum feedback arc weight is
+// exactly 1: the smallest cycle a zero ceiling has to reject.
+func withSingleBackEdge() []fixtureFile {
+	return append(acyclicFixtureFiles(), fixtureFile{
+		path:    "pkg/services/gamma/transports/http/callback.go",
+		imports: []string{"pkg/services/alpha"},
+	})
+}

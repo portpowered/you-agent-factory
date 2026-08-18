@@ -81,7 +81,7 @@
     },
     {
       "packagePath": "pkg/services/factory_runtime",
-      "fileCount": 77,
+      "fileCount": 76,
       "owner": "factory-runtime-maintainers",
       "removalReason": "Move runtime capabilities behind focused orchestration and subsystem packages."
     },

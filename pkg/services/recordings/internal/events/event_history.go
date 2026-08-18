@@ -22,7 +22,7 @@ import (
 // the API should respond with the serialized json payloads of those openapi.yaml based schemas.
 const (
 	eventIDRunRequest                       = "factory-event/run-started"
-	eventIDRunResponse                      = "factory-event/run-finished"
+	eventIDRunResponse                      = RunFinishedFactoryEventID
 	eventIDInitialStructure                 = "factory-event/initial-structure/0"
 	eventIDFactoryChangePrefix              = "factory-event/factory-change"
 	eventIDWorkRequestPrefix                = "factory-event/work-request"

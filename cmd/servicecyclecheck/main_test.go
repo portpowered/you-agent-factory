@@ -178,3 +178,64 @@ func repositoryRoot(t *testing.T) string {
 		directory = parent
 	}
 }
+
+// TestRunFailsOnASingleBackEdgeAtAZeroCeiling proves a ceiling of 0 is a real
+// gate rather than a value the checker degenerates on: one back-edge anywhere
+// in the service graph fails the run and is named in the cut set.
+func TestRunFailsOnASingleBackEdgeAtAZeroCeiling(t *testing.T) {
+	t.Parallel()
+
+	stdout, stderr, err := runFixture(t, withSingleBackEdge(), 0)
+	if err == nil {
+		t.Fatalf("a single back-edge must fail at ceiling 0, got success:\n%s", stdout)
+	}
+
+	for _, want := range []string{
+		"cross-service cycle regression",
+		"minimum feedback arc weight is 1",
+		"above the recorded ceiling of 0",
+		"cut set (1 edge(s), total weight 1)",
+		"gamma -> alpha (weight 1)",
+		"carrier package: pkg/services/gamma/transports/http",
+		"LINT_VIOLATION_COUNT: 1",
+	} {
+		if !strings.Contains(stderr, want) {
+			t.Fatalf("zero-ceiling regression output does not contain %q:\n%s", want, stderr)
+		}
+	}
+	if strings.Contains(stderr, "Lower the ceiling") {
+		t.Fatalf("a back-edge at ceiling 0 must not be reported as an improvement:\n%s", stderr)
+	}
+}
+
+// TestRunPassesOnAnAcyclicGraphAtAZeroCeiling is the other half of the
+// boundary: at 0/0 the checker must succeed outright. A ratchet that reported
+// an acyclic graph as an unclaimed improvement would be unsatisfiable once the
+// program reached zero, because there would be no lower ceiling to move to.
+func TestRunPassesOnAnAcyclicGraphAtAZeroCeiling(t *testing.T) {
+	t.Parallel()
+
+	stdout, stderr, err := runFixture(t, acyclicFixtureFiles(), 0)
+	if err != nil {
+		t.Fatalf("an acyclic graph must pass at ceiling 0: %v\nstderr:\n%s", err, stderr)
+	}
+	if stderr != "" {
+		t.Fatalf("a passing zero-ceiling run wrote to stderr:\n%s", stderr)
+	}
+
+	for _, want := range []string{
+		diagnosticPrefix,
+		"minimum feedback arc weight 0",
+		"in 0 cut edge(s)",
+		"matches ceiling 0",
+	} {
+		if !strings.Contains(stdout, want) {
+			t.Fatalf("zero-ceiling success output does not contain %q:\n%s", want, stdout)
+		}
+	}
+	for _, unwanted := range []string{"Lower the ceiling", "LINT_VIOLATION_COUNT", "cut set"} {
+		if strings.Contains(stdout, unwanted) {
+			t.Fatalf("a 0/0 run must not take the unclaimed-improvement branch, got %q in:\n%s", unwanted, stdout)
+		}
+	}
+}

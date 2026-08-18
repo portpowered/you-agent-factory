@@ -1579,11 +1579,6 @@
     },
     {
       "rule": "service-root-exported-function",
-      "filePath": "pkg/services/factory_runtime/recording_event_contracts.go",
-      "target": "RunFinishedFactoryEvent"
-    },
-    {
-      "rule": "service-root-exported-function",
       "filePath": "pkg/services/factory_runtime/recording_policy.go",
       "target": "ValidateRecordReplayPaths"
     },
