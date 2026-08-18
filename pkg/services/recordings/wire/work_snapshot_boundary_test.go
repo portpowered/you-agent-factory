@@ -1,4 +1,4 @@
-package work_test
+package wire_test
 
 import (
 	"context"
@@ -6,18 +6,19 @@ import (
 	"errors"
 	"testing"
 
-	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	"github.com/portpowered/infinite-you/pkg/services/recordings"
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	recordings "github.com/portpowered/infinite-you/pkg/services/recordings"
+	recordingswire "github.com/portpowered/infinite-you/pkg/services/recordings/wire"
 	"github.com/portpowered/infinite-you/pkg/services/work"
-	stateaccess "github.com/portpowered/infinite-you/pkg/services/work/internal/services/state_access"
-	stateaccesswire "github.com/portpowered/infinite-you/pkg/services/work/internal/services/state_access/wire"
 )
 
-// TestWorkConstructsRecordingsRequestsThroughRoot proves CUT-WORK-REC story 003:
-// leased Work state_access Recordings-backed reads construct Recordings queries
-// only through the published Recordings service root contract.
-// pkgmaintcheck:ignore-cyclomatic-complexity pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption
-func TestWorkConstructsRecordingsRequestsThroughRoot(t *testing.T) {
+// TestWorkSnapshotReaderConstructsRecordingsRequestsThroughRoot proves the
+// Recordings-owned Work snapshot reader constructs Recordings queries only
+// through the published Recordings service root contract. The fake implements
+// the whole published root, so any reach past the two query operations would
+// show up here. Each read builds its own scoped subscribe/reconstruct pair, so
+// a consumer that reads twice never reuses a previous read's replay window.
+func TestWorkSnapshotReaderConstructsRecordingsRequestsThroughRoot(t *testing.T) {
 	t.Parallel()
 
 	scope := recordings.CanonicalEventScope{FactorySessionID: "session-recordings-root"}
@@ -26,7 +27,7 @@ func TestWorkConstructsRecordingsRequestsThroughRoot(t *testing.T) {
 		Sequence:    0,
 		FactoryTick: 3,
 		Scope:       scope,
-		Kind:        recordings.CanonicalEventKind(interfaces.FactoryEventTypeWorkRequest),
+		Kind:        recordings.CanonicalEventKind(factorydefinitions.FactoryEventTypeWorkRequest),
 		Payload:     `{"requestId":"request-1"}`,
 	}}
 	fake := &workRecordingsRootFake{
@@ -38,30 +39,23 @@ func TestWorkConstructsRecordingsRequestsThroughRoot(t *testing.T) {
 			Payload:       recordingsBackedWorldPayload(t, "work-story", "story", "review"),
 		},
 	}
-	svc := stateaccesswire.NewService(
-		unavailableSessionResolver{},
-		stateaccesswire.NewRecordingsAdapter(fake),
-	)
+	reader := recordingswire.NewWorkSnapshotReader(fake)
 	ctx := context.Background()
 
-	list, err := svc.ListWork(ctx, "session-recordings-root", work.ListOptions{})
+	first, err := reader.ReadWorkSnapshot(ctx, "session-recordings-root")
 	if err != nil {
-		t.Fatalf("ListWork: %v", err)
+		t.Fatalf("ReadWorkSnapshot: %v", err)
 	}
-	if len(list.Results) != 1 || list.Results[0].WorkID != "work-story" {
-		t.Fatalf("ListWork = %#v, want one story work item", list)
-	}
-	if list.Results[0].State == nil || list.Results[0].State.Name != "review" {
-		t.Fatalf("ListWork state = %#v, want review", list.Results[0].State)
-	}
+	assertReviewStorySnapshot(t, first)
 
-	got, err := svc.GetWork(ctx, "session-recordings-root", "work-story")
-	if err != nil || got.WorkID != "work-story" || got.State.Name != "review" {
-		t.Fatalf("GetWork = %#v, %v", got, err)
+	second, err := reader.ReadWorkSnapshot(ctx, "session-recordings-root")
+	if err != nil {
+		t.Fatalf("second ReadWorkSnapshot: %v", err)
 	}
+	assertReviewStorySnapshot(t, second)
 
 	if len(fake.subscribeRequests) != 2 {
-		t.Fatalf("subscribe requests = %d, want 2 (ListWork and GetWork)", len(fake.subscribeRequests))
+		t.Fatalf("subscribe requests = %d, want one per read", len(fake.subscribeRequests))
 	}
 	for _, request := range fake.subscribeRequests {
 		if request.Scope != scope {
@@ -69,7 +63,7 @@ func TestWorkConstructsRecordingsRequestsThroughRoot(t *testing.T) {
 		}
 	}
 	if len(fake.reconstructRequests) != 2 {
-		t.Fatalf("reconstruct requests = %d, want 2", len(fake.reconstructRequests))
+		t.Fatalf("reconstruct requests = %d, want one per read", len(fake.reconstructRequests))
 	}
 	for _, request := range fake.reconstructRequests {
 		if request.Scope != scope || request.SelectedTick != 3 || len(request.Events) != 1 {
@@ -78,34 +72,33 @@ func TestWorkConstructsRecordingsRequestsThroughRoot(t *testing.T) {
 	}
 }
 
-// TestWorkRecordingsTypedProjectionFailuresSurfaceThroughReadEdge proves typed
-// Recordings projection failures propagate through the leased Work read edge.
-func TestWorkRecordingsTypedProjectionFailuresSurfaceThroughReadEdge(t *testing.T) {
+// TestWorkSnapshotReaderTypedRootFailuresStayClassifiable proves a typed
+// failure raised by the published Recordings root reaches the reader's caller
+// unchanged, so a Work consumer can still classify it by Recordings sentinel
+// without importing anything beyond the sentinel it already names.
+func TestWorkSnapshotReaderTypedRootFailuresStayClassifiable(t *testing.T) {
 	t.Parallel()
 
-	svc := stateaccesswire.NewService(
-		unavailableSessionResolver{},
-		stateaccesswire.NewRecordingsAdapter(&workRecordingsRootFake{
-			reconstructErr: recordings.ErrInvalidProjectionInput,
-		}),
-	)
-	_, err := svc.ListWork(context.Background(), "session-recordings-root", work.ListOptions{})
+	reader := recordingswire.NewWorkSnapshotReader(&workRecordingsRootFake{
+		reconstructErr: recordings.ErrInvalidProjectionInput,
+	})
+	_, err := reader.ReadWorkSnapshot(context.Background(), "session-recordings-root")
 	if err == nil {
-		t.Fatal("ListWork error = nil, want typed projection failure")
+		t.Fatal("ReadWorkSnapshot error = nil, want typed projection failure")
 	}
 	if !errors.Is(err, recordings.ErrInvalidProjectionInput) {
-		t.Fatalf("ListWork error = %v, want ErrInvalidProjectionInput", err)
+		t.Fatalf("ReadWorkSnapshot error = %v, want ErrInvalidProjectionInput", err)
 	}
 }
 
-// TestWorkRecordingsRequestConstructionImportsRecordingsRootOnly seals the
-// request-construction path: Work boundary tests may depend on Recordings query
-// helpers only through the service root contract.
-
-type unavailableSessionResolver struct{}
-
-func (unavailableSessionResolver) ResolveSessionAdapter(string) (stateaccess.SessionAdapter, error) {
-	return nil, errors.New("session unavailable")
+func assertReviewStorySnapshot(t *testing.T, snapshot work.ReadSnapshot) {
+	t.Helper()
+	if len(snapshot.Items) != 1 || snapshot.Items[0].WorkID != "work-story" {
+		t.Fatalf("snapshot = %#v, want one story work item", snapshot)
+	}
+	if snapshot.Items[0].State == nil || snapshot.Items[0].State.Name != "review" {
+		t.Fatalf("snapshot state = %#v, want review", snapshot.Items[0].State)
+	}
 }
 
 type workRecordingsRootFake struct {
@@ -362,11 +355,11 @@ func recordingsBackedWorldPayload(
 	stateName string,
 ) string {
 	t.Helper()
-	state := interfaces.FactoryWorldState{
-		Topology: interfaces.InitialStructurePayload{
-			WorkTypes: []interfaces.FactoryWorkType{{
+	state := factorydefinitions.FactoryWorldState{
+		Topology: factorydefinitions.InitialStructurePayload{
+			WorkTypes: []factorydefinitions.FactoryWorkType{{
 				ID: workTypeID,
-				States: []interfaces.FactoryStateDefinition{
+				States: []factorydefinitions.FactoryStateDefinition{
 					{Value: "init", Category: work.StateTypeInitial},
 					{Value: "review", Category: work.StateTypeProcessing},
 				},

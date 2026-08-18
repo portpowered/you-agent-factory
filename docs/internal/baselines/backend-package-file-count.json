@@ -267,7 +267,7 @@
     },
     {
       "packagePath": "pkg/services/work",
-      "fileCount": 25,
+      "fileCount": 24,
       "owner": "work-maintainers",
       "removalReason": "Continue extracting Work capabilities into focused child packages."
     },

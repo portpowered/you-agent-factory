@@ -5,10 +5,10 @@ import (
 	"errors"
 	"testing"
 
-	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
-	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
+	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
 func TestReadSnapshotFromWorldStateRejectsUnsupportedViews(t *testing.T) {
@@ -43,11 +43,11 @@ func TestReadSnapshotFromWorldStateRejectsInvalidPayload(t *testing.T) {
 func TestReadSnapshotFromFactoryWorldStateMapsActiveFailedTerminalAndRelations(t *testing.T) {
 	t.Parallel()
 
-	state := interfaces.FactoryWorldState{
-		Topology: interfaces.InitialStructurePayload{
-			WorkTypes: []interfaces.FactoryWorkType{{
+	state := factorydefinitions.FactoryWorldState{
+		Topology: factorydefinitions.InitialStructurePayload{
+			WorkTypes: []factorydefinitions.FactoryWorkType{{
 				ID: "story",
-				States: []interfaces.FactoryStateDefinition{
+				States: []factorydefinitions.FactoryStateDefinition{
 					{Value: "init", Category: work.StateTypeInitial},
 					{Value: "review", Category: work.StateTypeProcessing},
 					{Value: "done", Category: work.StateTypeTerminal},
@@ -55,9 +55,9 @@ func TestReadSnapshotFromFactoryWorldStateMapsActiveFailedTerminalAndRelations(t
 			}},
 		},
 		WorkItemsByID: map[string]work.FactoryWorkItem{
-			interfaces.SystemTimeWorkTypeID: {
-				ID:         interfaces.SystemTimeWorkTypeID,
-				WorkTypeID: interfaces.SystemTimeWorkTypeID,
+			factorydefinitions.SystemTimeWorkTypeID: {
+				ID:         factorydefinitions.SystemTimeWorkTypeID,
+				WorkTypeID: factorydefinitions.SystemTimeWorkTypeID,
 				State:      "pending",
 			},
 			"work-active": {
@@ -95,7 +95,7 @@ func TestReadSnapshotFromFactoryWorldStateMapsActiveFailedTerminalAndRelations(t
 				State:      "review",
 			},
 		},
-		TerminalWorkByID: map[string]interfaces.FactoryTerminalWork{
+		TerminalWorkByID: map[string]factorydefinitions.FactoryTerminalWork{
 			"work-terminal": {
 				WorkItem: work.FactoryWorkItem{
 					ID:         "work-terminal",
@@ -121,7 +121,7 @@ func TestReadSnapshotFromFactoryWorldStateMapsActiveFailedTerminalAndRelations(t
 	for _, item := range snapshot.Items {
 		byID[item.WorkID] = item
 	}
-	if _, ok := byID[interfaces.SystemTimeWorkTypeID]; ok {
+	if _, ok := byID[factorydefinitions.SystemTimeWorkTypeID]; ok {
 		t.Fatalf("system time work leaked into snapshot: %#v", snapshot)
 	}
 	if byID["work-active"].State == nil || byID["work-active"].State.Type != work.StateTypeProcessing {
@@ -144,14 +144,14 @@ func TestReadSnapshotFromFactoryWorldStateMapsActiveFailedTerminalAndRelations(t
 func TestReadSnapshotFromFactoryWorldStateLinksPendingHumanApprovalsToWork(t *testing.T) {
 	t.Parallel()
 
-	description := interfaces.NameValueConfig{Value: "Review release"}
-	state := interfaces.FactoryWorldState{
+	description := factorydefinitions.NameValueConfig{Value: "Review release"}
+	state := factorydefinitions.FactoryWorldState{
 		WorkItemsByID: map[string]work.FactoryWorkItem{
 			"work-with-description":    {ID: "work-with-description", WorkTypeID: "story", State: "review"},
 			"work-without-description": {ID: "work-without-description", WorkTypeID: "story", State: "review"},
 			"work-without-approval":    {ID: "work-without-approval", WorkTypeID: "story", State: "review"},
 		},
-		PendingHumanApprovalsByID: map[string]interfaces.FactoryWorldHumanApproval{
+		PendingHumanApprovalsByID: map[string]factorydefinitions.FactoryWorldHumanApproval{
 			"approval-z": {
 				ApprovalID:      "approval-z",
 				SessionID:       "session-1",
@@ -159,8 +159,8 @@ func TestReadSnapshotFromFactoryWorldStateLinksPendingHumanApprovalsToWork(t *te
 				WorkstationID:   "review",
 				WorkstationName: "Review release",
 				WorkItemIDs:     []string{"work-without-description"},
-				Decisions:       []interfaces.HumanApprovalDecision{interfaces.HumanApprovalDecisionApprove},
-				Status:          interfaces.HumanApprovalStatusPending,
+				Decisions:       []factorydefinitions.HumanApprovalDecision{factorydefinitions.HumanApprovalDecisionApprove},
+				Status:          factorydefinitions.HumanApprovalStatusPending,
 			},
 			"approval-a": {
 				ApprovalID:             "approval-a",
@@ -170,8 +170,8 @@ func TestReadSnapshotFromFactoryWorldStateLinksPendingHumanApprovalsToWork(t *te
 				WorkstationName:        "Review release",
 				WorkstationDescription: &description,
 				WorkItemIDs:            []string{"work-with-description"},
-				Decisions:              []interfaces.HumanApprovalDecision{interfaces.HumanApprovalDecisionApprove, interfaces.HumanApprovalDecisionReject},
-				Status:                 interfaces.HumanApprovalStatusPending,
+				Decisions:              []factorydefinitions.HumanApprovalDecision{factorydefinitions.HumanApprovalDecisionApprove, factorydefinitions.HumanApprovalDecisionReject},
+				Status:                 factorydefinitions.HumanApprovalStatusPending,
 			},
 		},
 	}
@@ -187,8 +187,8 @@ func TestReadSnapshotFromFactoryWorldStateLinksPendingHumanApprovalsToWork(t *te
 	}
 	withDescription := byID["work-with-description"].HumanApproval
 	if withDescription == nil || withDescription.ApprovalID != "approval-a" || withDescription.Description != "Review release" ||
-		withDescription.Status != string(interfaces.HumanApprovalStatusPending) ||
-		len(withDescription.Decisions) != 2 || withDescription.Decisions[1] != string(interfaces.HumanApprovalDecisionReject) {
+		withDescription.Status != string(factorydefinitions.HumanApprovalStatusPending) ||
+		len(withDescription.Decisions) != 2 || withDescription.Decisions[1] != string(factorydefinitions.HumanApprovalDecisionReject) {
 		t.Fatalf("approval read model = %#v, want stable display and decision metadata", withDescription)
 	}
 	if byID["work-without-approval"].HumanApproval != nil {
@@ -199,15 +199,15 @@ func TestReadSnapshotFromFactoryWorldStateLinksPendingHumanApprovalsToWork(t *te
 func TestReadSnapshotFromFactoryWorldStateProjectsArtifactVerificationWithoutScanning(t *testing.T) {
 	t.Parallel()
 
-	state := interfaces.FactoryWorldState{
-		Topology: interfaces.InitialStructurePayload{
-			WorkTypes: []interfaces.FactoryWorkType{{
+	state := factorydefinitions.FactoryWorldState{
+		Topology: factorydefinitions.InitialStructurePayload{
+			WorkTypes: []factorydefinitions.FactoryWorkType{{
 				ID: "story",
 				ExpectedArtifacts: []work.ExpectedArtifactDeclaration{{
 					Name: "report", Pattern: "reports/{{ (index .Inputs 0).Name }}.json", NonEmpty: true,
 				}},
 			}},
-			Workstations: []interfaces.FactoryWorkstation{{
+			Workstations: []factorydefinitions.FactoryWorkstation{{
 				ID: "publish", Name: "publish", InputPlaceIDs: []string{"story:review"},
 				ExpectedArtifacts: []work.ExpectedArtifactDeclaration{{
 					Name: "manifest", Pattern: "reports/manifest.json",
@@ -220,25 +220,25 @@ func TestReadSnapshotFromFactoryWorldStateProjectsArtifactVerificationWithoutSca
 			"failed":    {ID: "failed", WorkTypeID: "story", DisplayName: "failed", State: "review", PlaceID: "story:review"},
 			"plain":     {ID: "plain", WorkTypeID: "plain", DisplayName: "plain", State: "review", PlaceID: "plain:review"},
 		},
-		ActiveDispatches: map[string]interfaces.FactoryWorldDispatch{
+		ActiveDispatches: map[string]factorydefinitions.FactoryWorldDispatch{
 			"dispatch-pending": {
-				DispatchID: "dispatch-pending", TransitionID: "publish", Workstation: interfaces.FactoryWorkstationRef{ID: "publish", Name: "publish"},
-				WorkItemIDs: []string{"pending"}, Inputs: []interfaces.WorkstationInput{{WorkItem: &work.FactoryWorkItem{ID: "pending", WorkTypeID: "story", DisplayName: "pending"}}},
+				DispatchID: "dispatch-pending", TransitionID: "publish", Workstation: factorydefinitions.FactoryWorkstationRef{ID: "publish", Name: "publish"},
+				WorkItemIDs: []string{"pending"}, Inputs: []factorydefinitions.WorkstationInput{{WorkItem: &work.FactoryWorkItem{ID: "pending", WorkTypeID: "story", DisplayName: "pending"}}},
 			},
 		},
-		CompletedDispatches: []interfaces.FactoryWorldDispatchCompletion{
+		CompletedDispatches: []factorydefinitions.FactoryWorldDispatchCompletion{
 			{
-				DispatchID: "dispatch-satisfied", TransitionID: "publish", Workstation: interfaces.FactoryWorkstationRef{ID: "publish", Name: "publish"},
+				DispatchID: "dispatch-satisfied", TransitionID: "publish", Workstation: factorydefinitions.FactoryWorkstationRef{ID: "publish", Name: "publish"},
 				WorkItemIDs: []string{"satisfied"}, InputWorkItems: []work.FactoryWorkItem{{ID: "satisfied", WorkTypeID: "story", DisplayName: "satisfied"}},
-				Result: workerexecution.WorkstationResult{Outcome: string(workerexecution.OutcomeAccepted)},
+				Result: workers.WorkstationResult{Outcome: string(workers.OutcomeAccepted)},
 			},
 			{
-				DispatchID: "dispatch-failed", TransitionID: "publish", Workstation: interfaces.FactoryWorkstationRef{ID: "publish", Name: "publish"},
+				DispatchID: "dispatch-failed", TransitionID: "publish", Workstation: factorydefinitions.FactoryWorkstationRef{ID: "publish", Name: "publish"},
 				WorkItemIDs: []string{"failed"}, InputWorkItems: []work.FactoryWorkItem{{ID: "failed", WorkTypeID: "story", DisplayName: "failed"}},
-				Result: workerexecution.WorkstationResult{
-					Outcome: string(workerexecution.OutcomeFailed),
-					ArtifactVerification: &workerexecution.ExpectedArtifactVerification{Entries: []workerexecution.ExpectedArtifactVerificationEntry{{
-						Name: "manifest", Pattern: "reports/manifest.json", Reason: workerexecution.ExpectedArtifactVerificationReasonEmpty,
+				Result: workers.WorkstationResult{
+					Outcome: string(workers.OutcomeFailed),
+					ArtifactVerification: &workers.ExpectedArtifactVerification{Entries: []workers.ExpectedArtifactVerificationEntry{{
+						Name: "manifest", Pattern: "reports/manifest.json", Reason: workers.ExpectedArtifactVerificationReasonEmpty,
 					}}},
 				},
 			},
@@ -266,21 +266,21 @@ func TestReadSnapshotFromFactoryWorldStateProjectsArtifactVerificationWithoutSca
 
 func TestReadSnapshotFromFactoryWorldStateProjectsRecordedArtifactContext(t *testing.T) {
 	t.Parallel()
-	state := interfaces.FactoryWorldState{
-		Topology: interfaces.InitialStructurePayload{
-			WorkTypes: []interfaces.FactoryWorkType{{
+	state := factorydefinitions.FactoryWorldState{
+		Topology: factorydefinitions.InitialStructurePayload{
+			WorkTypes: []factorydefinitions.FactoryWorkType{{
 				ID: "story",
 				ExpectedArtifacts: []work.ExpectedArtifactDeclaration{{
 					Name: "report", Pattern: "{{ .Context.Project }}/{{ .Context.SessionID }}/{{ (index .Inputs 0).Project }}/{{ (index .Inputs 0).Payload }}/report.txt",
 				}},
 			}},
-			Workstations: []interfaces.FactoryWorkstation{{ID: "publish", Name: "publish"}},
+			Workstations: []factorydefinitions.FactoryWorkstation{{ID: "publish", Name: "publish"}},
 		},
 		WorkItemsByID: map[string]work.FactoryWorkItem{
 			"work-1": {ID: "work-1", WorkTypeID: "story", DisplayName: "story", State: "review"},
 		},
-		CompletedDispatches: []interfaces.FactoryWorldDispatchCompletion{{
-			DispatchID: "dispatch-1", TransitionID: "publish", Workstation: interfaces.FactoryWorkstationRef{ID: "publish", Name: "publish"},
+		CompletedDispatches: []factorydefinitions.FactoryWorldDispatchCompletion{{
+			DispatchID: "dispatch-1", TransitionID: "publish", Workstation: factorydefinitions.FactoryWorkstationRef{ID: "publish", Name: "publish"},
 			ExpectedArtifactContext: &work.ExpectedArtifactTemplateContext{
 				Project:   "project-7",
 				SessionID: "session-9",
@@ -290,7 +290,7 @@ func TestReadSnapshotFromFactoryWorldStateProjectsRecordedArtifactContext(t *tes
 				}},
 			},
 			WorkItemIDs: []string{"work-1"}, InputWorkItems: []work.FactoryWorkItem{{ID: "work-1", WorkTypeID: "story", DisplayName: "story"}},
-			Result: interfaces.WorkstationResult{Outcome: string(workerexecution.OutcomeAccepted)},
+			Result: factorydefinitions.WorkstationResult{Outcome: string(workers.OutcomeAccepted)},
 		}},
 	}
 	snapshot := readSnapshotFromFactoryWorldState(state)
@@ -306,14 +306,14 @@ func TestWorkStateCategoryFallsBackToInitialWhenUnknown(t *testing.T) {
 
 	state := &work.State{
 		Name: "unknown-state",
-		Type: workStateCategory(interfaces.InitialStructurePayload{}, "story", "unknown-state"),
+		Type: workStateCategory(factorydefinitions.InitialStructurePayload{}, "story", "unknown-state"),
 	}
 	if state.Type != "" {
 		t.Fatalf("workStateCategory = %q, want empty category", state.Type)
 	}
 	item := workStateFromItem(
 		work.FactoryWorkItem{ID: "work-1", WorkTypeID: "story", State: "unknown-state"},
-		interfaces.FactoryWorldState{},
+		factorydefinitions.FactoryWorldState{},
 		false,
 	)
 	if item == nil || item.Type != work.StateTypeInitial {
@@ -350,11 +350,11 @@ func TestFirstNonEmptyReturnsFirstTrimmedValue(t *testing.T) {
 	}
 }
 
-func TestReadWorkSnapshotRejectsNilRecordingsRoot(t *testing.T) {
+func TestReadWorkSnapshotRejectsANilRecordingsRoot(t *testing.T) {
 	t.Parallel()
 
-	adapter := recordingsAdapter{}
-	_, err := adapter.ReadWorkSnapshot(context.Background(), "session-1")
+	reader := workSnapshotReader{}
+	_, err := reader.ReadWorkSnapshot(context.Background(), "session-1")
 	if err == nil || err.Error() != "Recordings service is required" {
 		t.Fatalf("ReadWorkSnapshot error = %v, want missing Recordings service", err)
 	}
@@ -364,10 +364,10 @@ func TestWorkStateCategoryMatchesWorkTypeName(t *testing.T) {
 	t.Parallel()
 
 	category := workStateCategory(
-		interfaces.InitialStructurePayload{
-			WorkTypes: []interfaces.FactoryWorkType{{
+		factorydefinitions.InitialStructurePayload{
+			WorkTypes: []factorydefinitions.FactoryWorkType{{
 				Name: "story",
-				States: []interfaces.FactoryStateDefinition{
+				States: []factorydefinitions.FactoryStateDefinition{
 					{Value: "review", Category: work.StateTypeProcessing},
 				},
 			}},
@@ -384,17 +384,17 @@ func TestWorkStateCategorySkipsNonMatchingWorkTypes(t *testing.T) {
 	t.Parallel()
 
 	category := workStateCategory(
-		interfaces.InitialStructurePayload{
-			WorkTypes: []interfaces.FactoryWorkType{
+		factorydefinitions.InitialStructurePayload{
+			WorkTypes: []factorydefinitions.FactoryWorkType{
 				{
 					ID: "bug",
-					States: []interfaces.FactoryStateDefinition{
+					States: []factorydefinitions.FactoryStateDefinition{
 						{Value: "triage", Category: work.StateTypeInitial},
 					},
 				},
 				{
 					ID: "story",
-					States: []interfaces.FactoryStateDefinition{
+					States: []factorydefinitions.FactoryStateDefinition{
 						{Value: "review", Category: work.StateTypeProcessing},
 					},
 				},
@@ -411,30 +411,30 @@ func TestWorkStateCategorySkipsNonMatchingWorkTypes(t *testing.T) {
 func TestReadSnapshotFromFactoryWorldStateUsesFailedDispatchAndFailureDetailArtifactFacts(t *testing.T) {
 	t.Parallel()
 
-	topology := interfaces.InitialStructurePayload{
-		WorkTypes: []interfaces.FactoryWorkType{{
+	topology := factorydefinitions.InitialStructurePayload{
+		WorkTypes: []factorydefinitions.FactoryWorkType{{
 			ID: "story", ExpectedArtifacts: []work.ExpectedArtifactDeclaration{{Name: "report", Pattern: "report.txt"}},
 		}},
-		Workstations: []interfaces.FactoryWorkstation{{
+		Workstations: []factorydefinitions.FactoryWorkstation{{
 			ID: "review", Name: "review", InputPlaceIDs: []string{"story:review"},
 			ExpectedArtifacts: []work.ExpectedArtifactDeclaration{{Name: "manifest", Pattern: "manifest.json"}},
 		}},
 	}
 	failedDispatchItem := work.FactoryWorkItem{ID: "failed-dispatch", WorkTypeID: "story", DisplayName: "failed dispatch", State: "review"}
 	failureDetailItem := work.FactoryWorkItem{ID: "failed-detail", WorkTypeID: "story", DisplayName: "failed detail", State: "review"}
-	state := interfaces.FactoryWorldState{
+	state := factorydefinitions.FactoryWorldState{
 		Topology:      topology,
 		WorkItemsByID: map[string]work.FactoryWorkItem{failedDispatchItem.ID: failedDispatchItem, failureDetailItem.ID: failureDetailItem},
-		FailedDispatches: []interfaces.FactoryWorldDispatchCompletion{{
-			DispatchID: "dispatch-failed", TransitionID: "review", Workstation: interfaces.FactoryWorkstationRef{ID: "review", Name: "review"},
-			WorkItemIDs: []string{failedDispatchItem.ID}, Result: interfaces.WorkstationResult{Outcome: string(workerexecution.OutcomeAccepted)},
+		FailedDispatches: []factorydefinitions.FactoryWorldDispatchCompletion{{
+			DispatchID: "dispatch-failed", TransitionID: "review", Workstation: factorydefinitions.FactoryWorkstationRef{ID: "review", Name: "review"},
+			WorkItemIDs: []string{failedDispatchItem.ID}, Result: factorydefinitions.WorkstationResult{Outcome: string(workers.OutcomeAccepted)},
 		}},
-		FailureDetailsByWorkID: map[string]interfaces.FactoryWorldFailureDetail{
+		FailureDetailsByWorkID: map[string]factorydefinitions.FactoryWorldFailureDetail{
 			failureDetailItem.ID: {
 				DispatchID: "dispatch-detail", TransitionID: "review", WorkstationName: "review", WorkItem: failureDetailItem,
 				ExpectedArtifactContext: &work.ExpectedArtifactTemplateContext{Project: "project-7", SessionID: "session-9"},
-				ArtifactVerification: &workerexecution.ExpectedArtifactVerification{Entries: []workerexecution.ExpectedArtifactVerificationEntry{{
-					Name: "manifest", Pattern: "manifest.json", Reason: workerexecution.ExpectedArtifactVerificationReasonEmpty,
+				ArtifactVerification: &workers.ExpectedArtifactVerification{Entries: []workers.ExpectedArtifactVerificationEntry{{
+					Name: "manifest", Pattern: "manifest.json", Reason: workers.ExpectedArtifactVerificationReasonEmpty,
 				}}},
 			},
 		},
@@ -463,15 +463,15 @@ func TestWorldArtifactProjectionCoversFallbackBranches(t *testing.T) {
 	if got := worldArtifactObservation(nil); got.Verified || len(got.Entries) != 0 {
 		t.Fatalf("nil observation = %#v, want empty", got)
 	}
-	if got := worldArtifactObservationFromResult(workerexecution.WorkstationResult{Outcome: string(workerexecution.OutcomeFailed)}); got.Verified {
+	if got := worldArtifactObservationFromResult(workers.WorkstationResult{Outcome: string(workers.OutcomeFailed)}); got.Verified {
 		t.Fatalf("failed nil-verification observation = %#v, want pending", got)
 	}
-	if got := worldWorkstationArtifactDeclarations(interfaces.InitialStructurePayload{}, "missing", "missing"); got != nil {
+	if got := worldWorkstationArtifactDeclarations(factorydefinitions.InitialStructurePayload{}, "missing", "missing"); got != nil {
 		t.Fatalf("missing workstation declarations = %#v, want nil", got)
 	}
 
 	input := work.FactoryWorkItem{ID: "input"}
-	if !worldDispatchContainsWork(nil, []interfaces.WorkstationInput{{WorkItem: &input}}, nil, nil, input.ID) {
+	if !worldDispatchContainsWork(nil, []factorydefinitions.WorkstationInput{{WorkItem: &input}}, nil, nil, input.ID) {
 		t.Fatal("workstation input did not identify Work")
 	}
 	if !worldDispatchContainsWork(nil, nil, []work.FactoryWorkItem{input}, nil, input.ID) {
@@ -484,8 +484,8 @@ func TestWorldArtifactProjectionCoversFallbackBranches(t *testing.T) {
 		t.Fatal("empty dispatch incorrectly identified Work")
 	}
 
-	topology := interfaces.InitialStructurePayload{
-		Workstations: []interfaces.FactoryWorkstation{{
+	topology := factorydefinitions.InitialStructurePayload{
+		Workstations: []factorydefinitions.FactoryWorkstation{{
 			Name: "review", InputPlaceIDs: []string{"story:review"},
 			ExpectedArtifacts: []work.ExpectedArtifactDeclaration{{Name: "review", Pattern: "review.txt"}},
 		}},

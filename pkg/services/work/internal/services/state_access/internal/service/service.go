@@ -12,8 +12,8 @@ import (
 // Session adapter port and Recordings-backed reads through the private
 // Recordings adapter port.
 type Service struct {
-	sessions    stateaccess.SessionResolver
-	recordings  stateaccess.RecordingsAdapter
+	sessions  stateaccess.SessionResolver
+	snapshots stateaccess.SnapshotReader
 }
 
 var _ stateaccess.Service = (*Service)(nil)
@@ -21,9 +21,9 @@ var _ stateaccess.Service = (*Service)(nil)
 // New constructs the private state_access implementation.
 func New(
 	sessions stateaccess.SessionResolver,
-	recordings stateaccess.RecordingsAdapter,
+	snapshots stateaccess.SnapshotReader,
 ) *Service {
-	return &Service{sessions: sessions, recordings: recordings}
+	return &Service{sessions: sessions, snapshots: snapshots}
 }
 
 func (s *Service) SubmitWorkRequestForSession(

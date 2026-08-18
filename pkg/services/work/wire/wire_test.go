@@ -283,7 +283,7 @@ func TestNewServiceServesPublishedPeerBehavior(t *testing.T) {
 	if err == nil {
 		t.Fatal("ListWork() error = nil, want unresolved runtime failure")
 	}
-	if err.Error() != "Work state access recordings adapter is required" {
+	if err.Error() != "Work state access snapshot reader is required" {
 		t.Fatalf("ListWork() error = %v, want recordings adapter required", err)
 	}
 

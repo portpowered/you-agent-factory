@@ -6,10 +6,10 @@ import (
 	"strings"
 
 	"github.com/portpowered/infinite-you/pkg/platform/jsonvalue"
-	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
-	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
+	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
 func readSnapshotFromWorldState(view recordings.WorldStateView) (work.ReadSnapshot, error) {
@@ -17,14 +17,14 @@ func readSnapshotFromWorldState(view recordings.WorldStateView) (work.ReadSnapsh
 		strings.TrimSpace(view.Payload) == "" {
 		return work.ReadSnapshot{}, recordings.ErrUnsupportedProjectionView
 	}
-	var state interfaces.FactoryWorldState
+	var state factorydefinitions.FactoryWorldState
 	if err := json.Unmarshal([]byte(view.Payload), &state); err != nil {
 		return work.ReadSnapshot{}, recordings.ErrInvalidProjectionInput
 	}
 	return readSnapshotFromFactoryWorldState(state), nil
 }
 
-func readSnapshotFromFactoryWorldState(state interfaces.FactoryWorldState) work.ReadSnapshot {
+func readSnapshotFromFactoryWorldState(state factorydefinitions.FactoryWorldState) work.ReadSnapshot {
 	itemsByID := make(map[string]work.FactoryWorkItem, len(state.WorkItemsByID))
 	for id, item := range state.WorkItemsByID {
 		itemsByID[id] = item
@@ -46,7 +46,7 @@ func readSnapshotFromFactoryWorldState(state interfaces.FactoryWorldState) work.
 
 func readModelFromWorkItem(
 	item work.FactoryWorkItem,
-	state interfaces.FactoryWorldState,
+	state factorydefinitions.FactoryWorldState,
 	names map[string]string,
 	activeIDs map[string]struct{},
 ) work.ReadModel {
@@ -80,7 +80,7 @@ func readModelFromWorkItem(
 	return read
 }
 
-func humanApprovalForWork(workID string, state interfaces.FactoryWorldState) *work.HumanApprovalReadModel {
+func humanApprovalForWork(workID string, state factorydefinitions.FactoryWorldState) *work.HumanApprovalReadModel {
 	approvalIDs := make([]string, 0, len(state.PendingHumanApprovalsByID))
 	for approvalID := range state.PendingHumanApprovalsByID {
 		approvalIDs = append(approvalIDs, approvalID)
@@ -98,7 +98,7 @@ func humanApprovalForWork(workID string, state interfaces.FactoryWorldState) *wo
 				Decisions: make([]string, 0, len(approval.Decisions)), Status: string(approval.Status),
 			}
 			if approval.WorkstationDescription != nil {
-				result.Description = interfaces.ResolveNameValue(*approval.WorkstationDescription, "")
+				result.Description = factorydefinitions.ResolveNameValue(*approval.WorkstationDescription, "")
 			}
 			for _, decision := range approval.Decisions {
 				result.Decisions = append(result.Decisions, string(decision))
@@ -111,7 +111,7 @@ func humanApprovalForWork(workID string, state interfaces.FactoryWorldState) *wo
 
 func workStateFromItem(
 	item work.FactoryWorkItem,
-	state interfaces.FactoryWorldState,
+	state factorydefinitions.FactoryWorldState,
 	inFlight bool,
 ) *work.State {
 	stateName := strings.TrimSpace(item.State)
@@ -135,7 +135,7 @@ func workStateFromItem(
 }
 
 func workStateCategory(
-	topology interfaces.InitialStructurePayload,
+	topology factorydefinitions.InitialStructurePayload,
 	workTypeID string,
 	stateName string,
 ) string {
@@ -179,7 +179,7 @@ func firstNonEmpty(values ...string) string {
 
 func expectedArtifactsFromWorldItem(
 	item work.FactoryWorkItem,
-	state interfaces.FactoryWorldState,
+	state factorydefinitions.FactoryWorldState,
 ) []work.ExpectedArtifactReadModel {
 	workTypeDeclarations := worldWorkTypeArtifactDeclarations(state.Topology, item.WorkTypeID)
 	workstationDeclarations, inputs, observation, templateContext, workstationFound := worldDispatchArtifactFacts(item, state)
@@ -197,7 +197,7 @@ func expectedArtifactsFromWorldItem(
 }
 
 func worldWorkTypeArtifactDeclarations(
-	topology interfaces.InitialStructurePayload,
+	topology factorydefinitions.InitialStructurePayload,
 	workTypeID string,
 ) []work.ExpectedArtifactDeclaration {
 	for _, workType := range topology.WorkTypes {
@@ -210,7 +210,7 @@ func worldWorkTypeArtifactDeclarations(
 
 func worldCandidateWorkstationArtifactDeclarations(
 	item work.FactoryWorkItem,
-	topology interfaces.InitialStructurePayload,
+	topology factorydefinitions.InitialStructurePayload,
 ) []work.ExpectedArtifactDeclaration {
 	placeID := strings.TrimSpace(item.PlaceID)
 	if placeID == "" && item.WorkTypeID != "" && item.State != "" {
@@ -235,7 +235,7 @@ type worldArtifactDispatchFacts struct {
 
 func worldDispatchArtifactFacts(
 	item work.FactoryWorkItem,
-	state interfaces.FactoryWorldState,
+	state factorydefinitions.FactoryWorldState,
 ) ([]work.ExpectedArtifactDeclaration, []work.ExpectedArtifactInput, work.ExpectedArtifactObservation, *work.ExpectedArtifactTemplateContext, bool) {
 	if dispatch, ok := latestWorldActiveArtifactDispatch(item, state.ActiveDispatches); ok {
 		return worldWorkstationArtifactDeclarations(state.Topology, dispatch.transitionID, dispatch.workstationName),
@@ -259,7 +259,7 @@ func worldDispatchArtifactFacts(
 
 func latestWorldActiveArtifactDispatch(
 	item work.FactoryWorkItem,
-	dispatches map[string]interfaces.FactoryWorldDispatch,
+	dispatches map[string]factorydefinitions.FactoryWorldDispatch,
 ) (worldArtifactDispatchFacts, bool) {
 	ids := make([]string, 0, len(dispatches))
 	for id := range dispatches {
@@ -283,7 +283,7 @@ func latestWorldActiveArtifactDispatch(
 
 func latestWorldCompletedArtifactDispatch(
 	item work.FactoryWorkItem,
-	dispatches []interfaces.FactoryWorldDispatchCompletion,
+	dispatches []factorydefinitions.FactoryWorldDispatchCompletion,
 ) (worldArtifactDispatchFacts, bool) {
 	for index := len(dispatches) - 1; index >= 0; index-- {
 		dispatch := dispatches[index]
@@ -309,7 +309,7 @@ func cloneExpectedArtifactTemplateContext(
 
 func worldDispatchContainsWork(
 	workItemIDs []string,
-	inputs []interfaces.WorkstationInput,
+	inputs []factorydefinitions.WorkstationInput,
 	inputWorkItems []work.FactoryWorkItem,
 	outputWorkItems []work.FactoryWorkItem,
 	workID string,
@@ -336,7 +336,7 @@ func worldDispatchContainsWork(
 }
 
 func worldWorkstationArtifactDeclarations(
-	topology interfaces.InitialStructurePayload,
+	topology factorydefinitions.InitialStructurePayload,
 	transitionID string,
 	workstationName string,
 ) []work.ExpectedArtifactDeclaration {
@@ -348,7 +348,7 @@ func worldWorkstationArtifactDeclarations(
 	return nil
 }
 
-func worldWorkstationInputs(inputs []interfaces.WorkstationInput) []work.FactoryWorkItem {
+func worldWorkstationInputs(inputs []factorydefinitions.WorkstationInput) []work.FactoryWorkItem {
 	items := make([]work.FactoryWorkItem, 0, len(inputs))
 	for _, input := range inputs {
 		if input.WorkItem != nil {
@@ -383,7 +383,7 @@ func worldExpectedArtifactInput(item work.FactoryWorkItem) work.ExpectedArtifact
 }
 
 func worldArtifactObservation(
-	verification *workerexecution.ExpectedArtifactVerification,
+	verification *workers.ExpectedArtifactVerification,
 ) work.ExpectedArtifactObservation {
 	if verification == nil {
 		return work.ExpectedArtifactObservation{}
@@ -408,12 +408,12 @@ func worldExpectedArtifactTemplateContext(
 }
 
 func worldArtifactObservationFromResult(
-	result workerexecution.WorkstationResult,
+	result workers.WorkstationResult,
 ) work.ExpectedArtifactObservation {
 	if result.ArtifactVerification != nil {
 		return worldArtifactObservation(result.ArtifactVerification)
 	}
-	if result.Outcome == string(workerexecution.OutcomeAccepted) {
+	if result.Outcome == string(workers.OutcomeAccepted) {
 		return work.ExpectedArtifactObservation{Verified: true}
 	}
 	return work.ExpectedArtifactObservation{}
