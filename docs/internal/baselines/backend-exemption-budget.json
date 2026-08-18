@@ -1833,6 +1833,18 @@
     },
     {
       "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
+      "target": "pkg/services/work/transports/cli/submit/submit_test.go#TestSubmit_JSONPayloadPostsWorkTypeName",
+      "owner": "backend-maintainers",
+      "removalReason": "Refactor the target to satisfy the pkgmaintcheck:ignore-cyclomatic-complexity threshold. Current rationale: this CLI boundary test keeps the JSON request contract, headers, and response assertions in one flow."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
+      "target": "pkg/services/work/transports/cli/work/list_test.go#TestList_JSONOutputPreservesGeneratedResponseShape",
+      "owner": "backend-maintainers",
+      "removalReason": "Refactor the target to satisfy the pkgmaintcheck:ignore-cyclomatic-complexity threshold. Current rationale: this JSON output test keeps the generated page shape assertions together so the CLI surface stays reviewer-readable."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
       "target": "pkg/services/work/transports/http/error_mapping.go#RootErrorResponse",
       "owner": "backend-maintainers",
       "removalReason": "pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption."
@@ -2148,18 +2160,6 @@
       "target": "pkg/transports/cli/root_submit_batch.go#parseRunCommandArgs",
       "owner": "backend-maintainers",
       "removalReason": "pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption."
-    },
-    {
-      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
-      "target": "pkg/transports/cli/submit/submit_test.go#TestSubmit_JSONPayloadPostsWorkTypeName",
-      "owner": "backend-maintainers",
-      "removalReason": "Refactor the target to satisfy the pkgmaintcheck:ignore-cyclomatic-complexity threshold. Current rationale: this CLI boundary test keeps the JSON request contract, headers, and response assertions in one flow."
-    },
-    {
-      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
-      "target": "pkg/transports/cli/work/list_test.go#TestList_JSONOutputPreservesGeneratedResponseShape",
-      "owner": "backend-maintainers",
-      "removalReason": "Refactor the target to satisfy the pkgmaintcheck:ignore-cyclomatic-complexity threshold. Current rationale: this JSON output test keeps the generated page shape assertions together so the CLI surface stays reviewer-readable."
     },
     {
       "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",

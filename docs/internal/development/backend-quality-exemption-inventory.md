@@ -68,8 +68,8 @@ blank and `#` comment lines, and deduplicate the remaining full import paths. It
 | `pkg/transports/cli/init` | 2 | 1 | directive only |
 | `pkg/transports/cli/mcp` | 3 | 3 | directive + coverage baseline |
 | `pkg/transports/cli/run` | 2 | 1 | directive + coverage baseline |
-| `pkg/transports/cli/submit` | 1 | 1 | directive only |
-| `pkg/transports/cli/work` | 1 | 1 | directive only |
+| `pkg/services/work/transports/cli/submit` | 1 | 1 | directive only |
+| `pkg/services/work/transports/cli/work` | 1 | 1 | directive only |
 | `pkg/config` | 8 | 4 | directive + coverage baseline |
 | `pkg/transports/mapping/factoryconfig/openapitests` | 1 | 1 | directive only |
 | `pkg/factory/events` | 3 | 3 | directive + coverage baseline |
@@ -272,21 +272,21 @@ Owner: `pkg/transports/cli/run` package maintainers. Status: **directive + cover
 | `pkg/transports/cli/run/run_invocation_test.go:1` | `backendsizecheck:ignore-file` | `pkg/transports/cli/run/run_invocation_test.go` | T | T gate |
 | `pkg/transports/cli/run/run_invocation_test.go:2` | `pkgmaintcheck:ignore-file-lines` | `pkg/transports/cli/run/run_invocation_test.go` | T | T gate |
 
-### `pkg/transports/cli/submit`
+### `pkg/services/work/transports/cli/submit`
 
-Owner: `pkg/transports/cli/submit` package maintainers. Status: **directive only**.
-
-| Source | Directive rule | Target | Reason | Evidence |
-| --- | --- | --- | --- | --- |
-| `pkg/transports/cli/submit/submit_test.go:203` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `TestSubmit_JSONPayloadPostsWorkTypeName` | T | T gate |
-
-### `pkg/transports/cli/work`
-
-Owner: `pkg/transports/cli/work` package maintainers. Status: **directive only**.
+Owner: `pkg/services/work/transports/cli/submit` package maintainers. Status: **directive only**.
 
 | Source | Directive rule | Target | Reason | Evidence |
 | --- | --- | --- | --- | --- |
-| `pkg/transports/cli/work/list_test.go:675` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `TestList_JSONOutputPreservesGeneratedResponseShape` | T | T gate |
+| `pkg/services/work/transports/cli/submit/submit_test.go:203` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `TestSubmit_JSONPayloadPostsWorkTypeName` | T | T gate |
+
+### `pkg/services/work/transports/cli/work`
+
+Owner: `pkg/services/work/transports/cli/work` package maintainers. Status: **directive only**.
+
+| Source | Directive rule | Target | Reason | Evidence |
+| --- | --- | --- | --- | --- |
+| `pkg/services/work/transports/cli/work/list_test.go:675` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `TestList_JSONOutputPreservesGeneratedResponseShape` | T | T gate |
 
 ### `pkg/config`
 
