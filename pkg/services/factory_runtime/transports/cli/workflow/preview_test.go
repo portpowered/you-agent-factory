@@ -11,7 +11,7 @@ import (
 
 	"github.com/portpowered/infinite-you/internal/testutil"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime"
-	"github.com/portpowered/infinite-you/pkg/transports/cli/workflow"
+	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/transports/cli/workflow"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/pkg/transports/mapping"
 	"github.com/spf13/cobra"
