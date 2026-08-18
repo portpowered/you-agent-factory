@@ -6,7 +6,7 @@ import (
 	"time"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	"github.com/portpowered/infinite-you/pkg/transports/mapping/factorysnapshot"
+	"github.com/portpowered/infinite-you/pkg/transports/mapping/factorydefinitionentry"
 )
 
 // CanonicalTopologyReplacementEvents returns backend-produced topology events
@@ -24,7 +24,7 @@ func CanonicalTopologyReplacementEvents() ([]interfaces.FactoryEvent, error) {
 }
 
 func canonicalTopologyEvent(id string, eventType interfaces.FactoryEventType, tick, sequence int, factory *interfaces.FactoryConfig) (interfaces.FactoryEvent, error) {
-	publicFactory, err := factorysnapshot.ObjectFromFactoryConfig(factory)
+	publicFactory, err := factorydefinitionentry.ObjectFromFactoryConfig(factory)
 	if err != nil {
 		return interfaces.FactoryEvent{}, fmt.Errorf("map topology fixture to public Factory: %w", err)
 	}

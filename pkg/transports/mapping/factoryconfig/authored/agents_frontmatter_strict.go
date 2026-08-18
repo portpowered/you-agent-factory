@@ -7,7 +7,7 @@ import (
 	"reflect"
 	"strings"
 
-	"github.com/portpowered/infinite-you/pkg/transports/mapping/factorydefinition/retiredboundary"
+	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/transports/mapping/factorydefinition/retiredboundary"
 	"gopkg.in/yaml.v3"
 )
 

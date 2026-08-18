@@ -13,7 +13,7 @@ import (
 	replay "github.com/portpowered/infinite-you/pkg/services/recordings/internal/replay"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	factorymapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig"
-	"github.com/portpowered/infinite-you/pkg/transports/mapping/factorysnapshot"
+	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/transports/mapping/factorysnapshot"
 )
 
 var javascriptRecordingSnapshotDecoder interfaces.FactorySnapshotJSONDecoder = func(
