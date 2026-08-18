@@ -529,8 +529,20 @@ func TestDefaultWorkTypeResolverPreservesSessionAdmissionPolicy(t *testing.T) {
 		wantErr     string
 	}{
 		{name: "missing dependencies"},
-		{name: "session not found", definitions: currentFactoryForSessionAPI{err: apisurface.ErrFactorySessionNotFound}},
-		{name: "current factory not found", definitions: currentFactoryForSessionAPI{err: apisurface.ErrCurrentFactoryNotFound}},
+		{name: "missing invocation policy", definitions: currentFactoryForSessionAPI{}},
+		// Both not-found rows supply an invocation policy that would name a
+		// work type, so reaching the empty result proves the not-found
+		// fallback rather than the missing-collaborator short circuit above.
+		{
+			name:        "session not found",
+			definitions: currentFactoryForSessionAPI{err: apisurface.ErrFactorySessionNotFound},
+			invocation:  defaultWorkTypePolicy{id: "default-task"},
+		},
+		{
+			name:        "current factory not found",
+			definitions: currentFactoryForSessionAPI{err: apisurface.ErrCurrentFactoryNotFound},
+			invocation:  defaultWorkTypePolicy{id: "default-task"},
+		},
 		{
 			name:        "opaque definition error",
 			definitions: currentFactoryForSessionAPI{err: errors.New("definition failed")},
