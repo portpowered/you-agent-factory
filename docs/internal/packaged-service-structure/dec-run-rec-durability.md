@@ -159,5 +159,5 @@ record in
 | PSS plan ([`plan.md`](../../temp/projects/packaged-service-structure/plan.md)) | Runtime sequence step 7 / Checkpoint/Recovery row |
 | PSS checklist ([`checklist.md`](../../temp/projects/packaged-service-structure/checklist.md)) | IMP-RUN-04 final status |
 | Planner meta (`docs/temp/meta.md`) | IMP-RUN-04 hold/admission text |
-| Ownership inventory | `docs/internal/baselines/ownership-inventory.json` (`factory_runtime/checkpoint_recovery`) |
+| Owner rationale | `docs/architecture/service-ownership-rationale.md` (`factory_runtime/checkpoint_recovery`) |
 | PSS program README | `docs/internal/projects/packaged-service-structure/README.md` |

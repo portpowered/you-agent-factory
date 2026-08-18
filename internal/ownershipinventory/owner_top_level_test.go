@@ -8,25 +8,42 @@ import (
 	"github.com/portpowered/infinite-you/internal/ownershipinventory"
 )
 
-func TestProductOwnerTopLevelSpecsCoverAllOwners(t *testing.T) {
+func TestProductOwnerTopLevelSpecsCoverEveryDerivedOwner(t *testing.T) {
 	t.Parallel()
 
-	specs := ownershipinventory.ProductOwnerTopLevelSpecs()
-	if len(specs) != len(ownershipinventory.ProductOwners) {
-		t.Fatalf("spec count = %d, want %d", len(specs), len(ownershipinventory.ProductOwners))
+	root := repositoryRoot(t)
+	owners, err := ownershipinventory.DiscoverProductOwners(root)
+	if err != nil {
+		t.Fatalf("DiscoverProductOwners() error = %v", err)
 	}
-	for i, owner := range ownershipinventory.ProductOwners {
+	if len(owners) == 0 {
+		t.Fatal("expected the live pkg/services tree to yield product owners")
+	}
+	specs := mustProductOwnerTopLevelSpecs(t, root)
+	if len(specs) != len(owners) {
+		t.Fatalf("spec count = %d, want %d", len(specs), len(owners))
+	}
+	for i, owner := range owners {
 		if specs[i].Owner != owner {
 			t.Fatalf("spec[%d].Owner = %q, want %q", i, specs[i].Owner, owner)
 		}
 	}
 }
 
+func mustProductOwnerTopLevelSpecs(t *testing.T, root string) []ownershipinventory.OwnerTopLevelSpec {
+	t.Helper()
+	specs, err := ownershipinventory.ProductOwnerTopLevelSpecs(root)
+	if err != nil {
+		t.Fatalf("ProductOwnerTopLevelSpecs() error = %v", err)
+	}
+	return specs
+}
+
 func TestOwnerTopLevelChildrenMatchCommittedInventory(t *testing.T) {
 	t.Parallel()
 
 	root := repositoryRoot(t)
-	for _, spec := range ownershipinventory.ProductOwnerTopLevelSpecs() {
+	for _, spec := range mustProductOwnerTopLevelSpecs(t, root) {
 		spec := spec
 		t.Run(spec.Owner, func(t *testing.T) {
 			t.Parallel()
@@ -35,10 +52,7 @@ func TestOwnerTopLevelChildrenMatchCommittedInventory(t *testing.T) {
 			if err != nil {
 				t.Fatalf("ListOwnerTopLevelChildren(%q) error = %v", spec.Owner, err)
 			}
-			want, ok := ownershipinventory.OwnerTopLevelInventory(spec.Owner)
-			if !ok {
-				t.Fatalf("OwnerTopLevelInventory(%q) ok = false", spec.Owner)
-			}
+			want := spec.Inventory()
 			if !slices.Equal(live, want) {
 				t.Fatalf("live top-level children = %v, want committed inventory %v", live, want)
 			}
@@ -50,7 +64,7 @@ func TestOwnerTopLevelClassificationPartitionsLiveTree(t *testing.T) {
 	t.Parallel()
 
 	root := repositoryRoot(t)
-	for _, spec := range ownershipinventory.ProductOwnerTopLevelSpecs() {
+	for _, spec := range mustProductOwnerTopLevelSpecs(t, root) {
 		spec := spec
 		t.Run(spec.Owner, func(t *testing.T) {
 			t.Parallel()
@@ -75,7 +89,8 @@ func TestOwnerTopLevelClassificationPartitionsLiveTree(t *testing.T) {
 func TestOwnerTopLevelUnexpectedDoesNotOverlapExpectedRetain(t *testing.T) {
 	t.Parallel()
 
-	for _, spec := range ownershipinventory.ProductOwnerTopLevelSpecs() {
+	root := repositoryRoot(t)
+	for _, spec := range mustProductOwnerTopLevelSpecs(t, root) {
 		for _, name := range spec.Unexpected {
 			if slices.Contains(spec.ExpectedRetain, name) {
 				t.Fatalf("owner %q child %q is both expected retain and unexpected", spec.Owner, name)
@@ -115,7 +130,7 @@ func TestOwnerTopLevelRestClassificationMatchesTopLevelInventory(t *testing.T) {
 		t.Fatalf("ListProductionPackages() error = %v", err)
 	}
 
-	for _, spec := range ownershipinventory.ProductOwnerTopLevelSpecs() {
+	for _, spec := range mustProductOwnerTopLevelSpecs(t, root) {
 		ownerPrefix := "pkg/services/" + spec.Owner + "/"
 		for _, packagePath := range packages {
 			if packagePath == "pkg/services/"+spec.Owner {

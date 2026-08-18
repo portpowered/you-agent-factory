@@ -1,7 +1,6 @@
 package main
 
 import (
-	"path/filepath"
 	"strings"
 	"testing"
 
@@ -10,55 +9,12 @@ import (
 
 const deletedProviderSessionsServicePackagePath = "pkg/services/provider_sessions/service"
 
-func TestMapCommittedOwnerPackageProviderSessionsPrivateReadersRetain(t *testing.T) {
-	t.Parallel()
-
-	privateReaders := []string{
-		"pkg/services/provider_sessions/internal/services/codex_reader",
-		"pkg/services/provider_sessions/internal/services/cursor_reader",
-	}
-	for _, packagePath := range privateReaders {
-		got, ok := mapCommittedOwnerPackage(packagePath)
-		if !ok {
-			t.Fatalf("mapCommittedOwnerPackage(%q) ok = false", packagePath)
-		}
-		if got.Disposition != DispositionRetain {
-			t.Fatalf("mapCommittedOwnerPackage(%q) disposition = %q, want retain", packagePath, got.Disposition)
-		}
-		if got.Destination != "provider_sessions/internal/services/codex_reader" &&
-			got.Destination != "provider_sessions/internal/services/cursor_reader" {
-			t.Fatalf("mapCommittedOwnerPackage(%q) destination = %q, want nested private reader destination", packagePath, got.Destination)
-		}
-	}
-}
-
-func TestProviderSessionsCommittedManifestOmitsDeletedTransitionalServicePackage(t *testing.T) {
+func TestVerifyProviderSessionsUnexpectedPublicSiblingRemapsPassesOnRepository(t *testing.T) {
 	t.Parallel()
 
 	repoRoot := findRepoRoot(t)
-	manifest, err := loadManifest(filepath.Join(repoRoot, manifestRelativePath))
-	if err != nil {
-		t.Fatalf("loadManifest() error = %v", err)
-	}
-
-	for _, packagePath := range manifest.Inventory {
-		if packagePath == deletedProviderSessionsServicePackagePath {
-			t.Fatalf("committed manifest inventory still lists deleted transitional package %q", deletedProviderSessionsServicePackagePath)
-		}
-	}
-	for _, row := range manifest.Packages {
-		if row.PackagePath == deletedProviderSessionsServicePackagePath {
-			t.Fatalf("committed manifest packages still list deleted transitional package %q", deletedProviderSessionsServicePackagePath)
-		}
-	}
-}
-
-func TestVerifyProviderSessionsDualLedgerAlignmentPassesOnRepository(t *testing.T) {
-	t.Parallel()
-
-	repoRoot := findRepoRoot(t)
-	if err := ownershipinventory.VerifyProviderSessionsDualLedgerAlignment(repoRoot); err != nil {
-		t.Fatalf("VerifyProviderSessionsDualLedgerAlignment() error = %v", err)
+	if err := ownershipinventory.VerifyProviderSessionsUnexpectedPublicSiblingRemaps(repoRoot); err != nil {
+		t.Fatalf("VerifyProviderSessionsUnexpectedPublicSiblingRemaps() error = %v", err)
 	}
 }
 
@@ -89,124 +45,21 @@ func TestVerifyProviderSessionsINVDispositionBeyondServicePassesOnRepository(t *
 	}
 }
 
-func TestProviderSessionsCommittedBaselinesAlignMoveDestinations(t *testing.T) {
+// Provider Sessions finished its migration, so it holds no open moves at all.
+// The lock is the absence of a row: reopening a Provider Sessions move fails
+// here and has to be a deliberate change rather than a quiet one.
+func TestProviderSessionsHasNoOpenMovesInTheLedger(t *testing.T) {
 	t.Parallel()
 
 	repoRoot := findRepoRoot(t)
-	manifest, err := loadManifest(filepath.Join(repoRoot, manifestRelativePath))
-	if err != nil {
-		t.Fatalf("loadManifest() error = %v", err)
-	}
-	ownership, err := ownershipinventory.Load(repoRoot)
-	if err != nil {
-		t.Fatalf("ownershipinventory.Load() error = %v", err)
-	}
-
-	ownershipByPath := make(map[string]ownershipinventory.PackageRow, len(ownership.Packages))
-	for _, row := range ownership.Packages {
-		ownershipByPath[row.PackagePath] = row
-	}
+	moveByPath := committedMoveLedgerRows(t, repoRoot)
 
 	const ownerPrefix = "pkg/services/provider_sessions/"
-	for _, row := range manifest.Packages {
-		if row.PackagePath != "pkg/services/provider_sessions" && !strings.HasPrefix(row.PackagePath, ownerPrefix) {
+	for packagePath, row := range moveByPath {
+		if packagePath != "pkg/services/provider_sessions" && !strings.HasPrefix(packagePath, ownerPrefix) {
 			continue
 		}
-		if row.Disposition != DispositionMove {
-			continue
-		}
-		ownershipRow, ok := ownershipByPath[row.PackagePath]
-		if !ok {
-			t.Fatalf("ownership inventory missing committed manifest move row %q", row.PackagePath)
-		}
-		wantSuccessor := "pkg/services/" + row.Destination
-		if ownershipRow.Successor != wantSuccessor {
-			t.Fatalf("dual-ledger drift for %q: manifest destination %q => successor %q, ownership has %q",
-				row.PackagePath, row.Destination, wantSuccessor, ownershipRow.Successor)
-		}
+		t.Fatalf("move ledger reopened a Provider Sessions move for %q (successor %q); the owner is settled",
+			packagePath, row.Successor)
 	}
-}
-
-func TestCommittedManifestProviderSessionsRejectsRetainToOwnerRootForUnexpectedSiblings(t *testing.T) {
-	t.Parallel()
-
-	repoRoot := findRepoRoot(t)
-	topLevel, err := ownershipinventory.LoadProviderSessionsTopLevelInventory(repoRoot)
-	if err != nil {
-		t.Fatalf("LoadProviderSessionsTopLevelInventory() error = %v", err)
-	}
-	manifest, err := loadManifest(filepath.Join(repoRoot, manifestRelativePath))
-	if err != nil {
-		t.Fatalf("loadManifest() error = %v", err)
-	}
-
-	manifestByPath := make(map[string]PackageMapping, len(manifest.Packages))
-	for _, row := range manifest.Packages {
-		manifestByPath[row.PackagePath] = row
-	}
-
-	for _, packagePath := range ownershipinventory.ProviderSessionsUnexpectedPublicSiblingPackagePaths(topLevel) {
-		row, ok := manifestByPath[packagePath]
-		if !ok {
-			t.Fatalf("committed manifest missing unexpected public sibling %q", packagePath)
-		}
-		if row.Disposition == DispositionRetain && row.Destination == "provider_sessions" {
-			t.Fatalf("committed manifest row retain→provider_sessions for %q", packagePath)
-		}
-		if row.Disposition != DispositionMove {
-			t.Fatalf("committed manifest row %q disposition = %q, want move", packagePath, row.Disposition)
-		}
-		if row.Destination == "provider_sessions" {
-			t.Fatalf("committed manifest row %q move destination = owner root, want nested plan path", packagePath)
-		}
-	}
-}
-
-func TestProviderSessionsInventoryRejectsRetainToOwnerRootForUnexpectedPublicSibling(t *testing.T) {
-	t.Parallel()
-
-	repoRoot := findRepoRoot(t)
-	topLevel, err := ownershipinventory.LoadProviderSessionsTopLevelInventory(repoRoot)
-	if err != nil {
-		t.Fatalf("LoadProviderSessionsTopLevelInventory() error = %v", err)
-	}
-
-	for _, child := range topLevel.Children {
-		if child.Classification != ownershipinventory.ProviderSessionsTopLevelUnexpectedPublicSibling &&
-			child.Classification != ownershipinventory.ProviderSessionsTopLevelINVUnexpectedPublicSibling {
-			continue
-		}
-		packagePath := ownershipinventory.ProviderSessionsOwnerPackagePath + "/" + child.Directory
-		got, ok := mapCommittedOwnerPackage(packagePath)
-		if !ok {
-			t.Fatalf("mapCommittedOwnerPackage(%q) ok = false", packagePath)
-		}
-		if got.Disposition == DispositionRetain && got.Destination == "provider_sessions" {
-			t.Fatalf("unexpected retain→provider_sessions for inventory path %q", packagePath)
-		}
-		if got.Disposition != DispositionMove {
-			t.Fatalf("inventory path %q disposition = %q, want move", packagePath, got.Disposition)
-		}
-		if got.Destination == "provider_sessions" {
-			t.Fatalf("inventory path %q move destination = owner root, want nested plan path", packagePath)
-		}
-	}
-}
-
-func manifestPackageRow(manifest Manifest, packagePath string) (PackageMapping, bool) {
-	for _, row := range manifest.Packages {
-		if row.PackagePath == packagePath {
-			return row, true
-		}
-	}
-	return PackageMapping{}, false
-}
-
-func ownershipPackageRow(inventory ownershipinventory.Inventory, packagePath string) (ownershipinventory.PackageRow, bool) {
-	for _, row := range inventory.Packages {
-		if row.PackagePath == packagePath {
-			return row, true
-		}
-	}
-	return ownershipinventory.PackageRow{}, false
 }

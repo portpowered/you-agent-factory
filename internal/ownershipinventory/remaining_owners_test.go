@@ -9,7 +9,7 @@ import (
 func TestAllProductOwnerUnexpectedSiblingsMapPackageRejectsRetainToOwnerRoot(t *testing.T) {
 	t.Parallel()
 
-	for _, spec := range ownershipinventory.ProductOwnerTopLevelSpecs() {
+	for _, spec := range mustProductOwnerTopLevelSpecs(t, repositoryRoot(t)) {
 		if len(spec.Unexpected) == 0 {
 			continue
 		}

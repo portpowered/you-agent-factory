@@ -44,6 +44,9 @@ Read these architecture notes when the work touches their area:
   customer/internal data-model split.
 - `docs/architecture/packaged-structure.md` for the current Go package families,
   service package convention, dependency direction, and composition boundaries.
+- `docs/architecture/service-ownership-rationale.md` for why each committed
+  service owns what it owns, the destination vocabulary, responsibility
+  clusters, public-surface ownership, and owned roles.
 
 ## Standards
 

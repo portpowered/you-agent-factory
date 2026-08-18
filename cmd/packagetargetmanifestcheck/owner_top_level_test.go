@@ -1,32 +1,44 @@
 package main
 
 import (
-	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
 )
 
-func TestProductOwnerTopLevelSpecsCoverAllOwners(t *testing.T) {
+func TestProductOwnerTopLevelSpecsCoverEveryDerivedOwner(t *testing.T) {
 	t.Parallel()
 
-	specs := productOwnerTopLevelSpecsList()
-	owners := closedDestinationVocabulary().ProductOwners
-	if len(specs) != len(owners) {
-		t.Fatalf("spec count = %d, want %d", len(specs), len(owners))
+	repoRoot := findRepoRoot(t)
+	specs := mustOwnerTopLevelSpecs(t, repoRoot)
+	vocab, err := derivedDestinationVocabulary(repoRoot)
+	if err != nil {
+		t.Fatalf("derivedDestinationVocabulary() error = %v", err)
 	}
-	for i, owner := range owners {
+	if len(specs) != len(vocab.ProductOwners) {
+		t.Fatalf("spec count = %d, want %d", len(specs), len(vocab.ProductOwners))
+	}
+	for i, owner := range vocab.ProductOwners {
 		if specs[i].owner != owner {
 			t.Fatalf("spec[%d].owner = %q, want %q", i, specs[i].owner, owner)
 		}
 	}
 }
 
+func mustOwnerTopLevelSpecs(t *testing.T, repoRoot string) []ownerTopLevelSpec {
+	t.Helper()
+	specs, err := productOwnerTopLevelSpecsList(repoRoot)
+	if err != nil {
+		t.Fatalf("productOwnerTopLevelSpecsList() error = %v", err)
+	}
+	return specs
+}
+
 func TestOwnerTopLevelChildrenMatchCommittedInventory(t *testing.T) {
 	t.Parallel()
 
 	repoRoot := findRepoRoot(t)
-	for _, spec := range productOwnerTopLevelSpecsList() {
+	for _, spec := range mustOwnerTopLevelSpecs(t, repoRoot) {
 		spec := spec
 		t.Run(spec.owner, func(t *testing.T) {
 			t.Parallel()
@@ -35,10 +47,7 @@ func TestOwnerTopLevelChildrenMatchCommittedInventory(t *testing.T) {
 			if err != nil {
 				t.Fatalf("listOwnerTopLevelChildren(%q) error = %v", spec.owner, err)
 			}
-			want, ok := ownerTopLevelInventory(spec.owner)
-			if !ok {
-				t.Fatalf("ownerTopLevelInventory(%q) ok = false", spec.owner)
-			}
+			want := spec.inventory()
 			if !slices.Equal(live, want) {
 				t.Fatalf("live top-level children = %v, want committed inventory %v", live, want)
 			}
@@ -50,7 +59,7 @@ func TestOwnerTopLevelClassificationPartitionsLiveTree(t *testing.T) {
 	t.Parallel()
 
 	repoRoot := findRepoRoot(t)
-	for _, spec := range productOwnerTopLevelSpecsList() {
+	for _, spec := range mustOwnerTopLevelSpecs(t, repoRoot) {
 		spec := spec
 		t.Run(spec.owner, func(t *testing.T) {
 			t.Parallel()
@@ -75,7 +84,8 @@ func TestOwnerTopLevelClassificationPartitionsLiveTree(t *testing.T) {
 func TestOwnerTopLevelUnexpectedDoesNotOverlapExpectedRetain(t *testing.T) {
 	t.Parallel()
 
-	for _, spec := range productOwnerTopLevelSpecsList() {
+	repoRoot := findRepoRoot(t)
+	for _, spec := range mustOwnerTopLevelSpecs(t, repoRoot) {
 		for _, name := range spec.unexpected {
 			if slices.Contains(spec.expectedRetain, name) {
 				t.Fatalf("owner %q child %q is both expected retain and unexpected", spec.owner, name)
@@ -115,7 +125,7 @@ func TestOwnerTopLevelRestClassificationMatchesTopLevelInventory(t *testing.T) {
 		t.Fatalf("loadManifestInventory() error = %v", err)
 	}
 
-	for _, spec := range productOwnerTopLevelSpecsList() {
+	for _, spec := range mustOwnerTopLevelSpecs(t, repoRoot) {
 		ownerPrefix := "pkg/services/" + spec.owner + "/"
 		for _, packagePath := range inventory {
 			if packagePath == "pkg/services/"+spec.owner {
@@ -149,10 +159,8 @@ func TestRecordingsTopLevelInventoryMatchesUnifiedRegistry(t *testing.T) {
 	}
 }
 
+// loadManifestInventory returns the live production package list. The manifest
+// no longer carries a committed copy of it, so the tree is the only source.
 func loadManifestInventory(repoRoot string) ([]string, error) {
-	manifest, err := loadManifest(filepath.Join(repoRoot, manifestRelativePath))
-	if err != nil {
-		return nil, err
-	}
-	return manifest.Inventory, nil
+	return listProductionPkgPackages(repoRoot)
 }

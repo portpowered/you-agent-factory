@@ -40,9 +40,9 @@ The audit reconciles these sources before defining a later packet:
    and decomposition audit;
 4. workers-stateless-execution-composition-plan.md, the sibling execution
    plan used as the shape and verification reference for later packets;
-5. package-target-manifest.json and
+5. docs/internal/baselines/unfinished-package-moves.json and
    docs/internal/projects/packaged-service-structure/path-lease-packet-manifest.json,
-   which identify package ownership and shared-path conflicts; and
+   which identify remaining package moves and shared-path conflicts; and
 6. docs/architecture/packaged-structure.md,
    docs/architecture/architecture.md, docs/architecture/structures.md, and
    docs/architecture/data-model.md, which define the public composition

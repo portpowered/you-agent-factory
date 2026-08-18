@@ -11,19 +11,18 @@ func TestRecordingsCommittedManifestAlignMoveDestinations(t *testing.T) {
 	t.Parallel()
 
 	root := repositoryRoot(t)
-	manifest, err := loadPackageTargetManifest(root)
+	moves, err := ownershipinventory.LoadUnfinishedMoves(root)
 	if err != nil {
-		t.Fatalf("loadPackageTargetManifest() error = %v", err)
+		t.Fatalf("LoadUnfinishedMoves() error = %v", err)
 	}
 
 	const ownerPrefix = "pkg/services/recordings/"
-	for _, row := range manifest.Packages {
+	checked := 0
+	for _, row := range moves.Moves {
 		if !strings.HasPrefix(row.PackagePath, ownerPrefix) {
 			continue
 		}
-		if row.Disposition != ownershipinventory.DispositionMove {
-			continue
-		}
+		checked++
 
 		got, err := ownershipinventory.MapPackage(row.PackagePath)
 		if err != nil {
@@ -34,9 +33,12 @@ func TestRecordingsCommittedManifestAlignMoveDestinations(t *testing.T) {
 		}
 		wantSuccessor := "pkg/services/" + row.Destination
 		if got.Successor != wantSuccessor {
-			t.Fatalf("dual-ledger drift for %q: manifest destination %q => successor %q, MapPackage has %q",
+			t.Fatalf("move ledger drift for %q: destination %q => successor %q, MapPackage has %q",
 				row.PackagePath, row.Destination, wantSuccessor, got.Successor)
 		}
+	}
+	if checked == 0 {
+		t.Fatal("no Recordings rows found in the move ledger; the alignment check proved nothing")
 	}
 }
 

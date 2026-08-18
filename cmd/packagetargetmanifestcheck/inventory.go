@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+
+	"github.com/portpowered/infinite-you/internal/ownershipinventory"
 )
 
 // listProductionPkgPackages returns every production Go package under pkg/ in
@@ -66,69 +68,50 @@ func listProductionPkgPackages(repoRoot string) ([]string, error) {
 	return packages, nil
 }
 
-func validateInventory(repoRoot string, inventory []string) error {
-	live, err := listProductionPkgPackages(repoRoot)
+// validateRowsNamePackagesThatExist proves every committed migration row still
+// names a package present in the live tree, so a row cannot silently outlive the
+// package it describes.
+//
+// Completeness is deliberately asserted in one direction only. A live package
+// with no row is valid, expected state: its destination is derivable from its
+// own path, so adding or deleting a package inside a service needs no registry
+// edit.
+func validateRowsNamePackagesThatExist(repoRoot string, packages []PackageMapping) error {
+	// The open-move ledger is shared with the ownership-inventory checker, so
+	// "this package still exists" has to mean the same thing in both tools.
+	// ListProductionPackages counts any directory under pkg/ that holds a .go
+	// file, which keeps test-helper packages (…/clonetests, …/fixturetests)
+	// from reading as stale rows.
+	live, err := ownershipinventory.ListProductionPackages(repoRoot)
 	if err != nil {
 		return err
 	}
-	if len(inventory) == 0 {
-		return fmt.Errorf("inventory must list every production pkg package; found 0 rows, live tree has %d", len(live))
+	liveSet := make(map[string]struct{}, len(live))
+	for _, packagePath := range live {
+		liveSet[packagePath] = struct{}{}
 	}
-	if !slices.IsSorted(inventory) {
-		return fmt.Errorf("inventory must be stable-sorted in byte-order path sort")
-	}
-	seen := make(map[string]struct{}, len(inventory))
-	for i, packagePath := range inventory {
-		if strings.TrimSpace(packagePath) == "" {
-			return fmt.Errorf("inventory[%d] is empty", i)
-		}
+
+	var stale []string
+	for i, row := range packages {
+		packagePath := row.PackagePath
 		if strings.Contains(packagePath, "\\") {
-			return fmt.Errorf("inventory[%d] %q must use slash separators", i, packagePath)
+			return fmt.Errorf("moves[%d] %q must use slash separators", i, packagePath)
 		}
 		if !strings.HasPrefix(packagePath, "pkg/") {
-			return fmt.Errorf("inventory[%d] %q must be repository-relative under pkg/", i, packagePath)
+			return fmt.Errorf("moves[%d] %q must be repository-relative under pkg/", i, packagePath)
 		}
-		if _, dup := seen[packagePath]; dup {
-			return fmt.Errorf("inventory contains duplicate package path %q", packagePath)
+		if _, alive := liveSet[packagePath]; !alive {
+			stale = append(stale, packagePath)
 		}
-		seen[packagePath] = struct{}{}
 	}
-	if !slices.Equal(inventory, live) {
-		missing, extra := diffStringSets(live, inventory)
-		switch {
-		case len(missing) > 0 && len(extra) > 0:
-			return fmt.Errorf("inventory does not match live production packages; missing example %q; extra example %q\nLINT_VIOLATION_COUNT: %d", missing[0], extra[0], len(missing)+len(extra))
-		case len(missing) > 0:
-			return fmt.Errorf("inventory is missing production package %q\nLINT_VIOLATION_COUNT: %d", missing[0], len(missing))
-		case len(extra) > 0:
-			return fmt.Errorf("inventory contains unknown package %q\nLINT_VIOLATION_COUNT: %d", extra[0], len(extra))
-		default:
-			return fmt.Errorf("inventory order does not match stable-sorted live production packages")
-		}
+	if len(stale) > 0 {
+		slices.Sort(stale)
+		return fmt.Errorf(
+			"moves name %d package(s) that no longer exist in the live tree: %s\nLINT_VIOLATION_COUNT: %d",
+			len(stale),
+			strings.Join(stale, ", "),
+			len(stale),
+		)
 	}
 	return nil
-}
-
-func diffStringSets(want, got []string) (missing, extra []string) {
-	wantSet := make(map[string]struct{}, len(want))
-	gotSet := make(map[string]struct{}, len(got))
-	for _, value := range want {
-		wantSet[value] = struct{}{}
-	}
-	for _, value := range got {
-		gotSet[value] = struct{}{}
-	}
-	for _, value := range want {
-		if _, ok := gotSet[value]; !ok {
-			missing = append(missing, value)
-		}
-	}
-	for _, value := range got {
-		if _, ok := wantSet[value]; !ok {
-			extra = append(extra, value)
-		}
-	}
-	slices.Sort(missing)
-	slices.Sort(extra)
-	return missing, extra
 }

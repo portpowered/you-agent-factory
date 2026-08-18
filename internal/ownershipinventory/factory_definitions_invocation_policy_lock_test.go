@@ -3,7 +3,6 @@ package ownershipinventory_test
 import (
 	"os"
 	"path/filepath"
-	"slices"
 	"strings"
 	"testing"
 
@@ -11,9 +10,8 @@ import (
 )
 
 const (
-	factoryDefinitionsInvocationPolicyServiceID = "factory_definitions/invocation_policy"
+	factoryDefinitionsInvocationPolicyServiceID  = "factory_definitions/invocation_policy"
 	factoryDefinitionsInvocationPolicyTargetPath = "pkg/services/factory_definitions/internal/services/invocation_policy"
-	factoryDefinitionsInvocationPolicyManifestDestination = "factory_definitions/internal/services/invocation_policy"
 )
 
 var factoryDefinitionsInvocationPolicyResidualRests = []string{
@@ -28,40 +26,32 @@ var factoryDefinitionsInvocationPolicyResidualRests = []string{
 	"internal/services/distribution/goal",
 }
 
-func TestFrozenInventoryRegistersInvocationPolicyNestedService(t *testing.T) {
+// Invocation Policy is a nested subservice of Factory Definitions. It used to be
+// proved by a rationale card in the registry, which meant every nested service
+// had to be registered twice. The durable claim is about the tree: the
+// subservice sits at its committed path and derives to the Factory Definitions
+// owner from that path alone. Its design rationale is prose and lives in
+// docs/architecture/service-ownership-rationale.md.
+func TestInvocationPolicyNestedServiceDerivesToFactoryDefinitions(t *testing.T) {
 	t.Parallel()
 
-	if !slices.Contains(ownershipinventory.CommittedNestedServiceIDs, factoryDefinitionsInvocationPolicyServiceID) {
-		t.Fatalf("CommittedNestedServiceIDs missing %q", factoryDefinitionsInvocationPolicyServiceID)
-	}
-
 	root := repositoryRoot(t)
-	inventory, err := ownershipinventory.Load(root)
-	if err != nil {
-		t.Fatalf("Load() error = %v", err)
+	if _, err := os.Stat(filepath.Join(root, filepath.FromSlash(factoryDefinitionsInvocationPolicyTargetPath))); err != nil {
+		t.Fatalf("nested subservice %q must exist on disk: %v", factoryDefinitionsInvocationPolicyServiceID, err)
 	}
 
-	var card *ownershipinventory.OwnerRationaleCard
-	for i := range inventory.OwnerRationales {
-		if inventory.OwnerRationales[i].ServiceID == factoryDefinitionsInvocationPolicyServiceID {
-			card = &inventory.OwnerRationales[i]
-			break
-		}
+	owner, ok := ownershipinventory.OwnerForPackage(factoryDefinitionsInvocationPolicyTargetPath)
+	if !ok || owner != "factory_definitions" {
+		t.Fatalf("OwnerForPackage(%q) = %q, %v; want factory_definitions, true", factoryDefinitionsInvocationPolicyTargetPath, owner, ok)
 	}
-	if card == nil {
-		t.Fatalf("frozen inventory missing rationale card for %q", factoryDefinitionsInvocationPolicyServiceID)
-	}
-	if card.Kind != ownershipinventory.RationaleKindNested {
-		t.Fatalf("rationale card %q kind = %q, want nested", card.ServiceID, card.Kind)
-	}
-	if card.ParentServiceID != "factory_definitions" {
-		t.Fatalf("rationale card %q parentServiceId = %q, want factory_definitions", card.ServiceID, card.ParentServiceID)
-	}
-	if card.TargetPath != factoryDefinitionsInvocationPolicyTargetPath {
-		t.Fatalf("rationale card %q targetPath = %q, want %q", card.ServiceID, card.TargetPath, factoryDefinitionsInvocationPolicyTargetPath)
-	}
-	if !strings.Contains(card.Authority, "invocation time") {
-		t.Fatalf("rationale card %q authority should describe invocation-time policy ownership", card.ServiceID)
+
+	// The subservice is settled where it lives, so it carries no open-move row.
+	if moveRow, ok := committedMoveLedger(t, root)[factoryDefinitionsInvocationPolicyTargetPath]; ok {
+		t.Fatalf(
+			"move ledger carries a row for settled nested subservice %q (successor %q)",
+			factoryDefinitionsInvocationPolicyTargetPath,
+			moveRow.Successor,
+		)
 	}
 }
 
@@ -69,23 +59,7 @@ func TestFactoryDefinitionsResidualInvocationPolicyPackagesLocked(t *testing.T) 
 	t.Parallel()
 
 	root := repositoryRoot(t)
-	inventory, err := ownershipinventory.Load(root)
-	if err != nil {
-		t.Fatalf("Load() error = %v", err)
-	}
-	manifest, err := loadPackageTargetManifest(root)
-	if err != nil {
-		t.Fatalf("loadPackageTargetManifest() error = %v", err)
-	}
-
-	ownershipByPath := make(map[string]ownershipinventory.PackageRow, len(inventory.Packages))
-	for _, row := range inventory.Packages {
-		ownershipByPath[row.PackagePath] = row
-	}
-	manifestByPath := make(map[string]packageTargetManifestRow, len(manifest.Packages))
-	for _, row := range manifest.Packages {
-		manifestByPath[row.PackagePath] = row
-	}
+	moveByPath := committedMoveLedger(t, root)
 
 	for _, rest := range factoryDefinitionsInvocationPolicyResidualRests {
 		packagePath := "pkg/services/factory_definitions/" + rest
@@ -98,27 +72,25 @@ func TestFactoryDefinitionsResidualInvocationPolicyPackagesLocked(t *testing.T) 
 			t.Fatalf("MapPackage(%q) disposition = %q, want retain", packagePath, got.Disposition)
 		}
 
-		ownershipRow, ok := ownershipByPath[packagePath]
+		// Retain is the derived default, so a package staying put carries no row.
+		// Reconstruct the implicit row and hold it to the same contract.
+		derived, ok := ownershipinventory.DerivedPackageRow(packagePath)
 		if !ok {
-			t.Fatalf("frozen inventory missing row for %q", packagePath)
+			t.Fatalf("no derivable owner for locked package %q", packagePath)
 		}
-		if ownershipRow.Disposition != ownershipinventory.DispositionRetain {
-			t.Fatalf("frozen inventory %q disposition = %q, want retain", packagePath, ownershipRow.Disposition)
+		if derived.Disposition != ownershipinventory.DispositionRetain {
+			t.Fatalf("derived row for %q disposition = %q, want retain", packagePath, derived.Disposition)
 		}
 
-		manifestRow, ok := manifestByPath[packagePath]
-		if !ok {
-			t.Fatalf("package-target-manifest missing row for %q", packagePath)
-		}
-		if manifestRow.Disposition != ownershipinventory.DispositionRetain {
-			t.Fatalf("manifest %q disposition = %q, want retain", packagePath, manifestRow.Disposition)
-		}
-		wantDestination := factoryDefinitionsInvocationPolicyManifestDestination
-		if strings.HasPrefix(rest, "internal/services/distribution/") {
-			wantDestination = "factory_definitions/internal/services/distribution"
-		}
-		if manifestRow.Destination != wantDestination {
-			t.Fatalf("manifest %q destination = %q, want %q", packagePath, manifestRow.Destination, wantDestination)
+		// The ledger tracks only unfinished migration intent. These packages are
+		// locked where they are, so the lock is proven by the absence of a row:
+		// adding a move row for one of them fails here.
+		if moveRow, ok := moveByPath[packagePath]; ok {
+			t.Fatalf(
+				"move ledger carries a row for locked package %q (successor %q); locked packages carry no row",
+				packagePath,
+				moveRow.Successor,
+			)
 		}
 	}
 }
@@ -142,10 +114,7 @@ func TestFactoryDefinitionsSnapshotsPortabilityAndDefinitionDestinationsLocked(t
 	t.Parallel()
 
 	root := repositoryRoot(t)
-	manifest, err := loadPackageTargetManifest(root)
-	if err != nil {
-		t.Fatalf("loadPackageTargetManifest() error = %v", err)
-	}
+	moveByPath := committedMoveLedger(t, root)
 
 	definitionPath := "pkg/services/factory_definitions/definition"
 	got, err := ownershipinventory.MapPackage(definitionPath)
@@ -156,34 +125,23 @@ func TestFactoryDefinitionsSnapshotsPortabilityAndDefinitionDestinationsLocked(t
 		t.Fatalf("MapPackage(%q) = %#v, want move→pkg/services/factory_definitions/internal", definitionPath, got)
 	}
 
-	var definitionManifest packageTargetManifestRow
-	foundDefinition := false
-	for _, row := range manifest.Packages {
-		if row.PackagePath == definitionPath {
-			definitionManifest = row
-			foundDefinition = true
-			break
-		}
+	definitionMove, ok := moveByPath[definitionPath]
+	if !ok {
+		t.Fatalf("move ledger missing row for %q", definitionPath)
 	}
-	if !foundDefinition {
-		t.Fatalf("package-target-manifest missing row for %q", definitionPath)
+	if definitionMove.Destination != "factory_definitions/internal" {
+		t.Fatalf("move ledger %q = %#v, want destination factory_definitions/internal", definitionPath, definitionMove)
 	}
-	if definitionManifest.Disposition != ownershipinventory.DispositionMove ||
-		definitionManifest.Destination != "factory_definitions/internal" {
-		t.Fatalf("manifest %q = %#v, want move→factory_definitions/internal", definitionPath, definitionManifest)
+	if definitionMove.Successor != got.Successor {
+		t.Fatalf("move ledger %q successor = %q, want %q from MapPackage", definitionPath, definitionMove.Successor, got.Successor)
 	}
 
+	// snapshots_portability already sits at its destination, so it carries no
+	// migration row. A row appearing here would mean a move was reopened.
 	const snapshotsPrefix = "pkg/services/factory_definitions/internal/services/snapshots_portability"
-	for _, row := range manifest.Packages {
-		if !strings.HasPrefix(row.PackagePath, snapshotsPrefix) {
-			continue
-		}
-		if row.Disposition != ownershipinventory.DispositionRetain {
-			t.Fatalf("snapshots_portability row %q disposition = %q, want retain", row.PackagePath, row.Disposition)
-		}
-		if row.Destination != "factory_definitions/internal/services/snapshots_portability" {
-			t.Fatalf("snapshots_portability row %q destination = %q, want factory_definitions/internal/services/snapshots_portability",
-				row.PackagePath, row.Destination)
+	for packagePath := range moveByPath {
+		if strings.HasPrefix(packagePath, snapshotsPrefix) {
+			t.Fatalf("move ledger carries a row for settled package %q; settled packages carry no row", packagePath)
 		}
 	}
 }

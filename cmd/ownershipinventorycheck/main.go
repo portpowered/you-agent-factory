@@ -32,13 +32,11 @@ func run(root string, stdout, stderr io.Writer) int {
 		return 1
 	}
 	if !report.OK() {
-		fmt.Fprintf(stderr, "[ownership-inventory-check] freeze gate failed: inventoryOK=%v pathLeaseOK=%v completeness=%v stableSort=%v rationale=%v edges=%v namedOwners=%v processEdges=%v nonOverlappingLeases=%v\n",
+		fmt.Fprintf(stderr, "[ownership-inventory-check] freeze gate failed: inventoryOK=%v pathLeaseOK=%v completeness=%v stableSort=%v namedOwners=%v processEdges=%v nonOverlappingLeases=%v\n",
 			report.InventoryOK,
 			report.PathLeaseOK,
 			report.Completeness,
 			report.StableSortOrder,
-			report.RequiredRationaleFields,
-			report.EdgeClassifications,
 			report.NamedOwnerCoverage,
 			report.ProcessEdgesException,
 			report.NonOverlappingActiveLeases,

@@ -11,6 +11,11 @@ use the
 [`general backend standard`](../internal/standards/code/general-backend-standards.md)
 for dependency direction, code shape, testing, and package-size requirements.
 
+For why each owner holds what it holds — per-service authority, state store,
+lifecycle, consumers, transaction boundary, and failure recovery, plus
+responsibility clusters, public-surface ownership, and owned roles — see
+[Service Ownership Rationale](service-ownership-rationale.md).
+
 ## Top-Level Package Families
 
 The backend has six direct package families:
@@ -212,7 +217,14 @@ The package layout is guarded mechanically:
 - `make pkg-boundary` checks dependency and ownership boundaries.
 - `make pkg-structure` checks repository-specific package and functional-test
   shape.
-- `make package-target-manifest-check` validates package target inventory.
+- `make package-target-manifest-check` validates the remaining package migration
+  rows in `docs/internal/baselines/unfinished-package-moves.json`, the single
+  ledger of unfinished migration intent shared with
+  `make ownership-inventory-check`. A package that stays where it already lives
+  derives its destination from its own path and carries no row, so package churn
+  inside a service needs no ledger edit. A row naming a package that no longer
+  exists fails the check. The ledger only shrinks; when it reaches zero rows it
+  is deleted along with its loaders and checks.
 - `make lint` runs these checks with the rest of the lint suite.
 
 Mechanical baselines may record temporary, deletion-only debt. Those baselines

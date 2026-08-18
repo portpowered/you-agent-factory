@@ -17,12 +17,9 @@ func TestDelSetProofGate_RootShapeAndStructureOwnershipDebtReduced(t *testing.T)
 
 	root := repositoryRoot(t)
 
-	t.Run("ownership_dual_ledger_alignment", func(t *testing.T) {
-		t.Parallel()
-		if err := ownershipinventory.VerifyOperatorSettingsDualLedgerAlignment(root); err != nil {
-			t.Fatalf("VerifyOperatorSettingsDualLedgerAlignment() error = %v", err)
-		}
-	})
+	// There is no longer a second package ledger to align against: open moves
+	// live in one consolidated file and settled packages derive their owner from
+	// the tree, so the cross-ledger alignment subtest was retired with it.
 
 	t.Run("ownership_top_level_inventory", func(t *testing.T) {
 		t.Parallel()

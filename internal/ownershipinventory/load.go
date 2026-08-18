@@ -8,7 +8,15 @@ import (
 	"path/filepath"
 )
 
-// Load reads the frozen ownership-inventory artifact from the repository root.
+// Load reads the frozen ownership-inventory artifact from the repository root,
+// attaches the consolidated open-move ledger as its package rows, and derives
+// the destination vocabulary from the live pkg/services tree.
+//
+// The inventory document itself no longer carries package rows: the only rows
+// that survive are open moves, and those live in one consolidated ledger shared
+// with the packaged-service-structure checker. It does not carry the destination
+// vocabulary either — that is derived at load time, so adding a service does not
+// require regenerating this artifact.
 func Load(root string) (Inventory, error) {
 	path := filepath.Join(root, filepath.FromSlash(InventoryRelativePath))
 	payload, err := os.ReadFile(path)
@@ -19,44 +27,18 @@ func Load(root string) (Inventory, error) {
 	if err := json.Unmarshal(payload, &inventory); err != nil {
 		return Inventory{}, fmt.Errorf("parse ownership inventory %s: %w", InventoryRelativePath, err)
 	}
+	moves, err := LoadUnfinishedMoves(root)
+	if err != nil {
+		return Inventory{}, err
+	}
+	vocabulary, err := DiscoverDestinationVocabulary(root)
+	if err != nil {
+		return Inventory{}, err
+	}
+	inventory.Destinations = vocabulary
+	inventory.UnfinishedMoves = moves
+	inventory.Packages = moves.PackageRows()
 	return inventory, nil
-}
-
-// LoadEffective returns the ownership inventory with package rows replaced by
-// the FND-01 seed when that seed artifact is present.
-func LoadEffective(root string) (Inventory, bool, error) {
-	inventory, err := Load(root)
-	if err != nil {
-		return Inventory{}, false, err
-	}
-	seed, ok, err := loadFND01Seed(root)
-	if err != nil {
-		return Inventory{}, false, err
-	}
-	if !ok {
-		return inventory, false, nil
-	}
-	inventory.Packages = seed.Packages
-	return inventory, true, nil
-}
-
-func loadFND01Seed(root string) (PackageTargetManifest, bool, error) {
-	path := filepath.Join(root, filepath.FromSlash(FND01SeedRelativePath))
-	payload, err := os.ReadFile(path)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return PackageTargetManifest{}, false, nil
-		}
-		return PackageTargetManifest{}, false, fmt.Errorf("read FND-01 seed %s: %w", FND01SeedRelativePath, err)
-	}
-	var seed PackageTargetManifest
-	if err := json.Unmarshal(payload, &seed); err != nil {
-		return PackageTargetManifest{}, false, fmt.Errorf("parse FND-01 seed %s: %w", FND01SeedRelativePath, err)
-	}
-	if len(seed.Packages) == 0 {
-		return PackageTargetManifest{}, false, fmt.Errorf("FND-01 seed %s has no packages", FND01SeedRelativePath)
-	}
-	return seed, true, nil
 }
 
 // WriteInventory writes the ownership-inventory freeze artifact.

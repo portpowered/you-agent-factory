@@ -4,7 +4,6 @@ package ownershipinventory
 
 const (
 	InventoryRelativePath = "docs/internal/baselines/ownership-inventory.json"
-	FND01SeedRelativePath = "docs/internal/baselines/package-target-manifest.json"
 
 	SortKeyDescription = "packagePath ascending byte order (path slash-separated)"
 
@@ -22,57 +21,40 @@ const (
 
 	ProcessEdgesPackagePath = "pkg/services/edges"
 
-	RationaleKindTopLevel = "top_level"
-	RationaleKindNested   = "nested"
-
-	OwnerRationaleSortKeyDescription        = "serviceID ascending byte order"
-	ResponsibilityClusterSortKeyDescription = "owner then clusterID ascending byte order"
-	CrossServiceEdgeSortKeyDescription      = "fromOwner then toOwner ascending byte order"
-	NamedOwnerSortKeyDescription            = "owner ascending byte order"
-	MisplacedGuardSortKeyDescription        = "id ascending byte order"
-	PublicSurfaceSortKeyDescription         = "id ascending byte order"
-	OwnedRoleSortKeyDescription             = "kind then id ascending byte order"
+	NamedOwnerSortKeyDescription     = "owner ascending byte order"
+	MisplacedGuardSortKeyDescription = "id ascending byte order"
 
 	NamedOwnerStatusConfirmed = "confirmed"
-
-	EdgeClassCommand             = "command"
-	EdgeClassQuery               = "query"
-	EdgeClassEvent               = "event"
-	EdgeClassProtocolComposition = "protocol_composition"
-	EdgeClassConstruction        = "construction"
-	EdgeClassLifecycle           = "lifecycle"
-	EdgeClassExternalEffect      = "external_effect"
 )
 
-// AllowedEdgeClasses is the closed cross-service edge classification set.
-var AllowedEdgeClasses = []string{
-	EdgeClassCommand,
-	EdgeClassQuery,
-	EdgeClassEvent,
-	EdgeClassProtocolComposition,
-	EdgeClassConstruction,
-	EdgeClassLifecycle,
-	EdgeClassExternalEffect,
-}
-
 // Inventory is the frozen PSS-F01 ownership inventory artifact.
+//
+// UnfinishedMoves and Packages are not part of the artifact on disk. Open moves
+// live in one consolidated ledger (UnfinishedMovesRelativePath) shared with the
+// packaged-service-structure checker; Load attaches them here so inventory
+// consumers keep a single row view.
+//
+// Design intent about the owner tree — per-service rationale cards,
+// responsibility clusters, public-surface ownership, and owned roles — is not
+// part of this artifact either. It is prose that no gate counts, so it lives in
+// docs/architecture/service-ownership-rationale.md instead of here.
+//
+// The cross-service import graph is not here either. It was a hand-maintained
+// edge table that documented reciprocal owner imports instead of failing on
+// them; cmd/servicecyclecheck now derives the graph and ratchets its minimum
+// feedback arc weight, which fails on a new back-edge the table never could.
 type Inventory struct {
 	Version                 int                      `json:"version"`
 	Stage                   string                   `json:"stage"`
 	SortKey                 string                   `json:"sortKey"`
-	FND01SeedPath           string                   `json:"fnd01SeedPath"`
-	Destinations            DestinationVocabulary    `json:"destinations"`
+	Destinations            DestinationVocabulary    `json:"-"`
 	ProcessEdgesException   ProcessEdgesException    `json:"processEdgesException"`
 	SeedServices            []SeedService            `json:"seedServices"`
 	AdditionalCurrentRoots  []string                 `json:"additionalCurrentRoots"`
-	OwnerRationales         []OwnerRationaleCard     `json:"ownerRationales"`
-	ResponsibilityClusters  []ResponsibilityCluster  `json:"responsibilityClusters"`
-	CrossServiceEdges       []CrossServiceEdge       `json:"crossServiceEdges"`
 	NamedOwnerConfirmations []NamedOwnerConfirmation `json:"namedOwnerConfirmations"`
 	MisplacedGuards         []MisplacedGuardEntry    `json:"misplacedGuards"`
-	PublicSurfaces          []PublicSurfaceEntry     `json:"publicSurfaces"`
-	OwnedRoles              []OwnedRoleEntry         `json:"ownedRoles"`
-	Packages                []PackageRow             `json:"packages"`
+	UnfinishedMoves         UnfinishedMoves          `json:"-"`
+	Packages                []PackageRow             `json:"-"`
 }
 
 // MisplacedGuardEntry records one normative standard, allowlist, package guard,
@@ -86,26 +68,6 @@ type MisplacedGuardEntry struct {
 	MisplacedConcern  string `json:"misplacedConcern"`
 	ReplacementOwner  string `json:"replacementOwner"`
 	Note              string `json:"note"`
-}
-
-// PublicSurfaceEntry maps one behavior test or public CLI/HTTP/MCP/replay/
-// visualization surface to its durable service owner.
-type PublicSurfaceEntry struct {
-	ID               string `json:"id"`
-	Kind             string `json:"kind"`
-	SurfacePath      string `json:"surfacePath"`
-	ReplacementOwner string `json:"replacementOwner"`
-	Note             string `json:"note"`
-}
-
-// OwnedRoleEntry assigns one constructor, datastore, lifecycle role, or
-// protocol adapter to exactly one committed destination or deletion mapping.
-type OwnedRoleEntry struct {
-	ID          string `json:"id"`
-	Kind        string `json:"kind"`
-	Name        string `json:"name"`
-	Destination string `json:"destination"`
-	Note        string `json:"note"`
 }
 
 // NamedOwnerConfirmation freezes one PRD-named owner onto the committed tree
@@ -129,57 +91,12 @@ type ResidualPackageRule struct {
 	Note          string `json:"note"`
 }
 
-// CrossServiceEdge records one distinct-owner production dependency edge and
-// its Packaged Service Structure interaction class.
-type CrossServiceEdge struct {
-	FromOwner string `json:"fromOwner"`
-	ToOwner   string `json:"toOwner"`
-	Class     string `json:"class"`
-	// Bidirectional and Unresolved keep a reciprocal import pair visible as
-	// convergence debt even when each direction has a valid interaction class.
-	Bidirectional         bool   `json:"bidirectional,omitempty"`
-	Unresolved            bool   `json:"unresolved,omitempty"`
-	ArchitectureException bool   `json:"architectureException,omitempty"`
-	Evidence              string `json:"evidence"`
-}
-
-// OwnerRationaleCard records authority, state, lifecycle, consumers,
-// transaction, and failure rationale for one committed top-level or nested
-// service from the Packaged Service Structure plan target tree.
-type OwnerRationaleCard struct {
-	ServiceID           string `json:"serviceId"`
-	Owner               string `json:"owner"`
-	Kind                string `json:"kind"`
-	ParentServiceID     string `json:"parentServiceId,omitempty"`
-	TargetPath          string `json:"targetPath"`
-	Authority           string `json:"authority"`
-	StateStore          string `json:"stateStore"`
-	Lifecycle           string `json:"lifecycle"`
-	Consumers           string `json:"consumers"`
-	TransactionBoundary string `json:"transactionBoundary"`
-	FailureRecovery     string `json:"failureRecovery"`
-}
-
-// ResponsibilityCluster records a large non-subservice responsibility cluster
-// that remains under a committed owner without becoming its own nested service.
-type ResponsibilityCluster struct {
-	Owner     string `json:"owner"`
-	ClusterID string `json:"clusterId"`
-	Name      string `json:"name"`
-	Note      string `json:"note"`
-}
-
-// PackageTargetManifest is the FND-01 package-to-target/deletion seed shape.
-// When present on disk, PSS-F01 reuses its package rows instead of inventing a
-// second destination catalog.
-type PackageTargetManifest struct {
-	Version  int          `json:"version"`
-	Stage    string       `json:"stage"`
-	SortKey  string       `json:"sortKey"`
-	Packages []PackageRow `json:"packages"`
-}
-
-// DestinationVocabulary is the closed destination set for inventory rows.
+// DestinationVocabulary is the destination set inventory rows may claim.
+//
+// It is derived from the repository tree by DiscoverDestinationVocabulary and is
+// never persisted: the owners half is the live pkg/services listing, so writing
+// it into the artifact would only reintroduce a hand-maintained mirror that has
+// to be regenerated every time a service is added.
 type DestinationVocabulary struct {
 	Owners    []string `json:"owners"`
 	Families  []string `json:"families"`
@@ -216,40 +133,24 @@ type PackageRow struct {
 
 // Report is the focused ownership-inventory validation result.
 type Report struct {
-	MissingPackages               []string
-	UnexpectedPackages            []string
-	DuplicatePackages             []string
-	InvalidMappings               []string
-	MissingSeedServices           []string
-	MissingAdditionalRoots        []string
-	MissingOwnerRationales        []string
-	MissingNestedRationales       []string
-	InvalidRationaleFields        []string
-	MissingResponsibilityClusters []string
-	MissingCrossServiceEdges      []string
-	UnexpectedCrossServiceEdges   []string
-	InvalidEdgeClassifications    []string
-	InvalidBidirectionalEdges     []string
-	MissingNamedOwners            []string
-	UnconfirmedNamedOwners        []string
-	InvalidNamedOwnerMaps         []string
-	MissingMisplacedGuards        []string
-	InvalidMisplacedGuards        []string
-	MissingPublicSurfaces         []string
-	InvalidPublicSurfaces         []string
-	MissingOwnedRoles             []string
-	InvalidOwnedRoles             []string
-	MissingCrossServiceEdgeTable  bool
-	MissingProcessEdgesException  bool
-	UnstableSort                  bool
-	UnstableRationaleSort         bool
-	UnstableResponsibilitySort    bool
-	UnstableEdgeSort              bool
-	UnstableNamedOwnerSort        bool
-	UnstableMisplacedGuardSort    bool
-	UnstablePublicSurfaceSort     bool
-	UnstableOwnedRoleSort         bool
-	ReusedFND01Seed               bool
+	// UnexpectedPackages lists package rows whose packagePath is absent from the
+	// live tree. There is deliberately no "missing package" counterpart: package
+	// ownership is derived by OwnerForPackage, so a live package without a row is
+	// valid.
+	UnexpectedPackages           []string
+	DuplicatePackages            []string
+	InvalidMappings              []string
+	MissingSeedServices          []string
+	MissingAdditionalRoots       []string
+	MissingNamedOwners           []string
+	UnconfirmedNamedOwners       []string
+	InvalidNamedOwnerMaps        []string
+	MissingMisplacedGuards       []string
+	InvalidMisplacedGuards       []string
+	MissingProcessEdgesException bool
+	UnstableSort                 bool
+	UnstableNamedOwnerSort       bool
+	UnstableMisplacedGuardSort   bool
 }
 
 // ViolationCount returns the number of independently reported inventory
@@ -257,40 +158,21 @@ type Report struct {
 // count once each so a consolidated diagnostic cannot hide added debt.
 func (r Report) ViolationCount() int {
 	return countStrings(
-		r.MissingPackages,
 		r.UnexpectedPackages,
 		r.DuplicatePackages,
 		r.InvalidMappings,
 		r.MissingSeedServices,
 		r.MissingAdditionalRoots,
-		r.MissingOwnerRationales,
-		r.MissingNestedRationales,
-		r.InvalidRationaleFields,
-		r.MissingResponsibilityClusters,
-		r.MissingCrossServiceEdges,
-		r.UnexpectedCrossServiceEdges,
-		r.InvalidEdgeClassifications,
-		r.InvalidBidirectionalEdges,
 		r.MissingNamedOwners,
 		r.UnconfirmedNamedOwners,
 		r.InvalidNamedOwnerMaps,
 		r.MissingMisplacedGuards,
 		r.InvalidMisplacedGuards,
-		r.MissingPublicSurfaces,
-		r.InvalidPublicSurfaces,
-		r.MissingOwnedRoles,
-		r.InvalidOwnedRoles,
 	) + countFlags(
-		r.MissingCrossServiceEdgeTable,
 		r.MissingProcessEdgesException,
 		r.UnstableSort,
-		r.UnstableRationaleSort,
-		r.UnstableResponsibilitySort,
-		r.UnstableEdgeSort,
 		r.UnstableNamedOwnerSort,
 		r.UnstableMisplacedGuardSort,
-		r.UnstablePublicSurfaceSort,
-		r.UnstableOwnedRoleSort,
 	)
 }
 
@@ -314,37 +196,18 @@ func countFlags(flags ...bool) int {
 
 // OK reports whether validation found no defects.
 func (r Report) OK() bool {
-	return len(r.MissingPackages) == 0 &&
-		len(r.UnexpectedPackages) == 0 &&
+	return len(r.UnexpectedPackages) == 0 &&
 		len(r.DuplicatePackages) == 0 &&
 		len(r.InvalidMappings) == 0 &&
 		len(r.MissingSeedServices) == 0 &&
 		len(r.MissingAdditionalRoots) == 0 &&
-		len(r.MissingOwnerRationales) == 0 &&
-		len(r.MissingNestedRationales) == 0 &&
-		len(r.InvalidRationaleFields) == 0 &&
-		len(r.MissingResponsibilityClusters) == 0 &&
-		len(r.MissingCrossServiceEdges) == 0 &&
-		len(r.UnexpectedCrossServiceEdges) == 0 &&
-		len(r.InvalidEdgeClassifications) == 0 &&
-		len(r.InvalidBidirectionalEdges) == 0 &&
 		len(r.MissingNamedOwners) == 0 &&
 		len(r.UnconfirmedNamedOwners) == 0 &&
 		len(r.InvalidNamedOwnerMaps) == 0 &&
 		len(r.MissingMisplacedGuards) == 0 &&
 		len(r.InvalidMisplacedGuards) == 0 &&
-		len(r.MissingPublicSurfaces) == 0 &&
-		len(r.InvalidPublicSurfaces) == 0 &&
-		len(r.MissingOwnedRoles) == 0 &&
-		len(r.InvalidOwnedRoles) == 0 &&
-		!r.MissingCrossServiceEdgeTable &&
 		!r.MissingProcessEdgesException &&
 		!r.UnstableSort &&
-		!r.UnstableRationaleSort &&
-		!r.UnstableResponsibilitySort &&
-		!r.UnstableEdgeSort &&
 		!r.UnstableNamedOwnerSort &&
-		!r.UnstableMisplacedGuardSort &&
-		!r.UnstablePublicSurfaceSort &&
-		!r.UnstableOwnedRoleSort
+		!r.UnstableMisplacedGuardSort
 }
