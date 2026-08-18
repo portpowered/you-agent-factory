@@ -16,7 +16,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/transports/acp/internal/mapping"
 	"github.com/portpowered/infinite-you/pkg/transports/acp/internal/protocol"
 	"github.com/portpowered/infinite-you/pkg/transports/acp/internal/session"
-	"github.com/portpowered/infinite-you/pkg/transports/mapping/factorytarget"
+	"github.com/portpowered/infinite-you/pkg/services/chat_sessions/transports/acp/factorytarget"
 )
 
 // errSessionNewUnavailable marks a "session/new" call this Server was never
