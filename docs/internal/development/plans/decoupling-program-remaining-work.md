@@ -1,6 +1,7 @@
 # Decoupling Program — Remaining Work
 
-Status snapshot taken 2026-08-17 against `origin/main` at `516aa58b8`.
+Status snapshot taken 2026-08-17 against `origin/main` at `32ce85fbc`, the
+commit that completed the `dcp` program.
 
 This document exists because the decoupling program (`dcp`) is close to done on
 its import-graph half while a substantially larger structural half remains, and
@@ -25,8 +26,8 @@ The `dcp` program ran in two batches.
 | dcp-3 | Derived service-cycle ratchet | merged |
 | dcp-4 | Cut transport-carried service back-edges | merged |
 | dcp-5 | Cut wire-carried service back-edges | merged |
-| dcp-6 | Cut work-service back-edges | in flight |
-| dcp-7 | Cut remaining service back-edges to zero | gated on dcp-6 |
+| dcp-6 | Cut work-service back-edges | merged |
+| dcp-7 | Cut remaining service back-edges | merged |
 
 **Transports move-down batch (dcp-t1 … dcp-t5).** All five merged. Moves
 single-service adapter packages out of the shared `pkg/transports/` tree and
@@ -35,8 +36,11 @@ under their owning service.
 The cycle ratchet lives in `docs/internal/baselines/service-cycle-ceiling.json`
 and is two-directional: it fails when the measured weight rises above the
 ceiling, and also when the weight drops below the ceiling without the ceiling
-being lowered in the same change. At `516aa58b8` the ceiling is **22**. dcp-6
-takes it to 15, dcp-7 to 0.
+being lowered in the same change. The program took it from 30 to **13**.
+
+It did not reach zero, and that is the correct outcome rather than a shortfall.
+The entire residual weight of 13 is one edge, `factory_definitions -> workers`,
+which section 3 covers.
 
 Measure the live weight with:
 
@@ -113,7 +117,96 @@ lane for every package with cross-service in-edges.** Check first whether a
 shared facade already sits on the consumer path. If one does, the relay is about
 ten lines inside the move-down lane itself.
 
-## 3. The remaining structural half: 44 unfinished package moves
+## 3. The one edge the program deliberately did not cut
+
+`dcp-7` cut `factory_definitions -> automations` and `recordings ->
+factory_runtime` and stopped. The remaining 13 is `factory_definitions ->
+workers`, deferred with a complete classification rather than forced. All 13
+imports are shared-vocabulary needs, not capability needs -- Factory Definitions
+calls exactly two Workers functions and both are pure clone helpers.
+
+### 3.1 Why it is not a simple move
+
+Two different things were tangled in the original cycle, and only one of them
+was cheap.
+
+**Authored-document grammar.** `automations.ParseCronJitter`,
+`ParseCronExpiryWindow`, `ValidateCronSchedule`, and
+`workers.ProviderIdentity(v).Validate()` are legality rules about strings in the
+authored factory file. Cron *syntax* is a property of the document format; cron
+*scheduling* is Automations'. `dcp-7` moved this half up into a shared cron
+grammar and the `factory_definitions -> automations` edge -- one import, one
+file, three call sites -- disappeared.
+
+**Execution-outcome vocabulary.** `WorkResult`, `WorkOutcome`, the outcome
+constants, `Token`, `WorkDiagnostics`, `WorkFailureMetadata`,
+`ProviderDiagnostic`, `ProviderResponseMetadataFailure*`, `CloneWorkstationResult`,
+and `providers.SessionMetadata`. These describe what a run produced. They cannot
+move up into Factory Definitions -- a definition must not know what a run
+produced -- and they cannot stay solely in Workers, because Factory Definitions,
+Recordings, Factory Runtime, and Factory Sessions all type against them.
+
+### 3.2 The structural blocker
+
+`pkg/services/providers` imports `pkg/services/workers`. So any shared home `H`
+that Workers aliases must not import Providers, or the cycle simply moves:
+`workers -> H -> providers -> workers`. `WorkResult` carries five
+providers-typed fields, so it cannot relocate unless provider-session vocabulary
+relocates with it.
+
+### 3.3 Where it should go: `pkg/services/work`, not `pkg/services/events`
+
+`dcp-7`'s own acceptance criteria proposed `pkg/services/events`. **That is the
+wrong home and should not be treated as the plan of record.**
+`providers.SessionMetadata` is embedded in `factory_events.go`,
+`factory_runtime.go`, *and* `factory_world_state.go`. Events is one consumer of
+three, so choosing it forces the other two to import the canonical ledger for a
+type that has nothing to do with recording.
+
+`pkg/services/work` is the candidate that survives the blocker. Measured on
+`origin/main`:
+
+| Edge | Weight |
+| --- | ---: |
+| `workers -> work` | 49 |
+| `work -> workers` | **0** |
+| `providers -> work` | 4 |
+| `work -> providers` | **0** |
+| `factory_definitions -> work` | 36 |
+| `work -> factory_definitions` | 2 |
+
+Work is already strictly upstream of both the aliasing service and the service
+owning the problematic field types, with no back-edge in either direction. It is
+the only home both legs can reach without forming `workers -> H -> providers ->
+workers`. Every consumer already imports it, so the move adds no new edge
+anywhere.
+
+Re-derive the numbers before acting:
+
+    git grep -h -c 'pkg/services/work"' origin/main -- 'pkg/services/workers/**.go'
+
+### 3.4 What the packet actually costs
+
+It is not a single move-down lane. Sequence it:
+
+1. Relocate provider-session *result* vocabulary (`SessionMetadata` and
+   siblings) into `work`. Providers already imports Work, so no new edge.
+2. Relocate the worker execution-outcome vocabulary into `work`. `WorkResult`'s
+   provider-typed fields now resolve inside the destination.
+3. Point Factory Definitions at `work` instead of `workers`. The edge goes to
+   zero and the cycle ceiling can be retired.
+
+Step 2 moves roughly 900 lines and **requires amending
+`workers/worker_vocabulary_contract.go` and
+`factory_definitions/owned_contract.go`, which currently assign this vocabulary
+to Workers.** That is a deliberate ownership change, not an incidental
+refactor -- it needs an explicit decision before a lane starts, which is why
+`dcp-7` correctly refused to make it unilaterally.
+
+Do not re-run this as a lane that "tries harder". The deferral was right; the
+missing input is the ownership decision.
+
+## 4. The remaining structural half: 44 unfinished package moves
 
 `docs/internal/baselines/unfinished-package-moves.json` is the consolidated
 ledger of packages under `pkg/` that still carry unfinished Packaged Service
@@ -158,7 +251,7 @@ Suggested approach, based on what worked for `dcp-t1..t5`:
   aborts before any floor is evaluated. Never bulk-regenerate; remove and re-add
   the specific entries.
 
-## 4. Other measured debt
+## 5. Other measured debt
 
 All counts from `docs/internal/baselines/` at `516aa58b8`.
 
@@ -178,7 +271,7 @@ The two coverage-minimum manifests are floors rather than debt — they are
 supposed to have an entry per package. The others are all violation baselines
 that should trend to zero.
 
-## 5. Open defects, not yet fixed
+## 6. Open defects, not yet fixed
 
 **Worker Sessions listing returns 200 with an empty array while workers are
 running.** A live API correctness bug, not a test issue.
@@ -204,7 +297,9 @@ in that window. Observed once as
 `UI Backend Integration`. `browserPreviewPorts()` calls the helper twice and only
 guards against the two results being equal to each other, not against either
 being stolen. About twenty integration files consume this harness, so measure
-frequency before changing it. Cheapest fix is a bounded retry on `EADDRINUSE`;
+frequency before changing it. Seen twice: once in `UI Backend Integration` and
+once in `Frontend Browser` (`page.reload: net::ERR_CONNECTION_REFUSED`), both
+confirmed as nondeterminism by a same-head re-run. Cheapest fix is a bounded retry on `EADDRINUSE`;
 the correct fix is passing the listening socket to the child so it is never
 released.
 
@@ -218,7 +313,7 @@ The `actions/checkout` step prints every remote branch, and enough branch names
 contain words like `failure` and `manifest` that a grep for a real error returns
 forty lines of branch list first. Filter with `grep -v 'Run actions/checkout'`.
 
-## 6. Operational notes for whoever picks this up
+## 7. Operational notes for whoever picks this up
 
 **Lane worktrees accumulate.** `git worktree list | grep -c '.claude/worktrees'`
 returned 144. Each is a full checkout. `du -sh` on that directory did not
@@ -247,14 +342,17 @@ timeout — which settles it as nondeterminism rather than inference. Where a sa
 re-run is unavailable because a new head has landed, say so rather than calling
 it flaky on one observation.
 
-## 7. Suggested order
+## 8. Suggested order
 
-1. Land dcp-6, then dcp-7. Cycle ratchet reaches 0 and
-   `service-cycle-ceiling.json` can be retired.
-2. Plan the 44 package moves as owner-scoped lanes per §3, applying §2.2 up
-   front.
-3. Fix the two correctness defects in §5 (Worker Sessions listing, `work move`
-   token coverage) — these are user-visible, unlike the baselines.
+1. Decide the ownership question in section 3.3 — does the execution-outcome
+   vocabulary move to `work`? Nothing else in the program is blocked on a
+   decision; this one is. Once decided, the packet is three sequenced lanes and
+   the cycle ceiling retires at zero.
+2. Fix the two correctness defects in section 6 (Worker Sessions listing,
+   `work move` token coverage) — these are user-visible, unlike the baselines.
+3. Plan the 44 package moves as owner-scoped lanes per section 4, applying
+   section 2.2 up front.
 4. Measure the `findAvailablePort` race frequency, then fix it. It taxes every
-   pull request that touches the UI.
-5. Work the violation baselines in §4 down, largest first.
+   pull request that touches the UI, and has now been observed in two different
+   jobs rather than one.
+5. Work the violation baselines in section 5 down, largest first.
