@@ -389,3 +389,86 @@ func readUnitReportJSON(t *testing.T, path string, target any) {
 		t.Fatalf("decode %s: %v\n%s", filepath.Base(path), err, data)
 	}
 }
+
+// TestNonStreamingTimingObserverDoesNotWritePerEvent guards the unit lane's
+// measured runtime. The snapshotter's observe path runs on the goroutine that
+// drains the child go test pipe: when it published per event it serialized the
+// whole run's snapshot and wrote it to disk once per package start and once per
+// package terminal, and the child blocked on a full pipe for the duration.
+//
+// The functional lane hid this because it observes a few dozen packages. The
+// unit lane observes hundreds, and the CI job went from ~5 minutes to over an
+// hour without completing.
+//
+// The bound below is deliberately loose. Per-event publishing cost roughly
+// 3.5ms per event locally, so this many events took about four seconds; leaving
+// persistence to the ticker costs no I/O on this path at all and finishes in
+// milliseconds. Anything near the old cost fails.
+func TestNonStreamingTimingObserverDoesNotWritePerEvent(t *testing.T) {
+	const packageCount = 528
+
+	expected := make([]string, 0, packageCount)
+	for index := range packageCount {
+		expected = append(expected, fmt.Sprintf("%s/pkg/probe/pkg%04d", modulePath, index))
+	}
+
+	timingPath := filepath.Join(t.TempDir(), "unit-timing-summary.json")
+	tracker := newFunctionalTimingTracker(expected, time.Now())
+	// sink nil is the non-streaming unit lane: -timing-output without -stream.
+	snapshotter := newFunctionalTimingSnapshotter(tracker, timingPath, nil, nil)
+
+	started := time.Now()
+	for _, packageName := range expected {
+		snapshotter.observe(goTestTimingEvent{Action: "start", Package: packageName})
+	}
+	for _, packageName := range expected {
+		snapshotter.observe(goTestTimingEvent{Action: timingOutcomePass, Package: packageName, Elapsed: 1.5})
+	}
+	elapsed := time.Since(started)
+
+	if elapsed > 1500*time.Millisecond {
+		t.Fatalf("observing %d package events on the pipe-drain path took %s; it must not perform per-event I/O", packageCount*2, elapsed)
+	}
+
+	// The events still have to be recorded: this must be cheaper, not blinder.
+	// An incomplete summary is the case the tracker exists for, because that is
+	// when finish() falls back to tracker state to describe every package.
+	if err := snapshotter.finish(functionalTimingSummaryJSON{Complete: false}, "lane interrupted"); err != nil {
+		t.Fatalf("finish timing snapshot: %v", err)
+	}
+
+	data, err := os.ReadFile(timingPath)
+	if err != nil {
+		t.Fatalf("read timing summary: %v", err)
+	}
+	var document functionalTimingSummaryJSON
+	if err := json.Unmarshal(data, &document); err != nil {
+		t.Fatalf("decode timing summary: %v", err)
+	}
+	if len(document.PackageStates) != packageCount {
+		t.Fatalf("timing summary recorded %d package states, want %d", len(document.PackageStates), packageCount)
+	}
+	for _, state := range document.PackageStates {
+		if state.State != functionalPackageStateCompleted {
+			t.Fatalf("package %s state is %q, want %q", state.Package, state.State, functionalPackageStateCompleted)
+		}
+	}
+}
+
+// TestStreamingTimingObserverStillPublishesPerEvent pins the functional lane's
+// behaviour in place: its progress lines are the live log a reader watches, so
+// the per-event publish must survive for a lane that has a sink.
+func TestStreamingTimingObserverStillPublishesPerEvent(t *testing.T) {
+	packages := []string{modulePath + "/tests/functional/alpha", modulePath + "/tests/functional/beta"}
+	timingPath := filepath.Join(t.TempDir(), "functional-timing-summary.json")
+	tracker := newFunctionalTimingTracker(packages, time.Now())
+
+	var sink strings.Builder
+	snapshotter := newFunctionalTimingSnapshotter(tracker, timingPath, &sink, nil)
+	snapshotter.observe(goTestTimingEvent{Action: "start", Package: packages[0]})
+	snapshotter.stopAndWait()
+
+	if !strings.Contains(sink.String(), "Functional timing snapshot:") {
+		t.Fatalf("streaming lane emitted no progress line per event; got %q", sink.String())
+	}
+}
