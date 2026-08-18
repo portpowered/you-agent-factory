@@ -6,7 +6,7 @@ import (
 
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	"github.com/portpowered/infinite-you/pkg/services/work"
-	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifest"
+	"github.com/portpowered/infinite-you/pkg/services/work/transports/cli/climanifest"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/commandidentity"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/generated"
 	cliobservation "github.com/portpowered/infinite-you/pkg/transports/cli/observation"
