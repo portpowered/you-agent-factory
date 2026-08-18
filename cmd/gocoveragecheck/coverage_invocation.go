@@ -1,6 +1,8 @@
 package main
 
 import (
+	"bufio"
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -355,7 +357,7 @@ func executeCoverageInvocationPlan(cfg config, plan coverageInvocationPlan, test
 			failedTestCountKnown = failedTestCountKnown && known
 		}
 
-		detail := mergeGoTestFailureDetail(batchStderr, batchStdout)
+		detail := mergeGoTestFailureDetail(batchStderr, coverageFailureDetailStdout(cfg, batchStdout))
 		batchFailurePrefix := failurePrefix
 		if len(plan.invocations) > 1 {
 			batchFailurePrefix = fmt.Sprintf("%s (batch %d/%d)", failurePrefix, index+1, len(plan.invocations))
@@ -613,6 +615,54 @@ func configureCoverageInvocationObservation(plan *coverageInvocationPlan, observ
 		plan.invocations[index].stderrWriter = reporter.stderrWriter(io.Discard)
 	}
 	return reporter
+}
+
+// coverageFailureDetailStdout returns the child stdout a failing batch should
+// be attributed with.
+//
+// Asking for a timing summary switches the child go test to -json, so the
+// buffered stdout holds test2json events rather than the human text a reader
+// needs to see which test failed and why. A lane that captures timing without
+// streaming therefore renders the human output back out of those events, which
+// keeps a failing unit lane exactly as diagnosable as it is with timing capture
+// switched off.
+//
+// A streaming lane already forwarded the human text to its sink line by line,
+// so its buffer is returned unchanged.
+func coverageFailureDetailStdout(cfg config, stdout string) string {
+	if cfg.stream || strings.TrimSpace(cfg.timingOutput) == "" {
+		return stdout
+	}
+	return renderGoTestEventOutput(stdout)
+}
+
+// renderGoTestEventOutput reconstitutes the human-readable go test stream from
+// captured test2json events. go test wraps every byte the test binary and the
+// toolchain write in an "output" event, so replaying those events in order
+// reproduces the original stream. Lines that are not decodable events pass
+// through unchanged: a child that crashed before test2json framed its output
+// still contributes its raw fragment.
+func renderGoTestEventOutput(stdout string) string {
+	if strings.TrimSpace(stdout) == "" {
+		return stdout
+	}
+	var rendered strings.Builder
+	scanner := bufio.NewScanner(strings.NewReader(stdout))
+	scanner.Buffer(make([]byte, 64*1024), 1024*1024)
+	for scanner.Scan() {
+		line := scanner.Bytes()
+		var event goTestTimingEvent
+		if err := json.Unmarshal(bytes.TrimSpace(line), &event); err != nil || event.Package == "" {
+			rendered.Write(line)
+			rendered.WriteString("\n")
+			continue
+		}
+		if event.Action != "output" {
+			continue
+		}
+		rendered.WriteString(event.Output)
+	}
+	return rendered.String()
 }
 
 func mergeGoTestFailureDetail(stderr string, stdout string) string {
