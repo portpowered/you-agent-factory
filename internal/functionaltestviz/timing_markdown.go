@@ -58,7 +58,57 @@ func RenderFunctionalTimingMarkdown(summary FunctionalTimingSummary) string {
 	}
 
 	renderFunctionalTestFailures(&b, summary.Tests)
+	renderSlowestFunctionalTests(&b, summary.Tests)
 	return b.String()
+}
+
+// slowestFunctionalTestReportLimit caps how many individual tests the slowest-
+// tests table names. The rendered text always states how many rows the cap
+// dropped so a truncated table is never mistaken for the whole suite.
+const slowestFunctionalTestReportLimit = 15
+
+// renderSlowestFunctionalTests renders the longest-running top-level tests
+// from the per-test rows already captured alongside the package timings.
+// Package totals answer "which package is slow"; this answers "which test".
+// Nothing is rendered when a run captured no per-test rows at all.
+func renderSlowestFunctionalTests(output *strings.Builder, tests []FunctionalTestTiming) {
+	if len(tests) == 0 {
+		return
+	}
+	slowest := make([]FunctionalTestTiming, len(tests))
+	copy(slowest, tests)
+	sort.SliceStable(slowest, func(i, j int) bool {
+		if slowest[i].Seconds != slowest[j].Seconds {
+			return slowest[i].Seconds > slowest[j].Seconds
+		}
+		if slowest[i].Package != slowest[j].Package {
+			return slowest[i].Package < slowest[j].Package
+		}
+		return slowest[i].Test < slowest[j].Test
+	})
+
+	shown := min(len(slowest), slowestFunctionalTestReportLimit)
+	output.WriteString("\n### Slowest top-level tests\n\n")
+	fmt.Fprintf(
+		output,
+		"- Showing the %d slowest of %d observed top-level tests by elapsed time; %d additional row(s) omitted.\n\n",
+		shown,
+		len(slowest),
+		len(slowest)-shown,
+	)
+	output.WriteString("| Test | Package | Elapsed (s) | Outcome |\n")
+	output.WriteString("| --- | --- | ---: | --- |\n")
+	for _, test := range slowest[:shown] {
+		output.WriteString("| `")
+		output.WriteString(test.Test)
+		output.WriteString("` | `")
+		output.WriteString(test.Package)
+		output.WriteString("` | ")
+		fmt.Fprintf(output, "%.3f", test.Seconds)
+		output.WriteString(" | ")
+		output.WriteString(test.Outcome)
+		output.WriteString(" |\n")
+	}
 }
 
 func renderFunctionalTestFailures(output *strings.Builder, tests []FunctionalTestTiming) {
