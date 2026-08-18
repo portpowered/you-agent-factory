@@ -537,12 +537,12 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 		return nil, err
 	}
 	runnerFactory := provideLifecycleRunnerFactory()
-	v83, err := provideApplicationRuntimeAdapter(edges2, runtimeFactory, wireHttpRuntimeBinding, runnerFactory)
+	v83, err := provideApplicationRuntimeAdapter(edges2, runtimeFactory, v81, wireHttpRuntimeBinding, runnerFactory)
 	if err != nil {
 		return nil, err
 	}
 	v84 := wire.NewLifecyclePlanOperation()
-	v85, err := wire.NewApplicationService(v82, v61, v83, v84, v81)
+	v85, err := wire.NewApplicationService(v82, v61, v83, v84)
 	if err != nil {
 		return nil, err
 	}

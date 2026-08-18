@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -17,6 +18,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factorysessionwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire"
 	factoryvisualization "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
@@ -270,6 +272,26 @@ func openedRuntimeForAdapter(runtime *stubTransportRuntime) factorysessionwire.O
 	}
 }
 
+// stubSinkOwner is the composition-root sink registry that the adapter
+// resolves an opening request opaque sink selection against.
+type stubSinkOwner struct {
+	factoryvisualization.RuntimeSinkOwner
+	sinks map[factoryvisualization.RuntimeSinkID]factoryvisualization.Sink
+}
+
+func (owner stubSinkOwner) RuntimeSink(
+	id factoryvisualization.RuntimeSinkID,
+) (factoryvisualization.Sink, bool) {
+	sink, ok := owner.sinks[id]
+	return sink, ok
+}
+
+func sinkOwnerHolding(id string, sink factoryvisualization.Sink) stubSinkOwner {
+	return stubSinkOwner{sinks: map[factoryvisualization.RuntimeSinkID]factoryvisualization.Sink{
+		factoryvisualization.RuntimeSinkID(id): sink,
+	}}
+}
+
 // markerHandler is a comparable owner handler so a test can assert the exact
 // handler instance the bound transport runs.
 type markerHandler struct{}
@@ -287,13 +309,17 @@ func TestProvideApplicationRuntimeAdapterOmitsTheVisualizationRoleWithoutASink(t
 	handler := &markerHandler{}
 	runtime := &stubTransportRuntime{}
 	adapt, err := provideApplicationRuntimeAdapter(
-		serviceedges.Edges{}, recordingVisualizationFactory(build), boundHandlerAdapter(handler), lifecycle.NewRunner,
+		serviceedges.Edges{},
+		recordingVisualizationFactory(build),
+		stubSinkOwner{},
+		boundHandlerAdapter(handler),
+		lifecycle.NewRunner,
 	)
 	if err != nil {
 		t.Fatalf("provideApplicationRuntimeAdapter: %v", err)
 	}
 
-	components, err := adapt(openedRuntimeForAdapter(runtime), nil)
+	components, err := adapt(openedRuntimeForAdapter(runtime), "")
 	if err != nil {
 		t.Fatalf("adapt without a sink: %v", err)
 	}
@@ -329,6 +355,7 @@ func TestProvideApplicationRuntimeAdapterBindsAnInertVisualizationRoleForASelect
 	adapt, err := provideApplicationRuntimeAdapter(
 		serviceedges.Edges{},
 		recordingVisualizationFactory(build),
+		sinkOwnerHolding("live-sink", sink),
 		boundHandlerAdapter(&markerHandler{}),
 		lifecycle.NewRunner,
 	)
@@ -336,7 +363,7 @@ func TestProvideApplicationRuntimeAdapterBindsAnInertVisualizationRoleForASelect
 		t.Fatalf("provideApplicationRuntimeAdapter: %v", err)
 	}
 
-	components, err := adapt(openedRuntimeForAdapter(&stubTransportRuntime{}), sink)
+	components, err := adapt(openedRuntimeForAdapter(&stubTransportRuntime{}), "live-sink")
 	if err != nil {
 		t.Fatalf("adapt with a sink: %v", err)
 	}
@@ -375,6 +402,7 @@ func TestProvideApplicationRuntimeAdapterHonorsRootVisualizationEdgeOverrides(t 
 			FactoryVisualizationRootObserver: func(root factoryvisualization.Root) { observed = root },
 		},
 		recordingVisualizationFactory(build),
+		stubSinkOwner{},
 		boundHandlerAdapter(&markerHandler{}),
 		lifecycle.NewRunner,
 	)
@@ -382,7 +410,7 @@ func TestProvideApplicationRuntimeAdapterHonorsRootVisualizationEdgeOverrides(t 
 		t.Fatalf("provideApplicationRuntimeAdapter: %v", err)
 	}
 
-	components, err := adapt(openedRuntimeForAdapter(&stubTransportRuntime{}), nil)
+	components, err := adapt(openedRuntimeForAdapter(&stubTransportRuntime{}), "")
 	if err != nil {
 		t.Fatalf("adapt with a fixed root sink: %v", err)
 	}
@@ -398,33 +426,65 @@ func TestProvideApplicationRuntimeAdapterFailsClosedOnMissingOperations(t *testi
 	t.Parallel()
 
 	build := &recordedVisualizationBuild{}
-	if _, err := provideApplicationRuntimeAdapter(
-		serviceedges.Edges{}, nil, boundHandlerAdapter(&markerHandler{}), lifecycle.NewRunner,
-	); err == nil {
-		t.Fatal("missing visualization factory = nil error, want a construction failure")
+	factory := recordingVisualizationFactory(build)
+	binding := boundHandlerAdapter(&markerHandler{})
+	missing := []struct {
+		name    string
+		factory factoryvisualization.RuntimeFactory
+		sinks   factoryvisualization.RuntimeSinkOwner
+		binding httpRuntimeBinding
+		runner  lifecycle.RunnerFactory
+	}{
+		{"visualization factory", nil, stubSinkOwner{}, binding, lifecycle.NewRunner},
+		{"visualization sink owner", factory, nil, binding, lifecycle.NewRunner},
+		{"HTTP binding", factory, stubSinkOwner{}, nil, lifecycle.NewRunner},
+		{"runner factory", factory, stubSinkOwner{}, binding, nil},
 	}
-	if _, err := provideApplicationRuntimeAdapter(
-		serviceedges.Edges{}, recordingVisualizationFactory(build), nil, lifecycle.NewRunner,
-	); err == nil {
-		t.Fatal("missing HTTP binding = nil error, want a construction failure")
-	}
-	if _, err := provideApplicationRuntimeAdapter(
-		serviceedges.Edges{}, recordingVisualizationFactory(build), boundHandlerAdapter(&markerHandler{}), nil,
-	); err == nil {
-		t.Fatal("missing runner factory = nil error, want a construction failure")
+	for _, operation := range missing {
+		if _, err := provideApplicationRuntimeAdapter(
+			serviceedges.Edges{}, operation.factory, operation.sinks, operation.binding, operation.runner,
+		); err == nil {
+			t.Fatalf("missing %s = nil error, want a construction failure", operation.name)
+		}
 	}
 
 	bindingFailure := errors.New("owner HTTP binding failed")
 	adapt, err := provideApplicationRuntimeAdapter(
 		serviceedges.Edges{},
-		recordingVisualizationFactory(build),
+		factory,
+		stubSinkOwner{},
 		func(factorysessionwire.OpenedApplicationRuntime) (http.Handler, error) { return nil, bindingFailure },
 		lifecycle.NewRunner,
 	)
 	if err != nil {
 		t.Fatalf("provideApplicationRuntimeAdapter: %v", err)
 	}
-	if _, err := adapt(openedRuntimeForAdapter(&stubTransportRuntime{}), nil); !errors.Is(err, bindingFailure) {
+	if _, err := adapt(openedRuntimeForAdapter(&stubTransportRuntime{}), ""); !errors.Is(err, bindingFailure) {
 		t.Fatalf("adapt with a failing HTTP binding = %v, want the binding failure", err)
+	}
+}
+
+func TestProvideApplicationRuntimeAdapterRejectsAnUnavailableVisualizationSink(t *testing.T) {
+	t.Parallel()
+
+	build := &recordedVisualizationBuild{}
+	runtime := &stubTransportRuntime{}
+	adapt, err := provideApplicationRuntimeAdapter(
+		serviceedges.Edges{},
+		recordingVisualizationFactory(build),
+		sinkOwnerHolding("live-sink", factoryvisualization.SinkFunc(func(factoryvisualization.View) {})),
+		boundHandlerAdapter(&markerHandler{}),
+		lifecycle.NewRunner,
+	)
+	if err != nil {
+		t.Fatalf("provideApplicationRuntimeAdapter: %v", err)
+	}
+
+	_, err = adapt(openedRuntimeForAdapter(runtime), factorysessions.VisualizationSinkID("stale-sink"))
+	if err == nil || !strings.Contains(err.Error(), "Factory Visualization sink \"stale-sink\" is unavailable") {
+		t.Fatalf("adapt with a stale sink selection = %v, want an unavailable-sink failure naming it", err)
+	}
+	if build.calls != 0 || runtime.runs != 0 {
+		t.Fatalf("stale sink built %d roles and ran %d transports, want none", build.calls, runtime.runs)
 	}
 }
