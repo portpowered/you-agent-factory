@@ -601,3 +601,59 @@ func TestParseCronJitterAndExpiryWindow_TreatAMissingCronConfigAsUnset(t *testin
 		t.Fatalf("ParseCronExpiryWindow(nil, 0) error = %v, want ErrInvalidExpiryWindow", err)
 	}
 }
+
+// A cron workstation may declare a fixed interval with 'every' instead of a
+// cron expression. That path never reaches the schedule grammar, so it derives
+// the schedule window straight from the parsed interval and the expiry window
+// then defaults to it.
+func TestParseCronTiming_DerivesTheScheduleWindowFromAnEveryInterval(t *testing.T) {
+	svc := testCronService()
+	nominalAt := time.Date(2026, 4, 18, 12, 30, 0, 0, time.UTC)
+
+	timing, err := svc.ParseCronTiming(&interfaces.CronConfig{Every: "5m"}, nominalAt)
+	if err != nil {
+		t.Fatalf("ParseCronTiming(every=5m) error = %v", err)
+	}
+	if timing.ExpiryWindow != 5*time.Minute {
+		t.Fatalf("expiry window = %s, want the 5m interval as the default", timing.ExpiryWindow)
+	}
+	if timing.MaxJitter != 0 {
+		t.Fatalf("max jitter = %s, want 0 when unset", timing.MaxJitter)
+	}
+
+	explicit, err := svc.ParseCronTiming(&interfaces.CronConfig{Every: "5m", ExpiryWindow: "30s", Jitter: "2s"}, nominalAt)
+	if err != nil {
+		t.Fatalf("ParseCronTiming(every=5m, explicit windows) error = %v", err)
+	}
+	if explicit.ExpiryWindow != 30*time.Second || explicit.MaxJitter != 2*time.Second {
+		t.Fatalf("timing = %#v, want 30s expiry and 2s jitter", explicit)
+	}
+}
+
+func TestParseCronTiming_RejectsAnEveryIntervalThatIsNotAPositiveDuration(t *testing.T) {
+	svc := testCronService()
+	nominalAt := time.Date(2026, 4, 18, 12, 30, 0, 0, time.UTC)
+
+	for _, every := range []string{"soon", "0s", "-5m"} {
+		_, err := svc.ParseCronTiming(&interfaces.CronConfig{Every: every}, nominalAt)
+		if err == nil || !errors.Is(err, cron.ErrInvalidSchedule) {
+			t.Errorf("ParseCronTiming(every=%q) error = %v, want ErrInvalidSchedule", every, err)
+		}
+	}
+}
+
+func TestBuildCronTimeMetadata_RequiresAWorkstationName(t *testing.T) {
+	svc := testCronService()
+
+	_, err := svc.BuildCronTimeMetadata(cron.CronTimeInput{
+		WorkflowIdentity: "factory/main",
+		NominalAt:        time.Date(2026, 4, 18, 12, 30, 0, 0, time.UTC),
+		ExpiryWindow:     time.Minute,
+	})
+	if err == nil {
+		t.Fatal("BuildCronTimeMetadata() with no workstation name = nil error, want a failure")
+	}
+	if !strings.Contains(err.Error(), "workstation name is required") {
+		t.Fatalf("error = %v, want it to name the missing workstation name", err)
+	}
+}
