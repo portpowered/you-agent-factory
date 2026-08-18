@@ -40,7 +40,7 @@ import (
 	recordingswire "github.com/portpowered/infinite-you/pkg/services/recordings/wire"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	workerswire "github.com/portpowered/infinite-you/pkg/services/workers/wire"
-	"github.com/portpowered/infinite-you/pkg/transports/mapping/validationentry"
+	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/transports/mapping/validationentry"
 	"go.uber.org/zap"
 )
 

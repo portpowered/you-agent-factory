@@ -6,7 +6,7 @@ import (
 	"time"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	"github.com/portpowered/infinite-you/pkg/transports/mapping/factorysnapshot"
+	factorymapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig"
 )
 
 // CanonicalTopologyReplacementEvents returns backend-produced topology events
@@ -24,9 +24,20 @@ func CanonicalTopologyReplacementEvents() ([]interfaces.FactoryEvent, error) {
 }
 
 func canonicalTopologyEvent(id string, eventType interfaces.FactoryEventType, tick, sequence int, factory *interfaces.FactoryConfig) (interfaces.FactoryEvent, error) {
-	publicFactory, err := factorysnapshot.ObjectFromFactoryConfig(factory)
+	// Map the fixture Factory through the generated public contract at the
+	// transport boundary, matching the representation the backend records in
+	// canonical topology events.
+	generatedFactory, err := factorymapping.FactoryConfigToOpenAPI(factory)
 	if err != nil {
 		return interfaces.FactoryEvent{}, fmt.Errorf("map topology fixture to public Factory: %w", err)
+	}
+	generatedPayload, err := json.Marshal(generatedFactory)
+	if err != nil {
+		return interfaces.FactoryEvent{}, fmt.Errorf("encode topology fixture public Factory: %w", err)
+	}
+	var publicFactory map[string]any
+	if err := json.Unmarshal(generatedPayload, &publicFactory); err != nil {
+		return interfaces.FactoryEvent{}, fmt.Errorf("decode topology fixture public Factory: %w", err)
 	}
 	factorySnapshot, err := interfaces.NewFactorySnapshot(publicFactory)
 	if err != nil {

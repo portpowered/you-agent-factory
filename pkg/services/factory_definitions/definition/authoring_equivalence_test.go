@@ -29,7 +29,7 @@ import (
 	factorydefinitionswire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire"
 	factorymapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig"
 	authoredmapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig/authored"
-	"github.com/portpowered/infinite-you/pkg/transports/mapping/validationentry"
+	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/transports/mapping/validationentry"
 )
 
 func newRootAuthoringServiceForPeer(t *testing.T) factoryroot.Service {

@@ -16,7 +16,7 @@ import (
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	workercompatibility "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	"github.com/portpowered/infinite-you/pkg/transports/mapping/factorydefinition/retiredboundary"
+	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/transports/mapping/factorydefinition/retiredboundary"
 	contentcontract "github.com/portpowered/infinite-you/pkg/transports/mapping/workcontent"
 )
 

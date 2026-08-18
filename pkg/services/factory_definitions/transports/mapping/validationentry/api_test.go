@@ -9,7 +9,7 @@ import (
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 	factorymapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig"
-	"github.com/portpowered/infinite-you/pkg/transports/mapping/validationentry"
+	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/transports/mapping/validationentry"
 )
 
 const (

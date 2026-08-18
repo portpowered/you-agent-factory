@@ -400,6 +400,22 @@
       "minimum": 39.72
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/transports/mapping/factorydefinition",
+      "minimum": 59.09
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/transports/mapping/factorydefinition/retiredboundary",
+      "minimum": 69.31
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/transports/mapping/factorysnapshot",
+      "minimum": 75.00
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/transports/mapping/validationentry",
+      "minimum": 70.31
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire/defaultscaffold",
       "minimum": 66.66
     },
@@ -1378,28 +1394,12 @@
       "minimum": 48.98
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/transports/mapping/factorydefinition",
-      "minimum": 59.09
-    },
-    {
-      "package": "github.com/portpowered/infinite-you/pkg/transports/mapping/factorydefinition/retiredboundary",
-      "minimum": 69.31
-    },
-    {
       "package": "github.com/portpowered/infinite-you/pkg/transports/mapping/factorysession",
       "minimum": 41.11
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/transports/mapping/factorysnapshot",
-      "minimum": 75.00
-    },
-    {
       "package": "github.com/portpowered/infinite-you/pkg/transports/mapping/optional",
       "minimum": 97.50
-    },
-    {
-      "package": "github.com/portpowered/infinite-you/pkg/transports/mapping/validationentry",
-      "minimum": 70.31
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/transports/mapping/workcontent",

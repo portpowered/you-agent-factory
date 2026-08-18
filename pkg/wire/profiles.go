@@ -60,7 +60,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/transports/cli/terminalpolicy"
 	transporthttp "github.com/portpowered/infinite-you/pkg/transports/http"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
-	factorydefinitionmapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factorydefinition"
+	factorydefinitionmapping "github.com/portpowered/infinite-you/pkg/services/factory_definitions/transports/mapping/factorydefinition"
 	factorysessionmapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factorysession"
 	mcpserver "github.com/portpowered/infinite-you/pkg/transports/mcp/server"
 	mcpstdio "github.com/portpowered/infinite-you/pkg/transports/mcp/stdio"

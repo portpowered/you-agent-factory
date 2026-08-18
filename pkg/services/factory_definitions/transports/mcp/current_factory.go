@@ -4,7 +4,7 @@ import (
 	"context"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-	factorydefinitionmapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factorydefinition"
+	factorydefinitionmapping "github.com/portpowered/infinite-you/pkg/services/factory_definitions/transports/mapping/factorydefinition"
 )
 
 // GetCurrentInput is the MCP request shape for you.factory_definition.get_current.
