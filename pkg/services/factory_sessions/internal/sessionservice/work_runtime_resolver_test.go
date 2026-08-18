@@ -392,16 +392,36 @@ func (r failingMoveRuntime) ControlMoveWork(
 func TestWorkRuntimeAdapterTranslatesEngineMoveFailuresToWorkSentinels(t *testing.T) {
 	opaque := errors.New("engine unavailable")
 	checks := []struct {
-		name string
-		from error
-		want error
+		name     string
+		from     error
+		want     error
+		wantText string
 	}{
-		{name: "request conflict", from: factory.ErrMoveWorkRequestConflict, want: work.ErrMoveWorkRequestAlreadyApplied},
-		{name: "work not found", from: factory.ErrMoveWorkNotFound, want: work.ErrMoveWorkNotFound},
-		{name: "invalid state", from: factory.ErrMoveWorkInvalidState, want: work.ErrMoveWorkInvalidState},
-		{name: "in-flight dispatch", from: factory.ErrMoveWorkInFlightDispatch, want: work.ErrMoveWorkInFlightDispatch},
-		{name: "engine terminated", from: factory.ErrMoveWorkEngineTerminated, want: work.ErrMoveWorkEngineTerminated},
-		{name: "unclassified failure", from: opaque, want: opaque},
+		{
+			name: "request conflict",
+			from: factory.ErrMoveWorkRequestConflict,
+			want: work.ErrMoveWorkRequestAlreadyApplied,
+			// The conflict sentinel is the one translation that already
+			// restated the failure in Work's own operator wording.
+			wantText: "operator move request was already applied",
+		},
+		{
+			name: "work not found", from: factory.ErrMoveWorkNotFound,
+			want: work.ErrMoveWorkNotFound, wantText: "work not found",
+		},
+		{
+			name: "invalid state", from: factory.ErrMoveWorkInvalidState,
+			want: work.ErrMoveWorkInvalidState, wantText: "invalid target state for work type",
+		},
+		{
+			name: "in-flight dispatch", from: factory.ErrMoveWorkInFlightDispatch,
+			want: work.ErrMoveWorkInFlightDispatch, wantText: "work is in an active dispatch",
+		},
+		{
+			name: "engine terminated", from: factory.ErrMoveWorkEngineTerminated,
+			want: work.ErrMoveWorkEngineTerminated, wantText: "engine has terminated",
+		},
+		{name: "unclassified failure", from: opaque, want: opaque, wantText: "engine unavailable"},
 	}
 	for _, check := range checks {
 		t.Run(check.name, func(t *testing.T) {
@@ -413,11 +433,8 @@ func TestWorkRuntimeAdapterTranslatesEngineMoveFailuresToWorkSentinels(t *testin
 			if !errors.Is(err, check.want) {
 				t.Fatalf("MoveWork() error = %v, want %v", err, check.want)
 			}
-			if err.Error() != check.from.Error() {
-				t.Fatalf(
-					"MoveWork() error text = %q, want the operator-facing wording %q preserved",
-					err.Error(), check.from.Error(),
-				)
+			if err.Error() != check.wantText {
+				t.Fatalf("MoveWork() error text = %q, want %q", err.Error(), check.wantText)
 			}
 		})
 	}
