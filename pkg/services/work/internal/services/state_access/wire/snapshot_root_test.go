@@ -9,47 +9,48 @@ import (
 	stateaccesswire "github.com/portpowered/infinite-you/pkg/services/work/internal/services/state_access/wire"
 )
 
-func TestGetWorkFromSnapshotsReadsThroughTheInjectedSnapshotReader(t *testing.T) {
+func TestSnapshotRootServiceGetWorkReadsThroughTheInjectedSnapshotReader(t *testing.T) {
 	t.Parallel()
 
 	reader := &snapshotReaderStub{snapshot: reviewWorkSnapshot("work-story")}
 
-	got, err := stateaccesswire.GetWorkFromSnapshots(
+	got, err := stateaccesswire.NewSnapshotRootService(reader).GetWork(
 		context.Background(),
 		"session-state-access-unit",
 		"work-story",
-		reader,
 	)
 	if err != nil {
-		t.Fatalf("GetWorkFromSnapshots: %v", err)
+		t.Fatalf("GetWork: %v", err)
 	}
 	if got.WorkID != "work-story" {
-		t.Fatalf("GetWorkFromSnapshots = %#v, want work-story", got)
+		t.Fatalf("GetWork = %#v, want work-story", got)
 	}
 	if reader.session != "session-state-access-unit" {
 		t.Fatalf("snapshot reader session = %q, want the requested session", reader.session)
 	}
 }
 
-func TestListWorkFromSnapshotsReadsThroughTheInjectedSnapshotReader(t *testing.T) {
+func TestSnapshotRootServiceListWorkReadsThroughTheInjectedSnapshotReader(t *testing.T) {
 	t.Parallel()
 
 	reader := &snapshotReaderStub{snapshot: reviewWorkSnapshot("work-story")}
 
-	list, err := stateaccesswire.ListWorkFromSnapshots(
+	list, err := stateaccesswire.NewSnapshotRootService(reader).ListWork(
 		context.Background(),
 		"session-state-access-unit",
-		reader,
 		work.ListOptions{},
 	)
 	if err != nil {
-		t.Fatalf("ListWorkFromSnapshots: %v", err)
+		t.Fatalf("ListWork: %v", err)
 	}
 	if len(list.Results) != 1 || list.Results[0].WorkID != "work-story" {
-		t.Fatalf("ListWorkFromSnapshots = %#v, want one story work item", list)
+		t.Fatalf("ListWork = %#v, want one story work item", list)
 	}
 	if list.Results[0].State == nil || list.Results[0].State.Name != "review" {
-		t.Fatalf("ListWorkFromSnapshots state = %#v, want review", list.Results[0].State)
+		t.Fatalf("ListWork state = %#v, want review", list.Results[0].State)
+	}
+	if reader.session != "session-state-access-unit" {
+		t.Fatalf("snapshot reader session = %q, want the requested session", reader.session)
 	}
 }
 
@@ -57,14 +58,13 @@ func TestSnapshotRootServiceSurfacesSnapshotReaderFailures(t *testing.T) {
 	t.Parallel()
 
 	failure := errors.New("snapshot unavailable")
-	_, err := stateaccesswire.ListWorkFromSnapshots(
+	_, err := stateaccesswire.NewSnapshotRootService(&snapshotReaderStub{err: failure}).ListWork(
 		context.Background(),
 		"session-state-access-unit",
-		&snapshotReaderStub{err: failure},
 		work.ListOptions{},
 	)
 	if !errors.Is(err, failure) {
-		t.Fatalf("ListWorkFromSnapshots error = %v, want the snapshot reader failure", err)
+		t.Fatalf("ListWork error = %v, want the snapshot reader failure", err)
 	}
 }
 
