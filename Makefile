@@ -138,6 +138,8 @@ FUNCTIONAL_TEST_TRIGGER ?= local
 FUNCTIONAL_TEST_BUDGET ?= 35m
 FUNCTIONAL_SHORT ?= true
 GO_UNIT_COVERAGE_PROFILE ?=
+GO_UNIT_COVERAGE_JSON_OUTPUT ?=
+GO_UNIT_COVERAGE_TIMING_OUTPUT ?=
 GO_FUNCTIONAL_COVERAGE_PROFILE ?=
 GO_FUNCTIONAL_COVERAGE_JSON_OUTPUT ?=
 GO_FUNCTIONAL_COVERAGE_TIMING_OUTPUT ?=
@@ -481,7 +483,7 @@ readme-check:
 test: test-unit test-ci-workflows
 
 test-ci-workflows:
-	$(NODE) --test scripts/default-pipeline.test.mjs scripts/development-package-workflow.test.mjs scripts/verification-policy.test.mjs scripts/ci/lane-budget.test.mjs scripts/ci/backend-lint-report.test.mjs scripts/ci/backend-lint-workflow.test.mjs scripts/ci/functional-coverage-comment.test.mjs
+	$(NODE) --test scripts/default-pipeline.test.mjs scripts/development-package-workflow.test.mjs scripts/verification-policy.test.mjs scripts/ci/lane-budget.test.mjs scripts/ci/backend-lint-report.test.mjs scripts/ci/backend-lint-workflow.test.mjs scripts/ci/functional-coverage-comment.test.mjs scripts/ci/unit-coverage-report.test.mjs
 
 test-full:
 	$(GO) test ./... -timeout $(GO_TEST_TIMEOUT)
@@ -672,8 +674,13 @@ test-coverage-go:
 	$(info make test-coverage-go is a compatibility alias for unit coverage; use make test-functional-coverage for the independent functional report.)
 	$(MAKE) test-unit-coverage
 
+# The three GO_UNIT_COVERAGE_* output paths are optional and independent. Each
+# is forwarded only when it is set, so an invocation with none of them set runs
+# exactly the command it ran before reporting existed. Setting the JSON or
+# timing path never changes the gate: gocoveragecheck's exit code stays the sole
+# pass/fail signal.
 test-unit-coverage:
-	$(GO) run ./cmd/gocoveragecheck -suite unit -min $(GO_UNIT_COVERAGE_MIN) -package-manifest $(GO_UNIT_COVERAGE_MANIFEST) -timeout $(GO_COVERAGE_TIMEOUT) $(if $(GO_UNIT_COVERAGE_PROFILE),-profile $(GO_UNIT_COVERAGE_PROFILE),)
+	$(GO) run ./cmd/gocoveragecheck -suite unit -min $(GO_UNIT_COVERAGE_MIN) -package-manifest $(GO_UNIT_COVERAGE_MANIFEST) -timeout $(GO_COVERAGE_TIMEOUT) $(if $(GO_UNIT_COVERAGE_PROFILE),-profile $(GO_UNIT_COVERAGE_PROFILE),) $(if $(GO_UNIT_COVERAGE_JSON_OUTPUT),-json-output $(GO_UNIT_COVERAGE_JSON_OUTPUT),) $(if $(GO_UNIT_COVERAGE_TIMING_OUTPUT),-timing-output $(GO_UNIT_COVERAGE_TIMING_OUTPUT),)
 
 # test-functional-coverage always runs functional-boundary-check first so the
 # required CI Backend Functional Coverage lane (and any local/alias caller of

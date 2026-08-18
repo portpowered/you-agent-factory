@@ -16,13 +16,18 @@ const functionalCoverageSnapshotInterval = 5 * time.Second
 // the buffered go test JSON. This lets a timeout snapshot describe packages
 // that have started but never emitted a terminal event.
 type functionalTimingTracker struct {
-	mu         sync.Mutex
-	expected   []string
-	started    map[string]time.Time
-	terminals  map[string]functionalPackageTimingJSON
-	invalid    bool
-	now        func() time.Time
-	runStarted time.Time
+	mu sync.Mutex
+	// expected preserves the sorted package order used by every snapshot.
+	// expectedSet answers membership in constant time: the unit lane observes
+	// hundreds of packages, so a linear scan per event grows with the square of
+	// the lane size.
+	expected    []string
+	expectedSet map[string]struct{}
+	started     map[string]time.Time
+	terminals   map[string]functionalPackageTimingJSON
+	invalid     bool
+	now         func() time.Time
+	runStarted  time.Time
 }
 
 func newFunctionalTimingTracker(expected []string, started time.Time) *functionalTimingTracker {
@@ -41,11 +46,12 @@ func newFunctionalTimingTracker(expected []string, started time.Time) *functiona
 	}
 	slices.Sort(ordered)
 	return &functionalTimingTracker{
-		expected:   ordered,
-		started:    make(map[string]time.Time, len(ordered)),
-		terminals:  make(map[string]functionalPackageTimingJSON, len(ordered)),
-		now:        time.Now,
-		runStarted: started,
+		expected:    ordered,
+		expectedSet: unique,
+		started:     make(map[string]time.Time, len(ordered)),
+		terminals:   make(map[string]functionalPackageTimingJSON, len(ordered)),
+		now:         time.Now,
+		runStarted:  started,
 	}
 }
 
@@ -94,7 +100,8 @@ func (tracker *functionalTimingTracker) observe(event goTestTimingEvent) bool {
 }
 
 func (tracker *functionalTimingTracker) isExpectedLocked(packageName string) bool {
-	return slices.Contains(tracker.expected, packageName)
+	_, expected := tracker.expectedSet[packageName]
+	return expected
 }
 
 func (tracker *functionalTimingTracker) snapshot(complete bool, reason string, at time.Time) functionalTimingSummaryJSON {
@@ -103,6 +110,11 @@ func (tracker *functionalTimingTracker) snapshot(complete bool, reason string, a
 
 	packages := make([]functionalPackageTimingJSON, 0, len(tracker.terminals))
 	states := make([]functionalPackageStateJSON, 0, len(tracker.expected))
+	// A snapshot records package progress, not per-test rows. Tests is still
+	// emitted as an empty array rather than left nil, because a nil slice
+	// marshals to JSON null and a consumer reading a documented array field
+	// cannot tell null apart from an unreadable document.
+	tests := make([]functionalTestTimingJSON, 0)
 	packageElapsed := 0.0
 	for _, packageName := range tracker.expected {
 		if terminal, ok := tracker.terminals[packageName]; ok {
@@ -147,6 +159,7 @@ func (tracker *functionalTimingTracker) snapshot(complete bool, reason string, a
 			PackageCount:             len(packages),
 			Packages:                 packages,
 			PackageStates:            states,
+			Tests:                    tests,
 		}
 	}
 	return functionalTimingSummaryJSON{
@@ -157,6 +170,7 @@ func (tracker *functionalTimingTracker) snapshot(complete bool, reason string, a
 		PackageCount:         len(packages),
 		Packages:             packages,
 		PackageStates:        states,
+		Tests:                tests,
 	}
 }
 
@@ -214,8 +228,22 @@ func (snapshotter *functionalTimingSnapshotter) run() {
 	}
 }
 
+// observe records a package lifecycle event. The caller is the goroutine that
+// drains the child go test pipe, so this path must stay cheap: a publish here
+// serializes the whole run's snapshot and writes it to disk, and while that
+// happens the pipe is not being read and every test binary blocks behind it.
+//
+// A streaming lane still publishes per event, because its progress lines are
+// the live log a reader watches, and it observes a few dozen packages. A
+// non-streaming lane has no sink to emit to, so persistence is left entirely to
+// the one-second ticker in run(): the timeout snapshot it exists to protect is
+// still on disk, without paying a full document write per event. The unit lane
+// observes hundreds of packages, which is what makes the difference matter.
 func (snapshotter *functionalTimingSnapshotter) observe(event goTestTimingEvent) {
 	if !snapshotter.tracker.observe(event) {
+		return
+	}
+	if snapshotter.sink == nil {
 		return
 	}
 	snapshotter.publish(false, "functional run still active", true)

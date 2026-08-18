@@ -183,6 +183,9 @@ func TestFunctionalCoverageVerdictPassesWhenEveryPackageMeetsItsFloor(t *testing
 	}
 }
 
+// TestUnitCoverageRunKeepsRawPerPackageCoverageLines pins the invocation that
+// publishes no coverage-summary artifact. Its stdout listing is the only copy
+// of the per-package measurement, so it is never collapsed.
 func TestUnitCoverageRunKeepsRawPerPackageCoverageLines(t *testing.T) {
 	originalCommandRunner := commandRunner
 	originalStdout := stdoutWriter
@@ -215,8 +218,8 @@ func TestUnitCoverageRunKeepsRawPerPackageCoverageLines(t *testing.T) {
 	if !strings.Contains(got, configPackage+"\tcoverage: 100.0% of statements\n") {
 		t.Fatalf("unit lane lost its raw per-package coverage line:\n%s", got)
 	}
-	if strings.Contains(got, "Functional package coverage verdict:") {
-		t.Fatalf("unit lane rendered the functional verdict block:\n%s", got)
+	if strings.Contains(got, "package coverage verdict:") {
+		t.Fatalf("unit lane collapsed its only copy of the measurement into a verdict block:\n%s", got)
 	}
 }
 
@@ -238,7 +241,7 @@ func TestNearFloorCoverageReportStatesOmittedPackages(t *testing.T) {
 		result.packageTotals[importPath] = packageCoverageTotals{coveredStatements: 51, totalStatements: 100}
 	}
 
-	writeFunctionalCoverageVerdict(result, nil)
+	writeCoverageVerdict("Functional", result, nil)
 
 	got := stdout.String()
 	if count := strings.Count(got, "  near floor: package="); count != nearFloorCoverageReportLimit {

@@ -188,9 +188,10 @@ jobs:
     # always-run summary and artifact-upload steps can preserve partial
     # diagnostics after a timeout.
     timeout-minutes: 80
-    # The functional lane upserts its own reporting comment on the pull
-    # request, mirroring Backend Lint. Every other permission stays at the
-    # workflow-level read-only default.
+    # Both lanes upsert their own reporting comment on the pull request,
+    # mirroring Backend Lint. Each uses a distinct HTML-comment marker, so the
+    # two reports never find, overwrite, or delete each other's comment. Every
+    # other permission stays at the workflow-level read-only default.
     permissions:
       contents: read
       pull-requests: write
@@ -226,6 +227,99 @@ jobs:
       - name: Run backend coverage
         if: matrix.suite == 'unit'
         run: make test-unit-coverage
+        env:
+          GO_UNIT_COVERAGE_PROFILE: .artifacts/unit-coverage/coverage.out
+          GO_UNIT_COVERAGE_JSON_OUTPUT: .artifacts/unit-coverage/coverage-summary.json
+          GO_UNIT_COVERAGE_TIMING_OUTPUT: .artifacts/unit-coverage/unit-timing-summary.json
+      # Reporting only. Every unit step below is additive and runs with
+      # if: always() so a failing or timed-out lane still publishes the partial
+      # diagnostics it did produce. Each is fail-open: a missing or malformed
+      # artifact writes an explicit "unavailable" body and exits 0, so a
+      # renderer or API failure can never turn a passing suite red. Node is set
+      # up here rather than beside the Go toolchain so the measured lane runs in
+      # exactly the environment it ran in before.
+      - name: Set up Node for unit coverage reporting
+        if: always() && matrix.suite == 'unit'
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - name: Publish unit coverage job summary
+        if: always() && matrix.suite == 'unit'
+        continue-on-error: true
+        run: bash scripts/ci/publish-unit-coverage-summary.sh
+        env:
+          UNIT_COVERAGE_DIR: .artifacts/unit-coverage
+          UNIT_COVERAGE_PROFILE: .artifacts/unit-coverage/coverage.out
+          UNIT_COVERAGE_JSON: .artifacts/unit-coverage/coverage-summary.json
+          UNIT_COVERAGE_TIMING: .artifacts/unit-coverage/unit-timing-summary.json
+          UNIT_COVERAGE_SUMMARY_FILE: .artifacts/unit-coverage/unit-coverage-summary.md
+      - name: Upload unit coverage diagnostics
+        if: always() && matrix.suite == 'unit'
+        uses: actions/upload-artifact@v4
+        with:
+          name: unit-coverage-diagnostics
+          path: |
+            .artifacts/unit-coverage/coverage.out
+            .artifacts/unit-coverage/coverage-summary.json
+            .artifacts/unit-coverage/unit-timing-summary.json
+            .artifacts/unit-coverage/unit-coverage-summary.md
+          if-no-files-found: ignore
+          retention-days: 14
+      - name: Render unit coverage pull request comment
+        if: always() && matrix.suite == 'unit'
+        continue-on-error: true
+        run: bash scripts/ci/publish-unit-coverage-comment.sh
+        env:
+          UNIT_COVERAGE_DIR: .artifacts/unit-coverage
+          UNIT_COVERAGE_JSON: .artifacts/unit-coverage/coverage-summary.json
+          UNIT_COVERAGE_TIMING: .artifacts/unit-coverage/unit-timing-summary.json
+          UNIT_COVERAGE_COMMENT_FILE: .artifacts/unit-coverage/unit-coverage-comment.md
+          UNIT_COVERAGE_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: Publish unit coverage report to the pull request
+        if: always() && matrix.suite == 'unit' && github.event_name == 'pull_request'
+        continue-on-error: true
+        uses: actions/github-script@v7
+        env:
+          UNIT_COVERAGE_COMMENT_FILE: .artifacts/unit-coverage/unit-coverage-comment.md
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const fs = require('node:fs');
+            const commentPath = `${process.env.GITHUB_WORKSPACE}/${process.env.UNIT_COVERAGE_COMMENT_FILE}`;
+            let body = '';
+            try {
+              body = fs.readFileSync(commentPath, 'utf8');
+            } catch (error) {
+              core.info(`unit coverage comment body unavailable at ${commentPath}: ${error.message}`);
+              return;
+            }
+            if (!body.trim()) {
+              core.info('unit coverage comment body is empty; nothing to publish.');
+              return;
+            }
+            const { upsertUnitCoverageComment } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/ci/unit-coverage-report.mjs`);
+            const comments = await github.paginate(github.rest.issues.listComments, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              per_page: 100,
+            });
+            const publication = upsertUnitCoverageComment(comments, body);
+            if (publication.action === 'update') {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: publication.commentId,
+                body: publication.body,
+              });
+              return;
+            }
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: publication.body,
+            });
       # This is the authoritative Linux functional run. Pull requests and
       # pushes to main use the same complete non-short tier. The run expands
       # ./tests/functional/... once, subtracts only the versioned quarantine,
