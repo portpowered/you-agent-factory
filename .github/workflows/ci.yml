@@ -188,6 +188,12 @@ jobs:
     # always-run summary and artifact-upload steps can preserve partial
     # diagnostics after a timeout.
     timeout-minutes: 80
+    # The functional lane upserts its own reporting comment on the pull
+    # request, mirroring Backend Lint. Every other permission stays at the
+    # workflow-level read-only default.
+    permissions:
+      contents: read
+      pull-requests: write
     env:
       PR_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
     strategy:
@@ -269,6 +275,64 @@ jobs:
           path: .artifacts/functional-test-viz/real-acpx-evidence.json
           if-no-files-found: error
           retention-days: 14
+      # Reporting only. Both steps below are fail-open: a missing or malformed
+      # artifact writes an explicit "unavailable" body and exits 0, so a
+      # renderer or API failure can never turn a passing suite red.
+      - name: Render functional coverage pull request comment
+        if: always() && matrix.suite == 'functional'
+        continue-on-error: true
+        run: bash scripts/ci/publish-functional-coverage-comment.sh
+        env:
+          FUNCTIONAL_TEST_VIZ_DIR: .artifacts/functional-test-viz
+          FUNCTIONAL_TEST_VIZ_TIMING: .artifacts/functional-test-viz/functional-timing-summary.json
+          FUNCTIONAL_TEST_VIZ_JSON: .artifacts/functional-test-viz/coverage-summary.json
+          FUNCTIONAL_COVERAGE_COMMENT_FILE: .artifacts/functional-test-viz/functional-coverage-comment.md
+          FUNCTIONAL_COVERAGE_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: Publish functional coverage inventory to the pull request
+        if: always() && matrix.suite == 'functional' && github.event_name == 'pull_request'
+        continue-on-error: true
+        uses: actions/github-script@v7
+        env:
+          FUNCTIONAL_COVERAGE_COMMENT_FILE: .artifacts/functional-test-viz/functional-coverage-comment.md
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const fs = require('node:fs');
+            const commentPath = `${process.env.GITHUB_WORKSPACE}/${process.env.FUNCTIONAL_COVERAGE_COMMENT_FILE}`;
+            let body = '';
+            try {
+              body = fs.readFileSync(commentPath, 'utf8');
+            } catch (error) {
+              core.info(`functional coverage comment body unavailable at ${commentPath}: ${error.message}`);
+              return;
+            }
+            if (!body.trim()) {
+              core.info('functional coverage comment body is empty; nothing to publish.');
+              return;
+            }
+            const { upsertFunctionalCoverageComment } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/ci/functional-coverage-comment.mjs`);
+            const comments = await github.paginate(github.rest.issues.listComments, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              per_page: 100,
+            });
+            const publication = upsertFunctionalCoverageComment(comments, body);
+            if (publication.action === 'update') {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: publication.commentId,
+                body: publication.body,
+              });
+              return;
+            }
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: publication.body,
+            });
 
   backend-lint:
     name: Backend Lint
