@@ -4,7 +4,7 @@
 //
 // The canonical implementations are owned by the Factory Definitions service
 // under pkg/services/factory_definitions/transports/mapping. Composition-root
-// transports and repository-wide test support consume this package instead of
+// transports and peer-service transports consume this package instead of
 // reaching into that service's transport subpackages directly.
 package factorydefinitionentry
 
@@ -12,7 +12,6 @@ import (
 	"context"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/transports/mapping/factorysnapshot"
 	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/transports/mapping/validationentry"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
@@ -26,12 +25,4 @@ func ValidateFactoryAPI(
 	operation interfaces.SubmittedDefinitionValidationOperation,
 ) (interfaces.ValidationResult, error) {
 	return validationentry.ValidateFactoryAPI(ctx, factory, operation)
-}
-
-// ObjectFromFactoryConfig maps an authored Factory Definition through the
-// generated public contract at the transport boundary.
-func ObjectFromFactoryConfig(
-	factoryConfig *interfaces.FactoryConfig,
-) (map[string]any, error) {
-	return factorysnapshot.ObjectFromFactoryConfig(factoryConfig)
 }
