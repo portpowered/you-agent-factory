@@ -7,12 +7,12 @@ import (
 	"strings"
 	"testing"
 
-	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 )
 
-func TestNewRecordingsAdapterConstructsReconstructWorldStateThroughRoot(t *testing.T) {
+func TestNewWorkSnapshotReaderConstructsReconstructWorldStateThroughRoot(t *testing.T) {
 	t.Parallel()
 
 	scope := recordings.CanonicalEventScope{FactorySessionID: "session-recordings"}
@@ -21,7 +21,7 @@ func TestNewRecordingsAdapterConstructsReconstructWorldStateThroughRoot(t *testi
 		Sequence:    0,
 		FactoryTick: 3,
 		Scope:       scope,
-		Kind:        recordings.CanonicalEventKind(interfaces.FactoryEventTypeWorkRequest),
+		Kind:        recordings.CanonicalEventKind(factorydefinitions.FactoryEventTypeWorkRequest),
 		Payload:     `{"requestId":"request-1"}`,
 	}}
 	fake := &recordingsRootFake{
@@ -33,10 +33,10 @@ func TestNewRecordingsAdapterConstructsReconstructWorldStateThroughRoot(t *testi
 			Payload:       recordingsBackedWorldPayload(t, "work-story", "story", "review"),
 		},
 	}
-	adapter := NewRecordingsAdapter(fake)
+	reader := NewWorkSnapshotReader(fake)
 	ctx := context.Background()
 
-	snapshot, err := adapter.ReadWorkSnapshot(ctx, "session-recordings")
+	snapshot, err := reader.ReadWorkSnapshot(ctx, "session-recordings")
 	if err != nil {
 		t.Fatalf("ReadWorkSnapshot: %v", err)
 	}
@@ -55,44 +55,44 @@ func TestNewRecordingsAdapterConstructsReconstructWorldStateThroughRoot(t *testi
 	}
 }
 
-func TestNewRecordingsAdapterTypedProjectionFailures(t *testing.T) {
+func TestNewWorkSnapshotReaderTypedProjectionFailures(t *testing.T) {
 	t.Parallel()
 
-	adapter := NewRecordingsAdapter(&recordingsRootFake{
+	reader := NewWorkSnapshotReader(&recordingsRootFake{
 		reconstructErr: recordings.ErrInvalidProjectionInput,
 	})
-	_, err := adapter.ReadWorkSnapshot(context.Background(), "session-recordings")
+	_, err := reader.ReadWorkSnapshot(context.Background(), "session-recordings")
 	if !errors.Is(err, recordings.ErrInvalidProjectionInput) {
 		t.Fatalf("ReadWorkSnapshot error = %v, want ErrInvalidProjectionInput", err)
 	}
 }
 
-func TestNewRecordingsAdapterNilRootReturnsNil(t *testing.T) {
+func TestNewWorkSnapshotReaderNilRootReturnsNil(t *testing.T) {
 	t.Parallel()
 
-	if adapter := NewRecordingsAdapter(nil); adapter != nil {
-		t.Fatalf("NewRecordingsAdapter(nil) = %#v, want nil", adapter)
+	if reader := NewWorkSnapshotReader(nil); reader != nil {
+		t.Fatalf("NewWorkSnapshotReader(nil) = %#v, want nil", reader)
 	}
 }
 
 func TestReadWorkSnapshotValidatesContextAndSession(t *testing.T) {
 	t.Parallel()
 
-	adapter := NewRecordingsAdapter(&recordingsRootFake{})
+	reader := NewWorkSnapshotReader(&recordingsRootFake{})
 
-	_, err := adapter.ReadWorkSnapshot(nil, "session-1")
-	if err == nil || err.Error() != "Work state access context is required" {
+	_, err := reader.ReadWorkSnapshot(nil, "session-1")
+	if err == nil || err.Error() != "Work snapshot read context is required" {
 		t.Fatalf("ReadWorkSnapshot(nil ctx) error = %v", err)
 	}
 
 	canceled, cancel := context.WithCancel(context.Background())
 	cancel()
-	_, err = adapter.ReadWorkSnapshot(canceled, "session-1")
+	_, err = reader.ReadWorkSnapshot(canceled, "session-1")
 	if !errors.Is(err, context.Canceled) {
 		t.Fatalf("ReadWorkSnapshot(canceled ctx) error = %v, want context.Canceled", err)
 	}
 
-	_, err = adapter.ReadWorkSnapshot(context.Background(), "  ")
+	_, err = reader.ReadWorkSnapshot(context.Background(), "  ")
 	if !errors.Is(err, recordings.ErrInvalidProjectionScope) {
 		t.Fatalf("ReadWorkSnapshot(empty session) error = %v, want ErrInvalidProjectionScope", err)
 	}
@@ -103,8 +103,8 @@ func TestReadWorkSnapshotSubscribeAndSubscriptionFailures(t *testing.T) {
 
 	t.Run("subscribe error", func(t *testing.T) {
 		t.Parallel()
-		adapter := NewRecordingsAdapter(&recordingsRootFake{subscribeErr: errors.New("subscribe failed")})
-		_, err := adapter.ReadWorkSnapshot(context.Background(), "session-1")
+		reader := NewWorkSnapshotReader(&recordingsRootFake{subscribeErr: errors.New("subscribe failed")})
+		_, err := reader.ReadWorkSnapshot(context.Background(), "session-1")
 		if err == nil || !strings.Contains(err.Error(), "subscribe Recordings canonical facts") {
 			t.Fatalf("ReadWorkSnapshot error = %v, want wrapped subscribe failure", err)
 		}
@@ -112,7 +112,7 @@ func TestReadWorkSnapshotSubscribeAndSubscriptionFailures(t *testing.T) {
 
 	t.Run("subscription gap", func(t *testing.T) {
 		t.Parallel()
-		adapter := NewRecordingsAdapter(&recordingsRootFake{
+		reader := NewWorkSnapshotReader(&recordingsRootFake{
 			subscription: func(context.Context) recordings.SubscriptionOutcome {
 				return recordings.SubscriptionOutcome{
 					Kind: recordings.SubscriptionGap,
@@ -120,7 +120,7 @@ func TestReadWorkSnapshotSubscribeAndSubscriptionFailures(t *testing.T) {
 				}
 			},
 		})
-		_, err := adapter.ReadWorkSnapshot(context.Background(), "session-1")
+		_, err := reader.ReadWorkSnapshot(context.Background(), "session-1")
 		if err == nil || !strings.Contains(err.Error(), "recordings subscription gap at sequence 42") {
 			t.Fatalf("ReadWorkSnapshot error = %v, want subscription gap", err)
 		}
@@ -128,12 +128,12 @@ func TestReadWorkSnapshotSubscribeAndSubscriptionFailures(t *testing.T) {
 
 	t.Run("subscription gap without detail", func(t *testing.T) {
 		t.Parallel()
-		adapter := NewRecordingsAdapter(&recordingsRootFake{
+		reader := NewWorkSnapshotReader(&recordingsRootFake{
 			subscription: func(context.Context) recordings.SubscriptionOutcome {
 				return recordings.SubscriptionOutcome{Kind: recordings.SubscriptionGap}
 			},
 		})
-		_, err := adapter.ReadWorkSnapshot(context.Background(), "session-1")
+		_, err := reader.ReadWorkSnapshot(context.Background(), "session-1")
 		if err == nil || err.Error() != "recordings subscription gap" {
 			t.Fatalf("ReadWorkSnapshot error = %v, want generic subscription gap", err)
 		}
@@ -141,14 +141,14 @@ func TestReadWorkSnapshotSubscribeAndSubscriptionFailures(t *testing.T) {
 
 	t.Run("nil subscription", func(t *testing.T) {
 		t.Parallel()
-		adapter := NewRecordingsAdapter(&recordingsRootFake{
+		reader := NewWorkSnapshotReader(&recordingsRootFake{
 			subscription: nil,
 			worldState: recordings.WorldStateView{
 				SchemaVersion: recordings.WorldStateViewSchemaV1,
 				Payload:       recordingsBackedWorldPayload(t, "work-story", "story", "review"),
 			},
 		})
-		snapshot, err := adapter.ReadWorkSnapshot(context.Background(), "session-1")
+		snapshot, err := reader.ReadWorkSnapshot(context.Background(), "session-1")
 		if err != nil {
 			t.Fatalf("ReadWorkSnapshot: %v", err)
 		}
@@ -160,7 +160,7 @@ func TestReadWorkSnapshotSubscribeAndSubscriptionFailures(t *testing.T) {
 	t.Run("unknown subscription outcome after event", func(t *testing.T) {
 		t.Parallel()
 		index := 0
-		adapter := NewRecordingsAdapter(&recordingsRootFake{
+		reader := NewWorkSnapshotReader(&recordingsRootFake{
 			subscription: func(context.Context) recordings.SubscriptionOutcome {
 				if index == 0 {
 					index++
@@ -176,7 +176,7 @@ func TestReadWorkSnapshotSubscribeAndSubscriptionFailures(t *testing.T) {
 				Payload:       recordingsBackedWorldPayload(t, "work-story", "story", "review"),
 			},
 		})
-		snapshot, err := adapter.ReadWorkSnapshot(context.Background(), "session-1")
+		snapshot, err := reader.ReadWorkSnapshot(context.Background(), "session-1")
 		if err != nil {
 			t.Fatalf("ReadWorkSnapshot: %v", err)
 		}
@@ -329,11 +329,11 @@ func recordingsBackedWorldPayload(
 	stateName string,
 ) string {
 	t.Helper()
-	state := interfaces.FactoryWorldState{
-		Topology: interfaces.InitialStructurePayload{
-			WorkTypes: []interfaces.FactoryWorkType{{
+	state := factorydefinitions.FactoryWorldState{
+		Topology: factorydefinitions.InitialStructurePayload{
+			WorkTypes: []factorydefinitions.FactoryWorkType{{
 				ID: workTypeID,
-				States: []interfaces.FactoryStateDefinition{
+				States: []factorydefinitions.FactoryStateDefinition{
 					{Value: "init", Category: work.StateTypeInitial},
 					{Value: "review", Category: work.StateTypeProcessing},
 				},

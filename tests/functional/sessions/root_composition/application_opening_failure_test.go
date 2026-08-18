@@ -3,6 +3,7 @@ package root_composition_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -38,12 +39,37 @@ func (unavailableVisualizationSinkOwner) RuntimeSink(factoryvisualization.Runtim
 
 func (unavailableVisualizationSinkOwner) CloseRuntimeSink(factoryvisualization.RuntimeSinkID) {}
 
+// sinkResolvingRuntimeAdapter mirrors the composition-root runtime adapter:
+// the opening request carries only an opaque visualization sink selection, and
+// the adapter is the operation that resolves it against the process-scoped sink
+// registry before binding any component.
+func sinkResolvingRuntimeAdapter(
+	sinks factoryvisualization.RuntimeSinkOwner,
+	bound *bool,
+) factorysessionwire.RuntimeAdapter {
+	return func(
+		_ factorysessionwire.OpenedApplicationRuntime,
+		sinkID factorysessions.VisualizationSinkID,
+	) (factorysessions.BoundProcessComponents, error) {
+		if sinkID != "" {
+			if _, ok := sinks.RuntimeSink(factoryvisualization.RuntimeSinkID(sinkID)); !ok {
+				return factorysessions.BoundProcessComponents{}, fmt.Errorf(
+					"Factory Visualization sink %q is unavailable", sinkID,
+				)
+			}
+		}
+		*bound = true
+		return factorysessions.BoundProcessComponents{}, nil
+	}
+}
+
 // TestApplicationOpeningClosesRuntimeWhenVisualizationSinkIsUnavailable proves
-// that the application opener closes an already-opened runtime when a stale
-// typed visualization-sink ID cannot be resolved at the service boundary.
-// Normal CLI execution registers a valid sink before opening the application;
-// this focused boundary test supplies the invalid opaque ID directly so the
-// cleanup behavior remains observable in the functional coverage lane.
+// that the application opener closes an already-opened runtime when the stale
+// opaque visualization-sink ID it forwarded cannot be resolved, and that no
+// process component is bound in that case. Normal CLI execution registers a
+// valid sink before opening the application; this focused boundary test
+// supplies the invalid opaque ID directly so the cleanup behavior remains
+// observable in the functional coverage lane.
 func TestApplicationOpeningClosesRuntimeWhenVisualizationSinkIsUnavailable(t *testing.T) {
 	t.Parallel()
 
@@ -53,18 +79,14 @@ func TestApplicationOpeningClosesRuntimeWhenVisualizationSinkIsUnavailable(t *te
 			Request: &factorysessions.RuntimeOpeningRequest{},
 		}, nil
 	})
-	adaptCalled := false
-	adapt := factorysessionwire.RuntimeAdapter(func(factorysessionwire.OpenedApplicationRuntime, factoryvisualization.Sink) (factorysessions.BoundProcessComponents, error) {
-		adaptCalled = true
-		return factorysessions.BoundProcessComponents{}, nil
-	})
+	componentsBound := false
+	adapt := sinkResolvingRuntimeAdapter(unavailableVisualizationSinkOwner{}, &componentsBound)
 
 	service, err := factorysessionwire.NewApplicationService(
 		resolve,
 		runtime,
 		adapt,
 		factorysessionwire.NewLifecyclePlanOperation(),
-		unavailableVisualizationSinkOwner{},
 	)
 	if err != nil {
 		t.Fatalf("NewApplicationService() error = %v", err)
@@ -77,7 +99,7 @@ func TestApplicationOpeningClosesRuntimeWhenVisualizationSinkIsUnavailable(t *te
 	if runtime.closed != 1 {
 		t.Fatalf("runtime close count = %d, want 1", runtime.closed)
 	}
-	if adaptCalled {
-		t.Fatal("runtime adapter was called after visualization sink resolution failed")
+	if componentsBound {
+		t.Fatal("process components were bound after visualization sink resolution failed")
 	}
 }

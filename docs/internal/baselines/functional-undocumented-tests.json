@@ -867,18 +867,6 @@
       "name": "TestServiceLifecycle_WorkFileSubmissionCompletesTwoStagePipeline"
     },
     {
-      "file": "work/recordings/recordings_read_test.go",
-      "name": "TestGetWorkFromRecordingsRootUsesRecordingsServiceRoot"
-    },
-    {
-      "file": "work/recordings/recordings_read_test.go",
-      "name": "TestRecordingsBackedWorkReadsMapRichWorldState"
-    },
-    {
-      "file": "work/recordings/recordings_read_test.go",
-      "name": "TestRecordingsBackedWorkReadsSurfaceTypedProjectionFailures"
-    },
-    {
       "file": "workflow/config_driven_retry_loop_breaker_test.go",
       "name": "TestConfigDrivenRetryLoopBreaker_SucceedsBeforeLimit"
     },

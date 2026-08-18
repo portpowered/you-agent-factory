@@ -11,7 +11,6 @@ import (
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimeopening"
-	factoryvisualization "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
 )
 
 // RuntimeInputs are the resolved invocation values selected by the canonical
@@ -26,11 +25,13 @@ type RuntimeInputResolver func(
 ) (RuntimeInputs, error)
 
 // RuntimeAdapter binds the exact HTTP and optional visualization components
-// selected by Wire to one opened Factory Session. It contains no product
-// lifecycle selection or ordering policy.
+// selected by Wire to one opened Factory Session, for the visualization sink
+// the caller selected. It owns resolving that opaque selection; Factory
+// Sessions never names the presentation service that retains it. This
+// operation contains no product lifecycle selection or ordering policy.
 type RuntimeAdapter func(
 	roles.OpenedApplicationRuntime,
-	factoryvisualization.Sink,
+	factorysessions.VisualizationSinkID,
 ) (factorysessions.BoundProcessComponents, error)
 
 // Service is constructed once by Wire. OpenApplication supplies only
@@ -41,7 +42,6 @@ type Service struct {
 	openRuntime   runtimeopening.ApplicationRuntimeOpening
 	adaptRuntime  RuntimeAdapter
 	planLifecycle roles.LifecyclePlanOperation
-	visualization factoryvisualization.RuntimeSinkOwner
 }
 
 func New(
@@ -49,7 +49,6 @@ func New(
 	openRuntime runtimeopening.ApplicationRuntimeOpening,
 	adaptRuntime RuntimeAdapter,
 	planLifecycle roles.LifecyclePlanOperation,
-	visualization factoryvisualization.RuntimeSinkOwner,
 ) (*Service, error) {
 	switch {
 	case resolveInputs == nil:
@@ -60,15 +59,12 @@ func New(
 		return nil, errors.New("construct application opener: application adapter is required")
 	case planLifecycle == nil:
 		return nil, errors.New("construct application opener: lifecycle plan operation is required")
-	case visualization == nil:
-		return nil, errors.New("construct application opener: Factory Visualization sink owner is required")
 	default:
 		return &Service{
 			resolveInputs: resolveInputs,
 			openRuntime:   openRuntime,
 			adaptRuntime:  adaptRuntime,
 			planLifecycle: planLifecycle,
-			visualization: visualization,
 		}, nil
 	}
 }
@@ -78,7 +74,7 @@ func (service *Service) OpenApplication(
 	request *factorysessions.RuntimeOpeningRequest,
 	sinkID factorysessions.VisualizationSinkID,
 ) (roles.OpenedProcessApplication, error) {
-	if service == nil || service.resolveInputs == nil || service.openRuntime == nil || service.adaptRuntime == nil || service.planLifecycle == nil || service.visualization == nil {
+	if service == nil || service.resolveInputs == nil || service.openRuntime == nil || service.adaptRuntime == nil || service.planLifecycle == nil {
 		return roles.OpenedProcessApplication{}, errors.New("open Factory Session application: service is required")
 	}
 	opened, err := service.openRuntimeForRequest(ctx, request)
@@ -110,16 +106,7 @@ func (service *Service) bindLiveApplication(
 	opened roles.OpenedApplicationRuntime,
 	sinkID factorysessions.VisualizationSinkID,
 ) (roles.OpenedProcessApplication, error) {
-	var visualizationSink factoryvisualization.Sink
-	if sinkID != "" {
-		var ok bool
-		visualizationSink, ok = service.visualization.RuntimeSink(factoryvisualization.RuntimeSinkID(sinkID))
-		if !ok {
-			err := closeOpenedRuntime(opened, fmt.Errorf("Factory Visualization sink %q is unavailable", sinkID))
-			return roles.OpenedProcessApplication{}, fmt.Errorf("bind Factory Session application: %w", err)
-		}
-	}
-	components, err := service.adaptRuntime(opened, visualizationSink)
+	components, err := service.adaptRuntime(opened, sinkID)
 	if err != nil {
 		err = closeOpenedRuntime(opened, err)
 		return roles.OpenedProcessApplication{}, fmt.Errorf("bind Factory Session application: %w", err)

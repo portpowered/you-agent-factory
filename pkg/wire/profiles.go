@@ -514,23 +514,27 @@ func provideWorkContentStagingService(
 func provideApplicationRuntimeAdapter(
 	edges serviceedges.Edges,
 	visualizationFactory factoryvisualization.RuntimeFactory,
+	visualizationSinks factoryvisualization.RuntimeSinkOwner,
 	httpBinding httpRuntimeBinding,
 	newRunner lifecycle.RunnerFactory,
 ) (factorysessionwire.RuntimeAdapter, error) {
-	if visualizationFactory == nil || httpBinding == nil || newRunner == nil {
+	if visualizationFactory == nil || visualizationSinks == nil || httpBinding == nil || newRunner == nil {
 		return nil, errors.New("Factory visualization, HTTP binding, and lifecycle component operations are required")
 	}
 	fixedSink := edges.FactoryVisualizationSink
 	fixedRootObserver := edges.FactoryVisualizationRootObserver
 	return func(
 		opened factorysessionwire.OpenedApplicationRuntime,
-		sink factoryvisualization.Sink,
+		sinkID factorysessions.VisualizationSinkID,
 	) (factorysessions.BoundProcessComponents, error) {
+		sink, err := selectVisualizationSink(visualizationSinks, sinkID)
+		if err != nil {
+			return factorysessions.BoundProcessComponents{}, err
+		}
 		if fixedSink != nil {
 			sink = fixedSink
 		}
 		var visualization lifecycle.Component
-		var err error
 		if sink != nil {
 			logger := opened.Resources.Logger
 			if logger == nil {
@@ -570,6 +574,24 @@ func provideApplicationRuntimeAdapter(
 			Visualization: visualization,
 		}, nil
 	}, nil
+}
+
+// selectVisualizationSink resolves the transport-selected visualization sink
+// the opening request carries. Factory Sessions carries only the opaque
+// selection, so the composition root that owns the sink registry is the only
+// place that can turn it back into a presentation sink.
+func selectVisualizationSink(
+	sinks factoryvisualization.RuntimeSinkOwner,
+	sinkID factorysessions.VisualizationSinkID,
+) (factoryvisualization.Sink, error) {
+	if sinkID == "" {
+		return nil, nil
+	}
+	sink, ok := sinks.RuntimeSink(factoryvisualization.RuntimeSinkID(sinkID))
+	if !ok {
+		return nil, fmt.Errorf("Factory Visualization sink %q is unavailable", sinkID)
+	}
+	return sink, nil
 }
 
 func provideManagedRunnerFactory() runtimeapplication.ManagedRunnerFactory {

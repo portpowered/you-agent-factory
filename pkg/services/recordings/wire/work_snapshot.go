@@ -6,41 +6,50 @@ import (
 	"fmt"
 	"strings"
 
-	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	"github.com/portpowered/infinite-you/pkg/services/recordings"
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	recordings "github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
-	stateaccess "github.com/portpowered/infinite-you/pkg/services/work/internal/services/state_access"
 )
 
-type recordingsAdapter struct {
-	root RecordingsReadRoot
-}
-
-// RecordingsReadRoot is the narrow Recordings projection port needed by Work
+// WorkReadRoot is the narrow Recordings projection port needed to answer Work
 // list/get reads. It deliberately excludes lifecycle and scope operations so
-// adapters and tests do not depend on unrelated Recordings capabilities.
-type RecordingsReadRoot interface {
+// this construction path and its tests do not depend on unrelated Recordings
+// capabilities.
+type WorkReadRoot interface {
 	SubscribeFrom(context.Context, recordings.SubscribeRequest) (recordings.SubscribeResult, error)
 	ReconstructWorldState(recordings.ReconstructWorldStateRequest) (recordings.ReconstructWorldStateResult, error)
 }
 
-// NewRecordingsAdapter constructs the private Work state_access Recordings port
-// from the published Recordings service root contract.
-func NewRecordingsAdapter(root RecordingsReadRoot) stateaccess.RecordingsAdapter {
+// WorkSnapshotReader reads one session-scoped, detached Work read snapshot.
+// Work owns the consumer side of this shape and never names Recordings to
+// obtain it; Recordings owns this implementation and offers it to composition.
+type WorkSnapshotReader interface {
+	ReadWorkSnapshot(context.Context, string) (work.ReadSnapshot, error)
+}
+
+// NewWorkSnapshotReader projects Recordings canonical facts into the detached
+// Work read snapshot Work state access consumes when no live Factory Session
+// is available. A nil root yields a nil reader so composition can select the
+// live session path instead.
+func NewWorkSnapshotReader(root WorkReadRoot) WorkSnapshotReader {
 	if root == nil {
 		return nil
 	}
-	return recordingsAdapter{root: root}
+	return workSnapshotReader{root: root}
 }
 
-func (a recordingsAdapter) ReadWorkSnapshot(
+type workSnapshotReader struct {
+	root WorkReadRoot
+}
+
+func (r workSnapshotReader) ReadWorkSnapshot(
 	ctx context.Context,
 	sessionID string,
 ) (work.ReadSnapshot, error) {
-	if a.root == nil {
+	if r.root == nil {
 		return work.ReadSnapshot{}, errors.New("Recordings service is required")
 	}
-	if err := requireContext(ctx); err != nil {
+	if err := requireSnapshotContext(ctx); err != nil {
 		return work.ReadSnapshot{}, err
 	}
 	sessionID = strings.TrimSpace(sessionID)
@@ -48,11 +57,11 @@ func (a recordingsAdapter) ReadWorkSnapshot(
 		return work.ReadSnapshot{}, recordings.ErrInvalidProjectionScope
 	}
 	scope := recordings.CanonicalEventScope{FactorySessionID: sessionID}
-	events, err := a.canonicalEventsForScope(ctx, scope)
+	events, err := r.canonicalEventsForScope(ctx, scope)
 	if err != nil {
 		return work.ReadSnapshot{}, err
 	}
-	reconstructed, err := a.root.ReconstructWorldState(
+	reconstructed, err := r.root.ReconstructWorldState(
 		reconstructWorldStateRequest(scope, events),
 	)
 	if err != nil {
@@ -61,11 +70,11 @@ func (a recordingsAdapter) ReadWorkSnapshot(
 	return readSnapshotFromWorldState(reconstructed.WorldState)
 }
 
-func (a recordingsAdapter) canonicalEventsForScope(
+func (r workSnapshotReader) canonicalEventsForScope(
 	ctx context.Context,
 	scope recordings.CanonicalEventScope,
 ) ([]recordings.CanonicalEvent, error) {
-	subscribed, err := a.root.SubscribeFrom(ctx, recordings.SubscribeRequest{Scope: scope})
+	subscribed, err := r.root.SubscribeFrom(ctx, recordings.SubscribeRequest{Scope: scope})
 	if err != nil {
 		return nil, fmt.Errorf("subscribe Recordings canonical facts: %w", err)
 	}
@@ -118,13 +127,13 @@ func canonicalEventsFromSubscription(
 	}
 }
 
-func requireContext(ctx context.Context) error {
+func requireSnapshotContext(ctx context.Context) error {
 	if ctx == nil {
-		return errors.New("Work state access context is required")
+		return errors.New("Work snapshot read context is required")
 	}
 	return ctx.Err()
 }
 
 func isPublicWorkItem(item work.FactoryWorkItem) bool {
-	return !interfaces.IsSystemTimeWorkType(item.WorkTypeID)
+	return !factorydefinitions.IsSystemTimeWorkType(item.WorkTypeID)
 }

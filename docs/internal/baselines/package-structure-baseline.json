@@ -2430,7 +2430,7 @@
     {
       "rule": "service-root-interface-count",
       "filePath": "pkg/services/work/internal/services/state_access",
-      "target": "pkg/services/work/internal/services/state_access/service.go:RecordingsAdapter,pkg/services/work/internal/services/state_access/service.go:Service,pkg/services/work/internal/services/state_access/service.go:SessionAdapter,pkg/services/work/internal/services/state_access/service.go:SessionResolver"
+      "target": "pkg/services/work/internal/services/state_access/service.go:Service,pkg/services/work/internal/services/state_access/service.go:SessionAdapter,pkg/services/work/internal/services/state_access/service.go:SessionResolver,pkg/services/work/internal/services/state_access/service.go:SnapshotReader"
     },
     {
       "rule": "service-root-interface-count",

@@ -29,7 +29,7 @@ func TestCloseOpenedRuntimePreservesCauseWithoutCloseOperation(t *testing.T) {
 
 func TestHistoricalReplayPlanRunsDetachedNoopTransport(t *testing.T) {
 	inspection := &factorysessions.HistoricalReplayInspection{}
-	resolve, open, adapt, _, owner := validApplicationOpeningDependencies()
+	resolve, open, adapt, _ := validApplicationOpeningDependencies()
 	open = runtimeOpenerFunc(func(context.Context, *factorysessions.RuntimeOpeningRequest) (roles.OpenedApplicationRuntime, error) {
 		return roles.OpenedApplicationRuntime{HistoricalReplay: inspection}, nil
 	})
@@ -46,7 +46,7 @@ func TestHistoricalReplayPlanRunsDetachedNoopTransport(t *testing.T) {
 		})
 		return lifecycle.Plan{}, nil
 	})
-	service, err := New(resolve, open, adapt, plan, owner)
+	service, err := New(resolve, open, adapt, plan)
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}

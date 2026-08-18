@@ -226,12 +226,12 @@ func TestReadSnapshotUsesSessionAdapterOnly(t *testing.T) {
 	}
 }
 
-func TestReadSnapshotFallsBackToRecordingsAdapterWhenSessionUnavailable(t *testing.T) {
+func TestReadSnapshotFallsBackToTheSnapshotReaderWhenSessionUnavailable(t *testing.T) {
 	t.Parallel()
 
 	svc := internalservice.New(
 		stubSessionResolver{},
-		&recordingRecordingsAdapter{snapshot: work.ReadSnapshot{Items: []work.ReadModel{{
+		&recordingSnapshotReader{snapshot: work.ReadSnapshot{Items: []work.ReadModel{{
 			CursorID:     "work-rec",
 			WorkID:       "work-rec",
 			Name:         "Recorded work",
@@ -250,12 +250,12 @@ func TestReadSnapshotFallsBackToRecordingsAdapterWhenSessionUnavailable(t *testi
 	}
 }
 
-type recordingRecordingsAdapter struct {
+type recordingSnapshotReader struct {
 	snapshot work.ReadSnapshot
 	err      error
 }
 
-func (a *recordingRecordingsAdapter) ReadWorkSnapshot(
+func (a *recordingSnapshotReader) ReadWorkSnapshot(
 	context.Context,
 	string,
 ) (work.ReadSnapshot, error) {

@@ -103,12 +103,12 @@ func (s *Service) readSnapshot(ctx context.Context, sessionID string) (work.Read
 		}
 		return snapshot, nil
 	}
-	if s == nil || s.recordings == nil {
-		return work.ReadSnapshot{}, errors.New("Work state access recordings adapter is required")
+	if s == nil || s.snapshots == nil {
+		return work.ReadSnapshot{}, errors.New("Work state access snapshot reader is required")
 	}
-	snapshot, err := s.recordings.ReadWorkSnapshot(ctx, sessionID)
+	snapshot, err := s.snapshots.ReadWorkSnapshot(ctx, sessionID)
 	if err != nil {
-		return work.ReadSnapshot{}, fmt.Errorf("read Work snapshot from Recordings: %w", err)
+		return work.ReadSnapshot{}, fmt.Errorf("read projected Work snapshot: %w", err)
 	}
 	return snapshot, nil
 }
