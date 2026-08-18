@@ -7,6 +7,38 @@ import (
 	"path/filepath"
 )
 
+// prepareCoverageProfile resolves the coverage profile a lane writes and
+// returns the cleanup its caller owns. A caller-named profile is kept; an
+// unnamed one becomes a temp file the caller removes.
+//
+// A caller-named profile routinely points into a CI artifact directory that
+// does not exist yet, and go test -coverprofile does not create it, so the
+// directory is created here. Without it the lane fails before measuring
+// anything.
+func prepareCoverageProfile(profilePath string) (string, func() error, error) {
+	if profilePath != "" {
+		if directory := filepath.Dir(profilePath); directory != "" && directory != "." {
+			if err := os.MkdirAll(directory, 0o755); err != nil {
+				return "", nil, fmt.Errorf("create coverage profile directory: %w", err)
+			}
+		}
+		return profilePath, func() error { return nil }, nil
+	}
+	file, err := os.CreateTemp("", "go-coverage-*.out")
+	if err != nil {
+		return "", nil, fmt.Errorf("create temp coverage profile: %w", err)
+	}
+	profilePath = file.Name()
+	cleanup := func() error { return os.Remove(profilePath) }
+	if err := file.Close(); err != nil {
+		return "", nil, errors.Join(
+			fmt.Errorf("close temp coverage profile: %w", err),
+			cleanup(),
+		)
+	}
+	return profilePath, cleanup, nil
+}
+
 // writeAtomicDiagnosticFile makes a completed JSON document visible in one
 // rename. A timeout can interrupt the producer at any point, so readers must
 // never observe a half-written timing or coverage artifact.

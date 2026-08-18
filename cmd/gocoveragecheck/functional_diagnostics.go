@@ -103,6 +103,11 @@ func (tracker *functionalTimingTracker) snapshot(complete bool, reason string, a
 
 	packages := make([]functionalPackageTimingJSON, 0, len(tracker.terminals))
 	states := make([]functionalPackageStateJSON, 0, len(tracker.expected))
+	// A snapshot records package progress, not per-test rows. Tests is still
+	// emitted as an empty array rather than left nil, because a nil slice
+	// marshals to JSON null and a consumer reading a documented array field
+	// cannot tell null apart from an unreadable document.
+	tests := make([]functionalTestTimingJSON, 0)
 	packageElapsed := 0.0
 	for _, packageName := range tracker.expected {
 		if terminal, ok := tracker.terminals[packageName]; ok {
@@ -147,6 +152,7 @@ func (tracker *functionalTimingTracker) snapshot(complete bool, reason string, a
 			PackageCount:             len(packages),
 			Packages:                 packages,
 			PackageStates:            states,
+			Tests:                    tests,
 		}
 	}
 	return functionalTimingSummaryJSON{
@@ -157,6 +163,7 @@ func (tracker *functionalTimingTracker) snapshot(complete bool, reason string, a
 		PackageCount:         len(packages),
 		Packages:             packages,
 		PackageStates:        states,
+		Tests:                tests,
 	}
 }
 

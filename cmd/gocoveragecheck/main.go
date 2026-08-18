@@ -297,33 +297,6 @@ func runForOS(cfg config, targetOS string) (result coverageResult, runErr error)
 	return runCoverageProfile(cfg, targetOS, profilePath)
 }
 
-func prepareCoverageProfile(profilePath string) (string, func() error, error) {
-	if profilePath != "" {
-		// A caller-named profile routinely points into a CI artifact directory
-		// that does not exist yet. go test -coverprofile does not create it, so
-		// without this the lane would fail before measuring anything.
-		if directory := filepath.Dir(profilePath); directory != "" && directory != "." {
-			if err := os.MkdirAll(directory, 0o755); err != nil {
-				return "", nil, fmt.Errorf("create coverage profile directory: %w", err)
-			}
-		}
-		return profilePath, func() error { return nil }, nil
-	}
-	file, err := os.CreateTemp("", "go-coverage-*.out")
-	if err != nil {
-		return "", nil, fmt.Errorf("create temp coverage profile: %w", err)
-	}
-	profilePath = file.Name()
-	cleanup := func() error { return os.Remove(profilePath) }
-	if err := file.Close(); err != nil {
-		return "", nil, errors.Join(
-			fmt.Errorf("close temp coverage profile: %w", err),
-			cleanup(),
-		)
-	}
-	return profilePath, cleanup, nil
-}
-
 func runCoverageProfile(cfg config, targetOS string, profilePath string) (coverageResult, error) {
 	coverPackages, testPackages, err := resolveCoverageLane(cfg)
 	if err != nil {

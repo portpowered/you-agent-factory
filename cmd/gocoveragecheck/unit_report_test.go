@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 var unitReportCoverPackages = []string{
@@ -271,6 +272,38 @@ func TestUnitCoverageLaneCreatesItsArtifactDirectory(t *testing.T) {
 		if _, statErr := os.Stat(filepath.Join(artifactRoot, name)); statErr != nil {
 			t.Fatalf("unit lane did not publish %s into a fresh artifact directory: %v", name, statErr)
 		}
+	}
+}
+
+// TestInterruptedTimingSnapshotEmitsAnEmptyTestArray pins the artifact an
+// if: always() upload preserves when a lane is cut short. A snapshot has no
+// per-test rows yet, and a nil slice marshals to JSON null, which a consumer
+// reading a documented array field cannot tell apart from an unreadable
+// document. Reporting an interrupted lane as unmeasurable is exactly the
+// failure the always-on artifact exists to prevent.
+func TestInterruptedTimingSnapshotEmitsAnEmptyTestArray(t *testing.T) {
+	tracker := newFunctionalTimingTracker([]string{modulePath + "/pkg/config"}, time.Now())
+	snapshot := tracker.snapshot(false, "lane budget expired", time.Now())
+
+	if snapshot.Tests == nil {
+		t.Fatal("snapshot Tests is nil; it marshals to JSON null and reads as an unavailable timing summary")
+	}
+	if len(snapshot.Tests) != 0 {
+		t.Fatalf("snapshot Tests = %+v, want an empty array", snapshot.Tests)
+	}
+
+	data, err := renderFunctionalTimingSummaryJSON(snapshot)
+	if err != nil {
+		t.Fatalf("render timing snapshot: %v", err)
+	}
+	var decoded struct {
+		Tests *[]functionalTestTimingJSON `json:"tests"`
+	}
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		t.Fatalf("decode timing snapshot: %v\n%s", err, data)
+	}
+	if decoded.Tests == nil {
+		t.Fatalf("timing snapshot encoded tests as null:\n%s", data)
 	}
 }
 
