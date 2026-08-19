@@ -17,4 +17,4 @@ export interface FactoryGraphNodeInteractionOverlay {
 }
 export declare function FactoryGraphNodeInteractionOverlayView({ overlay, }: {
     overlay?: FactoryGraphNodeInteractionOverlay;
-}): import("react/jsx-runtime").JSX.Element | null;
+}): import("react").JSX.Element | null;

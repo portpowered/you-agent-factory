@@ -12,7 +12,7 @@ export interface FactoryGraphReplaySurfaceProps {
  * It consumes the complete Factory and its selected-tick runtime projection,
  * retaining the authored Factory layout rather than re-inventing topology.
  */
-export declare function FactoryGraphReplaySurface({ className, onSelectNode, selectedNodeId, source, }: FactoryGraphReplaySurfaceProps): import("react/jsx-runtime").JSX.Element;
+export declare function FactoryGraphReplaySurface({ className, onSelectNode, selectedNodeId, source, }: FactoryGraphReplaySurfaceProps): import("react").JSX.Element;
 export interface FactoryGraphReplayFlow {
     edges: Edge[];
     nodes: FactoryGraphNode[];

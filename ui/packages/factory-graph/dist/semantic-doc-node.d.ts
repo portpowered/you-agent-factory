@@ -21,4 +21,4 @@ export interface FactoryGraphDocNodeData extends Record<string, unknown> {
 }
 export type FactoryGraphDocNode = Node<FactoryGraphDocNodeData, "doc">;
 /** Original Factory document node, with host-owned selection callback. */
-export declare function FactoryGraphDocNodeView({ data, selected: reactFlowSelected, }: NodeProps<FactoryGraphDocNode>): import("react/jsx-runtime").JSX.Element;
+export declare function FactoryGraphDocNodeView({ data, selected: reactFlowSelected, }: NodeProps<FactoryGraphDocNode>): import("react").JSX.Element;

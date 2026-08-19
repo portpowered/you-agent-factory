@@ -4,10 +4,10 @@ export declare function FactoryGraphPlaceSemanticIcon({ locale, place, visualSta
     locale?: string;
     place: FactoryGraphSemanticPlaceRef;
     visualState: FactoryGraphVisualState;
-}): import("react/jsx-runtime").JSX.Element;
+}): import("react").JSX.Element;
 export declare function FactoryGraphPlaceLabelText({ dataPrefix, place, }: {
     dataPrefix: "place" | "state";
     place: FactoryGraphSemanticPlaceRef;
-}): import("react/jsx-runtime").JSX.Element;
+}): import("react").JSX.Element;
 export declare function factoryGraphPlaceLabel(place: FactoryGraphSemanticPlaceRef): string;
 export declare function factoryGraphPlaceKindLabel(place: FactoryGraphSemanticPlaceRef, locale?: string): string;

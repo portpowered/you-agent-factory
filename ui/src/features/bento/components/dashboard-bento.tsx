@@ -28,7 +28,6 @@ import {
   type DashboardCardBuilderArgs,
   getDashboardWidgetTitle,
 } from "./dashboard-bento-cards";
-import { DashboardLayoutDiagnostics } from "./diagnostics/dashboard-layout-diagnostics";
 import { DashboardWidgetRemovalFeedback } from "./removal/dashboard-widget-removal-feedback";
 
 function useDashboardBentoSelectionState() {
@@ -86,7 +85,6 @@ export function DashboardBento({
   const {
     addDashboardWidget,
     dashboardLayout,
-    dashboardLayoutDiagnostics,
     persistDashboardLayout,
     removeDashboardWidget,
   } = useDashboardLayout(layoutScope);
@@ -136,7 +134,6 @@ export function DashboardBento({
   const cards = buildDashboardCardLayouts({
     addDashboardWidget,
     currentSelection,
-    dashboardCardStateContext,
     dashboardLayout,
     onDashboardCardStateChange: reportDashboardCardState,
     restoredDashboardCardStates,
@@ -169,10 +166,6 @@ export function DashboardBento({
 
   return (
     <>
-      <DashboardLayoutDiagnostics
-        diagnostics={dashboardLayoutDiagnostics}
-        locale={resolvedLocale}
-      />
       <DashboardWidgetRemovalFeedback
         locale={resolvedLocale}
         onCancelRemoval={dashboardWidgetRemoval.cancelRemoval}
@@ -207,7 +200,6 @@ export function DashboardBento({
 function buildDashboardCardLayouts({
   addDashboardWidget,
   currentSelection,
-  dashboardCardStateContext,
   dashboardLayout,
   importController,
   isCurrent,
@@ -235,7 +227,6 @@ function buildDashboardCardLayouts({
 }) {
   return buildDashboardCards({
     currentSelection,
-    dashboardCardStateContext,
     dashboardLayout,
     importController,
     isCurrent,
