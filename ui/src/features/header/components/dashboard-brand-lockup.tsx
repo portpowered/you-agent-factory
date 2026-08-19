@@ -1,4 +1,6 @@
+import youWordmark from "../../../assets/brand/you-wordmark.png";
 import { cn } from "../../../lib/cn";
+import { getHeaderControlsMessages } from "../messages/header-controls";
 
 interface DashboardBrandLockupProps {
   className?: string;
@@ -8,9 +10,11 @@ interface DashboardBrandLockupProps {
 
 export function DashboardBrandLockup({
   className = "",
-  locale: _locale,
+  locale,
   wordmarkClassName: _wordmarkClassName = "",
 }: DashboardBrandLockupProps) {
+  const messages = getHeaderControlsMessages(locale);
+
   return (
     <span
       className={cn(
@@ -18,9 +22,13 @@ export function DashboardBrandLockup({
         className,
       )}
     >
-      <span className="inline-flex h-12 items-center justify-center gap-1 rounded-sm border border-primary bg-primary-container px-3 text-sm font-black uppercase leading-none tracking-[0.18em] text-primary">
-        <span className="text-[1rem] leading-none">U</span>
-      </span>
+      <img
+        alt={messages.brandWordmark}
+        className="h-12 w-12 shrink-0 rounded-sm object-cover"
+        height={48}
+        src={youWordmark}
+        width={48}
+      />
     </span>
   );
 }

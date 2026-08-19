@@ -182,6 +182,7 @@ export function WorkflowActivityBentoCard({
         style={{ height: "100%", maxHeight: "100%", overflow: "hidden" }}
       >
         <ReactFlowCurrentActivityCardView
+          chromeless
           importController={importController}
           locale={locale}
           now={now}

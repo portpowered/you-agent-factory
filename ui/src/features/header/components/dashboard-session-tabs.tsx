@@ -25,11 +25,7 @@ import {
   sessionTabID,
 } from "../lib/dashboard-session-tabs-utils";
 import { getHeaderControlsMessages } from "../messages/header-controls";
-import {
-  NewFactoryButton,
-  OpenSessionButton,
-  SessionTabButton,
-} from "./dashboard-session-tab";
+import { OpenSessionButton, SessionTabButton } from "./dashboard-session-tab";
 import { OpenSessionDialog } from "./dashboard-session-tabs-open-dialog";
 
 export function DashboardSessionTabs({
@@ -79,7 +75,7 @@ function DashboardSessionTabsView({
     activeSession,
     closeError,
     closeSessionMutation,
-    completedJourney,
+    completedCreatesNewFactory,
     dialogError,
     dialogOpen,
     discoveredTargets,
@@ -92,9 +88,7 @@ function DashboardSessionTabsView({
     handleInspectFolder,
     handleOpenTarget,
     isRefreshingSessions,
-    journey,
     moveSessionTab,
-    newFactoryDialog,
     openSessionMutation,
     openFactoryDialog,
     resetDialogState,
@@ -123,10 +117,6 @@ function DashboardSessionTabsView({
             isPending={sessionsQuery.isPending}
             messages={messages}
             onCloseSession={handleCloseSession}
-            onNewFactory={(trigger) => {
-              dialogTriggerRef.current = trigger;
-              newFactoryDialog();
-            }}
             onOpenFactory={(trigger) => {
               dialogTriggerRef.current = trigger;
               openFactoryDialog();
@@ -140,9 +130,9 @@ function DashboardSessionTabsView({
             streamStateForSession={streamStateForSession}
           />
         </div>
-        {completedJourney ? (
+        {completedCreatesNewFactory !== null ? (
           <AlertPanel aria-live="polite" role="status" tone="success">
-            {completedJourney === "new"
+            {completedCreatesNewFactory
               ? messages.newFactorySuccessLabel
               : messages.openFactorySuccessLabel}
           </AlertPanel>
@@ -169,7 +159,6 @@ function DashboardSessionTabsView({
           folderPath={folderPath}
           isPending={openSessionMutation.isPending}
           isValidatePending={validateFolderMutation.isPending}
-          journey={journey}
           messages={messages}
           onCancelInitConfirmation={handleCancelInitConfirmation}
           onChangeFolderPath={handleChangeFolderPath}
@@ -199,7 +188,6 @@ function SessionTabsContent({
   isPending,
   isRefreshing,
   messages,
-  onNewFactory,
   onOpenFactory,
   onCloseSession,
   onReorderSession,
@@ -215,7 +203,6 @@ function SessionTabsContent({
   isRefreshing: boolean;
   messages: ReturnType<typeof getHeaderControlsMessages>;
   onCloseSession: (sessionID: string) => void;
-  onNewFactory: (trigger: HTMLButtonElement) => void;
   onOpenFactory: (trigger: HTMLButtonElement) => void;
   onReorderSession: (sessionID: string, targetIndex: number) => void;
   onRetry: () => void;
@@ -266,12 +253,6 @@ function SessionTabsContent({
           label={messages.openSessionButtonLabel}
           onClick={(event) => {
             onOpenFactory(event.currentTarget);
-          }}
-        />
-        <NewFactoryButton
-          label={messages.newFactoryButtonLabel}
-          onClick={(event) => {
-            onNewFactory(event.currentTarget);
           }}
         />
       </>
@@ -417,12 +398,6 @@ function SessionTabsContent({
           label={messages.openSessionButtonLabel}
           onClick={(event) => {
             onOpenFactory(event.currentTarget);
-          }}
-        />
-        <NewFactoryButton
-          label={messages.newFactoryButtonLabel}
-          onClick={(event) => {
-            onNewFactory(event.currentTarget);
           }}
         />
       </div>

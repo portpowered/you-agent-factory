@@ -1052,10 +1052,10 @@ describe("DashboardSessionTabs", () => {
     });
 
     fireEvent.click(
-      screen.getByRole("button", { name: messages.newFactoryButtonLabel }),
+      screen.getByRole("button", { name: messages.openSessionButtonLabel }),
     );
     fireEvent.change(
-      screen.getByPlaceholderText(messages.newFactoryFolderFieldPlaceholder),
+      screen.getByPlaceholderText(messages.sessionFolderFieldPlaceholder),
       {
         target: { value: selectedFolderPath },
       },
@@ -1231,10 +1231,10 @@ describe("DashboardSessionTabs", () => {
     });
 
     fireEvent.click(
-      screen.getByRole("button", { name: messages.newFactoryButtonLabel }),
+      screen.getByRole("button", { name: messages.openSessionButtonLabel }),
     );
     fireEvent.change(
-      screen.getByPlaceholderText(messages.newFactoryFolderFieldPlaceholder),
+      screen.getByPlaceholderText(messages.sessionFolderFieldPlaceholder),
       {
         target: { value: emptyFolderPath },
       },
@@ -1273,7 +1273,7 @@ describe("DashboardSessionTabs", () => {
     expect(
       (
         screen.getByRole("textbox", {
-          name: messages.newFactoryFolderFieldLabel,
+          name: messages.sessionFolderFieldLabel,
         }) as HTMLInputElement
       ).value,
     ).toBe(emptyFolderPath);

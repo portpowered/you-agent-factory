@@ -311,10 +311,10 @@ describe("DashboardSessionTabs canonical reconciliation", () => {
 
     const messages = getHeaderControlsMessages("en");
     fireEvent.click(
-      screen.getByRole("button", { name: messages.newFactoryButtonLabel }),
+      screen.getByRole("button", { name: messages.openSessionButtonLabel }),
     );
     fireEvent.change(
-      screen.getByPlaceholderText(messages.newFactoryFolderFieldPlaceholder),
+      screen.getByPlaceholderText(messages.sessionFolderFieldPlaceholder),
       { target: { value: "/workspace/dashboard-regression-new" } },
     );
     fireEvent.submit(
@@ -348,60 +348,8 @@ describe("DashboardSessionTabs canonical reconciliation", () => {
       screen.queryByText("/workspace/dashboard-regression-new/factory"),
     ).toBeNull();
     expect(
-      screen.getByPlaceholderText(messages.newFactoryFolderFieldPlaceholder),
+      screen.getByPlaceholderText(messages.sessionFolderFieldPlaceholder),
     ).toBeTruthy();
-    fireEvent.click(
-      screen.getByRole("button", { name: messages.closeDialogLabel }),
-    );
-    await waitFor(() => {
-      expect(screen.getAllByRole("tab")).toHaveLength(2);
-    });
-  });
-
-  it("rejects New Factory validation when the target already exists", async () => {
-    const fixture = createDashboardRegressionFixture();
-    vi.stubGlobal("fetch", fixture.fetch);
-    const queryClient = createQueryClient();
-
-    renderWithQueryClient(queryClient);
-    await waitFor(() => {
-      expect(fixture.state().pendingSessionListIDs).toContain("initial");
-    });
-    await act(async () => {
-      fixture.sessionLists.resolve("initial");
-    });
-    await waitFor(() => {
-      expect(screen.getByRole("tab", { name: "secondary" })).toBeTruthy();
-    });
-
-    const messages = getHeaderControlsMessages("en");
-    fireEvent.click(
-      screen.getByRole("button", { name: messages.newFactoryButtonLabel }),
-    );
-    fireEvent.change(
-      screen.getByPlaceholderText(messages.newFactoryFolderFieldPlaceholder),
-      { target: { value: "/workspace/dashboard-regression" } },
-    );
-    fireEvent.submit(
-      screen
-        .getByRole("button", { name: messages.openSessionSubmitLabel })
-        .closest("form") as HTMLFormElement,
-    );
-    await waitFor(() => {
-      expect(fixture.state().pendingFactoryOperationIDs).toContain(
-        "open-validation-success",
-      );
-    });
-    await act(async () => {
-      fixture.factoryJourneys.resolve("open-validation-success");
-    });
-
-    expect(
-      await screen.findByText(messages.newFactoryExistingTargetError),
-    ).toBeTruthy();
-    expect(fixture.state().pendingFactoryOperationIDs).not.toContain(
-      "new-confirm-success",
-    );
     fireEvent.click(
       screen.getByRole("button", { name: messages.closeDialogLabel }),
     );

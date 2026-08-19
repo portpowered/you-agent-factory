@@ -5,6 +5,7 @@ import { useId } from "react";
 import type { DashboardSnapshot } from "../../../api/dashboard/types";
 import type { ImportFactoryValue } from "../../../api/session-factory";
 import { DashboardPanelShell } from "../../../components/ui/dashboard-shell";
+import { cn } from "../../../lib/cn";
 import type { ReadFactoryImportFile } from "../../import/hooks/use-factory-png-drop";
 import type { FactoryImportConfirmInput } from "../../import/lib/factory-import-save-choice";
 import type { FactoryPngImportValue } from "../../import/lib/factory-png-import";
@@ -90,10 +91,11 @@ export interface ReactFlowCurrentActivityCardProps {
 export function ReactFlowCurrentActivityCardView(
   props: ReactFlowCurrentActivityCardProps & {
     viewModel: CurrentActivityGraphCardViewModel;
+    chromeless?: boolean;
     showHeaderActions?: boolean;
   },
 ) {
-  const { viewModel, showHeaderActions = false } = props;
+  const { viewModel, chromeless = false, showHeaderActions = false } = props;
   const editorController = props.editorController ?? viewModel;
   const { headingID } = useCurrentActivityAccessibilityIDs(
     props.widgetInstanceID,
@@ -120,7 +122,10 @@ export function ReactFlowCurrentActivityCardView(
   return (
     <DashboardPanelShell
       aria-labelledby={headingID}
-      className="relative flex h-full max-h-full min-h-0 min-w-0 flex-col overflow-hidden"
+      className={cn(
+        "relative flex h-full max-h-full min-h-0 min-w-0 flex-col overflow-hidden",
+        chromeless && "rounded-none border-0 bg-transparent shadow-none",
+      )}
       style={{ height: "100%", maxHeight: "100%", overflow: "hidden" }}
     >
       {showHeaderActions ? (

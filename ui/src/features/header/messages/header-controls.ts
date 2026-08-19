@@ -85,7 +85,7 @@ const headerControlsMessagesByLocale = {
   en: {
     ...headerFactoryJourneyMessagesByLocale.en,
     activeSessionFolderLabelTemplate: "Active folder: {{folderPath}}",
-    brandWordmark: "U",
+    brandWordmark: "You Agent Factory",
     browseSessionFolderButtonLabel: "Choose folder",
     closingSessionButtonLabel: "Closing session",
     currentTickStatusTemplate: `${HEADER_CURRENT_TICK_TOKEN}/${HEADER_MAX_TICK_TOKEN}`,
@@ -173,7 +173,7 @@ const headerControlsMessagesByLocale = {
   ja: {
     ...headerFactoryJourneyMessagesByLocale.ja,
     activeSessionFolderLabelTemplate: "アクティブなフォルダー: {{folderPath}}",
-    brandWordmark: "U",
+    brandWordmark: "You Agent Factory",
     browseSessionFolderButtonLabel: "フォルダーを選ぶ",
     closingSessionButtonLabel: "セッションを終了中",
     currentTickStatusTemplate: `${HEADER_CURRENT_TICK_TOKEN}/${HEADER_MAX_TICK_TOKEN}`,
@@ -262,7 +262,7 @@ const headerControlsMessagesByLocale = {
   ko: {
     ...headerFactoryJourneyMessagesByLocale.ko,
     activeSessionFolderLabelTemplate: "활성 폴더: {{folderPath}}",
-    brandWordmark: "U",
+    brandWordmark: "You Agent Factory",
     browseSessionFolderButtonLabel: "폴더 선택",
     closingSessionButtonLabel: "세션 종료 중",
     currentTickStatusTemplate: `${HEADER_CURRENT_TICK_TOKEN}/${HEADER_MAX_TICK_TOKEN}`,
@@ -350,7 +350,7 @@ const headerControlsMessagesByLocale = {
   "zh-CN": {
     ...headerFactoryJourneyMessagesByLocale["zh-CN"],
     activeSessionFolderLabelTemplate: "当前文件夹：{{folderPath}}",
-    brandWordmark: "U",
+    brandWordmark: "You Agent Factory",
     browseSessionFolderButtonLabel: "选择文件夹",
     closingSessionButtonLabel: "正在关闭会话",
     currentTickStatusTemplate: `${HEADER_CURRENT_TICK_TOKEN}/${HEADER_MAX_TICK_TOKEN}`,
