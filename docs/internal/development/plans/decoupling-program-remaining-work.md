@@ -12,6 +12,12 @@ re-derive it rather than trust it.
 
 Numbers in this document go stale. Re-measure before acting on any of them.
 
+**Successor document: `service-shape-followups.md`.** It supersedes
+Section 3 of this file. The `providers -> workers` edge recorded here as a
+structural blocker was measured again at `b21919b44` and exists only in
+`_test.go` files; the production direction is `workers -> providers`. Read the
+successor before planning any move described below.
+
 ## 1. What is already done
 
 The `dcp` program ran in two batches.
