@@ -50,7 +50,10 @@ func TestCodexRootPreservesRequestOrderedStreamFinalAndSession(t *testing.T) {
 		}
 		return codex.EffectResult{
 			DurationMillis: 23,
-			Metadata:       map[string]string{"transport": "jsonl"},
+			Metadata: map[string]string{
+				"transport": "jsonl",
+				"api_token": "provider-secret",
+			},
 		}, nil
 	})
 	root := newCodexRoot(t, effect)
@@ -149,6 +152,13 @@ func assertCodexSuccessResult(
 		result.Diagnostics.DurationMillis != 23 ||
 		result.Diagnostics.Metadata["transport"] != "jsonl" {
 		t.Fatalf("Diagnostics = %#v", result.Diagnostics)
+	}
+	if result.Diagnostics.Metadata["input_tokens"] != "10" ||
+		result.Diagnostics.Metadata["output_tokens"] != "5" {
+		t.Fatalf("usage metadata = %#v, want decimal input/output counters", result.Diagnostics.Metadata)
+	}
+	if result.Diagnostics.Metadata["api_token"] != "<redacted>" {
+		t.Fatalf("api_token = %q, want redacted", result.Diagnostics.Metadata["api_token"])
 	}
 	assertProgress(t, result.Diagnostics.Progress)
 }
@@ -289,6 +299,9 @@ func assertProgress(t *testing.T, progress []providers.ExecuteProgress) {
 	}
 	if !reflect.DeepEqual(gotPhases, wantPhases) {
 		t.Fatalf("progress phases = %#v, want %#v", gotPhases, wantPhases)
+	}
+	if got := progress[12].Detail; got != `{"input_tokens":10,"cached_input_tokens":2,"output_tokens":5,"reasoning_output_tokens":1}` {
+		t.Fatalf("usage detail = %q, want existing serialized usage record", got)
 	}
 	for _, index := range []int{2, 3, 4} {
 		if progress[index].Metadata["item_id"] != "message-1" {
