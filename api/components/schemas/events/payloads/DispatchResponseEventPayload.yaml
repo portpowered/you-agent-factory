@@ -46,6 +46,9 @@ properties:
     $ref: '../../../../openapi-main.yaml#/components/schemas/ProviderFailureMetadata'
   metrics:
     $ref: '../../../../openapi-main.yaml#/components/schemas/WorkMetrics'
+  usage:
+    $ref: '../../data-models/FactoryDispatchUsage.yaml'
+    description: Dispatch usage derived from the completed workstation result when available.
   durationMillis:
     type: integer
     format: int64

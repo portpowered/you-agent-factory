@@ -590,6 +590,7 @@ func (h *FactoryEventHistory) RecordWorkstationResponse(tick int, result workers
 			OutputWork:                  eventWorksPtr(outputWorkItems(completed.OutputMutations, completed.ConsumedTokens)),
 			OutputResources:             h.dispatchOutputResourcesPtr(completed.OutputMutations),
 			ProviderFailure:             workers.CloneWorkFailureMetadata(result.FailureMetadata),
+			Usage:                       dispatchUsageEventPayload(result, completed),
 		},
 	))
 }

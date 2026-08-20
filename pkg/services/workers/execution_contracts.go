@@ -294,6 +294,7 @@ type DispatchResponseEventPayload struct {
 	ProviderFailure             *WorkFailureMetadata          `json:"providerFailure,omitempty"`
 	SelectedClassificationLabel *string                       `json:"selectedClassificationLabel,omitempty"`
 	TransitionID                string                        `json:"transitionId"`
+	Usage                       *DispatchUsageEventPayload    `json:"usage,omitempty"`
 	// StructuredResultPresent distinguishes a present JSON null from an absent
 	// result without changing the public event shape.
 	StructuredResultPresent bool `json:"-"`
@@ -328,6 +329,18 @@ func (value *DispatchResponseEventPayload) UnmarshalJSON(data []byte) error {
 type DispatchResourceEventRef struct {
 	Capacity int    `json:"capacity"`
 	Name     string `json:"name"`
+}
+
+// DispatchUsageEventPayload carries optional, replay-safe usage facts on a
+// completed Petri dispatch. Pointer fields preserve the distinction between a
+// missing provider fact and a provider-reported zero.
+type DispatchUsageEventPayload struct {
+	CostUSD        *float64 `json:"costUsd,omitempty"`
+	DurationMillis *int64   `json:"durationMillis,omitempty"`
+	InputTokens    *int64   `json:"inputTokens,omitempty"`
+	OutputTokens   *int64   `json:"outputTokens,omitempty"`
+	RetryCount     *int32   `json:"retryCount,omitempty"`
+	TotalTokens    *int64   `json:"totalTokens,omitempty"`
 }
 
 // WorkMetricsEventPayload preserves the millisecond-based public event shape
