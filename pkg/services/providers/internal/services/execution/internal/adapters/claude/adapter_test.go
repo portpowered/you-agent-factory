@@ -49,7 +49,10 @@ func TestClaudeRootPreservesRequestOrderedStreamFinalAndSession(t *testing.T) {
 		}
 		return claude.EffectResult{
 			DurationMillis: 19,
-			Metadata:       map[string]string{"transport": "stream-json"},
+			Metadata: map[string]string{
+				"transport": "stream-json",
+				"api-token": "secret-value",
+			},
 		}, nil
 	})
 	root := newClaudeRoot(t, effect)
@@ -224,7 +227,10 @@ func assertClaudeSuccessResult(
 	}
 	if result.Diagnostics == nil ||
 		result.Diagnostics.DurationMillis != 19 ||
-		result.Diagnostics.Metadata["transport"] != "stream-json" {
+		result.Diagnostics.Metadata["transport"] != "stream-json" ||
+		result.Diagnostics.Metadata["input_tokens"] != "123" ||
+		result.Diagnostics.Metadata["output_tokens"] != "45" ||
+		result.Diagnostics.Metadata["api-token"] != "<redacted>" {
 		t.Fatalf("Diagnostics = %#v", result.Diagnostics)
 	}
 	assertProgress(t, result.Diagnostics.Progress)
@@ -307,6 +313,11 @@ func TestClaudeDecoderMapsMixedTextAndToolProgress(t *testing.T) {
 	}
 	if got := countPhase(result.Diagnostics.Progress, "tool.completed"); got < 1 {
 		t.Fatalf("tool.completed facts = %d, want at least 1", got)
+	}
+	for _, key := range []string{"input_tokens", "output_tokens"} {
+		if _, exists := result.Diagnostics.Metadata[key]; exists {
+			t.Fatalf("Diagnostics.Metadata[%q] = %q, want usage omitted without terminal usage", key, result.Diagnostics.Metadata[key])
+		}
 	}
 }
 
@@ -409,6 +420,7 @@ func claudeSuccessStream() []byte {
 		map[string]any{
 			"type": "result", "subtype": "success", "is_error": false,
 			"result": "authoritative final answer", "session_id": "claude-session-42",
+			"usage": map[string]any{"input_tokens": 123, "output_tokens": 45},
 		},
 	}
 	return encodeRecords(records)
