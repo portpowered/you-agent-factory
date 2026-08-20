@@ -428,8 +428,7 @@ function useCurrentActivityGraphNodePresentation(
         const resizedDimensions = dimensionsByNodeId.get(node.id);
         const renderedDimensions =
           liveDimensionsByNodeId.get(node.id) ?? resizedDimensions;
-        return {
-          ...node,
+        const presentation = {
           ...(renderedDimensions
             ? {
                 height: renderedDimensions.height,
@@ -437,10 +436,20 @@ function useCurrentActivityGraphNodePresentation(
                 width: renderedDimensions.width,
               }
             : {}),
-          data: { ...node.data, expanded: resizedDimensions !== undefined },
           position: transientPositionsByNodeId.get(node.id) ?? node.position,
           selected: graphSelection.isNodeSelected(node.id),
         };
+        // Overriding `data` across the whole union would sever the link
+        // between each node's `type` and its `data`; only the workstation
+        // view has an expanded content variant, so narrow before stamping it.
+        if (node.type === "workstation") {
+          return {
+            ...node,
+            ...presentation,
+            data: { ...node.data, expanded: resizedDimensions !== undefined },
+          };
+        }
+        return { ...node, ...presentation };
       }),
     [
       baseNodes,
