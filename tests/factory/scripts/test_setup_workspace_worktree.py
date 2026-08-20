@@ -18,6 +18,7 @@ EXPECTED_RESULT_KEYS = {
     "branch",
     "prd_path",
     "prd_md_path",
+    "standing_rules_path",
     "reused",
 }
 
@@ -95,6 +96,27 @@ def setup_repo_with_origin_main_ahead(local_repo, repo_root):
     (local_repo / "dirty.txt").write_text("unstaged change\n", encoding="utf-8")
     git(["fetch", "origin"], local_repo)
 
+    return bare_remote
+
+
+def setup_repo_with_local_main_ahead(local_repo, repo_root, ahead_commits=1):
+    """Create a bare remote; local main carries unpushed commits ahead of it."""
+    bare_remote = repo_root / "remote.git"
+    bare_remote.mkdir()
+    git(["init", "--bare", "-b", "main"], bare_remote)
+
+    local_repo.mkdir()
+    init_local_repo(local_repo)
+    git(["remote", "add", "origin", str(bare_remote)], local_repo)
+    git(["push", "-u", "origin", "main"], local_repo)
+
+    for index in range(ahead_commits):
+        ahead_file = local_repo / f"unpushed-{index}.txt"
+        ahead_file.write_text("local main is ahead\n", encoding="utf-8")
+        git(["add", ahead_file.name], local_repo)
+        git(["commit", "-m", f"unpushed local commit {index}"], local_repo)
+
+    git(["fetch", "origin"], local_repo)
     return bare_remote
 
 
@@ -201,6 +223,55 @@ class SetupWorkspaceWorktreeTest(unittest.TestCase):
         ).stdout.strip()
         self.assertEqual(branch_sha, main_sha)
         self.assertTrue(self.module.branch_exists_locally(self.repo_path, prd_name))
+
+    def test_new_worktree_branches_from_origin_main_when_local_main_is_ahead(self):
+        local_repo = self.repo_path / "local"
+        setup_repo_with_local_main_ahead(local_repo, self.repo_path, ahead_commits=2)
+
+        origin_main_sha = git(
+            ["rev-parse", "refs/remotes/origin/main"],
+            local_repo,
+        ).stdout.strip()
+        local_main_sha = git(
+            ["rev-parse", "refs/heads/main"],
+            local_repo,
+        ).stdout.strip()
+        self.assertNotEqual(local_main_sha, origin_main_sha)
+
+        prd_name = "local-main-ahead-prd"
+        write_prd(local_repo, prd_name)
+
+        result = run_setup_workspace(local_repo, prd_name)
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+        payload = json.loads(result.stdout)
+        worktree_path = Path(payload["worktree"])
+        self.assertTrue(worktree_path.exists())
+
+        worktree_head = git(["rev-parse", "HEAD"], worktree_path).stdout.strip()
+        self.assertEqual(worktree_head, origin_main_sha)
+        self.assertNotEqual(worktree_head, local_main_sha)
+        for index in range(2):
+            self.assertFalse((worktree_path / f"unpushed-{index}.txt").exists())
+        ancestor_check = git(
+            ["merge-base", "--is-ancestor", local_main_sha, worktree_head],
+            worktree_path,
+            check=False,
+        )
+        self.assertNotEqual(ancestor_check.returncode, 0)
+
+        # Local main must be untouched: the ahead commits stay on it.
+        self.assertEqual(
+            git(["rev-parse", "refs/heads/main"], local_repo).stdout.strip(),
+            local_main_sha,
+        )
+
+    def test_resolve_worktree_start_point_falls_back_to_main_without_origin(self):
+        init_local_repo(self.repo_path)
+        self.assertEqual(
+            self.module.resolve_worktree_start_point(self.repo_path),
+            "main",
+        )
 
     def test_copies_prd_json_and_optional_markdown(self):
         init_local_repo(self.repo_path)
