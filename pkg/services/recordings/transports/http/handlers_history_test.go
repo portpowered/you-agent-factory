@@ -968,18 +968,6 @@ func TestListFactorySessionDispatches_ProjectsHistoricalPetriUsage(t *testing.T)
 	if len(response.Dispatches) != 2 {
 		t.Fatalf("dispatches = %#v, want two dispatches", response.Dispatches)
 	}
-	withTokens := response.Dispatches[0].Usage
-	if withTokens == nil || withTokens.DurationMillis == nil || *withTokens.DurationMillis != durationWithTokens ||
-		withTokens.InputTokens == nil || *withTokens.InputTokens != inputTokens ||
-		withTokens.OutputTokens == nil || *withTokens.OutputTokens != outputTokens ||
-		withTokens.TotalTokens == nil || *withTokens.TotalTokens != totalTokens {
-		t.Fatalf("token-present response usage = %#v, want duration and token facts", withTokens)
-	}
-	withoutTokens := response.Dispatches[1].Usage
-	if withoutTokens == nil || withoutTokens.DurationMillis == nil || *withoutTokens.DurationMillis != durationWithoutTokens {
-		t.Fatalf("token-absent response usage = %#v, want duration-only usage", withoutTokens)
-	}
-	if withoutTokens.InputTokens != nil || withoutTokens.OutputTokens != nil || withoutTokens.TotalTokens != nil || withoutTokens.CostUsd != nil {
-		t.Fatalf("token-absent response usage = %#v, want token and cost fields omitted", withoutTokens)
-	}
+	assertHistoricalHTTPUsageWithTokens(t, response.Dispatches[0].Usage, durationWithTokens, inputTokens, outputTokens, totalTokens)
+	assertHistoricalHTTPDurationOnlyUsage(t, response.Dispatches[1].Usage, durationWithoutTokens)
 }

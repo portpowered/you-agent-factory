@@ -751,24 +751,8 @@ func TestHistoricalDispatchMappingPreservesPetriUsagePresence(t *testing.T) {
 	if len(response.Dispatches) != 2 {
 		t.Fatalf("dispatches = %#v, want two dispatches", response.Dispatches)
 	}
-	withTokens := response.Dispatches[0].Usage
-	if withTokens == nil || withTokens.DurationMillis == nil || *withTokens.DurationMillis != durationWithTokens ||
-		withTokens.InputTokens == nil || *withTokens.InputTokens != inputTokens ||
-		withTokens.OutputTokens == nil || *withTokens.OutputTokens != outputTokens ||
-		withTokens.TotalTokens == nil || *withTokens.TotalTokens != totalTokens {
-		t.Fatalf("token-present usage = %#v, want duration/input/output/total", withTokens)
-	}
-	if withTokens.CostUsd != nil {
-		t.Fatalf("token-present cost = %#v, want unset", withTokens.CostUsd)
-	}
-
-	withoutTokens := response.Dispatches[1].Usage
-	if withoutTokens == nil || withoutTokens.DurationMillis == nil || *withoutTokens.DurationMillis != durationWithoutTokens {
-		t.Fatalf("token-absent usage = %#v, want duration-only usage", withoutTokens)
-	}
-	if withoutTokens.InputTokens != nil || withoutTokens.OutputTokens != nil || withoutTokens.TotalTokens != nil || withoutTokens.CostUsd != nil {
-		t.Fatalf("token-absent usage = %#v, want token and cost fields omitted", withoutTokens)
-	}
+	assertHistoricalUsageWithTokens(t, response.Dispatches[0].Usage, durationWithTokens, inputTokens, outputTokens, totalTokens)
+	assertHistoricalDurationOnlyUsage(t, response.Dispatches[1].Usage, durationWithoutTokens)
 
 	detail := factorysession.HistoricalDispatchDetailToAPI(
 		"dur-sess-hist-usage-001",
@@ -785,6 +769,50 @@ func TestHistoricalDispatchMappingPreservesPetriUsagePresence(t *testing.T) {
 	)
 	if detail.Usage == nil || detail.Usage.TotalTokens == nil || *detail.Usage.TotalTokens != totalTokens {
 		t.Fatalf("detail usage = %#v, want token facts", detail.Usage)
+	}
+}
+
+func assertHistoricalUsageWithTokens(t *testing.T, usage *factoryapi.FactoryDispatchUsage, duration, input, output, total int64) {
+	t.Helper()
+	if usage == nil {
+		t.Fatal("token-present usage = nil")
+	}
+	if usage.DurationMillis == nil || *usage.DurationMillis != duration {
+		t.Fatalf("token-present duration = %#v, want %d", usage.DurationMillis, duration)
+	}
+	if usage.InputTokens == nil || *usage.InputTokens != input {
+		t.Fatalf("token-present input tokens = %#v, want %d", usage.InputTokens, input)
+	}
+	if usage.OutputTokens == nil || *usage.OutputTokens != output {
+		t.Fatalf("token-present output tokens = %#v, want %d", usage.OutputTokens, output)
+	}
+	if usage.TotalTokens == nil || *usage.TotalTokens != total {
+		t.Fatalf("token-present total tokens = %#v, want %d", usage.TotalTokens, total)
+	}
+	if usage.CostUsd != nil {
+		t.Fatalf("token-present cost = %#v, want unset", usage.CostUsd)
+	}
+}
+
+func assertHistoricalDurationOnlyUsage(t *testing.T, usage *factoryapi.FactoryDispatchUsage, duration int64) {
+	t.Helper()
+	if usage == nil {
+		t.Fatal("token-absent usage = nil")
+	}
+	if usage.DurationMillis == nil || *usage.DurationMillis != duration {
+		t.Fatalf("token-absent duration = %#v, want %d", usage.DurationMillis, duration)
+	}
+	if usage.InputTokens != nil {
+		t.Fatalf("token-absent input tokens = %#v, want nil", usage.InputTokens)
+	}
+	if usage.OutputTokens != nil {
+		t.Fatalf("token-absent output tokens = %#v, want nil", usage.OutputTokens)
+	}
+	if usage.TotalTokens != nil {
+		t.Fatalf("token-absent total tokens = %#v, want nil", usage.TotalTokens)
+	}
+	if usage.CostUsd != nil {
+		t.Fatalf("token-absent cost = %#v, want nil", usage.CostUsd)
 	}
 }
 
