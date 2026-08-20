@@ -580,6 +580,10 @@
       "minimum": 96.00
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/checkpoint_recovery/internal/filesystem",
+      "minimum": 73.90
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/checkpoint_recovery/internal/javascriptstore",
       "minimum": 85.71
     },
