@@ -157,11 +157,15 @@ export async function expectTypographyRegressionSurface(
   canvasElement: HTMLElement,
 ): Promise<void> {
   const canvas = within(canvasElement);
-  const heading = await canvas.findByRole("heading", { name: "U" });
+  const heading = await canvas.findByRole("heading", {
+    name: "You Agent Factory",
+  });
   const toolbar = canvas.getByRole("region", { name: "dashboard summary" });
 
   expect(heading.className).toContain(DASHBOARD_PAGE_HEADING_CLASS);
-  expect(heading.textContent).toBe("U");
+  expect(
+    within(heading).getByRole("img", { name: "You Agent Factory" }),
+  ).toBeTruthy();
   expect(
     within(toolbar).queryByRole("status", { name: /Event stream/i }),
   ).toBeNull();
@@ -214,7 +218,9 @@ export async function expectTimelineToolbarAlignment(
   const controlsCard = await canvas.findByRole("article", {
     name: "Session controls",
   });
-  const heading = within(header).getByRole("heading", { name: "U" });
+  const heading = within(header).getByRole("heading", {
+    name: "You Agent Factory",
+  });
   const activeTab = within(header).getByRole("tab", { name: "root" });
   const slider = within(controlsCard).getByRole<HTMLInputElement>("slider", {
     name: "Timeline tick",

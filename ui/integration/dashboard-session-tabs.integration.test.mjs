@@ -250,7 +250,7 @@ describe.concurrent("dashboard session tabs browser integration", () => {
           waitUntil: "domcontentloaded",
         });
         await browserPage.page
-          .getByRole("heading", { level: 1, name: "U", exact: true })
+          .getByRole("heading", { level: 1, name: "You Agent Factory", exact: true })
           .waitFor({ state: "visible", timeout: uiInteractionTimeoutMs });
         await browserPage.page
           .getByRole("button", { name: "Open Factory" })
@@ -350,7 +350,7 @@ describe.concurrent("dashboard session tabs browser integration", () => {
           waitUntil: "domcontentloaded",
         });
         await browserPage.page
-          .getByRole("heading", { level: 1, name: "U", exact: true })
+          .getByRole("heading", { level: 1, name: "You Agent Factory", exact: true })
           .waitFor({ state: "visible", timeout: uiInteractionTimeoutMs });
 
         const rootTab = browserPage.page.getByRole("tab", { name: "root" });
@@ -601,7 +601,7 @@ describe.concurrent("dashboard session tabs browser integration", () => {
           waitUntil: "domcontentloaded",
         });
         await browserPage.page
-          .getByRole("heading", { level: 1, name: "U", exact: true })
+          .getByRole("heading", { level: 1, name: "You Agent Factory", exact: true })
           .waitFor({ state: "visible", timeout: uiInteractionTimeoutMs });
 
         const workTotalsState = browserPage.page
@@ -720,7 +720,7 @@ describe.concurrent("dashboard session tabs browser integration", () => {
           waitUntil: "domcontentloaded",
         });
         await browserPage.page
-          .getByRole("heading", { level: 1, name: "U", exact: true })
+          .getByRole("heading", { level: 1, name: "You Agent Factory", exact: true })
           .waitFor({ state: "visible", timeout: uiInteractionTimeoutMs });
 
         const rootTab = browserPage.page.getByRole("tab", { name: "root" });
