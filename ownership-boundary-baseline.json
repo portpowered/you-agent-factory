@@ -1,0 +1,229 @@
+{
+  "version": 1,
+  "entries": [
+    {
+      "rule": "mapping-filesystem-behavior",
+      "filePath": "pkg/transports/mapping/factoryconfig/authored/agents_config_test.go",
+      "target": "os.WriteFile",
+      "class": "test-only",
+      "stage": "wire-injection-full-blow",
+      "deletionGate": "move filesystem behavior behind an injected service or exact external-effect port"
+    },
+    {
+      "rule": "mapping-filesystem-behavior",
+      "filePath": "pkg/transports/mapping/factoryconfig/authored/agents_config_test_helpers_test.go",
+      "target": "os.ReadFile",
+      "class": "test-only",
+      "stage": "wire-injection-full-blow",
+      "deletionGate": "move filesystem behavior behind an injected service or exact external-effect port"
+    },
+    {
+      "rule": "mapping-filesystem-behavior",
+      "filePath": "pkg/transports/mapping/factoryconfig/openapitests/parity_inventory_test.go",
+      "target": "os.ReadFile",
+      "class": "test-only",
+      "stage": "wire-injection-full-blow",
+      "deletionGate": "move filesystem behavior behind an injected service or exact external-effect port"
+    },
+    {
+      "rule": "mapping-filesystem-behavior",
+      "filePath": "pkg/transports/mapping/factorysession/factory_session_execution_test.go",
+      "target": "os.ReadFile",
+      "class": "test-only",
+      "stage": "wire-injection-full-blow",
+      "deletionGate": "move filesystem behavior behind an injected service or exact external-effect port"
+    },
+    {
+      "rule": "mapping-filesystem-behavior",
+      "filePath": "pkg/transports/mapping/factorysession/factory_session_lifecycle_test.go",
+      "target": "os.ReadFile",
+      "class": "test-only",
+      "stage": "wire-injection-full-blow",
+      "deletionGate": "move filesystem behavior behind an injected service or exact external-effect port"
+    },
+    {
+      "rule": "peer-service-implementation-import",
+      "filePath": "pkg/services/factory_definitions/transports/cli/cobracompletion/selected_factory_signature_test.go",
+      "target": "github.com/portpowered/infinite-you/pkg/services/work/transports/cli/climanifest",
+      "class": "test-only",
+      "stage": "wire-injection-full-blow",
+      "deletionGate": "import only the peer service root contract (pkg/services/\u003cpeer\u003e) instead of a peer implementation or nested subservice"
+    },
+    {
+      "rule": "peer-service-implementation-import",
+      "filePath": "pkg/services/factory_runtime/internal/services/orchestration/runtime/captured_turn_terminate_integration_test.go",
+      "target": "github.com/portpowered/infinite-you/pkg/services/events/wire",
+      "class": "test-only",
+      "stage": "wire-injection-full-blow",
+      "deletionGate": "import only the peer service root contract (pkg/services/\u003cpeer\u003e) instead of a peer implementation or nested subservice"
+    },
+    {
+      "rule": "peer-service-implementation-import",
+      "filePath": "pkg/services/factory_runtime/internal/services/orchestration/runtime/captured_turn_terminate_integration_test.go",
+      "target": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire",
+      "class": "test-only",
+      "stage": "wire-injection-full-blow",
+      "deletionGate": "import only the peer service root contract (pkg/services/\u003cpeer\u003e) instead of a peer implementation or nested subservice"
+    },
+    {
+      "rule": "peer-service-implementation-import",
+      "filePath": "pkg/services/factory_runtime/internal/services/orchestration/runtime/captured_turn_terminate_integration_test.go",
+      "target": "github.com/portpowered/infinite-you/pkg/services/worker_sessions/wire",
+      "class": "test-only",
+      "stage": "wire-injection-full-blow",
+      "deletionGate": "import only the peer service root contract (pkg/services/\u003cpeer\u003e) instead of a peer implementation or nested subservice"
+    },
+    {
+      "rule": "peer-service-implementation-import",
+      "filePath": "pkg/services/factory_runtime/internal/services/orchestration/runtime/dispatch_worker_sessions_cutover_test.go",
+      "target": "github.com/portpowered/infinite-you/pkg/services/events/wire",
+      "class": "test-only",
+      "stage": "wire-injection-full-blow",
+      "deletionGate": "import only the peer service root contract (pkg/services/\u003cpeer\u003e) instead of a peer implementation or nested subservice"
+    },
+    {
+      "rule": "peer-service-implementation-import",
+      "filePath": "pkg/services/factory_runtime/internal/services/orchestration/runtime/dispatch_worker_sessions_cutover_test.go",
+      "target": "github.com/portpowered/infinite-you/pkg/services/worker_sessions/wire",
+      "class": "test-only",
+      "stage": "wire-injection-full-blow",
+      "deletionGate": "import only the peer service root contract (pkg/services/\u003cpeer\u003e) instead of a peer implementation or nested subservice"
+    },
+    {
+      "rule": "peer-service-implementation-import",
+      "filePath": "pkg/services/factory_sessions/internal/runtimeopening/runtime_load_test.go",
+      "target": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire",
+      "class": "test-only",
+      "stage": "wire-injection-full-blow",
+      "deletionGate": "import only the peer service root contract (pkg/services/\u003cpeer\u003e) instead of a peer implementation or nested subservice"
+    },
+    {
+      "rule": "peer-service-implementation-import",
+      "filePath": "pkg/services/factory_sessions/internal/runtimeopening/testmain_test.go",
+      "target": "github.com/portpowered/infinite-you/pkg/services/operator_settings/wire",
+      "class": "test-only",
+      "stage": "wire-injection-full-blow",
+      "deletionGate": "import only the peer service root contract (pkg/services/\u003cpeer\u003e) instead of a peer implementation or nested subservice"
+    },
+    {
+      "rule": "peer-service-implementation-import",
+      "filePath": "pkg/services/factory_visualization/wire/recordings_peer_test.go",
+      "target": "github.com/portpowered/infinite-you/pkg/services/recordings/wire",
+      "class": "test-only",
+      "stage": "wire-injection-full-blow",
+      "deletionGate": "import only the peer service root contract (pkg/services/\u003cpeer\u003e) instead of a peer implementation or nested subservice"
+    },
+    {
+      "rule": "peer-service-implementation-import",
+      "filePath": "pkg/services/factory_visualization/wire/wire_test.go",
+      "target": "github.com/portpowered/infinite-you/pkg/services/recordings/wire",
+      "class": "test-only",
+      "stage": "wire-injection-full-blow",
+      "deletionGate": "import only the peer service root contract (pkg/services/\u003cpeer\u003e) instead of a peer implementation or nested subservice"
+    },
+    {
+      "rule": "peer-service-implementation-import",
+      "filePath": "pkg/services/operator_settings/transports/cli/initsetup/init_test.go",
+      "target": "github.com/portpowered/infinite-you/pkg/services/providers/wire",
+      "class": "test-only",
+      "stage": "wire-injection-full-blow",
+      "deletionGate": "import only the peer service root contract (pkg/services/\u003cpeer\u003e) instead of a peer implementation or nested subservice"
+    },
+    {
+      "rule": "peer-service-implementation-import",
+      "filePath": "pkg/services/providers/transports/cli/contract_preservation_test.go",
+      "target": "github.com/portpowered/infinite-you/pkg/services/work/transports/cli/climanifest",
+      "class": "test-only",
+      "stage": "wire-injection-full-blow",
+      "deletionGate": "import only the peer service root contract (pkg/services/\u003cpeer\u003e) instead of a peer implementation or nested subservice"
+    },
+    {
+      "rule": "peer-service-implementation-import",
+      "filePath": "pkg/services/providers/transports/cli/execute_adjacent_validation_test.go",
+      "target": "github.com/portpowered/infinite-you/pkg/services/work/transports/cli/climanifest",
+      "class": "test-only",
+      "stage": "wire-injection-full-blow",
+      "deletionGate": "import only the peer service root contract (pkg/services/\u003cpeer\u003e) instead of a peer implementation or nested subservice"
+    },
+    {
+      "rule": "peer-service-implementation-import",
+      "filePath": "pkg/services/recordings/internal/replay/configtests/factory_snapshot_test.go",
+      "target": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/transports/mapping/factorysnapshot",
+      "class": "test-only",
+      "stage": "wire-injection-full-blow",
+      "deletionGate": "import only the peer service root contract (pkg/services/\u003cpeer\u003e) instead of a peer implementation or nested subservice"
+    },
+    {
+      "rule": "peer-service-implementation-import",
+      "filePath": "pkg/services/recordings/internal/replay/javascript_recording_contract_test.go",
+      "target": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/transports/mapping/factorysnapshot",
+      "class": "test-only",
+      "stage": "wire-injection-full-blow",
+      "deletionGate": "import only the peer service root contract (pkg/services/\u003cpeer\u003e) instead of a peer implementation or nested subservice"
+    },
+    {
+      "rule": "peer-service-implementation-import",
+      "filePath": "pkg/services/system_initialization/internal/workflow/testmain_test.go",
+      "target": "github.com/portpowered/infinite-you/pkg/services/operator_settings/wire",
+      "class": "test-only",
+      "stage": "wire-injection-full-blow",
+      "deletionGate": "import only the peer service root contract (pkg/services/\u003cpeer\u003e) instead of a peer implementation or nested subservice"
+    },
+    {
+      "rule": "peer-service-implementation-import",
+      "filePath": "pkg/services/system_initialization/testmain_test.go",
+      "target": "github.com/portpowered/infinite-you/pkg/services/operator_settings/wire",
+      "class": "test-only",
+      "stage": "wire-injection-full-blow",
+      "deletionGate": "import only the peer service root contract (pkg/services/\u003cpeer\u003e) instead of a peer implementation or nested subservice"
+    },
+    {
+      "rule": "peer-service-implementation-import",
+      "filePath": "pkg/services/system_initialization/wire/testmain_test.go",
+      "target": "github.com/portpowered/infinite-you/pkg/services/operator_settings/wire",
+      "class": "test-only",
+      "stage": "wire-injection-full-blow",
+      "deletionGate": "import only the peer service root contract (pkg/services/\u003cpeer\u003e) instead of a peer implementation or nested subservice"
+    },
+    {
+      "rule": "peer-service-implementation-import",
+      "filePath": "pkg/services/worker_sessions/internal/service/fakes_test.go",
+      "target": "github.com/portpowered/infinite-you/pkg/services/events/wire",
+      "class": "test-only",
+      "stage": "wire-injection-full-blow",
+      "deletionGate": "import only the peer service root contract (pkg/services/\u003cpeer\u003e) instead of a peer implementation or nested subservice"
+    },
+    {
+      "rule": "peer-service-implementation-import",
+      "filePath": "pkg/services/worker_sessions/wire/wire_test.go",
+      "target": "github.com/portpowered/infinite-you/pkg/services/events/wire",
+      "class": "test-only",
+      "stage": "wire-injection-full-blow",
+      "deletionGate": "import only the peer service root contract (pkg/services/\u003cpeer\u003e) instead of a peer implementation or nested subservice"
+    },
+    {
+      "rule": "peer-service-implementation-import",
+      "filePath": "pkg/services/workers/internal/services/runners/internal/services/agent/internal/service/live_provider_session_integration_test.go",
+      "target": "github.com/portpowered/infinite-you/pkg/services/events/wire",
+      "class": "test-only",
+      "stage": "wire-injection-full-blow",
+      "deletionGate": "import only the peer service root contract (pkg/services/\u003cpeer\u003e) instead of a peer implementation or nested subservice"
+    },
+    {
+      "rule": "peer-service-implementation-import",
+      "filePath": "pkg/services/workers/internal/services/runners/internal/services/agent/internal/service/live_provider_session_integration_test.go",
+      "target": "github.com/portpowered/infinite-you/pkg/services/providers/wire",
+      "class": "test-only",
+      "stage": "wire-injection-full-blow",
+      "deletionGate": "import only the peer service root contract (pkg/services/\u003cpeer\u003e) instead of a peer implementation or nested subservice"
+    },
+    {
+      "rule": "peer-service-implementation-import",
+      "filePath": "pkg/services/workers/internal/services/runners/internal/services/agent/internal/service/live_provider_session_integration_test.go",
+      "target": "github.com/portpowered/infinite-you/pkg/services/worker_sessions/wire",
+      "class": "test-only",
+      "stage": "wire-injection-full-blow",
+      "deletionGate": "import only the peer service root contract (pkg/services/\u003cpeer\u003e) instead of a peer implementation or nested subservice"
+    }
+  ]
+}

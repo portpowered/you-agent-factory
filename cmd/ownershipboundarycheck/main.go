@@ -95,11 +95,11 @@ type config struct {
 }
 
 type finding struct {
-	Rule     string `json:"rule"`
-	FilePath string `json:"filePath"`
-	Target   string `json:"target"`
-	Line     int    `json:"-"`
-	class    boundarySourceClass
+	Rule     string              `json:"rule"`
+	FilePath string              `json:"filePath"`
+	Target   string              `json:"target"`
+	Class    boundarySourceClass `json:"class"`
+	Line     int                 `json:"-"`
 }
 
 type baseline struct {
@@ -141,30 +141,20 @@ func run(cfg config, stdout, stderr io.Writer) error {
 	if err != nil {
 		return err
 	}
-	productionFindings := filterFindingsByClass(findings, productionSourceClass)
-	testOnlyFindings := filterFindingsByClass(findings, testOnlySourceClass)
 	if cfg.createBaseline {
-		return createBaseline(repoRoot, productionFindings, stdout)
+		return createBaseline(repoRoot, findings, stdout)
 	}
 	recorded, err := loadBaseline(repoRoot)
 	if err != nil {
 		return err
 	}
-	recorded, err = productionBaseline(recorded)
+	active, unrecorded, stale, err := partition(findings, recorded)
 	if err != nil {
 		return err
-	}
-	active, unrecorded, stale, err := partition(productionFindings, recorded)
-	if err != nil {
-		return err
-	}
-	for _, item := range testOnlyFindings {
-		writeFinding(stdout, "test-only observation", item)
 	}
 	for _, item := range unrecorded {
 		writeFinding(stderr, "new violation", item)
 	}
-	counts := countFindingClasses(testOnlyFindings, unrecorded)
 	for _, item := range stale {
 		fmt.Fprintf(
 			stderr,
@@ -172,25 +162,25 @@ func run(cfg config, stdout, stderr io.Writer) error {
 			item.Rule,
 			item.FilePath,
 			item.Target,
-			effectiveBoundarySourceClass(boundarySourceClass(item.Class), item.FilePath),
+			item.Class,
 			baselineFile,
 		)
-		counts.add(effectiveBoundarySourceClass(boundarySourceClass(item.Class), item.FilePath))
 	}
+	counts := countClassifiedViolations(unrecorded, stale)
 	if len(unrecorded) > 0 || len(stale) > 0 {
-		writeClassifiedFindingCounts(stderr, counts)
+		writeClassifiedViolationCounts(stderr, counts)
 		return fmt.Errorf(
 			"[agent-factory:ownership-boundary] found %d new violation(s) and %d stale baseline entries",
 			len(unrecorded),
 			len(stale),
 		)
 	}
-	writeClassifiedFindingCounts(stdout, counts)
 	fmt.Fprintf(
 		stdout,
 		"[agent-factory:ownership-boundary] ownership boundaries hold (%d deletion-only baseline entries remain)\n",
 		len(active),
 	)
+	writeClassifiedViolationCounts(stdout, counts)
 	return nil
 }
 
@@ -260,20 +250,17 @@ func scanFile(path, relative string, inventory ownerInventory) ([]finding, error
 	if ast.IsGenerated(file) {
 		return nil, nil
 	}
+	class := classifyBoundarySource(relative)
 	aliases, imports := importInventory(file)
 	var findings []finding
 	switch {
 	case within(relative, initializerRoot):
-		findings = append(findings, scanInitializerImports(fileSet, imports, relative, inventory)...)
-		findings = append(findings, scanInitializerCalls(fileSet, file, aliases, relative)...)
+		findings = append(findings, scanInitializerImports(fileSet, imports, relative, inventory, class)...)
+		findings = append(findings, scanInitializerCalls(fileSet, file, aliases, relative, class)...)
 	case within(relative, platformRoot):
-		findings = append(findings, scanPlatformImports(fileSet, imports, relative)...)
+		findings = append(findings, scanPlatformImports(fileSet, imports, relative, class)...)
 	case within(relative, mappingRoot):
-		findings = append(findings, scanMappingBehavior(fileSet, file, aliases, imports, relative)...)
-	}
-	class := classifyBoundarySource(relative)
-	for index := range findings {
-		findings[index].class = class
+		findings = append(findings, scanMappingBehavior(fileSet, file, aliases, imports, relative, class)...)
 	}
 	return findings, nil
 }
@@ -309,6 +296,7 @@ func scanInitializerImports(
 	imports []importedPackage,
 	relative string,
 	inventory ownerInventory,
+	class boundarySourceClass,
 ) []finding {
 	var findings []finding
 	for _, imported := range imports {
@@ -321,7 +309,7 @@ func scanInitializerImports(
 		}
 		if rule != "" {
 			findings = append(findings, finding{
-				Rule: rule, FilePath: relative, Target: imported.Path,
+				Rule: rule, FilePath: relative, Target: imported.Path, Class: class,
 				Line: fileSet.Position(imported.Pos).Line,
 			})
 		}
@@ -330,8 +318,8 @@ func scanInitializerImports(
 				strings.HasPrefix(imported.Path, transportsImport)) {
 			findings = append(findings, finding{
 				Rule: ruleInitializerConstruction, FilePath: relative,
-				Target: imported.Path + ".*",
-				Line:   fileSet.Position(imported.Pos).Line,
+				Target: imported.Path + ".*", Class: class,
+				Line: fileSet.Position(imported.Pos).Line,
 			})
 		}
 	}
@@ -362,6 +350,7 @@ func scanInitializerCalls(
 	file *ast.File,
 	aliases map[string]string,
 	relative string,
+	class boundarySourceClass,
 ) []finding {
 	var findings []finding
 	ast.Inspect(file, func(node ast.Node) bool {
@@ -387,8 +376,8 @@ func scanInitializerCalls(
 		}
 		findings = append(findings, finding{
 			Rule: ruleInitializerConstruction, FilePath: relative,
-			Target: importPath + "." + selector.Sel.Name,
-			Line:   fileSet.Position(call.Pos()).Line,
+			Target: importPath + "." + selector.Sel.Name, Class: class,
+			Line: fileSet.Position(call.Pos()).Line,
 		})
 		return true
 	})
@@ -404,7 +393,7 @@ func constructionName(name string) bool {
 	return false
 }
 
-func scanPlatformImports(fileSet *token.FileSet, imports []importedPackage, relative string) []finding {
+func scanPlatformImports(fileSet *token.FileSet, imports []importedPackage, relative string, class boundarySourceClass) []finding {
 	var findings []finding
 	for _, imported := range imports {
 		if !strings.HasPrefix(imported.Path, servicesImport) {
@@ -420,7 +409,7 @@ func scanPlatformImports(fileSet *token.FileSet, imports []importedPackage, rela
 			}
 		}
 		findings = append(findings, finding{
-			Rule: rulePlatformDomainImport, FilePath: relative, Target: imported.Path,
+			Rule: rulePlatformDomainImport, FilePath: relative, Target: imported.Path, Class: class,
 			Line: fileSet.Position(imported.Pos).Line,
 		})
 	}
@@ -433,12 +422,13 @@ func scanMappingBehavior(
 	aliases map[string]string,
 	imports []importedPackage,
 	relative string,
+	class boundarySourceClass,
 ) []finding {
 	var findings []finding
 	for _, imported := range imports {
 		if imported.Path == "os/exec" {
 			findings = append(findings, finding{
-				Rule: ruleMappingProcess, FilePath: relative, Target: "os/exec",
+				Rule: ruleMappingProcess, FilePath: relative, Target: "os/exec", Class: class,
 				Line: fileSet.Position(imported.Pos).Line,
 			})
 		}
@@ -454,7 +444,7 @@ func scanMappingBehavior(
 		}
 		if rule != "" {
 			findings = append(findings, finding{
-				Rule: rule, FilePath: relative, Target: imported.Path + ".*",
+				Rule: rule, FilePath: relative, Target: imported.Path + ".*", Class: class,
 				Line: fileSet.Position(imported.Pos).Line,
 			})
 		}
@@ -462,7 +452,7 @@ func scanMappingBehavior(
 	ast.Inspect(file, func(node ast.Node) bool {
 		if statement, ok := node.(*ast.GoStmt); ok {
 			findings = append(findings, finding{
-				Rule: ruleMappingGoroutine, FilePath: relative, Target: "go statement",
+				Rule: ruleMappingGoroutine, FilePath: relative, Target: "go statement", Class: class,
 				Line: fileSet.Position(statement.Pos()).Line,
 			})
 			return true
@@ -499,8 +489,8 @@ func scanMappingBehavior(
 		if rule != "" {
 			findings = append(findings, finding{
 				Rule: rule, FilePath: relative,
-				Target: importPath + "." + selector.Sel.Name,
-				Line:   fileSet.Position(call.Pos()).Line,
+				Target: importPath + "." + selector.Sel.Name, Class: class,
+				Line: fileSet.Position(call.Pos()).Line,
 			})
 		}
 		return true
@@ -529,15 +519,18 @@ func uniqueFindings(items []finding) []finding {
 }
 
 func findingKey(item finding) string {
-	return item.Rule + "\x00" + item.FilePath + "\x00" + string(effectiveBoundarySourceClass(item.class, item.FilePath)) + "\x00" + item.Target
+	return item.Rule + "\x00" + item.FilePath + "\x00" + string(item.Class) + "\x00" + item.Target
 }
 
 func entryKey(item baselineEntry) string {
-	return item.Rule + "\x00" + item.FilePath + "\x00" + string(effectiveBoundarySourceClass(boundarySourceClass(item.Class), item.FilePath)) + "\x00" + item.Target
+	class := item.Class
+	if strings.TrimSpace(class) == "" {
+		class = string(classifyBoundarySource(item.FilePath))
+	}
+	return item.Rule + "\x00" + item.FilePath + "\x00" + class + "\x00" + item.Target
 }
 
 func createBaseline(repoRoot string, findings []finding, stdout io.Writer) error {
-	findings = filterFindingsByClass(findings, productionSourceClass)
 	if len(findings) == 0 {
 		return fmt.Errorf("refusing to create empty %s; absence records zero debt", baselineFile)
 	}
@@ -553,7 +546,7 @@ func createBaseline(repoRoot string, findings []finding, stdout io.Writer) error
 	for _, item := range findings {
 		entries = append(entries, baselineEntry{
 			Rule: item.Rule, FilePath: item.FilePath, Target: item.Target,
-			Class: string(effectiveBoundarySourceClass(item.class, item.FilePath)),
+			Class: string(item.Class),
 			Stage: baselineStage, DeletionGate: deletionGates[item.Rule],
 		})
 	}
@@ -602,6 +595,11 @@ func partition(
 		if err := validateEntry(item); err != nil {
 			return nil, nil, nil, err
 		}
+		class, err := baselineSourceClass(item)
+		if err != nil {
+			return nil, nil, nil, err
+		}
+		item.Class = string(class)
 		key := entryKey(item)
 		if _, duplicate := entries[key]; duplicate {
 			return nil, nil, nil, fmt.Errorf("%s contains duplicate entry for %s", baselineFile, item.Target)
@@ -631,9 +629,6 @@ func validateEntry(item baselineEntry) error {
 	if item.Rule == "" || item.FilePath == "" || item.Target == "" {
 		return fmt.Errorf("%s contains an entry with a missing rule, filePath, or target", baselineFile)
 	}
-	if _, err := sourceClassFromBaseline(item.Class, item.FilePath); err != nil {
-		return err
-	}
 	gate, known := deletionGates[item.Rule]
 	if !known {
 		return fmt.Errorf("%s contains unknown rule %q", baselineFile, item.Rule)
@@ -643,6 +638,19 @@ func validateEntry(item baselineEntry) error {
 	}
 	if item.DeletionGate != gate {
 		return fmt.Errorf("%s entry %s has an invalid deletion gate", baselineFile, item.Target)
+	}
+	class, err := baselineSourceClass(item)
+	if err != nil {
+		return err
+	}
+	if class == testOnlySourceClass {
+		for field, value := range map[string]string{
+			"rule": item.Rule, "filePath": item.FilePath, "target": item.Target,
+		} {
+			if strings.ContainsAny(value, "*?[]") {
+				return fmt.Errorf("%s entry %s %s must be exact and cannot contain wildcards", baselineFile, item.Target, field)
+			}
+		}
 	}
 	return nil
 }
@@ -654,13 +662,13 @@ func writeFinding(writer io.Writer, label string, item finding) {
 	}
 	fmt.Fprintf(
 		writer,
-		"[agent-factory:ownership-boundary] %s: %s:%d %s -> %s; %s [class=%s]\n",
+		"[agent-factory:ownership-boundary] %s: %s:%d %s -> %s [class=%s]; %s\n",
 		label,
 		item.FilePath,
 		item.Line,
 		item.Rule,
 		item.Target,
+		item.Class,
 		remediation,
-		effectiveBoundarySourceClass(item.class, item.FilePath),
 	)
 }
