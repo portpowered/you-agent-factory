@@ -268,10 +268,9 @@ const (
 
 // PersistenceChoiceForPolicy resolves application policy into the closed
 // persistence choice consumed by durable execution composition.
-// Ordinary runtime opening uses the zero value / disabled policy so live
-// you run and packaged-factory invocations do not create project-local
-// .you-agent-factory/durable-sessions. Explicit enabled policy preserves
-// restart/resume snapshot persistence for callers and tests that opt in.
+// Public runtime opening selects PersistencePolicyEnabled explicitly before it
+// reaches this selector. The zero value and explicit disabled policy remain
+// memory-only choices for callers and tests that need deterministic isolation.
 func PersistenceChoiceForPolicy(
 	policy PersistencePolicy,
 	projectRoot string,
