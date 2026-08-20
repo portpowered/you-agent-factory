@@ -179,6 +179,17 @@ func assertBreakdownInputs(t *testing.T, breakdowns []factoryvisualization.Runti
 	}
 }
 
+func breakdownForKey(t *testing.T, breakdowns []factoryvisualization.RuntimeMetricsBreakdown, key string) factoryvisualization.RuntimeMetricsAggregate {
+	t.Helper()
+	for _, breakdown := range breakdowns {
+		if breakdown.Key == key {
+			return breakdown.Aggregate
+		}
+	}
+	t.Fatalf("breakdown key %q not found in %#v", key, breakdowns)
+	return factoryvisualization.RuntimeMetricsAggregate{}
+}
+
 func assertRuntimeMetricsQueryDeterministic(
 	t *testing.T,
 	query factoryvisualization.RuntimeMetricsQuery,
@@ -234,6 +245,168 @@ func TestRuntimeMetricsQueryAppliesIndependentAndCombinedFilters(t *testing.T) {
 			if len(result.Workstations) != check.wantGroups {
 				t.Fatalf("workstation groups = %d, want %d", len(result.Workstations), check.wantGroups)
 			}
+		})
+	}
+}
+
+func TestRuntimeMetricsQueryFiltersAcrossActiveRotatedAndCompressedScopes(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	writeRuntimeMetricsJSONL(t, filepath.Join(root, "120000.000000000-runtime-metrics-session-a-runtime-a.log"), []factoryvisualization.RuntimeMetricRecord{
+		metricRecord("provider.input_tokens", 1, "session-a", "runtime-a", "active", "worker-a", "provider-a", "", "tokens"),
+		metricRecord("dispatch.duration", 10, "session-a", "runtime-a", "active", "worker-a", "provider-a", "", "ms"),
+		metricRecord("provider.duration", 5, "session-a", "runtime-a", "active", "worker-a", "provider-a", "", "ms"),
+	}, "")
+	writeRuntimeMetricsJSONL(t, filepath.Join(root, "120001.000000000-runtime-metrics-session-a-runtime-b-2026-08-20T12-01-00.000.log"), []factoryvisualization.RuntimeMetricRecord{
+		metricRecord("provider.input_tokens", 2, "session-a", "runtime-b", "rotated", "worker-b", "provider-b", "", "tokens"),
+		metricRecord("dispatch.duration", 20, "session-a", "runtime-b", "rotated", "worker-b", "provider-b", "", "ms"),
+		metricRecord("provider.duration", 15, "session-a", "runtime-b", "rotated", "worker-b", "provider-b", "", "ms"),
+	}, "")
+	writeRuntimeMetricsGZIP(t, filepath.Join(root, "120002.000000000-runtime-metrics-session-b-runtime-a-2026-08-20T12-02-00.000.log.gz"), []factoryvisualization.RuntimeMetricRecord{
+		metricRecord("provider.input_tokens", 4, "session-b", "runtime-a", "compressed", "worker-c", "provider-c", "", "tokens"),
+		metricRecord("dispatch.duration", 40, "session-b", "runtime-a", "compressed", "worker-c", "provider-c", "", "ms"),
+		metricRecord("provider.duration", 35, "session-b", "runtime-a", "compressed", "worker-c", "provider-c", "", "ms"),
+	}, "")
+
+	query, err := factoryvisualizationwire.NewRuntimeMetricsQuery(platformmetrics.NewRuntimeMetricsReader(), logging.NoopLogger{})
+	if err != nil {
+		t.Fatalf("NewRuntimeMetricsQuery() error = %v", err)
+	}
+	cases := []struct {
+		name             string
+		request          factoryvisualization.RuntimeMetricsQueryRequest
+		wantInputTokens  float64
+		wantWorkstations []string
+		wantDispatchP50  float64
+		wantDispatchP95  float64
+		wantProviderP50  float64
+		wantProviderP95  float64
+	}{
+		{
+			name:             "all scopes",
+			request:          factoryvisualization.RuntimeMetricsQueryRequest{MetricsRoot: root},
+			wantInputTokens:  7,
+			wantWorkstations: []string{"active", "compressed", "rotated"},
+			wantDispatchP50:  20,
+			wantDispatchP95:  40,
+			wantProviderP50:  15,
+			wantProviderP95:  35,
+		},
+		{
+			name:             "session filter",
+			request:          factoryvisualization.RuntimeMetricsQueryRequest{MetricsRoot: root, SessionID: "session-a"},
+			wantInputTokens:  3,
+			wantWorkstations: []string{"active", "rotated"},
+			wantDispatchP50:  10,
+			wantDispatchP95:  20,
+			wantProviderP50:  5,
+			wantProviderP95:  15,
+		},
+		{
+			name:             "runtime filter",
+			request:          factoryvisualization.RuntimeMetricsQueryRequest{MetricsRoot: root, RuntimeInstanceID: "runtime-a"},
+			wantInputTokens:  5,
+			wantWorkstations: []string{"active", "compressed"},
+			wantDispatchP50:  10,
+			wantDispatchP95:  40,
+			wantProviderP50:  5,
+			wantProviderP95:  35,
+		},
+		{
+			name:             "combined intersection",
+			request:          factoryvisualization.RuntimeMetricsQueryRequest{MetricsRoot: root, SessionID: "session-a", RuntimeInstanceID: "runtime-a"},
+			wantInputTokens:  1,
+			wantWorkstations: []string{"active"},
+			wantDispatchP50:  10,
+			wantDispatchP95:  10,
+			wantProviderP50:  5,
+			wantProviderP95:  5,
+		},
+	}
+	for _, testCase := range cases {
+		testCase := testCase
+		t.Run(testCase.name, func(t *testing.T) {
+			result, err := query.QueryRuntimeMetrics(context.Background(), testCase.request)
+			if err != nil {
+				t.Fatalf("QueryRuntimeMetrics() error = %v", err)
+			}
+			if result.Totals.InputTokens != testCase.wantInputTokens {
+				t.Fatalf("input tokens = %v, want %v", result.Totals.InputTokens, testCase.wantInputTokens)
+			}
+			assertBreakdownKeys(t, result.Workstations, testCase.wantWorkstations)
+			assertDuration(t, result.Totals.DispatchDuration, testCase.wantDispatchP50, testCase.wantDispatchP95, len(testCase.wantWorkstations), "ms")
+			assertDuration(t, result.Totals.ProviderDuration, testCase.wantProviderP50, testCase.wantProviderP95, len(testCase.wantWorkstations), "ms")
+		})
+	}
+
+	noMatch, err := query.QueryRuntimeMetrics(context.Background(), factoryvisualization.RuntimeMetricsQueryRequest{
+		MetricsRoot: root, SessionID: "missing-session",
+	})
+	if err != nil {
+		t.Fatalf("QueryRuntimeMetrics(no match) error = %v", err)
+	}
+	if noMatch.Totals.InputTokens != 0 || noMatch.Totals.DispatchDuration != nil || noMatch.Totals.ProviderDuration != nil ||
+		len(noMatch.Workstations) != 0 || len(noMatch.WorkerTypes) != 0 || len(noMatch.Providers) != 0 {
+		t.Fatalf("no-match result = %#v, want an empty scoped result", noMatch)
+	}
+}
+
+func TestRuntimeMetricsQueryCalculatesIndependentNearestRankPercentilesPerDimension(t *testing.T) {
+	t.Parallel()
+
+	reader := &runtimeMetricsReaderStub{}
+	addDurations := func(label string, dispatch, provider []float64) {
+		for _, value := range dispatch {
+			reader.records = append(reader.records, metricRecord("dispatch.duration", value, "session-a", "runtime-a", label, label, label, "", "ms"))
+		}
+		for _, value := range provider {
+			reader.records = append(reader.records, metricRecord("provider.duration", value, "session-a", "runtime-a", label, label, label, "", "ms"))
+		}
+	}
+	addDurations("even", []float64{10, 20, 30, 40}, []float64{5})
+	addDurations("repeated", []float64{1, 1, 2}, []float64{7, 7, 9})
+	addDurations("dispatch-only", []float64{4, 8}, nil)
+	addDurations("provider-only", nil, []float64{6, 10})
+
+	query, err := factoryvisualizationwire.NewRuntimeMetricsQuery(reader, logging.NoopLogger{})
+	if err != nil {
+		t.Fatalf("NewRuntimeMetricsQuery() error = %v", err)
+	}
+	result, err := query.QueryRuntimeMetrics(context.Background(), factoryvisualization.RuntimeMetricsQueryRequest{MetricsRoot: t.TempDir()})
+	if err != nil {
+		t.Fatalf("QueryRuntimeMetrics() error = %v", err)
+	}
+
+	for _, breakdowns := range []struct {
+		name string
+		data []factoryvisualization.RuntimeMetricsBreakdown
+	}{
+		{name: "workstation", data: result.Workstations},
+		{name: "worker type", data: result.WorkerTypes},
+		{name: "provider", data: result.Providers},
+	} {
+		breakdowns := breakdowns
+		t.Run(breakdowns.name, func(t *testing.T) {
+			even := breakdownForKey(t, breakdowns.data, "even")
+			assertDuration(t, even.DispatchDuration, 20, 40, 4, "ms")
+			assertDuration(t, even.ProviderDuration, 5, 5, 1, "ms")
+
+			repeated := breakdownForKey(t, breakdowns.data, "repeated")
+			assertDuration(t, repeated.DispatchDuration, 1, 2, 3, "ms")
+			assertDuration(t, repeated.ProviderDuration, 7, 9, 3, "ms")
+
+			dispatchOnly := breakdownForKey(t, breakdowns.data, "dispatch-only")
+			assertDuration(t, dispatchOnly.DispatchDuration, 4, 8, 2, "ms")
+			if dispatchOnly.ProviderDuration != nil {
+				t.Fatalf("dispatch-only provider duration = %#v, want unavailable", dispatchOnly.ProviderDuration)
+			}
+
+			providerOnly := breakdownForKey(t, breakdowns.data, "provider-only")
+			if providerOnly.DispatchDuration != nil {
+				t.Fatalf("provider-only dispatch duration = %#v, want unavailable", providerOnly.DispatchDuration)
+			}
+			assertDuration(t, providerOnly.ProviderDuration, 6, 10, 2, "ms")
 		})
 	}
 }
