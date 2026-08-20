@@ -11,6 +11,16 @@ func NewJavaScriptCheckpointStore() factoryruntime.JavaScriptCheckpointStore {
 	return checkpointrecoverywire.NewJavaScriptCheckpointStore()
 }
 
+// NewDurableJavaScriptCheckpointStore constructs the filesystem-backed
+// JavaScript checkpoint store beneath an explicitly supplied durable-state
+// root. The root is shared safely with the opaque checkpoint store by the
+// parent-private checkpoint-recovery wire.
+func NewDurableJavaScriptCheckpointStore(
+	durableRoot string,
+) (factoryruntime.JavaScriptCheckpointStore, error) {
+	return checkpointrecoverywire.NewDurableJavaScriptCheckpointStore(durableRoot)
+}
+
 // NewJavaScriptCheckpointSummaries constructs the default JavaScript checkpoint
 // summary projector from the parent-private checkpoint recovery layout.
 func NewJavaScriptCheckpointSummaries() factoryruntime.JavaScriptCheckpointSummaries {
