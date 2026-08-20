@@ -2215,8 +2215,10 @@ describe("current activity graph active item labels", () => {
       },
     });
     (
-      docNode?.data as { onSelectDoc?: (targetPath: string) => void }
-    ).onSelectDoc?.("factory/docs/guide.md");
+      docNode?.data as
+        | { onSelectDoc?: (targetPath: string) => void }
+        | undefined
+    )?.onSelectDoc?.("factory/docs/guide.md");
     expect(onSelectDoc).toHaveBeenCalledWith("factory/docs/guide.md");
     expect(scriptNode).toMatchObject({
       type: "doc",
@@ -2284,8 +2286,10 @@ describe("current activity graph active item labels", () => {
       },
     });
     (
-      docNode?.data as { onSelectDoc?: (targetPath: string) => void }
-    ).onSelectDoc?.(nestedDocPath);
+      docNode?.data as
+        | { onSelectDoc?: (targetPath: string) => void }
+        | undefined
+    )?.onSelectDoc?.(nestedDocPath);
     expect(onSelectDoc).toHaveBeenCalledWith(nestedDocPath);
   });
 

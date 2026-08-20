@@ -1035,8 +1035,10 @@ describe("useCurrentActivityGraphViewModel node positions", () => {
       (node) => node.id === "workstation:review",
     );
     const clickReviewNode = (
-      reviewNode?.data as { onSelectWorkstation?: (nodeId: string) => void }
-    ).onSelectWorkstation;
+      reviewNode?.data as
+        | { onSelectWorkstation?: (nodeId: string) => void }
+        | undefined
+    )?.onSelectWorkstation;
     expect(clickReviewNode).toBeInstanceOf(Function);
 
     act(() => {
