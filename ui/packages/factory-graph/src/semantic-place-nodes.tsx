@@ -104,8 +104,10 @@ function FactoryGraphPlaceNodeView({
       validationError: data.validationError,
     }),
   );
+  const holdsWork = data.tokenCount > 0;
   const visualState = resolveFactoryGraphVisualState({
     activeFlow: data.activeFlow,
+    activeWork: holdsWork,
     family: stateNode
       ? "work-state"
       : data.place.kind === "resource"
@@ -145,6 +147,7 @@ function FactoryGraphPlaceNodeView({
       }
       visualState={{
         activeFlow: data.activeFlow,
+        activeWork: holdsWork,
         focused: data.focused,
         lifecycle: stateNode ? data.place.state_category : undefined,
         muted: data.muted,

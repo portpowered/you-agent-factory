@@ -98,6 +98,7 @@ export function FactoryGraphWorkstationNodeView({
   );
   const selected = data.selectedWorkstation || reactFlowSelected;
   const visualState = resolveFactoryGraphVisualState({
+    activeWork: data.active,
     family: "workstation",
     focused: data.focused,
     lifecycle: data.active ? "PROCESSING" : undefined,
@@ -127,6 +128,7 @@ export function FactoryGraphWorkstationNodeView({
           : undefined
       }
       visualState={{
+        activeWork: data.active,
         focused: data.focused,
         lifecycle: data.active ? "PROCESSING" : undefined,
         muted: data.muted,

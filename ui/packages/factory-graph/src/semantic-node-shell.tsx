@@ -110,6 +110,7 @@ export function FactoryGraphNodeShell({
         data-graph-visual-active-flow={visualState.activeFlow || undefined}
         data-graph-visual-border={visualState.border}
         data-graph-visual-emphasis={visualState.emphasis}
+        data-graph-visual-fill={visualState.fill}
         data-graph-visual-focus={visualState.focus}
         data-graph-visual-glow={visualState.glow}
         data-graph-visual-icon={visualState.icon}

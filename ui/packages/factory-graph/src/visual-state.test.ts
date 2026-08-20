@@ -141,6 +141,66 @@ describe("resolveFactoryGraphVisualState", () => {
   );
 });
 
+describe("resolveFactoryGraphVisualState work occupancy", () => {
+  it("keeps an empty processing work state on a soft fill", () => {
+    expect(visualState({ lifecycle: "PROCESSING" })).toMatchObject({
+      emphasis: "standard",
+      fill: "soft",
+      glow: "none",
+      status: "active",
+      surface: "active",
+    });
+  });
+
+  it("fills a processing work state solidly once it holds work", () => {
+    expect(
+      visualState({ activeWork: true, lifecycle: "PROCESSING" }),
+    ).toMatchObject({
+      emphasis: "strong",
+      fill: "solid",
+      glow: "active",
+      status: "active",
+      surface: "active",
+    });
+  });
+
+  it("keeps a held terminal work state solid in its own tone", () => {
+    expect(
+      visualState({ activeWork: true, lifecycle: "TERMINAL" }),
+    ).toMatchObject({
+      fill: "solid",
+      status: "success",
+      surface: "success",
+    });
+  });
+
+  it("treats an active flow highlight as held work", () => {
+    expect(visualState({ activeFlow: true })).toMatchObject({
+      fill: "solid",
+      surface: "active",
+    });
+  });
+
+  it("leaves a toneless node soft even while it holds work", () => {
+    expect(visualState({ activeWork: true })).toMatchObject({
+      fill: "soft",
+      status: "quiet",
+      surface: "quiet",
+    });
+  });
+
+  it.each([
+    ["INITIAL", "waiting"],
+    ["TERMINAL", "success"],
+    ["FAILED", "danger"],
+  ] as const)("keeps an empty %s work state soft", (lifecycle, status) => {
+    expect(visualState({ lifecycle })).toMatchObject({
+      fill: "soft",
+      surface: status,
+    });
+  });
+});
+
 describe("resolveFactoryGraphVisualState active emphasis", () => {
   it("elevates an active flow without inventing a lifecycle status", () => {
     expect(visualState({ activeFlow: true })).toMatchObject({

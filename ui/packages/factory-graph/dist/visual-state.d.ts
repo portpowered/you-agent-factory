@@ -10,12 +10,24 @@ export type FactoryGraphVisualNestedAccentRole = "neutral" | "info" | "warning" 
  */
 export declare function factoryGraphVisualNestedAccentRole(parentStatus: FactoryGraphVisualStatusRole): FactoryGraphVisualNestedAccentRole;
 export type FactoryGraphVisualBorderRole = FactoryGraphVisualStatusRole | "selection" | "validation";
+/**
+ * Whether a node paints its tone as a translucent container or as a solid
+ * block. Only a node that currently holds Work earns the solid treatment.
+ */
+export type FactoryGraphVisualFillRole = "soft" | "solid";
 export type FactoryGraphVisualGlowRole = "none" | "active" | "danger" | "selection" | "validation";
 export type FactoryGraphVisualStatusTreatment = "none" | "waiting" | "processing" | "completed" | "failed";
 export type FactoryGraphVisualEmphasis = "quiet" | "standard" | "strong" | "attention" | "selected";
 export type FactoryGraphVisualFocusRole = "none" | "keyboard" | "selection" | "selection-and-keyboard";
 export type FactoryGraphValidationState = "none" | "warning" | "error";
 export interface FactoryGraphVisualStateInput {
+    /**
+     * Whether the node currently holds active Work. A work state reports its
+     * held Work; a workstation reports its running executions. This is separate
+     * from `lifecycle`, which is an authored category and says nothing about
+     * whether anything is in the node right now.
+     */
+    activeWork?: boolean;
     /** Protocol-neutral Factory graph family, not a transport node type. */
     family: FactoryGraphNodeFamily;
     /** Work-state lifecycle or an equivalent host runtime status. */
@@ -32,6 +44,7 @@ export interface FactoryGraphVisualState {
     lifecycle: FactoryGraphVisualLifecycleRole;
     status: FactoryGraphVisualStatusRole;
     surface: FactoryGraphVisualStatusRole;
+    fill: FactoryGraphVisualFillRole;
     border: FactoryGraphVisualBorderRole;
     glow: FactoryGraphVisualGlowRole;
     icon: FactoryGraphVisualStatusRole;
@@ -51,5 +64,10 @@ export interface FactoryGraphVisualState {
  * `statusTreatment`; validation overlays selection and active-flow emphasis;
  * selection/focus overlays active-flow emphasis; and muted is returned as an
  * independent flag so it cannot erase any status.
+ *
+ * Tone and occupancy are separate axes. `surface` carries the authored tone
+ * even when the node is empty; only held Work promotes `fill` to `solid` and
+ * lights the active glow, so an authored `PROCESSING` work state stays a
+ * translucent container until Work actually enters it.
  */
 export declare function resolveFactoryGraphVisualState(input: FactoryGraphVisualStateInput): FactoryGraphVisualState;

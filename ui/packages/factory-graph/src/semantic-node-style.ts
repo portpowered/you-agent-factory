@@ -28,19 +28,54 @@ const NESTED_ACCENT_SURFACE_CLASS_NAME: Record<
   danger: "border-af-danger-border bg-error-container",
 };
 
-const NESTED_ACCENT_IMPORTANT_SURFACE_CLASS_NAME: Record<
+/** Translucent tone worn by a node that holds no Work. */
+const NESTED_ACCENT_SOFT_FILL_CLASS_NAME: Record<
   FactoryGraphVisualNestedAccentRole,
   string
 > = {
   neutral: "",
   info: "!bg-info-container",
-  warning: "!bg-warning",
+  warning: "!bg-warning-container",
   success: "!bg-success-container",
   danger: "!bg-error-container",
 };
 
-const NESTED_ACCENT_ACTIVE_TEXT_OVERRIDE_CLASS_NAME =
-  "[&_[data-factory-entity-title]]:!text-on-warning [&_[data-workstation-runtime-label]]:!text-on-warning [&_[data-active-work-label]]:!text-on-warning [&_[data-active-work-duration]]:!text-on-warning [&_[data-workstation-scheduling-label]]:!border-on-warning [&_[data-workstation-scheduling-label]]:!text-on-warning";
+/** Opaque tone worn by a node that currently holds Work. */
+const NESTED_ACCENT_SOLID_FILL_CLASS_NAME: Record<
+  FactoryGraphVisualNestedAccentRole,
+  string
+> = {
+  neutral: "",
+  info: "!bg-info",
+  warning: "!bg-warning",
+  success: "!bg-success",
+  danger: "!bg-error",
+};
+
+/**
+ * Foreground inversion for a solidly filled node.
+ *
+ * Only content that sits directly on the fill is listed: work-state and place
+ * labels join the workstation title and runtime label because both families
+ * hold Work, and the semantic icon joins them because its idle tone matches
+ * the solid fill. Work-item chips, the scheduling label, and the guarded
+ * control card keep their own nested surfaces, so inverting their ink would
+ * put near-canvas text on a dark background. Every variant is spelled out so
+ * the class scanner can see it.
+ */
+const NESTED_ACCENT_SOLID_FILL_TEXT_CLASS_NAME: Record<
+  FactoryGraphVisualNestedAccentRole,
+  string
+> = {
+  neutral: "",
+  info: "[&_[data-factory-entity-title]]:!text-on-info [&_[data-graph-semantic-icon]]:!text-on-info [&_[data-place-state-value]]:!text-on-info [&_[data-place-work-type]]:!text-on-info [&_[data-state-value]]:!text-on-info [&_[data-state-work-type]]:!text-on-info [&_[data-workstation-runtime-label]]:!text-on-info",
+  warning:
+    "[&_[data-factory-entity-title]]:!text-on-warning [&_[data-graph-semantic-icon]]:!text-on-warning [&_[data-place-state-value]]:!text-on-warning [&_[data-place-work-type]]:!text-on-warning [&_[data-state-value]]:!text-on-warning [&_[data-state-work-type]]:!text-on-warning [&_[data-workstation-runtime-label]]:!text-on-warning",
+  success:
+    "[&_[data-factory-entity-title]]:!text-on-success [&_[data-graph-semantic-icon]]:!text-on-success [&_[data-place-state-value]]:!text-on-success [&_[data-place-work-type]]:!text-on-success [&_[data-state-value]]:!text-on-success [&_[data-state-work-type]]:!text-on-success [&_[data-workstation-runtime-label]]:!text-on-success",
+  danger:
+    "[&_[data-factory-entity-title]]:!text-on-error [&_[data-graph-semantic-icon]]:!text-on-error [&_[data-place-state-value]]:!text-on-error [&_[data-place-work-type]]:!text-on-error [&_[data-state-value]]:!text-on-error [&_[data-state-work-type]]:!text-on-error [&_[data-workstation-runtime-label]]:!text-on-error",
+};
 
 const NESTED_ACCENT_BORDER_CLASS_NAME: Record<
   FactoryGraphVisualNestedAccentRole,
@@ -149,32 +184,6 @@ const VISUAL_STATUS_SURFACE_CLASS_NAME: Record<
   danger: nestedAccentClassNameForStatus(
     "danger",
     NESTED_ACCENT_SURFACE_CLASS_NAME,
-  ),
-};
-
-const VISUAL_STATUS_IMPORTANT_SURFACE_CLASS_NAME: Record<
-  FactoryGraphVisualState["surface"],
-  string
-> = {
-  quiet: nestedAccentClassNameForStatus(
-    "quiet",
-    NESTED_ACCENT_IMPORTANT_SURFACE_CLASS_NAME,
-  ),
-  waiting: nestedAccentClassNameForStatus(
-    "waiting",
-    NESTED_ACCENT_IMPORTANT_SURFACE_CLASS_NAME,
-  ),
-  active: nestedAccentClassNameForStatus(
-    "active",
-    NESTED_ACCENT_IMPORTANT_SURFACE_CLASS_NAME,
-  ),
-  success: nestedAccentClassNameForStatus(
-    "success",
-    NESTED_ACCENT_IMPORTANT_SURFACE_CLASS_NAME,
-  ),
-  danger: nestedAccentClassNameForStatus(
-    "danger",
-    NESTED_ACCENT_IMPORTANT_SURFACE_CLASS_NAME,
   ),
 };
 
@@ -298,9 +307,13 @@ export function factoryGraphNodeVisualStateClassName(
       ? "ring-2 ring-af-graph-focus-indicator"
       : undefined;
 
+  const solidFill = state.fill === "solid";
+
   return [
-    VISUAL_STATUS_IMPORTANT_SURFACE_CLASS_NAME[state.surface],
-    state.surface === "active" && NESTED_ACCENT_ACTIVE_TEXT_OVERRIDE_CLASS_NAME,
+    solidFill
+      ? NESTED_ACCENT_SOLID_FILL_CLASS_NAME[nestedAccentRole]
+      : NESTED_ACCENT_SOFT_FILL_CLASS_NAME[nestedAccentRole],
+    solidFill && NESTED_ACCENT_SOLID_FILL_TEXT_CLASS_NAME[nestedAccentRole],
     borderClassName,
     glowClassName,
     focusClassName,
