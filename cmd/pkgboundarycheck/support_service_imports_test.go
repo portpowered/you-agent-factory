@@ -157,7 +157,7 @@ func TestRunRequiresExactDeletionOnlyBaselineForReusableSupportWireImport(t *tes
 	}
 }
 
-func TestReusableSupportScanDoesNotConflateTestFiles(t *testing.T) {
+func TestReusableSupportScanClassifiesTestFiles(t *testing.T) {
 	t.Parallel()
 
 	repoRoot := t.TempDir()
@@ -172,8 +172,11 @@ func TestReusableSupportScanDoesNotConflateTestFiles(t *testing.T) {
 	if err != nil {
 		t.Fatalf("scanSupportServiceSubpackageImports() error = %v", err)
 	}
-	if len(findings) != 0 {
-		t.Fatalf("reusable support findings = %#v, want _test.go handled only by test baseline", findings)
+	if len(findings) != 1 {
+		t.Fatalf("reusable support findings = %#v, want one test-only edge", findings)
+	}
+	if findings[0].class != testOnlySourceClass {
+		t.Fatalf("reusable support finding class = %q, want %q", findings[0].class, testOnlySourceClass)
 	}
 }
 
