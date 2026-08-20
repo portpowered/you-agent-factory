@@ -213,10 +213,10 @@ func TestFactorySessionResumeDoesNotRepeatCompletedDispatch(t *testing.T) {
 	}
 }
 
-// TestFactorySessionHistoryIsNotPersistedByDefault proves an interrupted
-// Factory Session remains inspectable for its process lifetime but is absent
-// after restart while durable snapshot recording is disabled by default.
-func TestFactorySessionHistoryIsNotPersistedByDefault(t *testing.T) {
+// TestFactorySessionHistoryIsPersistedAcrossRestart proves an interrupted
+// Factory Session remains inspectable after the public process is restarted
+// with the same project-local durable session store.
+func TestFactorySessionHistoryIsPersistedAcrossRestart(t *testing.T) {
 	const workflowName = "resumable-two-step-fake-children"
 	factoryDir := setupResumableTwoStepWorkflowFixture(t, workflowName)
 	home := t.TempDir()
@@ -242,13 +242,13 @@ func TestFactorySessionHistoryIsNotPersistedByDefault(t *testing.T) {
 	}
 
 	beforeDispatches := listFactorySessionDispatches(t, beforeURL, sessionID)
-	requireDispatchSummary(
+	dispatchOneBefore := requireDispatchSummary(
 		t,
 		beforeDispatches,
 		"dispatch-1",
 		factoryapi.FactoryDispatchStatusCOMPLETED,
 	)
-	requireDispatchSummary(
+	dispatchTwoBefore := requireDispatchSummary(
 		t,
 		beforeDispatches,
 		"dispatch-2",
@@ -284,21 +284,60 @@ func TestFactorySessionHistoryIsNotPersistedByDefault(t *testing.T) {
 		t.Fatalf("sync-preflight reasonCode = %q, want %q", preflight.ReasonCode, factoryapi.LogicalSessionRemap)
 	}
 
-	endpoint := afterURL + "/factory-sessions/" + url.PathEscape(sessionID)
-	response, err := http.Get(endpoint)
-	if err != nil {
-		t.Fatalf("GET %s: %v", endpoint, err)
+	afterShow := readDurableFactorySession(t, afterURL, sessionID)
+	if afterShow.SessionId != sessionID {
+		t.Fatalf("post-restart sessionId = %q, want %q", afterShow.SessionId, sessionID)
 	}
-	defer response.Body.Close()
-	if response.StatusCode != http.StatusNotFound {
-		body, _ := io.ReadAll(response.Body)
+	assertDurableProgressCounts(t, afterShow.Progress, 1, 2, 0)
+	if afterShow.Status != factoryapi.FactorySessionDurableLifecycleStatusInterrupted {
+		t.Fatalf("post-restart status = %q, want INTERRUPTED", afterShow.Status)
+	}
+	if afterShow.Lifecycle == nil || afterShow.Lifecycle.InterruptedAt == nil {
+		t.Fatalf("post-restart lifecycle = %#v, want interruptedAt", afterShow.Lifecycle)
+	}
+	if beforeShow.Lifecycle == nil || beforeShow.Lifecycle.InterruptedAt == nil {
+		t.Fatal("pre-restart lifecycle missing interruptedAt")
+	}
+	if !afterShow.Lifecycle.InterruptedAt.Equal(*beforeShow.Lifecycle.InterruptedAt) {
 		t.Fatalf(
-			"GET %s status = %d body = %s, want 404 while persistence is disabled",
-			endpoint,
-			response.StatusCode,
-			body,
+			"interruptedAt changed across restart: before=%s after=%s",
+			beforeShow.Lifecycle.InterruptedAt,
+			afterShow.Lifecycle.InterruptedAt,
 		)
 	}
+
+	afterDispatches := listFactorySessionDispatches(t, afterURL, sessionID)
+	afterDispatchOne := requireDispatchSummary(
+		t,
+		afterDispatches,
+		"dispatch-1",
+		factoryapi.FactoryDispatchStatusCOMPLETED,
+	)
+	afterDispatchTwo := requireDispatchSummary(
+		t,
+		afterDispatches,
+		"dispatch-2",
+		factoryapi.FactoryDispatchStatusINTERRUPTED,
+		factoryapi.FactoryDispatchStatusRUNNING,
+	)
+	if len(afterDispatches.Dispatches) != 2 {
+		t.Fatalf("post-restart dispatch count = %d, want 2", len(afterDispatches.Dispatches))
+	}
+	assertDispatchSummaryParity(t, dispatchOneBefore, afterDispatchOne)
+	assertDispatchSummaryParity(t, dispatchTwoBefore, afterDispatchTwo)
+	if dispatchTwoBefore.Status != afterDispatchTwo.Status {
+		t.Fatalf(
+			"dispatch-2 status changed across restart: before=%q after=%q",
+			dispatchTwoBefore.Status,
+			afterDispatchTwo.Status,
+		)
+	}
+
+	afterEvents := listFactorySessionEvents(t, afterURL, sessionID)
+	if len(afterEvents) == 0 {
+		t.Fatal("post-restart factory events unexpectedly empty")
+	}
+	assertFactoryEventHistoryContinuity(t, beforeEvents, afterEvents)
 }
 
 func startLogicalIdentityRestartServer(
