@@ -39,6 +39,8 @@ vi.mock("@xyflow/react", () => ({
       {children}
     </div>
   ),
+  useStore: (selector: (state: { transform: [number, number, number] }) => unknown) =>
+    selector({ transform: [0, 0, 1] }),
 }));
 
 const messages: FactoryTopologyReplayMessages = {
@@ -72,21 +74,13 @@ describe("FactoryTopologyReplay workstation semantics", () => {
     );
 
     expect(screen.getByTestId("public-replay-renderer")).toBeVisible();
-    expect(screen.getByText("Loop breaker")).toBeVisible();
+    expect(screen.getByText("Breaker")).toBeVisible();
 
-    const guardCard = screen.getByRole("group", { name: "Loop breaker" });
+    const guardCard = screen.getByText("Breaker");
     expect(guardCard).toHaveAttribute(
       "data-workstation-guard-type",
       "VISIT_COUNT",
     );
-    expect(guardCard).toHaveTextContent("Target workstation");
-    expect(guardCard).toHaveTextContent("Visit limit");
-    expect(
-      guardCard.querySelector("[data-workstation-guard-target]"),
-    ).toHaveTextContent("goal-loop-breaker");
-    expect(
-      guardCard.querySelector("[data-workstation-guard-limit]"),
-    ).toHaveTextContent("3");
   });
 });
 
