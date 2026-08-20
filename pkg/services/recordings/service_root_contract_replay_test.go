@@ -127,6 +127,16 @@ func assertReplayLoadFailures(t *testing.T, service recordings.Service) {
 	}); !errors.Is(err, recordings.ErrReplayRecordingNotFinalized) {
 		t.Fatalf("active recording error = %v, want ErrReplayRecordingNotFinalized", err)
 	}
+	resume, err := service.LoadReplayRecordingForResume(recordings.LoadReplayRecordingForResumeRequest{
+		RecordingID: active.Status.RecordingID,
+	})
+	if err != nil {
+		t.Fatalf("active resume recording error = %v, want success", err)
+	}
+	if resume.RecoveredEventCount != len(resume.Recording.Events) ||
+		resume.Truncated || resume.SkippedTrailingBlocks != 0 {
+		t.Fatalf("active resume result = %#v, want detached complete facts without truncation", resume)
+	}
 }
 
 func assertReplayPlanFailures(

@@ -283,6 +283,10 @@ func (stub *recordingsRequestBoundaryStub) LoadReplayRecording(recordings.LoadRe
 	return recordings.LoadReplayRecordingResult{}, recordings.ErrMissingReplayArtifact
 }
 
+func (stub *recordingsRequestBoundaryStub) LoadReplayRecordingForResume(recordings.LoadReplayRecordingForResumeRequest) (recordings.LoadReplayRecordingForResumeResult, error) {
+	return recordings.LoadReplayRecordingForResumeResult{}, recordings.ErrMissingReplayArtifact
+}
+
 func (stub *recordingsRequestBoundaryStub) CreateReplayPlan(recordings.CreateReplayPlanRequest) (recordings.CreateReplayPlanResult, error) {
 	return recordings.CreateReplayPlanResult{}, recordings.ErrInvalidReplayArtifact
 }

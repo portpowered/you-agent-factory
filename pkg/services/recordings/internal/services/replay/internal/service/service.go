@@ -66,6 +66,27 @@ func (service *Service) LoadReplayRecording(
 	}, nil
 }
 
+func (service *Service) LoadReplayRecordingForResume(
+	request recordings.LoadReplayRecordingForResumeRequest,
+) (recordings.LoadReplayRecordingForResumeResult, error) {
+	snapshot, err := service.lifecycle.Snapshot(request.RecordingID)
+	if errors.Is(err, recordings.ErrMissingRecordingTarget) {
+		return recordings.LoadReplayRecordingForResumeResult{}, recordings.ErrReplayRecordingNotFound
+	}
+	if err != nil {
+		return recordings.LoadReplayRecordingForResumeResult{}, err
+	}
+	events := append([]recordings.CanonicalEvent(nil), snapshot.Events...)
+	return recordings.LoadReplayRecordingForResumeResult{
+		Recording: recordings.ReplayRecordingFacts{
+			RecordingID: request.RecordingID,
+			Scope:       snapshot.Status.Scope,
+			Events:      events,
+		},
+		RecoveredEventCount: len(events),
+	}, nil
+}
+
 func validateNeutralReplayPlan(request recordings.CreateReplayPlanRequest) error {
 	if request.SchemaVersion != recordings.ReplayPlanSchemaV1 ||
 		request.Timing != recordings.ReplayTimingOrderOnly ||

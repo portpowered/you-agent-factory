@@ -557,6 +557,24 @@ func (fake *peerRootServiceFake) LoadReplayRecording(
 	}, nil
 }
 
+func (fake *peerRootServiceFake) LoadReplayRecordingForResume(
+	request recordings.LoadReplayRecordingForResumeRequest,
+) (recordings.LoadReplayRecordingForResumeResult, error) {
+	session, err := fake.recordingSession(request.RecordingID)
+	if err != nil {
+		return recordings.LoadReplayRecordingForResumeResult{}, recordings.ErrReplayRecordingNotFound
+	}
+	events := append([]recordings.CanonicalEvent(nil), session.events...)
+	return recordings.LoadReplayRecordingForResumeResult{
+		Recording: recordings.ReplayRecordingFacts{
+			RecordingID: request.RecordingID,
+			Scope:       session.scope,
+			Events:      events,
+		},
+		RecoveredEventCount: len(events),
+	}, nil
+}
+
 func validPeerReplayPlan(request recordings.CreateReplayPlanRequest) error {
 	if request.SchemaVersion != recordings.ReplayPlanSchemaV1 ||
 		request.Timing != recordings.ReplayTimingOrderOnly ||

@@ -213,6 +213,12 @@ func (service *combinedService) LoadReplayRecording(
 	return service.replayService.LoadReplayRecording(request)
 }
 
+func (service *combinedService) LoadReplayRecordingForResume(
+	request recordings.LoadReplayRecordingForResumeRequest,
+) (recordings.LoadReplayRecordingForResumeResult, error) {
+	return service.replayService.LoadReplayRecordingForResume(request)
+}
+
 func (service *combinedService) CreateReplayPlan(
 	request recordings.CreateReplayPlanRequest,
 ) (recordings.CreateReplayPlanResult, error) {

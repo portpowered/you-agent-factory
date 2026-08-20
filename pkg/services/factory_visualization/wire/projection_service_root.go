@@ -238,6 +238,12 @@ func (adapter *projectionServiceRoot) LoadReplayRecording(
 	return recordings.LoadReplayRecordingResult{}, recordings.ErrMissingReplayArtifact
 }
 
+func (adapter *projectionServiceRoot) LoadReplayRecordingForResume(
+	recordings.LoadReplayRecordingForResumeRequest,
+) (recordings.LoadReplayRecordingForResumeResult, error) {
+	return recordings.LoadReplayRecordingForResumeResult{}, recordings.ErrMissingReplayArtifact
+}
+
 func (adapter *projectionServiceRoot) CreateReplayPlan(
 	recordings.CreateReplayPlanRequest,
 ) (recordings.CreateReplayPlanResult, error) {

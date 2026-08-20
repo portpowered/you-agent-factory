@@ -575,6 +575,22 @@ type LoadReplayRecordingResult struct {
 	Recording ReplayRecordingFacts
 }
 
+// LoadReplayRecordingForResumeRequest selects one recording for explicit
+// resume-intent loading. Unlike neutral replay, resume loading may inspect an
+// active, unfinalized recording.
+type LoadReplayRecordingForResumeRequest struct {
+	RecordingID RecordingID
+}
+
+// LoadReplayRecordingForResumeResult returns detached canonical facts and the
+// recovery facts reported by the selected resume source.
+type LoadReplayRecordingForResumeResult struct {
+	Recording             ReplayRecordingFacts
+	RecoveredEventCount   int
+	Truncated             bool
+	SkippedTrailingBlocks int
+}
+
 // ReplayPlanHandle is an opaque Recordings-owned replay identity.
 type ReplayPlanHandle string
 
@@ -1519,6 +1535,9 @@ type Service interface {
 	// LoadReplayRecording selects finalized canonical facts through the neutral
 	// replay root-contract slice.
 	LoadReplayRecording(LoadReplayRecordingRequest) (LoadReplayRecordingResult, error)
+	// LoadReplayRecordingForResume selects canonical facts for explicit resume
+	// intent. It may load an unfinalized recording and reports recovery facts.
+	LoadReplayRecordingForResume(LoadReplayRecordingForResumeRequest) (LoadReplayRecordingForResumeResult, error)
 	// CreateReplayPlan validates canonical facts and creates an opaque neutral
 	// replay plan without exposing execution or storage machinery.
 	CreateReplayPlan(CreateReplayPlanRequest) (CreateReplayPlanResult, error)

@@ -85,6 +85,48 @@ func TestAcceptedRecordingsRootUsesPrivateReplay(t *testing.T) {
 	}
 }
 
+func TestAcceptedRecordingsRootLoadsUnfinalizedRecordingForResume(t *testing.T) {
+	t.Parallel()
+
+	root := recordingsinternal.NewService(
+		&unusedLedger{},
+		recordingsinternal.NewProjectionService(),
+	)
+	bound, err := root.BindRecording(recordings.BindRecordingRequest{
+		RecordingID: "recording-root-resume",
+		Artifact:    "artifact:root-resume",
+	})
+	if err != nil {
+		t.Fatalf("BindRecording: %v", err)
+	}
+	for index, event := range []recordings.CanonicalEvent{
+		rootReplayEvent("root-resume-event-1", 0),
+		rootReplayEvent("root-resume-event-2", 1),
+	} {
+		if _, err := root.RecordRecordingEvent(recordings.RecordRecordingEventRequest{
+			RecordingID: bound.Status.RecordingID,
+			Event:       event,
+		}); err != nil {
+			t.Fatalf("RecordRecordingEvent[%d]: %v", index, err)
+		}
+	}
+
+	loaded, err := root.LoadReplayRecordingForResume(recordings.LoadReplayRecordingForResumeRequest{
+		RecordingID: bound.Status.RecordingID,
+	})
+	if err != nil {
+		t.Fatalf("LoadReplayRecordingForResume: %v", err)
+	}
+	if loaded.RecoveredEventCount != 2 || len(loaded.Recording.Events) != 2 || loaded.Truncated {
+		t.Fatalf("resume result = %#v, want two complete events without truncation", loaded)
+	}
+	if _, err := root.LoadReplayRecording(recordings.LoadReplayRecordingRequest{
+		RecordingID: bound.Status.RecordingID,
+	}); !errors.Is(err, recordings.ErrReplayRecordingNotFinalized) {
+		t.Fatalf("neutral load error = %v, want ErrReplayRecordingNotFinalized", err)
+	}
+}
+
 func rootReplayEvent(id string, sequence recordings.CanonicalEventSequence) recordings.CanonicalEvent {
 	return recordings.CanonicalEvent{
 		ID:       recordings.CanonicalEventID(id),

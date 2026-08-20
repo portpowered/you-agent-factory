@@ -289,6 +289,10 @@ func (stub *Service) LoadReplayRecording(recordings.LoadReplayRecordingRequest) 
 	return recordings.LoadReplayRecordingResult{}, recordings.ErrMissingReplayArtifact
 }
 
+func (stub *Service) LoadReplayRecordingForResume(recordings.LoadReplayRecordingForResumeRequest) (recordings.LoadReplayRecordingForResumeResult, error) {
+	return recordings.LoadReplayRecordingForResumeResult{}, recordings.ErrMissingReplayArtifact
+}
+
 func (stub *Service) CreateReplayPlan(recordings.CreateReplayPlanRequest) (recordings.CreateReplayPlanResult, error) {
 	return recordings.CreateReplayPlanResult{}, recordings.ErrInvalidReplayArtifact
 }

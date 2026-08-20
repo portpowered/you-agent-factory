@@ -48,6 +48,61 @@ func TestLoadReplayRecordingReturnsDetachedFinalizedFacts(t *testing.T) {
 	}
 }
 
+func TestLoadReplayRecordingForResumeReturnsDetachedUnfinalizedFacts(t *testing.T) {
+	t.Parallel()
+
+	replay, lifecycle, recordingID, scope := newReplayHarness(t)
+	if _, err := replay.LoadReplayRecordingForResume(recordings.LoadReplayRecordingForResumeRequest{
+		RecordingID: "missing-recording",
+	}); !errors.Is(err, recordings.ErrReplayRecordingNotFound) {
+		t.Fatalf("missing resume recording error = %v, want ErrReplayRecordingNotFound", err)
+	}
+
+	loaded, err := replay.LoadReplayRecordingForResume(recordings.LoadReplayRecordingForResumeRequest{
+		RecordingID: recordingID,
+	})
+	if err != nil {
+		t.Fatalf("LoadReplayRecordingForResume: %v", err)
+	}
+	if loaded.Recording.RecordingID != recordingID {
+		t.Fatalf("recording id = %q, want %q", loaded.Recording.RecordingID, recordingID)
+	}
+	if loaded.Recording.Scope != scope {
+		t.Fatalf("scope = %#v, want %#v", loaded.Recording.Scope, scope)
+	}
+	if len(loaded.Recording.Events) != 2 || loaded.RecoveredEventCount != 2 {
+		t.Fatalf("recovery counts = (%d, %d), want (2, 2)",
+			len(loaded.Recording.Events), loaded.RecoveredEventCount)
+	}
+	if loaded.Truncated || loaded.SkippedTrailingBlocks != 0 {
+		t.Fatalf("recovery metadata = (truncated=%t, skipped=%d), want no truncation",
+			loaded.Truncated, loaded.SkippedTrailingBlocks)
+	}
+
+	loaded.Recording.Events[0].Kind = "MUTATED"
+	reloaded, err := replay.LoadReplayRecordingForResume(recordings.LoadReplayRecordingForResumeRequest{
+		RecordingID: recordingID,
+	})
+	if err != nil {
+		t.Fatalf("LoadReplayRecordingForResume reload: %v", err)
+	}
+	if reloaded.Recording.Events[0].Kind != "FACTORY_STATE_RESPONSE" {
+		t.Fatalf("reload event kind = %q, want original retained facts", reloaded.Recording.Events[0].Kind)
+	}
+
+	if _, err := replay.LoadReplayRecording(recordings.LoadReplayRecordingRequest{
+		RecordingID: recordingID,
+	}); !errors.Is(err, recordings.ErrReplayRecordingNotFinalized) {
+		t.Fatalf("neutral load error = %v, want ErrReplayRecordingNotFinalized", err)
+	}
+
+	if _, err := lifecycle.QueryRecordingStatus(recordings.RecordingStatusRequest{
+		RecordingID: recordingID,
+	}); err != nil {
+		t.Fatalf("QueryRecordingStatus: %v", err)
+	}
+}
+
 func TestLoadReplayRecordingTypedFailures(t *testing.T) {
 	t.Parallel()
 

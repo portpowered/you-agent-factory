@@ -11,33 +11,35 @@ var (
 	ErrReplayRecordingNotFound     = recordings.ErrReplayRecordingNotFound
 	ErrReplayRecordingNotFinalized = recordings.ErrReplayRecordingNotFinalized
 	ErrCorruptReplayInput          = recordings.ErrCorruptReplayInput
-	ErrUnsupportedReplayPlan         = recordings.ErrUnsupportedReplayPlan
+	ErrUnsupportedReplayPlan       = recordings.ErrUnsupportedReplayPlan
 	ErrReplayPlanNotFound          = recordings.ErrReplayPlanNotFound
 )
 
 type (
-	ReplayPlanSchemaVersion = recordings.ReplayPlanSchemaVersion
-	ReplayTimingMode        = recordings.ReplayTimingMode
-	ReplayRecordingFacts    = recordings.ReplayRecordingFacts
-	LoadReplayRecordingRequest = recordings.LoadReplayRecordingRequest
-	LoadReplayRecordingResult  = recordings.LoadReplayRecordingResult
-	ReplayPlanHandle        = recordings.ReplayPlanHandle
-	CreateReplayPlanRequest = recordings.CreateReplayPlanRequest
-	ReplayPlanFacts         = recordings.ReplayPlanFacts
-	CreateReplayPlanResult  = recordings.CreateReplayPlanResult
-	ReplayObservationKind   = recordings.ReplayObservationKind
-	ReplayDivergenceFacts   = recordings.ReplayDivergenceFacts
-	ReplayObservation       = recordings.ReplayObservation
-	ObserveReplayRequest    = recordings.ObserveReplayRequest
-	ObserveReplayResult     = recordings.ObserveReplayResult
+	ReplayPlanSchemaVersion             = recordings.ReplayPlanSchemaVersion
+	ReplayTimingMode                    = recordings.ReplayTimingMode
+	ReplayRecordingFacts                = recordings.ReplayRecordingFacts
+	LoadReplayRecordingRequest          = recordings.LoadReplayRecordingRequest
+	LoadReplayRecordingResult           = recordings.LoadReplayRecordingResult
+	LoadReplayRecordingForResumeRequest = recordings.LoadReplayRecordingForResumeRequest
+	LoadReplayRecordingForResumeResult  = recordings.LoadReplayRecordingForResumeResult
+	ReplayPlanHandle                    = recordings.ReplayPlanHandle
+	CreateReplayPlanRequest             = recordings.CreateReplayPlanRequest
+	ReplayPlanFacts                     = recordings.ReplayPlanFacts
+	CreateReplayPlanResult              = recordings.CreateReplayPlanResult
+	ReplayObservationKind               = recordings.ReplayObservationKind
+	ReplayDivergenceFacts               = recordings.ReplayDivergenceFacts
+	ReplayObservation                   = recordings.ReplayObservation
+	ObserveReplayRequest                = recordings.ObserveReplayRequest
+	ObserveReplayResult                 = recordings.ObserveReplayResult
 )
 
 const (
-	ReplayPlanSchemaV1  = recordings.ReplayPlanSchemaV1
+	ReplayPlanSchemaV1    = recordings.ReplayPlanSchemaV1
 	ReplayTimingOrderOnly = recordings.ReplayTimingOrderOnly
-	ReplayProgress      = recordings.ReplayProgress
-	ReplayCompleted     = recordings.ReplayCompleted
-	ReplayDiverged      = recordings.ReplayDiverged
+	ReplayProgress        = recordings.ReplayProgress
+	ReplayCompleted       = recordings.ReplayCompleted
+	ReplayDiverged        = recordings.ReplayDiverged
 )
 
 // Recordings-owned legacy replay artifact vocabulary. Peers import these
