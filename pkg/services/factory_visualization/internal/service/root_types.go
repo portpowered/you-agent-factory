@@ -7,14 +7,24 @@ import factoryvisualization "github.com/portpowered/infinite-you/pkg/services/fa
 type (
 	Root = factoryvisualization.Service
 
-	View               = factoryvisualization.View
-	RuntimeObservation = factoryvisualization.RuntimeObservation
-	Sink               = factoryvisualization.Sink
-	SinkFunc           = factoryvisualization.SinkFunc
-	Clock              = factoryvisualization.Clock
-	Source             = factoryvisualization.Source
-	ErrorReporter      = factoryvisualization.ErrorReporter
-	RuntimeReader      = factoryvisualization.RuntimeReader
+	View                       = factoryvisualization.View
+	RuntimeObservation         = factoryvisualization.RuntimeObservation
+	Sink                       = factoryvisualization.Sink
+	SinkFunc                   = factoryvisualization.SinkFunc
+	Clock                      = factoryvisualization.Clock
+	Source                     = factoryvisualization.Source
+	ErrorReporter              = factoryvisualization.ErrorReporter
+	RuntimeReader              = factoryvisualization.RuntimeReader
+	RuntimeMetricsReader       = factoryvisualization.RuntimeMetricsReader
+	RuntimeMetricsQuery        = factoryvisualization.RuntimeMetricsQuery
+	RuntimeMetricRecord        = factoryvisualization.RuntimeMetricRecord
+	RuntimeMetricsQueryRequest = factoryvisualization.RuntimeMetricsQueryRequest
+	RuntimeMetricsQueryResult  = factoryvisualization.RuntimeMetricsQueryResult
+	RuntimeMetricsQueryError   = factoryvisualization.RuntimeMetricsQueryError
+	RuntimeMetricsAggregate    = factoryvisualization.RuntimeMetricsAggregate
+	RuntimeMetricsBreakdown    = factoryvisualization.RuntimeMetricsBreakdown
+	RuntimeMetricsDuration     = factoryvisualization.RuntimeMetricsDuration
+	RuntimeMetricsCost         = factoryvisualization.RuntimeMetricsCost
 
 	ActivateMode       = factoryvisualization.ActivateMode
 	LifecycleState     = factoryvisualization.LifecycleState
@@ -62,6 +72,9 @@ const (
 	ProjectionErrorInvalidInput            = factoryvisualization.ProjectionErrorInvalidInput
 	ProjectionErrorSnapshotUnavailable     = factoryvisualization.ProjectionErrorSnapshotUnavailable
 	ProjectionErrorReconstructionFailed    = factoryvisualization.ProjectionErrorReconstructionFailed
+	RuntimeMetricsCostUnavailable          = factoryvisualization.RuntimeMetricsCostUnavailable
+	RuntimeMetricsQueryInvalidInput        = factoryvisualization.RuntimeMetricsQueryInvalidInput
+	RuntimeMetricsQueryReadFailed          = factoryvisualization.RuntimeMetricsQueryReadFailed
 	PresentationDeliveryBestEffort         = factoryvisualization.PresentationDeliveryBestEffort
 	PresentationDeliveryLossless           = factoryvisualization.PresentationDeliveryLossless
 	PresentationErrorInvalidInput          = factoryvisualization.PresentationErrorInvalidInput
