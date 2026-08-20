@@ -23,23 +23,40 @@ import (
 // backendsizecheck:ignore-function service-ownership migration preserves this orchestration flow; extract focused helpers and remove this exemption.
 func TestProcessModelsInvokeUsesCanonicalGraphAndExactExternalEdges(t *testing.T) {
 	audio := []byte("RIFF....WAVE")
+	var backendPayload struct {
+		Operation  string `json:"operation"`
+		ModelName  string `json:"modelName"`
+		OutputFile string `json:"outputFile"`
+		Text       string `json:"text"`
+	}
 	modelServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
 		switch request.URL.Path {
 		case "/health":
 			w.WriteHeader(http.StatusOK)
 		case "/invoke":
-			var payload struct {
-				OutputFile string `json:"outputFile"`
-			}
-			if err := json.NewDecoder(request.Body).Decode(&payload); err != nil {
+			if err := json.NewDecoder(request.Body).Decode(&backendPayload); err != nil {
 				http.Error(w, err.Error(), http.StatusBadRequest)
 				return
 			}
-			if err := os.WriteFile(payload.OutputFile, audio, 0o644); err != nil {
+			if err := os.WriteFile(backendPayload.OutputFile, audio, 0o644); err != nil {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 				return
 			}
+			response, err := json.Marshal(map[string]any{
+				"content": []map[string]any{{
+					"type":        "AUDIO",
+					"slot":        "audio",
+					"file":        backendPayload.OutputFile,
+					"contentType": "audio/wav",
+				}},
+			})
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write(response)
 		default:
 			http.NotFound(w, request)
 		}
@@ -72,6 +89,7 @@ func TestProcessModelsInvokeUsesCanonicalGraphAndExactExternalEdges(t *testing.T
 	}
 
 	var output bytes.Buffer
+	var diagnostics bytes.Buffer
 	if err := process.Execute(root.Input{
 		Args: []string{
 			"you", "--json", "models", "invoke", "OMNIVOICE_Q4_K_M",
@@ -79,7 +97,7 @@ func TestProcessModelsInvokeUsesCanonicalGraphAndExactExternalEdges(t *testing.T
 		},
 		Env:              homeEnvironment(home),
 		Stdout:           &output,
-		Stderr:           io.Discard,
+		Stderr:           &diagnostics,
 		Context:          context.Background(),
 		WorkingDirectory: factoryDir,
 	}); err != nil {
@@ -96,9 +114,13 @@ func TestProcessModelsInvokeUsesCanonicalGraphAndExactExternalEdges(t *testing.T
 	if response.Worker != "voice-local" || len(response.Content) == 0 {
 		t.Fatalf("response = %#v, want voice-local content", response)
 	}
+	if diagnostics.Len() != 0 {
+		t.Fatalf("models invoke JSON stderr = %q, want empty", diagnostics.String())
+	}
 
 	audioPath := filepath.Join(t.TempDir(), "speech.wav")
 	output.Reset()
+	diagnostics.Reset()
 	if err := process.Execute(root.Input{
 		Args: []string{
 			"you", "models", "invoke", "OMNIVOICE_Q4_K_M",
@@ -107,11 +129,31 @@ func TestProcessModelsInvokeUsesCanonicalGraphAndExactExternalEdges(t *testing.T
 		},
 		Env:              homeEnvironment(home),
 		Stdout:           &output,
-		Stderr:           io.Discard,
+		Stderr:           &diagnostics,
 		Context:          context.Background(),
 		WorkingDirectory: factoryDir,
 	}); err != nil {
 		t.Fatalf("Process.Execute(models invoke --output) error = %v", err)
+	}
+	if got, want := output.String(), "Wrote audio: "+audioPath+"\n"; got != want {
+		t.Fatalf("models invoke stdout = %q, want %q", got, want)
+	}
+	if diagnostics.Len() != 0 {
+		t.Fatalf("models invoke stderr = %q, want empty", diagnostics.String())
+	}
+	if backendPayload.Operation != "TTS" || backendPayload.ModelName != "OMNIVOICE_Q4_K_M" ||
+		backendPayload.Text != "write audio from the process" || backendPayload.OutputFile == "" {
+		t.Fatalf("backend TTS payload = %#v, want model, operation, text, and output file", backendPayload)
+	}
+	if filepath.Ext(backendPayload.OutputFile) != ".wav" {
+		t.Fatalf("backend output file = %q, want .wav audio artifact", backendPayload.OutputFile)
+	}
+	audioInfo, err := os.Stat(audioPath)
+	if err != nil {
+		t.Fatalf("stat models invoke output audio: %v", err)
+	}
+	if !audioInfo.Mode().IsRegular() || audioInfo.Size() != int64(len(audio)) {
+		t.Fatalf("models invoke output audio info = %#v, want regular file with %d bytes", audioInfo, len(audio))
 	}
 	written, err := os.ReadFile(audioPath)
 	if err != nil {
