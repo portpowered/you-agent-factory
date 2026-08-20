@@ -22,6 +22,10 @@ import {
   divergentDocumentPlaneFactoryDocument,
 } from "../../../testing/graph-editor-harness";
 import type { FactoryLayout } from "../../factory-graph-editor/lib/layout/factory-graph-layout-operations";
+import {
+  FACTORY_LAYOUT_GROUP_DEFAULT_SIZE,
+  fitFactoryLayoutGroupBounds,
+} from "../../factory-graph-editor/lib/layout/visual-groups/factory-graph-layout-groups";
 import type { GraphLayout } from "../../flowchart/lib/layout";
 import { currentActivityCardFactoryDefinition } from "./current-activity-card-factory-definition";
 import {
@@ -972,6 +976,131 @@ describe("useCurrentActivityGraphViewModel node positions", () => {
     });
   });
 
+  it("wires a node click into graph selection and fits a group around widely scattered members", () => {
+    const graphLayout: GraphLayout = {
+      edges: [],
+      height: 1200,
+      nodes: [
+        {
+          column: 0,
+          height: 120,
+          nodeId: "workstation:review",
+          nodeKind: "workstation",
+          row: 0,
+          width: 220,
+          workstationNodeId: "review",
+          x: 40,
+          y: 40,
+        },
+        {
+          column: 1,
+          height: 120,
+          nodeId: "work-state:story:queued",
+          nodeKind: "state_position",
+          place: {
+            kind: "work_state",
+            place_id: "story:queued",
+            state_category: "QUEUED",
+            state_value: "queued",
+            type_id: "story",
+          },
+          row: 0,
+          width: 140,
+          x: 900,
+          y: 120,
+        },
+        {
+          column: 2,
+          height: 120,
+          nodeId: "work-state:story:done",
+          nodeKind: "state_position",
+          place: {
+            kind: "work_state",
+            place_id: "story:done",
+            state_category: "TERMINAL",
+            state_value: "done",
+            type_id: "story",
+          },
+          row: 1,
+          width: 140,
+          x: 300,
+          y: 1000,
+        },
+      ],
+      width: 1400,
+    };
+    const { result } = renderGraphViewModelWithLayout(graphLayout);
+
+    const reviewNode = result.current.nodes.find(
+      (node) => node.id === "workstation:review",
+    );
+    const clickReviewNode = (
+      reviewNode?.data as
+        | { onSelectWorkstation?: (nodeId: string) => void }
+        | undefined
+    )?.onSelectWorkstation;
+    expect(clickReviewNode).toBeInstanceOf(Function);
+
+    act(() => {
+      clickReviewNode?.("review");
+    });
+
+    expect([...result.current.graphSelection.state.selectedNodeIds]).toEqual([
+      "workstation:review",
+    ]);
+
+    act(() => {
+      result.current.graphSelection.addToSelection({
+        nodeIds: ["work-state:story:queued", "work-state:story:done"],
+      });
+    });
+
+    const selectedNodeIds = [
+      ...result.current.graphSelection.state.selectedNodeIds,
+    ];
+    expect(new Set(selectedNodeIds)).toEqual(
+      new Set([
+        "workstation:review",
+        "work-state:story:queued",
+        "work-state:story:done",
+      ]),
+    );
+
+    const nodeGeometryById = new Map(
+      result.current.nodes
+        .filter((node) => selectedNodeIds.includes(node.id))
+        .map((node) => [
+          node.id,
+          {
+            height: node.height ?? 0,
+            position: node.position,
+            width: node.width ?? 0,
+          },
+        ]),
+    );
+
+    const bounds = fitFactoryLayoutGroupBounds({
+      nodeGeometryById,
+      nodeIds: selectedNodeIds,
+    });
+
+    expect(bounds).not.toBeNull();
+    expect(bounds?.width ?? 0).toBeGreaterThan(
+      FACTORY_LAYOUT_GROUP_DEFAULT_SIZE.width,
+    );
+    expect(bounds?.height ?? 0).toBeGreaterThan(
+      FACTORY_LAYOUT_GROUP_DEFAULT_SIZE.height,
+    );
+    expect(bounds?.x ?? 0).toBeLessThanOrEqual(40);
+    expect(bounds?.y ?? 0).toBeLessThanOrEqual(40);
+    expect((bounds?.x ?? 0) + (bounds?.width ?? 0)).toBeGreaterThanOrEqual(
+      900 + 140,
+    );
+    expect((bounds?.y ?? 0) + (bounds?.height ?? 0)).toBeGreaterThanOrEqual(
+      1000 + 120,
+    );
+  });
+
   it("syncs React Flow selection changes and clears with Esc handler", () => {
     const graphLayout: GraphLayout = {
       edges: [],
@@ -1220,6 +1349,153 @@ describe("useCurrentActivityGraphViewModel edge waypoints", () => {
       selected: true,
       type: "factoryEditorEdge",
     });
+  });
+});
+
+function workstationResizeLayout(): GraphLayout {
+  return {
+    edges: [],
+    height: 360,
+    nodes: [
+      {
+        column: 0,
+        height: 160,
+        nodeId: "workstation:review",
+        nodeKind: "workstation",
+        row: 0,
+        width: 220,
+        workstationNodeId: "review",
+        x: 120,
+        y: 80,
+      },
+    ],
+    width: 600,
+  };
+}
+
+function nodeResizeControls(
+  result: { current: CurrentActivityGraphViewModelResult },
+  nodeId: string,
+) {
+  return (
+    result.current.nodes.find((node) => node.id === nodeId)?.data as
+      | {
+          resizeControls?: {
+            onResize?: (dimensions: { height: number; width: number }) => void;
+            onResizeEnd?: (dimensions: {
+              height: number;
+              width: number;
+            }) => void;
+          };
+        }
+      | undefined
+  )?.resizeControls;
+}
+
+describe("current activity graph live node resize", () => {
+  it("grows the rendered node while the resize pointer is still down", () => {
+    const { result } = renderGraphViewModelWithLayout(
+      workstationResizeLayout(),
+    );
+
+    act(() => {
+      nodeResizeControls(result, "workstation:review")?.onResize?.({
+        height: 300,
+        width: 320,
+      });
+    });
+
+    expect(result.current.nodes[0]).toMatchObject({
+      height: 300,
+      measured: { height: 300, width: 320 },
+      width: 320,
+    });
+  });
+
+  it("tracks every intermediate size rather than only the last one", () => {
+    const { result } = renderGraphViewModelWithLayout(
+      workstationResizeLayout(),
+    );
+
+    act(() => {
+      nodeResizeControls(result, "workstation:review")?.onResize?.({
+        height: 220,
+        width: 240,
+      });
+    });
+    expect(result.current.nodes[0]?.width).toBe(240);
+
+    act(() => {
+      nodeResizeControls(result, "workstation:review")?.onResize?.({
+        height: 260,
+        width: 300,
+      });
+    });
+
+    expect(result.current.nodes[0]).toMatchObject({
+      height: 260,
+      width: 300,
+    });
+  });
+
+  it("keeps the committed size after the drag settles", () => {
+    const { result } = renderGraphViewModelWithLayout(
+      workstationResizeLayout(),
+    );
+
+    act(() => {
+      nodeResizeControls(result, "workstation:review")?.onResize?.({
+        height: 300,
+        width: 320,
+      });
+    });
+    act(() => {
+      nodeResizeControls(result, "workstation:review")?.onResizeEnd?.({
+        height: 300,
+        width: 320,
+      });
+    });
+
+    expect(result.current.nodes[0]).toMatchObject({
+      height: 300,
+      width: 320,
+    });
+  });
+
+  it("holds the expanded content variant back until the drag is committed", () => {
+    const { result } = renderGraphViewModelWithLayout(
+      workstationResizeLayout(),
+    );
+    const expanded = () =>
+      (result.current.nodes[0]?.data as { expanded?: boolean } | undefined)
+        ?.expanded;
+
+    act(() => {
+      nodeResizeControls(result, "workstation:review")?.onResize?.({
+        height: 300,
+        width: 320,
+      });
+    });
+    expect(expanded()).toBe(false);
+
+    act(() => {
+      nodeResizeControls(result, "workstation:review")?.onResizeEnd?.({
+        height: 300,
+        width: 320,
+      });
+    });
+
+    expect(expanded()).toBe(true);
+  });
+
+  it("does not resize while the editor cannot be interacted with", () => {
+    const { result } = renderGraphViewModelWithLayout(
+      workstationResizeLayout(),
+      { editor: { canInteractWithEditor: false, editorMode: false } },
+    );
+
+    expect(nodeResizeControls(result, "workstation:review")).toBeUndefined();
+    expect(result.current.nodes[0]?.width).toBe(220);
   });
 });
 // Component lane: requires DOM APIs.

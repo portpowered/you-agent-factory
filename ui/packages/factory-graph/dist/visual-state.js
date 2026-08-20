@@ -21,6 +21,11 @@ export function factoryGraphVisualNestedAccentRole(parentStatus) {
  * `statusTreatment`; validation overlays selection and active-flow emphasis;
  * selection/focus overlays active-flow emphasis; and muted is returned as an
  * independent flag so it cannot erase any status.
+ *
+ * Tone and occupancy are separate axes. `surface` carries the authored tone
+ * even when the node is empty; only held Work promotes `fill` to `solid` and
+ * lights the active glow, so an authored `PROCESSING` work state stays a
+ * translucent container until Work actually enters it.
  */
 export function resolveFactoryGraphVisualState(input) {
     const lifecycle = resolveLifecycleRole(input.lifecycle, input.runtimeStatus);
@@ -32,6 +37,7 @@ export function resolveFactoryGraphVisualState(input) {
     const muted = input.muted === true;
     const hasSelectionOrFocus = selected || focused;
     const activeFlowStatus = status === "quiet" && activeFlow ? "active" : status;
+    const holdsWork = activeFlow || input.activeWork === true;
     let border = status;
     if (validation !== "none") {
         border = "validation";
@@ -49,7 +55,7 @@ export function resolveFactoryGraphVisualState(input) {
     else if (hasSelectionOrFocus) {
         glow = "selection";
     }
-    else if (activeFlow || lifecycle === "processing") {
+    else if (holdsWork) {
         glow = "active";
     }
     else if (lifecycle === "failed") {
@@ -59,13 +65,13 @@ export function resolveFactoryGraphVisualState(input) {
         activeFlow,
         border,
         emphasis: emphasisFor({
-            activeFlow,
             hasSelectionOrFocus,
-            lifecycle,
+            holdsWork,
             status,
             validation,
         }),
         family: input.family,
+        fill: holdsWork && activeFlowStatus !== "quiet" ? "solid" : "soft",
         focus: focusRoleFor(selected, focused),
         glow,
         icon: activeFlowStatus,
@@ -176,7 +182,7 @@ function emphasisFor(input) {
         return "attention";
     if (input.hasSelectionOrFocus)
         return "selected";
-    if (input.activeFlow || input.lifecycle === "processing")
+    if (input.holdsWork)
         return "strong";
     return input.status === "quiet" ? "quiet" : "standard";
 }

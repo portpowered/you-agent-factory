@@ -1,6 +1,7 @@
 import {
   type ControlPosition,
   NodeResizeControl,
+  type OnResize,
   type OnResizeEnd,
   ResizeControlVariant,
   useUpdateNodeInternals,
@@ -18,6 +19,12 @@ export interface FactoryGraphNodeResizeControlsProps {
   bounds: FactoryGraphNodeDimensionBounds;
   isVisible?: boolean;
   nodeId?: string;
+  /**
+   * Reports every intermediate size while the pointer is still down so the
+   * host can paint the node at its in-progress size instead of snapping to
+   * the committed size once the drag settles.
+   */
+  onResize?: (dimensions: FactoryGraphNodeDimensions) => void;
   onResizeEnd?: (dimensions: FactoryGraphNodeDimensions) => void;
 }
 
@@ -27,6 +34,7 @@ export function FactoryGraphNodeResizeControls({
   bounds,
   isVisible = false,
   nodeId,
+  onResize,
   onResizeEnd,
 }: FactoryGraphNodeResizeControlsProps) {
   const updateNodeInternals = useUpdateNodeInternals();
@@ -35,6 +43,12 @@ export function FactoryGraphNodeResizeControls({
       updateNodeInternals(nodeId);
     }
   }, [nodeId, updateNodeInternals]);
+  const handleResize = useCallback<OnResize>(
+    (_event, dimensions) => {
+      onResize?.({ height: dimensions.height, width: dimensions.width });
+    },
+    [onResize],
+  );
   const handleResizeEnd = useCallback<OnResizeEnd>(
     (_event, dimensions) => {
       onResizeEnd?.({ height: dimensions.height, width: dimensions.width });
@@ -53,40 +67,100 @@ export function FactoryGraphNodeResizeControls({
 
   return (
     <NodeResizeControl
-      className="factory-graph-node-resize-control factory-graph-node-resize-edge nodrag nopan pointer-events-auto"
+      className={RESIZE_GRIP_CONTROL_CLASS_NAME}
       maxHeight={bounds.maximum.height}
       maxWidth={bounds.maximum.width}
       minHeight={bounds.minimum.height}
       minWidth={bounds.minimum.width}
       nodeId={nodeId}
+      onResize={handleResize}
       onResizeEnd={handleResizeEnd}
       position={resizePosition}
-      style={bottomEdgeResizeControlStyle}
-      variant={ResizeControlVariant.Line}
+      style={RESIZE_GRIP_STYLE_BY_POSITION[resizePosition]}
+      variant={ResizeControlVariant.Handle}
       shouldResize={(_event, dimensions) =>
         isFiniteBoundedDimensions(dimensions, bounds)
       }
-    />
+    >
+      <span
+        aria-hidden="true"
+        className={RESIZE_GRIP_MARK_CLASS_NAME[resizePosition]}
+        data-factory-graph-node-resize-grip={resizePosition}
+      />
+    </NodeResizeControl>
   );
 }
 
-const bottomEdgeResizeControlStyle: CSSProperties = {
-  borderBottomColor: "var(--color-primary)",
-  borderBottomStyle: "solid",
-  borderBottomWidth: "3px",
-  borderLeftWidth: "0px",
-  borderRightWidth: "0px",
-  borderTopWidth: "0px",
-  height: "10px",
-  left: "0",
-  top: "100%",
-  transform: "translateY(-50%)",
-  width: "100%",
+/**
+ * The grip stays out of sight until the node is hovered or focused, matching
+ * the bento card resize affordance. `semantic-node-shell` owns the
+ * `group/factory-graph-node` ancestor these variants read.
+ */
+const RESIZE_GRIP_CONTROL_CLASS_NAME = [
+  "factory-graph-node-resize-control",
+  "factory-graph-node-resize-grip",
+  "nodrag",
+  "nopan",
+  "pointer-events-auto",
+  "opacity-0",
+  "transition-opacity",
+  "group-hover/factory-graph-node:opacity-100",
+  "group-focus-within/factory-graph-node:opacity-100",
+].join(" ");
+
+/** Neutral, unaccented tick marks; an accent tone would read as node status. */
+const RESIZE_GRIP_MARK_BASE_CLASS_NAME =
+  "pointer-events-none block h-full w-full border-af-text-subtle";
+
+const RESIZE_GRIP_MARK_CLASS_NAME: Record<ResizeGripPosition, string> = {
+  bottom: `${RESIZE_GRIP_MARK_BASE_CLASS_NAME} border-b-2`,
+  "bottom-right": `${RESIZE_GRIP_MARK_BASE_CLASS_NAME} rounded-br-sm border-b-2 border-r-2`,
+  right: `${RESIZE_GRIP_MARK_BASE_CLASS_NAME} border-r-2`,
 };
+
+type ResizeGripPosition = Extract<
+  ControlPosition,
+  "bottom" | "bottom-right" | "right"
+>;
+
+/**
+ * Small enough to read as a hint rather than a divider, and inset from the
+ * node edge so the mark sits inside the card the way a bento card grip does.
+ */
+const RESIZE_GRIP_SIZE = "14px";
+const RESIZE_GRIP_INSET = "calc(-100% - 4px)";
+
+function resizeGripStyle(
+  left: string,
+  top: string,
+  translate: string,
+): CSSProperties {
+  return {
+    background: "none",
+    border: "none",
+    borderRadius: "0",
+    height: RESIZE_GRIP_SIZE,
+    left,
+    top,
+    translate,
+    width: RESIZE_GRIP_SIZE,
+  };
+}
+
+const RESIZE_GRIP_STYLE_BY_POSITION: Record<ResizeGripPosition, CSSProperties> =
+  {
+    bottom: resizeGripStyle("50%", "100%", `-50% ${RESIZE_GRIP_INSET}`),
+    "bottom-right": resizeGripStyle(
+      "100%",
+      "100%",
+      `${RESIZE_GRIP_INSET} ${RESIZE_GRIP_INSET}`,
+    ),
+    right: resizeGripStyle("100%", "50%", `${RESIZE_GRIP_INSET} -50%`),
+  };
 
 function resizeControlPosition(
   allowedAxes: FactoryGraphNodeResizeAxes,
-): ControlPosition | null {
+): ResizeGripPosition | null {
   if (allowedAxes.width && allowedAxes.height) {
     return "bottom-right";
   }

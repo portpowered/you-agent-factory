@@ -291,6 +291,10 @@ function projectParityNode(
   const active = booleanValue(data.active);
   const visual = resolveFactoryGraphVisualState({
     activeFlow: booleanValue(data.activeFlow),
+    activeWork:
+      family === "workstation"
+        ? active
+        : (numberValue(data.tokenCount) ?? 0) > 0,
     family,
     focused: booleanValue(data.focused),
     lifecycle:

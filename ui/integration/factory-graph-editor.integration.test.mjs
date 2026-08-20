@@ -270,7 +270,11 @@ describe.concurrent("factory graph editor browser integration", () => {
           waitUntil: "domcontentloaded",
         });
         await browserPage.page
-          .getByRole("heading", { level: 1, name: "U", exact: true })
+          .getByRole("heading", {
+            level: 1,
+            name: "You Agent Factory",
+            exact: true,
+          })
           .waitFor({
             state: "visible",
             timeout: uiInteractionTimeoutMs,
@@ -381,7 +385,11 @@ describe.concurrent("factory graph editor browser integration", () => {
           waitUntil: "domcontentloaded",
         });
         await browserPage.page
-          .getByRole("heading", { level: 1, name: "U", exact: true })
+          .getByRole("heading", {
+            level: 1,
+            name: "You Agent Factory",
+            exact: true,
+          })
           .waitFor({
             state: "visible",
             timeout: uiInteractionTimeoutMs,
@@ -569,7 +577,11 @@ describe.concurrent("factory graph editor browser integration", () => {
           waitUntil: "domcontentloaded",
         });
         await browserPage.page
-          .getByRole("heading", { level: 1, name: "U", exact: true })
+          .getByRole("heading", {
+            level: 1,
+            name: "You Agent Factory",
+            exact: true,
+          })
           .waitFor({
             state: "visible",
             timeout: uiInteractionTimeoutMs,
@@ -740,7 +752,11 @@ describe.concurrent("factory graph editor browser integration", () => {
           waitUntil: "domcontentloaded",
         });
         await browserPage.page
-          .getByRole("heading", { level: 1, name: "U", exact: true })
+          .getByRole("heading", {
+            level: 1,
+            name: "You Agent Factory",
+            exact: true,
+          })
           .waitFor({
             state: "visible",
             timeout: uiInteractionTimeoutMs,
@@ -836,7 +852,11 @@ describe.concurrent("factory graph editor browser integration", () => {
           waitUntil: "domcontentloaded",
         });
         await browserPage.page
-          .getByRole("heading", { level: 1, name: "U", exact: true })
+          .getByRole("heading", {
+            level: 1,
+            name: "You Agent Factory",
+            exact: true,
+          })
           .waitFor({
             state: "visible",
             timeout: uiInteractionTimeoutMs,

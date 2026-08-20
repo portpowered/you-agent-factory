@@ -103,6 +103,7 @@ describe("DashboardSessionTab controls", () => {
     });
 
     expect(button.getAttribute("aria-haspopup")).toBe("dialog");
-    expect(button.className).toContain("rounded-xl");
+    expect(button.getAttribute("title")).toBe("Open another factory session");
+    expect(button.className).toContain("rounded-lg");
   });
 });

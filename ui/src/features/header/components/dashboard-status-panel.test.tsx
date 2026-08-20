@@ -6,6 +6,7 @@ import { DashboardStatusPanel } from "./dashboard-status-panel";
 
 describe("DashboardStatusPanel", () => {
   it("renders the default header state without optional detail copy", () => {
+    const messages = getHeaderControlsMessages("en");
     const { container } = render(
       <DashboardStatusPanel title="Timeline unavailable" />,
     );
@@ -14,10 +15,11 @@ describe("DashboardStatusPanel", () => {
     const heading = screen.getByRole("heading", {
       name: "Timeline unavailable",
     });
+    const brandImage = screen.getByAltText(messages.brandWordmark);
 
     expect(heading).toBeTruthy();
-    expect(screen.getByText("U").className).not.toContain("sr-only");
-    expect(headerEyebrow?.textContent).toContain("U");
+    expect(brandImage).toBeTruthy();
+    expect(headerEyebrow?.contains(brandImage)).toBe(true);
     expect(headerEyebrow?.className).toContain("text-primary");
     expect(heading.className).toContain("af-page-heading");
     expect(screen.queryByText("Waiting for more timeline data.")).toBeNull();
@@ -61,7 +63,7 @@ describe("DashboardStatusPanel", () => {
     expect(
       screen.getByRole("heading", { name: messages.loadingDashboardTitle }),
     ).toBeTruthy();
-    expect(screen.getByText("U").className).not.toContain("sr-only");
+    expect(screen.getByAltText(messages.brandWordmark)).toBeTruthy();
   });
 
   it("renders optional recovery actions below the detail copy", () => {

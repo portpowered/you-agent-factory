@@ -18,7 +18,6 @@ import {
   StandardListSelectionItem,
 } from "../../../components/ui/standard-list-selection";
 import {
-  type FactorySessionJourney,
   type FolderValidationState,
   factorySessionTargetOptionValue,
   folderValidationStatusMessage,
@@ -27,7 +26,6 @@ import {
 } from "../lib/dashboard-session-tabs-utils";
 import type { getHeaderControlsMessages } from "../messages/header-controls";
 
-// biome-ignore lint/complexity/noExcessiveLinesPerFunction: keeps the localized folder form and its mutually exclusive validation panels together.
 export function OpenSessionDialog({
   dialogError,
   discoveredTargets,
@@ -35,7 +33,6 @@ export function OpenSessionDialog({
   folderPath,
   isPending,
   isValidatePending,
-  journey,
   messages,
   onCancelInitConfirmation,
   onChangeFolderPath,
@@ -52,7 +49,6 @@ export function OpenSessionDialog({
   folderPath: string;
   isPending: boolean;
   isValidatePending: boolean;
-  journey: FactorySessionJourney;
   messages: ReturnType<typeof getHeaderControlsMessages>;
   onCancelInitConfirmation: () => void;
   onChangeFolderPath: (value: string) => void;
@@ -67,7 +63,6 @@ export function OpenSessionDialog({
   const folderHelperTextID = useId();
   const folderErrorTextID = useId();
   const dialogDescriptionID = useId();
-  const isNewJourney = journey === "new";
   const hasFolderCandidate = folderPath.trim().length > 0;
   const showInspectSubmit =
     folderValidation.status !== "ready" &&
@@ -81,15 +76,9 @@ export function OpenSessionDialog({
     folderValidation.status === "init_ready"
       ? null
       : folderValidationStatusMessage(folderValidation, messages);
-  const folderLabel = isNewJourney
-    ? messages.newFactoryFolderFieldLabel
-    : messages.sessionFolderFieldLabel;
-  const folderPlaceholder = isNewJourney
-    ? messages.newFactoryFolderFieldPlaceholder
-    : messages.sessionFolderFieldPlaceholder;
-  const folderHelperText = isNewJourney
-    ? messages.newFactoryFolderHelperText
-    : messages.sessionFolderHelperText;
+  const folderLabel = messages.sessionFolderFieldLabel;
+  const folderPlaceholder = messages.sessionFolderFieldPlaceholder;
+  const folderHelperText = messages.sessionFolderHelperText;
 
   return (
     <DialogContent
@@ -99,18 +88,12 @@ export function OpenSessionDialog({
       onCloseAutoFocus={onCloseAutoFocus}
     >
       <DialogHeader>
-        <DialogTitle>
-          {isNewJourney
-            ? messages.newFactoryDialogTitle
-            : messages.openSessionDialogTitle}
-        </DialogTitle>
+        <DialogTitle>{messages.openSessionDialogTitle}</DialogTitle>
         <DialogDescription
           className="text-sm leading-6 text-on-surface-variant"
           id={dialogDescriptionID}
         >
-          {isNewJourney
-            ? messages.newFactoryDialogDescription
-            : messages.openSessionDialogDescription}
+          {messages.openSessionDialogDescription}
         </DialogDescription>
       </DialogHeader>
       <form className="grid gap-4" onSubmit={onInspectFolder}>

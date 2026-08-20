@@ -49,6 +49,12 @@ export type FactoryGraphVisualBorderRole =
   | "selection"
   | "validation";
 
+/**
+ * Whether a node paints its tone as a translucent container or as a solid
+ * block. Only a node that currently holds Work earns the solid treatment.
+ */
+export type FactoryGraphVisualFillRole = "soft" | "solid";
+
 export type FactoryGraphVisualGlowRole =
   | "none"
   | "active"
@@ -79,6 +85,13 @@ export type FactoryGraphVisualFocusRole =
 export type FactoryGraphValidationState = "none" | "warning" | "error";
 
 export interface FactoryGraphVisualStateInput {
+  /**
+   * Whether the node currently holds active Work. A work state reports its
+   * held Work; a workstation reports its running executions. This is separate
+   * from `lifecycle`, which is an authored category and says nothing about
+   * whether anything is in the node right now.
+   */
+  activeWork?: boolean;
   /** Protocol-neutral Factory graph family, not a transport node type. */
   family: FactoryGraphNodeFamily;
   /** Work-state lifecycle or an equivalent host runtime status. */
@@ -96,6 +109,7 @@ export interface FactoryGraphVisualState {
   lifecycle: FactoryGraphVisualLifecycleRole;
   status: FactoryGraphVisualStatusRole;
   surface: FactoryGraphVisualStatusRole;
+  fill: FactoryGraphVisualFillRole;
   border: FactoryGraphVisualBorderRole;
   glow: FactoryGraphVisualGlowRole;
   icon: FactoryGraphVisualStatusRole;
@@ -116,6 +130,11 @@ export interface FactoryGraphVisualState {
  * `statusTreatment`; validation overlays selection and active-flow emphasis;
  * selection/focus overlays active-flow emphasis; and muted is returned as an
  * independent flag so it cannot erase any status.
+ *
+ * Tone and occupancy are separate axes. `surface` carries the authored tone
+ * even when the node is empty; only held Work promotes `fill` to `solid` and
+ * lights the active glow, so an authored `PROCESSING` work state stays a
+ * translucent container until Work actually enters it.
  */
 export function resolveFactoryGraphVisualState(
   input: FactoryGraphVisualStateInput,
@@ -129,6 +148,7 @@ export function resolveFactoryGraphVisualState(
   const muted = input.muted === true;
   const hasSelectionOrFocus = selected || focused;
   const activeFlowStatus = status === "quiet" && activeFlow ? "active" : status;
+  const holdsWork = activeFlow || input.activeWork === true;
 
   let border: FactoryGraphVisualBorderRole = status;
   if (validation !== "none") {
@@ -144,7 +164,7 @@ export function resolveFactoryGraphVisualState(
     glow = "validation";
   } else if (hasSelectionOrFocus) {
     glow = "selection";
-  } else if (activeFlow || lifecycle === "processing") {
+  } else if (holdsWork) {
     glow = "active";
   } else if (lifecycle === "failed") {
     glow = "danger";
@@ -154,13 +174,13 @@ export function resolveFactoryGraphVisualState(
     activeFlow,
     border,
     emphasis: emphasisFor({
-      activeFlow,
       hasSelectionOrFocus,
-      lifecycle,
+      holdsWork,
       status,
       validation,
     }),
     family: input.family,
+    fill: holdsWork && activeFlowStatus !== "quiet" ? "solid" : "soft",
     focus: focusRoleFor(selected, focused),
     glow,
     icon: activeFlowStatus,
@@ -288,14 +308,13 @@ function focusRoleFor(
 }
 
 function emphasisFor(input: {
-  activeFlow: boolean;
   hasSelectionOrFocus: boolean;
-  lifecycle: FactoryGraphVisualLifecycleRole;
+  holdsWork: boolean;
   status: FactoryGraphVisualStatusRole;
   validation: FactoryGraphValidationState;
 }): FactoryGraphVisualEmphasis {
   if (input.validation !== "none") return "attention";
   if (input.hasSelectionOrFocus) return "selected";
-  if (input.activeFlow || input.lifecycle === "processing") return "strong";
+  if (input.holdsWork) return "strong";
   return input.status === "quiet" ? "quiet" : "standard";
 }

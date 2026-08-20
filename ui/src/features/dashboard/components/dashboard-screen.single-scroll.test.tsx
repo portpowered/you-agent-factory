@@ -104,10 +104,6 @@ vi.mock("../../bento/hooks/use-dashboard-bento-snapshot", () => ({
         },
         dashboardCardStateContext: {
           dirtyCardInstanceIDs: new Set<string>(),
-          hasAuthoritativeSnapshot: true,
-          recoveryPending: false,
-          streamStatus: dashboardSnapshotState.value.streamState.status,
-          timelineMode: "current" as const,
           workOutcomeHydrationStatus: "ready" as const,
         },
         getDashboardCardState: vi.fn(),

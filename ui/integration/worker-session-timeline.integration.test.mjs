@@ -542,7 +542,11 @@ describe("Worker Session timeline browser integration", () => {
           waitUntil: "domcontentloaded",
         });
         await browserPage.page
-          .getByRole("heading", { level: 1, name: "U", exact: true })
+          .getByRole("heading", {
+            level: 1,
+            name: "You Agent Factory",
+            exact: true,
+          })
           .waitFor({ timeout: uiInteractionTimeoutMs });
         await selectReplayWork(browserPage.page, expect);
 
@@ -660,7 +664,11 @@ describe("Worker Session timeline browser integration", () => {
           waitUntil: "domcontentloaded",
         });
         await browserPage.page
-          .getByRole("heading", { level: 1, name: "U", exact: true })
+          .getByRole("heading", {
+            level: 1,
+            name: "You Agent Factory",
+            exact: true,
+          })
           .waitFor({ timeout: uiInteractionTimeoutMs });
         await selectReplayWork(browserPage.page, expect);
 
@@ -780,7 +788,11 @@ describe("Worker Session timeline browser integration", () => {
           waitUntil: "domcontentloaded",
         });
         await browserPage.page
-          .getByRole("heading", { level: 1, name: "U", exact: true })
+          .getByRole("heading", {
+            level: 1,
+            name: "You Agent Factory",
+            exact: true,
+          })
           .waitFor({ timeout: uiInteractionTimeoutMs });
         await selectReplayWork(browserPage.page, expect);
         await browserPage.page.setViewportSize({ height: 900, width: 1440 });

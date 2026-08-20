@@ -1006,12 +1006,17 @@ export const WorkStateLifecyclePhases = {
       await expect(document.documentElement.dataset.colorPalette).toBe(
         paletteId,
       );
-      const activeNode = (await canvas.findByText("story:review")).closest(
+      const processingNode = (await canvas.findByText("story:review")).closest(
         "article",
       );
-      await expect(activeNode).toHaveAttribute(
+      // Authored PROCESSING phase holding no Work: tone without solid fill.
+      await expect(processingNode).toHaveAttribute(
         "data-graph-visual-emphasis",
-        "strong",
+        "standard",
+      );
+      await expect(processingNode).toHaveAttribute(
+        "data-graph-visual-fill",
+        "soft",
       );
     }
     applyDocumentColorPalette("factory-dark");

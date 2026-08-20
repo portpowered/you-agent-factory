@@ -160,6 +160,7 @@ export {
   type FactoryGraphValidationState,
   type FactoryGraphVisualBorderRole,
   type FactoryGraphVisualEmphasis,
+  type FactoryGraphVisualFillRole,
   type FactoryGraphVisualFocusRole,
   type FactoryGraphVisualGlowRole,
   type FactoryGraphVisualLifecycleRole,

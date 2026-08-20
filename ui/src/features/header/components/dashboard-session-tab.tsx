@@ -1,4 +1,3 @@
-import { Button } from "@you-agent-factory/components/primitives";
 import type {
   DragEvent as ReactDragEvent,
   KeyboardEvent as ReactKeyboardEvent,
@@ -7,6 +6,7 @@ import type {
 
 import type { DashboardStreamState } from "../../../api/dashboard/types";
 import type { FactorySessionSummary } from "../../../api/factory-sessions";
+import { DashboardActionButton } from "../../../components/ui/dashboard-action-button";
 import { cn } from "../../../lib/cn";
 import {
   sessionCloseLabel,
@@ -48,23 +48,35 @@ export function OpenSessionButton({
   onClick: (event: ReactMouseEvent<HTMLButtonElement>) => void;
 }) {
   return (
-    <Button aria-haspopup="dialog" onClick={onClick} size="sm" tone="outline">
-      {label}
-    </Button>
+    <DashboardActionButton
+      aria-haspopup="dialog"
+      aria-label={label}
+      iconOnly
+      onClick={onClick}
+      title={label}
+      tone="outline"
+    >
+      <OpenSessionButtonIcon />
+    </DashboardActionButton>
   );
 }
 
-export function NewFactoryButton({
-  label,
-  onClick,
-}: {
-  label: string;
-  onClick: (event: ReactMouseEvent<HTMLButtonElement>) => void;
-}) {
+function OpenSessionButtonIcon() {
   return (
-    <Button aria-haspopup="dialog" onClick={onClick} size="sm" tone="secondary">
-      {label}
-    </Button>
+    <svg
+      aria-hidden="true"
+      fill="none"
+      height="18"
+      stroke="currentColor"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      strokeWidth="1.8"
+      viewBox="0 0 24 24"
+      width="18"
+    >
+      <path d="M12 5v14" />
+      <path d="M5 12h14" />
+    </svg>
   );
 }
 

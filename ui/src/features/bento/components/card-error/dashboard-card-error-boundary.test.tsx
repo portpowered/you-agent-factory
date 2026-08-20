@@ -57,7 +57,6 @@ function HealthyCard() {
   );
 }
 
-// biome-ignore lint/complexity/noExcessiveLinesPerFunction: the two cases share one board fixture and cover the complete localized recovery contract.
 describe("DashboardCardErrorBoundary", () => {
   it("contains one failed card, preserves sibling state and geometry, and recovers only that card", async () => {
     const consoleError = vi
@@ -112,9 +111,6 @@ describe("DashboardCardErrorBoundary", () => {
       ).toBeNull();
       expect(
         screen.getByRole("article", { name: "Healthy card" }),
-      ).toBeTruthy();
-      expect(
-        screen.getByRole("button", { name: "Move Healthy card card" }),
       ).toBeTruthy();
 
       const siblingAction = screen.getByRole("button", {

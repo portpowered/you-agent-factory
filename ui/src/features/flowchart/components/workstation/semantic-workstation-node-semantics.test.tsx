@@ -74,8 +74,12 @@ describe("Factory workstation authored semantics", () => {
       workstationSemantics: repeaterAgentSemantics,
     });
 
-    expect(repeater.getByText("Agent")).toBeTruthy();
-    expect(repeater.getByText("Repeater")).toBeTruthy();
+    expect(
+      repeater.container
+        .querySelector("[data-workstation-title]")
+        ?.getAttribute("title"),
+    ).toBe("Agent");
+    expect(repeater.queryByText("Repeater")).toBeNull();
     expect(
       repeater.container.querySelector("[data-workstation-semantic-icon]"),
     ).toBeNull();
@@ -93,7 +97,7 @@ describe("Factory workstation authored semantics", () => {
 });
 
 describe("Factory workstation guard card semantics", () => {
-  it("renders a guarded logical move card without making it selectable", () => {
+  it("renders a single-line breaker card without limits or target details", () => {
     const loopBreaker = renderWorkstationNode({
       workstationSemantics: loopBreakerSemantics,
     });
@@ -105,32 +109,16 @@ describe("Factory workstation guard card semantics", () => {
     expect(guardCard?.getAttribute("data-workstation-guard-type")).toBe(
       "VISIT_COUNT",
     );
-    expect(loopBreaker.getByText("Loop breaker")).toBeTruthy();
-    expect(loopBreaker.getByText("Logical move")).toBeTruthy();
-    expect(loopBreaker.getByText("review")).toBeTruthy();
-    expect(loopBreaker.getByText("3")).toBeTruthy();
+    expect(loopBreaker.getByText("Breaker")).toBeTruthy();
+    expect(loopBreaker.queryByText("Loop breaker")).toBeNull();
+    expect(loopBreaker.queryByText("Target workstation")).toBeNull();
+    expect(loopBreaker.queryByText("Visit limit")).toBeNull();
+    expect(loopBreaker.queryByText("review")).toBeNull();
     expect(
       loopBreaker.container.querySelectorAll("[data-workstation-guard-row]"),
-    ).toHaveLength(2);
-    const targetRow = loopBreaker.container.querySelector(
-      '[data-workstation-guard-row="target"]',
-    );
-    const limitRow = loopBreaker.container.querySelector(
-      '[data-workstation-guard-row="limit"]',
-    );
-    expect(targetRow?.textContent).toContain("Target workstation");
-    expect(targetRow?.textContent).toContain("review");
-    expect(limitRow?.textContent).toContain("Visit limit");
-    expect(limitRow?.textContent).toContain("3");
-    expect(
-      targetRow?.querySelector("[data-workstation-guard-target]")?.className,
-    ).toContain("truncate");
-    expect(
-      targetRow?.querySelector("[data-workstation-guard-target]")?.className,
-    ).not.toContain("break-words");
-    expect(
-      limitRow?.querySelector("[data-workstation-guard-limit]")?.className,
-    ).toContain("truncate");
+    ).toHaveLength(0);
+    expect(guardCard?.className).toContain("truncate");
+    expect(guardCard?.className).toContain("whitespace-nowrap");
     expect(loopBreaker.container.querySelector("button")).toBeNull();
 
     const shell = loopBreaker.container.querySelector(
@@ -176,12 +164,10 @@ describe("Factory workstation guard card semantics", () => {
     expect(shell?.className).toContain(
       "[&_[data-workstation-guard-card]]:!text-on-error-container",
     );
-    expect(guardCard?.getAttribute("aria-label")).toBe("Loop breaker");
     expect(guardCard?.getAttribute("data-workstation-guard-type")).toBe(
       "VISIT_COUNT",
     );
-    expect(failedLoopBreaker.getByText("review")).toBeTruthy();
-    expect(failedLoopBreaker.getByText("3")).toBeTruthy();
+    expect(failedLoopBreaker.getByText("Breaker")).toBeTruthy();
     expect(failedLoopBreaker.container.querySelector("button")).toBeNull();
   });
 });
@@ -203,7 +189,7 @@ describe("Factory workstation fallback and localization semantics", () => {
     expect(
       unknown.container.querySelector("[data-workstation-guard-card]"),
     ).toBeNull();
-    expect(unknown.getByText("Default scheduler")).toBeTruthy();
+    expect(unknown.queryByText("Default scheduler")).toBeNull();
     expect(unknown.container.textContent?.toLowerCase()).not.toContain(
       "exhaustion",
     );
@@ -215,20 +201,25 @@ describe("Factory workstation fallback and localization semantics", () => {
       workstationSemantics: repeaterAgentSemantics,
     });
 
-    expect(localized.getByText("代理")).toBeTruthy();
-    expect(localized.getByText("重复器")).toBeTruthy();
+    expect(
+      localized.container
+        .querySelector("[data-workstation-title]")
+        ?.getAttribute("title"),
+    ).toBe("代理");
+    expect(localized.queryByText("重复器")).toBeNull();
     expect(
       localized.container.querySelector("[data-workstation-semantic-icon]"),
     ).toBeNull();
 
     const defaultScheduler = renderWorkstationNode({ locale: "zh-CN" });
-    expect(defaultScheduler.getByText("默认调度器")).toBeTruthy();
+    expect(defaultScheduler.queryByText("默认调度器")).toBeNull();
   });
 });
 
 describe("Factory workstation density", () => {
   it("keeps the default scheduler single-line beside a guarded card", () => {
     const unknownScheduling = renderWorkstationNode({
+      expanded: true,
       workstationSemantics: {
         ...loopBreakerSemantics,
         schedulingBehavior: "UNKNOWN",
@@ -244,7 +235,10 @@ describe("Factory workstation density", () => {
   });
 
   it("does not put a disabled summary button over read-only graph nodes", () => {
-    const readOnlySummary = renderWorkstationNode({ summaryOnly: true });
+    const readOnlySummary = renderWorkstationNode({
+      expanded: true,
+      summaryOnly: true,
+    });
 
     expect(readOnlySummary.container.querySelector("button")).toBeNull();
     expect(

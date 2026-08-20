@@ -250,7 +250,11 @@ describe.concurrent("dashboard session tabs browser integration", () => {
           waitUntil: "domcontentloaded",
         });
         await browserPage.page
-          .getByRole("heading", { level: 1, name: "U", exact: true })
+          .getByRole("heading", {
+            level: 1,
+            name: "You Agent Factory",
+            exact: true,
+          })
           .waitFor({ state: "visible", timeout: uiInteractionTimeoutMs });
         await browserPage.page
           .getByRole("button", { name: "Open Factory" })
@@ -350,7 +354,11 @@ describe.concurrent("dashboard session tabs browser integration", () => {
           waitUntil: "domcontentloaded",
         });
         await browserPage.page
-          .getByRole("heading", { level: 1, name: "U", exact: true })
+          .getByRole("heading", {
+            level: 1,
+            name: "You Agent Factory",
+            exact: true,
+          })
           .waitFor({ state: "visible", timeout: uiInteractionTimeoutMs });
 
         const rootTab = browserPage.page.getByRole("tab", { name: "root" });
@@ -386,43 +394,37 @@ describe.concurrent("dashboard session tabs browser integration", () => {
           state: "visible",
           timeout: uiInteractionTimeoutMs,
         });
-        await sessionControls
-          .getByRole("status", { name: "Timeline mode: Live" })
-          .waitFor({ state: "visible", timeout: uiInteractionTimeoutMs });
+
+        // The timeline-mode status pill and the per-card state banners were
+        // removed from the dashboard chrome; the timeline slider position is
+        // now the observable live/historical signal.
+        const timelineSlider = sessionControls.getByRole("slider", {
+          name: "Timeline tick",
+        });
+        const readTimelineTickPosition = async () => ({
+          max: Number(await timelineSlider.getAttribute("max")),
+          value: Number(await timelineSlider.inputValue()),
+        });
+        await expect
+          .poll(
+            async () => {
+              const { max, value } = await readTimelineTickPosition();
+              return Number.isFinite(max) && value === max;
+            },
+            { timeout: uiInteractionTimeoutMs },
+          )
+          .toBe(true);
 
         const workTotalsCard = browserPage.page.locator(
           '[data-bento-card-id="work-totals"]',
         );
-        const workTotalsState = workTotalsCard.getByRole("status");
-        await workTotalsState.waitFor({
+        const workTotalsRegion = workTotalsCard.getByRole("region", {
+          name: "work totals",
+        });
+        await workTotalsRegion.waitFor({
           state: "visible",
           timeout: uiInteractionTimeoutMs,
         });
-        await expect
-          .poll(
-            () =>
-              workTotalsState.getAttribute("data-dashboard-card-content-state"),
-            { timeout: uiInteractionTimeoutMs },
-          )
-          .toBe("known-empty");
-        await expect
-          .poll(
-            () =>
-              workTotalsState.getAttribute(
-                "data-dashboard-card-freshness-state",
-              ),
-            { timeout: uiInteractionTimeoutMs },
-          )
-          .toBe("fresh");
-        await expect
-          .poll(
-            () =>
-              workTotalsState.getAttribute(
-                "data-dashboard-card-temporal-state",
-              ),
-            { timeout: uiInteractionTimeoutMs },
-          )
-          .toBe("live");
 
         const pauseButton = sessionControls.getByRole("button", {
           name: "Pause live dashboard updates for root",
@@ -438,23 +440,17 @@ describe.concurrent("dashboard session tabs browser integration", () => {
           })
           .waitFor({ state: "visible", timeout: uiInteractionTimeoutMs });
 
-        const timelineSlider = sessionControls.getByRole("slider", {
-          name: "Timeline tick",
-        });
         await timelineSlider.focus();
         await timelineSlider.press("ArrowLeft");
-        await sessionControls
-          .getByRole("status", { name: "Timeline mode: Historical" })
-          .waitFor({ state: "visible", timeout: uiInteractionTimeoutMs });
         await expect
           .poll(
-            () =>
-              workTotalsState.getAttribute(
-                "data-dashboard-card-temporal-state",
-              ),
+            async () => {
+              const { max, value } = await readTimelineTickPosition();
+              return Number.isFinite(max) && value < max;
+            },
             { timeout: uiInteractionTimeoutMs },
           )
-          .toBe("historical");
+          .toBe(true);
         expect(
           await sessionControls
             .getByText("Factory Session paused", { exact: true })
@@ -462,10 +458,16 @@ describe.concurrent("dashboard session tabs browser integration", () => {
         ).toBe(0);
 
         await browserPage.page.setViewportSize({ width: 360, height: 800 });
-        await sessionControls
-          .getByRole("status", { name: "Timeline mode: Historical" })
-          .waitFor({ state: "visible", timeout: uiInteractionTimeoutMs });
-        await workTotalsState.waitFor({
+        await expect
+          .poll(
+            async () => {
+              const { max, value } = await readTimelineTickPosition();
+              return Number.isFinite(max) && value < max;
+            },
+            { timeout: uiInteractionTimeoutMs },
+          )
+          .toBe(true);
+        await workTotalsRegion.waitFor({
           state: "visible",
           timeout: uiInteractionTimeoutMs,
         });
@@ -482,18 +484,15 @@ describe.concurrent("dashboard session tabs browser integration", () => {
           })
           .waitFor({ state: "visible", timeout: uiInteractionTimeoutMs });
         await timelineSlider.press("ArrowRight");
-        await sessionControls
-          .getByRole("status", { name: "Timeline mode: Live" })
-          .waitFor({ state: "visible", timeout: uiInteractionTimeoutMs });
         await expect
           .poll(
-            () =>
-              workTotalsState.getAttribute(
-                "data-dashboard-card-temporal-state",
-              ),
+            async () => {
+              const { max, value } = await readTimelineTickPosition();
+              return Number.isFinite(max) && value === max;
+            },
             { timeout: uiInteractionTimeoutMs },
           )
-          .toBe("live");
+          .toBe(true);
 
         expectSubtleActiveSessionTabShell(
           await readSessionTabShellClassName(rootTab),
@@ -601,54 +600,59 @@ describe.concurrent("dashboard session tabs browser integration", () => {
           waitUntil: "domcontentloaded",
         });
         await browserPage.page
-          .getByRole("heading", { level: 1, name: "U", exact: true })
+          .getByRole("heading", {
+            level: 1,
+            name: "You Agent Factory",
+            exact: true,
+          })
           .waitFor({ state: "visible", timeout: uiInteractionTimeoutMs });
 
-        const workTotalsState = browserPage.page
+        // The per-card freshness banner was removed from the dashboard
+        // cards, so the retained-data contract is now that the work totals
+        // stat region keeps rendering its replay-derived values after the
+        // live stream dies and across viewport changes.
+        const workTotalsRegion = browserPage.page
           .locator('[data-bento-card-id="work-totals"]')
-          .getByRole("status");
-        await workTotalsState.waitFor({
+          .getByRole("region", { name: "work totals" });
+        await workTotalsRegion.waitFor({
           state: "visible",
           timeout: uiInteractionTimeoutMs,
         });
         await expect
-          .poll(
-            () =>
-              workTotalsState.getAttribute("data-dashboard-card-content-state"),
-            { timeout: uiInteractionTimeoutMs },
-          )
-          .toBe("populated");
+          .poll(() => eventStreamAttempts, {
+            timeout: uiInteractionTimeoutMs,
+          })
+          .toBeGreaterThanOrEqual(1);
+        let previousTotalsText = "";
         await expect
           .poll(
-            () =>
-              workTotalsState.getAttribute(
-                "data-dashboard-card-freshness-state",
-              ),
+            async () => {
+              const currentTotalsText =
+                (await workTotalsRegion.textContent()) ?? "";
+              const stable =
+                currentTotalsText !== "" &&
+                currentTotalsText === previousTotalsText;
+              previousTotalsText = currentTotalsText;
+              return stable;
+            },
             { timeout: uiInteractionTimeoutMs },
           )
-          .toBe("stale");
-        expect(eventStreamAttempts).toBeGreaterThanOrEqual(1);
+          .toBe(true);
+        const retainedTotalsText = previousTotalsText;
 
         await browserPage.page.setViewportSize({ width: 360, height: 800 });
-        await workTotalsState.waitFor({
+        await workTotalsRegion.waitFor({
           state: "visible",
           timeout: uiInteractionTimeoutMs,
         });
-        await expect
-          .poll(
-            () =>
-              workTotalsState.getAttribute(
-                "data-dashboard-card-freshness-state",
-              ),
-            { timeout: uiInteractionTimeoutMs },
-          )
-          .toBe("stale");
+        expect(await workTotalsRegion.textContent()).toBe(retainedTotalsText);
 
         await browserPage.page.setViewportSize({ width: 1280, height: 900 });
-        await workTotalsState.waitFor({
+        await workTotalsRegion.waitFor({
           state: "visible",
           timeout: uiInteractionTimeoutMs,
         });
+        expect(await workTotalsRegion.textContent()).toBe(retainedTotalsText);
         expectNoBrowserErrors(
           browserPage.pageErrors,
           browserPage.consoleErrors,
@@ -720,7 +724,11 @@ describe.concurrent("dashboard session tabs browser integration", () => {
           waitUntil: "domcontentloaded",
         });
         await browserPage.page
-          .getByRole("heading", { level: 1, name: "U", exact: true })
+          .getByRole("heading", {
+            level: 1,
+            name: "You Agent Factory",
+            exact: true,
+          })
           .waitFor({ state: "visible", timeout: uiInteractionTimeoutMs });
 
         const rootTab = browserPage.page.getByRole("tab", { name: "root" });
@@ -751,40 +759,60 @@ describe.concurrent("dashboard session tabs browser integration", () => {
           })
           .toBe("Factory event stream connected.");
 
+        // The timeline-mode status pill and the per-card state banners were
+        // removed from the dashboard chrome; the timeline slider position is
+        // the live/historical signal, and the beta card contract is that its
+        // work totals stay unchanged while alpha data arrives late.
         const sessionControls = browserPage.page.getByRole("article", {
           name: "Session controls",
         });
-        await sessionControls
-          .getByRole("status", { name: "Timeline mode: Live" })
-          .waitFor({ state: "visible", timeout: uiInteractionTimeoutMs });
-
-        const workTotalsState = browserPage.page
-          .locator('[data-bento-card-id="work-totals"]')
-          .getByRole("status");
-        await expect
-          .poll(
-            () =>
-              workTotalsState.getAttribute("data-dashboard-card-content-state"),
-            { timeout: uiInteractionTimeoutMs },
-          )
-          .toBe("known-empty");
-        const betaCardText = await workTotalsState.textContent();
-        const betaCardFreshness = await workTotalsState.getAttribute(
-          "data-dashboard-card-freshness-state",
-        );
-
         const timelineSlider = sessionControls.getByRole("slider", {
           name: "Timeline tick",
         });
+        const readTimelineTickPosition = async () => ({
+          max: Number(await timelineSlider.getAttribute("max")),
+          value: Number(await timelineSlider.inputValue()),
+        });
+        await expect
+          .poll(
+            async () => {
+              const { max, value } = await readTimelineTickPosition();
+              return Number.isFinite(max) && value === max;
+            },
+            { timeout: uiInteractionTimeoutMs },
+          )
+          .toBe(true);
+
+        const workTotalsRegion = browserPage.page
+          .locator('[data-bento-card-id="work-totals"]')
+          .getByRole("region", { name: "work totals" });
+        await workTotalsRegion.waitFor({
+          state: "visible",
+          timeout: uiInteractionTimeoutMs,
+        });
+        const betaCardText = await workTotalsRegion.textContent();
+
         await timelineSlider.focus();
         await timelineSlider.press("ArrowLeft");
-        await sessionControls
-          .getByRole("status", { name: "Timeline mode: Historical" })
-          .waitFor({ state: "visible", timeout: uiInteractionTimeoutMs });
+        await expect
+          .poll(
+            async () => {
+              const { max, value } = await readTimelineTickPosition();
+              return Number.isFinite(max) && value < max;
+            },
+            { timeout: uiInteractionTimeoutMs },
+          )
+          .toBe(true);
         await timelineSlider.press("ArrowRight");
-        await sessionControls
-          .getByRole("status", { name: "Timeline mode: Live" })
-          .waitFor({ state: "visible", timeout: uiInteractionTimeoutMs });
+        await expect
+          .poll(
+            async () => {
+              const { max, value } = await readTimelineTickPosition();
+              return Number.isFinite(max) && value === max;
+            },
+            { timeout: uiInteractionTimeoutMs },
+          )
+          .toBe(true);
 
         const delayedAlphaRoute = delayedAlphaRoutes.at(-1);
         if (!delayedAlphaRoute) {
@@ -809,26 +837,16 @@ describe.concurrent("dashboard session tabs browser integration", () => {
             timeout: uiInteractionTimeoutMs,
           })
           .toBe("Factory event stream connected.");
+        expect(await workTotalsRegion.textContent()).toBe(betaCardText);
         await expect
           .poll(
-            () =>
-              workTotalsState.getAttribute("data-dashboard-card-content-state"),
+            async () => {
+              const { max, value } = await readTimelineTickPosition();
+              return Number.isFinite(max) && value === max;
+            },
             { timeout: uiInteractionTimeoutMs },
           )
-          .toBe("known-empty");
-        await expect
-          .poll(
-            () =>
-              workTotalsState.getAttribute(
-                "data-dashboard-card-freshness-state",
-              ),
-            { timeout: uiInteractionTimeoutMs },
-          )
-          .toBe(betaCardFreshness);
-        expect(await workTotalsState.textContent()).toBe(betaCardText);
-        await sessionControls
-          .getByRole("status", { name: "Timeline mode: Live" })
-          .waitFor({ state: "visible", timeout: uiInteractionTimeoutMs });
+          .toBe(true);
 
         expectNoBrowserErrors(
           browserPage.pageErrors,

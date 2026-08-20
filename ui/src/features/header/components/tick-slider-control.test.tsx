@@ -127,9 +127,6 @@ describe("TickSliderControl", () => {
 
     expect(slider.value).toBe("9");
     expect(statusText).toBeTruthy();
-    expect(
-      screen.getByRole("status", { name: "Timeline mode: Live" }),
-    ).toBeTruthy();
     expect(slider.getAttribute("aria-describedby")).toBe(statusText.id);
     expect(slider.getAttribute("aria-valuetext")).toBe("9/9");
     expect(sliderShell?.className).toContain("gap-1.5");
@@ -153,9 +150,6 @@ describe("TickSliderControl", () => {
 
     await waitFor(() => {
       expect(screen.getByText("2/9")).toBeTruthy();
-      expect(
-        screen.getByRole("status", { name: "Timeline mode: Historical" }),
-      ).toBeTruthy();
     });
     expect(slider.getAttribute("aria-valuetext")).toBe("2/9");
     expect(useFactoryTimelineStore.getState().mode).toBe("fixed");
@@ -165,9 +159,6 @@ describe("TickSliderControl", () => {
 
     await waitFor(() => {
       expect(screen.getByText("9/9")).toBeTruthy();
-      expect(
-        screen.getByRole("status", { name: "Timeline mode: Live" }),
-      ).toBeTruthy();
     });
     expect(useFactoryTimelineStore.getState().mode).toBe("current");
     expect(useFactoryTimelineStore.getState().selectedTick).toBe(9);

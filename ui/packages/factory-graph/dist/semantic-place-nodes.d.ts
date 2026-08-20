@@ -34,8 +34,8 @@ export interface FactoryGraphConstraintNodeData extends FactoryGraphBasePlaceNod
 export type FactoryGraphStatePositionNode = Node<FactoryGraphStatePositionNodeData, "statePosition">;
 export type FactoryGraphConstraintNode = Node<FactoryGraphConstraintNodeData, "constraint">;
 export type FactoryGraphPlaceNode = FactoryGraphConstraintNode | FactoryGraphStatePositionNode;
-export declare function FactoryGraphStatePositionNodeView(props: NodeProps<FactoryGraphStatePositionNode>): import("react/jsx-runtime").JSX.Element;
-export declare function FactoryGraphConstraintNodeView(props: NodeProps<FactoryGraphConstraintNode>): import("react/jsx-runtime").JSX.Element;
+export declare function FactoryGraphStatePositionNodeView(props: NodeProps<FactoryGraphStatePositionNode>): import("react").JSX.Element;
+export declare function FactoryGraphConstraintNodeView(props: NodeProps<FactoryGraphConstraintNode>): import("react").JSX.Element;
 export declare function FactoryGraphWorkProgressMarker(props: ({
     ariaLabel: string;
     className?: string;
@@ -49,4 +49,4 @@ export declare function FactoryGraphWorkProgressMarker(props: ({
     dotDataAttribute: string;
     kind: "dots";
     suffix?: ReactNode;
-} & ComponentPropsWithoutRef<"span">)): import("react/jsx-runtime").JSX.Element;
+} & ComponentPropsWithoutRef<"span">)): import("react").JSX.Element;

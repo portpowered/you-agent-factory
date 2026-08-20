@@ -434,6 +434,7 @@ interface BuildCurrentActivityNodesInput {
   graphLayout: GraphLayout;
   locale?: string;
   now: number;
+  onGraphSelectNode?: (nodeId: string) => void;
   onSelectDoc: (targetPath: string) => void;
   onSelectResource: (resourceName: string) => void;
   onSelectStateNode: (placeId: string) => void;
@@ -472,6 +473,8 @@ function resizeControlsForNode(input: {
     allowedAxes: resolution.allowedAxes,
     bounds: resolution.bounds,
     nodeId: input.nodeId,
+    onResize: (dimensions: FactoryGraphNodeDimensions) =>
+      controller.onResize?.(target, dimensions),
     onResizeEnd: (dimensions: FactoryGraphNodeDimensions) =>
       controller.onResizeEnd(target, dimensions),
   };
@@ -486,18 +489,6 @@ function placeNodeFamily(
   if (factoryGraphNode?.kind === "worker") return "worker";
   if (factoryGraphNode?.kind === "work-type") return "work-type";
   return "constraint";
-}
-
-function placeNodeSizingContent(
-  place: PositionedPlaceNode["place"],
-  factoryGraphNode: ReturnType<typeof resolveFactoryGraphPlaceNode>,
-): readonly (string | null | undefined)[] {
-  return [
-    factoryGraphNode?.nodeId,
-    place.type_id,
-    place.state_value,
-    place.place_id,
-  ];
 }
 
 function workerPresentationMetadata(
@@ -620,6 +611,98 @@ function buildPlaceNodeData(
   };
 }
 
+function withGraphSelectNode<Args extends unknown[]>(
+  onGraphSelectNode: ((nodeId: string) => void) | undefined,
+  factoryGraphNodeId: string,
+  onSelect: (...args: Args) => void,
+): (...args: Args) => void {
+  return (...args: Args) => {
+    onGraphSelectNode?.(factoryGraphNodeId);
+    onSelect(...args);
+  };
+}
+
+type PlaceNodeBuildContext = {
+  basePlaceNode: ReturnType<typeof buildPlaceNodeShell>;
+  placeData: ReturnType<typeof buildPlaceNodeData>;
+  input: BuildCurrentActivityNodesInput;
+  wireSelectionHandlers: boolean;
+};
+
+function buildWorkerPlaceNode(
+  context: PlaceNodeBuildContext,
+): CurrentActivityNode {
+  const { basePlaceNode, input, wireSelectionHandlers } = context;
+  const { basePlaceData, factoryGraphNodeId, place } = context.placeData;
+  const workerName =
+    place.state_value ?? factoryGraphNodeId.replace(/^worker:/, "");
+  const workerMetadata = workerPresentationMetadata(
+    input.factoryDefinition ?? input.snapshot.factory,
+    workerName,
+  );
+  return {
+    ...basePlaceNode,
+    data: {
+      ...basePlaceData,
+      kind: "worker" as const,
+      ...(wireSelectionHandlers
+        ? {
+            onSelectWorker: withGraphSelectNode(
+              input.onGraphSelectNode,
+              factoryGraphNodeId,
+              input.onSelectWorker,
+            ),
+          }
+        : {}),
+      place,
+      ...workerMetadata,
+      selectedWorker:
+        input.selection?.kind === "worker" &&
+        input.selection.workerName === workerName,
+    },
+    selectable: true,
+    type: "worker",
+  };
+}
+
+function buildWorkTypePlaceNode(
+  context: PlaceNodeBuildContext,
+): CurrentActivityNode {
+  const { basePlaceNode, input, wireSelectionHandlers } = context;
+  const { basePlaceData, factoryGraphNodeId, place } = context.placeData;
+  const workTypeName =
+    place.state_value ?? factoryGraphNodeId.replace(/^work-type:/, "");
+  const resolvedFactoryDefinition =
+    input.factoryDefinition ?? input.snapshot.factory;
+  const isDefaultWorkType = workTypeHasDefaultHandling(
+    resolvedFactoryDefinition,
+    workTypeName,
+  );
+  return {
+    ...basePlaceNode,
+    data: {
+      ...basePlaceData,
+      kind: "work-type" as const,
+      ...(wireSelectionHandlers
+        ? {
+            onSelectWorkType: withGraphSelectNode(
+              input.onGraphSelectNode,
+              factoryGraphNodeId,
+              input.onSelectWorkType,
+            ),
+          }
+        : {}),
+      isDefaultWorkType,
+      place,
+      selectedWorkType:
+        input.selection?.kind === "work-type" &&
+        input.selection.workTypeName === workTypeName,
+    },
+    selectable: false,
+    type: "workType",
+  };
+}
+
 function buildPlaceNode(
   positionedNode: PositionedPlaceNode,
   input: BuildCurrentActivityNodesInput,
@@ -627,12 +710,13 @@ function buildPlaceNode(
 ): CurrentActivityNode {
   const factoryGraphNode = resolveFactoryGraphPlaceNode(positionedNode.place);
   const basePlaceNode = buildPlaceNodeShell(positionedNode);
-  const { basePlaceData, factoryGraphNodeId, place } = buildPlaceNodeData(
+  const placeData = buildPlaceNodeData(
     positionedNode,
     input,
     factoryGraphNode,
     validationProjection,
   );
+  const { basePlaceData, factoryGraphNodeId, place } = placeData;
 
   const wireSelectionHandlers = shouldWireGraphNodeSelectionHandlers(
     input.editor,
@@ -645,7 +729,13 @@ function buildPlaceNode(
         ...basePlaceData,
         kind: "work-state" as const,
         ...(wireSelectionHandlers
-          ? { onSelectStateNode: input.onSelectStateNode }
+          ? {
+              onSelectStateNode: withGraphSelectNode(
+                input.onGraphSelectNode,
+                factoryGraphNodeId,
+                input.onSelectStateNode,
+              ),
+            }
           : {}),
         place,
       },
@@ -665,7 +755,13 @@ function buildPlaceNode(
         ...basePlaceData,
         kind: "resource" as const,
         ...(wireSelectionHandlers
-          ? { onSelectResource: input.onSelectResource }
+          ? {
+              onSelectResource: withGraphSelectNode(
+                input.onGraphSelectNode,
+                factoryGraphNodeId,
+                input.onSelectResource,
+              ),
+            }
           : {}),
         place,
         selectedResource:
@@ -678,57 +774,21 @@ function buildPlaceNode(
   }
 
   if (factoryGraphNode?.kind === "worker") {
-    const workerName =
-      place.state_value ?? factoryGraphNode.nodeId.replace(/^worker:/, "");
-    const workerMetadata = workerPresentationMetadata(
-      input.factoryDefinition ?? input.snapshot.factory,
-      workerName,
-    );
-    return {
-      ...basePlaceNode,
-      data: {
-        ...basePlaceData,
-        kind: "worker" as const,
-        ...(wireSelectionHandlers
-          ? { onSelectWorker: input.onSelectWorker }
-          : {}),
-        place,
-        ...workerMetadata,
-        selectedWorker:
-          input.selection?.kind === "worker" &&
-          input.selection.workerName === workerName,
-      },
-      selectable: true,
-      type: "worker",
-    };
+    return buildWorkerPlaceNode({
+      basePlaceNode,
+      input,
+      placeData,
+      wireSelectionHandlers,
+    });
   }
 
   if (factoryGraphNode?.kind === "work-type") {
-    const workTypeName =
-      place.state_value ?? factoryGraphNodeId.replace(/^work-type:/, "");
-    const resolvedFactoryDefinition =
-      input.factoryDefinition ?? input.snapshot.factory;
-    const isDefaultWorkType = workTypeHasDefaultHandling(
-      resolvedFactoryDefinition,
-      workTypeName,
-    );
-    return {
-      ...basePlaceNode,
-      data: {
-        ...basePlaceData,
-        kind: "work-type" as const,
-        ...(wireSelectionHandlers
-          ? { onSelectWorkType: input.onSelectWorkType }
-          : {}),
-        isDefaultWorkType,
-        place,
-        selectedWorkType:
-          input.selection?.kind === "work-type" &&
-          input.selection.workTypeName === workTypeName,
-      },
-      selectable: false,
-      type: "workType",
-    };
+    return buildWorkTypePlaceNode({
+      basePlaceNode,
+      input,
+      placeData,
+      wireSelectionHandlers,
+    });
   }
 
   return {
@@ -763,7 +823,13 @@ function buildDocNode(
       kind: "doc",
       locale: input.locale,
       ...(wireSelectionHandlers && selectableDoc
-        ? { onSelectDoc: input.onSelectDoc }
+        ? {
+            onSelectDoc: withGraphSelectNode(
+              input.onGraphSelectNode,
+              positionedNode.nodeId,
+              input.onSelectDoc,
+            ),
+          }
         : {}),
       selectedDoc:
         input.selection?.kind === "doc" &&
@@ -885,7 +951,11 @@ function buildWorkstationNode(
       ...(wireSelectionHandlers
         ? {
             onSelectWorkID: input.onSelectWorkID,
-            onSelectWorkstation: input.onSelectWorkstation,
+            onSelectWorkstation: withGraphSelectNode(
+              input.onGraphSelectNode,
+              positionedNode.nodeId,
+              input.onSelectWorkstation,
+            ),
           }
         : {}),
       selectedWorkID:
@@ -924,6 +994,7 @@ export function buildCurrentActivityNodes({
   graphLayout,
   locale,
   now,
+  onGraphSelectNode,
   onSelectDoc,
   onSelectResource,
   onSelectStateNode,
@@ -956,6 +1027,7 @@ export function buildCurrentActivityNodes({
     graphLayout,
     locale,
     now,
+    onGraphSelectNode,
     onSelectDoc,
     onSelectResource,
     onSelectStateNode,

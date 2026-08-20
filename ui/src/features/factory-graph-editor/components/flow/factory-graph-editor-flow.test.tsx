@@ -294,7 +294,7 @@ describe("factory graph editor edge labels", () => {
     expect(
       reviewNode.querySelector("[data-factory-entity-title]")?.textContent,
     ).toContain("review");
-    expect(reviewNode.textContent).toContain("Default scheduler");
+    expect(reviewNode.textContent).not.toContain("Default scheduler");
     expect(reviewNode.textContent).toContain("Pending");
 
     expect(
@@ -399,8 +399,16 @@ describe("factory graph editor edge labels", () => {
     );
 
     expect(workstationNode).not.toBeNull();
-    expect(workstationNode?.textContent).toContain("Agent");
-    expect(workstationNode?.textContent).toContain("Repeater");
+    expect(
+      workstationNode
+        ?.querySelector("[data-workstation-runtime-type]")
+        ?.getAttribute("data-workstation-runtime-type"),
+    ).toBe(WorkstationType.AGENT_RUN);
+    expect(
+      workstationNode
+        ?.querySelector("[data-workstation-scheduling-behavior]")
+        ?.getAttribute("data-workstation-scheduling-behavior"),
+    ).toBe(WorkstationKind.REPEATER);
   });
 
   it("keeps inline labels hidden by default while preserving accessible edge names", async () => {

@@ -50,4 +50,4 @@ export interface FactoryGraphGroupRegionLayerProps {
  * need editing compose their own narrowly scoped affordances above this
  * layer; this component never creates edit controls or owns layout state.
  */
-export declare function FactoryGraphGroupRegionLayer({ groupAriaLabel, groups, }: FactoryGraphGroupRegionLayerProps): import("react/jsx-runtime").JSX.Element | null;
+export declare function FactoryGraphGroupRegionLayer({ groupAriaLabel, groups, }: FactoryGraphGroupRegionLayerProps): import("react").JSX.Element | null;

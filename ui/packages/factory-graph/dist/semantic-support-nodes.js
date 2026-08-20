@@ -4,11 +4,13 @@ import { GraphSemanticIcon } from "./semantic-icon.js";
 import { FactoryGraphNodeShell, } from "./semantic-node-shell.js";
 import { factoryGraphNodeHoverClassName, factoryGraphNodeSurfaceClassName, factoryGraphNodeVisualIconClassName, factoryGraphNodeWrappedTextClassName, } from "./semantic-node-style.js";
 import { resolveFactoryGraphVisualState } from "./visual-state.js";
+import { factoryGraphWorkerIconClassName, factoryGraphWorkerIconKind, } from "./worker-icon.js";
 /** Original Factory worker node, with host-owned worker selection. */
 export function FactoryGraphWorkerNodeView({ data, selected: reactFlowSelected, }) {
     const workerName = resolveWorkerName(data);
     const label = `worker:${workerName}`;
     const workerLabel = semanticLabel("worker", data.locale);
+    const workerIconKind = factoryGraphWorkerIconKind(data.workerType, data.runnerId);
     const selectable = data.onSelectWorker !== undefined;
     const selected = data.selectedWorker || reactFlowSelected;
     const visualState = resolveFactoryGraphVisualState({
@@ -19,7 +21,7 @@ export function FactoryGraphWorkerNodeView({ data, selected: reactFlowSelected, 
         selected,
         validation: data.validationError,
     });
-    const content = (_jsxs("span", { "aria-label": label, className: "flex min-w-0 items-center gap-1.5 overflow-hidden", "data-factory-entity-semantic-icon": true, "data-worker-label-zone": true, role: "img", title: label, children: [_jsx("span", { className: "sr-only", children: label }), _jsx(GraphSemanticIcon, { className: classNames("h-3.5 w-3.5 shrink-0", factoryGraphNodeVisualIconClassName(visualState, "text-info")), kind: "worker", label: workerLabel }), _jsxs("span", { className: "grid min-w-0 gap-px overflow-hidden", children: [_jsx("span", { className: factoryGraphNodeWrappedTextClassName("block overflow-hidden text-[0.62rem] font-bold uppercase leading-none text-info"), children: workerLabel }), _jsx("strong", { className: factoryGraphNodeWrappedTextClassName("block font-mono text-[0.8rem] font-bold leading-tight text-on-surface"), "data-factory-entity-title": true, title: workerName, children: workerName })] })] }));
+    const content = (_jsxs("span", { "aria-label": label, className: "flex h-full min-h-0 min-w-0 items-center gap-1.5 overflow-hidden", "data-factory-entity-semantic-icon": true, "data-worker-label-zone": true, role: "img", title: label, children: [_jsx("span", { className: "sr-only", children: label }), _jsx(GraphSemanticIcon, { className: classNames("h-3.5 w-3.5 shrink-0", factoryGraphWorkerIconClassName(visualState)), kind: workerIconKind, label: workerLabel }), _jsxs("span", { className: "grid min-w-0 gap-px overflow-hidden", children: [_jsx("span", { className: factoryGraphNodeWrappedTextClassName("block overflow-hidden text-[0.62rem] font-bold uppercase leading-none text-info"), "data-worker-kind-label": true, children: workerLabel }), _jsx("strong", { className: factoryGraphNodeWrappedTextClassName("block font-mono text-[0.8rem] font-bold leading-tight text-on-surface"), "data-factory-entity-title": true, title: workerName, children: workerName })] })] }));
     return (_jsx(FactoryGraphNodeShell, { className: classNames(factoryGraphNodeSurfaceClassName("info"), "justify-center text-left text-on-surface", factoryGraphNodeHoverClassName({
             activeFlow: data.activeFlow,
             muted: data.muted,
@@ -32,7 +34,7 @@ export function FactoryGraphWorkerNodeView({ data, selected: reactFlowSelected, 
             muted: data.muted,
             selected,
             validation: data.validationError,
-        }, children: selectable ? (_jsx(GraphNodeButton, { "aria-label": selectLabel("worker", workerName, data.locale), "aria-pressed": selected, className: "grid min-w-0 gap-0.5 overflow-hidden", "data-selected-worker": selected ? "true" : undefined, onClick: (event) => {
+        }, children: selectable ? (_jsx(GraphNodeButton, { "aria-label": selectLabel("worker", workerName, data.locale), "aria-pressed": selected, className: "grid h-full min-h-0 min-w-0 place-content-center gap-0.5 overflow-hidden", "data-selected-worker": selected ? "true" : undefined, onClick: (event) => {
                 event.stopPropagation();
                 data.onSelectWorker?.(workerName);
             }, children: content })) : (content) }));

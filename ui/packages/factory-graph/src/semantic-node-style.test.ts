@@ -32,6 +32,86 @@ describe("factoryGraphNodeVisualStatusSurfaceClassName", () => {
   );
 });
 
+/** Exact class tokens; `!bg-warning` is a substring of `!bg-warning-container`. */
+function classTokens(className: string): string[] {
+  return className.split(" ").filter(Boolean);
+}
+
+describe("factoryGraphNodeVisualStateClassName work occupancy fill", () => {
+  it("keeps an empty processing work state on the translucent container fill", () => {
+    const tokens = classTokens(
+      factoryGraphNodeVisualStateClassName(
+        visualState({ lifecycle: "PROCESSING" }),
+      ),
+    );
+
+    expect(tokens).toContain("!bg-warning-container");
+    expect(tokens).not.toContain("!bg-warning");
+  });
+
+  it("keeps an empty processing work state on default label ink", () => {
+    const className = factoryGraphNodeVisualStateClassName(
+      visualState({ lifecycle: "PROCESSING" }),
+    );
+
+    expect(className).not.toContain("!text-on-warning");
+  });
+
+  it("fills a held processing work state solidly", () => {
+    const tokens = classTokens(
+      factoryGraphNodeVisualStateClassName(
+        visualState({ activeWork: true, lifecycle: "PROCESSING" }),
+      ),
+    );
+
+    expect(tokens).toContain("!bg-warning");
+    expect(tokens).not.toContain("!bg-warning-container");
+  });
+
+  it("inverts work-state and workstation label ink on a solid fill", () => {
+    const className = factoryGraphNodeVisualStateClassName(
+      visualState({ activeWork: true, lifecycle: "PROCESSING" }),
+    );
+
+    for (const selector of [
+      "data-factory-entity-title",
+      "data-graph-semantic-icon",
+      "data-place-state-value",
+      "data-place-work-type",
+      "data-state-value",
+      "data-state-work-type",
+      "data-workstation-runtime-label",
+    ]) {
+      expect(className).toContain(`[&_[${selector}]]:!text-on-warning`);
+    }
+  });
+
+  it("leaves labels that sit on their own nested surface uninverted", () => {
+    const className = factoryGraphNodeVisualStateClassName(
+      visualState({ activeWork: true, lifecycle: "PROCESSING" }),
+    );
+
+    for (const selector of [
+      "data-active-work-duration",
+      "data-active-work-label",
+      "data-workstation-scheduling-label",
+    ]) {
+      expect(className).not.toContain(`[&_[${selector}]]:!text-on-warning`);
+    }
+  });
+
+  it("inverts held label ink in the node's own tone", () => {
+    const tokens = classTokens(
+      factoryGraphNodeVisualStateClassName(
+        visualState({ activeWork: true, lifecycle: "TERMINAL" }),
+      ),
+    );
+
+    expect(tokens).toContain("!bg-success");
+    expect(tokens).toContain("[&_[data-state-value]]:!text-on-success");
+  });
+});
+
 describe("factoryGraphNodeVisualStateClassName nested accents", () => {
   it("routes active border, glow, and ring accents through warning", () => {
     const activeFlow = factoryGraphNodeVisualStateClassName(

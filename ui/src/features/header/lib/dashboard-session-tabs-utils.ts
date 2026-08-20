@@ -10,8 +10,6 @@ import type { getHeaderControlsMessages } from "../messages/header-controls";
 export const SESSION_TAB_PATH_MAX_LENGTH = 48;
 export const CANONICAL_NESTED_FACTORY_DIR = "factory";
 
-export type FactorySessionJourney = "open" | "new";
-
 export type FolderValidationState =
   | { status: "idle" }
   | { status: "pending" }
@@ -25,8 +23,6 @@ export type FolderValidationErrorReason =
   | "missing"
   | "not_directory"
   | "not_runnable"
-  | "open_no_target"
-  | "new_target_exists"
   | "target_not_found"
   | "unreadable"
   | "unknown";
@@ -319,10 +315,6 @@ function folderValidationErrorMessage(
       return messages.openSessionFolderNotDirectoryError;
     case "not_runnable":
       return messages.openSessionFolderNotRunnableError;
-    case "open_no_target":
-      return messages.openFactoryNoExistingTargetError;
-    case "new_target_exists":
-      return messages.newFactoryExistingTargetError;
     case "target_not_found":
       return messages.openSessionOverrideNotFoundError;
     case "unreadable":

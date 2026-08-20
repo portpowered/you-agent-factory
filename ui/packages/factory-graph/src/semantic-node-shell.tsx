@@ -92,7 +92,9 @@ export function FactoryGraphNodeShell({
   );
 
   return (
-    <div className="relative h-full min-w-0 w-full">
+    // `group/factory-graph-node` is the hover/focus ancestor the resize grip
+    // reveals against; keep it on the wrapper that spans the whole card.
+    <div className="group/factory-graph-node relative h-full min-w-0 w-full">
       <GraphNodeShell
         aria-invalid={visualState.validation === "error" || undefined}
         className={classNames(
@@ -110,6 +112,7 @@ export function FactoryGraphNodeShell({
         data-graph-visual-active-flow={visualState.activeFlow || undefined}
         data-graph-visual-border={visualState.border}
         data-graph-visual-emphasis={visualState.emphasis}
+        data-graph-visual-fill={visualState.fill}
         data-graph-visual-focus={visualState.focus}
         data-graph-visual-glow={visualState.glow}
         data-graph-visual-icon={visualState.icon}

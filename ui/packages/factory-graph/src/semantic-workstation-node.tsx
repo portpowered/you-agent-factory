@@ -19,10 +19,6 @@ import {
   factoryGraphDurationText as durationText,
   type FactoryGraphWorkItemRef,
   type FactoryGraphWorkstationRef,
-  factoryGraphWorkstationControlRoleLabel,
-  factoryGraphWorkstationGuardLimitLabel,
-  factoryGraphWorkstationGuardLimitValue,
-  factoryGraphWorkstationGuardTargetLabel,
   factoryGraphGraphDuration as graphDuration,
   factoryGraphSelectWorkstationLabel as selectWorkstationLabel,
   type FactoryGraphWorkstationPresentation as WorkstationPresentation,
@@ -48,6 +44,7 @@ export interface FactoryGraphWorkstationNodeData
   extends Record<string, unknown> {
   active: boolean;
   activeFlow: boolean;
+  expanded?: boolean;
   focused?: boolean;
   executions: FactoryGraphActiveExecution[];
   factoryGraphNodeId?: string;
@@ -95,12 +92,13 @@ export function FactoryGraphWorkstationNodeView({
     data.workstation.workstation_name ||
     data.workstation.transition_id ||
     data.workstation.node_id;
+  const isExpanded = data.expanded === true;
   const entries = data.executions.flatMap((execution) =>
     (execution.work_items ?? []).map((workItem) => ({ execution, workItem })),
   );
   const selected = data.selectedWorkstation || reactFlowSelected;
   const visualState = resolveFactoryGraphVisualState({
-    activeFlow: data.activeFlow,
+    activeWork: data.active,
     family: "workstation",
     focused: data.focused,
     lifecycle: data.active ? "PROCESSING" : undefined,
@@ -126,11 +124,11 @@ export function FactoryGraphWorkstationNodeView({
       nodeType="workstation"
       resizeControls={
         data.resizeControls
-          ? { ...data.resizeControls, isVisible: selected }
+          ? { ...data.resizeControls, isVisible: true }
           : undefined
       }
       visualState={{
-        activeFlow: data.activeFlow,
+        activeWork: data.active,
         focused: data.focused,
         lifecycle: data.active ? "PROCESSING" : undefined,
         muted: data.muted,
@@ -143,6 +141,7 @@ export function FactoryGraphWorkstationNodeView({
       {data.summaryOnly ? (
         <Summary
           data={data}
+          isExpanded={isExpanded}
           presentation={presentation}
           title={title}
           visualState={visualState}
@@ -151,6 +150,7 @@ export function FactoryGraphWorkstationNodeView({
         <ActiveContent
           data={data}
           entries={entries}
+          isExpanded={isExpanded}
           presentation={presentation}
           title={title}
           visualState={visualState}
@@ -162,16 +162,24 @@ export function FactoryGraphWorkstationNodeView({
 
 function Summary({
   data,
+  isExpanded,
   presentation,
   title,
   visualState,
 }: {
   data: FactoryGraphWorkstationNodeData;
+  isExpanded: boolean;
   presentation: WorkstationPresentation;
   title: string;
   visualState: ReturnType<typeof resolveFactoryGraphVisualState>;
 }) {
-  const header = <Header presentation={presentation} title={title} />;
+  const header = (
+    <Header
+      presentation={presentation}
+      showAuxiliaryDetails={isExpanded}
+      title={title}
+    />
+  );
 
   return (
     <div
@@ -211,6 +219,7 @@ function Summary({
 function ActiveContent({
   data,
   entries,
+  isExpanded,
   presentation,
   title,
   visualState,
@@ -220,6 +229,7 @@ function ActiveContent({
     execution: FactoryGraphActiveExecution;
     workItem: FactoryGraphWorkItemRef;
   }>;
+  isExpanded: boolean;
   presentation: WorkstationPresentation;
   title: string;
   visualState: ReturnType<typeof resolveFactoryGraphVisualState>;
@@ -229,7 +239,13 @@ function ActiveContent({
     WORKSTATION_WORK_ITEM_MODE_MAXIMUM,
   );
   const visible = progressMode === "items" ? entries : [];
-  const header = <Header presentation={presentation} title={title} />;
+  const header = (
+    <Header
+      presentation={presentation}
+      showAuxiliaryDetails={isExpanded}
+      title={title}
+    />
+  );
   return (
     <div
       className="grid h-full min-w-0 grid-rows-[auto_auto_1fr_auto]"
@@ -263,7 +279,7 @@ function ActiveContent({
         locale={data.locale}
         presentation={presentation}
       />
-      <ul className="mt-1 grid min-w-0 list-none content-start gap-0.5 p-0">
+      <ul className="mt-1 grid min-h-0 min-w-0 list-none content-start gap-0.5 overflow-hidden p-0">
         {visible.map(({ execution, workItem }) => (
           <WorkItem
             data={data}
@@ -301,7 +317,13 @@ function WorkItem({
   );
   const content = (
     <>
-      <span className={workItemLabelClassName(label)} data-active-work-label>
+      <span
+        className={classNames(
+          workItemLabelClassName(label),
+          "!block !whitespace-nowrap truncate",
+        )}
+        data-active-work-label
+      >
         {label}
       </span>
       <span
@@ -350,10 +372,12 @@ function WorkItem({
 function Header({
   compact = false,
   presentation,
+  showAuxiliaryDetails = false,
   title,
 }: {
   compact?: boolean;
   presentation: WorkstationPresentation;
+  showAuxiliaryDetails?: boolean;
   title: string;
 }) {
   return (
@@ -368,19 +392,22 @@ function Header({
         }
         data-factory-entity-title
         data-workstation-title
+        title={showAuxiliaryDetails ? undefined : presentation.label}
       >
         {title}
       </span>
-      <span
-        className={factoryGraphNodeWrappedTextClassName(
-          "text-[0.62rem] font-semibold leading-tight text-on-surface-subtle",
-        )}
-        data-workstation-runtime-label
-        title={presentation.label}
-      >
-        {presentation.label}
-      </span>
-      {presentation.schedulingLabel ? (
+      {showAuxiliaryDetails ? (
+        <span
+          className={factoryGraphNodeWrappedTextClassName(
+            "text-[0.62rem] font-semibold leading-tight text-on-surface-subtle",
+          )}
+          data-workstation-runtime-label
+          title={presentation.label}
+        >
+          {presentation.label}
+        </span>
+      ) : null}
+      {showAuxiliaryDetails && presentation.schedulingLabel ? (
         <span
           className="min-w-0 max-w-full shrink truncate whitespace-nowrap rounded-sm border border-outline-variant bg-surface px-1.5 py-0.5 text-[0.62rem] font-semibold leading-none text-on-surface-subtle"
           data-workstation-scheduling-label
@@ -403,59 +430,17 @@ export function FactoryGraphWorkstationGuardedControlCard({
   const control = presentation.guardedControl;
   if (presentation.controlRole !== "LOOP_BREAKER" || !control) return null;
 
-  const roleLabel = factoryGraphWorkstationControlRoleLabel(
-    presentation.controlRole,
-    locale,
-  );
+  const label = locale === "zh-CN" ? "断路器" : "Breaker";
   return (
-    <fieldset
-      aria-label={roleLabel}
-      className="grid min-w-0 max-w-full gap-0.5 overflow-hidden rounded-md border border-af-warning-border bg-warning-container px-1.5 py-1 text-[0.68rem] leading-tight text-on-warning-container"
+    <span
+      className="min-w-0 max-w-full shrink truncate whitespace-nowrap rounded-sm border border-af-warning-border bg-warning-container px-1.5 py-0.5 text-[0.62rem] font-semibold leading-none text-on-warning-container"
+      data-workstation-control-role={presentation.controlRole}
       data-workstation-guard-card
       data-workstation-guard-type={control.guardType}
-      data-workstation-control-role={presentation.controlRole}
+      title={label}
     >
-      <span
-        className={factoryGraphNodeWrappedTextClassName(
-          "font-semibold uppercase leading-none tracking-[0.06em]",
-        )}
-        data-workstation-control-role-label
-      >
-        {roleLabel}
-      </span>
-      <dl className="m-0 grid min-w-0 gap-0.5">
-        <div
-          className="flex min-w-0 items-center gap-1"
-          data-workstation-guard-row="target"
-        >
-          <dt className="shrink-0 whitespace-nowrap">
-            {factoryGraphWorkstationGuardTargetLabel(locale)}
-          </dt>
-          <dd
-            className="m-0 min-w-0 truncate font-mono leading-tight"
-            data-workstation-guard-target
-            title={control.targetWorkstation}
-          >
-            {control.targetWorkstation}
-          </dd>
-        </div>
-        <div
-          className="flex min-w-0 items-center gap-1"
-          data-workstation-guard-row="limit"
-        >
-          <dt className="shrink-0 whitespace-nowrap">
-            {factoryGraphWorkstationGuardLimitLabel(locale)}
-          </dt>
-          <dd
-            className="m-0 min-w-0 truncate font-mono leading-tight"
-            data-workstation-guard-limit
-            title={factoryGraphWorkstationGuardLimitValue(control)}
-          >
-            {factoryGraphWorkstationGuardLimitValue(control)}
-          </dd>
-        </div>
-      </dl>
-    </fieldset>
+      {label}
+    </span>
   );
 }
 

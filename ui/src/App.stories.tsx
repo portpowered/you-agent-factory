@@ -1450,7 +1450,9 @@ export const HeaderLocalizationVerification = {
     });
 
     await expect(
-      within(englishToolbar).getByRole("heading", { name: "U" }),
+      within(englishToolbar).getByRole("heading", {
+        name: "You Agent Factory",
+      }),
     ).toBeVisible();
     await expect(
       within(englishToolbar).getByRole("button", { name: "Export PNG" }),

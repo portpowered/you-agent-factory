@@ -247,3 +247,123 @@ describe("CurrentActivity place node work-state phase precedence", () => {
     expect(shell?.className).not.toContain("opacity-[0.45]");
   });
 });
+
+/** `!bg-warning` is a substring of `!bg-warning-container`; compare tokens. */
+function shellClassTokens(shell: HTMLElement | null): string[] {
+  return (shell?.className ?? "").split(" ").filter(Boolean);
+}
+
+function workStatePlace(stateCategory: "PROCESSING" | "TERMINAL") {
+  return {
+    kind: "work_state",
+    place_id: `story:${stateCategory.toLowerCase()}`,
+    state_category: stateCategory,
+    state_value: stateCategory.toLowerCase(),
+    type_id: "story",
+  } satisfies DashboardPlaceRef;
+}
+
+describe("CurrentActivity work-state node fill by held work", () => {
+  afterEach(() => {
+    cleanup();
+  });
+
+  it("keeps an empty processing work state translucent", () => {
+    const { container } = render(
+      <StatePositionNodeView
+        {...statePositionNodeProps(workStatePlace("PROCESSING"), {
+          tokenCount: 0,
+        })}
+      />,
+    );
+    const shell = nodeShell(container);
+
+    expect(shell?.getAttribute("data-graph-visual-fill")).toBe("soft");
+    expect(shellClassTokens(shell)).toContain("!bg-warning-container");
+    expect(shellClassTokens(shell)).not.toContain("!bg-warning");
+  });
+
+  it("keeps an empty processing work state on default label ink", () => {
+    const { container } = render(
+      <StatePositionNodeView
+        {...statePositionNodeProps(workStatePlace("PROCESSING"), {
+          tokenCount: 0,
+        })}
+      />,
+    );
+    const shell = nodeShell(container);
+
+    expect(shell?.className).not.toContain(
+      "[&_[data-state-value]]:!text-on-warning",
+    );
+    expect(
+      container.querySelector("[data-state-value]")?.getAttribute("class"),
+    ).toContain("text-on-surface");
+  });
+
+  it("fills a processing work state solidly once work is in it", () => {
+    const { container } = render(
+      <StatePositionNodeView
+        {...statePositionNodeProps(workStatePlace("PROCESSING"), {
+          tokenCount: 2,
+        })}
+      />,
+    );
+    const shell = nodeShell(container);
+
+    expect(shell?.getAttribute("data-graph-visual-fill")).toBe("solid");
+    expect(shellClassTokens(shell)).toContain("!bg-warning");
+    expect(shellClassTokens(shell)).not.toContain("!bg-warning-container");
+  });
+
+  it("inverts work-state label ink on a solid fill", () => {
+    const { container } = render(
+      <StatePositionNodeView
+        {...statePositionNodeProps(workStatePlace("PROCESSING"), {
+          tokenCount: 2,
+        })}
+      />,
+    );
+    const shell = nodeShell(container);
+
+    expect(shell?.className).toContain(
+      "[&_[data-state-value]]:!text-on-warning",
+    );
+    expect(shell?.className).toContain(
+      "[&_[data-state-work-type]]:!text-on-warning",
+    );
+  });
+
+  it("inverts the work-state icon on a solid fill so it stays visible", () => {
+    const { container } = render(
+      <StatePositionNodeView
+        {...statePositionNodeProps(workStatePlace("PROCESSING"), {
+          tokenCount: 2,
+        })}
+      />,
+    );
+    const shell = nodeShell(container);
+
+    expect(container.querySelector("[data-graph-semantic-icon]")).toBeTruthy();
+    expect(shell?.className).toContain(
+      "[&_[data-graph-semantic-icon]]:!text-on-warning",
+    );
+  });
+
+  it("fills a held terminal work state solidly in its own tone", () => {
+    const { container } = render(
+      <StatePositionNodeView
+        {...statePositionNodeProps(workStatePlace("TERMINAL"), {
+          tokenCount: 1,
+        })}
+      />,
+    );
+    const shell = nodeShell(container);
+
+    expect(shell?.getAttribute("data-graph-visual-fill")).toBe("solid");
+    expect(shellClassTokens(shell)).toContain("!bg-success");
+    expect(shell?.className).toContain(
+      "[&_[data-state-value]]:!text-on-success",
+    );
+  });
+});

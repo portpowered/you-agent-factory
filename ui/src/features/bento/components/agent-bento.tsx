@@ -9,16 +9,9 @@ import { ScrollArea } from "@you-agent-factory/components/overlays";
 import { Heading } from "@you-agent-factory/components/primitives";
 import { DashboardPanelShell } from "../../../components/ui/dashboard-shell";
 import { cn } from "../../../lib/cn";
-import type { DashboardCardAsyncState } from "../../dashboard/lib/dashboard-card-state";
 import { useDashboardLayoutTouch } from "../hooks/touch/dashboardLayoutTouch";
 import { getAgentBentoMessages } from "../messages/agent-bento";
 import { DashboardCardErrorBoundary } from "./card-error/dashboard-card-error-boundary";
-import { DashboardCardStateBanner } from "./card-state/dashboard-card-state-banner";
-import {
-  DashboardLayoutKeyboardContext,
-  type DashboardLayoutKeyboardContextValue,
-  DashboardLayoutKeyboardControls,
-} from "./keyboard/dashboard-layout-keyboard-controls";
 import { renderBentoResizeHandle } from "./resize/bento-resize-handle";
 
 export interface AgentBentoLayoutItem {
@@ -36,7 +29,6 @@ export interface AgentBentoLayoutItem {
 }
 
 export interface AgentBentoLayoutCard {
-  cardState?: DashboardCardAsyncState;
   children: ReactNode;
   id: string;
   widgetType: string;
@@ -356,37 +348,9 @@ export function AgentBentoLayout({
             id={card.id}
             key={card.id}
           >
-            <DashboardLayoutKeyboardContext.Provider
-              value={
-                allowsInteractiveGrid
-                  ? ({
-                      columns: BENTO_COLUMNS,
-                      enabled: true,
-                      itemID: card.id,
-                      layout: renderedLayout,
-                      messages,
-                      onCommitLayout: commitLayoutChange,
-                      onPreviewLayout: previewLayoutChange,
-                    } satisfies DashboardLayoutKeyboardContextValue)
-                  : null
-              }
-            >
-              <DashboardCardErrorBoundary locale={locale}>
-                {card.cardState ? (
-                  <div className="flex h-full min-w-0 flex-col gap-1">
-                    <DashboardCardStateBanner
-                      locale={locale}
-                      state={card.cardState}
-                    />
-                    <div className="min-h-0 min-w-0 flex-1">
-                      {card.children}
-                    </div>
-                  </div>
-                ) : (
-                  card.children
-                )}
-              </DashboardCardErrorBoundary>
-            </DashboardLayoutKeyboardContext.Provider>
+            <DashboardCardErrorBoundary locale={locale}>
+              {card.children}
+            </DashboardCardErrorBoundary>
           </div>
         ))}
       </GridLayout>
@@ -427,6 +391,7 @@ export function AgentBentoCard({
     ) : (
       <ScrollArea
         className={BENTO_CARD_BODY_SCROLL_CLASS}
+        type="hover"
         viewportClassName={cn(
           BENTO_CARD_BODY_SCROLL_VIEWPORT_CLASS,
           cardBodyClassName,
@@ -485,7 +450,6 @@ export function AgentBentoCardHeader({
           compactChrome && BENTO_CARD_HEADER_TOOLS_COMPACT_CLASS,
         )}
       >
-        <DashboardLayoutKeyboardControls title={title} />
         {headerAction ?? (
           <span
             aria-hidden="true"

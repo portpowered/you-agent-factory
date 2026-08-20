@@ -57,6 +57,15 @@ export interface CurrentActivityNodeResizeTarget {
 
 export interface CurrentActivityNodeResizeController {
   enabled: boolean;
+  /**
+   * Presentation-only preview for each intermediate size while the pointer is
+   * still down. The graph view model owns it; a canonical layout host only
+   * needs `onResizeEnd`, so committing history per pointer move never happens.
+   */
+  onResize?: (
+    target: CurrentActivityNodeResizeTarget,
+    dimensions: FactoryGraphNodeDimensions,
+  ) => void;
   onResizeEnd: (
     target: CurrentActivityNodeResizeTarget,
     dimensions: FactoryGraphNodeDimensions,

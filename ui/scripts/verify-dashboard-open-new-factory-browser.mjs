@@ -129,11 +129,14 @@ async function openFactorySuccessfully(page) {
 }
 
 async function cancelNewFactoryPreview(page) {
-  const newFactoryButton = page.getByRole("button", { name: "New Factory" });
-  await newFactoryButton.click();
-  const dialog = page.getByRole("dialog", { name: "New Factory" });
+  // The New Factory journey now starts from the Open Factory dialog: an
+  // uninitialized folder validates into a scaffold preview with its own
+  // Create Factory confirmation.
+  const openFactoryButton = page.getByRole("button", { name: "Open Factory" });
+  await openFactoryButton.click();
+  const dialog = page.getByRole("dialog", { name: "Open Factory" });
   await dialog
-    .getByRole("textbox", { name: "New Factory parent folder" })
+    .getByRole("textbox", { name: "Factory folder" })
     .fill("/workspace/dashboard-regression-new");
   await dialog.getByRole("button", { name: "Start Factory" }).click();
   await dialog.getByRole("button", { name: "Checking folder..." }).waitFor({
@@ -151,22 +154,25 @@ async function cancelNewFactoryPreview(page) {
   }
 
   await dialog.getByRole("button", { name: "Cancel" }).click();
+  await page
+    .locator("[data-factory-preview-target]")
+    .waitFor({ state: "detached" });
   await dialog
-    .getByRole("textbox", { name: "New Factory parent folder" })
+    .getByRole("textbox", { name: "Factory folder" })
     .waitFor({ state: "visible" });
   if ((await page.locator('[role="tab"]').count()) !== 2) {
     throw new Error("Cancelling New Factory changed session membership.");
   }
   await dialog.getByRole("button", { name: "Close dialog" }).click();
   await dialog.waitFor({ state: "hidden" });
-  await waitForFocus(newFactoryButton, "New Factory");
+  await waitForFocus(openFactoryButton, "Open Factory");
 }
 
 async function createNewFactorySuccessfully(page) {
-  await page.getByRole("button", { name: "New Factory" }).click();
-  const dialog = page.getByRole("dialog", { name: "New Factory" });
+  await page.getByRole("button", { name: "Open Factory" }).click();
+  const dialog = page.getByRole("dialog", { name: "Open Factory" });
   await dialog
-    .getByRole("textbox", { name: "New Factory parent folder" })
+    .getByRole("textbox", { name: "Factory folder" })
     .fill("/workspace/dashboard-regression-new");
   await dialog.getByRole("button", { name: "Start Factory" }).click();
   await dialog.getByRole("button", { name: "Checking folder..." }).waitFor({
@@ -196,11 +202,11 @@ async function createNewFactorySuccessfully(page) {
 }
 
 async function failNewFactoryCreation(page) {
-  const newFactoryButton = page.getByRole("button", { name: "New Factory" });
-  await newFactoryButton.click();
-  const dialog = page.getByRole("dialog", { name: "New Factory" });
+  const openFactoryButton = page.getByRole("button", { name: "Open Factory" });
+  await openFactoryButton.click();
+  const dialog = page.getByRole("dialog", { name: "Open Factory" });
   await dialog
-    .getByRole("textbox", { name: "New Factory parent folder" })
+    .getByRole("textbox", { name: "Factory folder" })
     .fill("/workspace/dashboard-regression-new-broken");
   await dialog.getByRole("button", { name: "Start Factory" }).click();
   await dialog.getByRole("button", { name: "Checking folder..." }).waitFor({
@@ -228,7 +234,7 @@ async function failNewFactoryCreation(page) {
   }
   await dialog.getByRole("button", { name: "Close dialog" }).click();
   await dialog.waitFor({ state: "hidden" });
-  await waitForFocus(newFactoryButton, "New Factory");
+  await waitForFocus(openFactoryButton, "Open Factory");
 }
 
 async function verifyViewport(browser, viewport) {

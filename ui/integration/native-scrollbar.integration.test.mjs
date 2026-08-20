@@ -180,8 +180,8 @@ async function readNativeScrollbarProjection(page) {
   });
 }
 
-async function readRadixScrollbarProjection(page) {
-  return page.evaluate(() => {
+async function prepareRadixScrollbarFixture(page) {
+  await page.evaluate(() => {
     const viewport = Array.from(
       document.querySelectorAll("[data-radix-scroll-area-viewport]"),
     ).find((candidate) => {
@@ -200,6 +200,42 @@ async function readRadixScrollbarProjection(page) {
     marker.style.cssText = "height:1200px;width:1200px;";
     content.append(marker);
 
+    viewport.dataset.radixScrollbarFixtureViewport = "true";
+    viewport.scrollTop = 32;
+  });
+
+  // Hover-revealed ScrollAreas (type="hover", e.g. the agent bento cards)
+  // only mount their Radix scrollbar while the pointer is over the scroll
+  // area, so hover the fixture viewport before reading the projection.
+  await page
+    .locator('[data-radix-scrollbar-fixture-viewport="true"]')
+    .hover({ timeout: uiInteractionTimeoutMs });
+  await page.waitForFunction(
+    () => {
+      const viewport = document.querySelector(
+        '[data-radix-scrollbar-fixture-viewport="true"]',
+      );
+      const root = viewport?.parentElement;
+      return (
+        (root?.querySelectorAll('[data-orientation="vertical"]').length ?? 0) >
+        0
+      );
+    },
+    undefined,
+    { timeout: uiInteractionTimeoutMs },
+  );
+}
+
+async function readRadixScrollbarProjection(page) {
+  await prepareRadixScrollbarFixture(page);
+  return page.evaluate(() => {
+    const viewport = document.querySelector(
+      '[data-radix-scrollbar-fixture-viewport="true"]',
+    );
+    if (!(viewport instanceof HTMLElement)) {
+      throw new Error("The Radix scrollbar fixture viewport is missing.");
+    }
+
     const root = viewport.parentElement;
     const viewportStyle = getComputedStyle(viewport);
     const nativeScrollbarStyle = getComputedStyle(
@@ -207,7 +243,6 @@ async function readRadixScrollbarProjection(page) {
       "::-webkit-scrollbar",
     );
 
-    viewport.scrollTop = 32;
     return {
       nativeScrollbarDisplay: nativeScrollbarStyle.display,
       rootVerticalTrackCount:

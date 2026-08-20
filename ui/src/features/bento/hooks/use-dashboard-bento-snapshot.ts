@@ -3,11 +3,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { DashboardSnapshot } from "../../../api/dashboard/types";
 import { DEFAULT_FACTORY_SESSION_ID } from "../../../api/session-routing";
 import { useCurrentSelection } from "../../current-selection/hooks/core/useCurrentSelection";
-import type {
-  DashboardCardStateContext,
-  DashboardCardStateSnapshot,
-} from "../../dashboard/lib/dashboard-card-state";
-import { useDashboardStreamStore } from "../../dashboard/state/dashboardStreamStore";
+import type { DashboardCardStateSnapshot } from "../../dashboard/lib/dashboard-card-state";
 import {
   factoryTimelineEntryKey,
   useFactoryTimelineStore,
@@ -19,8 +15,7 @@ export interface DashboardWorkOutcomeStream {
   status: "loading" | "ready";
 }
 
-export interface DashboardBentoCardStateContext
-  extends DashboardCardStateContext {
+export interface DashboardBentoCardStateContext {
   dirtyCardInstanceIDs: ReadonlySet<string>;
   workOutcomeHydrationStatus: DashboardWorkOutcomeStream["status"];
 }
@@ -237,24 +232,12 @@ export function useDashboardBentoSnapshot(
     (state) =>
       selectDashboardWorkOutcomeInput(state, workOutcomeStream).hydrationStatus,
   );
-  const hasRestoredCheckpoint = useFactoryTimelineStore(
-    (state) => state.currentReplayCheckpoint != null,
-  );
-  const timelineMode = useFactoryTimelineStore(
-    (state) => state.mode ?? "current",
-  );
-  const streamStatus = useDashboardStreamStore((state) => state.streamState);
   const workstationRequestsByDispatchID = useFactoryTimelineStore(
     (state) =>
       state.worldViewCache[state.selectedTick]?.workstationRequestsByDispatchID,
   );
   const selectedSnapshot = useFactoryTimelineStore(
     (state) => state.worldViewCache[state.selectedTick],
-  );
-  const hasAuthoritativeSnapshot = useFactoryTimelineStore(
-    (state) =>
-      state.worldViewCache[state.selectedTick] != null &&
-      (state.events.length > 0 || state.currentReplayCheckpoint != null),
   );
   const snapshot = selectedSnapshot ?? EMPTY_DASHBOARD_SNAPSHOT;
   const currentSelection = useCurrentSelection({
@@ -272,11 +255,6 @@ export function useDashboardBentoSnapshot(
     snapshot,
     dashboardCardStateContext: {
       dirtyCardInstanceIDs,
-      hasAuthoritativeSnapshot,
-      recoveryPending:
-        hasRestoredCheckpoint || workOutcomeHydrationStatus === "loading",
-      streamStatus: streamStatus.status,
-      timelineMode,
       workOutcomeHydrationStatus,
     } satisfies DashboardBentoCardStateContext,
     workOutcomeHydrationStatus,
