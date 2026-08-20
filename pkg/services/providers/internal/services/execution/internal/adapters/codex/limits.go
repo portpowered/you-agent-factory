@@ -30,6 +30,8 @@ const (
 	inspectionTranscriptTruncatedMetadata   = "inspection_transcript_truncated"
 	inspectionDiagnosticsTruncatedMetadata  = "inspection_diagnostics_truncated"
 	inspectionRetainedTextTruncatedMetadata = "inspection_retained_text_truncated"
+	usageInputTokensMetadata                = "input_tokens"
+	usageOutputTokensMetadata               = "output_tokens"
 )
 
 type streamLimit struct {

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"strconv"
 	"strings"
 
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
@@ -15,6 +16,7 @@ type decoder struct {
 	flushed          bool
 	sessionID        string
 	finalContent     string
+	usage            *usageRecord
 	progress         []providers.ExecuteProgress
 	declaredFailure  *providers.ExecuteFailure
 	declaredKnown    bool
@@ -206,6 +208,10 @@ func (decoder *decoder) diagnostics() *providers.ExecuteDiagnostics {
 		inspectionLineCountMetadata:   inspectionMetadataValue(decoder.lineCount),
 		inspectionRecordCountMetadata: inspectionMetadataValue(decoder.recordCount),
 	}
+	if decoder.usage != nil {
+		metadata[usageInputTokensMetadata] = strconv.FormatInt(decoder.usage.InputTokens, 10)
+		metadata[usageOutputTokensMetadata] = strconv.FormatInt(decoder.usage.OutputTokens, 10)
+	}
 	if decoder.transcriptFull {
 		metadata[inspectionTranscriptTruncatedMetadata] = "true"
 	}
@@ -271,6 +277,8 @@ func (decoder *decoder) decodeRecord(raw []byte) {
 			decoder.markDecodeFailure("malformed_usage")
 			return
 		}
+		usage := *record.Usage
+		decoder.usage = &usage
 		detail, _ := json.Marshal(record.Usage)
 		decoder.addProgress("usage.updated", string(detail), nil)
 		decoder.addProgress("turn.completed", "completed", nil)
