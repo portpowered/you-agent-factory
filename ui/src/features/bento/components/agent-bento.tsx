@@ -391,6 +391,7 @@ export function AgentBentoCard({
     ) : (
       <ScrollArea
         className={BENTO_CARD_BODY_SCROLL_CLASS}
+        type="hover"
         viewportClassName={cn(
           BENTO_CARD_BODY_SCROLL_VIEWPORT_CLASS,
           cardBodyClassName,
