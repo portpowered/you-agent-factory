@@ -161,6 +161,168 @@ func TestFactoryTTSSuccessProjectsAudioWorkAndEvents(t *testing.T) {
 	assertFactoryTTSSuccessEvents(t, events, factorysessions.DefaultSessionID, outputWork, text, audio)
 }
 
+// TestFactoryTTSFailureRoutesToOnFailureWithoutAudioArtifact proves that a
+// failed generic Factory TTS dispatch remains a failed public Work outcome and
+// follows the authored onFailure route without presenting successful audio.
+func TestFactoryTTSFailureRoutesToOnFailureWithoutAudioArtifact(t *testing.T) {
+	text := "functional factory tts failure"
+	dir := scaffoldFactoryTTSAudioDispatch(t)
+	testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
+		Name:        "tts failure request",
+		WorkTypeID:  "task",
+		TargetState: "init",
+		Content: []work.WorkContentPart{{
+			Type: work.WorkContentPartTypeText,
+			Text: text,
+			Slot: "text",
+		}},
+	})
+
+	const failureMessage = "tts backend failed"
+	provider := newPackagedTTSFailingFakeProvider(failureMessage)
+	session, listed, events := support.RunFactoryToCompletionWithEdgesAndObservations(
+		t,
+		dir,
+		serviceedges.Edges{ProviderOverride: provider},
+		30*time.Second,
+	)
+
+	if provider.callCount() != 1 {
+		t.Fatalf("TTS provider call count = %d, want one failed attempt", provider.callCount())
+	}
+	if session.Runtime.Status != factoryapi.FactorySessionStatusIDLE ||
+		session.Runtime.Progress.Categories.Initial != 0 ||
+		session.Runtime.Progress.Categories.Processing != 0 ||
+		session.Runtime.Progress.Categories.Terminal != 0 ||
+		session.Runtime.Progress.Categories.Failed != 1 {
+		t.Fatalf("failed session projection = %+v, want idle with one failed Work and no success", session.Runtime)
+	}
+
+	failedWork := factoryTTSFailedWork(t, listed)
+	assertFactoryTTSFailedWork(t, failedWork, text, "listed Work")
+	observed := collectFactoryTTSDispatchEvents(t, events, factorysessions.DefaultSessionID)
+	workID := *failedWork.WorkId
+	requestID := factoryTTSRequiredContextID(t, observed.workRequest, "request")
+	traceID := factoryTTSRequiredTraceID(t, observed.workRequest)
+	dispatchID := factoryTTSRequiredContextID(t, observed.dispatchRequest, "dispatch")
+	assertFactoryTTSContextCorrelation(t, observed, workID, requestID, traceID, dispatchID)
+	assertFactoryTTSWorkRequest(t, observed.workRequest, workID, text)
+	assertFactoryTTSDispatchRequest(t, observed.dispatchRequest, workID)
+	assertFactoryTTSFailureModelEvents(t, observed, failureMessage)
+	assertFactoryTTSFailureDispatchResponse(t, observed.dispatchResponse, workID, text, failureMessage)
+
+	for _, event := range events {
+		if event.Type == factoryapi.FactoryEventTypeArtifactCreated {
+			t.Fatalf("TTS failure emitted ARTIFACT_CREATED event: %#v", event)
+		}
+	}
+}
+
+func factoryTTSFailedWork(
+	t *testing.T,
+	listed factoryapi.ListWorkResponse,
+) factoryapi.Work {
+	t.Helper()
+	var failed []factoryapi.Work
+	for _, candidate := range listed.Results {
+		if candidate.WorkTypeName == nil || *candidate.WorkTypeName != "task" ||
+			candidate.State == nil || candidate.State.Name != "failed" {
+			continue
+		}
+		failed = append(failed, candidate)
+	}
+	if len(failed) != 1 {
+		t.Fatalf("failed TTS Work = %#v, want one task:failed item", failed)
+	}
+	if failed[0].WorkId == nil || strings.TrimSpace(*failed[0].WorkId) == "" {
+		t.Fatalf("failed TTS Work id = %#v, want non-empty identity", failed[0].WorkId)
+	}
+	return failed[0]
+}
+
+func assertFactoryTTSFailedWork(
+	t *testing.T,
+	item factoryapi.Work,
+	wantText, label string,
+) {
+	t.Helper()
+	if item.State == nil || item.State.Name != "failed" || item.State.Type != factoryapi.WorkStateTypeFAILED {
+		t.Fatalf("%s state = %#v, want failed/FAILED", label, item.State)
+	}
+	if item.Content == nil || len(*item.Content) != 1 {
+		t.Fatalf("%s content = %#v, want one preserved text part and no AUDIO part", label, item.Content)
+	}
+	textPart, err := (*item.Content)[0].AsWorkTextContentPart()
+	if err != nil || textPart.Text != wantText || textPart.Slot == nil || *textPart.Slot != "text" {
+		t.Fatalf("%s content = %#v, want text %q in text slot", label, textPart, wantText)
+	}
+}
+
+func assertFactoryTTSFailureModelEvents(
+	t *testing.T,
+	events factoryTTSDispatchEvents,
+	wantMessage string,
+) {
+	t.Helper()
+	request, err := events.modelRequest.Payload.AsModelRequestEventPayload()
+	if err != nil {
+		t.Fatalf("decode failed MODEL_REQUEST %q: %v", events.modelRequest.Id, err)
+	}
+	if request.Operation != "TTS" || request.Worker != "tts-executor" ||
+		request.Model != factorydefinitions.DefaultTTSModelName || request.ModelRequestId == "" {
+		t.Fatalf("failed MODEL_REQUEST payload = %#v, want TTS/%s/%s and request identity", request, factorydefinitions.DefaultTTSModelName, "tts-executor")
+	}
+	response, err := events.modelResponse.Payload.AsModelResponseEventPayload()
+	if err != nil {
+		t.Fatalf("decode failed MODEL_RESPONSE %q: %v", events.modelResponse.Id, err)
+	}
+	if response.Operation != "TTS" || response.Outcome != factoryapi.InferenceOutcomeFailed ||
+		response.ModelRequestId != request.ModelRequestId {
+		t.Fatalf("failed MODEL_RESPONSE payload = %#v, want failed TTS response correlated to %q", response, request.ModelRequestId)
+	}
+	if response.OutputContent != nil || response.OutputPreview != nil {
+		t.Fatalf("failed MODEL_RESPONSE output = content %#v preview %#v, want no successful output", response.OutputContent, response.OutputPreview)
+	}
+	if response.FailureDetail == nil || response.FailureDetail.Reason != factoryapi.WorkFailureTypeUnknown ||
+		response.FailureDetail.Message != wantMessage {
+		t.Fatalf("failed MODEL_RESPONSE failureDetail = %#v, want unknown/%q", response.FailureDetail, wantMessage)
+	}
+}
+
+func assertFactoryTTSFailureDispatchResponse(
+	t *testing.T,
+	event *factoryapi.FactoryEvent,
+	workID, wantText, wantMessage string,
+) {
+	t.Helper()
+	payload, err := event.Payload.AsDispatchResponseEventPayload()
+	if err != nil {
+		t.Fatalf("decode failed DISPATCH_RESPONSE %q: %v", event.Id, err)
+	}
+	if payload.Outcome != factoryapi.WorkOutcomeFailed || payload.TransitionId != "tts-dispatch" {
+		t.Fatalf("failed DISPATCH_RESPONSE payload = %#v, want failed tts-dispatch response", payload)
+	}
+	if payload.Error == nil || *payload.Error != wantMessage || payload.FailureDetail == nil ||
+		payload.FailureDetail.Reason != factoryapi.WorkFailureTypeUnknown ||
+		payload.FailureDetail.Message != wantMessage {
+		t.Fatalf("failed DISPATCH_RESPONSE failure = error %#v detail %#v, want unknown/%q", payload.Error, payload.FailureDetail, wantMessage)
+	}
+	if payload.Output != nil {
+		t.Fatalf("failed DISPATCH_RESPONSE output = %q, want no serialized AUDIO output", *payload.Output)
+	}
+	if payload.OutputResources != nil && len(*payload.OutputResources) != 0 {
+		t.Fatalf("failed DISPATCH_RESPONSE outputResources = %#v, want no success artifact resources", payload.OutputResources)
+	}
+	if payload.OutputWork == nil || len(*payload.OutputWork) != 1 {
+		t.Fatalf("failed DISPATCH_RESPONSE outputWork = %#v, want one onFailure Work", payload.OutputWork)
+	}
+	responseWork := (*payload.OutputWork)[0]
+	if responseWork.WorkId == nil || *responseWork.WorkId != workID {
+		t.Fatalf("failed DISPATCH_RESPONSE output Work = %#v, want work %q", responseWork, workID)
+	}
+	assertFactoryTTSFailedWork(t, responseWork, wantText, "DISPATCH_RESPONSE output Work")
+}
+
 func factoryTTSCompletedWork(
 	t *testing.T,
 	listed factoryapi.ListWorkResponse,
@@ -201,7 +363,7 @@ func factoryTTSAudioPart(t *testing.T, item factoryapi.Work) factoryapi.WorkAudi
 	return audio
 }
 
-type factoryTTSSuccessEvents struct {
+type factoryTTSDispatchEvents struct {
 	workRequest      *factoryapi.FactoryEvent
 	dispatchRequest  *factoryapi.FactoryEvent
 	modelRequest     *factoryapi.FactoryEvent
@@ -218,7 +380,7 @@ func assertFactoryTTSSuccessEvents(
 	wantAudio factoryapi.WorkAudioContentPart,
 ) {
 	t.Helper()
-	observed := collectFactoryTTSSuccessEvents(t, events, sessionID)
+	observed := collectFactoryTTSDispatchEvents(t, events, sessionID)
 	workID := *outputWork.WorkId
 	requestID := factoryTTSRequiredContextID(t, observed.workRequest, "request")
 	traceID := factoryTTSRequiredTraceID(t, observed.workRequest)
@@ -230,13 +392,13 @@ func assertFactoryTTSSuccessEvents(
 	assertFactoryTTSDispatchResponse(t, observed.dispatchResponse, workID, wantAudio)
 }
 
-func collectFactoryTTSSuccessEvents(
+func collectFactoryTTSDispatchEvents(
 	t *testing.T,
 	events []factoryapi.FactoryEvent,
 	sessionID string,
-) factoryTTSSuccessEvents {
+) factoryTTSDispatchEvents {
 	t.Helper()
-	var observed factoryTTSSuccessEvents
+	var observed factoryTTSDispatchEvents
 	for index := range events {
 		event := &events[index]
 		if strings.TrimSpace(event.Id) == "" {
@@ -272,7 +434,7 @@ func collectFactoryTTSSuccessEvents(
 
 func assertFactoryTTSContextCorrelation(
 	t *testing.T,
-	events factoryTTSSuccessEvents,
+	events factoryTTSDispatchEvents,
 	workID, requestID, traceID, dispatchID string,
 ) {
 	t.Helper()
@@ -343,7 +505,7 @@ func assertFactoryTTSDispatchRequest(t *testing.T, event *factoryapi.FactoryEven
 
 func assertFactoryTTSModelEvents(
 	t *testing.T,
-	events factoryTTSSuccessEvents,
+	events factoryTTSDispatchEvents,
 	wantAudio factoryapi.WorkAudioContentPart,
 ) {
 	t.Helper()
