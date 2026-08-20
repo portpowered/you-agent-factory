@@ -12426,9 +12426,19 @@ components:
           description: Uppercase content types accepted or produced by this slot.
           items:
             $ref: '#/components/schemas/ModelOperationContentType'
+        modality:
+          $ref: '#/components/schemas/ModelOperationContentType'
         required:
           type: boolean
           description: Whether this input slot must be resolved before invocation starts. Output slots omit this field when not needed.
+        repeatable:
+          type: boolean
+          description: Whether the slot accepts or produces multiple ordered values.
+        mediaTypes:
+          type: array
+          description: Accepted or produced MIME-type patterns for this slot.
+          items:
+            type: string
     ModelOperationContentType:
       type: string
       description: Uppercase content-part categories supported by worker model-operation capability slots.
@@ -12436,6 +12446,7 @@ components:
         - TEXT
         - IMAGE
         - AUDIO
+        - VIDEO
         - JSON
         - BINARY
     RunnerID:

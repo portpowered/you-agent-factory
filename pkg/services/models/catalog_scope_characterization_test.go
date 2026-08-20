@@ -296,3 +296,112 @@ func assertCatalogGetErrorIs(
 		t.Fatalf("GetCatalogModel(%+v) = %v, want %v", request, err, want)
 	}
 }
+
+func TestGenericOperationContractsDescribeExactSlotShapes(t *testing.T) {
+	t.Parallel()
+
+	contracts := models.GenericOperationContracts()
+	wantNames := []string{models.OperationOMNI, models.OperationEMBED, models.OperationTTS, models.OperationASR}
+	if len(contracts) != len(wantNames) {
+		t.Fatalf("GenericOperationContracts length = %d, want %d", len(contracts), len(wantNames))
+	}
+	for index, wantName := range wantNames {
+		if contracts[index].Name != wantName {
+			t.Fatalf("operation[%d].Name = %q, want %q", index, contracts[index].Name, wantName)
+		}
+	}
+
+	assertOperationSlots(t, contracts[0], []operationSlotExpectation{
+		{name: "prompt", modality: models.ModalityText, required: true, mediaType: "text/plain"},
+		{name: "image", modality: models.ModalityImage, repeatable: true, mediaType: "image/*"},
+		{name: "audio", modality: models.ModalityAudio, mediaType: "audio/*"},
+		{name: "video", modality: models.ModalityVideo, mediaType: "video/*"},
+		{name: "parameters", modality: models.ModalityJSON, mediaType: "application/json"},
+	}, []operationSlotExpectation{
+		{name: "text", modality: models.ModalityText, required: true, mediaType: "text/plain"},
+		{name: "usage", modality: models.ModalityJSON, mediaType: "application/json"},
+	})
+	assertOperationSlots(t, contracts[1], []operationSlotExpectation{
+		{name: "text", modality: models.ModalityText, required: true, mediaType: "text/plain"},
+		{name: "parameters", modality: models.ModalityJSON, mediaType: "application/json"},
+	}, []operationSlotExpectation{
+		{name: "embedding", modality: models.ModalityJSON, required: true, mediaType: "application/json"},
+	})
+	assertOperationSlots(t, contracts[2], []operationSlotExpectation{
+		{name: "text", modality: models.ModalityText, required: true, mediaType: "text/plain"},
+		{name: "voice", modality: models.ModalityAudio, mediaType: "audio/*"},
+		{name: "parameters", modality: models.ModalityJSON, mediaType: "application/json"},
+	}, []operationSlotExpectation{
+		{name: "audio", modality: models.ModalityAudio, required: true, mediaType: "audio/*"},
+	})
+	assertOperationSlots(t, contracts[3], []operationSlotExpectation{
+		{name: "audio", modality: models.ModalityAudio, required: true, mediaType: "audio/*"},
+		{name: "prompt", modality: models.ModalityText, mediaType: "text/plain"},
+		{name: "parameters", modality: models.ModalityJSON, mediaType: "application/json"},
+	}, []operationSlotExpectation{
+		{name: "transcript", modality: models.ModalityText, required: true, mediaType: "text/plain"},
+		{name: "segments", modality: models.ModalityJSON, required: true, mediaType: "application/json"},
+	})
+}
+
+type operationSlotExpectation struct {
+	name       string
+	modality   models.Modality
+	required   bool
+	repeatable bool
+	mediaType  string
+}
+
+func assertOperationSlots(
+	t *testing.T,
+	operation models.Operation,
+	wantInputs []operationSlotExpectation,
+	wantOutputs []operationSlotExpectation,
+) {
+	t.Helper()
+	assertOperationSlotList(t, operation.Name+" inputs", operation.Inputs, wantInputs)
+	assertOperationSlotList(t, operation.Name+" outputs", operation.Outputs, wantOutputs)
+}
+
+func assertOperationSlotList(
+	t *testing.T,
+	label string,
+	slots []models.OperationSlot,
+	want []operationSlotExpectation,
+) {
+	t.Helper()
+	if len(slots) != len(want) {
+		t.Fatalf("%s length = %d, want %d", label, len(slots), len(want))
+	}
+	for index, expected := range want {
+		actual := slots[index]
+		if actual.Name != expected.name || actual.Modality != expected.modality || actual.Repeatable != expected.repeatable {
+			t.Fatalf("%s[%d] = %#v, want name=%q modality=%q repeatable=%t", label, index, actual, expected.name, expected.modality, expected.repeatable)
+		}
+		if actual.Required == nil || *actual.Required != expected.required {
+			t.Fatalf("%s[%d].Required = %v, want %t", label, index, actual.Required, expected.required)
+		}
+		if len(actual.MediaTypes) != 1 || actual.MediaTypes[0] != expected.mediaType {
+			t.Fatalf("%s[%d].MediaTypes = %#v, want [%q]", label, index, actual.MediaTypes, expected.mediaType)
+		}
+	}
+}
+
+func TestGenericOperationContractsAreDetached(t *testing.T) {
+	t.Parallel()
+
+	first, ok := models.GenericOperationContract(" omni ")
+	if !ok {
+		t.Fatal("GenericOperationContract(omni) did not find OMNI")
+	}
+	first.Inputs[1].MediaTypes[0] = "mutated"
+	first.Outputs[0].ContentTypes[0] = "mutated"
+
+	second, ok := models.GenericOperationContract(models.OperationOMNI)
+	if !ok {
+		t.Fatal("GenericOperationContract(OMNI) did not find OMNI")
+	}
+	if second.Inputs[1].MediaTypes[0] != "image/*" || second.Outputs[0].ContentTypes[0] != string(models.ModalityText) {
+		t.Fatalf("GenericOperationContract retained caller mutation: %#v", second)
+	}
+}

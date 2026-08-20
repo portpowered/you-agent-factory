@@ -3,6 +3,7 @@ package models
 import (
 	"errors"
 	"fmt"
+	"strings"
 )
 
 var (
@@ -74,11 +75,147 @@ type Operation struct {
 	Outputs []OperationSlot
 }
 
+const (
+	// OperationOMNI accepts multimodal prompt content and returns generated
+	// text. It is intentionally a provider-neutral operation identifier.
+	OperationOMNI = "OMNI"
+	// OperationEMBED converts text into an embedding value.
+	OperationEMBED = "EMBED"
+	// OperationTTS converts text into audio.
+	OperationTTS = "TTS"
+	// OperationASR converts audio into a transcript and segments.
+	OperationASR = "ASR"
+)
+
+// Modality identifies the provider-neutral content category of an operation
+// slot. It deliberately does not name a backend representation.
+type Modality string
+
+const (
+	ModalityText  Modality = "TEXT"
+	ModalityImage Modality = "IMAGE"
+	ModalityAudio Modality = "AUDIO"
+	ModalityVideo Modality = "VIDEO"
+	ModalityJSON  Modality = "JSON"
+)
+
 // OperationSlot describes one named input or output of a model operation.
 type OperationSlot struct {
 	Name         string
 	ContentTypes []string
+	Modality     Modality
 	Required     *bool
+	Repeatable   bool
+	MediaTypes   []string
+}
+
+// Clone returns a detached operation contract.
+func (operation Operation) Clone() Operation {
+	operation.Inputs = cloneOperationSlots(operation.Inputs)
+	operation.Outputs = cloneOperationSlots(operation.Outputs)
+	return operation
+}
+
+// GenericOperationContracts returns the canonical provider-neutral operation
+// shapes in stable order. Each call returns fresh slices so callers cannot
+// mutate the shared contract definitions.
+func GenericOperationContracts() []Operation {
+	return []Operation{
+		genericOMNIOperation(),
+		genericEMBEDOperation(),
+		genericTTSOperation(),
+		genericASROperation(),
+	}
+}
+
+// GenericOperationContract returns one detached canonical operation shape by
+// identifier. Identifiers are case-insensitive at this value-only lookup
+// boundary; returned contracts remain uppercase.
+func GenericOperationContract(name string) (Operation, bool) {
+	name = strings.ToUpper(strings.TrimSpace(name))
+	for _, operation := range GenericOperationContracts() {
+		if operation.Name == name {
+			return operation, true
+		}
+	}
+	return Operation{}, false
+}
+
+func genericOperationSlot(
+	name string,
+	modality Modality,
+	required bool,
+	repeatable bool,
+	mediaTypes ...string,
+) OperationSlot {
+	requiredValue := required
+	return OperationSlot{
+		Name:         name,
+		ContentTypes: []string{string(modality)},
+		Modality:     modality,
+		Required:     &requiredValue,
+		Repeatable:   repeatable,
+		MediaTypes:   append([]string(nil), mediaTypes...),
+	}
+}
+
+func genericOMNIOperation() Operation {
+	return Operation{
+		Name: OperationOMNI,
+		Inputs: []OperationSlot{
+			genericOperationSlot("prompt", ModalityText, true, false, "text/plain"),
+			genericOperationSlot("image", ModalityImage, false, true, "image/*"),
+			genericOperationSlot("audio", ModalityAudio, false, false, "audio/*"),
+			genericOperationSlot("video", ModalityVideo, false, false, "video/*"),
+			genericOperationSlot("parameters", ModalityJSON, false, false, "application/json"),
+		},
+		Outputs: []OperationSlot{
+			genericOperationSlot("text", ModalityText, true, false, "text/plain"),
+			genericOperationSlot("usage", ModalityJSON, false, false, "application/json"),
+		},
+	}
+}
+
+func genericEMBEDOperation() Operation {
+	return Operation{
+		Name: OperationEMBED,
+		Inputs: []OperationSlot{
+			genericOperationSlot("text", ModalityText, true, false, "text/plain"),
+			genericOperationSlot("parameters", ModalityJSON, false, false, "application/json"),
+		},
+		Outputs: []OperationSlot{
+			genericOperationSlot("embedding", ModalityJSON, true, false, "application/json"),
+		},
+	}
+}
+
+func genericTTSOperation() Operation {
+	return Operation{
+		Name: OperationTTS,
+		Inputs: []OperationSlot{
+			genericOperationSlot("text", ModalityText, true, false, "text/plain"),
+			genericOperationSlot("voice", ModalityAudio, false, false, "audio/*"),
+			genericOperationSlot("parameters", ModalityJSON, false, false, "application/json"),
+		},
+		Outputs: []OperationSlot{
+			genericOperationSlot("audio", ModalityAudio, true, false, "audio/*"),
+		},
+	}
+}
+
+func genericASROperation() Operation {
+	return Operation{
+		Name: OperationASR,
+		Inputs: []OperationSlot{
+			genericOperationSlot("audio", ModalityAudio, true, false, "audio/*"),
+			genericOperationSlot("prompt", ModalityText, false, false, "text/plain"),
+			genericOperationSlot("parameters", ModalityJSON, false, false, "application/json"),
+		},
+		Outputs: []OperationSlot{
+			genericOperationSlot("transcript", ModalityText, true, false, "text/plain"),
+			genericOperationSlot("segments", ModalityJSON, true, false, "application/json"),
+		},
+	}
 }
 
 func cloneOperations(operations []Operation) []Operation {
@@ -102,6 +239,7 @@ func cloneOperationSlots(slots []OperationSlot) []OperationSlot {
 	for i, slot := range slots {
 		cloned[i] = slot
 		cloned[i].ContentTypes = append([]string(nil), slot.ContentTypes...)
+		cloned[i].MediaTypes = append([]string(nil), slot.MediaTypes...)
 		if slot.Required != nil {
 			required := *slot.Required
 			cloned[i].Required = &required

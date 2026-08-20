@@ -3409,6 +3409,7 @@
         "TEXT",
         "IMAGE",
         "AUDIO",
+        "VIDEO",
         "JSON",
         "BINARY"
       ],
@@ -3431,9 +3432,23 @@
           "minItems": 1,
           "type": "array"
         },
+        "mediaTypes": {
+          "description": "Accepted or produced MIME-type patterns for this slot.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "modality": {
+          "$ref": "#/$defs/ModelOperationContentType"
+        },
         "name": {
           "description": "Stable slot name used by workstation-side bindings and diagnostics.",
           "type": "string"
+        },
+        "repeatable": {
+          "description": "Whether the slot accepts or produces multiple ordered values.",
+          "type": "boolean"
         },
         "required": {
           "description": "Whether this input slot must be resolved before invocation starts. Output slots omit this field when not needed.",

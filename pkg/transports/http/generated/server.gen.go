@@ -839,6 +839,7 @@ const (
 	ModelOperationContentTypeImage  ModelOperationContentType = "IMAGE"
 	ModelOperationContentTypeJSON   ModelOperationContentType = "JSON"
 	ModelOperationContentTypeText   ModelOperationContentType = "TEXT"
+	ModelOperationContentTypeVideo  ModelOperationContentType = "VIDEO"
 )
 
 // Defines values for ModelPullOutcome.
@@ -5659,8 +5660,17 @@ type ModelOperationSlot struct {
 	// ContentTypes Uppercase content types accepted or produced by this slot.
 	ContentTypes []ModelOperationContentType `json:"contentTypes"`
 
+	// MediaTypes Accepted or produced MIME-type patterns for this slot.
+	MediaTypes *[]string `json:"mediaTypes,omitempty"`
+
+	// Modality Uppercase content-part categories supported by worker model-operation capability slots.
+	Modality *ModelOperationContentType `json:"modality,omitempty"`
+
 	// Name Stable slot name used by workstation-side bindings and diagnostics.
 	Name string `json:"name"`
+
+	// Repeatable Whether the slot accepts or produces multiple ordered values.
+	Repeatable *bool `json:"repeatable,omitempty"`
 
 	// Required Whether this input slot must be resolved before invocation starts. Output slots omit this field when not needed.
 	Required *bool `json:"required,omitempty"`

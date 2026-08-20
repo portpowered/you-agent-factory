@@ -5988,8 +5988,13 @@ export interface components {
       name: string;
       /** @description Uppercase content types accepted or produced by this slot. */
       contentTypes: components["schemas"]["ModelOperationContentType"][];
+      modality?: components["schemas"]["ModelOperationContentType"];
       /** @description Whether this input slot must be resolved before invocation starts. Output slots omit this field when not needed. */
       required?: boolean;
+      /** @description Whether the slot accepts or produces multiple ordered values. */
+      repeatable?: boolean;
+      /** @description Accepted or produced MIME-type patterns for this slot. */
+      mediaTypes?: string[];
     };
     /**
      * @description Uppercase content-part categories supported by worker model-operation capability slots.
@@ -10859,6 +10864,7 @@ export const ModelOperationContentType = {
   TEXT: "TEXT",
   IMAGE: "IMAGE",
   AUDIO: "AUDIO",
+  VIDEO: "VIDEO",
   JSON: "JSON",
   BINARY: "BINARY",
 } as const;

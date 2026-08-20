@@ -56,9 +56,40 @@ func slotsToGenerated(slots []models.OperationSlot) []factoryapi.ModelOperationS
 		for _, contentType := range slot.ContentTypes {
 			contentTypes = append(contentTypes, factoryapi.ModelOperationContentType(contentType))
 		}
-		converted = append(converted, factoryapi.ModelOperationSlot{Name: slot.Name, ContentTypes: contentTypes, Required: slot.Required})
+		converted = append(converted, factoryapi.ModelOperationSlot{
+			Name:         slot.Name,
+			ContentTypes: contentTypes,
+			Modality:     modelOperationModality(slot.Modality),
+			Required:     slot.Required,
+			Repeatable:   modelOperationRepeatable(slot),
+			MediaTypes:   modelOperationMediaTypes(slot.MediaTypes),
+		})
 	}
 	return converted
+}
+
+func modelOperationModality(modality models.Modality) *factoryapi.ModelOperationContentType {
+	if modality == "" {
+		return nil
+	}
+	value := factoryapi.ModelOperationContentType(modality)
+	return &value
+}
+
+func modelOperationRepeatable(slot models.OperationSlot) *bool {
+	if slot.Modality == "" && slot.MediaTypes == nil {
+		return nil
+	}
+	value := slot.Repeatable
+	return &value
+}
+
+func modelOperationMediaTypes(mediaTypes []string) *[]string {
+	if mediaTypes == nil {
+		return nil
+	}
+	copied := append([]string(nil), mediaTypes...)
+	return &copied
 }
 
 func modalitiesToGenerated(modalities []string) []factoryapi.ModelOperationContentType {
