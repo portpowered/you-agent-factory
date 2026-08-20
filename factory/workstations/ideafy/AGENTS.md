@@ -217,8 +217,9 @@ thoughts:init -> ideafy -> thoughts:complete
 
 idea:init -> plan -> idea:to-complete + plan:init
 plan:init -> setup-workspace -> plan:complete + task:init
-task:init -> process -> task:in-review
-task:in-review -> review -> task:to-complete
+task:init -> process -> task:awaiting-ci
+task:awaiting-ci -> ci-wait -> task:in-review
+task:in-review + review:init with the same name -> review -> task:to-complete
 idea:to-complete + task:to-complete with the same name -> consume
 ```
 
