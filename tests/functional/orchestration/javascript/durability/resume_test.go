@@ -192,10 +192,10 @@ func TestJavaScriptResumeRestoresCheckpointAndFinalResult(t *testing.T) {
 	assertResumableTwoStepFinalPrimaryResult(t, result, workflowName)
 }
 
-// TestJavaScriptDurabilityDoesNotPersistSnapshotsByDefault proves the public
-// process keeps interrupted JavaScript sessions inspectable in memory without
-// recreating the retired project-local durable-sessions directory.
-func TestJavaScriptDurabilityDoesNotPersistSnapshotsByDefault(t *testing.T) {
+// TestJavaScriptDurabilityPersistsSnapshotsByDefault proves the public process
+// writes an interrupted JavaScript Factory Session to the project-local
+// durable-sessions directory during orderly shutdown.
+func TestJavaScriptDurabilityPersistsSnapshotsByDefault(t *testing.T) {
 	const workflowName = "resumable-two-step-fake-children"
 	projectRoot := setupJavaScriptDurabilityResumeWorkflowFixture(t, workflowName)
 	provider := newJavaScriptDurabilityResumeBlockingCommandRunner(workflowName)
@@ -215,10 +215,10 @@ func TestJavaScriptDurabilityDoesNotPersistSnapshotsByDefault(t *testing.T) {
 	}
 	// The public interrupted projection is published before the canceled
 	// provider command necessarily returns. Join the root-built process before
-	// inspecting project-local persistence so the negative assertion runs after
-	// all runtime work and cleanup associated with the canceled edge is done.
+	// inspecting project-local persistence so the assertion runs after all
+	// runtime work and cleanup associated with the canceled edge is done.
 	server.Stop(t)
-	assertNoJavaScriptDurableSessionPersistence(t, projectRoot, sessionID)
+	assertJavaScriptDurableSessionPersistence(t, projectRoot, sessionID)
 }
 
 func setupJavaScriptDurabilityResumeWorkflowFixture(t *testing.T, workflowName string) string {
@@ -392,16 +392,19 @@ func javaScriptDurableSessionPersistencePath(projectRoot, sessionID string) stri
 	return filepath.Join(projectRoot, ".you-agent-factory", "durable-sessions", sessionID+".json")
 }
 
-func assertNoJavaScriptDurableSessionPersistence(t *testing.T, projectRoot, sessionID string) {
+func assertJavaScriptDurableSessionPersistence(t *testing.T, projectRoot, sessionID string) {
 	t.Helper()
 
 	persistencePath := javaScriptDurableSessionPersistencePath(projectRoot, sessionID)
-	if _, err := os.Stat(persistencePath); !os.IsNotExist(err) {
-		t.Fatalf("project-local durable session snapshot stat error = %v, want not exist", err)
+	info, err := os.Stat(persistencePath)
+	if err != nil {
+		t.Fatalf("project-local durable session snapshot stat error = %v, want exist", err)
 	}
-	persistenceDir := filepath.Dir(persistencePath)
-	if _, err := os.Stat(persistenceDir); !os.IsNotExist(err) {
-		t.Fatalf("project-local durable session directory stat error = %v, want not exist", err)
+	if info.IsDir() {
+		t.Fatalf("project-local durable session snapshot %s is a directory, want a file", persistencePath)
+	}
+	if info.Size() == 0 {
+		t.Fatalf("project-local durable session snapshot %s is empty, want persisted session state", persistencePath)
 	}
 }
 

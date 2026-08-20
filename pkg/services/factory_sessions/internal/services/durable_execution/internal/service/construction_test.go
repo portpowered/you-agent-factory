@@ -52,6 +52,51 @@ func TestNewDurable_DefaultPolicyDoesNotCreateProjectDurableSessions(t *testing.
 	}
 }
 
+func TestNewDurable_DisabledPolicyDoesNotCreateProjectDurableSessions(t *testing.T) {
+	t.Parallel()
+
+	projectRoot := t.TempDir()
+	startedOwner, err := NewDurable(
+		projectRoot,
+		factorysessions.PersistencePolicyDisabled,
+		projectPersistenceStoreFactory(),
+		factorysessions.ChildExecutorModeFake,
+		restartClock{now: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)},
+		restartSyncWaitScheduler{},
+		checkpointfixtures.CheckpointSummariesFixture{},
+		factoryruntimefixtures.ScriptedJavaScriptWorkflows{},
+		factoryruntimefixtures.ScriptedJavaScriptWorkflows{},
+		factoryruntimefixtures.ScriptedJavaScriptWorkflows{},
+		nil,
+		factoryruntime.JavaScriptWorkerSettings{},
+		restartRecordingWriter{},
+		func() string { return "dddddddddddddddddddddddddddddddd" },
+		nil,
+		nil,
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("NewDurable(disabled policy): %v", err)
+	}
+
+	_, err = startedOwner.StartSync(context.Background(), factorysessions.DurableStartRequest{
+		RequestID: "req-construction-disabled-persistence-001",
+		Source: factorysessions.Source{
+			Kind: factoryruntime.WorkflowSourceKindInlineWorkflow,
+			InlineWorkflow: &factorysessions.InlineWorkflowSource{
+				Dialect:      "you-workflow-v1",
+				InlineSource: `return { ok: true };`,
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("StartSync: %v", err)
+	}
+	if _, err := os.Stat(runtimepersist.DirForProjectRoot(projectRoot)); !os.IsNotExist(err) {
+		t.Fatalf("disabled persistence path stat error = %v, want not exist", err)
+	}
+}
+
 func TestNewDurable_EnabledPolicyPersistsProjectDurableSessions(t *testing.T) {
 	t.Parallel()
 
