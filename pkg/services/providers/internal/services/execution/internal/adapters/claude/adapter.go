@@ -85,7 +85,10 @@ func newContinuationAttempt(effect Effect) execution.ContinuationAttempt {
 		}
 		metadata := cloneMetadata(effectResult.Metadata)
 		if metadata == nil {
-			metadata = make(map[string]string, 1)
+			metadata = make(map[string]string, 3)
+		}
+		for key, value := range decoder.reportedUsage {
+			metadata[key] = value
 		}
 		metadata["completion_evidence"] = "agent_message"
 		return providers.ExecuteResult{
