@@ -702,6 +702,26 @@ def _sync_main(repo_root):
     )
 
 
+def resolve_worktree_start_point(repo_root):
+    """Resolve the start point for brand-new lane branches.
+
+    Prefer the origin/main remote-tracking ref (freshly fetched by sync_main
+    just before worktree creation), so lanes never inherit unpushed local-main
+    commits when local main is ahead of origin/main. Fall back to local main
+    only when no origin/main ref is available (no origin remote, or origin has
+    no main branch).
+    """
+    if origin_main_ref_exists(repo_root):
+        result = run_git(
+            "rev-parse", "refs/remotes/origin/main",
+            cwd=repo_root, check=False,
+        )
+        sha = result.stdout.strip()
+        if result.returncode == 0 and sha:
+            return sha
+    return "main"
+
+
 def prune_worktrees(repo_root):
     """Prune stale worktree entries."""
     run_git("worktree", "prune", cwd=repo_root)
@@ -842,7 +862,8 @@ def create_or_reuse_worktree(repo_root, branch, worktree_path):
         )
     else:
         run_git(
-            "worktree", "add", "-b", branch, str(worktree_path), "main",
+            "worktree", "add", "-b", branch, str(worktree_path),
+            resolve_worktree_start_point(repo_root),
             cwd=repo_root,
         )
 

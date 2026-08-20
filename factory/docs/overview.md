@@ -74,10 +74,18 @@ thoughts:init -> ideafy -> thoughts:complete
 
 idea:init -> plan -> idea:to-complete + plan:init
 plan:init -> setup-workspace -> plan:complete + task:init
-task:init -> process -> task:in-review
-task:in-review -> review -> task:to-complete
+task:init -> process -> task:awaiting-ci
+task:awaiting-ci -> ci-wait -> task:in-review
+task:in-review + review:init with the same name -> review -> task:to-complete
 idea:to-complete + task:to-complete with the same name -> consume
 ```
+
+The **ci-wait** workstation is an agentless CI gate: a script
+(`factory/scripts/ci-wait.py`) waits until every required PR check on the
+lane's head is terminal (pass or fail — terminal-ness, not verdict), so
+reviewer agent sessions never spend time or review visits watching CI. A
+reviewer `<CONTINUE>` hold routes the task back to `awaiting-ci`, re-entering
+the same gate instead of burning a review visit.
 
 Executor and review workstations run in worktrees under
 `.claude/worktrees/<work-item-name>/`, created by

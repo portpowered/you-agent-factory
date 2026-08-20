@@ -63,28 +63,25 @@ did not touch; do record which gate outputs you compared.
 If the change involves modification to the website, you should use the playwright browser and READ instructions for docs/internal/processes/manual-qa.md.
 
 ### Step 2.1 — Reconcile CI state before commenting
-- Check the live required PR checks on the current head with `gh pr view --json headRefOid,mergeStateStatus,statusCheckRollup` and `gh pr checks`.
-- If required checks are still `PENDING`, `QUEUED`, or `IN_PROGRESS`, WAIT for
-  them in this session with ONE bounded watcher: `gh pr checks <n> --watch
-  --interval 180`. HARD CAP: at most 45 minutes of watching in this session,
-  one watcher invocation, never restarted. Sessions killed at the 2h timeout
-  count as review FAILURES and trip the circuit breaker — budget your session
-  to finish well before that. Do your code reading (Steps 1, 3, 4) while the
-  watcher runs. Do not post a comment just to say CI is running, and do
-  not end the session with `<REJECTED>` merely because CI was pending when you
-  started — that routes the work back to the processor, which has nothing to
-  do, and burns a process/review round trip.
-- Only if checks are STILL non-terminal after the bounded wait: end with
-  `<CONTINUE>` and post no comment. That is a HOLD, not a verdict: it returns
-  this work item to review so the loop re-enters review later once CI has
-  moved, without a failed worker session and without a rejection strike.
-  Waiting on CI is never executor rework, so it must never take the rejection
-  route.
+- CI is guaranteed TERMINAL on arrival: this work item reached you through the
+  `ci-wait` gate, a script workstation that only releases a task into review
+  once every required check on the current head is finished (pass or fail).
+  You never need to watch, poll, or wait for CI in this session — read the
+  final check states with `gh pr view --json headRefOid,mergeStateStatus,statusCheckRollup`
+  and `gh pr checks` and review against them.
+- If you somehow observe required checks that are still `PENDING`, `QUEUED`,
+  or `IN_PROGRESS` (a race: a new head was pushed after the gate released the
+  task), do NOT watch them. End with `<CONTINUE>` and post no comment: the
+  hold routes this task back through the `ci-wait` gate, which does the
+  waiting for you and costs no review visit. Never end with `<REJECTED>`
+  merely because CI is pending — waiting on CI is not executor rework.
 - Known-baseline flake policy: if a required check fails ONLY on a test in a
   package the PR diff does not touch, and that test is a known baseline flake
   (see the deflake lane list in docs/temp/scale-program-rules.md in the root
   repo, or verify it reproduces on the base SHA), rerun the failed jobs ONCE
-  (`gh run rerun <id> --failed`) and watch again. If it greens, proceed. If
+  (`gh run rerun <id> --failed`) and immediately end `<CONTINUE>` — the
+  `ci-wait` gate waits out the rerun and hands the task back to review with
+  terminal checks. If on that next pass the rerun greened, proceed. If
   the same untouched-package flake fails twice, post ONE comment naming the
   test and the owning deflake lane, state explicitly "NO EXECUTOR ACTION
   REQUIRED — waiting on baseline deflake", and end `<CONTINUE>`. That is a wait
@@ -130,14 +127,16 @@ remains.
 Route a converged repeat review as a HOLD. If the head has not moved since
 your last pass and you have no NEW independent finding — including the case
 where you are only re-confirming a blocker set the executor was already told
-about — end with `<CONTINUE>` and post no new PR comment. Re-sending an
-unchanged blocker set is a no-op that hands the processor nothing to act on,
-and taking the rejection route for it counts a consecutive-failure strike that
-can kill a healthy lane. `<REJECTED>` is for delivering concrete executor work
-the executor does not already have: the first time you raise a blocker set, or
-a new blocker on a head pushed since your last pass. Holds are bounded by the
-review visit cap, so a genuinely stuck lane still surfaces without you forcing
-a rejection.
+about — end with `<CONTINUE>` and post no new PR comment. The hold now
+re-enters through the `ci-wait` gate (task returns to `awaiting-ci`, not
+straight back to review), so the loop pauses on CI state instead of spinning.
+Re-sending an unchanged blocker set is a no-op that hands the processor
+nothing to act on, and taking the rejection route for it counts a
+consecutive-failure strike that can kill a healthy lane. `<REJECTED>` is for
+delivering concrete executor work the executor does not already have: the
+first time you raise a blocker set, or a new blocker on a head pushed since
+your last pass. Holds are bounded by the review visit cap, so a genuinely
+stuck lane still surfaces without you forcing a rejection.
 
 ### Step 5 - handle feedback
 
@@ -162,11 +161,13 @@ End your final response with exactly one review routing marker, alone on the
 final line:
 
 - `<COMPLETE>` when the PR is complete, approved, and merged.
-- `<CONTINUE>` to HOLD, because required CI is still non-terminal after the
-  bounded watcher, or because this is a repeat pass on an unchanged head with
-  no new independent findings. A hold posts no PR comment and re-enters review
-  with no failed worker session and no consecutive-failure strike. Holds are
-  bounded by the review visit cap, so holding cannot loop forever.
+- `<CONTINUE>` to HOLD, because you observed required checks that are somehow
+  still non-terminal, or because this is a repeat pass on an unchanged head
+  with no new independent findings. A hold posts no PR comment, routes the
+  task back through the `ci-wait` gate (which owns all CI waiting), and
+  re-enters review with no failed worker session and no consecutive-failure
+  strike. Holds are bounded by the review visit cap, so holding cannot loop
+  forever.
 - `<REJECTED>` when concrete executor rework remains that the executor has not
   already been given — a blocker set you are raising for the first time, or a
   new blocker on a head pushed since your last pass. Rejection routes the work

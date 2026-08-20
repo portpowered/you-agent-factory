@@ -101,6 +101,20 @@
         }
       },
       {
+        "id": "work-state:task:awaiting-ci",
+        "position": {
+          "x": 760.0,
+          "y": 1310.0
+        }
+      },
+      {
+        "id": "workstation:ci-wait",
+        "position": {
+          "x": 815.0,
+          "y": 1275.0
+        }
+      },
+      {
         "id": "work-state:task:in-review",
         "position": {
           "x": 871.73926,
@@ -412,6 +426,14 @@
         "id": "factory/scripts/setup-workspace.py",
         "targetPath": "factory/scripts/setup-workspace.py",
         "type": "SCRIPT"
+      },
+      {
+        "content": {
+          "encoding": "utf-8"
+        },
+        "id": "factory/scripts/ci-wait.py",
+        "targetPath": "factory/scripts/ci-wait.py",
+        "type": "SCRIPT"
       }
     ]
   },
@@ -449,6 +471,11 @@
           "id": "init",
           "name": "init",
           "type": "INITIAL"
+        },
+        {
+          "id": "awaiting-ci",
+          "name": "awaiting-ci",
+          "type": "PROCESSING"
         },
         {
           "id": "in-review",
@@ -565,6 +592,16 @@
       "command": "python3",
       "id": "workspace-setup",
       "name": "workspace-setup",
+      "type": "SCRIPT_WORKER"
+    },
+    {
+      "args": [
+        "factory/scripts/ci-wait.py",
+        "{{ (index .Inputs 0).Name }}"
+      ],
+      "command": "python3",
+      "id": "ci-waiter",
+      "name": "ci-waiter",
       "type": "SCRIPT_WORKER"
     },
     {
@@ -721,6 +758,30 @@
       "worker": "workspace-setup"
     },
     {
+      "id": "ci-wait",
+      "inputs": [
+        {
+          "state": "awaiting-ci",
+          "workType": "task"
+        }
+      ],
+      "name": "ci-wait",
+      "onFailure": [
+        {
+          "state": "failed",
+          "workType": "task"
+        }
+      ],
+      "outputs": [
+        {
+          "state": "in-review",
+          "workType": "task"
+        }
+      ],
+      "type": "SCRIPT_RUN",
+      "worker": "ci-waiter"
+    },
+    {
       "behavior": "REPEATER",
       "id": "process",
       "inputs": [
@@ -750,7 +811,7 @@
       ],
       "outputs": [
         {
-          "state": "in-review",
+          "state": "awaiting-ci",
           "workType": "task"
         },
         {
@@ -777,6 +838,12 @@
           "workType": "task"
         },
         {
+          "guards": [
+            {
+              "matchInput": "task",
+              "type": "SAME_NAME"
+            }
+          ],
           "state": "init",
           "workType": "review"
         }
@@ -784,7 +851,7 @@
       "name": "review",
       "onContinue": [
         {
-          "state": "in-review",
+          "state": "awaiting-ci",
           "workType": "task"
         },
         {
