@@ -450,6 +450,9 @@ func TestRuntimeOpeningRequestFactoryMapsSelectionsIntoOwnerRequests(t *testing.
 		!request.FactorySession.Host.AutoPort {
 		t.Fatalf("Factory Session request = %#v", request.FactorySession)
 	}
+	if request.FactorySession.PersistencePolicy != factorysessions.PersistencePolicyEnabled {
+		t.Fatalf("Factory Session persistence policy = %q, want %q", request.FactorySession.PersistencePolicy, factorysessions.PersistencePolicyEnabled)
+	}
 	if request.Workers.RunnerID != "runner" || request.Workers.Worktree != "feature-login" ||
 		request.Workers.WorkerReasoningEffort != "xhigh" ||
 		request.Workers.MockWorkers != mocks || request.Workers.InvocationSkipPermissionsOverride != &skip {
@@ -460,6 +463,31 @@ func TestRuntimeOpeningRequestFactoryMapsSelectionsIntoOwnerRequests(t *testing.
 	}
 	if request.ModelCacheDirectory != "models" {
 		t.Fatalf("Model cache directory = %#v", request.ModelCacheDirectory)
+	}
+}
+
+func TestRuntimeOpeningRequestFactorySelectsEnabledPersistenceForBatchAndService(t *testing.T) {
+	t.Parallel()
+	for _, test := range []struct {
+		name         string
+		continuously bool
+		mode         factorydefinitions.RuntimeMode
+	}{
+		{name: "batch", mode: factorydefinitions.RuntimeModeBatch},
+		{name: "service", continuously: true, mode: factorydefinitions.RuntimeModeService},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			request := provideRuntimeOpeningRequestFactory()(runcli.RunConfig{
+				Dir:          "factory",
+				Continuously: test.continuously,
+			}, nil)
+			if request.FactoryRuntime.Mode != test.mode {
+				t.Fatalf("runtime mode = %q, want %q", request.FactoryRuntime.Mode, test.mode)
+			}
+			if request.FactorySession.PersistencePolicy != factorysessions.PersistencePolicyEnabled {
+				t.Fatalf("persistence policy = %q, want %q", request.FactorySession.PersistencePolicy, factorysessions.PersistencePolicyEnabled)
+			}
+		})
 	}
 }
 
