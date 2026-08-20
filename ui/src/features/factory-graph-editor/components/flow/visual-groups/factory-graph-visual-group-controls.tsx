@@ -197,6 +197,9 @@ export function FactoryGraphVisualGroupControls({
   );
 }
 
+const CUSTOM_COLOR_SWATCH_GRADIENT =
+  "conic-gradient(from 0deg, #f43f5e, #f59e0b, #22c55e, #3b82f6, #8b5cf6, #f43f5e)";
+
 function FactoryGraphVisualGroupColorControls({
   colorLabel,
   colorOptionLabel,
@@ -210,7 +213,6 @@ function FactoryGraphVisualGroupColorControls({
   groupColor: string | undefined;
   onSetGroupColor: (color: string) => void;
 }) {
-  const customColorFieldId = useId();
   const selectedCustomColor =
     normalizeFactoryLayoutGroupCustomColor(groupColor);
   const selectedPresetColor = isApprovedFactoryLayoutGroupColor(groupColor)
@@ -218,13 +220,14 @@ function FactoryGraphVisualGroupColorControls({
     : selectedCustomColor === null
       ? "neutral"
       : null;
+  const isCustomColorSelected = selectedPresetColor === null;
   const customColorValue =
     selectedCustomColor ?? DEFAULT_FACTORY_LAYOUT_GROUP_CUSTOM_COLOR;
 
   return (
     <fieldset className="mt-3 grid gap-2 border-0 p-0">
       <legend className="text-sm text-on-surface-subtle">{colorLabel}</legend>
-      <div className="flex flex-wrap gap-2">
+      <div className="flex flex-wrap items-center gap-2">
         {FACTORY_LAYOUT_GROUP_COLOR_TOKENS.map((token) => (
           <DashboardActionButton
             aria-label={colorOptionLabel(token)}
@@ -248,17 +251,16 @@ function FactoryGraphVisualGroupColorControls({
             <span className="sr-only">{colorOptionLabel(token)}</span>
           </DashboardActionButton>
         ))}
-      </div>
-      <label
-        className="flex items-center justify-between gap-2 text-sm text-on-surface"
-        htmlFor={customColorFieldId}
-      >
-        <span className="text-on-surface-subtle">{customColorLabel}</span>
         <input
           aria-label={customColorLabel}
-          className="h-10 w-16 cursor-pointer rounded-lg border border-outline bg-surface p-1 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-af-focus-ring"
+          className={cn(
+            "h-8 w-8 shrink-0 cursor-pointer appearance-none rounded-full border-2 bg-transparent p-0",
+            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-af-focus-ring",
+            isCustomColorSelected
+              ? "border-on-surface ring-2 ring-af-overlay-focus"
+              : "border-outline",
+          )}
           data-factory-visual-group-custom-color=""
-          id={customColorFieldId}
           onChange={(event) => {
             const normalizedColor = normalizeFactoryLayoutGroupCustomColor(
               event.target.value,
@@ -267,10 +269,19 @@ function FactoryGraphVisualGroupColorControls({
               onSetGroupColor(normalizedColor);
             }
           }}
+          style={{
+            backgroundImage: isCustomColorSelected
+              ? undefined
+              : CUSTOM_COLOR_SWATCH_GRADIENT,
+            backgroundColor: isCustomColorSelected
+              ? customColorValue
+              : undefined,
+          }}
+          title={customColorLabel}
           type="color"
           value={customColorValue}
         />
-      </label>
+      </div>
     </fieldset>
   );
 }
