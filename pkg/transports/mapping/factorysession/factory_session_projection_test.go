@@ -6,6 +6,7 @@ import (
 	"time"
 
 	factorysessionexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/pkg/transports/mapping/factorysession"
@@ -721,6 +722,69 @@ func TestHistoricalDispatchListToAPI_ProjectsDetachedDispatchFacts(t *testing.T)
 	}
 	if response.Dispatches[1].Id != "dispatch-2" {
 		t.Fatalf("second dispatch = %#v, want dispatch-2", response.Dispatches[1])
+	}
+}
+
+func TestHistoricalDispatchMappingPreservesPetriUsagePresence(t *testing.T) {
+	t.Parallel()
+
+	durationWithTokens := int64(1500)
+	inputTokens := int64(12)
+	outputTokens := int64(8)
+	totalTokens := int64(20)
+	durationWithoutTokens := int64(2000)
+	response := factorysession.HistoricalDispatchListToAPI("dur-sess-hist-usage-001", []factorysession.HistoricalDispatchInput{
+		{
+			ID: "dispatch-with-tokens", Status: "COMPLETED", DispatchKind: "PETRI_TRANSITION",
+			Usage: &recordings.FactoryDispatchUsage{
+				DurationMillis: &durationWithTokens,
+				InputTokens:    &inputTokens,
+				OutputTokens:   &outputTokens,
+				TotalTokens:    &totalTokens,
+			},
+		},
+		{
+			ID: "dispatch-without-tokens", Status: "COMPLETED", DispatchKind: "PETRI_TRANSITION",
+			Usage: &recordings.FactoryDispatchUsage{DurationMillis: &durationWithoutTokens},
+		},
+	})
+	if len(response.Dispatches) != 2 {
+		t.Fatalf("dispatches = %#v, want two dispatches", response.Dispatches)
+	}
+	withTokens := response.Dispatches[0].Usage
+	if withTokens == nil || withTokens.DurationMillis == nil || *withTokens.DurationMillis != durationWithTokens ||
+		withTokens.InputTokens == nil || *withTokens.InputTokens != inputTokens ||
+		withTokens.OutputTokens == nil || *withTokens.OutputTokens != outputTokens ||
+		withTokens.TotalTokens == nil || *withTokens.TotalTokens != totalTokens {
+		t.Fatalf("token-present usage = %#v, want duration/input/output/total", withTokens)
+	}
+	if withTokens.CostUsd != nil {
+		t.Fatalf("token-present cost = %#v, want unset", withTokens.CostUsd)
+	}
+
+	withoutTokens := response.Dispatches[1].Usage
+	if withoutTokens == nil || withoutTokens.DurationMillis == nil || *withoutTokens.DurationMillis != durationWithoutTokens {
+		t.Fatalf("token-absent usage = %#v, want duration-only usage", withoutTokens)
+	}
+	if withoutTokens.InputTokens != nil || withoutTokens.OutputTokens != nil || withoutTokens.TotalTokens != nil || withoutTokens.CostUsd != nil {
+		t.Fatalf("token-absent usage = %#v, want token and cost fields omitted", withoutTokens)
+	}
+
+	detail := factorysession.HistoricalDispatchDetailToAPI(
+		"dur-sess-hist-usage-001",
+		factorysession.HistoricalDispatchInput{
+			ID: "dispatch-with-tokens", Status: "COMPLETED", DispatchKind: "PETRI_TRANSITION",
+			Usage: &recordings.FactoryDispatchUsage{
+				DurationMillis: &durationWithTokens,
+				InputTokens:    &inputTokens,
+				OutputTokens:   &outputTokens,
+				TotalTokens:    &totalTokens,
+			},
+		},
+		"PETRI",
+	)
+	if detail.Usage == nil || detail.Usage.TotalTokens == nil || *detail.Usage.TotalTokens != totalTokens {
+		t.Fatalf("detail usage = %#v, want token facts", detail.Usage)
 	}
 }
 

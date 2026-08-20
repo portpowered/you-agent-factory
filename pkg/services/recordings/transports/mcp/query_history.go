@@ -380,7 +380,7 @@ func ListFactorySessionDispatches(
 			kind = "PETRI_TRANSITION"
 		}
 		dispatches = append(dispatches, factorysessionmapping.HistoricalDispatchInput{
-			ID: dispatch.ID, Status: string(dispatch.Status), DispatchKind: kind,
+			ID: dispatch.ID, Status: string(dispatch.Status), DispatchKind: kind, Usage: dispatch.Usage,
 		})
 	}
 	return factorysessionmapping.HistoricalDispatchListToAPI(input.SessionID, dispatches), nil

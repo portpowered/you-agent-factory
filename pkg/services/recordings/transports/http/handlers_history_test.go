@@ -924,3 +924,62 @@ func TestListFactorySessionDispatches_FiltersByRequestedStatus(t *testing.T) {
 		t.Fatalf("unmatched filter dispatches = %#v, want an empty list", emptyResponse.Dispatches)
 	}
 }
+
+func TestListFactorySessionDispatches_ProjectsHistoricalPetriUsage(t *testing.T) {
+	t.Parallel()
+
+	sessionID := "dur-sess-history-http-usage-001"
+	durationWithTokens := int64(1500)
+	inputTokens := int64(12)
+	outputTokens := int64(8)
+	totalTokens := int64(20)
+	durationWithoutTokens := int64(2000)
+	adapter := historicalResultTestAdapter(`{}`, []recordings.HistoricalDispatch{
+		{
+			ID: "dispatch-with-tokens", Status: recordings.FactoryDispatchStatusCompleted,
+			DispatchKind: recordings.FactoryDispatchKindPetriTransition,
+			Usage: &recordings.FactoryDispatchUsage{
+				DurationMillis: &durationWithTokens,
+				InputTokens:    &inputTokens,
+				OutputTokens:   &outputTokens,
+				TotalTokens:    &totalTokens,
+			},
+		},
+		{
+			ID: "dispatch-without-tokens", Status: recordings.FactoryDispatchStatusCompleted,
+			DispatchKind: recordings.FactoryDispatchKindPetriTransition,
+			Usage:        &recordings.FactoryDispatchUsage{DurationMillis: &durationWithoutTokens},
+		},
+	})
+
+	result := httptest.NewRecorder()
+	adapter.ListFactorySessionDispatches(
+		result,
+		httptest.NewRequest(http.MethodGet, "/factory-sessions/"+sessionID+"/dispatches", nil),
+		factoryapi.SessionID(sessionID), factoryapi.ListFactorySessionDispatchesParams{},
+	)
+	if result.Code != http.StatusOK {
+		t.Fatalf("status = %d %s, want 200", result.Code, result.Body.String())
+	}
+	var response factoryapi.ListFactorySessionDispatchesResponse
+	if err := json.Unmarshal(result.Body.Bytes(), &response); err != nil {
+		t.Fatalf("decode response %q: %v", result.Body.String(), err)
+	}
+	if len(response.Dispatches) != 2 {
+		t.Fatalf("dispatches = %#v, want two dispatches", response.Dispatches)
+	}
+	withTokens := response.Dispatches[0].Usage
+	if withTokens == nil || withTokens.DurationMillis == nil || *withTokens.DurationMillis != durationWithTokens ||
+		withTokens.InputTokens == nil || *withTokens.InputTokens != inputTokens ||
+		withTokens.OutputTokens == nil || *withTokens.OutputTokens != outputTokens ||
+		withTokens.TotalTokens == nil || *withTokens.TotalTokens != totalTokens {
+		t.Fatalf("token-present response usage = %#v, want duration and token facts", withTokens)
+	}
+	withoutTokens := response.Dispatches[1].Usage
+	if withoutTokens == nil || withoutTokens.DurationMillis == nil || *withoutTokens.DurationMillis != durationWithoutTokens {
+		t.Fatalf("token-absent response usage = %#v, want duration-only usage", withoutTokens)
+	}
+	if withoutTokens.InputTokens != nil || withoutTokens.OutputTokens != nil || withoutTokens.TotalTokens != nil || withoutTokens.CostUsd != nil {
+		t.Fatalf("token-absent response usage = %#v, want token and cost fields omitted", withoutTokens)
+	}
+}

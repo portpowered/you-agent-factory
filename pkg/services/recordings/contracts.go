@@ -549,9 +549,12 @@ type HistoricalDispatch struct {
 	Status       FactoryDispatchStatus
 	DispatchKind FactoryDispatchKind
 	TransitionID string
-	FirstCursor  CanonicalEventCursor
-	LastCursor   CanonicalEventCursor
-	Association  *HistoricalDispatchWorkerSessionAssociation
+	// Usage is retained only for Petri DISPATCH_RESPONSE facts. JavaScript
+	// dispatch usage continues to follow its existing reconciliation path.
+	Usage       *FactoryDispatchUsage
+	FirstCursor CanonicalEventCursor
+	LastCursor  CanonicalEventCursor
+	Association *HistoricalDispatchWorkerSessionAssociation
 }
 
 // HistoricalRecordingQueryResult contains detached canonical history,

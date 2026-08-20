@@ -2,6 +2,7 @@ package service
 
 import (
 	"errors"
+	"math"
 	"strings"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
@@ -26,7 +27,7 @@ func projectHistoricalDispatches(
 			}
 			continue
 		}
-		status, kind, transitionID, applies, err := historicalDispatchStatus(legacy)
+		status, kind, transitionID, usage, applies, err := historicalDispatchStatus(legacy)
 		if err != nil {
 			return nil, historicalDispatchCorrupt(identity, event, err)
 		}
@@ -42,6 +43,7 @@ func projectHistoricalDispatches(
 			byID[dispatchID] = len(dispatches)
 			dispatches = append(dispatches, recordings.HistoricalDispatch{
 				ID: dispatchID, Status: status, DispatchKind: kind, TransitionID: transitionID,
+				Usage:       usage,
 				FirstCursor: event.Cursor, LastCursor: event.Cursor,
 			})
 			continue
@@ -52,6 +54,9 @@ func projectHistoricalDispatches(
 		}
 		if transitionID != "" {
 			dispatches[index].TransitionID = transitionID
+		}
+		if usage != nil {
+			dispatches[index].Usage = usage
 		}
 		dispatches[index].LastCursor = event.Cursor
 	}
@@ -92,52 +97,95 @@ func applyHistoricalWorkerSessionAssociation(
 	return historicalDispatchCorrupt(identity, event, errors.New("contradictory dispatch worker session association"))
 }
 
-func historicalDispatchStatus(event factorydefinitions.FactoryEvent) (recordings.FactoryDispatchStatus, recordings.FactoryDispatchKind, string, bool, error) {
+func historicalDispatchStatus(event factorydefinitions.FactoryEvent) (recordings.FactoryDispatchStatus, recordings.FactoryDispatchKind, string, *recordings.FactoryDispatchUsage, bool, error) {
 	switch event.Type {
 	case factorydefinitions.FactoryEventTypeDispatchRequest:
 		var payload factorydefinitions.DispatchRequestEventPayload
 		if err := event.DecodePayload(&payload); err != nil || strings.TrimSpace(payload.TransitionID) == "" {
-			return "", "", "", true, errors.New("invalid dispatch request")
+			return "", "", "", nil, true, errors.New("invalid dispatch request")
 		}
-		return recordings.FactoryDispatchStatusRunning, recordings.FactoryDispatchKindPetriTransition, payload.TransitionID, true, nil
+		return recordings.FactoryDispatchStatusRunning, recordings.FactoryDispatchKindPetriTransition, payload.TransitionID, nil, true, nil
 	case factorydefinitions.FactoryEventTypeDispatchResponse:
 		return dispatchResponseStatus(event)
 	case factorydefinitions.FactoryEventTypeDispatchQueued:
 		var payload factorydefinitions.DispatchQueuedEventPayload
 		if err := event.DecodePayload(&payload); err != nil || !validDispatchKind(payload.DispatchKind) {
-			return "", "", "", true, errors.New("invalid queued dispatch")
+			return "", "", "", nil, true, errors.New("invalid queued dispatch")
 		}
-		return recordings.FactoryDispatchStatusQueued, recordings.FactoryDispatchKind(payload.DispatchKind), "", true, nil
+		return recordings.FactoryDispatchStatusQueued, recordings.FactoryDispatchKind(payload.DispatchKind), "", nil, true, nil
 	case factorydefinitions.FactoryEventTypeDispatchInterrupted:
 		var payload factorydefinitions.DispatchInterruptedEventPayload
 		if err := event.DecodePayload(&payload); err != nil || !validDispatchStatus(payload.ObservedStatus) {
-			return "", "", "", true, errors.New("invalid interrupted dispatch")
+			return "", "", "", nil, true, errors.New("invalid interrupted dispatch")
 		}
-		return recordings.FactoryDispatchStatusInterrupted, "", "", true, nil
+		return recordings.FactoryDispatchStatusInterrupted, "", "", nil, true, nil
 	case factorydefinitions.FactoryEventTypeDispatchReconciled:
 		var payload factorydefinitions.DispatchReconciledEventPayload
 		if err := event.DecodePayload(&payload); err != nil || !validDispatchStatus(payload.ReconciledStatus) {
-			return "", "", "", true, errors.New("invalid reconciled dispatch")
+			return "", "", "", nil, true, errors.New("invalid reconciled dispatch")
 		}
-		return recordings.FactoryDispatchStatus(payload.ReconciledStatus), "", "", true, nil
+		// JavaScript usage is intentionally not copied here. Its established
+		// reconciliation projection must retain its existing serialized output.
+		return recordings.FactoryDispatchStatus(payload.ReconciledStatus), "", "", nil, true, nil
 	default:
-		return "", "", "", false, nil
+		return "", "", "", nil, false, nil
 	}
 }
 
-func dispatchResponseStatus(event factorydefinitions.FactoryEvent) (recordings.FactoryDispatchStatus, recordings.FactoryDispatchKind, string, bool, error) {
+func dispatchResponseStatus(event factorydefinitions.FactoryEvent) (recordings.FactoryDispatchStatus, recordings.FactoryDispatchKind, string, *recordings.FactoryDispatchUsage, bool, error) {
 	var payload workers.DispatchResponseEventPayload
 	if err := event.DecodePayload(&payload); err != nil || strings.TrimSpace(payload.TransitionID) == "" {
-		return "", "", "", true, errors.New("invalid dispatch response")
+		return "", "", "", nil, true, errors.New("invalid dispatch response")
 	}
+	usage := historicalDispatchUsage(payload.Usage, payload.DurationMillis)
 	switch payload.Outcome {
 	case workers.OutcomeAccepted, workers.OutcomeContinue, workers.OutcomeRejected:
-		return recordings.FactoryDispatchStatusCompleted, recordings.FactoryDispatchKindPetriTransition, payload.TransitionID, true, nil
+		return recordings.FactoryDispatchStatusCompleted, recordings.FactoryDispatchKindPetriTransition, payload.TransitionID, usage, true, nil
 	case workers.OutcomeFailed:
-		return recordings.FactoryDispatchStatusFailed, recordings.FactoryDispatchKindPetriTransition, payload.TransitionID, true, nil
+		return recordings.FactoryDispatchStatusFailed, recordings.FactoryDispatchKindPetriTransition, payload.TransitionID, usage, true, nil
 	default:
-		return "", "", "", true, errors.New("invalid dispatch response outcome")
+		return "", "", "", nil, true, errors.New("invalid dispatch response outcome")
 	}
+}
+
+func historicalDispatchUsage(
+	usage *workers.DispatchUsageEventPayload,
+	fallbackDurationMillis *int64,
+) *recordings.FactoryDispatchUsage {
+	if usage == nil && fallbackDurationMillis == nil {
+		return nil
+	}
+	result := &recordings.FactoryDispatchUsage{}
+	if usage != nil {
+		result.DurationMillis = cloneInt64(usage.DurationMillis)
+		result.InputTokens = nonNegativeInt64(usage.InputTokens)
+		result.OutputTokens = nonNegativeInt64(usage.OutputTokens)
+		if result.InputTokens != nil && result.OutputTokens != nil &&
+			*result.InputTokens <= math.MaxInt64-*result.OutputTokens {
+			totalTokens := *result.InputTokens + *result.OutputTokens
+			result.TotalTokens = &totalTokens
+		}
+	}
+	if result.DurationMillis == nil {
+		result.DurationMillis = cloneInt64(fallbackDurationMillis)
+	}
+	return result
+}
+
+func cloneInt64(value *int64) *int64 {
+	if value == nil {
+		return nil
+	}
+	cloned := *value
+	return &cloned
+}
+
+func nonNegativeInt64(value *int64) *int64 {
+	if value == nil || *value < 0 {
+		return nil
+	}
+	cloned := *value
+	return &cloned
 }
 
 func historicalDispatchID(event factorydefinitions.FactoryEvent) (string, error) {
