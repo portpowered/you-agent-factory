@@ -35,7 +35,7 @@ try {
 
   const readOnlyButton = await workstationButton(page);
   const initialDimensions = await nodeDimensions(readOnlyButton);
-  if (await page.locator(".factory-graph-node-resize-edge").count()) {
+  if (await page.locator(".factory-graph-node-resize-grip").count()) {
     throw new Error("Node resize controls rendered before entering edit mode.");
   }
 
@@ -46,11 +46,15 @@ try {
   const selectedButton = await selectWorkstation(page);
   await waitForAttachedEdges(page, workstationId);
 
-  const resizeControl = page.locator(".factory-graph-node-resize-edge");
+  // One grip per node, not one per graph: every editable workstation carries
+  // its own, so scope the count to the node under test.
+  const resizeControl = page.locator(
+    `.react-flow__node[data-id="${workstationId}"] .factory-graph-node-resize-grip`,
+  );
   await resizeControl.waitFor({ state: "visible" });
   if ((await resizeControl.count()) !== 1) {
     throw new Error(
-      `Expected one bottom-edge node resize control, found ${await resizeControl.count()}.`,
+      `Expected one node resize grip, found ${await resizeControl.count()}.`,
     );
   }
   if (
@@ -84,9 +88,7 @@ try {
 
   const handleBounds = await resizeControl.boundingBox();
   if (!handleBounds) {
-    throw new Error(
-      "Could not measure the workstation bottom-edge resize control.",
-    );
+    throw new Error("Could not measure the workstation resize grip.");
   }
 
   const beforeResize = await nodeDimensions(selectedButton);
@@ -217,7 +219,7 @@ try {
   await waitForStoryRender(page);
   const reloadedButton = await workstationButton(page);
   const reloadedDimensions = await nodeDimensions(reloadedButton);
-  if (await page.locator(".factory-graph-node-resize-edge").count()) {
+  if (await page.locator(".factory-graph-node-resize-grip").count()) {
     throw new Error(
       "Node resize controls rendered in read-only mode after reload.",
     );
@@ -235,7 +237,9 @@ try {
     await reselectedButton.elementHandle(),
   );
   await page
-    .locator(".factory-graph-node-resize-edge")
+    .locator(
+      `.react-flow__node[data-id="${workstationId}"] .factory-graph-node-resize-grip`,
+    )
     .waitFor({ state: "visible" });
   assertDimensionsMatchSaved(await nodeDimensions(reselectedButton), savedSize);
 

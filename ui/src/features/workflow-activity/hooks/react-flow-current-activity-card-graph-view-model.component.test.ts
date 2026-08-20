@@ -1349,4 +1349,151 @@ describe("useCurrentActivityGraphViewModel edge waypoints", () => {
     });
   });
 });
+
+function workstationResizeLayout(): GraphLayout {
+  return {
+    edges: [],
+    height: 360,
+    nodes: [
+      {
+        column: 0,
+        height: 160,
+        nodeId: "workstation:review",
+        nodeKind: "workstation",
+        row: 0,
+        width: 220,
+        workstationNodeId: "review",
+        x: 120,
+        y: 80,
+      },
+    ],
+    width: 600,
+  };
+}
+
+function nodeResizeControls(
+  result: { current: CurrentActivityGraphViewModelResult },
+  nodeId: string,
+) {
+  return (
+    result.current.nodes.find((node) => node.id === nodeId)?.data as
+      | {
+          resizeControls?: {
+            onResize?: (dimensions: { height: number; width: number }) => void;
+            onResizeEnd?: (dimensions: {
+              height: number;
+              width: number;
+            }) => void;
+          };
+        }
+      | undefined
+  )?.resizeControls;
+}
+
+describe("current activity graph live node resize", () => {
+  it("grows the rendered node while the resize pointer is still down", () => {
+    const { result } = renderGraphViewModelWithLayout(
+      workstationResizeLayout(),
+    );
+
+    act(() => {
+      nodeResizeControls(result, "workstation:review")?.onResize?.({
+        height: 300,
+        width: 320,
+      });
+    });
+
+    expect(result.current.nodes[0]).toMatchObject({
+      height: 300,
+      measured: { height: 300, width: 320 },
+      width: 320,
+    });
+  });
+
+  it("tracks every intermediate size rather than only the last one", () => {
+    const { result } = renderGraphViewModelWithLayout(
+      workstationResizeLayout(),
+    );
+
+    act(() => {
+      nodeResizeControls(result, "workstation:review")?.onResize?.({
+        height: 220,
+        width: 240,
+      });
+    });
+    expect(result.current.nodes[0]?.width).toBe(240);
+
+    act(() => {
+      nodeResizeControls(result, "workstation:review")?.onResize?.({
+        height: 260,
+        width: 300,
+      });
+    });
+
+    expect(result.current.nodes[0]).toMatchObject({
+      height: 260,
+      width: 300,
+    });
+  });
+
+  it("keeps the committed size after the drag settles", () => {
+    const { result } = renderGraphViewModelWithLayout(
+      workstationResizeLayout(),
+    );
+
+    act(() => {
+      nodeResizeControls(result, "workstation:review")?.onResize?.({
+        height: 300,
+        width: 320,
+      });
+    });
+    act(() => {
+      nodeResizeControls(result, "workstation:review")?.onResizeEnd?.({
+        height: 300,
+        width: 320,
+      });
+    });
+
+    expect(result.current.nodes[0]).toMatchObject({
+      height: 300,
+      width: 320,
+    });
+  });
+
+  it("holds the expanded content variant back until the drag is committed", () => {
+    const { result } = renderGraphViewModelWithLayout(
+      workstationResizeLayout(),
+    );
+    const expanded = () =>
+      (result.current.nodes[0]?.data as { expanded?: boolean } | undefined)
+        ?.expanded;
+
+    act(() => {
+      nodeResizeControls(result, "workstation:review")?.onResize?.({
+        height: 300,
+        width: 320,
+      });
+    });
+    expect(expanded()).toBe(false);
+
+    act(() => {
+      nodeResizeControls(result, "workstation:review")?.onResizeEnd?.({
+        height: 300,
+        width: 320,
+      });
+    });
+
+    expect(expanded()).toBe(true);
+  });
+
+  it("does not resize while the editor cannot be interacted with", () => {
+    const { result } = renderGraphViewModelWithLayout(
+      workstationResizeLayout(),
+      { editor: { canInteractWithEditor: false, editorMode: false } },
+    );
+
+    expect(nodeResizeControls(result, "workstation:review")).toBeUndefined();
+    expect(result.current.nodes[0]?.width).toBe(220);
+  });
+});
 // Component lane: requires DOM APIs.

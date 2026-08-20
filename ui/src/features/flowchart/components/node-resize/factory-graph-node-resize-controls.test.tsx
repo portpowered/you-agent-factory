@@ -1,5 +1,5 @@
 import "@testing-library/jest-dom/vitest";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -13,6 +13,12 @@ vi.mock("@xyflow/react", async (importOriginal) => {
   return {
     ...actual,
     NodeResizeControl: (props: {
+      children?: React.ReactNode;
+      className?: string;
+      onResize?: (
+        event: MouseEvent | TouchEvent,
+        dimensions: { height: number; width: number },
+      ) => void;
       onResizeEnd?: (
         event: MouseEvent | TouchEvent,
         dimensions: { height: number; width: number },
@@ -22,6 +28,7 @@ vi.mock("@xyflow/react", async (importOriginal) => {
       variant?: string;
     }) => (
       <button
+        className={props.className}
         data-testid={`resize-${props.position}`}
         data-variant={props.variant}
         onClick={() =>
@@ -30,9 +37,17 @@ vi.mock("@xyflow/react", async (importOriginal) => {
             width: 280,
           })
         }
+        onPointerMove={() =>
+          props.onResize?.(new MouseEvent("mousemove"), {
+            height: 210,
+            width: 250,
+          })
+        }
         style={props.style}
         type="button"
-      />
+      >
+        {props.children}
+      </button>
     ),
     useUpdateNodeInternals: () => updateNodeInternals,
   };
@@ -59,12 +74,16 @@ function resizeProps(
   };
 }
 
+function grip(container: HTMLElement): HTMLElement | null {
+  return container.querySelector("[data-factory-graph-node-resize-grip]");
+}
+
 describe("Factory graph node resize controls", () => {
   beforeEach(() => {
     updateNodeInternals.mockClear();
   });
 
-  it("renders one bottom-edge line for a width-only family", async () => {
+  it("renders one right-edge grip for a width-only family", async () => {
     const user = userEvent.setup();
     const onResizeEnd = vi.fn();
     const { container } = render(
@@ -75,13 +94,7 @@ describe("Factory graph node resize controls", () => {
     expect(container.querySelectorAll("[data-testid^='resize-']")).toHaveLength(
       1,
     );
-    expect(control.getAttribute("data-variant")).toBe("line");
-    expect(control).toHaveStyle({
-      height: "10px",
-      left: "0px",
-      top: "100%",
-      width: "100%",
-    });
+    expect(control.getAttribute("data-variant")).toBe("handle");
     expect(container.textContent).toBe("");
     expect(
       container.querySelector("[data-factory-graph-node-resize-actions]"),
@@ -93,7 +106,7 @@ describe("Factory graph node resize controls", () => {
     expect(updateNodeInternals).toHaveBeenCalledWith("worker:writer");
   });
 
-  it("uses the bottom-right edge for a family that allows both axes", () => {
+  it("uses the bottom-right corner for a family that allows both axes", () => {
     const { container } = render(
       <FactoryGraphNodeResizeControls
         {...resizeProps({
@@ -108,7 +121,7 @@ describe("Factory graph node resize controls", () => {
     );
     expect(screen.getByTestId("resize-bottom-right")).toHaveAttribute(
       "data-variant",
-      "line",
+      "handle",
     );
   });
 
@@ -121,7 +134,7 @@ describe("Factory graph node resize controls", () => {
 
     expect(screen.getByTestId("resize-bottom")).toHaveAttribute(
       "data-variant",
-      "line",
+      "handle",
     );
     expect(screen.queryByTestId("resize-right")).toBeNull();
   });
@@ -146,5 +159,106 @@ describe("Factory graph node resize controls", () => {
     expect(container.querySelectorAll("[data-testid^='resize-']")).toHaveLength(
       0,
     );
+  });
+});
+
+describe("Factory graph node resize grip appearance", () => {
+  it("marks a both-axes family with a small bottom-right corner grip", () => {
+    const { container } = render(
+      <FactoryGraphNodeResizeControls
+        {...resizeProps({
+          allowedAxes: { height: true, width: true },
+          nodeId: "workstation:review",
+        })}
+      />,
+    );
+
+    const control = screen.getByTestId("resize-bottom-right");
+    expect(control).toHaveStyle({ height: "14px", width: "14px" });
+    expect(grip(container)?.className).toContain("border-b-2");
+    expect(grip(container)?.className).toContain("border-r-2");
+  });
+
+  it("tints the grip with the subtle neutral border token, never an accent", () => {
+    const { container } = render(
+      <FactoryGraphNodeResizeControls
+        {...resizeProps({ allowedAxes: { height: true, width: true } })}
+      />,
+    );
+
+    const gripClassName = grip(container)?.className ?? "";
+    expect(gripClassName).toContain("border-af-text-subtle");
+    expect(gripClassName).not.toContain("primary");
+    expect(screen.getByTestId("resize-bottom-right")).not.toHaveStyle({
+      borderBottomColor: "var(--color-primary)",
+    });
+  });
+
+  it("stays out of sight until the node is hovered or focused", () => {
+    render(
+      <FactoryGraphNodeResizeControls
+        {...resizeProps({ allowedAxes: { height: true, width: true } })}
+      />,
+    );
+
+    const controlClassName =
+      screen.getByTestId("resize-bottom-right").className ?? "";
+    expect(controlClassName).toContain("opacity-0");
+    expect(controlClassName).toContain(
+      "group-hover/factory-graph-node:opacity-100",
+    );
+    expect(controlClassName).toContain(
+      "group-focus-within/factory-graph-node:opacity-100",
+    );
+  });
+
+  it("draws a single-axis grip as a bar rather than a corner", () => {
+    const { container } = render(
+      <FactoryGraphNodeResizeControls {...resizeProps()} />,
+    );
+
+    const gripClassName = grip(container)?.className ?? "";
+    expect(gripClassName).toContain("border-r-2");
+    expect(gripClassName).not.toContain("border-b-2");
+  });
+});
+
+describe("Factory graph node live resize", () => {
+  beforeEach(() => {
+    updateNodeInternals.mockClear();
+  });
+
+  it("reports dimensions continuously while the pointer drags", () => {
+    const onResize = vi.fn();
+    const onResizeEnd = vi.fn();
+    render(
+      <FactoryGraphNodeResizeControls
+        {...resizeProps({
+          allowedAxes: { height: true, width: true },
+          onResize,
+          onResizeEnd,
+        })}
+      />,
+    );
+
+    fireEvent.pointerMove(screen.getByTestId("resize-bottom-right"));
+
+    expect(onResize).toHaveBeenCalledWith({ height: 210, width: 250 });
+    expect(onResizeEnd).not.toHaveBeenCalled();
+  });
+
+  it("leaves node internals alone until the drag settles", () => {
+    render(
+      <FactoryGraphNodeResizeControls
+        {...resizeProps({
+          allowedAxes: { height: true, width: true },
+          onResize: vi.fn(),
+        })}
+      />,
+    );
+
+    fireEvent.pointerMove(screen.getByTestId("resize-bottom-right"));
+
+    expect(updateNodeInternals).not.toHaveBeenCalled();
   });
 });

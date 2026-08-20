@@ -291,7 +291,7 @@ async function verifyVisualGroupAfterReload({
       name: `Select ${TARGET_WORKSTATION_LABEL} workstation`,
     })
     .click();
-  await reloadedNode.locator(".factory-graph-node-resize-edge").waitFor({
+  await reloadedNode.locator(".factory-graph-node-resize-grip").waitFor({
     state: "visible",
   });
   assertNodeSizeMatches(

@@ -1,13 +1,11 @@
 export async function resizeSelectedNode(page, node, nodeId) {
   const before = await readNodeSize(node);
-  const resizeControl = node.locator(".factory-graph-node-resize-edge");
+  const resizeControl = node.locator(".factory-graph-node-resize-grip");
   await resizeControl.waitFor({ state: "visible" });
   await expectNoObsoleteNodeResizeActions(page);
   const controlBounds = await resizeControl.boundingBox();
   if (!controlBounds) {
-    throw new Error(
-      "Could not measure the selected node bottom-edge resize control.",
-    );
+    throw new Error("Could not measure the selected node resize grip.");
   }
 
   const startX = controlBounds.x + controlBounds.width / 2;
@@ -31,7 +29,7 @@ export async function resizeSelectedNode(page, node, nodeId) {
   const resized = await readNodeSize(node);
   if (resized.width <= before.width || resized.height <= before.height) {
     throw new Error(
-      `Bottom-edge node resize did not increase both dimensions: before=${JSON.stringify(before)} after=${JSON.stringify(resized)}.`,
+      `Node resize grip did not increase both dimensions: before=${JSON.stringify(before)} after=${JSON.stringify(resized)}.`,
     );
   }
 

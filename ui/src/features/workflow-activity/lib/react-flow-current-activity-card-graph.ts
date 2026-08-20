@@ -473,6 +473,8 @@ function resizeControlsForNode(input: {
     allowedAxes: resolution.allowedAxes,
     bounds: resolution.bounds,
     nodeId: input.nodeId,
+    onResize: (dimensions: FactoryGraphNodeDimensions) =>
+      controller.onResize?.(target, dimensions),
     onResizeEnd: (dimensions: FactoryGraphNodeDimensions) =>
       controller.onResizeEnd(target, dimensions),
   };
