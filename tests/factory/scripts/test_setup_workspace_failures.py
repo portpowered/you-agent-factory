@@ -192,7 +192,7 @@ class SetupWorkspaceFailureTest(unittest.TestCase):
         self.assertNotIn("Worktree preparation failed", result.stderr)
         self.assertNotIn("PRD copy failed", result.stderr)
 
-    def test_reports_worktree_preparation_failure_without_root_sync_label(self):
+    def test_diverged_branch_reuse_reports_no_failure_labels(self):
         bare_remote = self.repo_path / "remote.git"
         bare_remote.mkdir()
         subprocess.run(
@@ -260,9 +260,11 @@ class SetupWorkspaceFailureTest(unittest.TestCase):
         subprocess.run(["git", "fetch", "origin"], cwd=local_repo, check=True)
 
         second = run_setup_workspace(local_repo, prd_name)
-        self.assertEqual(second.returncode, 1, second.stdout)
-        self.assertIn("Worktree preparation failed:", second.stderr)
-        self.assertIn("worktree branch update failed", second.stderr.lower())
+        self.assertEqual(second.returncode, 0, second.stderr)
+        self.assertIn(
+            "skipped (local branch diverged from upstream", second.stderr,
+        )
+        self.assertNotIn("Worktree preparation failed", second.stderr)
         self.assertNotIn("Root sync failed", second.stderr)
         self.assertNotIn("PRD copy failed", second.stderr)
 

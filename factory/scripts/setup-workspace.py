@@ -782,9 +782,11 @@ def confirm_worktree_upstream_head(worktree_path, branch, upstream_ref):
 def sync_reused_worktree_branch(repo_root, worktree_path, branch):
     """Checkout branch in a reused worktree and fast-forward when safe.
 
-    No-upstream and missing-remote-branch conditions are non-fatal. Unsafe
-    fast-forward failures raise RuntimeError for worktree-preparation reporting.
-    Returns a human-readable outcome string for logging.
+    No-upstream, missing-remote-branch, and diverged-from-upstream conditions
+    are all non-fatal skips: a diverged local branch keeps its worktree state
+    as-is (remote commits stay on origin and reconcile at push time), because
+    resetting would destroy unpushed local commits and raising would kill the
+    lane. Returns a human-readable outcome string for logging.
     """
     run_git("checkout", branch, cwd=worktree_path)
 
@@ -819,8 +821,15 @@ def sync_reused_worktree_branch(repo_root, worktree_path, branch):
         local_sha = run_git("rev-parse", f"refs/heads/{branch}", cwd=worktree_path).stdout.strip()
         upstream_sha = run_git("rev-parse", upstream_ref, cwd=worktree_path).stdout.strip()
         if not can_fast_forward_main(worktree_path, local_sha, upstream_sha):
-            raise RuntimeError(
-                f"worktree branch update failed for {branch}: {stderr}"
+            if snapshot_id is not None:
+                return (
+                    f"stashed local changes in snapshot {snapshot_id[:8]}, "
+                    "then skipped (local branch diverged from upstream; "
+                    "keeping local worktree state)"
+                )
+            return (
+                "skipped (local branch diverged from upstream; "
+                "keeping local worktree state)"
             )
 
         run_git("reset", "--hard", upstream_ref, cwd=worktree_path)

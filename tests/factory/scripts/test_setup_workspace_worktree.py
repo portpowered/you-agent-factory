@@ -419,7 +419,7 @@ class SetupWorkspaceWorktreeTest(unittest.TestCase):
         self.assertTrue(marker.exists())
         self.assertIn("no upstream", second.stderr.lower())
 
-    def test_reports_worktree_preparation_failure_when_branch_update_unsafe(self):
+    def test_keeps_local_worktree_state_when_branch_diverged_from_upstream(self):
         bare_remote = self.repo_path / "remote.git"
         bare_remote.mkdir()
         git(["init", "--bare", "-b", "main"], bare_remote)
@@ -458,11 +458,45 @@ class SetupWorkspaceWorktreeTest(unittest.TestCase):
         git(["push", "origin", prd_name], upstream)
         git(["fetch", "origin"], local_repo)
 
+        local_tip = git(["rev-parse", "HEAD"], worktree_path).stdout.strip()
+        dirty_file = worktree_path / "diverged-dirty.txt"
+        dirty_file.write_text("keep me dirty\n", encoding="utf-8")
+
         second = run_setup_workspace(local_repo, prd_name)
-        self.assertEqual(second.returncode, 1, second.stdout)
-        self.assertIn("Worktree preparation failed", second.stderr)
-        self.assertNotIn("Root sync failed", second.stderr)
-        self.assertIn("worktree branch update failed", second.stderr.lower())
+        self.assertEqual(second.returncode, 0, second.stderr)
+        self.assertIn(
+            "skipped (local branch diverged from upstream", second.stderr,
+        )
+        self.assertIn("stashed local changes", second.stderr.lower())
+        self.assertNotIn("worktree branch update failed", second.stderr.lower())
+        second_payload = json.loads(second.stdout)
+        self.assertTrue(second_payload["reused"])
+
+        # The unpushed local commits survive: HEAD still equals the pre-sync
+        # local tip, and the worktree was not reset to the remote history.
+        self.assertEqual(
+            git(["rev-parse", "HEAD"], worktree_path).stdout.strip(),
+            local_tip,
+        )
+        self.assertTrue((worktree_path / "local-only.txt").exists())
+        self.assertFalse((worktree_path / "remote-only.txt").exists())
+
+        # Stashed local changes are restored by the finally block.
+        self.assertEqual(
+            dirty_file.read_text(encoding="utf-8"),
+            "keep me dirty\n",
+        )
+        self.assertIn(
+            "?? diverged-dirty.txt",
+            git(["status", "--porcelain"], worktree_path).stdout,
+        )
+
+        # Nothing is lost remotely either: the diverged remote commits remain
+        # reachable on the fetched upstream ref for push-time reconciliation.
+        remote_tip = git(
+            ["rev-parse", f"origin/{prd_name}"], worktree_path,
+        ).stdout.strip()
+        self.assertNotEqual(remote_tip, local_tip)
 
 
 if __name__ == "__main__":
