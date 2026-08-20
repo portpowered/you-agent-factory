@@ -1,0 +1,301 @@
+{
+  "version": 1,
+  "entries": [
+    {
+      "packagePath": "pkg/services/factory_definitions/clonetests",
+      "destination": "factory_definitions/internal",
+      "successor": "pkg/services/factory_definitions/internal",
+      "class": "test-only",
+      "stage": "pss-package-target-test-only",
+      "deletionGate": "delete the exact test-only package-target edge after its owning migration lands, then remove this baseline entry"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/definition",
+      "destination": "factory_definitions/internal",
+      "successor": "pkg/services/factory_definitions/internal",
+      "class": "test-only",
+      "stage": "pss-package-target-test-only",
+      "deletionGate": "delete the exact test-only package-target edge after its owning migration lands, then remove this baseline entry"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/internal/services/runtime_snapshot",
+      "destination": "factory_definitions/internal",
+      "successor": "pkg/services/factory_definitions/internal",
+      "class": "test-only",
+      "stage": "pss-package-target-test-only",
+      "deletionGate": "delete the exact test-only package-target edge after its owning migration lands, then remove this baseline entry"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/systeminitializationtests",
+      "destination": "factory_definitions/internal",
+      "successor": "pkg/services/factory_definitions/internal",
+      "class": "test-only",
+      "stage": "pss-package-target-test-only",
+      "deletionGate": "delete the exact test-only package-target edge after its owning migration lands, then remove this baseline entry"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/internal/factorystatus",
+      "destination": "factory_runtime/internal",
+      "successor": "pkg/services/factory_runtime/internal",
+      "class": "test-only",
+      "stage": "pss-package-target-test-only",
+      "deletionGate": "delete the exact test-only package-target edge after its owning migration lands, then remove this baseline entry"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/internal/orchestrators/petri",
+      "destination": "factory_runtime/internal/services/orchestration",
+      "successor": "pkg/services/factory_runtime/internal/services/orchestration",
+      "class": "test-only",
+      "stage": "pss-package-target-test-only",
+      "deletionGate": "delete the exact test-only package-target edge after its owning migration lands, then remove this baseline entry"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/internal/rootobservation",
+      "destination": "factory_runtime/internal",
+      "successor": "pkg/services/factory_runtime/internal",
+      "class": "test-only",
+      "stage": "pss-package-target-test-only",
+      "deletionGate": "delete the exact test-only package-target edge after its owning migration lands, then remove this baseline entry"
+    },
+    {
+      "packagePath": "pkg/services/factory_sessions/internal/runtimeopening",
+      "destination": "factory_sessions/internal/services/runtime_opening",
+      "successor": "pkg/services/factory_sessions/internal/services/runtime_opening",
+      "class": "test-only",
+      "stage": "pss-package-target-test-only",
+      "deletionGate": "delete the exact test-only package-target edge after its owning migration lands, then remove this baseline entry"
+    },
+    {
+      "packagePath": "pkg/services/factory_sessions/internal/runtimeopening/invocation",
+      "destination": "factory_sessions/internal/services/runtime_opening",
+      "successor": "pkg/services/factory_sessions/internal/services/runtime_opening",
+      "class": "test-only",
+      "stage": "pss-package-target-test-only",
+      "deletionGate": "delete the exact test-only package-target edge after its owning migration lands, then remove this baseline entry"
+    },
+    {
+      "packagePath": "pkg/services/factory_sessions/internal/runtimeopening/operatordefaults",
+      "destination": "factory_sessions/internal/services/runtime_opening",
+      "successor": "pkg/services/factory_sessions/internal/services/runtime_opening",
+      "class": "test-only",
+      "stage": "pss-package-target-test-only",
+      "deletionGate": "delete the exact test-only package-target edge after its owning migration lands, then remove this baseline entry"
+    },
+    {
+      "packagePath": "pkg/services/operator_settings/internal",
+      "destination": "operator_settings/internal",
+      "successor": "pkg/services/operator_settings/internal",
+      "class": "test-only",
+      "stage": "pss-package-target-test-only",
+      "deletionGate": "delete the exact test-only package-target edge after its owning migration lands, then remove this baseline entry"
+    },
+    {
+      "packagePath": "pkg/services/operator_settings/internal/construct",
+      "destination": "operator_settings/internal",
+      "successor": "pkg/services/operator_settings/internal",
+      "class": "test-only",
+      "stage": "pss-package-target-test-only",
+      "deletionGate": "delete the exact test-only package-target edge after its owning migration lands, then remove this baseline entry"
+    },
+    {
+      "packagePath": "pkg/services/operator_settings/internal/identityinputinventory",
+      "destination": "operator_settings/internal",
+      "successor": "pkg/services/operator_settings/internal",
+      "class": "test-only",
+      "stage": "pss-package-target-test-only",
+      "deletionGate": "delete the exact test-only package-target edge after its owning migration lands, then remove this baseline entry"
+    },
+    {
+      "packagePath": "pkg/services/operator_settings/internal/service",
+      "destination": "operator_settings/internal",
+      "successor": "pkg/services/operator_settings/internal",
+      "class": "test-only",
+      "stage": "pss-package-target-test-only",
+      "deletionGate": "delete the exact test-only package-target edge after its owning migration lands, then remove this baseline entry"
+    },
+    {
+      "packagePath": "pkg/services/operator_settings/internal/testproviders",
+      "destination": "operator_settings/internal",
+      "successor": "pkg/services/operator_settings/internal",
+      "class": "test-only",
+      "stage": "pss-package-target-test-only",
+      "deletionGate": "delete the exact test-only package-target edge after its owning migration lands, then remove this baseline entry"
+    },
+    {
+      "packagePath": "pkg/services/providers/internal/services/execution/internal/adapters/agy/agypty",
+      "destination": "providers/internal/services/execution",
+      "successor": "pkg/services/providers",
+      "class": "test-only",
+      "stage": "pss-package-target-test-only",
+      "deletionGate": "delete the exact test-only package-target edge after its owning migration lands, then remove this baseline entry"
+    },
+    {
+      "packagePath": "pkg/services/recordings/internal/artifacts",
+      "destination": "recordings/internal/services/artifacts_export",
+      "successor": "pkg/services/recordings/internal/services/artifacts_export",
+      "class": "test-only",
+      "stage": "pss-package-target-test-only",
+      "deletionGate": "delete the exact test-only package-target edge after its owning migration lands, then remove this baseline entry"
+    },
+    {
+      "packagePath": "pkg/services/recordings/internal/events",
+      "destination": "recordings/internal/services/canonical_ledger",
+      "successor": "pkg/services/recordings/internal/services/canonical_ledger",
+      "class": "test-only",
+      "stage": "pss-package-target-test-only",
+      "deletionGate": "delete the exact test-only package-target edge after its owning migration lands, then remove this baseline entry"
+    },
+    {
+      "packagePath": "pkg/services/recordings/internal/events/kinds",
+      "destination": "recordings/internal/services/canonical_ledger",
+      "successor": "pkg/services/recordings/internal/services/canonical_ledger",
+      "class": "test-only",
+      "stage": "pss-package-target-test-only",
+      "deletionGate": "delete the exact test-only package-target edge after its owning migration lands, then remove this baseline entry"
+    },
+    {
+      "packagePath": "pkg/services/recordings/internal/events/snapshot",
+      "destination": "recordings/internal/services/canonical_ledger",
+      "successor": "pkg/services/recordings/internal/services/canonical_ledger",
+      "class": "test-only",
+      "stage": "pss-package-target-test-only",
+      "deletionGate": "delete the exact test-only package-target edge after its owning migration lands, then remove this baseline entry"
+    },
+    {
+      "packagePath": "pkg/services/recordings/internal/projections",
+      "destination": "recordings/internal/services/projection_query",
+      "successor": "pkg/services/recordings/internal/services/projection_query",
+      "class": "test-only",
+      "stage": "pss-package-target-test-only",
+      "deletionGate": "delete the exact test-only package-target edge after its owning migration lands, then remove this baseline entry"
+    },
+    {
+      "packagePath": "pkg/services/recordings/internal/projections/dashboard",
+      "destination": "recordings/internal/services/projection_query",
+      "successor": "pkg/services/recordings/internal/services/projection_query",
+      "class": "test-only",
+      "stage": "pss-package-target-test-only",
+      "deletionGate": "delete the exact test-only package-target edge after its owning migration lands, then remove this baseline entry"
+    },
+    {
+      "packagePath": "pkg/services/recordings/internal/projections/projectiontests",
+      "destination": "recordings/internal/services/projection_query",
+      "successor": "pkg/services/recordings/internal/services/projection_query",
+      "class": "test-only",
+      "stage": "pss-package-target-test-only",
+      "deletionGate": "delete the exact test-only package-target edge after its owning migration lands, then remove this baseline entry"
+    },
+    {
+      "packagePath": "pkg/services/recordings/internal/projections/workstation",
+      "destination": "recordings/internal/services/projection_query",
+      "successor": "pkg/services/recordings/internal/services/projection_query",
+      "class": "test-only",
+      "stage": "pss-package-target-test-only",
+      "deletionGate": "delete the exact test-only package-target edge after its owning migration lands, then remove this baseline entry"
+    },
+    {
+      "packagePath": "pkg/services/recordings/internal/replay",
+      "destination": "recordings/internal/services/replay",
+      "successor": "pkg/services/recordings/internal/services/replay",
+      "class": "test-only",
+      "stage": "pss-package-target-test-only",
+      "deletionGate": "delete the exact test-only package-target edge after its owning migration lands, then remove this baseline entry"
+    },
+    {
+      "packagePath": "pkg/services/recordings/internal/replay/clocktests",
+      "destination": "recordings/internal/services/replay",
+      "successor": "pkg/services/recordings/internal/services/replay",
+      "class": "test-only",
+      "stage": "pss-package-target-test-only",
+      "deletionGate": "delete the exact test-only package-target edge after its owning migration lands, then remove this baseline entry"
+    },
+    {
+      "packagePath": "pkg/services/recordings/internal/replay/configtests",
+      "destination": "recordings/internal/services/replay",
+      "successor": "pkg/services/recordings/internal/services/replay",
+      "class": "test-only",
+      "stage": "pss-package-target-test-only",
+      "deletionGate": "delete the exact test-only package-target edge after its owning migration lands, then remove this baseline entry"
+    },
+    {
+      "packagePath": "pkg/services/recordings/internal/replay/fixturetests",
+      "destination": "recordings/internal/services/replay",
+      "successor": "pkg/services/recordings/internal/services/replay",
+      "class": "test-only",
+      "stage": "pss-package-target-test-only",
+      "deletionGate": "delete the exact test-only package-target edge after its owning migration lands, then remove this baseline entry"
+    },
+    {
+      "packagePath": "pkg/services/work/internal/invocationreturnpolicy",
+      "destination": "work/internal",
+      "successor": "pkg/services/work/internal",
+      "class": "test-only",
+      "stage": "pss-package-target-test-only",
+      "deletionGate": "delete the exact test-only package-target edge after its owning migration lands, then remove this baseline entry"
+    },
+    {
+      "packagePath": "pkg/services/work/internal/lineagegraph",
+      "destination": "work/internal",
+      "successor": "pkg/services/work/internal",
+      "class": "test-only",
+      "stage": "pss-package-target-test-only",
+      "deletionGate": "delete the exact test-only package-target edge after its owning migration lands, then remove this baseline entry"
+    },
+    {
+      "packagePath": "pkg/services/work/internal/proposalmaterialization",
+      "destination": "work/internal",
+      "successor": "pkg/services/work/internal",
+      "class": "test-only",
+      "stage": "pss-package-target-test-only",
+      "deletionGate": "delete the exact test-only package-target edge after its owning migration lands, then remove this baseline entry"
+    },
+    {
+      "packagePath": "pkg/services/work/internal/requestadmission",
+      "destination": "work/internal",
+      "successor": "pkg/services/work/internal",
+      "class": "test-only",
+      "stage": "pss-package-target-test-only",
+      "deletionGate": "delete the exact test-only package-target edge after its owning migration lands, then remove this baseline entry"
+    },
+    {
+      "packagePath": "pkg/services/work/internal/stateaccessquery",
+      "destination": "work/internal",
+      "successor": "pkg/services/work/internal",
+      "class": "test-only",
+      "stage": "pss-package-target-test-only",
+      "deletionGate": "delete the exact test-only package-target edge after its owning migration lands, then remove this baseline entry"
+    },
+    {
+      "packagePath": "pkg/services/workers/internal",
+      "destination": "workers/internal",
+      "successor": "pkg/services/workers/internal",
+      "class": "test-only",
+      "stage": "pss-package-target-test-only",
+      "deletionGate": "delete the exact test-only package-target edge after its owning migration lands, then remove this baseline entry"
+    },
+    {
+      "packagePath": "pkg/services/workers/internal/diagnostics",
+      "destination": "workers/internal",
+      "successor": "pkg/services/workers/internal",
+      "class": "test-only",
+      "stage": "pss-package-target-test-only",
+      "deletionGate": "delete the exact test-only package-target edge after its owning migration lands, then remove this baseline entry"
+    },
+    {
+      "packagePath": "pkg/services/workers/internal/interface",
+      "destination": "workers/internal",
+      "successor": "pkg/services/workers/internal",
+      "class": "test-only",
+      "stage": "pss-package-target-test-only",
+      "deletionGate": "delete the exact test-only package-target edge after its owning migration lands, then remove this baseline entry"
+    },
+    {
+      "packagePath": "pkg/services/workers/internal/service",
+      "destination": "workers/internal",
+      "successor": "pkg/services/workers/internal",
+      "class": "test-only",
+      "stage": "pss-package-target-test-only",
+      "deletionGate": "delete the exact test-only package-target edge after its owning migration lands, then remove this baseline entry"
+    }
+  ]
+}

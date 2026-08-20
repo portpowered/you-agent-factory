@@ -34,6 +34,12 @@ row, and when `moves` is empty the file is deleted together with its loaders and
 checks. Both `ownership-inventory-check` and `package-target-manifest-check`
 read this one file, so there is no second destination catalog to keep in sync.
 
+`package-target-test-only-baseline.json` is the exact deletion-only companion
+for the package-target checker. It records only test-only source observations
+for open move rows, with the source class included in each identity. A
+test-only source never establishes production package liveness; new observations
+and stale accepted entries both fail until the exact edge is reviewed.
+
 `ownership-inventory.json` is the PSS-F01 frozen ownership inventory. It no
 longer enumerates packages — that moved to `unfinished-package-moves.json`
 above. It freezes the closed destination vocabulary, the Process Edges
