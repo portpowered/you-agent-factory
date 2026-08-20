@@ -18,7 +18,7 @@ export function DashboardBrandLockup({
   return (
     <span
       className={cn(
-        "inline-flex min-w-0 items-center pl-2 align-middle leading-none",
+        "inline-flex min-w-0 items-center align-middle leading-none",
         className,
       )}
     >
