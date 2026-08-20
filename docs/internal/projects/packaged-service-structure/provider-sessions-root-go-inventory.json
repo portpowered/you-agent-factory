@@ -1,0 +1,17 @@
+{
+  "formatVersion": "pss-provider-sessions-root-go-inventory/v1",
+  "ownerPackage": "pkg/services/provider_sessions",
+  "sortKey": "file name ascending byte order",
+  "files": [
+    {
+      "file": "contracts.go",
+      "classification": "thin_root_contract",
+      "note": "Peer Service interface plus Inspect/Project/Details request, result, value, and typed-error contracts."
+    },
+    {
+      "file": "doc.go",
+      "classification": "thin_root_contract",
+      "note": "Package documentation for the committed thin Provider Sessions root contract surface."
+    }
+  ]
+}
