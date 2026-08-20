@@ -13,6 +13,7 @@ export interface FactoryGraphActiveExecution {
 export interface FactoryGraphWorkstationNodeData extends Record<string, unknown> {
     active: boolean;
     activeFlow: boolean;
+    expanded?: boolean;
     focused?: boolean;
     executions: FactoryGraphActiveExecution[];
     factoryGraphNodeId?: string;

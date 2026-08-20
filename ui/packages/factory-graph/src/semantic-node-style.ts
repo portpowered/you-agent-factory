@@ -34,10 +34,13 @@ const NESTED_ACCENT_IMPORTANT_SURFACE_CLASS_NAME: Record<
 > = {
   neutral: "",
   info: "!bg-info-container",
-  warning: "!bg-warning-container",
+  warning: "!bg-warning",
   success: "!bg-success-container",
   danger: "!bg-error-container",
 };
+
+const NESTED_ACCENT_ACTIVE_TEXT_OVERRIDE_CLASS_NAME =
+  "[&_[data-factory-entity-title]]:!text-on-warning [&_[data-workstation-runtime-label]]:!text-on-warning [&_[data-active-work-label]]:!text-on-warning [&_[data-active-work-duration]]:!text-on-warning [&_[data-workstation-scheduling-label]]:!border-on-warning [&_[data-workstation-scheduling-label]]:!text-on-warning";
 
 const NESTED_ACCENT_BORDER_CLASS_NAME: Record<
   FactoryGraphVisualNestedAccentRole,
@@ -297,11 +300,11 @@ export function factoryGraphNodeVisualStateClassName(
 
   return [
     VISUAL_STATUS_IMPORTANT_SURFACE_CLASS_NAME[state.surface],
+    state.surface === "active" && NESTED_ACCENT_ACTIVE_TEXT_OVERRIDE_CLASS_NAME,
     borderClassName,
     glowClassName,
     focusClassName,
-    state.activeFlow &&
-      state.glow === "active" &&
+    state.glow === "active" &&
       `agent-flow-node--active ring-2 ${NESTED_ACCENT_RING_CLASS_NAME[nestedAccentRole]}`,
     state.selection && "shadow-af-accent-selected",
     state.muted && "agent-flow-node--muted",
