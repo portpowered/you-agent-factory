@@ -91,6 +91,27 @@ Executor and review workstations run in worktrees under
 `.claude/worktrees/<work-item-name>/`, created by
 `factory/scripts/setup-workspace.py`.
 
+The **review** workstation runs the dedicated `reviewer` worker
+(codex `gpt-5.6-luna`, reasoning effort `max`). Planning (`plan`) stays on the
+`planner` worker (codex `gpt-5.6-sol`).
+
+### Review quality probes
+
+Reviews run on luna at max reasoning effort for cost reasons: sol review
+sessions were the factory's largest spend bucket, and luna runs at roughly
+1/25th of sol's token rates. Because review-evaluation quality on luna is a
+known risk, the operator dispatches an independent "review quality probe"
+subagent on luna-reviewed PRs. The probe re-reviews the same PR head at high
+capability and grades the factory review as one of:
+
+* `CONCUR` — the probe agrees with the factory review's verdict
+* `MISSED_BLOCKER` — the factory review approved despite a real blocker
+  (false approve)
+* `FALSE_REJECTION` — the factory review rejected without a real blocker
+
+A `MISSED_BLOCKER` on a merged PR, or a low concur rate over the first ~10
+luna reviews, reverts the review worker to sol.
+
 ## Batch Submission
 
 Use the canonical `FACTORY_REQUEST_BATCH` shape from `you docs batch-inputs`.
