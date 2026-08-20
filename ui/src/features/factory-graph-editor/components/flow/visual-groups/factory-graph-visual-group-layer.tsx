@@ -93,11 +93,14 @@ export function FactoryGraphVisualGroupLayer({
           groupAriaLabel(group) || group.label?.trim() || group.id;
 
         return (
+          // A border here would shift the containing block for the absolutely
+          // positioned affordance children inward by the border width, so the
+          // selection indicator uses outline (which doesn't affect layout).
           <div
             className={cn(
               "pointer-events-none absolute overflow-visible rounded-2xl text-left",
               selected
-                ? "border-2 border-primary ring-2 ring-af-overlay-focus"
+                ? "outline outline-2 outline-primary ring-2 ring-af-overlay-focus"
                 : undefined,
             )}
             data-factory-visual-group={group.id}

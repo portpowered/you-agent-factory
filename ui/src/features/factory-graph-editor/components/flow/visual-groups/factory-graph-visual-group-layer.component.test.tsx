@@ -116,6 +116,17 @@ describe("FactoryGraphVisualGroupLayer", () => {
     ).toBeInTheDocument();
   });
 
+  it("marks selection with outline instead of border so affordance offsets stay anchored to the group's true edges", () => {
+    renderVisualGroupLayer({ selectedGroupId: "group-1" });
+
+    const groupBox = document.querySelector(
+      '[data-factory-visual-group="group-1"]',
+    );
+
+    expect(groupBox).toHaveClass("outline");
+    expect(groupBox?.className).not.toMatch(/(?:^|\s)border(?:-\d+)?(?:\s|$)/);
+  });
+
   it("keeps the decorative interior transparent and targets only label or outline affordances", () => {
     renderVisualGroupLayer();
 
