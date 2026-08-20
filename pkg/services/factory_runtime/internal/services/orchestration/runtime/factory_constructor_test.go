@@ -32,6 +32,59 @@ func TestNew_RequiresClock(t *testing.T) {
 	}
 }
 
+func TestNew_WithoutRestoredStateUsesFreshResourceMarking(t *testing.T) {
+	base := time.Date(2026, time.April, 10, 12, 0, 0, 0, time.UTC)
+	net := buildSimpleNet()
+	resource := &state.ResourceDef{ID: "gpu-slot", Name: "GPU slot", Capacity: 2}
+	place, expectedTokens := state.GenerateResourcePlaces(resource, base)
+	net.Resources = map[string]*state.ResourceDef{resource.ID: resource}
+	net.Places[place.ID] = place
+
+	f, err := newTestFactory(
+		withNet(net),
+		withClock(platformclock.NewDeterministic(base, time.Second)),
+	)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	snapshot, err := f.GetEngineStateSnapshot(context.Background())
+	if err != nil {
+		t.Fatalf("GetEngineStateSnapshot: %v", err)
+	}
+	if snapshot.Marking.WorkflowID != net.ID {
+		t.Fatalf("marking workflow ID = %q, want %q", snapshot.Marking.WorkflowID, net.ID)
+	}
+	if got := len(snapshot.Marking.Tokens); got != len(expectedTokens) {
+		t.Fatalf("initial token count = %d, want %d resource tokens", got, len(expectedTokens))
+	}
+	if got := len(snapshot.Marking.PlaceTokens[place.ID]); got != len(expectedTokens) {
+		t.Fatalf("initial tokens at %q = %d, want %d", place.ID, got, len(expectedTokens))
+	}
+	if got := len(snapshot.Marking.PlaceTokens["task:init"]); got != 0 {
+		t.Fatalf("initial Work tokens at task:init = %d, want none", got)
+	}
+
+	for _, expected := range expectedTokens {
+		actual, ok := snapshot.Marking.Tokens[expected.ID]
+		if !ok {
+			t.Fatalf("initial marking is missing resource token %q", expected.ID)
+		}
+		if actual.PlaceID != expected.PlaceID {
+			t.Errorf("resource token %q place = %q, want %q", actual.ID, actual.PlaceID, expected.PlaceID)
+		}
+		if actual.Color.WorkID != expected.Color.WorkID || actual.Color.WorkTypeID != expected.Color.WorkTypeID {
+			t.Errorf("resource token %q identity = (%q, %q), want (%q, %q)", actual.ID, actual.Color.WorkID, actual.Color.WorkTypeID, expected.Color.WorkID, expected.Color.WorkTypeID)
+		}
+		if actual.Color.DataType != expected.Color.DataType {
+			t.Errorf("resource token %q data type = %q, want %q", actual.ID, actual.Color.DataType, expected.Color.DataType)
+		}
+		if !actual.CreatedAt.Equal(base) || !actual.EnteredAt.Equal(base) {
+			t.Errorf("resource token %q timestamps = (%s, %s), want (%s, %s)", actual.ID, actual.CreatedAt, actual.EnteredAt, base, base)
+		}
+	}
+}
+
 type resourceCapacityRuntimeHarness struct {
 	capacity  factoryruntime.ResourceCapacityService
 	admitted  factoryruntime.AdmittedResourceCapacityService
