@@ -2210,11 +2210,14 @@ describe("current activity graph active item labels", () => {
         displayLabel: "guide.md",
         fileType: "DOC",
         kind: "doc",
-        onSelectDoc,
         selectedDoc: true,
         targetPath: "factory/docs/guide.md",
       },
     });
+    (
+      docNode?.data as { onSelectDoc?: (targetPath: string) => void }
+    ).onSelectDoc?.("factory/docs/guide.md");
+    expect(onSelectDoc).toHaveBeenCalledWith("factory/docs/guide.md");
     expect(scriptNode).toMatchObject({
       type: "doc",
       data: {
@@ -2276,11 +2279,14 @@ describe("current activity graph active item labels", () => {
         displayLabel: "review.md",
         fileType: "DOC",
         kind: "doc",
-        onSelectDoc,
         selectedDoc: true,
         targetPath: nestedDocPath,
       },
     });
+    (
+      docNode?.data as { onSelectDoc?: (targetPath: string) => void }
+    ).onSelectDoc?.(nestedDocPath);
+    expect(onSelectDoc).toHaveBeenCalledWith(nestedDocPath);
   });
 
   it("updates doc nodes when the saved factory document changes", async () => {

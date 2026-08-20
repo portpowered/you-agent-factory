@@ -364,8 +364,16 @@ describe("ReactFlowCurrentActivityCard graph semantics", () => {
     const reviewWorkstationButton = screen.getByRole("button", {
       name: "Select Review workstation",
     });
-    expect(within(reviewWorkstationButton).getByText("Agent")).toBeTruthy();
-    expect(within(reviewWorkstationButton).getByText("Repeater")).toBeTruthy();
+    expect(
+      reviewWorkstationButton
+        .closest("[data-workstation-runtime-type]")
+        ?.getAttribute("data-workstation-runtime-type"),
+    ).toBe("MODEL_WORKSTATION");
+    expect(
+      reviewWorkstationButton
+        .closest("[data-workstation-scheduling-behavior]")
+        ?.getAttribute("data-workstation-scheduling-behavior"),
+    ).toBe("REPEATER");
     expect(
       reviewWorkstationButton.querySelector("[data-workstation-semantic-icon]"),
     ).toBeNull();
@@ -574,8 +582,16 @@ describe("ReactFlowCurrentActivityCard graph semantics", () => {
       name: "Select Review workstation",
     });
     expect(reviewButton).toBeTruthy();
-    expect(within(reviewButton).getByText("Inference")).toBeTruthy();
-    expect(within(reviewButton).getByText("Repeater")).toBeTruthy();
+    expect(
+      reviewButton
+        .closest("[data-workstation-runtime-type]")
+        ?.getAttribute("data-workstation-runtime-type"),
+    ).toBe("INFERENCE_RUN");
+    expect(
+      reviewButton
+        .closest("[data-workstation-scheduling-behavior]")
+        ?.getAttribute("data-workstation-scheduling-behavior"),
+    ).toBe("REPEATER");
     expect(
       reviewButton.querySelector("[data-workstation-semantic-icon]"),
     ).toBeNull();

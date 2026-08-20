@@ -108,6 +108,7 @@ function useCurrentActivityBaseNodes({
   graphLayout,
   locale,
   now,
+  onGraphSelectNode,
   onSelectDoc,
   onSelectResource,
   onSelectStateNode,
@@ -140,6 +141,7 @@ function useCurrentActivityBaseNodes({
   editor: CurrentActivityGraphViewModelEditorInput;
   factoryDefinition?: DashboardSnapshot["factory"];
   graphLayout: GraphLayout;
+  onGraphSelectNode: (nodeId: string) => void;
 }) {
   return useMemo<CurrentActivityNode[]>(
     () =>
@@ -160,6 +162,7 @@ function useCurrentActivityBaseNodes({
         graphLayout,
         locale,
         now,
+        onGraphSelectNode,
         onSelectDoc,
         onSelectResource,
         onSelectStateNode,
@@ -185,6 +188,7 @@ function useCurrentActivityBaseNodes({
       graphLayout,
       locale,
       now,
+      onGraphSelectNode,
       onSelectDoc,
       onSelectResource,
       onSelectStateNode,
@@ -389,6 +393,7 @@ function useCurrentActivityGraphNodePresentation(
                 width: resizedDimensions.width,
               }
             : {}),
+          data: { ...node.data, expanded: resizedDimensions !== undefined },
           position: transientPositionsByNodeId.get(node.id) ?? node.position,
           selected: graphSelection.isNodeSelected(node.id),
         };
@@ -570,6 +575,16 @@ export function useCurrentActivityGraphViewModel({
   const graphSelection = useFactoryGraphEditorSelection({
     onStateChange: publishGraphSelectionBridgeState,
   });
+  const { replaceSelection: replaceGraphSelection } = graphSelection;
+  const handleGraphSelectNode = useCallback(
+    (nodeId: string) => {
+      replaceGraphSelection({
+        nodeIds: [nodeId],
+        primaryTarget: { id: nodeId, kind: "node" },
+      });
+    },
+    [replaceGraphSelection],
+  );
   const graphSelectionEnabled =
     !editor.editorMode || editor.activeTool !== "delete";
   const nodeResizeState = useCurrentActivityNodeResizeState({
@@ -590,6 +605,7 @@ export function useCurrentActivityGraphViewModel({
     graphLayout: positionedGraphLayout,
     locale,
     now,
+    onGraphSelectNode: handleGraphSelectNode,
     onSelectDoc,
     onSelectResource,
     onSelectStateNode,

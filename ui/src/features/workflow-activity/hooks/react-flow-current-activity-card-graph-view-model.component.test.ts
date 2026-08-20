@@ -22,6 +22,10 @@ import {
   divergentDocumentPlaneFactoryDocument,
 } from "../../../testing/graph-editor-harness";
 import type { FactoryLayout } from "../../factory-graph-editor/lib/layout/factory-graph-layout-operations";
+import {
+  FACTORY_LAYOUT_GROUP_DEFAULT_SIZE,
+  fitFactoryLayoutGroupBounds,
+} from "../../factory-graph-editor/lib/layout/visual-groups/factory-graph-layout-groups";
 import type { GraphLayout } from "../../flowchart/lib/layout";
 import { currentActivityCardFactoryDefinition } from "./current-activity-card-factory-definition";
 import {
@@ -970,6 +974,129 @@ describe("useCurrentActivityGraphViewModel node positions", () => {
       kind: "node",
       id: "workstation:review",
     });
+  });
+
+  it("wires a node click into graph selection and fits a group around widely scattered members", () => {
+    const graphLayout: GraphLayout = {
+      edges: [],
+      height: 1200,
+      nodes: [
+        {
+          column: 0,
+          height: 120,
+          nodeId: "workstation:review",
+          nodeKind: "workstation",
+          row: 0,
+          width: 220,
+          workstationNodeId: "review",
+          x: 40,
+          y: 40,
+        },
+        {
+          column: 1,
+          height: 120,
+          nodeId: "work-state:story:queued",
+          nodeKind: "state_position",
+          place: {
+            kind: "work_state",
+            place_id: "story:queued",
+            state_category: "QUEUED",
+            state_value: "queued",
+            type_id: "story",
+          },
+          row: 0,
+          width: 140,
+          x: 900,
+          y: 120,
+        },
+        {
+          column: 2,
+          height: 120,
+          nodeId: "work-state:story:done",
+          nodeKind: "state_position",
+          place: {
+            kind: "work_state",
+            place_id: "story:done",
+            state_category: "TERMINAL",
+            state_value: "done",
+            type_id: "story",
+          },
+          row: 1,
+          width: 140,
+          x: 300,
+          y: 1000,
+        },
+      ],
+      width: 1400,
+    };
+    const { result } = renderGraphViewModelWithLayout(graphLayout);
+
+    const reviewNode = result.current.nodes.find(
+      (node) => node.id === "workstation:review",
+    );
+    const clickReviewNode = (
+      reviewNode?.data as { onSelectWorkstation?: (nodeId: string) => void }
+    ).onSelectWorkstation;
+    expect(clickReviewNode).toBeInstanceOf(Function);
+
+    act(() => {
+      clickReviewNode?.("review");
+    });
+
+    expect([...result.current.graphSelection.state.selectedNodeIds]).toEqual([
+      "workstation:review",
+    ]);
+
+    act(() => {
+      result.current.graphSelection.addToSelection({
+        nodeIds: ["work-state:story:queued", "work-state:story:done"],
+      });
+    });
+
+    const selectedNodeIds = [
+      ...result.current.graphSelection.state.selectedNodeIds,
+    ];
+    expect(new Set(selectedNodeIds)).toEqual(
+      new Set([
+        "workstation:review",
+        "work-state:story:queued",
+        "work-state:story:done",
+      ]),
+    );
+
+    const nodeGeometryById = new Map(
+      result.current.nodes
+        .filter((node) => selectedNodeIds.includes(node.id))
+        .map((node) => [
+          node.id,
+          {
+            height: node.height ?? 0,
+            position: node.position,
+            width: node.width ?? 0,
+          },
+        ]),
+    );
+
+    const bounds = fitFactoryLayoutGroupBounds({
+      nodeGeometryById,
+      nodeIds: selectedNodeIds,
+    });
+
+    expect(bounds).not.toBeNull();
+    expect(bounds?.width ?? 0).toBeGreaterThan(
+      FACTORY_LAYOUT_GROUP_DEFAULT_SIZE.width,
+    );
+    expect(bounds?.height ?? 0).toBeGreaterThan(
+      FACTORY_LAYOUT_GROUP_DEFAULT_SIZE.height,
+    );
+    expect(bounds?.x ?? 0).toBeLessThanOrEqual(40);
+    expect(bounds?.y ?? 0).toBeLessThanOrEqual(40);
+    expect((bounds?.x ?? 0) + (bounds?.width ?? 0)).toBeGreaterThanOrEqual(
+      900 + 140,
+    );
+    expect((bounds?.y ?? 0) + (bounds?.height ?? 0)).toBeGreaterThanOrEqual(
+      1000 + 120,
+    );
   });
 
   it("syncs React Flow selection changes and clears with Esc handler", () => {

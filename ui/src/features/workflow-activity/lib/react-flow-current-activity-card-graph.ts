@@ -434,6 +434,7 @@ interface BuildCurrentActivityNodesInput {
   graphLayout: GraphLayout;
   locale?: string;
   now: number;
+  onGraphSelectNode?: (nodeId: string) => void;
   onSelectDoc: (targetPath: string) => void;
   onSelectResource: (resourceName: string) => void;
   onSelectStateNode: (placeId: string) => void;
@@ -620,6 +621,17 @@ function buildPlaceNodeData(
   };
 }
 
+function withGraphSelectNode<Args extends unknown[]>(
+  onGraphSelectNode: ((nodeId: string) => void) | undefined,
+  factoryGraphNodeId: string,
+  onSelect: (...args: Args) => void,
+): (...args: Args) => void {
+  return (...args: Args) => {
+    onGraphSelectNode?.(factoryGraphNodeId);
+    onSelect(...args);
+  };
+}
+
 function buildPlaceNode(
   positionedNode: PositionedPlaceNode,
   input: BuildCurrentActivityNodesInput,
@@ -645,7 +657,13 @@ function buildPlaceNode(
         ...basePlaceData,
         kind: "work-state" as const,
         ...(wireSelectionHandlers
-          ? { onSelectStateNode: input.onSelectStateNode }
+          ? {
+              onSelectStateNode: withGraphSelectNode(
+                input.onGraphSelectNode,
+                factoryGraphNodeId,
+                input.onSelectStateNode,
+              ),
+            }
           : {}),
         place,
       },
@@ -665,7 +683,13 @@ function buildPlaceNode(
         ...basePlaceData,
         kind: "resource" as const,
         ...(wireSelectionHandlers
-          ? { onSelectResource: input.onSelectResource }
+          ? {
+              onSelectResource: withGraphSelectNode(
+                input.onGraphSelectNode,
+                factoryGraphNodeId,
+                input.onSelectResource,
+              ),
+            }
           : {}),
         place,
         selectedResource:
@@ -690,7 +714,13 @@ function buildPlaceNode(
         ...basePlaceData,
         kind: "worker" as const,
         ...(wireSelectionHandlers
-          ? { onSelectWorker: input.onSelectWorker }
+          ? {
+              onSelectWorker: withGraphSelectNode(
+                input.onGraphSelectNode,
+                factoryGraphNodeId,
+                input.onSelectWorker,
+              ),
+            }
           : {}),
         place,
         ...workerMetadata,
@@ -718,7 +748,13 @@ function buildPlaceNode(
         ...basePlaceData,
         kind: "work-type" as const,
         ...(wireSelectionHandlers
-          ? { onSelectWorkType: input.onSelectWorkType }
+          ? {
+              onSelectWorkType: withGraphSelectNode(
+                input.onGraphSelectNode,
+                factoryGraphNodeId,
+                input.onSelectWorkType,
+              ),
+            }
           : {}),
         isDefaultWorkType,
         place,
@@ -763,7 +799,13 @@ function buildDocNode(
       kind: "doc",
       locale: input.locale,
       ...(wireSelectionHandlers && selectableDoc
-        ? { onSelectDoc: input.onSelectDoc }
+        ? {
+            onSelectDoc: withGraphSelectNode(
+              input.onGraphSelectNode,
+              positionedNode.nodeId,
+              input.onSelectDoc,
+            ),
+          }
         : {}),
       selectedDoc:
         input.selection?.kind === "doc" &&
@@ -885,7 +927,11 @@ function buildWorkstationNode(
       ...(wireSelectionHandlers
         ? {
             onSelectWorkID: input.onSelectWorkID,
-            onSelectWorkstation: input.onSelectWorkstation,
+            onSelectWorkstation: withGraphSelectNode(
+              input.onGraphSelectNode,
+              positionedNode.nodeId,
+              input.onSelectWorkstation,
+            ),
           }
         : {}),
       selectedWorkID:
@@ -924,6 +970,7 @@ export function buildCurrentActivityNodes({
   graphLayout,
   locale,
   now,
+  onGraphSelectNode,
   onSelectDoc,
   onSelectResource,
   onSelectStateNode,
@@ -956,6 +1003,7 @@ export function buildCurrentActivityNodes({
     graphLayout,
     locale,
     now,
+    onGraphSelectNode,
     onSelectDoc,
     onSelectResource,
     onSelectStateNode,
