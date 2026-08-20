@@ -1,6 +1,6 @@
 ---
 author: Agent Factory Team
-last-modified: 2026-08-10
+last-modified: 2026-08-20
 doc-id: agent-factory/proposals/session-cost-how-to
 ---
 
@@ -22,8 +22,11 @@ A session-scoped cost report values one Factory Session execution; the
 separate Costs service owns the calculation. A Factory definition does not
 have an accrued cost until it runs in a Factory Session.
 
-For elapsed time, queue time, iterations, rework, bottlenecks, distributions,
-and cross-session Factory comparisons, use the proposed performance guide in
+This guide is one half of the dispatch performance and cost MVP. For dispatch
+queue and execution timing and attempt outcome rates, use the proposed MVP
+guide in `dispatch-performance-and-cost-mvp-customer-how-to.md`. For work
+cycle time, iterations, rework, bottlenecks, distributions, and cross-session
+Factory comparisons, use the proposed follow-on guide in
 `session-and-work-analytics-customer-how-to.md`.
 
 ## Command overview

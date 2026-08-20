@@ -1,39 +1,50 @@
 ---
 author: Agent Factory Team
-last-modified: 2026-08-10
+last-modified: 2026-08-20
 doc-id: agent-factory/proposals/session-work-analytics-how-to
 ---
 
-# Measure Factory Performance
+# Analyze Work Flow and Factory Performance
 
 > Proposed customer guide. The metrics commands described here
 > are a target CLI contract and are not yet part of the shipped CLI. Promote
 > this material into the appropriate `docs/reference/` topics when the API and
 > CLI behavior is implemented.
+>
+> This is the follow-on to the dispatch performance and cost MVP. The MVP —
+> `you metrics session`, `you metrics summary`, dispatch queue/execution
+> timing, attempt outcome rates by workstation/worker/provider/model, and the
+> cost lens — is specified in
+> `dispatch-performance-and-cost-mvp-customer-how-to.md` and
+> `session-cost-customer-how-to.md`. This plan assumes that surface exists
+> and only adds to it: new commands, new lens values, new group-by
+> dimensions, and new columns. It does not reshape MVP output.
 
-Use performance reports to move from a single execution to longer-term Factory
-improvement:
+Use the follow-on capabilities to move from dispatch-level measurement to
+longer-term Factory improvement:
 
-1. Explain where one Factory Session spent its time.
+1. Explain where one Factory Session's wall time actually went.
 2. Follow one piece of Work through its attempts, iterations, and sessions.
 3. Find workers, workstations, and states that create recurring delays.
 4. Compare cohorts to determine whether a Factory graph change improved the
    result.
 
-Cost remains a separate backend concern but is one customer-facing metrics
-lens. Use `you metrics session <session-id> --lens cost` for monetary and token
-valuation. Other lenses cover time, throughput, reliability, quality, rework,
-and distributions.
-
 ## Command overview
 
+Baseline shipped by the MVP:
+
 ```text
-you metrics session <session-id> [--lens <lens>]...
-  [--by-work] [--by-worker] [--by-dispatch]
+you metrics session <session-id> [--lens cost] [--by-worker] [--by-dispatch]
+you metrics summary [filters] [--lens cost] [--group-by <dimension>]
+```
+
+This plan adds:
+
+```text
+you metrics session <session-id> [--lens <lens>]... [--by-work]
 you metrics work <work-id> --session <session-id> [--lineage] [--timeline]
 you metrics worker-session <worker-session-id>
 
-you metrics summary [filters] [--lens <lens>]...
 you metrics bottlenecks [filters]
 you metrics distribution --metric <metric> [filters] [--group-by <dimension>]
 you metrics trend --metric <metric> [filters] --interval day|week|month
@@ -49,6 +60,15 @@ you metrics compare periods \
   --baseline <from>..<until> --candidate <from>..<until> [filters]
 ```
 
+It also adds filters and group-by dimensions to the MVP commands:
+
+```text
+--work-type <name>
+--factory-revision <digest>
+--group-by work-type
+--group-by factory-revision
+```
+
 The command families have deliberately different scopes:
 
 - `you metrics session` explains one Factory Session.
@@ -62,9 +82,10 @@ for command diagnostics on stderr and does not add analytical dimensions.
 
 ## Choose one or more lenses
 
-The scope says which executions to measure. A lens says which questions to
-answer. `--lens` is repeatable so customers can compose one report without
-learning separate command families:
+The MVP ships `--lens` with `cost` as its only value. This plan completes the
+lens taxonomy. The scope says which executions to measure. A lens says which
+questions to answer. `--lens` is repeatable so customers can compose one
+report without learning separate command families:
 
 ```bash
 you metrics session <session-id> \
@@ -82,34 +103,23 @@ you metrics session <session-id> \
 | `quality` | Did the result pass customer-defined acceptance or evaluation criteria? |
 | `capacity` | Were configured workers or workstations saturated? |
 
-`overview` is the default for entity and summary commands. Cost, quality, and
-capacity remain explicitly unavailable when their required facts are absent;
-requesting a lens never turns missing data into zero.
+`overview` is the default for entity and summary commands and matches the MVP
+default report. Cost, quality, and capacity remain explicitly unavailable when
+their required facts are absent; requesting a lens never turns missing data
+into zero.
 
-## 1. Explain one Factory Session
+## 1. Explain where session wall time went
 
-Start with the default operational summary:
+The MVP session report gives dispatch counts, summed queue time, and summed
+execution time. The flow lens extends it with wall-time classification:
 
 ```bash
-you metrics session <session-id>
+you metrics session <session-id> --lens flow
 ```
 
-Example:
-
 ```text
-Factory Session fs-review-042 metrics as of 2026-08-10 14:32 PDT
-
-STATUS                         SUCCEEDED
-ELAPSED WALL TIME              18m 42s
 ACTIVE SESSION TIME            17m 03s
 PAUSED TIME                     1m 39s
-DISTINCT WORK ITEMS                  8
-DISPATCH ATTEMPTS                   19
-WORKER SESSIONS                     17
-MAX CONCURRENT EXECUTIONS            4
-SUMMED EXECUTION TIME           41m 08s
-SUMMED QUEUE TIME                6m 21s
-RETRIES                              2
 WORK REVISITS                        3
 FIRST-PASS YIELD                  62.5%
 
@@ -120,73 +130,18 @@ Paused                     1m 17s      6.8%
 Unclassified                  0s      0.0%
 ```
 
-Summed execution time can exceed elapsed wall time because workers execute in
-parallel. It answers "how much execution occurred?" rather than "how long did
-the customer wait?" The critical path explains the portion of wall time that
-actually constrained session completion.
+The critical path explains the portion of wall time that actually constrained
+session completion, as opposed to summed execution time, which answers "how
+much execution occurred?"
 
-For a running session, durations end at the report's `as of` time. Running and
-queued attempts are shown separately and are not presented as completed
-duration samples.
-
-## 2. Attribute session time to workers
-
-Add `--by-worker` to group dispatch execution by configured Worker identity:
-
-```bash
-you metrics session <session-id> --by-worker
-```
-
-```text
-WORKER             SESSIONS  ATTEMPTS  QUEUE P50  RUN P50  RUN P95  SUCCESS  REVISITS
-planner                   2         2        8s     1m 42s    2m 01s    100.0%       0
-reviewer                  9        11       31s     2m 14s    4m 48s     81.8%       3
-repairer                  6         6       12s     1m 09s    2m 36s     83.3%       0
-```
-
-`SESSIONS` counts distinct Worker Sessions. `ATTEMPTS` counts dispatch
-executions, including retries. These values can differ when a Worker Session
-continues across several dispatch attempts or when an interrupted attempt is
-reconciled.
-
-The default grouping is the authored Worker. Use `--by-dispatch` when every
-execution attempt matters, or `--by-work` when the customer-visible Work item
-is the useful unit.
-
-Combine views when investigating a specific session:
+`--by-work` groups session activity by the customer-visible Work item, joining
+the MVP's `--by-worker` and `--by-dispatch` groupings:
 
 ```bash
 you metrics session <session-id> --by-work --by-worker --by-dispatch
 ```
 
-## 3. Inspect queue and execution time per dispatch
-
-Use `--by-dispatch` for the most granular session timeline:
-
-```bash
-you metrics session <session-id> --by-dispatch
-```
-
-```text
-DISPATCH       WORK       WORKSTATION  WORKER    ATTEMPT  QUEUE  EXECUTION  OUTCOME
-dispatch-101   work-17    plan         planner         1     8s      1m 42s  ACCEPTED
-dispatch-102   work-17    review       reviewer        1    44s      3m 16s  REJECTED
-dispatch-108   work-17    repair       repairer        1    12s      1m 09s  ACCEPTED
-dispatch-113   work-17    review       reviewer        2    19s      2m 07s  ACCEPTED
-```
-
-This view distinguishes:
-
-- queue time: dispatch queued until worker execution starts;
-- execution time: worker execution starts until the attempt terminates;
-- attempt number: repeated execution for the same Work and stage;
-- outcome: accepted, continued, rejected, failed, interrupted, or canceled.
-
-Failed and canceled attempts still contribute execution and queue time. They
-must not disappear from totals merely because they did not produce successful
-Work.
-
-## 4. Explain one piece of Work
+## 2. Explain one piece of Work
 
 Work identifiers are interpreted in a Factory Session scope. Start with the
 session in which the Work was observed:
@@ -223,7 +178,7 @@ order:
 you metrics work <work-id> --session <session-id> --timeline
 ```
 
-## 5. Follow Work across Factory Sessions
+## 3. Follow Work across Factory Sessions
 
 A Work ID identifies one Work record. Use `--lineage` when the customer wants
 the broader logical piece of work represented by its trace and chaining
@@ -250,62 +205,13 @@ TERMINAL RESULT            SUCCEEDED
 Cross-session association must use recorded Work lineage such as `traceId`,
 `currentChainingTraceId`, and predecessor trace IDs. Similar names or payloads
 are not sufficient evidence that two Work records represent the same logical
-piece of work.
+piece of work. The MVP already requires these facts to be recorded in the
+event ledger; this plan is where they become reportable.
 
-## 6. Read the operational summary over time
+## 4. Measure Work flow and rework
 
-Use `you metrics summary` for a population rather than one execution:
-
-```bash
-you metrics summary --factory customer-support --since 30d
-```
-
-```text
-Analytics summary
-Window: 2026-07-11T00:00:00Z through 2026-08-10T14:32:00Z
-Filter: factory=customer-support
-
-FACTORY SESSIONS                       286
-TERMINAL FACTORY SESSIONS              271
-OPEN FACTORY SESSIONS                   15
-WORK ADMITTED                        2,814
-WORK COMPLETED                       2,641
-WORK COMPLETION RATE                 93.9%
-FIRST-PASS YIELD                     78.4%
-RETRY RATE                            6.2%
-REVISIT RATE                         11.7%
-THROUGHPUT                       88.0/day
-
-METRIC                         P50       P90       P95       MAX    SAMPLES
-Session wall time            12m 08s   31m 42s   44m 10s   2h 18m       271
-Work cycle time               4m 21s   13m 08s   18m 40s   1h 02m     2,641
-Dispatch queue time               18s     1m 41s    3m 09s      22m     6,902
-Dispatch execution time       1m 06s    4m 14s    6m 37s      41m     6,755
-```
-
-The report always prints its time window, filters, sample counts, and coverage.
-Open observations are counted but excluded from terminal-duration
-distributions unless the command explicitly says otherwise.
-
-Common filters include:
-
-```text
---factory <name>
---factory-revision <digest>
---work-type <name>
---workstation <name>
---worker <name>
---provider <id>
---model <id>
---status <status>
---since <duration-or-time>
---until <time>
-```
-
-## 7. Measure Work flow and rework
-
-Use the Work view to compare cycle time, first-pass yield, retries, and repeated
-processing:
+This plan adds Work-level metrics to `you metrics summary`, alongside the
+MVP's dispatch metrics:
 
 ```bash
 you metrics summary \
@@ -323,6 +229,17 @@ incident               603     11m 42s     38m 51s       62.7%   10.6%    22.4%
 release-review         196     18m 09s     51m 20s       54.1%   14.8%    31.6%
 ```
 
+The unfiltered summary gains Work-population rows on top of the MVP output:
+
+```text
+WORK ADMITTED                        2,814
+WORK COMPLETED                       2,641
+WORK COMPLETION RATE                 93.9%
+FIRST-PASS YIELD                     78.4%
+REVISIT RATE                         11.7%
+THROUGHPUT                       88.0/day
+```
+
 The default report uses `revisit`, not `rework`, for graph-derived loops. A
 revisit means Work entered a previously visited non-terminal state or repeated
 an already visited processing stage. Some Factory graphs intentionally iterate,
@@ -333,31 +250,10 @@ outcome explicitly classifies a route or state as rework. When that
 classification is absent, the CLI prints `REWORK: unclassified` instead of
 renaming every loop as rework.
 
-## 8. Compare workers and workstations
+The reliability lens likewise adds `REVISIT` columns to the MVP's
+workstation/worker/provider/model groupings.
 
-Use the workers view for execution capacity and reliability:
-
-```bash
-you metrics summary \
-  --factory customer-support \
-  --since 14d \
-  --lens flow \
-  --lens reliability \
-  --group-by workstation
-```
-
-```text
-WORKSTATION  ATTEMPTS  QUEUE P50  QUEUE P95  RUN P50  RUN P95  FAILURE  REVISIT
-triage          2,204         7s         31s       42s    1m 38s      1.2%     2.4%
-review            918        39s       4m 12s    2m 17s    8m 44s      6.8%    18.1%
-repair            311        18s       1m 09s    3m 02s   10m 27s      8.4%    12.9%
-```
-
-Grouping by `worker` uses the authored Worker identity. Grouping by `model` or
-`provider` explains execution-channel differences. Individual Worker Session
-IDs remain a drilldown dimension, not a useful default cohort.
-
-## 9. Find likely bottlenecks
+## 5. Find likely bottlenecks
 
 Use the bottleneck report to rank constrained stages and show the evidence for
 the ranking:
@@ -386,7 +282,7 @@ should expose its component signals:
 
 Unknown capacity must not be presented as zero utilization.
 
-## 10. Inspect one distribution
+## 6. Inspect one distribution
 
 Use a distribution command instead of relying on a single average:
 
@@ -417,7 +313,7 @@ worker.failure-rate
 worker.retry-rate
 ```
 
-## 11. Follow a trend
+## 7. Follow a trend
 
 Use trend reports to see whether a metric changed gradually or only during a
 short-lived event:
@@ -443,11 +339,13 @@ Do not infer that the revision caused the change merely because the dates
 align. Compare workload mix, providers, models, and sample sizes before drawing
 that conclusion.
 
-## 12. Compare Factory graph revisions
+## 8. Compare Factory graph revisions
 
 Every Factory Session used for revision comparison must record an immutable
 digest of its effective compiled Factory definition. A mutable Factory name or
-the server's current edit version is not enough.
+the server's current edit version is not enough. The MVP already requires this
+digest in the event ledger, so history accumulated before this plan ships
+remains comparable.
 
 Compare two revisions of the same Factory:
 
@@ -481,7 +379,7 @@ relative percentages. The report includes sample sizes, coverage, and workload
 mix warnings so a small or materially different cohort is not presented as a
 conclusive improvement.
 
-## 13. Compare time periods
+## 9. Compare time periods
 
 Use period comparison when there was an operational change without a new graph
 revision, such as worker capacity, provider, or model changes:
@@ -497,62 +395,35 @@ Period boundaries are interpreted as UTC in machine-readable input unless an
 explicit offset is present. Human output prints the effective boundaries and
 timezone before the results.
 
-## 14. Use JSON for further analysis
+## 10. Use JSON for further analysis
 
-Every view supports global `--json`:
+Every view supports global `--json`. In addition to the MVP's JSON retention
+rules (filters, time boundaries, `asOf`, sample counts, metric definitions,
+warnings), follow-on JSON consumers should retain:
 
-```bash
-you --json metrics bottlenecks \
-  --factory customer-support \
-  --since 30d > bottlenecks.json
-```
-
-JSON consumers should retain:
-
-- effective filters and time boundaries;
-- the report's `asOf` timestamp;
-- sample and excluded counts;
 - event and duration coverage;
-- Factory revision digests;
-- metric definitions and units;
-- quantile method; and
-- warnings or unavailable classifications.
+- Factory revision digests; and
+- the quantile method.
 
 Do not compare unlabeled values from reports produced under different filters,
 metric definitions, or revision identities.
 
 ## Metric definitions
 
+The MVP defines session wall time, dispatch queue time, dispatch execution
+time, summed execution time, retry, success rate, and failure rate. This plan
+adds:
+
 | Metric | Definition |
 |---|---|
-| Session wall time | Session start until terminal event, or `asOf` for a running session. |
 | Active session time | Wall time minus recorded paused intervals. |
 | Work cycle time | Work admission until its first terminal Work state. |
-| Dispatch queue time | Dispatch queued until worker execution starts. |
-| Dispatch execution time | Worker execution start until the attempt terminates. |
-| Summed execution time | Sum of dispatch execution durations; may exceed wall time under concurrency. |
 | Critical-path execution | Execution intervals that constrain observed end-to-end completion. |
-| Retry | A new attempt explicitly retrying a failed, timed-out, or interrupted dispatch. |
 | Revisit | Work repeats a previously visited non-terminal state or processing stage. |
 | Iteration | A completed pass through a declared iterative stage or loop. |
 | First-pass yield | Terminal successful Work without a retry, revisit, or classified rework step. |
 | Throughput | Terminal Work count divided by the effective observation window. |
 | Rework | A route or state explicitly classified as rework by the Factory contract. |
-
-## Missing and partial data
-
-Reports must distinguish zero from unavailable. Each report includes coverage
-for the facts it needs, such as queue timestamps, execution timestamps, Work
-lineage, terminal events, and Factory revision identity.
-
-Examples:
-
-- A dispatch with no start timestamp has unknown queue and execution time.
-- Running Work has elapsed cycle time but no completed cycle-time sample.
-- Work without trace lineage cannot be joined safely across sessions.
-- A session without an effective Factory digest appears under `unknown
-  revision` and is excluded from revision comparison.
-- A workstation without configured capacity has no saturation percentage.
 
 ## Explain a surprising result
 
@@ -579,7 +450,9 @@ improvement.
 
 ## Check metrics data health
 
-Use coverage before trusting a comparison or automating a threshold:
+The MVP prints sample and exclusion counts inline. This plan promotes coverage
+to a first-class report; use it before trusting a comparison or automating a
+threshold:
 
 ```bash
 you metrics coverage --factory customer-support --since 30d
@@ -688,7 +561,7 @@ top-level command families:
 Explain why one session was slow:
 
 ```bash
-you metrics session <session-id> --by-worker --by-dispatch
+you metrics session <session-id> --lens flow --by-worker --by-dispatch
 ```
 
 Follow a piece of Work through repeated or cross-session processing:
@@ -713,22 +586,13 @@ you metrics compare revisions \
   --since 90d
 ```
 
-Inspect operational and monetary lenses for the same session:
-
-```bash
-you metrics session <session-id> \
-  --lens flow \
-  --lens reliability \
-  --lens cost \
-  --by-work \
-  --by-worker
-```
-
 ## Product boundary
 
 The CLI presents one `you metrics` namespace even though the implementation
 uses separate services. The metrics transport delegates operational and cohort
 queries to Analytics and monetary valuation to Costs, then composes requested
-lenses. Factory Sessions, Worker Sessions, Work, and Recordings remain the
-authoritative sources of lifecycle, usage, and lineage facts rather than
-calculating analytical results themselves.
+lenses. The MVP stands up the Analytics service with dispatch-scope queries;
+this plan extends the same service with work-centric, flow-classification, and
+comparative queries. Factory Sessions, Worker Sessions, Work, and Recordings
+remain the authoritative sources of lifecycle, usage, and lineage facts rather
+than calculating analytical results themselves.
