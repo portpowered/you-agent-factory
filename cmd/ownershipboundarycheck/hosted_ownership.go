@@ -72,6 +72,7 @@ func evaluateHostedOwnershipClaims(claims []hostedOwnershipClaim) []finding {
 				Rule:     ruleHostedOwnershipAssignment,
 				FilePath: hostedOwnershipClaimsFile,
 				Target:   fmt.Sprintf("unknown responsibility %q", claim.Responsibility),
+				class:    productionSourceClass,
 			})
 			continue
 		}
@@ -87,6 +88,7 @@ func evaluateHostedOwnershipClaims(claims []hostedOwnershipClaim) []finding {
 				claim.Owner,
 				wantOwner,
 			),
+			class: productionSourceClass,
 		})
 	}
 	sort.Slice(findings, func(i, j int) bool {
