@@ -96,6 +96,27 @@ async function createAndEditVisualGroup(page, viewport) {
     targetWorkstationNode,
     TARGET_WORKSTATION_LABEL,
   );
+  // The marquee leaves React Flow's nodes-selection overlay stacked above the
+  // node, which swallows pointer input aimed at the in-node resize grip.
+  // Clear it and reselect the workstation directly, the way an operator grabs
+  // the grip after clicking a node.
+  await viewport.press("Escape");
+  await page
+    .locator(".react-flow__nodesselection-rect")
+    .waitFor({ state: "detached" });
+  await targetWorkstationNode
+    .getByRole("button", {
+      exact: true,
+      name: `Select ${TARGET_WORKSTATION_LABEL} workstation`,
+    })
+    .click();
+  await targetWorkstationNode
+    .getByRole("button", {
+      exact: true,
+      name: `Select ${TARGET_WORKSTATION_LABEL} workstation`,
+      pressed: true,
+    })
+    .waitFor({ state: "visible" });
   const resizedNode = await resizeSelectedNode(
     page,
     targetWorkstationNode,
