@@ -393,7 +393,9 @@ function SessionTabsContent({
           ))}
         </div>
       </nav>
-      <div className="flex min-w-0 flex-wrap items-center gap-1">
+      {/* flex-none keeps the fixed-size open button on screen; the tab strip
+          beside it owns the shrink and scrolls instead. */}
+      <div className="flex flex-none items-center gap-1">
         <OpenSessionButton
           label={messages.openSessionButtonLabel}
           onClick={(event) => {
