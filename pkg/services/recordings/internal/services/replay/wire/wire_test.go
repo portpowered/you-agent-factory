@@ -22,3 +22,18 @@ func TestNewServiceConstructsReplayCapability(t *testing.T) {
 		t.Fatal("NewService() = nil")
 	}
 }
+
+func TestNewServiceWithResumeSourceConstructsReplayCapability(t *testing.T) {
+	t.Parallel()
+
+	planner := recordings.LiveRecordingTargetPlannerFunc(
+		func(recordings.LiveRecordingTargetRequest) (recordings.LiveRecordingTarget, error) {
+			return recordings.LiveRecordingTarget{}, nil
+		},
+	)
+	lifecycle := recordinglifecyclewire.NewService(planner, nil, nil)
+	projection := projectionquerywire.NewService()
+	if service := NewServiceWithResumeSource(lifecycle, projection, nil, nil); service == nil {
+		t.Fatal("NewServiceWithResumeSource() = nil")
+	}
+}
