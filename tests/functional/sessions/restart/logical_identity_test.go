@@ -284,7 +284,29 @@ func TestFactorySessionHistoryIsPersistedAcrossRestart(t *testing.T) {
 		t.Fatalf("sync-preflight reasonCode = %q, want %q", preflight.ReasonCode, factoryapi.LogicalSessionRemap)
 	}
 
-	afterShow := readDurableFactorySession(t, afterURL, sessionID)
+	assertRestartedFactorySession(
+		t,
+		afterURL,
+		sessionID,
+		beforeShow,
+		dispatchOneBefore,
+		dispatchTwoBefore,
+		beforeEvents,
+	)
+}
+
+func assertRestartedFactorySession(
+	t *testing.T,
+	baseURL string,
+	sessionID string,
+	beforeShow factoryapi.FactorySessionDurableReadModel,
+	beforeDispatchOne factoryapi.FactorySessionDispatchSummary,
+	beforeDispatchTwo factoryapi.FactorySessionDispatchSummary,
+	beforeEvents []factoryapi.FactoryEvent,
+) {
+	t.Helper()
+
+	afterShow := readDurableFactorySession(t, baseURL, sessionID)
 	if afterShow.SessionId != sessionID {
 		t.Fatalf("post-restart sessionId = %q, want %q", afterShow.SessionId, sessionID)
 	}
@@ -306,13 +328,8 @@ func TestFactorySessionHistoryIsPersistedAcrossRestart(t *testing.T) {
 		)
 	}
 
-	afterDispatches := listFactorySessionDispatches(t, afterURL, sessionID)
-	afterDispatchOne := requireDispatchSummary(
-		t,
-		afterDispatches,
-		"dispatch-1",
-		factoryapi.FactoryDispatchStatusCOMPLETED,
-	)
+	afterDispatches := listFactorySessionDispatches(t, baseURL, sessionID)
+	afterDispatchOne := requireDispatchSummary(t, afterDispatches, "dispatch-1", factoryapi.FactoryDispatchStatusCOMPLETED)
 	afterDispatchTwo := requireDispatchSummary(
 		t,
 		afterDispatches,
@@ -323,17 +340,17 @@ func TestFactorySessionHistoryIsPersistedAcrossRestart(t *testing.T) {
 	if len(afterDispatches.Dispatches) != 2 {
 		t.Fatalf("post-restart dispatch count = %d, want 2", len(afterDispatches.Dispatches))
 	}
-	assertDispatchSummaryParity(t, dispatchOneBefore, afterDispatchOne)
-	assertDispatchSummaryParity(t, dispatchTwoBefore, afterDispatchTwo)
-	if dispatchTwoBefore.Status != afterDispatchTwo.Status {
+	assertDispatchSummaryParity(t, beforeDispatchOne, afterDispatchOne)
+	assertDispatchSummaryParity(t, beforeDispatchTwo, afterDispatchTwo)
+	if beforeDispatchTwo.Status != afterDispatchTwo.Status {
 		t.Fatalf(
 			"dispatch-2 status changed across restart: before=%q after=%q",
-			dispatchTwoBefore.Status,
+			beforeDispatchTwo.Status,
 			afterDispatchTwo.Status,
 		)
 	}
 
-	afterEvents := listFactorySessionEvents(t, afterURL, sessionID)
+	afterEvents := listFactorySessionEvents(t, baseURL, sessionID)
 	if len(afterEvents) == 0 {
 		t.Fatal("post-restart factory events unexpectedly empty")
 	}
