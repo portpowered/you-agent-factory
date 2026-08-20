@@ -2,6 +2,9 @@ package runtime
 
 import (
 	"context"
+	"encoding/json"
+	"os"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -13,8 +16,11 @@ import (
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/orchestrators/petri"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/scheduler"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/state"
+	"github.com/portpowered/infinite-you/pkg/services/recordings"
+	recordingswire "github.com/portpowered/infinite-you/pkg/services/recordings/wire"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
@@ -83,6 +89,255 @@ func TestNew_WithoutRestoredStateUsesFreshResourceMarking(t *testing.T) {
 			t.Errorf("resource token %q timestamps = (%s, %s), want (%s, %s)", actual.ID, actual.CreatedAt, actual.EnteredAt, base, base)
 		}
 	}
+}
+
+func TestNew_WithExplicitEmptyRestoredStateUsesFreshResourceMarking(t *testing.T) {
+	base := time.Date(2026, time.April, 10, 12, 0, 0, 0, time.UTC)
+	newFactory := func(restored *interfaces.FactoryWorldState) *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net] {
+		net := buildSimpleNet()
+		resource := &state.ResourceDef{ID: "gpu-slot", Name: "GPU slot", Capacity: 2}
+		place, _ := state.GenerateResourcePlaces(resource, base)
+		net.Resources = map[string]*state.ResourceDef{resource.ID: resource}
+		net.Places[place.ID] = place
+		f, err := newTestFactory(
+			withNet(net),
+			withClock(platformclock.NewDeterministic(base, time.Second)),
+			withRestoredWorldState(restored),
+		)
+		if err != nil {
+			t.Fatalf("New: %v", err)
+		}
+		snapshot, err := f.GetEngineStateSnapshot(context.Background())
+		if err != nil {
+			t.Fatalf("GetEngineStateSnapshot: %v", err)
+		}
+		return snapshot
+	}
+
+	fresh := newFactory(nil)
+	empty := newFactory(&interfaces.FactoryWorldState{})
+	if !reflect.DeepEqual(fresh.Marking, empty.Marking) {
+		t.Fatalf("empty restored marking = %#v, fresh marking = %#v; want identical markings", empty.Marking, fresh.Marking)
+	}
+}
+
+func TestNew_WithRestoredWorldStateSeedsWorkAndKeepsCurrentResourcesAuthoritative(t *testing.T) {
+	base := time.Date(2026, time.April, 10, 12, 0, 0, 0, time.UTC)
+	net := buildSimpleNet()
+	resource := &state.ResourceDef{ID: "gpu-slot", Name: "GPU slot", Capacity: 2}
+	resourcePlace, expectedResources := state.GenerateResourcePlaces(resource, base)
+	net.Resources = map[string]*state.ResourceDef{resource.ID: resource}
+	net.Places[resourcePlace.ID] = resourcePlace
+	restored := restoredWorldStateFixture(base, resourcePlace.ID)
+
+	f, err := newTestFactory(
+		withNet(net),
+		withClock(platformclock.NewDeterministic(base, time.Second)),
+		withRestoredWorldState(restored),
+	)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	snapshot, err := f.GetEngineStateSnapshot(context.Background())
+	if err != nil {
+		t.Fatalf("GetEngineStateSnapshot: %v", err)
+	}
+	if got := len(snapshot.Marking.Tokens); got != len(expectedResources)+1 {
+		t.Fatalf("initial token count = %d, want %d current resources plus restored Work", got, len(expectedResources)+1)
+	}
+	assertCurrentRestoredResourceTokens(t, snapshot, resourcePlace.ID, expectedResources)
+	token := restoredWorkTokenFromSnapshot(t, snapshot)
+	assertRestoredWorkToken(t, token, restored.WorkItemsByID["work-restored"])
+}
+
+func assertCurrentRestoredResourceTokens(
+	t *testing.T,
+	snapshot *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net],
+	placeID string,
+	expectedResources []*workerexecution.Token,
+) {
+	t.Helper()
+	wantIDs := []string{expectedResources[0].ID, expectedResources[1].ID}
+	if got := snapshot.Marking.PlaceTokens[placeID]; !reflect.DeepEqual(got, wantIDs) {
+		t.Fatalf("resource token IDs = %#v, want current generated IDs %#v", got, wantIDs)
+	}
+}
+
+func restoredWorkTokenFromSnapshot(
+	t *testing.T,
+	snapshot *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net],
+) *workerexecution.Token {
+	t.Helper()
+	workTokenIDs := snapshot.Marking.PlaceTokens["task:done"]
+	if len(workTokenIDs) != 1 {
+		t.Fatalf("restored Work token IDs = %#v, want one token", workTokenIDs)
+	}
+	token := snapshot.Marking.Tokens[workTokenIDs[0]]
+	if token == nil {
+		t.Fatalf("restored Work token %q is missing from marking", workTokenIDs[0])
+	}
+	return token
+}
+
+func assertRestoredWorkToken(
+	t *testing.T,
+	token *workerexecution.Token,
+	item work.FactoryWorkItem,
+) {
+	t.Helper()
+	if token.ID != "work-restored" || token.Color.WorkID != "work-restored" || token.Color.WorkTypeID != "task" {
+		t.Fatalf("restored Work identity = (%q, %q, %q), want work-restored/task", token.ID, token.Color.WorkID, token.Color.WorkTypeID)
+	}
+	if token.Color.RequestID != "request-restored" || token.Color.TraceID != "trace-restored" || token.Color.ParentID != "parent-restored" {
+		t.Fatalf("restored Work lineage = %#v, want recorded request/trace/parent", token.Color)
+	}
+	if token.Color.Name != "Restored work" || !reflect.DeepEqual(token.Color.Tags, map[string]string{"priority": "high"}) {
+		t.Fatalf("restored Work presentation = %#v, want recorded name and tags", token.Color)
+	}
+	assertRestoredWorkPayload(t, token, item)
+	if len(token.Color.Relations) != 1 || token.Color.Relations[0].TargetWorkID != "dependency-restored" {
+		t.Fatalf("restored Work relations = %#v, want dependency-restored", token.Color.Relations)
+	}
+}
+
+func assertRestoredWorkPayload(t *testing.T, token *workerexecution.Token, item work.FactoryWorkItem) {
+	t.Helper()
+	if !reflect.DeepEqual(token.Color.Content, item.Content) ||
+		!reflect.DeepEqual(token.Color.StructuredResult, item.StructuredResult) {
+		t.Fatalf("restored Work payload = %#v, want recorded content and structured result", token.Color)
+	}
+}
+
+func restoredWorldStateFixture(base time.Time, resourcePlaceID string) *interfaces.FactoryWorldState {
+	return &interfaces.FactoryWorldState{
+		EventTime: base.Add(-time.Minute),
+		WorkItemsByID: map[string]work.FactoryWorkItem{
+			"work-restored": {
+				ID: "work-restored", WorkTypeID: "task", State: "done", DisplayName: "Restored work",
+				ChainingTraceDepth: 2, CurrentChainingTraceID: "chain-current",
+				PreviousChainingTraceIDs: []string{"chain-previous"}, TraceID: "trace-restored",
+				ParentID: "parent-restored", PlaceID: "task:done",
+				Content: []work.WorkContentPart{{Type: work.WorkContentPartTypeText, Text: "recorded content"}},
+				Tags:    map[string]string{"priority": "high"}, StructuredResult: map[string]any{"answer": "recorded"},
+			},
+			// This item is retained in the historical Work index but is not
+			// present in current occupancy; it must not become a live token.
+			"work-not-on-board": {ID: "work-not-on-board", WorkTypeID: "task", State: "init", PlaceID: "task:init"},
+		},
+		WorkRequestsByID: map[string]interfaces.WorkRequestPayload{
+			"request-restored": {RequestID: "request-restored", WorkItems: []work.FactoryWorkItem{{ID: "work-restored"}}},
+		},
+		RelationsByWorkID: map[string][]work.FactoryRelation{
+			"work-restored": {{Type: string(work.WorkRelationDependsOn), TargetWorkID: "dependency-restored", RequiredState: "done"}},
+		},
+		PlaceOccupancyByID: map[string]interfaces.FactoryPlaceOccupancy{
+			"task:done":     {PlaceID: "task:done", WorkItemIDs: []string{"work-restored"}, ResourceTokenIDs: []string{"old-gpu-token-1", "old-gpu-token-2", "old-gpu-token-3"}},
+			resourcePlaceID: {PlaceID: resourcePlaceID, ResourceTokenIDs: []string{"recorded-resource-token"}},
+		},
+	}
+}
+
+func TestNew_RoundTripsCanonicalRecordingThroughRecordingsRoot(t *testing.T) {
+	base := time.Date(2026, time.April, 10, 12, 0, 0, 0, time.UTC)
+	root, err := recordingswire.NewServiceWithProjectionAndEffects(
+		recordingswire.NewRuntimeLedger(nil, func() time.Time { return base }, "roundtrip", nil),
+		recordingswire.NewProjectionService(),
+		nil,
+		func(string, []byte) error { return nil },
+		os.MkdirAll,
+		func(dir, pattern string) (recordings.RecordingTemporaryFile, error) {
+			return os.CreateTemp(dir, pattern)
+		},
+		os.Remove,
+		os.Rename,
+		os.ReadFile,
+	)
+	if err != nil {
+		t.Fatalf("NewService: %v", err)
+	}
+	opening, ok := root.(recordings.RuntimeOpening)
+	if !ok {
+		t.Fatal("Recordings root does not expose RuntimeOpening")
+	}
+
+	factorySnapshot, err := interfaces.NewFactorySnapshot(map[string]any{
+		"name": "roundtrip-factory",
+		"workTypes": []any{
+			map[string]any{
+				"name": "task",
+				"states": []any{
+					map[string]any{"name": "init", "type": "INITIAL"},
+					map[string]any{"name": "done", "type": "TERMINAL"},
+				},
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("NewFactorySnapshot: %v", err)
+	}
+
+	workID := "work-roundtrip"
+	traceID := "trace-roundtrip"
+	events := roundtripFixtureEvents(t, base, factorySnapshot)
+
+	restored, err := opening.ReconstructCanonicalFactoryWorldState(events, 1)
+	if err != nil {
+		t.Fatalf("ReconstructCanonicalFactoryWorldState: %v", err)
+	}
+	if got := restored.WorkItemsByID[workID].PlaceID; got != "task:init" {
+		t.Fatalf("reconstructed Work place = %q, want task:init", got)
+	}
+
+	f, err := newTestFactory(
+		withNet(buildSimpleNet()),
+		withClock(platformclock.NewDeterministic(base.Add(2*time.Second), time.Second)),
+		withRestoredWorldState(&restored),
+	)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	snapshot, err := f.GetEngineStateSnapshot(context.Background())
+	if err != nil {
+		t.Fatalf("GetEngineStateSnapshot: %v", err)
+	}
+	placeTokens := snapshot.Marking.PlaceTokens["task:init"]
+	if len(placeTokens) != 1 {
+		t.Fatalf("round-tripped Work tokens = %#v, want one token at task:init", placeTokens)
+	}
+	token := snapshot.Marking.Tokens[placeTokens[0]]
+	if token == nil || token.Color.WorkID != workID || token.Color.TraceID != traceID {
+		t.Fatalf("round-tripped Work token = %#v, want %s/%s", token, workID, traceID)
+	}
+}
+
+func roundtripFixtureEvents(t *testing.T, base time.Time, factorySnapshot *interfaces.FactorySnapshot) []interfaces.FactoryEvent {
+	t.Helper()
+	requestID := "request-roundtrip"
+	traceID := "trace-roundtrip"
+	workID := "work-roundtrip"
+	workIDs := []string{workID}
+	traceIDs := []string{traceID}
+	return []interfaces.FactoryEvent{
+		{Id: "run-roundtrip", Type: interfaces.FactoryEventTypeRunRequest,
+			Payload: mustMarshalRoundtripTest(t, interfaces.RunRequestEventPayload{Factory: factorySnapshot, RecordedAt: base}),
+			Context: interfaces.FactoryEventContext{Tick: 0, Sequence: 0, EventTime: base}},
+		{Id: "work-roundtrip", Type: interfaces.FactoryEventTypeWorkRequest,
+			Payload: mustMarshalRoundtripTest(t, work.WorkRequestEventPayload{Type: work.WorkRequestTypeFactoryRequestBatch,
+				Works: []work.WorkRequestEventWork{{Name: "Roundtrip work", WorkID: workID, WorkTypeID: "task",
+					State: &work.WorkEventState{Name: "init"}, TraceID: traceID,
+					Content: []work.WorkContentPart{{Type: work.WorkContentPartTypeText, Text: "fixture payload"}}}}}),
+			Context: interfaces.FactoryEventContext{Tick: 1, Sequence: 1, EventTime: base.Add(time.Second),
+				RequestID: &requestID, TraceIDs: &traceIDs, WorkIDs: &workIDs}},
+	}
+}
+
+func mustMarshalRoundtripTest(t *testing.T, value any) []byte {
+	t.Helper()
+	encoded, err := json.Marshal(value)
+	if err != nil {
+		t.Fatalf("marshal roundtrip fixture: %v", err)
+	}
+	return encoded
 }
 
 type resourceCapacityRuntimeHarness struct {

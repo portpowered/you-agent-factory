@@ -420,6 +420,19 @@ func (service *combinedService) Projection() recordings.ProjectionService {
 	return service.ProjectionService
 }
 
+// ReconstructCanonicalFactoryWorldState publishes the typed canonical
+// reduction through the Recordings root without exposing its implementation
+// package to runtime callers.
+func (service *combinedService) ReconstructCanonicalFactoryWorldState(
+	events []recordings.FactoryEvent,
+	selectedTick int,
+) (recordings.FactoryWorldState, error) {
+	if service == nil || service.ProjectionService == nil {
+		return recordings.FactoryWorldState{}, fmt.Errorf("Recordings projection is unavailable")
+	}
+	return service.ProjectionService.ReconstructFactoryWorldState(events, selectedTick)
+}
+
 func (service *combinedService) ReplayClock(
 	artifact *recordings.ReplayArtifact,
 ) recordings.Clock {

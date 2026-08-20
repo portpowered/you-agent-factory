@@ -193,6 +193,13 @@ func (a *Assembly) Assemble(
 		return nil, nil, factoryruntime.SessionBuildSpec{}, nil, nil, err
 	}
 	spec.ReplayEvents = cloneReplayArtifactEvents(replayArtifact)
+	spec.RestoredWorldState, err = reconstructRestoredWorldState(
+		recordingsRuntime,
+		spec.ReplayEvents,
+	)
+	if err != nil {
+		return nil, nil, factoryruntime.SessionBuildSpec{}, nil, nil, err
+	}
 	instance, err := builder.Build(ctx, spec)
 	if err != nil {
 		return nil, nil, factoryruntime.SessionBuildSpec{}, nil, nil, err
@@ -224,4 +231,27 @@ func cloneReplayArtifactEvents(artifact *factorydefinitions.ReplayArtifact) []fa
 		events[index] = event.Clone()
 	}
 	return events
+}
+
+func reconstructRestoredWorldState(
+	opening recordings.RuntimeOpening,
+	events []factorydefinitions.FactoryEvent,
+) (*factorydefinitions.FactoryWorldState, error) {
+	if len(events) == 0 {
+		return nil, nil
+	}
+	if opening == nil {
+		return nil, fmt.Errorf("Recordings runtime opening is required to reconstruct restored world state")
+	}
+	selectedTick := 0
+	for _, event := range events {
+		if event.Context.Tick > selectedTick {
+			selectedTick = event.Context.Tick
+		}
+	}
+	worldState, err := opening.ReconstructCanonicalFactoryWorldState(events, selectedTick)
+	if err != nil {
+		return nil, fmt.Errorf("reconstruct restored Factory world state: %w", err)
+	}
+	return &worldState, nil
 }

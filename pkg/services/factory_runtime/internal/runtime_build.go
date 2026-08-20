@@ -436,6 +436,7 @@ func buildBundle(
 		spec.Clock,
 		spec.RecordPath,
 		initialFactory,
+		spec.RestoredWorldState,
 		spec.SubmissionHooks,
 		spec.CompletionPlanner,
 		spec.PetriMutationRecorder,

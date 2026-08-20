@@ -187,6 +187,11 @@ type LoadReplayInputResult struct {
 type RuntimeOpening interface {
 	OpenRuntime(context.Context, RuntimeScopeRequest) (RuntimeScopeResult, error)
 	LoadReplayInput(LoadReplayInputRequest) (LoadReplayInputResult, error)
+	// ReconstructCanonicalFactoryWorldState reduces detached canonical Factory
+	// Events into the typed world state consumed by runtime construction. The
+	// reduction remains Recordings-owned; callers receive only the public value
+	// contract and never the reducer or projection implementation.
+	ReconstructCanonicalFactoryWorldState([]FactoryEvent, int) (FactoryWorldState, error)
 	Projection() ProjectionService
 	ReplayClock(*ReplayArtifact) Clock
 	ReplayExecution(*ReplayArtifact) (

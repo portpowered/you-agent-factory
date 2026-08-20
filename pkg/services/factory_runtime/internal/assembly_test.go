@@ -11,6 +11,7 @@ import (
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	instancehost "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/instance_host"
 	instancehostwire "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/instance_host/wire"
+	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
@@ -21,6 +22,45 @@ func stubWorkerSessionsFactory(workers.Service, platformclock.Source) (workerses
 }
 
 type stubWorkersService struct{ workers.Service }
+
+type assemblyWorldStateOpening struct {
+	recordings.RuntimeOpening
+	state  interfaces.FactoryWorldState
+	tick   int
+	events []interfaces.FactoryEvent
+}
+
+func (opening *assemblyWorldStateOpening) ReconstructCanonicalFactoryWorldState(
+	events []interfaces.FactoryEvent,
+	selectedTick int,
+) (interfaces.FactoryWorldState, error) {
+	opening.events = events
+	opening.tick = selectedTick
+	return opening.state, nil
+}
+
+func TestReconstructRestoredWorldStateUsesLatestReplayTick(t *testing.T) {
+	events := []interfaces.FactoryEvent{
+		{Context: interfaces.FactoryEventContext{Tick: 2}},
+		{Context: interfaces.FactoryEventContext{Tick: 7}},
+		{Context: interfaces.FactoryEventContext{Tick: 4}},
+	}
+	opening := &assemblyWorldStateOpening{state: interfaces.FactoryWorldState{Tick: 7}}
+
+	state, err := reconstructRestoredWorldState(opening, events)
+	if err != nil {
+		t.Fatalf("reconstructRestoredWorldState: %v", err)
+	}
+	if state == nil || state.Tick != 7 {
+		t.Fatalf("restored state = %#v, want tick 7", state)
+	}
+	if opening.tick != 7 {
+		t.Fatalf("selected reconstruction tick = %d, want latest replay tick 7", opening.tick)
+	}
+	if len(opening.events) != len(events) {
+		t.Fatalf("reconstruction events = %d, want %d", len(opening.events), len(events))
+	}
+}
 
 func TestNewAssemblyRequiresWireConstructedRuntimeFactory(t *testing.T) {
 	assembly, err := NewAssembly(nil, stubWorkerSessionsFactory, nil)
