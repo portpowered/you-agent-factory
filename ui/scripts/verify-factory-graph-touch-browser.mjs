@@ -65,21 +65,25 @@ async function viewportTransform(page) {
 
 async function verifyLoopBreakerCard(guardCard) {
   await guardCard.waitFor({ state: "visible" });
-  const guardText = await guardCard.textContent();
+  const guardText = (await guardCard.textContent())?.trim();
+  if (guardText !== "Breaker") {
+    throw new Error(
+      `Expected the single-line breaker card to read "Breaker": ${guardText ?? "<empty>"}`,
+    );
+  }
   if (
-    !guardText?.includes("Loop breaker") ||
-    !guardText.includes("execute-goal") ||
-    !guardText.includes("3")
+    (await guardCard.getAttribute("data-workstation-guard-type")) !==
+    "VISIT_COUNT"
   ) {
     throw new Error(
-      `Guarded workstation card did not expose its authored target and limit: ${guardText ?? "<empty>"}`,
+      "Breaker card did not carry its VISIT_COUNT guard type attribute",
     );
   }
 
   const guardRows = guardCard.locator("[data-workstation-guard-row]");
-  if ((await guardRows.count()) !== 2) {
+  if ((await guardRows.count()) !== 0) {
     throw new Error(
-      `Expected loop-breaker details to have two single-line rows, found ${await guardRows.count()}`,
+      `Expected the single-line breaker card to have no detail rows, found ${await guardRows.count()}`,
     );
   }
 
@@ -110,28 +114,21 @@ async function verifyLoopBreakerCard(guardCard) {
     );
   }
 
-  const guardRowStyles = await guardCard
-    .locator("[data-workstation-guard-target], [data-workstation-guard-limit]")
-    .evaluateAll((values) =>
-      values.map((value) => {
-        const style = getComputedStyle(value);
-        return {
-          overflow: style.overflow,
-          textOverflow: style.textOverflow,
-          whiteSpace: style.whiteSpace,
-        };
-      }),
-    );
+  const guardCardStyle = await guardCard.evaluate((value) => {
+    const style = getComputedStyle(value);
+    return {
+      overflow: style.overflow,
+      textOverflow: style.textOverflow,
+      whiteSpace: style.whiteSpace,
+    };
+  });
   if (
-    guardRowStyles.some(
-      (style) =>
-        style.overflow !== "hidden" ||
-        style.textOverflow !== "ellipsis" ||
-        style.whiteSpace !== "nowrap",
-    )
+    guardCardStyle.overflow !== "hidden" ||
+    guardCardStyle.textOverflow !== "ellipsis" ||
+    guardCardStyle.whiteSpace !== "nowrap"
   ) {
     throw new Error(
-      `Loop-breaker detail values are not single-line truncating fields: ${JSON.stringify(guardRowStyles)}`,
+      `Breaker card is not a single-line truncating field: ${JSON.stringify(guardCardStyle)}`,
     );
   }
 
@@ -153,6 +150,9 @@ async function verifyMixedWorkstationSemantics(page) {
     );
   }
 
+  // Collapsed workstation nodes no longer render runtime/scheduling label
+  // rows; the runtime semantic label is exposed through the title attribute
+  // of the workstation title until a node is expanded by resizing it.
   const expectedWorkstations = [
     ["Classifier route", "Classifier"],
     ["Logical route", "Logical move"],
@@ -161,9 +161,9 @@ async function verifyMixedWorkstationSemantics(page) {
       "Inference",
     ],
     ["Agent worker", "Agent"],
-    ["execute-goal", "Repeater"],
-    ["Script cron", "Cron"],
-    ["Poller source", "Default scheduler"],
+    ["execute-goal", "Agent"],
+    ["Script cron", "Script"],
+    ["Poller source", "Poller"],
   ];
 
   for (const [name, semanticLabel] of expectedWorkstations) {
@@ -171,15 +171,24 @@ async function verifyMixedWorkstationSemantics(page) {
       name: `Select ${name} workstation`,
     });
     await button.waitFor({ state: "visible" });
-    await button
+    const title = button.locator("[data-workstation-title]");
+    await title.waitFor({ state: "visible" });
+    const semanticTitle = await title.getAttribute("title");
+    if (semanticTitle !== semanticLabel) {
+      throw new Error(
+        `Expected the collapsed ${name} workstation title to expose the ${semanticLabel} semantic label, found ${semanticTitle ?? "<missing>"}`,
+      );
+    }
+    const auxiliaryLabelCount = await button
       .locator(
         "[data-workstation-runtime-label], [data-workstation-scheduling-label]",
-        { hasText: semanticLabel },
       )
-      .first()
-      .waitFor({
-        state: "visible",
-      });
+      .count();
+    if (auxiliaryLabelCount !== 0) {
+      throw new Error(
+        `Collapsed ${name} workstation rendered ${auxiliaryLabelCount} auxiliary semantic label rows`,
+      );
+    }
   }
 
   const guardCard = page.locator("[data-workstation-guard-card]");
@@ -187,11 +196,11 @@ async function verifyMixedWorkstationSemantics(page) {
 
   await assertWorkstationDescendantsContained(guardNode, "Loop-breaker");
 
-  const defaultScheduler = page.locator("[data-workstation-scheduling-label]", {
-    hasText: "Default scheduler",
+  const defaultSchedulerButton = page.getByRole("button", {
+    name: "Select Poller source workstation",
   });
-  await defaultScheduler.waitFor({ state: "visible" });
-  const defaultSchedulerNode = defaultScheduler.locator(
+  await defaultSchedulerButton.waitFor({ state: "visible" });
+  const defaultSchedulerNode = defaultSchedulerButton.locator(
     "xpath=ancestor::*[contains(concat(' ', normalize-space(@class), ' '), ' react-flow__node ')][1]",
   );
   await assertWorkstationDescendantsContained(
