@@ -7,8 +7,6 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
-
-	"github.com/portpowered/infinite-you/internal/ownershipinventory"
 )
 
 // listProductionPkgPackages returns every production Go package under pkg/ in
@@ -77,20 +75,6 @@ func listProductionPkgPackages(repoRoot string) ([]string, error) {
 // own path, so adding or deleting a package inside a service needs no registry
 // edit.
 func validateRowsNamePackagesThatExist(repoRoot string, packages []PackageMapping) error {
-	// The open-move ledger is shared with the ownership-inventory checker, so
-	// "this package still exists" has to mean the same thing in both tools.
-	// ListProductionPackages counts any directory under pkg/ that holds a .go
-	// file, which keeps test-helper packages (…/clonetests, …/fixturetests)
-	// from reading as stale rows.
-	live, err := ownershipinventory.ListProductionPackages(repoRoot)
-	if err != nil {
-		return err
-	}
-	liveSet := make(map[string]struct{}, len(live))
-	for _, packagePath := range live {
-		liveSet[packagePath] = struct{}{}
-	}
-
 	var stale []string
 	for i, row := range packages {
 		packagePath := row.PackagePath
@@ -100,7 +84,15 @@ func validateRowsNamePackagesThatExist(repoRoot string, packages []PackageMappin
 		if !strings.HasPrefix(packagePath, "pkg/") {
 			return fmt.Errorf("moves[%d] %q must be repository-relative under pkg/", i, packagePath)
 		}
-		if _, alive := liveSet[packagePath]; !alive {
+		// Discover the source class before deciding whether the row is live. A
+		// test-only package remains visible to the package-target report instead
+		// of disappearing behind a production-only filter; both source classes
+		// still establish that the named directory exists.
+		classes, err := packageTargetSourceClasses(repoRoot, packagePath)
+		if err != nil {
+			return err
+		}
+		if len(classes) == 0 {
 			stale = append(stale, packagePath)
 		}
 	}

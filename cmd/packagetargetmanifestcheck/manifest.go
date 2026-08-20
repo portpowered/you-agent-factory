@@ -100,6 +100,16 @@ func loadUnfinishedMoves(path string) (UnfinishedMoves, error) {
 // validateOpenMoveLedger checks the consolidated open-move ledger's schema and
 // that every remaining row still names a package that exists on disk.
 func validateOpenMoveLedger(repoRoot string, moves UnfinishedMoves) error {
+	if err := validateOpenMoveLedgerSchema(repoRoot, moves); err != nil {
+		return err
+	}
+	return validateRowsNamePackagesThatExist(repoRoot, moves.Moves)
+}
+
+// validateOpenMoveLedgerSchema keeps schema and destination validation separate
+// from source liveness. The package-target command needs to report classified
+// source observations before it applies the existing production failure path.
+func validateOpenMoveLedgerSchema(repoRoot string, moves UnfinishedMoves) error {
 	vocabulary, err := derivedDestinationVocabulary(repoRoot)
 	if err != nil {
 		return err
@@ -107,7 +117,7 @@ func validateOpenMoveLedger(repoRoot string, moves UnfinishedMoves) error {
 	if err := validateUnfinishedMovesSchema(moves, vocabulary); err != nil {
 		return err
 	}
-	return validateRowsNamePackagesThatExist(repoRoot, moves.Moves)
+	return nil
 }
 
 func validateUnfinishedMovesSchema(moves UnfinishedMoves, vocabulary DestinationVocabulary) error {
