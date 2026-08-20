@@ -97,6 +97,7 @@ type RuntimeActivationMockReject struct {
 type RuntimeActivationRecordingInputs struct {
 	RecordPath    string
 	ReplayPath    string
+	ResumePath    string
 	WorkflowID    string
 	FlushInterval time.Duration
 }

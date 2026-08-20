@@ -118,8 +118,23 @@ func TestRunCommand_RecordFlagsDocumentDefaultRecordingBehavior(t *testing.T) {
 	if replayFlag == nil {
 		t.Fatal("expected --replay flag on run command")
 	}
-	if !strings.Contains(replayFlag.Usage, "existing sensitive replay artifact") {
-		t.Fatalf("--replay usage = %q, want sensitivity guidance", replayFlag.Usage)
+	if !strings.Contains(replayFlag.Usage, "replay deterministically") ||
+		!strings.Contains(replayFlag.Usage, "read-only") ||
+		!strings.Contains(replayFlag.Usage, "does not write a new recording") {
+		t.Fatalf("--replay usage = %q, want deterministic read-only guidance", replayFlag.Usage)
+	}
+
+	resumeFlag := runCmd.Flags().Lookup("resume")
+	if resumeFlag == nil {
+		t.Fatal("expected --resume flag on run command")
+	}
+	if resumeFlag.Value.Type() != "string" {
+		t.Fatalf("--resume value type = %q, want string", resumeFlag.Value.Type())
+	}
+	for _, want := range []string{"continue live Factory execution", "successor recording", "--record"} {
+		if !strings.Contains(resumeFlag.Usage, want) {
+			t.Fatalf("--resume usage = %q, want %q", resumeFlag.Usage, want)
+		}
 	}
 }
 

@@ -627,6 +627,7 @@ func invocationTarget(
 		Verbose:               cfg.Verbose,
 		RecordPath:            cfg.RecordPath,
 		ReplayPath:            cfg.ReplayPath,
+		ResumePath:            cfg.ResumePath,
 		RuntimeLogDir:         cfg.RuntimeLogDir,
 		RuntimeLogConfig: factoryruntime.RuntimeLogStorageConfig{
 			MaxSize: cfg.RuntimeLogConfig.MaxSize, MaxBackups: cfg.RuntimeLogConfig.MaxBackups,

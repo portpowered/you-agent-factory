@@ -20,7 +20,7 @@ func newRunServerFlagBindings() climanifestcobra.RunServerFlagBindings {
 	targets := map[string]any{}
 	stringInputs := []string{
 		"you.run.flag.work", "you.run.flag.dir", "you.run.flag.named",
-		"you.run.flag.factory", "you.run.flag.record", "you.run.flag.replay",
+		"you.run.flag.factory", "you.run.flag.record", "you.run.flag.replay", "you.run.flag.resume",
 		"you.run.flag.provider", "you.run.flag.model", "you.run.flag.worker-reasoning-effort",
 		"you.run.flag.worktree", "you.run.flag.to-file",
 		"you.run.flag.runtime-log-dir", "you.run.flag.runtime-metrics-dir",
@@ -66,6 +66,7 @@ func applyRunResolvedInputs(cfg runcli.RunConfig, values map[string]any) (runcli
 		{"you.run.flag.to-file", &cfg.InvocationFilePath},
 		{"you.run.flag.record", &cfg.RecordPath},
 		{"you.run.flag.replay", &cfg.ReplayPath},
+		{"you.run.flag.resume", &cfg.ResumePath},
 		{"you.run.flag.runtime-log-dir", &cfg.RuntimeLogDir},
 		{"you.run.flag.runtime-metrics-dir", &cfg.RuntimeMetricsDir},
 		{"you.run.flag.with-mock-workers", &cfg.MockWorkersConfigPath},

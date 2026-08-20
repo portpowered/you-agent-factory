@@ -842,7 +842,7 @@ func TestNewRunServerFamilyComponentsRegistersLocalFlags(t *testing.T) {
 	components := mustRunServerFamilyComponents(t)
 	for _, flagName := range []string{
 		"continuously", "work", "dir", "named", "factory", "record", "no-record",
-		"replay", "runtime-log-dir", "runtime-log-max-size-mb", "runtime-log-max-backups",
+		"replay", "resume", "runtime-log-dir", "runtime-log-max-size-mb", "runtime-log-max-backups",
 		"runtime-log-max-age-days", "runtime-log-compress", "runtime-metrics-dir",
 		"runtime-metrics-max-size-mb", "runtime-metrics-max-backups",
 		"runtime-metrics-max-age-days", "runtime-metrics-compress", "with-mock-workers",
@@ -915,7 +915,7 @@ func testRunServerBindings() RunServerFlagBindings {
 	targets := map[string]any{}
 	for _, inputID := range []string{
 		"you.run.flag.work", "you.run.flag.dir", "you.run.flag.named",
-		"you.run.flag.factory", "you.run.flag.record", "you.run.flag.replay",
+		"you.run.flag.factory", "you.run.flag.record", "you.run.flag.replay", "you.run.flag.resume",
 		"you.run.flag.provider", "you.run.flag.model",
 		"you.run.flag.worker-reasoning-effort",
 		"you.run.flag.worktree", "you.run.flag.to-file",

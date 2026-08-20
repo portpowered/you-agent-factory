@@ -139,6 +139,7 @@ var ErrUnsupportedReplayBinding = errors.New("unsupported replay binding input")
 type RuntimeOpeningRequest struct {
 	RecordPath    string
 	ReplayPath    string
+	ResumePath    string
 	WorkflowID    string
 	FlushInterval time.Duration
 }

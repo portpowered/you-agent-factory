@@ -473,7 +473,8 @@ func runUsesCurrentFactory(cmd *cobra.Command) bool {
 		!cmd.Flags().Changed("dir") &&
 		!cmd.Flags().Changed("factory") &&
 		!cmd.Flags().Changed("named") &&
-		!cmd.Flags().Changed("replay")
+		!cmd.Flags().Changed("replay") &&
+		!cmd.Flags().Changed("resume")
 }
 
 func selectCurrentFactoryFromWorkingDirectory(cmd *cobra.Command, cfg *runcli.RunConfig) error {

@@ -715,6 +715,7 @@ func runtimeActivationInputs(request factorysessions.RuntimeOpeningRequest) fact
 		Recordings: factoryruntime.RuntimeActivationRecordingInputs{
 			RecordPath:    request.Recordings.RecordPath,
 			ReplayPath:    request.Recordings.ReplayPath,
+			ResumePath:    request.Recordings.ResumePath,
 			WorkflowID:    request.Recordings.WorkflowID,
 			FlushInterval: request.Recordings.FlushInterval,
 		},

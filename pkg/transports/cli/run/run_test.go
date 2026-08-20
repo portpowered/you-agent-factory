@@ -371,6 +371,7 @@ func TestRun_RecordOrReplayPathPassedToServiceConfig(t *testing.T) {
 		wantDefaultRecord bool
 		wantRecordPath    string
 		wantReplayPath    string
+		wantResumePath    string
 	}{
 		{
 			name:              "default live mode",
@@ -393,6 +394,18 @@ func TestRun_RecordOrReplayPathPassedToServiceConfig(t *testing.T) {
 			name:           "replay mode",
 			cfg:            RunConfig{ReplayPath: "existing.replay.json"},
 			wantReplayPath: "existing.replay.json",
+		},
+		{
+			name:              "resume mode",
+			cfg:               RunConfig{ResumePath: "existing.recording.json"},
+			wantDefaultRecord: true,
+			wantResumePath:    "existing.recording.json",
+		},
+		{
+			name:           "resume mode with explicit successor",
+			cfg:            RunConfig{ResumePath: "existing.recording.json", RecordPath: "successor.recording.json"},
+			wantRecordPath: "successor.recording.json",
+			wantResumePath: "existing.recording.json",
 		},
 		{
 			name: "default recording disabled for one run",
@@ -420,9 +433,11 @@ func TestRun_RecordOrReplayPathPassedToServiceConfig(t *testing.T) {
 
 			var capturedRecordPath string
 			var capturedReplayPath string
+			var capturedResumePath string
 			openTestRuntimeRunner = func(_ context.Context, cfg *testRuntimeSelections, _ serviceedges.Edges) (factoryServiceRunner, error) {
 				capturedRecordPath = cfg.RecordPath
 				capturedReplayPath = cfg.ReplayPath
+				capturedResumePath = cfg.ResumePath
 				return stubFactoryService{run: func(context.Context) error { return nil }}, nil
 			}
 
@@ -448,6 +463,9 @@ func TestRun_RecordOrReplayPathPassedToServiceConfig(t *testing.T) {
 			}
 			if capturedReplayPath != tt.wantReplayPath {
 				t.Fatalf("replay path = %q, want %q", capturedReplayPath, tt.wantReplayPath)
+			}
+			if capturedResumePath != tt.wantResumePath {
+				t.Fatalf("resume path = %q, want %q", capturedResumePath, tt.wantResumePath)
 			}
 		})
 	}
