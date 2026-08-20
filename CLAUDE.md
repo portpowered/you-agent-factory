@@ -125,6 +125,22 @@ the standards.
   hosted-source, reconciliation, and invocation-schedule behavior.
 - `pkg/services/provider_sessions/` owns provider-session discovery and
   transcript/session inspection.
+- `pkg/services/chat_sessions/` owns the ACP customer conversation and control
+  context: selected targets, ordered turns, target episodes, attachments, and
+  control intents. It sequences source-native observations onto the Chat
+  Session's Events topic without owning Factory replay history.
+- `pkg/services/events/` owns the process-local, in-memory, session-scoped
+  source-native stream for append/attachment, retained reads, cursors,
+  subscriptions, retention gaps, and backpressure. It is not the canonical
+  Factory Event ledger.
+- `pkg/services/webhooks/` owns Factory-configured outbound webhook
+  subscriptions, canonical-event filtering, signed delivery attempts, bounded
+  retry/backoff, and session-owned dead-letter diagnostics. Recordings remains
+  the event authority; Webhooks owns no canonical Factory state.
+- `pkg/services/worker_sessions/` owns Worker Session identity, attempt
+  supervision, lifecycle classification, dispatch association, and publication
+  of source-native Worker observations to Events. It does not own Workers
+  execution policy or Factory replay history.
 - `pkg/services/operator_settings/`, `pkg/services/factory_visualization/`, and
   `pkg/services/system_initialization/` own settings resolution, runtime
   presentation/projection, and system bootstrap/rollback respectively.
