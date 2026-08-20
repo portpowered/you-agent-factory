@@ -129,7 +129,7 @@ func assertTerminalRunPayload(t *testing.T, rawPayload string, startedAt, finish
 }
 
 func TestRuntimeRootKeepsConcurrentLedgersIsolatedAndReleasesRoutes(t *testing.T) {
-	service := NewRuntimeRoot(nil, nil, nil, nil, nil, nil, nil, nil, nil)
+	service := NewRuntimeRoot(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
 	root, ok := service.(runtimeRoot)
 	if !ok || root == nil {
 		t.Fatal("NewRuntimeRoot() returned nil")
@@ -212,6 +212,7 @@ func openActiveRuntime(t *testing.T) (runtimeRoot, recordings.RuntimeScopeResult
 		t.Fatalf("NewFactorySnapshot: %v", err)
 	}
 	service := NewRuntimeRoot(
+		nil,
 		nil,
 		nil,
 		nil,

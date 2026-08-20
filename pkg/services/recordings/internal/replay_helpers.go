@@ -3,12 +3,45 @@ package internal
 import (
 	"fmt"
 
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	recordings "github.com/portpowered/infinite-you/pkg/services/recordings"
 	replayimpl "github.com/portpowered/infinite-you/pkg/services/recordings/internal/replay"
+	historicalquery "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/historical_query"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
+
+// NewServiceWithLifecycleEffectsAndHistoricalQueryAndLoggerAndReplaySource
+// constructs the process-scoped root with the selected logger, historical
+// reader, and explicit resume source.
+func NewServiceWithLifecycleEffectsAndHistoricalQueryAndLoggerAndReplaySource(
+	ledger recordings.Ledger,
+	projection recordings.ProjectionService,
+	targetPlanner recordings.LiveRecordingTargetPlanner,
+	writer recordings.RecordingSnapshotWriter,
+	tickers recordings.RecordingFlushTickerFactory,
+	publication portableArtifactPublication,
+	historicalQuery historicalquery.Service,
+	readFile recordings.RecordingReadFile,
+	decodeFactorySnapshot factorydefinitions.FactorySnapshotJSONDecoder,
+	logger logging.Logger,
+	clocks ...recordings.RecordingClock,
+) recordings.Service {
+	return newServiceWithLifecycleEffects(
+		ledger,
+		projection,
+		targetPlanner,
+		writer,
+		tickers,
+		publication,
+		logger,
+		historicalQuery,
+		readFile,
+		decodeFactorySnapshot,
+		clocks...,
+	)
+}
 
 func NewReplayClock(artifact *recordings.ReplayArtifact) recordings.Clock {
 	if artifact == nil {
