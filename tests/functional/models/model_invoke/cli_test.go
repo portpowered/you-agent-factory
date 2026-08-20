@@ -170,50 +170,9 @@ func TestProcessModelsInvokeFailureKeepsStreamsSafeAndReleasesCapacity(t *testin
 	var backendMu sync.Mutex
 	failBackend := false
 	backendInvocations := 0
-	modelServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
-		switch request.URL.Path {
-		case "/health":
-			w.WriteHeader(http.StatusOK)
-		case "/invoke":
-			var payload struct {
-				OutputFile string `json:"outputFile"`
-			}
-			if err := json.NewDecoder(request.Body).Decode(&payload); err != nil {
-				http.Error(w, err.Error(), http.StatusBadRequest)
-				return
-			}
-			backendMu.Lock()
-			backendInvocations++
-			shouldFail := failBackend
-			backendMu.Unlock()
-			if shouldFail {
-				http.Error(w, "deterministic TTS backend failure", http.StatusInternalServerError)
-				return
-			}
-			if err := os.WriteFile(payload.OutputFile, audio, 0o644); err != nil {
-				http.Error(w, err.Error(), http.StatusInternalServerError)
-				return
-			}
-			response, err := json.Marshal(map[string]any{
-				"content": []map[string]any{{
-					"type":        "AUDIO",
-					"slot":        "audio",
-					"file":        payload.OutputFile,
-					"contentType": "audio/wav",
-				}},
-			})
-			if err != nil {
-				http.Error(w, err.Error(), http.StatusInternalServerError)
-				return
-			}
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusOK)
-			_, _ = w.Write(response)
-		default:
-			http.NotFound(w, request)
-		}
-	}))
-	t.Cleanup(modelServer.Close)
+	modelServer := startProcessTTSSuccessFailureServer(
+		t, audio, &backendMu, &failBackend, &backendInvocations,
+	)
 
 	home := t.TempDir()
 	writeReadyOmniVoiceCache(t, home)
@@ -290,6 +249,61 @@ func TestProcessModelsInvokeFailureKeepsStreamsSafeAndReleasesCapacity(t *testin
 	if gotBackendInvocations != 4 {
 		t.Fatalf("backend invocation count = %d, want four success/success/failure/success attempts", gotBackendInvocations)
 	}
+}
+
+func startProcessTTSSuccessFailureServer(
+	t *testing.T,
+	audio []byte,
+	backendMu *sync.Mutex,
+	failBackend *bool,
+	backendInvocations *int,
+) *httptest.Server {
+	t.Helper()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
+		switch request.URL.Path {
+		case "/health":
+			w.WriteHeader(http.StatusOK)
+		case "/invoke":
+			var payload struct {
+				OutputFile string `json:"outputFile"`
+			}
+			if err := json.NewDecoder(request.Body).Decode(&payload); err != nil {
+				http.Error(w, err.Error(), http.StatusBadRequest)
+				return
+			}
+			backendMu.Lock()
+			*backendInvocations++
+			shouldFail := *failBackend
+			backendMu.Unlock()
+			if shouldFail {
+				http.Error(w, "deterministic TTS backend failure", http.StatusInternalServerError)
+				return
+			}
+			if err := os.WriteFile(payload.OutputFile, audio, 0o644); err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			response, err := json.Marshal(map[string]any{
+				"content": []map[string]any{{
+					"type":        "AUDIO",
+					"slot":        "audio",
+					"file":        payload.OutputFile,
+					"contentType": "audio/wav",
+				}},
+			})
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write(response)
+		default:
+			http.NotFound(w, request)
+		}
+	}))
+	t.Cleanup(server.Close)
+	return server
 }
 
 func executeProcessTTS(
