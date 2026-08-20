@@ -43,3 +43,16 @@ func TestValidateEnvelopeRejectsStructurallyCorruptValues(t *testing.T) {
 		})
 	}
 }
+
+func TestValidateEnvelopeAcceptsValidValue(t *testing.T) {
+	t.Parallel()
+
+	err := checkpointrecovery.ValidateEnvelope(checkpointrecovery.Envelope{
+		CheckpointID:  "checkpoint-1",
+		SchemaVersion: 1,
+		Payload:       []byte("payload"),
+	})
+	if err != nil {
+		t.Fatalf("ValidateEnvelope() error = %v, want nil", err)
+	}
+}

@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	checkpointrecovery "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/checkpoint_recovery"
@@ -43,11 +44,13 @@ func TestDurableCheckpointStoresRoundTripAcrossFreshInstances(t *testing.T) {
 	t.Parallel()
 
 	root := filepath.Join(t.TempDir(), ".you-agent-factory", "durable-sessions")
-	opaqueWriter, err := checkpointrecoverywire.NewDurableCheckpointStore(root)
+	opaqueConstructor := checkpointrecoverywire.NewDurableCheckpointStore(platformfilesystem.Local{})
+	opaqueWriter, err := opaqueConstructor(root)
 	if err != nil {
 		t.Fatalf("NewDurableCheckpointStore(writer): %v", err)
 	}
-	javascriptWriter, err := checkpointrecoverywire.NewDurableJavaScriptCheckpointStore(root)
+	javascriptConstructor := checkpointrecoverywire.NewDurableJavaScriptCheckpointStore(platformfilesystem.Local{})
+	javascriptWriter, err := javascriptConstructor(root)
 	if err != nil {
 		t.Fatalf("NewDurableJavaScriptCheckpointStore(writer): %v", err)
 	}
@@ -73,11 +76,11 @@ func TestDurableCheckpointStoresRoundTripAcrossFreshInstances(t *testing.T) {
 	}
 	javascriptWriter.Put(javascript)
 
-	opaqueReader, err := checkpointrecoverywire.NewDurableCheckpointStore(root)
+	opaqueReader, err := opaqueConstructor(root)
 	if err != nil {
 		t.Fatalf("NewDurableCheckpointStore(reader): %v", err)
 	}
-	javascriptReader, err := checkpointrecoverywire.NewDurableJavaScriptCheckpointStore(root)
+	javascriptReader, err := javascriptConstructor(root)
 	if err != nil {
 		t.Fatalf("NewDurableJavaScriptCheckpointStore(reader): %v", err)
 	}
@@ -100,10 +103,10 @@ func TestDurableCheckpointStoresRoundTripAcrossFreshInstances(t *testing.T) {
 func TestDurableCheckpointStoresRequireExplicitRoot(t *testing.T) {
 	t.Parallel()
 
-	if _, err := checkpointrecoverywire.NewDurableCheckpointStore(" "); err == nil {
+	if _, err := checkpointrecoverywire.NewDurableCheckpointStore(platformfilesystem.Local{})(" "); err == nil {
 		t.Fatal("NewDurableCheckpointStore(blank) error = nil")
 	}
-	if _, err := checkpointrecoverywire.NewDurableJavaScriptCheckpointStore(" "); err == nil {
+	if _, err := checkpointrecoverywire.NewDurableJavaScriptCheckpointStore(platformfilesystem.Local{})(" "); err == nil {
 		t.Fatal("NewDurableJavaScriptCheckpointStore(blank) error = nil")
 	}
 }

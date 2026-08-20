@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factoryruntimewire "github.com/portpowered/infinite-you/pkg/services/factory_runtime/wire"
@@ -24,7 +25,8 @@ func TestNewDurableJavaScriptCheckpointStoreRoundTripsAcrossFreshInstances(t *te
 	t.Parallel()
 
 	root := filepath.Join(t.TempDir(), ".you-agent-factory", "durable-sessions")
-	writer, err := factoryruntimewire.NewDurableJavaScriptCheckpointStore(root)
+	constructor := factoryruntimewire.NewDurableJavaScriptCheckpointStore(platformfilesystem.Local{})
+	writer, err := constructor(root)
 	if err != nil {
 		t.Fatalf("NewDurableJavaScriptCheckpointStore(writer): %v", err)
 	}
@@ -41,7 +43,7 @@ func TestNewDurableJavaScriptCheckpointStoreRoundTripsAcrossFreshInstances(t *te
 	}
 	writer.Put(want)
 
-	reader, err := factoryruntimewire.NewDurableJavaScriptCheckpointStore(root)
+	reader, err := constructor(root)
 	if err != nil {
 		t.Fatalf("NewDurableJavaScriptCheckpointStore(reader): %v", err)
 	}
