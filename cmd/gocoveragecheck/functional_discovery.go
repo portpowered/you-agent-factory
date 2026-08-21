@@ -8,6 +8,7 @@ import (
 	"go/parser"
 	"go/token"
 	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"slices"
@@ -128,7 +129,104 @@ func listFunctionalTestPackageMetadata(patterns []string, repoRoot string) ([]fu
 	if len(patterns) == 0 {
 		return nil, errors.New("resolve go coverage lane: no packages matched")
 	}
+	candidatePaths, usedCurrentTree, err := currentTreeFunctionalPackageCandidates(patterns, repoRoot)
+	if err != nil {
+		return nil, err
+	}
+	if usedCurrentTree {
+		return listFunctionalTestPackageMetadataForCandidates(candidatePaths, repoRoot)
+	}
 	return listFunctionalTestPackageMetadataFromPatterns(patterns, repoRoot)
+}
+
+func currentTreeFunctionalPackageCandidates(patterns []string, repoRoot string) ([]string, bool, error) {
+	if !slices.Equal(patterns, sortedUniqueStrings(functionalTestPatterns)) {
+		return nil, false, nil
+	}
+
+	root := filepath.Join(repoRoot, "tests", "functional")
+	if _, err := os.Stat(root); err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			return nil, false, nil
+		}
+		return nil, false, fmt.Errorf("discover functional tests: inspect current functional tree: %w", err)
+	}
+
+	// Candidate enumeration reads directory entries and file names only. Go
+	// list remains the authority for package identity and build-selected files;
+	// this walk only avoids asking a wildcard query to inspect every directory.
+	candidates := make(map[string]struct{})
+	err := filepath.WalkDir(root, func(path string, entry fs.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return fmt.Errorf("discover functional tests: inspect current functional tree entry %q: %w", filepath.ToSlash(path), walkErr)
+		}
+		if entry.IsDir() {
+			if entry.Name() == "testdata" {
+				return fs.SkipDir
+			}
+			return nil
+		}
+		if !strings.HasSuffix(entry.Name(), ".go") {
+			return nil
+		}
+		relativeDir, err := filepath.Rel(repoRoot, filepath.Dir(path))
+		if err != nil {
+			return fmt.Errorf("discover functional tests: resolve current functional package directory %q: %w", filepath.ToSlash(filepath.Dir(path)), err)
+		}
+		candidates[modulePath+"/"+filepath.ToSlash(relativeDir)] = struct{}{}
+		return nil
+	})
+	if err != nil {
+		return nil, false, err
+	}
+
+	paths := make([]string, 0, len(candidates))
+	for path := range candidates {
+		paths = append(paths, path)
+	}
+	if len(paths) == 0 {
+		return nil, false, nil
+	}
+	slices.Sort(paths)
+	return paths, true, nil
+}
+
+func listFunctionalTestPackageMetadataForCandidates(candidatePaths []string, repoRoot string) ([]functionalGoListPackage, error) {
+	// A concrete probe can include a directory whose only Go files are excluded
+	// by the active build. Go list reports that probe miss as a package Error;
+	// it is the one expected non-package result that can be discarded here.
+	// Every other listing error remains fail-closed.
+	result, err := listFunctionalTestPackageBatchWithFieldsAndFlagsAllowingBuildConstraintErrors(
+		candidatePaths,
+		functionalGoListJSONFields,
+		[]string{"-find"},
+		repoRoot,
+	)
+	if err != nil {
+		return nil, err
+	}
+	listedPackages, err := mergeFunctionalGoListPackages(result.packages)
+	if err != nil {
+		return nil, err
+	}
+
+	excluded := make(map[string]struct{}, len(result.buildConstraintExcluded))
+	for _, packagePath := range result.buildConstraintExcluded {
+		excluded[packagePath] = struct{}{}
+	}
+	runnableCandidates := make([]string, 0, len(candidatePaths))
+	for _, candidatePath := range candidatePaths {
+		if _, skipped := excluded[candidatePath]; skipped {
+			continue
+		}
+		if isFunctionalTestPackage(candidatePath) {
+			runnableCandidates = append(runnableCandidates, candidatePath)
+		}
+	}
+	if len(runnableCandidates) == 0 {
+		return nil, errors.New("resolve go coverage lane: no packages matched")
+	}
+	return selectFunctionalPackageSet(runnableCandidates, listedPackages)
 }
 
 func listFunctionalTestPackageMetadataFromPatterns(patterns []string, repoRoot string) ([]functionalGoListPackage, error) {
@@ -425,6 +523,22 @@ func listFunctionalTestPackageBatchWithFields(packages []string, jsonFields stri
 }
 
 func listFunctionalTestPackageBatchWithFieldsAndFlags(packages []string, jsonFields string, flags []string, repoRoot string) ([]functionalGoListPackage, error) {
+	result, err := listFunctionalTestPackageBatchWithFieldsAndFlagsAllowingBuildConstraintErrors(packages, jsonFields, flags, repoRoot)
+	if err != nil {
+		return nil, err
+	}
+	if len(result.buildConstraintExcluded) != 0 {
+		return nil, fmt.Errorf("discover functional tests: go list reported build-constraint package errors for %q", strings.Join(result.buildConstraintExcluded, ", "))
+	}
+	return result.packages, nil
+}
+
+type functionalGoListPackageMetadataResult struct {
+	packages                []functionalGoListPackage
+	buildConstraintExcluded []string
+}
+
+func listFunctionalTestPackageBatchWithFieldsAndFlagsAllowingBuildConstraintErrors(packages []string, jsonFields string, flags []string, repoRoot string) (functionalGoListPackageMetadataResult, error) {
 	// The inventory only needs package locations and build-selected test file
 	// names. The AST parser below remains responsible for validating the
 	// selected source files.
@@ -439,43 +553,72 @@ func listFunctionalTestPackageBatchWithFieldsAndFlags(packages []string, jsonFie
 	if err != nil {
 		detail := mergeGoTestFailureDetail(stderr, stdout)
 		if detail != "" {
-			return nil, fmt.Errorf("discover functional tests: go list: %w\n%s", err, detail)
+			return functionalGoListPackageMetadataResult{}, fmt.Errorf("discover functional tests: go list: %w\n%s", err, detail)
 		}
-		return nil, fmt.Errorf("discover functional tests: go list: %w", err)
+		return functionalGoListPackageMetadataResult{}, fmt.Errorf("discover functional tests: go list: %w", err)
 	}
 
-	return decodeFunctionalGoListPackages(stdout)
+	return decodeFunctionalGoListPackagesAllowingBuildConstraintErrors(stdout, packages)
 }
 
 func decodeFunctionalGoListPackages(stdout string) ([]functionalGoListPackage, error) {
+	result, err := decodeFunctionalGoListPackagesAllowingBuildConstraintErrors(stdout, nil)
+	if err != nil {
+		return nil, err
+	}
+	if len(result.buildConstraintExcluded) != 0 {
+		return nil, fmt.Errorf("discover functional tests: go list reported build-constraint package errors for %q", strings.Join(result.buildConstraintExcluded, ", "))
+	}
+	return result.packages, nil
+}
+
+func decodeFunctionalGoListPackagesAllowingBuildConstraintErrors(stdout string, candidatePaths []string) (functionalGoListPackageMetadataResult, error) {
+	candidates := make(map[string]struct{}, len(candidatePaths))
+	for _, candidatePath := range candidatePaths {
+		candidates[candidatePath] = struct{}{}
+	}
+	result := functionalGoListPackageMetadataResult{
+		packages:                make([]functionalGoListPackage, 0),
+		buildConstraintExcluded: make([]string, 0),
+	}
 	decoder := json.NewDecoder(strings.NewReader(stdout))
-	packages := make([]functionalGoListPackage, 0)
 	for {
 		var pkg functionalGoListPackage
 		if err := decoder.Decode(&pkg); err != nil {
 			if errors.Is(err, io.EOF) {
-				return packages, nil
+				return result, nil
 			}
-			return nil, fmt.Errorf("discover functional tests: decode go list package: %w", err)
+			return functionalGoListPackageMetadataResult{}, fmt.Errorf("discover functional tests: decode go list package: %w", err)
 		}
 		if pkg.Error != nil {
 			detail := strings.TrimSpace(pkg.Error.Err)
 			if detail == "" {
 				detail = "package listing failed"
 			}
-			if position := strings.TrimSpace(pkg.Error.Pos); position != "" {
-				return nil, fmt.Errorf("discover functional tests: go list package %q at %s: %s", pkg.ImportPath, position, detail)
+			if isExpectedBuildConstraintCandidateError(pkg, detail, candidates) {
+				result.buildConstraintExcluded = append(result.buildConstraintExcluded, pkg.ImportPath)
+				continue
 			}
-			return nil, fmt.Errorf("discover functional tests: go list package %q: %s", pkg.ImportPath, detail)
+			if position := strings.TrimSpace(pkg.Error.Pos); position != "" {
+				return functionalGoListPackageMetadataResult{}, fmt.Errorf("discover functional tests: go list package %q at %s: %s", pkg.ImportPath, position, detail)
+			}
+			return functionalGoListPackageMetadataResult{}, fmt.Errorf("discover functional tests: go list package %q: %s", pkg.ImportPath, detail)
 		}
 		if strings.TrimSpace(pkg.ImportPath) == "" {
-			return nil, errors.New("discover functional tests: go list returned a package without an import path")
+			return functionalGoListPackageMetadataResult{}, errors.New("discover functional tests: go list returned a package without an import path")
 		}
 		if strings.TrimSpace(pkg.Dir) == "" {
-			return nil, fmt.Errorf("discover functional tests: go list package %q did not include a directory", pkg.ImportPath)
+			return functionalGoListPackageMetadataResult{}, fmt.Errorf("discover functional tests: go list package %q did not include a directory", pkg.ImportPath)
 		}
-		packages = append(packages, pkg)
+		result.packages = append(result.packages, pkg)
 	}
+}
+
+func isExpectedBuildConstraintCandidateError(pkg functionalGoListPackage, detail string, candidates map[string]struct{}) bool {
+	if _, candidate := candidates[pkg.ImportPath]; !candidate {
+		return false
+	}
+	return strings.HasPrefix(detail, "build constraints exclude all Go files")
 }
 
 func mergeFunctionalGoListPackages(packages []functionalGoListPackage) ([]functionalGoListPackage, error) {

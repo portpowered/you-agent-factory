@@ -156,7 +156,7 @@ func TestDiscoverFunctionalTestInventoryParallelizesConcretePackageBatches(t *te
 	}
 }
 
-func TestResolveFunctionalTestPackagesWithMetadataUsesParallelCurrentTreeMetadata(t *testing.T) {
+func TestResolveFunctionalTestPackagesWithMetadataUsesConcreteCurrentTreeMetadata(t *testing.T) {
 	originalRunner := commandRunner
 	t.Cleanup(func() { commandRunner = originalRunner })
 
@@ -190,13 +190,11 @@ func TestSecond(t *testing.T) {}
 		mu.Lock()
 		invocations = append(invocations, invocation)
 		mu.Unlock()
-		if len(invocation.args) == 5 && invocation.args[0] == "list" && invocation.args[1] == functionalGoListErrorFlag && invocation.args[2] == functionalGoListJSONFields && invocation.args[3] == "-find" {
-			switch invocation.args[4] {
-			case modulePath + "/tests/functional/metadata/...":
-				return marshalFunctionalGoListPackage(t, functionalGoListPackage{ImportPath: packagePath, Dir: packageDir, TestGoFiles: []string{"metadata_test.go"}}), "", nil
-			case modulePath + "/tests/functional/metadata-second/...":
-				return marshalFunctionalGoListPackage(t, functionalGoListPackage{ImportPath: secondPackagePath, Dir: secondPackageDir, TestGoFiles: []string{"second_test.go"}}), "", nil
-			}
+		if slices.Equal(invocation.args, []string{"list", functionalGoListErrorFlag, functionalGoListJSONFields, "-find", packagePath, secondPackagePath}) {
+			return strings.Join([]string{
+				marshalFunctionalGoListPackage(t, functionalGoListPackage{ImportPath: packagePath, Dir: packageDir, TestGoFiles: []string{"metadata_test.go"}}),
+				marshalFunctionalGoListPackage(t, functionalGoListPackage{ImportPath: secondPackagePath, Dir: secondPackageDir, TestGoFiles: []string{"second_test.go"}}),
+			}, "\n"), "", nil
 		}
 		t.Fatalf("unexpected go list invocation: %+v", invocation)
 		return "", "", nil
@@ -212,13 +210,60 @@ func TestSecond(t *testing.T) {}
 	if len(listed) != 2 || listed[0].ImportPath != packagePath || !slices.Equal(listed[0].TestGoFiles, []string{"metadata_test.go"}) || listed[1].ImportPath != secondPackagePath || !slices.Equal(listed[1].TestGoFiles, []string{"second_test.go"}) {
 		t.Fatalf("listed metadata = %+v, want complete grouped build-selected metadata", listed)
 	}
-	if len(invocations) != 2 {
-		t.Fatalf("go list invocations = %d, want two parallel current-tree metadata queries: %+v", len(invocations), invocations)
+	if len(invocations) != 1 {
+		t.Fatalf("go list invocations = %d, want one concrete current-tree metadata query: %+v", len(invocations), invocations)
 	}
 	for _, invocation := range invocations {
 		if invocation.name != "go" || invocation.dir != repoRoot {
 			t.Fatalf("go list invocation = %+v, want repo-root go command", invocation)
 		}
+	}
+}
+
+func TestResolveFunctionalTestPackagesWithMetadataSkipsBuildExcludedCandidates(t *testing.T) {
+	originalRunner := commandRunner
+	t.Cleanup(func() { commandRunner = originalRunner })
+
+	packagePath := modulePath + "/tests/functional/visible"
+	excludedPath := modulePath + "/tests/functional/excluded"
+	repoRoot := t.TempDir()
+	packageDir := filepath.Join(repoRoot, "tests", "functional", "visible")
+	excludedDir := filepath.Join(repoRoot, "tests", "functional", "excluded")
+	if err := os.MkdirAll(packageDir, 0o755); err != nil {
+		t.Fatalf("create visible package directory: %v", err)
+	}
+	if err := os.MkdirAll(excludedDir, 0o755); err != nil {
+		t.Fatalf("create excluded package directory: %v", err)
+	}
+	writeFunctionalDiscoveryFixture(t, packageDir, "visible_test.go", "package visible\n")
+	writeFunctionalDiscoveryFixture(t, excludedDir, "excluded_functionallong_test.go", "package excluded\n")
+
+	commandRunner = func(invocation commandInvocation) (string, string, error) {
+		wantArgs := []string{"list", functionalGoListErrorFlag, functionalGoListJSONFields, "-find", excludedPath, packagePath}
+		if !slices.Equal(invocation.args, wantArgs) {
+			t.Fatalf("go list invocation = %+v, want concrete current-tree candidates", invocation)
+		}
+		return strings.Join([]string{
+			marshalFunctionalGoListPackage(t, functionalGoListPackage{
+				ImportPath: packagePath,
+				Dir:        packageDir,
+			}),
+			marshalFunctionalGoListPackage(t, functionalGoListPackage{
+				ImportPath: excludedPath,
+				Dir:        excludedDir,
+				Error: &functionalGoListPackageError{
+					Err: "build constraints exclude all Go files in " + excludedDir,
+				},
+			}),
+		}, "\n"), "", nil
+	}
+
+	packages, listed, err := resolveFunctionalTestPackagesWithMetadata(config{suite: "functional"}, repoRoot)
+	if err != nil {
+		t.Fatalf("resolveFunctionalTestPackagesWithMetadata() error = %v", err)
+	}
+	if !slices.Equal(packages, []string{packagePath}) || len(listed) != 1 || listed[0].ImportPath != packagePath {
+		t.Fatalf("packages/listed = %v/%+v, want only build-selected package", packages, listed)
 	}
 }
 
