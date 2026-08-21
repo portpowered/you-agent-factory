@@ -200,7 +200,7 @@ func TestNew_WithRestoredActiveDispatchUsesRecordedWorkPlacement(t *testing.T) {
 	restored := &interfaces.FactoryWorldState{
 		WorkItemsByID: map[string]work.FactoryWorkItem{
 			"work-active": {
-				ID: "work-active", WorkTypeID: "task", State: "done", PlaceID: "task:done",
+				ID: "work-active", WorkTypeID: "task", State: "done",
 			},
 		},
 		ActiveDispatches: map[string]interfaces.FactoryWorldDispatch{
