@@ -232,8 +232,8 @@ func New(
 
 	sched := buildRuntimeScheduler(cfg)
 	effectiveLogger := logging.EnsureLogger(cfg.logger)
-	sharedTransformer, subs := buildRuntimeSubsystems(cfg, sched, effectiveLogger, newID)
 	marking, seededRestoredWorkIDs := buildRuntimeMarking(cfg)
+	sharedTransformer, subs := buildRuntimeSubsystems(cfg, sched, effectiveLogger, newID, seededRestoredWorkIDs)
 	resultBuffer := buffers.NewTypedBuffer[workerexecution.WorkResult](defaultRuntimeBufferSize)
 	effectiveEventHistory := ensureEventHistory(cfg)
 	dispatchResultHook, dispatchPlan, err := configureRuntimeDispatch(
@@ -310,7 +310,7 @@ func buildRuntimeScheduler(cfg *runtimeConfig) scheduler.Scheduler {
 	return scheduler.NewWorkInQueueScheduler(50, cfg.runtimeConfig)
 }
 
-func buildRuntimeSubsystems(cfg *runtimeConfig, sched scheduler.Scheduler, logger logging.Logger, newID factory.IDGenerator) (*token_transformer.Transformer, []subsystems.Subsystem) {
+func buildRuntimeSubsystems(cfg *runtimeConfig, sched scheduler.Scheduler, logger logging.Logger, newID factory.IDGenerator, seededRestoredWorkIDs map[string]struct{}) (*token_transformer.Transformer, []subsystems.Subsystem) {
 	workIDGen := petri.NewWorkIDGenerator()
 	var replayIDs factory.ReplayDispatchIDResolver
 	if resolver, ok := cfg.completionDeliveryPlanner.(factory.ReplayDispatchIDResolver); ok {
@@ -328,7 +328,7 @@ func buildRuntimeSubsystems(cfg *runtimeConfig, sched scheduler.Scheduler, logge
 			logger,
 			cfg.runtimeConfig),
 
-		subsystems.NewDispatcher(
+		subsystems.NewDispatcherWithSeededReplay(
 			cfg.net,
 			sched,
 			cfg.workflowContext,
@@ -336,7 +336,8 @@ func buildRuntimeSubsystems(cfg *runtimeConfig, sched scheduler.Scheduler, logge
 			cfg.runtimeConfig,
 			cfg.clock.Now,
 			newID,
-			replayIDs),
+			replayIDs,
+			seededRestoredWorkIDs),
 
 		subsystems.NewHistory(logger),
 		subsystems.NewTransitioner(

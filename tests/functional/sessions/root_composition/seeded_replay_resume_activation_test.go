@@ -107,7 +107,7 @@ func seededReplayResumeFactoryConfig() map[string]any {
 		"workstations": []map[string]any{{
 			"name":      "process",
 			"worker":    "worker-a",
-			"inputs":    []map[string]string{{"workType": "task", "state": "processing"}},
+			"inputs":    []map[string]string{{"workType": "task", "state": "init"}},
 			"outputs":   []map[string]string{{"workType": "task", "state": "complete"}},
 			"onFailure": []map[string]string{{"workType": "task", "state": "failed"}},
 		}},
