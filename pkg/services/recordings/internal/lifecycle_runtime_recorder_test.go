@@ -144,6 +144,11 @@ func TestReplayRecordingSnapshotWriterPreservesReplayCompatibility(t *testing.T)
 			len(artifact.Events),
 		)
 	}
+	for index, event := range artifact.Events {
+		if event.Context.SessionID == nil || *event.Context.SessionID != "~default" {
+			t.Fatalf("replay artifact event %d session id = %v, want ~default", index, event.Context.SessionID)
+		}
+	}
 }
 
 func newLifecycleRecorderForTest(
