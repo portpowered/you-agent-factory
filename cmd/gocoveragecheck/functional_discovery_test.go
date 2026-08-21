@@ -156,6 +156,104 @@ func TestDiscoverFunctionalTestInventoryParallelizesConcretePackageBatches(t *te
 	}
 }
 
+func TestResolveFunctionalTestPackagesWithMetadataUsesCurrentTreeGoList(t *testing.T) {
+	originalRunner := commandRunner
+	t.Cleanup(func() { commandRunner = originalRunner })
+
+	packagePath := modulePath + "/tests/functional/metadata"
+	supportPath := modulePath + "/tests/functional/internal/support"
+	repoRoot := t.TempDir()
+	packageDir := filepath.Join(repoRoot, "metadata")
+	supportDir := filepath.Join(repoRoot, "support")
+	if err := os.MkdirAll(packageDir, 0o755); err != nil {
+		t.Fatalf("create package directory: %v", err)
+	}
+	if err := os.MkdirAll(supportDir, 0o755); err != nil {
+		t.Fatalf("create support directory: %v", err)
+	}
+	writeFunctionalDiscoveryFixture(t, packageDir, "metadata_test.go", `package metadata
+
+import "testing"
+
+func TestMetadata(t *testing.T) {}
+`)
+
+	var gotInvocation commandInvocation
+	commandRunner = func(invocation commandInvocation) (string, string, error) {
+		gotInvocation = invocation
+		return strings.Join([]string{
+			marshalFunctionalGoListPackage(t, functionalGoListPackage{ImportPath: supportPath, Dir: supportDir}),
+			marshalFunctionalGoListPackage(t, functionalGoListPackage{ImportPath: packagePath, Dir: packageDir, TestGoFiles: []string{"metadata_test.go"}}),
+		}, "\n"), "", nil
+	}
+
+	packages, listed, err := resolveFunctionalTestPackagesWithMetadata(config{suite: "functional"}, repoRoot)
+	if err != nil {
+		t.Fatalf("resolveFunctionalTestPackagesWithMetadata() error = %v", err)
+	}
+	if !slices.Equal(packages, []string{packagePath}) {
+		t.Fatalf("packages = %v, want only runnable package", packages)
+	}
+	if len(listed) != 1 || listed[0].ImportPath != packagePath || !slices.Equal(listed[0].TestGoFiles, []string{"metadata_test.go"}) {
+		t.Fatalf("listed metadata = %+v, want build-selected test files", listed)
+	}
+	if gotInvocation.name != "go" || gotInvocation.dir != repoRoot || !slices.Equal(gotInvocation.args, []string{"list", "-json", "-find", "./tests/functional/..."}) {
+		t.Fatalf("go list invocation = %+v, want one current-tree metadata query", gotInvocation)
+	}
+}
+
+func TestPrepareFunctionalCoverageRunUsesRetainedGoListMetadata(t *testing.T) {
+	originalRunner := commandRunner
+	originalStdout := stdoutWriter
+	t.Cleanup(func() {
+		commandRunner = originalRunner
+		stdoutWriter = originalStdout
+	})
+
+	packagePath := modulePath + "/tests/functional/metadata-reuse"
+	repoRoot := t.TempDir()
+	packageDir := filepath.Join(repoRoot, "metadata-reuse")
+	if err := os.MkdirAll(packageDir, 0o755); err != nil {
+		t.Fatalf("create package directory: %v", err)
+	}
+	writeFunctionalDiscoveryFixture(t, packageDir, "metadata_reuse_test.go", `package metadatareuse
+
+import "testing"
+
+func TestMetadataReuse(t *testing.T) {}
+`)
+	quarantinePath := filepath.Join(repoRoot, "functional-quarantine.json")
+	if err := os.WriteFile(quarantinePath, []byte(`{"version":1,"suite":"functional","entries":[]}`), 0o644); err != nil {
+		t.Fatalf("write quarantine fixture: %v", err)
+	}
+
+	commandRunner = func(invocation commandInvocation) (string, string, error) {
+		t.Fatalf("unexpected subprocess after metadata reuse: %+v", invocation)
+		return "", "", nil
+	}
+	var stdout bytes.Buffer
+	stdoutWriter = &stdout
+	started := startFunctionalDiscovery("current-tree")
+	selection, selected, err := prepareFunctionalCoverageRunAfterStart(
+		config{functionalQuarantine: quarantinePath, timeout: time.Minute},
+		[]string{packagePath},
+		"linux",
+		4,
+		repoRoot,
+		[]functionalGoListPackage{{ImportPath: packagePath, Dir: packageDir, TestGoFiles: []string{"metadata_reuse_test.go"}}},
+		started,
+	)
+	if err != nil {
+		t.Fatalf("prepareFunctionalCoverageRunAfterStart() error = %v", err)
+	}
+	if !slices.Equal(selected, []string{packagePath}) || !slices.Equal(selection.Inventory.Tests[packagePath], []string{"TestMetadataReuse"}) {
+		t.Fatalf("selection = %+v, want retained metadata inventory", selection)
+	}
+	if !strings.Contains(stdout.String(), "Functional discovery: end status=complete") || !strings.Contains(stdout.String(), "Functional gate: discovered-packages=1 discovered-tests=1") {
+		t.Fatalf("lifecycle output = %q, want complete metadata-backed gate", stdout.String())
+	}
+}
+
 func marshalFunctionalGoListPackage(t *testing.T, pkg functionalGoListPackage) string {
 	t.Helper()
 	data, err := json.Marshal(pkg)

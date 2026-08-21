@@ -53,16 +53,25 @@ func discoverFunctionalTestInventoryWithPatternsAndJobs(listPatterns, packages [
 	if err != nil {
 		return functionalTestInventory{}, err
 	}
-	listedPackages, err = selectFunctionalPackageSet(requestedPackages, listedPackages)
+	return discoverFunctionalTestInventoryFromListedPackages(requestedPackages, listedPackages)
+}
+
+func discoverFunctionalTestInventoryFromListedPackages(requestedPackages []string, listedPackages []functionalGoListPackage) (functionalTestInventory, error) {
+	requestedPackages = sortedUniqueStrings(requestedPackages)
+	if len(requestedPackages) == 0 {
+		return functionalTestInventory{}, errors.New("discover functional tests: no packages were selected")
+	}
+
+	selectedPackages, err := selectFunctionalPackageSet(requestedPackages, listedPackages)
 	if err != nil {
 		return functionalTestInventory{}, err
 	}
 
 	inventory := functionalTestInventory{
-		Packages: make([]string, 0, len(listedPackages)),
-		Tests:    make(map[string][]string, len(listedPackages)),
+		Packages: make([]string, 0, len(selectedPackages)),
+		Tests:    make(map[string][]string, len(selectedPackages)),
 	}
-	for _, pkg := range listedPackages {
+	for _, pkg := range selectedPackages {
 		tests, err := discoverFunctionalPackageTests(pkg)
 		if err != nil {
 			return functionalTestInventory{}, err
@@ -72,6 +81,45 @@ func discoverFunctionalTestInventoryWithPatternsAndJobs(listPatterns, packages [
 	}
 	sort.Strings(inventory.Packages)
 	return inventory, nil
+}
+
+func listFunctionalTestPackageMetadata(patterns []string, repoRoot string) ([]functionalGoListPackage, error) {
+	patterns = sortedUniqueStrings(patterns)
+	if len(patterns) == 0 {
+		return nil, errors.New("resolve go coverage lane: no packages matched")
+	}
+
+	listedPackages, err := listFunctionalTestPackageBatch(patterns, repoRoot)
+	if err != nil {
+		return nil, err
+	}
+	functionalPackages := make([]functionalGoListPackage, 0, len(listedPackages))
+	for _, pkg := range listedPackages {
+		if isFunctionalTestPackage(pkg.ImportPath) {
+			functionalPackages = append(functionalPackages, pkg)
+		}
+	}
+	if len(functionalPackages) == 0 {
+		return nil, errors.New("resolve go coverage lane: no packages matched")
+	}
+	return mergeFunctionalGoListPackages(functionalPackages)
+}
+
+func resolveFunctionalTestPackagesWithMetadata(cfg config, repoRoot string) ([]string, []functionalGoListPackage, error) {
+	if strings.TrimSpace(cfg.packages) != "" {
+		return splitList(cfg.packages, " ", true), nil, nil
+	}
+
+	listedPackages, err := listFunctionalTestPackageMetadata(functionalTestPatterns, repoRoot)
+	if err != nil {
+		return nil, nil, err
+	}
+	packages := make([]string, 0, len(listedPackages))
+	for _, pkg := range listedPackages {
+		packages = append(packages, pkg.ImportPath)
+	}
+	slices.Sort(packages)
+	return packages, listedPackages, nil
 }
 
 func listFunctionalTestPackages(listPatterns, requestedPackages []string, jobs int, repoRoot string) ([]functionalGoListPackage, error) {

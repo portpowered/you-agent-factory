@@ -310,17 +310,53 @@ func runForOSWithCPU(cfg config, targetOS string, logicalCPUs int) (result cover
 }
 
 func runCoverageProfile(cfg config, targetOS string, logicalCPUs int, profilePath string) (coverageResult, error) {
-	var coverPackages []string
-	var testPackages []string
-	var packageDiscovery coveragePackageDiscovery
-	var canonicalBlocks map[string]coverageBlock
-	if err := cfg.measureCoveragePhase(coveragePhaseList, func() error {
-		var err error
-		packageDiscovery, coverPackages, testPackages, err = resolveCoverageLaneWithDiscovery(cfg)
-		return err
-	}); err != nil {
+	coverPackages, err := resolveCoverPackages(cfg)
+	if err != nil {
 		return coverageResult{}, err
 	}
+	repoRoot, err := repoRootDir()
+	if err != nil {
+		return coverageResult{}, err
+	}
+	testPackages, functionalMetadata, functionalDiscoveryStarted, err := resolveCoverageTestPackages(cfg, repoRoot)
+	if err != nil {
+		return coverageResult{}, err
+	}
+	testPackages, functionalSelection, err := prepareCoverageTestPackages(
+		cfg,
+		testPackages,
+		targetOS,
+		logicalCPUs,
+		repoRoot,
+		functionalMetadata,
+		functionalDiscoveryStarted,
+	)
+	if err != nil {
+		return coverageResult{}, err
+	}
+	coverPackageArgument := strings.Join(coverPackages, ",")
+	if targetOS == "windows" && strings.TrimSpace(cfg.coverpkg) == "" {
+		// A fully expanded backend package list exceeds Windows' command-line
+		// limit. A package pattern keeps the invocation to one logical coverage
+		// pass; the resolved list above remains authoritative for profile
+		// filtering, reporting, and package gates.
+		coverPackageArgument = modulePath + "/pkg/..."
+	}
+	coverageTestArgs := []string{
+		"test",
+		fmt.Sprintf("-coverpkg=%s", coverPackageArgument),
+		fmt.Sprintf("-p=%d", cfg.testJobs(targetOS, logicalCPUs)),
+		// Coverage is an authoritative measurement, so every package must run
+		// even when a prior non-instrumented invocation is cached.
+		"-count=1",
+	}
+	if cfg.short {
+		coverageTestArgs = append(coverageTestArgs, "-short")
+	}
+	coverageTestArgs = append(coverageTestArgs,
+		fmt.Sprintf("-covermode=%s", cfg.covermode),
+		fmt.Sprintf("-timeout=%s", cfg.timeout),
+	)
 
 	var prepared preparedCoverageRun
 	if err := cfg.measureCoveragePhase(coveragePhasePlan, func() error {

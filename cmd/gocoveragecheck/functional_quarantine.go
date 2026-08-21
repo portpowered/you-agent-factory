@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -73,11 +74,20 @@ type goTestListEvent struct {
 }
 
 func resolveFunctionalCoverageSelection(path string, listPatterns, packages []string, timeout time.Duration, short bool, jobs int, repoRoot string) (functionalCoverageSelection, functionalQuarantine, error) {
+	return resolveFunctionalCoverageSelectionWithMetadata(path, listPatterns, packages, timeout, short, jobs, repoRoot, nil)
+}
+
+func resolveFunctionalCoverageSelectionWithMetadata(path string, listPatterns, packages []string, timeout time.Duration, short bool, jobs int, repoRoot string, listedPackages []functionalGoListPackage) (functionalCoverageSelection, functionalQuarantine, error) {
 	manifest, err := readFunctionalQuarantineFile(path)
 	if err != nil {
 		return functionalCoverageSelection{}, functionalQuarantine{}, err
 	}
-	inventory, err := discoverFunctionalTestInventoryWithPatternsAndJobs(listPatterns, packages, jobs, repoRoot)
+	var inventory functionalTestInventory
+	if listedPackages == nil {
+		inventory, err = discoverFunctionalTestInventoryWithPatternsAndJobs(listPatterns, packages, jobs, repoRoot)
+	} else {
+		inventory, err = discoverFunctionalTestInventoryFromListedPackages(packages, listedPackages)
+	}
 	if err != nil {
 		return functionalCoverageSelection{}, functionalQuarantine{}, err
 	}
@@ -95,26 +105,47 @@ func resolveFunctionalCoverageSelection(path string, listPatterns, packages []st
 }
 
 func prepareFunctionalCoverageRun(cfg config, packages []string, targetOS string, logicalCPUs int, repoRoot string) (functionalCoverageSelection, []string, error) {
+	return prepareFunctionalCoverageRunAfterStart(
+		cfg,
+		packages,
+		targetOS,
+		logicalCPUs,
+		repoRoot,
+		nil,
+		startFunctionalDiscovery(strconv.Itoa(len(sortedUniqueStrings(packages)))),
+	)
+}
+
+func prepareFunctionalCoverageRunAfterStart(cfg config, packages []string, targetOS string, logicalCPUs int, repoRoot string, listedPackages []functionalGoListPackage, discoveryStarted time.Time) (functionalCoverageSelection, []string, error) {
 	quarantinePath := cfg.functionalQuarantine
 	if !filepath.IsAbs(quarantinePath) {
 		quarantinePath = filepath.Join(repoRoot, quarantinePath)
 	}
-	discoveryStarted := time.Now()
-	fmt.Fprintf(stdoutWriter, "Functional discovery: begin requested-packages=%d\n", len(sortedUniqueStrings(packages)))
-	// resolveTestPackages already obtained this current-tree package set from
-	// go list. Querying those concrete packages again for their build-selected
-	// test files avoids making go list walk the entire wildcard tree a second
-	// time, while keeping go list authoritative for the metadata we parse.
-	listPatterns := packages
-	selection, manifest, err := resolveFunctionalCoverageSelection(
-		quarantinePath,
-		listPatterns,
-		packages,
-		cfg.timeout,
-		cfg.short,
-		cfg.testJobs(targetOS, logicalCPUs),
-		repoRoot,
-	)
+	var selection functionalCoverageSelection
+	var manifest functionalQuarantine
+	var err error
+	if listedPackages == nil {
+		selection, manifest, err = resolveFunctionalCoverageSelection(
+			quarantinePath,
+			packages,
+			packages,
+			cfg.timeout,
+			cfg.short,
+			cfg.testJobs(targetOS, logicalCPUs),
+			repoRoot,
+		)
+	} else {
+		selection, manifest, err = resolveFunctionalCoverageSelectionWithMetadata(
+			quarantinePath,
+			packages,
+			packages,
+			cfg.timeout,
+			cfg.short,
+			cfg.testJobs(targetOS, logicalCPUs),
+			repoRoot,
+			listedPackages,
+		)
+	}
 	if err != nil {
 		writeFunctionalDiscoveryEnd(discoveryStarted, "failed", functionalTestInventory{})
 		return functionalCoverageSelection{}, nil, err
@@ -137,6 +168,48 @@ func prepareFunctionalCoverageRun(cfg config, packages []string, targetOS string
 		return functionalCoverageSelection{}, nil, err
 	}
 	return selection, selectedFunctionalPackages(selection), nil
+}
+
+func resolveCoverageTestPackages(cfg config, repoRoot string) ([]string, []functionalGoListPackage, time.Time, error) {
+	if strings.TrimSpace(cfg.functionalQuarantine) == "" {
+		packages, err := resolveTestPackages(cfg)
+		return packages, nil, time.Time{}, err
+	}
+
+	discoveryStarted := startFunctionalDiscovery(functionalDiscoveryRequestLabel(cfg))
+	packages, listedPackages, err := resolveFunctionalTestPackagesWithMetadata(cfg, repoRoot)
+	if err != nil {
+		writeFunctionalDiscoveryEnd(discoveryStarted, "failed", functionalTestInventory{})
+		return nil, nil, time.Time{}, err
+	}
+	return packages, listedPackages, discoveryStarted, nil
+}
+
+func prepareCoverageTestPackages(cfg config, packages []string, targetOS string, logicalCPUs int, repoRoot string, listedPackages []functionalGoListPackage, discoveryStarted time.Time) ([]string, *functionalCoverageSelection, error) {
+	if strings.TrimSpace(cfg.functionalQuarantine) == "" {
+		return packages, nil, nil
+	}
+	selection, selectedPackages, err := prepareFunctionalCoverageRunAfterStart(cfg, packages, targetOS, logicalCPUs, repoRoot, listedPackages, discoveryStarted)
+	if err != nil {
+		return nil, nil, err
+	}
+	return selectedPackages, &selection, nil
+}
+
+func startFunctionalDiscovery(requestedPackages string) time.Time {
+	if strings.TrimSpace(requestedPackages) == "" {
+		requestedPackages = "unknown"
+	}
+	started := time.Now()
+	fmt.Fprintf(stdoutWriter, "Functional discovery: begin requested-packages=%s\n", requestedPackages)
+	return started
+}
+
+func functionalDiscoveryRequestLabel(cfg config) string {
+	if strings.TrimSpace(cfg.packages) == "" {
+		return "current-tree"
+	}
+	return strconv.Itoa(len(splitList(cfg.packages, " ", true)))
 }
 
 func writeFunctionalDiscoveryEnd(started time.Time, status string, inventory functionalTestInventory) {
