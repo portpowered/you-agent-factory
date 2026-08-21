@@ -364,15 +364,25 @@ func TestRun_DefaultModeUsesBatchRuntimeAndExitsWhenRunReturns(t *testing.T) {
 	}
 }
 
+type recordOrReplayPathCase struct {
+	name              string
+	cfg               RunConfig
+	wantDefaultRecord bool
+	wantRecordPath    string
+	wantReplayPath    string
+	wantResumePath    string
+}
+
 func TestRun_RecordOrReplayPathPassedToServiceConfig(t *testing.T) {
-	tests := []struct {
-		name              string
-		cfg               RunConfig
-		wantDefaultRecord bool
-		wantRecordPath    string
-		wantReplayPath    string
-		wantResumePath    string
-	}{
+	for _, tt := range recordOrReplayPathCases() {
+		t.Run(tt.name, func(t *testing.T) {
+			runRecordOrReplayPathCase(t, tt)
+		})
+	}
+}
+
+func recordOrReplayPathCases() []recordOrReplayPathCase {
+	return []recordOrReplayPathCase{
 		{
 			name:              "default live mode",
 			cfg:               RunConfig{},
@@ -414,60 +424,58 @@ func TestRun_RecordOrReplayPathPassedToServiceConfig(t *testing.T) {
 			},
 		},
 	}
+}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			originalBuilder := openTestRuntimeRunner
-			defer func() {
-				openTestRuntimeRunner = originalBuilder
-			}()
+func runRecordOrReplayPathCase(t *testing.T, tt recordOrReplayPathCase) {
+	originalBuilder := openTestRuntimeRunner
+	defer func() {
+		openTestRuntimeRunner = originalBuilder
+	}()
 
-			tt.cfg.HomeDir = t.TempDir()
-			plannedPath := filepath.Join(tt.cfg.HomeDir, "planned-recording.json")
-			tt.cfg.RecordingTargetPlanner = recordings.LiveRecordingTargetPlannerFunc(func(request recordings.LiveRecordingTargetRequest) (recordings.LiveRecordingTarget, error) {
-				if request.HomeDir != tt.cfg.HomeDir || request.ReportedSessionID != defaultFactorySessionID {
-					t.Fatalf("recording request = %#v", request)
-				}
-				return recordings.LiveRecordingTarget{ServicePath: plannedPath, ReportedPath: plannedPath}, nil
-			})
+	tt.cfg.HomeDir = t.TempDir()
+	plannedPath := filepath.Join(tt.cfg.HomeDir, "planned-recording.json")
+	tt.cfg.RecordingTargetPlanner = recordings.LiveRecordingTargetPlannerFunc(func(request recordings.LiveRecordingTargetRequest) (recordings.LiveRecordingTarget, error) {
+		if request.HomeDir != tt.cfg.HomeDir || request.ReportedSessionID != defaultFactorySessionID {
+			t.Fatalf("recording request = %#v", request)
+		}
+		return recordings.LiveRecordingTarget{ServicePath: plannedPath, ReportedPath: plannedPath}, nil
+	})
 
-			var capturedRecordPath string
-			var capturedReplayPath string
-			var capturedResumePath string
-			openTestRuntimeRunner = func(_ context.Context, cfg *testRuntimeSelections, _ serviceedges.Edges) (factoryServiceRunner, error) {
-				capturedRecordPath = cfg.RecordPath
-				capturedReplayPath = cfg.ReplayPath
-				capturedResumePath = cfg.ResumePath
-				return stubFactoryService{run: func(context.Context) error { return nil }}, nil
-			}
+	var capturedRecordPath string
+	var capturedReplayPath string
+	var capturedResumePath string
+	openTestRuntimeRunner = func(_ context.Context, cfg *testRuntimeSelections, _ serviceedges.Edges) (factoryServiceRunner, error) {
+		capturedRecordPath = cfg.RecordPath
+		capturedReplayPath = cfg.ReplayPath
+		capturedResumePath = cfg.ResumePath
+		return stubFactoryService{run: func(context.Context) error { return nil }}, nil
+	}
 
-			err := Run(context.Background(), tt.cfg)
-			if tt.cfg.DisableDefaultRecording && tt.cfg.RecordPath != "" {
-				if err == nil {
-					t.Fatal("expected conflicting --record and --no-record settings to fail")
-				}
-				if !strings.Contains(err.Error(), "--no-record cannot be used with --record") {
-					t.Fatalf("unexpected error: %v", err)
-				}
-				return
-			}
-			if err != nil {
-				t.Fatalf("Run: %v", err)
-			}
-			if tt.wantDefaultRecord {
-				if capturedRecordPath != plannedPath {
-					t.Fatalf("record path = %q, want injected planned path %q", capturedRecordPath, plannedPath)
-				}
-			} else if capturedRecordPath != tt.wantRecordPath {
-				t.Fatalf("record path = %q, want %q", capturedRecordPath, tt.wantRecordPath)
-			}
-			if capturedReplayPath != tt.wantReplayPath {
-				t.Fatalf("replay path = %q, want %q", capturedReplayPath, tt.wantReplayPath)
-			}
-			if capturedResumePath != tt.wantResumePath {
-				t.Fatalf("resume path = %q, want %q", capturedResumePath, tt.wantResumePath)
-			}
-		})
+	err := Run(context.Background(), tt.cfg)
+	if tt.cfg.DisableDefaultRecording && tt.cfg.RecordPath != "" {
+		if err == nil {
+			t.Fatal("expected conflicting --record and --no-record settings to fail")
+		}
+		if !strings.Contains(err.Error(), "--no-record cannot be used with --record") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		return
+	}
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if tt.wantDefaultRecord {
+		if capturedRecordPath != plannedPath {
+			t.Fatalf("record path = %q, want injected planned path %q", capturedRecordPath, plannedPath)
+		}
+	} else if capturedRecordPath != tt.wantRecordPath {
+		t.Fatalf("record path = %q, want %q", capturedRecordPath, tt.wantRecordPath)
+	}
+	if capturedReplayPath != tt.wantReplayPath {
+		t.Fatalf("replay path = %q, want %q", capturedReplayPath, tt.wantReplayPath)
+	}
+	if capturedResumePath != tt.wantResumePath {
+		t.Fatalf("resume path = %q, want %q", capturedResumePath, tt.wantResumePath)
 	}
 }
 

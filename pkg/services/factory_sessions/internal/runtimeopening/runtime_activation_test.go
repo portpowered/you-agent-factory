@@ -184,6 +184,34 @@ func TestActivationRequestCarriesExplicitRuntimeInputs(t *testing.T) {
 	}
 }
 
+func TestRuntimeOpeningRequestRoundTripsResumePathToRecordingsContract(t *testing.T) {
+	t.Parallel()
+
+	const resumePath = "source.recording.json"
+	request := factorysessions.RuntimeOpeningRequest{
+		FactoryDefinition: factorydefinitions.RuntimeOpeningRequest{Directory: "/factory"},
+		Recordings: recordings.RuntimeOpeningRequest{
+			RecordPath: "successor.recording.json",
+			ResumePath: resumePath,
+		},
+	}
+
+	activation := factoryruntime.RuntimeActivationRequest{
+		Snapshot: activationSnapshot(),
+		Inputs:   runtimeActivationInputs(request),
+	}
+	opening, err := runtimeOpeningRequestFromActivation(activation)
+	if err != nil {
+		t.Fatalf("runtimeOpeningRequestFromActivation() error = %v", err)
+	}
+	if opening.Recordings.ResumePath != resumePath {
+		t.Fatalf("Recordings resume path = %q, want %q", opening.Recordings.ResumePath, resumePath)
+	}
+	if opening.Recordings.RecordPath != request.Recordings.RecordPath {
+		t.Fatalf("Recordings successor path = %q, want %q", opening.Recordings.RecordPath, request.Recordings.RecordPath)
+	}
+}
+
 func TestActivationRequestDetachesMockWorkerInputs(t *testing.T) {
 	t.Parallel()
 

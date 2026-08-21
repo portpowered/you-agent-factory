@@ -113,7 +113,14 @@ func TestRunCommand_RecordFlagsDocumentDefaultRecordingBehavior(t *testing.T) {
 	if !strings.Contains(runCmd.Long, "Replay artifacts are sensitive and can contain prompts, payloads, stdout, stderr, and diagnostic metadata.") {
 		t.Fatal("expected run command long help text to document replay artifact sensitivity")
 	}
+}
 
+func TestRunCommand_ReplayFlagDocumentsReadOnlyBehavior(t *testing.T) {
+	root := newLegacyTestRootCommand()
+	runCmd, _, err := root.Find([]string{"run"})
+	if err != nil {
+		t.Fatalf("find run: %v", err)
+	}
 	replayFlag := runCmd.Flags().Lookup("replay")
 	if replayFlag == nil {
 		t.Fatal("expected --replay flag on run command")
@@ -123,7 +130,14 @@ func TestRunCommand_RecordFlagsDocumentDefaultRecordingBehavior(t *testing.T) {
 		!strings.Contains(replayFlag.Usage, "does not write a new recording") {
 		t.Fatalf("--replay usage = %q, want deterministic read-only guidance", replayFlag.Usage)
 	}
+}
 
+func TestRunCommand_ResumeFlagDocumentsLiveSuccessorBehavior(t *testing.T) {
+	root := newLegacyTestRootCommand()
+	runCmd, _, err := root.Find([]string{"run"})
+	if err != nil {
+		t.Fatalf("find run: %v", err)
+	}
 	resumeFlag := runCmd.Flags().Lookup("resume")
 	if resumeFlag == nil {
 		t.Fatal("expected --resume flag on run command")

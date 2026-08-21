@@ -176,6 +176,7 @@ func recordingsRuntimeOpeningRequest(request factoryruntime.RuntimeActivationReq
 	return recordings.RuntimeOpeningRequest{
 		RecordPath:    request.Inputs.Recordings.RecordPath,
 		ReplayPath:    request.Inputs.Recordings.ReplayPath,
+		ResumePath:    request.Inputs.Recordings.ResumePath,
 		WorkflowID:    request.Inputs.Recordings.WorkflowID,
 		FlushInterval: request.Inputs.Recordings.FlushInterval,
 	}
