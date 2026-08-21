@@ -481,59 +481,6 @@ func readFunctionalQuarantineFile(path string) (functionalQuarantine, error) {
 	return manifest, nil
 }
 
-func discoverFunctionalTestInventory(packages []string, timeout time.Duration, short bool, jobs int, repoRoot string) (functionalTestInventory, error) {
-	packages = sortedUniqueStrings(packages)
-	if len(packages) == 0 {
-		return functionalTestInventory{}, errors.New("discover functional tests: no packages were selected")
-	}
-	args := []string{"test", "-list=^Test", "-json", fmt.Sprintf("-p=%d", maxFunctionalDiscoveryJobs(jobs)), "-count=1"}
-	if short {
-		args = append(args, "-short")
-	}
-	args = append(args, fmt.Sprintf("-timeout=%s", timeout))
-	args = append(args, packages...)
-	stdout, stderr, err := runCommand(commandInvocation{
-		name: "go",
-		args: args,
-		env:  os.Environ(),
-		dir:  repoRoot,
-	})
-	if err != nil {
-		detail := mergeGoTestFailureDetail(stderr, stdout)
-		if detail != "" {
-			return functionalTestInventory{}, fmt.Errorf("discover functional tests: %w\n%s", err, detail)
-		}
-		return functionalTestInventory{}, fmt.Errorf("discover functional tests: %w", err)
-	}
-
-	inventory := functionalTestInventory{
-		Packages: packages,
-		Tests:    make(map[string][]string, len(packages)),
-	}
-	for _, packagePath := range packages {
-		inventory.Tests[packagePath] = nil
-	}
-	seenPackages := make(map[string]struct{}, len(packages))
-	if err := parseFunctionalTestList(stdout, inventory, seenPackages); err != nil {
-		return functionalTestInventory{}, err
-	}
-	for _, packagePath := range packages {
-		if _, ok := seenPackages[packagePath]; !ok {
-			return functionalTestInventory{}, fmt.Errorf("discover functional tests: package %q did not report a terminal list event", packagePath)
-		}
-		tests := sortedUniqueStrings(inventory.Tests[packagePath])
-		inventory.Tests[packagePath] = tests
-	}
-	return inventory, nil
-}
-
-func maxFunctionalDiscoveryJobs(jobs int) int {
-	if jobs < 1 {
-		return 1
-	}
-	return jobs
-}
-
 func parseFunctionalTestList(output string, inventory functionalTestInventory, seenPackages map[string]struct{}) error {
 	for _, line := range strings.Split(output, "\n") {
 		line = strings.TrimSpace(line)

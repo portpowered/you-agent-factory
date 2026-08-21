@@ -221,20 +221,38 @@ func TestDiscoverFunctionalTestInventoryUsesGoListProcessResult(t *testing.T) {
 
 	packageA := modulePath + "/tests/functional/alpha"
 	packageB := modulePath + "/tests/functional/beta"
+	repoRoot := t.TempDir()
+	packageADir := filepath.Join(repoRoot, "alpha")
+	packageBDir := filepath.Join(repoRoot, "beta")
+	if err := os.MkdirAll(packageADir, 0o755); err != nil {
+		t.Fatalf("create package A fixture: %v", err)
+	}
+	if err := os.MkdirAll(packageBDir, 0o755); err != nil {
+		t.Fatalf("create package B fixture: %v", err)
+	}
+	writeFunctionalDiscoveryFixture(t, packageADir, "alpha_test.go", `package alpha
+
+import "testing"
+
+func TestAlpha(t *testing.T) {}
+func TestAdded(*testing.T) {}
+`)
+	writeFunctionalDiscoveryFixture(t, packageBDir, "beta_external_test.go", `package beta_test
+
+import "testing"
+
+func TestBeta(t *testing.T) {}
+`)
 	var gotInvocation commandInvocation
 	commandRunner = func(invocation commandInvocation) (string, string, error) {
 		gotInvocation = invocation
 		return strings.Join([]string{
-			marshalFunctionalListEvent(goTestListEvent{Action: "start", Package: packageB}),
-			marshalFunctionalListEvent(goTestListEvent{Action: "output", Package: packageB, Output: "TestBeta\n"}),
-			marshalFunctionalListEvent(goTestListEvent{Action: "skip", Package: packageB}),
-			marshalFunctionalListEvent(goTestListEvent{Action: "start", Package: packageA}),
-			marshalFunctionalListEvent(goTestListEvent{Action: "output", Package: packageA, Output: "TestAlpha\nTestAdded\n"}),
-			marshalFunctionalListEvent(goTestListEvent{Action: "pass", Package: packageA}),
+			marshalFunctionalGoListPackage(t, functionalGoListPackage{ImportPath: packageB, Dir: packageBDir, XTestGoFiles: []string{"beta_external_test.go"}}),
+			marshalFunctionalGoListPackage(t, functionalGoListPackage{ImportPath: packageA, Dir: packageADir, TestGoFiles: []string{"alpha_test.go"}}),
 		}, "\n"), "", nil
 	}
 
-	inventory, err := discoverFunctionalTestInventory([]string{packageB, packageA}, 2*time.Minute, true, 4, t.TempDir())
+	inventory, err := discoverFunctionalTestInventory([]string{packageB, packageA}, 2*time.Minute, true, 4, repoRoot)
 	if err != nil {
 		t.Fatalf("discoverFunctionalTestInventory() error = %v", err)
 	}
@@ -244,8 +262,159 @@ func TestDiscoverFunctionalTestInventoryUsesGoListProcessResult(t *testing.T) {
 	if !slices.Equal(inventory.Tests[packageA], []string{"TestAdded", "TestAlpha"}) || !slices.Equal(inventory.Tests[packageB], []string{"TestBeta"}) {
 		t.Fatalf("inventory tests = %+v, want both package test lists", inventory.Tests)
 	}
-	if gotInvocation.name != "go" || gotInvocation.dir == "" || !slices.Contains(gotInvocation.args, "-list=^Test") || !slices.Contains(gotInvocation.args, "-json") || !slices.Contains(gotInvocation.args, "-short") {
-		t.Fatalf("discovery invocation = %+v, want go test list/json/short process", gotInvocation)
+	if gotInvocation.name != "go" || gotInvocation.dir != repoRoot || !slices.Equal(gotInvocation.args, []string{"list", "-json", packageA, packageB}) {
+		t.Fatalf("discovery invocation = %+v, want go list -json for sorted packages", gotInvocation)
+	}
+}
+
+func marshalFunctionalGoListPackage(t *testing.T, pkg functionalGoListPackage) string {
+	t.Helper()
+	data, err := json.Marshal(pkg)
+	if err != nil {
+		t.Fatalf("marshal go list package: %v", err)
+	}
+	return string(data)
+}
+
+func writeFunctionalDiscoveryFixture(t *testing.T, dir, name, source string) {
+	t.Helper()
+	if err := os.WriteFile(filepath.Join(dir, name), []byte(source), 0o644); err != nil {
+		t.Fatalf("write discovery fixture %s: %v", name, err)
+	}
+}
+
+func TestFunctionalDiscoveryFiltersDeclarationsByTestContract(t *testing.T) {
+	packagePath := modulePath + "/tests/functional/fixture"
+	repoRoot := t.TempDir()
+	packageDir := filepath.Join(repoRoot, "fixture")
+	if err := os.MkdirAll(packageDir, 0o755); err != nil {
+		t.Fatalf("create fixture package: %v", err)
+	}
+	writeFunctionalDiscoveryFixture(t, packageDir, "eligible_test.go", `package fixture
+
+import (
+	"testing"
+	testingAlias "testing"
+)
+
+func TestValid(t *testing.T) {}
+func TestAlias(t *testingAlias.T) {}
+func TestNoParameter() {}
+func TestWrongType(t testing.TB) {}
+func TestTwoParameters(t, other *testing.T) {}
+func TestReturn(t *testing.T) bool { return true }
+func TestGeneric[T any](t *testing.T) {}
+func Test() {}
+func TestExample(t *testing.T) {}
+
+type fixture struct{}
+
+func (fixture) TestMethod(t *testing.T) {}
+`)
+	writeFunctionalDiscoveryFixture(t, packageDir, "dot_import_test.go", `package fixture
+
+import . "testing"
+
+func TestDot(t *T) {}
+`)
+	writeFunctionalDiscoveryFixture(t, packageDir, "functionallong_test.go", `//go:build functionallong
+
+package fixture
+
+import "testing"
+
+func TestBuildTagExcluded(t *testing.T) {}
+`)
+	ignoredDir := filepath.Join(packageDir, "testdata")
+	if err := os.MkdirAll(ignoredDir, 0o755); err != nil {
+		t.Fatalf("create testdata fixture: %v", err)
+	}
+	writeFunctionalDiscoveryFixture(t, ignoredDir, "ignored_test.go", `package ignored
+
+import "testing"
+
+func TestTestdataExcluded(t *testing.T) {}
+`)
+
+	originalRunner := commandRunner
+	t.Cleanup(func() { commandRunner = originalRunner })
+	commandRunner = func(invocation commandInvocation) (string, string, error) {
+		return marshalFunctionalGoListPackage(t, functionalGoListPackage{
+			ImportPath:  packagePath,
+			Dir:         packageDir,
+			TestGoFiles: []string{"eligible_test.go", "dot_import_test.go"},
+		}), "", nil
+	}
+
+	inventory, err := discoverFunctionalTestInventory([]string{packagePath}, 0, false, 0, repoRoot)
+	if err != nil {
+		t.Fatalf("discoverFunctionalTestInventory() error = %v", err)
+	}
+	want := []string{"TestAlias", "TestDot", "TestExample", "TestValid"}
+	if !slices.Equal(inventory.Tests[packagePath], want) {
+		t.Fatalf("discovered tests = %v, want %v", inventory.Tests[packagePath], want)
+	}
+}
+
+func TestFunctionalDiscoveryFailsClosedForGoListAndFileErrors(t *testing.T) {
+	packagePath := modulePath + "/tests/functional/fixture"
+	tests := []struct {
+		name       string
+		setup      func(*testing.T, string) string
+		runnerErr  error
+		stderr     string
+		wantDetail string
+	}{
+		{
+			name:       "go list failure",
+			runnerErr:  errors.New("exit status 7"),
+			stderr:     "go: no required module provides package " + packagePath,
+			wantDetail: packagePath,
+		},
+		{
+			name: "missing listed file",
+			setup: func(t *testing.T, root string) string {
+				t.Helper()
+				return marshalFunctionalGoListPackage(t, functionalGoListPackage{
+					ImportPath:  packagePath,
+					Dir:         root,
+					TestGoFiles: []string{"missing_test.go"},
+				})
+			},
+			wantDetail: "missing_test.go",
+		},
+		{
+			name: "parse failure",
+			setup: func(t *testing.T, root string) string {
+				t.Helper()
+				writeFunctionalDiscoveryFixture(t, root, "broken_test.go", "package fixture\nfunc TestBroken(\n")
+				return marshalFunctionalGoListPackage(t, functionalGoListPackage{
+					ImportPath:  packagePath,
+					Dir:         root,
+					TestGoFiles: []string{"broken_test.go"},
+				})
+			},
+			wantDetail: "broken_test.go",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			root := t.TempDir()
+			originalRunner := commandRunner
+			t.Cleanup(func() { commandRunner = originalRunner })
+			commandRunner = func(commandInvocation) (string, string, error) {
+				if test.runnerErr != nil {
+					return "", test.stderr, test.runnerErr
+				}
+				return test.setup(t, root), "", nil
+			}
+
+			_, err := discoverFunctionalTestInventory([]string{packagePath}, 0, false, 0, root)
+			if err == nil || !strings.Contains(err.Error(), test.wantDetail) {
+				t.Fatalf("discoverFunctionalTestInventory() error = %v, want detail %q", err, test.wantDetail)
+			}
+		})
 	}
 }
 
