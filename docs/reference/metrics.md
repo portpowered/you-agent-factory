@@ -6,7 +6,80 @@ doc-id: agent-factory/metrics
 
 # Metrics
 
-`you docs metrics` describes `you metrics`, which reports recorded Factory Runtime metrics. Use it to inspect token usage, dispatch completion, failure reasons, and available latency.
+`you docs metrics` describes `you metrics`, which reports retained Factory Runtime metrics. Use it to inspect token usage, dispatch completion, failure reasons, provider attribution, and available latency.
+
+## Start With A Live Factory Session
+
+Run this sequence from any directory while the Factory API is reachable. It
+does not require Factory source files in the current directory.
+
+```bash
+# List the public IDs accepted by the metrics session filter.
+you session list --scope live
+
+# Capture one ID from the structured live-session response.
+SESSION_ID="$(you --json session list --scope live | jq -er '.sessions[0].id')"
+test -n "$SESSION_ID"
+
+# Compare all retained sessions with the selected live Factory Session.
+ALL_METRICS="$(you --json metrics)"
+SCOPED_METRICS="$(you --json metrics --session "$SESSION_ID")"
+jq -n --argjson all "$ALL_METRICS" --argjson scoped "$SCOPED_METRICS" '
+  {
+    unscoped: $all.totals,
+    scoped: $scoped.totals,
+    scoped_totals_are_not_larger:
+      ($scoped.totals.input_tokens <= $all.totals.input_tokens and
+       $scoped.totals.output_tokens <= $all.totals.output_tokens and
+       $scoped.totals.completed_dispatches <= $all.totals.completed_dispatches)
+  }'
+
+# Inspect the selected scope in each supported grouping.
+you metrics --group-by workstation --session "$SESSION_ID"
+you metrics --group-by worker --session "$SESSION_ID"
+you metrics --group-by provider --session "$SESSION_ID"
+
+# Use the global --json flag for one machine-readable provider report.
+you --json metrics --group-by provider --session "$SESSION_ID"
+```
+
+The `jq -e` lookup fails when the live-session list is empty. Start or attach a
+Factory, then repeat the list command. For a non-default API port, use the
+same server selection for both commands: `you session list --port <port>` and
+`you --server <uri> metrics`.
+
+The unscoped report covers all retained Factory Sessions. The scoped report
+uses the public ID returned by the live list and resolves its retained metrics
+scope through Factory Sessions. A resolved scope with no recognized records is
+a verified empty success with zero totals. It is different from a failed
+scope lookup.
+
+## Live And Persisted Factory Session IDs
+
+The base metrics command accepts the live IDs returned by:
+
+```bash
+you session list --scope live
+```
+
+Do not copy a `dur-sess-*` value from `you session list --scope persisted` into
+`you metrics --session`. Persisted Factory Session identities belong to the
+durable inspection surface. They are not interchangeable with the public live
+selector used to resolve retained runtime metrics.
+
+If a live ID is unknown, or if it is known but has no retained metrics scope,
+the command fails before rendering a report. The HTTP operation has the same
+behavior:
+
+| Code | HTTP status | Meaning | Next action |
+|------|-------------|---------|-------------|
+| `METRICS_SESSION_NOT_FOUND` | `404` | The requested live Factory Session ID is not known. | Run `you session list --scope live` and choose an ID from that response. |
+| `METRICS_SESSION_SCOPE_UNAVAILABLE` | `503` | The live Factory Session is known, but no retained metrics scope is available. | Run `you session list --scope live` and choose a live ID with retained metrics. |
+
+Both failures leave stdout empty. The CLI exits non-zero and writes the coded
+diagnostic to stderr. A direct request uses the
+`GET /metrics?session_id=<live-id>` route and returns the same code and
+recovery message.
 
 ## Run The Command
 
@@ -17,9 +90,9 @@ you metrics
 you metrics --group-by workstation
 you metrics --group-by worker
 you metrics --group-by provider
-you metrics --group-by provider --session session-123
-you metrics --json
-you metrics --json --group-by worker --session session-123
+you metrics --group-by provider --session "$SESSION_ID"
+you --json metrics
+you --json metrics --group-by worker --session "$SESSION_ID"
 ```
 
 The `--group-by` flag accepts these values:
@@ -32,111 +105,60 @@ An unsupported value returns an error before the command queries metrics.
 
 ## Scope One Factory Session
 
-Use `--session <id>` with the exact Factory Session identifier. The filter applies to totals, groups, failure reasons, and latency samples.
+Use `--session "$SESSION_ID"` with an exact live Factory Session identifier.
+The filter applies to totals, groups, failure reasons, and latency samples.
 
 Without `--session`, the command reports all recorded Factory Sessions.
 
 ## Human Output
 
-Human output includes totals and the requested deterministic breakdown. It labels input and output token counts, completed dispatch counts, and failure counts by reason.
+Human output includes totals and the requested deterministic breakdown. It
+labels `Input tokens`, `Output tokens`, `Completed dispatches`, and `Failures by reason`.
 
 Latency uses milliseconds. The command reports p50 and p95 values when samples exist. It prints `no samples` when a latency value has no samples.
 
 Cost is always `unavailable`. The command does not emit a numeric price.
 
-Example:
+The provider breakdown includes every completed dispatch. Its completed
+dispatch counts, including the unavailable attribution group, sum to the
+selected total. Human output labels that group
+`Unavailable (provider attribution not proven)`.
 
-```text
-Scope: Factory Session session-123
-Group by: provider
-Cost: unavailable
-
-Totals:
-  Input tokens: 1200
-  Output tokens: 450
-  Completed dispatches: 8
-  Failures by reason:
-    timeout: 1
-  Dispatch latency (milliseconds): p50=820, p95=1400, samples=8
-  Provider latency (milliseconds): p50=790, p95=1320, samples=8
-
-Breakdown by provider: 1 rows
-  codex:
-    Input tokens: 1200
-    Output tokens: 450
-    Completed dispatches: 8
-```
+Retained facts use one `unavailable` JSON provider key when the provider is
+missing, contains only `${...}` template text, or has conflicting concrete
+evidence. A `${...}` string is never exposed as a provider key. Token,
+failure, and latency measures remain attached only to facts supported by that
+provider evidence.
 
 ## JSON Output
 
-Use `--json` for one machine-readable JSON document on stdout. The document names its scope, grouping, units, cost availability, totals, groups, failure reasons, and latency percentiles.
+Use the global `--json` flag for one machine-readable JSON document on stdout:
+
+```bash
+you --json metrics --group-by provider --session "$SESSION_ID"
+```
+
+The document names its scope, grouping, units, cost availability, totals,
+groups, failure reasons, and latency percentiles.
 
 The `groups` array contains only the requested grouping. Groups are sorted by key for deterministic output. Missing latency samples use `samples: 0`, `p50: null`, and `p95: null`.
 
-```json
-{
-  "scope": {
-    "kind": "factory_session",
-    "factory_session_id": "session-123"
-  },
-  "group_by": "provider",
-  "units": {
-    "tokens": "tokens",
-    "counts": "count",
-    "latency": "milliseconds"
-  },
-  "cost": {
-    "availability": "unavailable"
-  },
-  "totals": {
-    "input_tokens": 1200,
-    "output_tokens": 450,
-    "completed_dispatches": 8,
-    "failures_by_reason": {
-      "timeout": 1
-    },
-    "dispatch_latency": {
-      "unit": "milliseconds",
-      "samples": 8,
-      "p50": 820,
-      "p95": 1400
-    },
-    "provider_latency": {
-      "unit": "milliseconds",
-      "samples": 8,
-      "p50": 790,
-      "p95": 1320
-    }
-  },
-  "groups": [
-    {
-      "key": "codex",
-      "aggregate": {
-        "input_tokens": 1200,
-        "output_tokens": 450,
-        "completed_dispatches": 8,
-        "failures_by_reason": {
-          "timeout": 1
-        },
-        "dispatch_latency": {
-          "unit": "milliseconds",
-          "samples": 8,
-          "p50": 820,
-          "p95": 1400
-        },
-        "provider_latency": {
-          "unit": "milliseconds",
-          "samples": 8,
-          "p50": 790,
-          "p95": 1320
-        }
-      }
-    }
-  ]
-}
-```
+The top-level fields are:
+
+| Field | Meaning |
+|-------|---------|
+| `scope` | `all_factory_sessions` for an unscoped query or `factory_session` with the selected live ID. |
+| `group_by` | The requested `workstation`, `worker`, or `provider` grouping. |
+| `units` | `tokens`, `count`, and `milliseconds`. |
+| `cost.availability` | The base metrics cost state. It remains `unavailable`. |
+| `totals` | Token, completion, failure, and latency aggregates for the selected scope. |
+| `groups` | Rows for only the requested grouping, sorted by key. |
 
 An unscoped JSON result uses `"kind": "all_factory_sessions"` and a null `factory_session_id`. Empty results use zero counts, empty failure maps, an empty groups array, and null percentile values.
+
+The HTTP `GET /metrics` report also exposes retained `usage_rows` and the
+three canonical breakdown arrays. The CLI selects one of those breakdowns
+under `groups` for the requested `--group-by` value.
 
 ## Runtime Cost Rollups
 
@@ -146,13 +168,15 @@ reader:
 
 ```bash
 you metrics costs
-you metrics costs --session session-123
-you --server http://localhost:7437 metrics costs --json
+you metrics costs --session "$SESSION_ID"
+you --json --server http://localhost:7437 metrics costs
 ```
 
-The optional `--session` filter selects one Factory Session. Global `--server`
-selects the Factory API; global `--json` emits the API-shaped report. A route
-failure returns an error without a partial success document.
+The optional `--session` filter selects one Factory Session. Use a live ID from
+`you session list --scope live` when the report must match the base metrics
+workflow. Global `--server` selects the Factory API; global `--json` emits the
+API-shaped report. A route failure returns an error without a partial success
+document.
 
 ### Configure The Price Table
 
