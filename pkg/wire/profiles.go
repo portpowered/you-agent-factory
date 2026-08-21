@@ -962,6 +962,7 @@ func newHTTPRuntimeHandler(
 			workersessionshttp.NewAdapterWithStartAndContinueAndInterruptAndControl(
 				opened.WorkerSessions, opened.WorkerSessions, opened.WorkerSessions,
 				opened.WorkerSessions, opened.WorkerSessions, opened.Work,
+				newWorkerSessionsFactorySessionScopeResolver(opened.FactorySessions),
 			), opened.Logger,
 		)
 	}

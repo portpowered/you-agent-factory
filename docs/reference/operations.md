@@ -149,6 +149,12 @@ output is the deliberate failed or terminal state. This is the loop-breaker
 pattern. Do not put a visit guard only on the worker path and assume it will
 stop and classify the Work for you.
 
+For a process and review loop, add `logicalRoundTrip` to the paired loop-breaker
+guards. Its `maxVisits` value counts process/review pairs as logical cycles.
+Its `maxRawVisits` value sums both workstation counts and stops imbalanced or
+unchanged routes. Omit the field when the legacy per-workstation count is
+required. See `you docs guards` for the complete configuration shape.
+
 ## Bound shared resources before dispatch
 
 A top-level resource pool is a finite capacity boundary. A workstation

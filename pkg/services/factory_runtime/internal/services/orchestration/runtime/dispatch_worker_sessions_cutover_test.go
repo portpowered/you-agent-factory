@@ -9,10 +9,8 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil/recordingfixtures"
-	"github.com/portpowered/infinite-you/internal/testutil/runtimefixtures"
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
-	eventswire "github.com/portpowered/infinite-you/pkg/services/events/wire"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
@@ -20,7 +18,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
-	workersessionswire "github.com/portpowered/infinite-you/pkg/services/worker_sessions/wire"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
@@ -57,14 +54,7 @@ func (l *blockingAssociationLedger) RecordDispatchWorkerSessionAssociation(
 
 func TestStartThroughWorkerSessions_AssociationIsControlAddressableBeforeStart(t *testing.T) {
 	workerService := newControlledWorkstationBoundary()
-	events, err := eventswire.NewService(logging.NoopLogger{})
-	if err != nil {
-		t.Fatalf("New events service: %v", err)
-	}
-	workerSessions, err := workersessionswire.NewService(workerService, events, logging.NoopLogger{}, platformclock.Real{}, unavailableProviderSessions{}, nil)
-	if err != nil {
-		t.Fatalf("New Worker Sessions service: %v", err)
-	}
+	workerSessions := newRuntimeWorkerSessionsService(workerService)
 	ledger := newBlockingAssociationLedger()
 	request := workers.WorkstationDispatchRequest{
 		WorkstationName: "review",
@@ -119,9 +109,8 @@ func TestStartThroughWorkerSessions_AssociationIsControlAddressableBeforeStart(t
 // dispatch-to-Worker-Session association is committed to Factory Events
 // before worker_sessions.Service.Start can hand the attempt to Workers.
 // controlledWorkstationBoundary only receives a DispatchWorkstation call once
-// Start has reserved the session, transitioned STARTING, and handed off --
-// so observing the association at that exact point proves the ordering
-// without needing a controlled Worker Sessions fake.
+// the service-root test double has reserved the session and handed off -- so
+// observing the association at that exact point proves the ordering.
 func TestFactoryImpl_PlanDispatchRecordsWorkerSessionAssociationBeforeWorkersHandoff(t *testing.T) {
 	boundary := newControlledWorkstationBoundary()
 	runtime, ledger, err := newTestFactoryWithScriptedLedger(
@@ -237,108 +226,6 @@ func TestFactoryImpl_PlanDispatchExecutesThroughWorkerSessionsStart(t *testing.T
 	}
 }
 
-func TestFactoryImpl_PlanDispatchCapturesResolvedWorkerDefinitionFactsInObservation(t *testing.T) {
-	impl, execution, workerSessions := newResolvedWorkerDefinitionRuntime(t)
-	impl.state = interfaces.FactoryStateRunning
-	plan := factory.PlanDispatchRequest{
-		DispatchID: "resolved-model-dispatch", CorrelationID: "resolved-model-correlation",
-		WorkIDs: []string{"resolved-model-work"}, WorkstationName: "t-process",
-		WorkerType: "definition-worker", ReplayKey: "t-process/resolved-model-trace/resolved-model-work",
-	}
-	planned, err := impl.PlanDispatch(t.Context(), plan)
-	requireNoRootErr(t, err, "PlanDispatch")
-	if planned.Outcome != factory.DispatchPlanOutcomeAccepted {
-		t.Fatalf("PlanDispatch outcome = %q, want ACCEPTED", planned.Outcome)
-	}
-	request, ok := execution.lastRequest.Load().(workers.ExecuteRequest)
-	if !ok {
-		t.Fatal("Workers Execute request was not recorded")
-	}
-	assertResolvedWorkerRequest(t, plan, request)
-	observation, err := workerSessions.GetObservationByWorkerSessionID(
-		t.Context(),
-		workersessions.GetObservationByWorkerSessionIDRequest{WorkerSessionID: plan.DispatchID},
-	)
-	requireNoRootErr(t, err, "GetObservationByWorkerSessionID")
-	assertResolvedWorkerObservation(t, plan, request, observation)
-}
-
-func newResolvedWorkerDefinitionRuntime(t *testing.T) (*factoryImpl, *recordingRootExecutionService, workersessions.Service) {
-	t.Helper()
-	execution := &recordingRootExecutionService{testWorkstationBoundary: &testWorkstationBoundary{}}
-	events, err := eventswire.NewService(logging.NoopLogger{})
-	requireNoRootErr(t, err, "New events service")
-	workerSessions, err := workersessionswire.NewService(
-		execution,
-		events,
-		logging.NoopLogger{},
-		platformclock.Real{},
-		unavailableProviderSessions{},
-		nil,
-	)
-	requireNoRootErr(t, err, "New Worker Sessions service")
-	runtime, _, err := newTestFactoryWithScriptedLedger(
-		withNet(buildSimpleNet()),
-		withInlineDispatch(),
-		withWorkerService(execution),
-		withWorkerSessions(workerSessions),
-		withRuntimeConfig(runtimefixtures.RuntimeDefinitionLookupFixture{
-			Workstations: map[string]*interfaces.FactoryWorkstationConfig{
-				"t-process": {
-					Name:           "t-process",
-					Type:           interfaces.WorkstationTypeModel,
-					WorkerTypeName: "definition-worker",
-				},
-			},
-			Workers: map[string]*interfaces.FactoryWorkerConfig{
-				"definition-worker": {
-					Name:             "definition-worker",
-					Type:             interfaces.WorkerTypeModel,
-					ExecutorProvider: "codex",
-					ModelProvider:    "resolved-provider",
-					Model:            "gpt-5.6-luna",
-					ReasoningEffort:  "high",
-				},
-			},
-		}),
-		withLogger(logging.NoopLogger{}),
-	)
-	requireNoRootErr(t, err, "New")
-	impl, ok := runtime.(*factoryImpl)
-	if !ok {
-		t.Fatalf("factory type = %T, want *factoryImpl", runtime)
-	}
-	return impl, execution, workerSessions
-}
-
-func assertResolvedWorkerRequest(t *testing.T, plan factory.PlanDispatchRequest, request workers.ExecuteRequest) {
-	t.Helper()
-	if request.Correlation.DispatchID != plan.DispatchID {
-		t.Fatalf("executed dispatch correlation = %q, want %q", request.Correlation.DispatchID, plan.DispatchID)
-	}
-	if request.Target.Model.Name != "gpt-5.6-luna" || request.Target.Model.Provider != "resolved-provider" || request.Target.Model.ReasoningEffort != "high" {
-		t.Fatalf("downstream model request = %#v, want resolved model/provider/effort", request.Target.Model)
-	}
-}
-
-func assertResolvedWorkerObservation(
-	t *testing.T,
-	plan factory.PlanDispatchRequest,
-	request workers.ExecuteRequest,
-	observation workersessions.Observation,
-) {
-	t.Helper()
-	if observation.WorkerSessionID != plan.DispatchID || observation.AttemptID == "" {
-		t.Fatalf("observation identity = %#v, want dispatch identity and attempt ID", observation)
-	}
-	if observation.Model == nil || *observation.Model != request.Target.Model.Name {
-		t.Fatalf("observation model = %#v, want downstream model %q", observation.Model, request.Target.Model.Name)
-	}
-	if observation.ReasoningEffort == nil || *observation.ReasoningEffort != request.Target.Model.ReasoningEffort {
-		t.Fatalf("observation reasoning effort = %#v, want downstream effort %q", observation.ReasoningEffort, request.Target.Model.ReasoningEffort)
-	}
-}
-
 // newInvokeWorkerTestFactory composes the real Worker Sessions service over the
 // controlled Workers boundary for the InvokeWorker cells, because identity
 // reservation is the behavior those cells test and a fake Reserve would concede
@@ -350,10 +237,7 @@ func newInvokeWorkerTestFactory(
 	execution *controlledWorkstationBoundary,
 ) *factoryImpl {
 	t.Helper()
-	events, err := eventswire.NewService(logging.NoopLogger{})
-	requireNoRootErr(t, err, "New events service")
-	sessions, err := workersessionswire.NewService(execution, events, logging.NoopLogger{}, platformclock.Real{}, unavailableProviderSessions{}, nil)
-	requireNoRootErr(t, err, "New Worker Sessions service")
+	sessions := newRuntimeWorkerSessionsService(execution)
 
 	runtime, _, err := newTestFactoryWithScriptedLedger(
 		withNet(buildSimpleNet()),
@@ -847,6 +731,32 @@ func TestRecordedDispatchFactsBranches(t *testing.T) {
 	if len(fallbackRequests["dispatch-input"].workIDs) != 1 || fallbackRequests["dispatch-input"].workIDs[0] != "work-from-input" {
 		t.Fatalf("recordedDispatchFacts(payload fallback) = %#v", fallbackRequests)
 	}
+	modelEvents := []interfaces.FactoryEvent{{
+		Context: interfaces.FactoryEventContext{
+			DispatchID: stringPointerForRecordedTest("dispatch-model"),
+			EventTime:  base,
+		},
+		Type: interfaces.FactoryEventTypeDispatchWorkerSessionAssoc,
+		Payload: mustMarshalRecordedTest(t, struct {
+			WorkerSessionID string `json:"workerSessionId"`
+			Model           string `json:"model"`
+			ReasoningEffort string `json:"reasoningEffort"`
+		}{
+			WorkerSessionID: "worker-model",
+			Model:           "gpt-5.6-luna",
+			ReasoningEffort: "high",
+		}),
+	}}
+	modelAssociations, _ := recordedDispatchFacts(modelEvents)
+	modelAssociation := modelAssociations["dispatch-model"]
+	if modelAssociation.model == nil || *modelAssociation.model != "gpt-5.6-luna" || modelAssociation.reasoningEffort == nil || *modelAssociation.reasoningEffort != "high" {
+		t.Fatalf("recordedDispatchFacts(model) = %#v, want resolved execution facts", modelAssociation)
+	}
+	modelFact := recordedDispatchFact("dispatch-model", modelAssociation, nil, nil, nil, nil, nil)
+	modelObservation := recordedObservationFromFact(modelFact, nil)
+	if modelObservation.Model == nil || *modelObservation.Model != "gpt-5.6-luna" || modelObservation.ReasoningEffort == nil || *modelObservation.ReasoningEffort != "high" {
+		t.Fatalf("recordedObservationFromFact(model) = %#v, want resolved execution facts", modelObservation)
+	}
 }
 
 func TestRecordedDispatchTimingBranches(t *testing.T) {
@@ -923,21 +833,6 @@ func TestRecordedWorldStateBranches(t *testing.T) {
 	}
 }
 
-func TestRecordedObservationMergeBranches(t *testing.T) {
-	liveObservation := workersessions.Observation{
-		WorkerSessionID: "worker-1", ProviderSession: providers.SessionRef{Provider: providers.IDCodex, Kind: providers.SessionIDKind, ID: "live-session"}, ProviderSessionAvailable: true,
-		TokenUsage: &workersessions.TokenUsage{InputTokens: intPointerForRecordedTest(7)}, Transcript: workersessions.TranscriptAvailabilityAvailable, Parse: workersessions.ParseDiagnostics{EventCount: 2},
-		Failure: &workersessions.FailureCause{Kind: workersessions.FailureCauseWorkersExecutionFailure, Detail: "live failure"},
-	}
-	merged := mergeRecordedObservations([]workersessions.Observation{{WorkerSessionID: "worker-1"}}, []workersessions.Observation{liveObservation})
-	if len(merged) != 1 || !merged[0].ProviderSessionAvailable || merged[0].ProviderSession.ID != "live-session" || merged[0].TokenUsage == nil || *merged[0].TokenUsage.InputTokens != 7 || merged[0].Transcript != workersessions.TranscriptAvailabilityAvailable || merged[0].Parse.EventCount != 2 || merged[0].Failure == nil {
-		t.Fatalf("mergeRecordedObservations() = %#v", merged)
-	}
-	if mergeRecordedObservations(nil, []workersessions.Observation{liveObservation}) != nil {
-		t.Fatal("mergeRecordedObservations(empty recorded) returned non-nil")
-	}
-}
-
 func TestRecordedLiveAdapterBranches(t *testing.T) {
 	live := &recordedWorkerSessionObservation{}
 	if _, err := live.GetObservation(context.Background(), workersessions.GetObservationRequest{}); !errors.Is(err, workersessions.ErrInvalidObservationIdentity) {
@@ -960,6 +855,15 @@ func TestRecordedLiveAdapterBranches(t *testing.T) {
 	}
 	if (&factoryImpl{cfg: &runtimeConfig{}}).WorkerSessionsObservation() == nil {
 		t.Fatal("WorkerSessionsObservation() on configured runtime returned nil")
+	}
+	resolved := "550e8400-e29b-41d4-a716-446655440000"
+	observation := (&factoryImpl{cfg: &runtimeConfig{}}).WorkerSessionsObservationForSession(resolved)
+	service, ok := observation.(*recordedWorkerSessionObservation)
+	if !ok {
+		t.Fatalf("WorkerSessionsObservationForSession() type = %T, want recordedWorkerSessionObservation", observation)
+	}
+	if service.factorySessionID != resolved {
+		t.Fatalf("WorkerSessionsObservationForSession() factory session id = %q, want %q", service.factorySessionID, resolved)
 	}
 }
 

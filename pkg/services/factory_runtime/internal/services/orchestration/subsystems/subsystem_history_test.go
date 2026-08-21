@@ -2,6 +2,7 @@ package subsystems
 
 import (
 	"context"
+	"reflect"
 	"testing"
 	"time"
 
@@ -88,6 +89,50 @@ func TestHistorySubsystem_Execute_MergesHistoryFromDispatchConsumedTokens(t *tes
 	}
 	if history.FailureLog[0].Timestamp != timestamp {
 		t.Fatalf("FailureLog[0].Timestamp = %s, want %s", history.FailureLog[0].Timestamp, timestamp)
+	}
+}
+
+func TestHistorySubsystem_RepeatedSnapshotExecutionDoesNotDoubleCountVisitHistory(t *testing.T) {
+	snapshot := &interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
+		Results: []workerexecution.WorkResult{{
+			DispatchID:   "dispatch-repeated",
+			TransitionID: "review",
+			Outcome:      workerexecution.OutcomeRejected,
+		}},
+		Dispatches: map[string]*interfaces.DispatchEntry{
+			"dispatch-repeated": {
+				ConsumedTokens: factorytoken.ToWorkerSlice([]factorytoken.Token{{
+					Color: factorytoken.Color{WorkID: "work-repeated", WorkTypeID: "task"},
+					History: factorytoken.History{TotalVisits: map[string]int{
+						"process": 12,
+						"review":  11,
+					}},
+				}}),
+			},
+		},
+	}
+
+	subsystem := NewHistory(nil)
+	first, err := subsystem.Execute(context.Background(), snapshot)
+	if err != nil {
+		t.Fatalf("first Execute() error = %v", err)
+	}
+	second, err := subsystem.Execute(context.Background(), snapshot)
+	if err != nil {
+		t.Fatalf("repeated Execute() error = %v", err)
+	}
+	if first == nil || second == nil {
+		t.Fatalf("Execute() results = (%#v, %#v), want history results", first, second)
+	}
+	if !reflect.DeepEqual(first.Histories, second.Histories) {
+		t.Fatalf("repeated histories = %#v, want %#v", second.Histories, first.Histories)
+	}
+	history := first.Histories[0]
+	if history.TotalVisits["process"] != 12 || history.TotalVisits["review"] != 12 {
+		t.Fatalf("computed history = %#v, want process=12 review=12", history.TotalVisits)
+	}
+	if snapshot.Dispatches["dispatch-repeated"].ConsumedTokens[0].History.TotalVisits["review"] != 11 {
+		t.Fatalf("source snapshot review visits = %d, want unchanged 11", snapshot.Dispatches["dispatch-repeated"].ConsumedTokens[0].History.TotalVisits["review"])
 	}
 }
 

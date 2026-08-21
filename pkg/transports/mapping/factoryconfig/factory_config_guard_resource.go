@@ -156,10 +156,21 @@ func workstationGuardsAPIFromInternal(guards []interfaces.GuardConfig) *[]factor
 			Workstation:       stringPtrIfNotEmpty(guard.Workstation),
 			MaxVisits:         intPtrIfNonZero(guard.MaxVisits),
 			MaxVisitsArgument: stringPtrIfNotEmpty(guard.MaxVisitsArgument),
+			LogicalRoundTrip:  logicalRoundTripAPIFromInternal(guard.LogicalRoundTrip),
 			MatchConfig:       guardMatchConfigAPIFromInternal(guard.MatchConfig),
 		}
 	}
 	return &values
+}
+
+func logicalRoundTripAPIFromInternal(value *interfaces.LogicalRoundTripConfig) *factoryapi.LogicalRoundTrip {
+	if value == nil {
+		return nil
+	}
+	return &factoryapi.LogicalRoundTrip{
+		Workstations: append([]string(nil), value.Workstations...),
+		MaxRawVisits: value.MaxRawVisits,
+	}
 }
 
 func factoryGuardsAPIFromInternal(guards []interfaces.FactoryGuardConfig) *[]factoryapi.FactoryGuard {

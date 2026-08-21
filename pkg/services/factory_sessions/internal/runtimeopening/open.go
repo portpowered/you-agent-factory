@@ -453,6 +453,7 @@ func openRuntime(
 		return runtimeProducts{}, err
 	}
 	opened := assembleRuntimeProducts(
+		ctx,
 		factoryDefinitions,
 		service4,
 		invocationDomain,

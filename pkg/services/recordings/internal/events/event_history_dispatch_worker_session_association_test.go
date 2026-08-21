@@ -2,10 +2,12 @@ package events
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 	"time"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	"github.com/portpowered/infinite-you/pkg/services/recordings"
 )
 
 func TestFactoryEventHistory_RecordDispatchWorkerSessionAssociation_RecordsCanonicalAssociation(t *testing.T) {
@@ -44,6 +46,41 @@ func TestFactoryEventHistory_RecordDispatchWorkerSessionAssociation_RecordsCanon
 	}
 	if payload.WorkerSessionID != "worker-session-1" {
 		t.Fatalf("payload workerSessionId = %q, want worker-session-1", payload.WorkerSessionID)
+	}
+}
+
+func TestFactoryEventHistory_RecordDispatchWorkerSessionAssociationWithExecution_RetainsReplayFactsWithoutWideningPublicPayload(t *testing.T) {
+	eventTime := time.Date(2026, 4, 22, 16, 0, 0, 0, time.UTC)
+	history := newTestFactoryEventHistory(eventHistoryProjectionNet(), func() time.Time { return time.Unix(0, 0).UTC() })
+
+	history.RecordDispatchWorkerSessionAssociationWithExecution(
+		4,
+		"dispatch-model",
+		"worker-session-model",
+		"turn-model",
+		recordings.DispatchWorkerSessionExecutionFacts{Model: "gpt-5.6-luna", ReasoningEffort: "high"},
+		eventTime,
+	)
+
+	event := history.CanonicalEvents()[0]
+	var replayPayload struct {
+		WorkerSessionID string `json:"workerSessionId"`
+		Model           string `json:"model"`
+		ReasoningEffort string `json:"reasoningEffort"`
+	}
+	if err := json.Unmarshal(event.Payload, &replayPayload); err != nil {
+		t.Fatalf("decode replay association payload: %v", err)
+	}
+	if replayPayload.WorkerSessionID != "worker-session-model" || replayPayload.Model != "gpt-5.6-luna" || replayPayload.ReasoningEffort != "high" {
+		t.Fatalf("replay association payload = %#v, want worker session and execution facts", replayPayload)
+	}
+
+	var publicPayload interfaces.DispatchWorkerSessionAssociationEventPayload
+	if err := event.DecodePayload(&publicPayload); err != nil {
+		t.Fatalf("decode public association payload: %v", err)
+	}
+	if publicPayload.WorkerSessionID != "worker-session-model" {
+		t.Fatalf("public association payload workerSessionId = %q, want worker-session-model", publicPayload.WorkerSessionID)
 	}
 }
 

@@ -87,6 +87,17 @@ reviewer agent sessions never spend time or review visits watching CI. A
 reviewer `<CONTINUE>` hold routes the task back to `awaiting-ci`, re-entering
 the same gate instead of burning a review visit.
 
+### Process and review visit budget
+
+The process and review loop uses one logical cycle for each paired traversal.
+Its two loop-breaker guards set `maxVisits` to `12` and `maxRawVisits` to
+`24`. Seven review rejections therefore use fourteen raw visits without
+reaching the logical limit.
+
+The raw backstop still stops an imbalanced or unchanged route. It sums visits
+from `process` and `review`, then fails the Work when it reaches `24`. A
+`VISIT_COUNT` guard without `logicalRoundTrip` keeps the legacy raw behavior.
+
 Executor and review workstations run in worktrees under
 `.claude/worktrees/<work-item-name>/`, created by
 `factory/scripts/setup-workspace.py`.

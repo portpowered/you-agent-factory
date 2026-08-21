@@ -1,0 +1,18 @@
+type: object
+description: Optional paired workstation policy for charging one logical visit per process/review round trip.
+additionalProperties: false
+required:
+  - workstations
+  - maxRawVisits
+properties:
+  workstations:
+    type: array
+    minItems: 2
+    maxItems: 2
+    description: Exactly two workstation names whose visits form one logical round trip.
+    items:
+      type: string
+  maxRawVisits:
+    type: integer
+    minimum: 1
+    description: Absolute raw-visit ceiling across both paired workstations; it must exceed the containing guard's maxVisits.

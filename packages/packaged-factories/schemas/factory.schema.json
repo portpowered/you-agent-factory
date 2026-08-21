@@ -1481,6 +1481,31 @@
       ],
       "type": "string"
     },
+    "LogicalRoundTrip": {
+      "additionalProperties": false,
+      "description": "Optional paired workstation policy for charging one logical visit per process/review round trip.",
+      "properties": {
+        "maxRawVisits": {
+          "description": "Absolute raw-visit ceiling across both paired workstations; it must exceed the containing guard's maxVisits.",
+          "minimum": 1,
+          "type": "integer"
+        },
+        "workstations": {
+          "description": "Exactly two workstation names whose visits form one logical round trip.",
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 2,
+          "minItems": 2,
+          "type": "array"
+        }
+      },
+      "required": [
+        "workstations",
+        "maxRawVisits"
+      ],
+      "type": "object"
+    },
     "ModelOperation": {
       "additionalProperties": false,
       "description": "One provider-agnostic operation exposed by a model worker, such as `TTS`.",
@@ -2517,6 +2542,14 @@
       "additionalProperties": false,
       "description": "Guard attached to a workstation as a whole.",
       "properties": {
+        "logicalRoundTrip": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/LogicalRoundTrip"
+            }
+          ],
+          "description": "Optional paired process/review policy. When present, the containing maxVisits is the logical cycle budget and maxRawVisits is the absolute raw-visit backstop."
+        },
         "matchConfig": {
           "allOf": [
             {

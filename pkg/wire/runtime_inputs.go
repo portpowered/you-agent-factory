@@ -30,6 +30,8 @@ import (
 	recordingshttp "github.com/portpowered/infinite-you/pkg/services/recordings/transports/http"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workwire "github.com/portpowered/infinite-you/pkg/services/work/wire"
+	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
+	workersessionshttp "github.com/portpowered/infinite-you/pkg/services/worker_sessions/transports/http"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
 	transporthttp "github.com/portpowered/infinite-you/pkg/transports/http"
@@ -538,4 +540,53 @@ func newDurableExecutionHTTPHandler(
 		),
 		sessionsHandler, nil, nil, nil, nil, logger,
 	).Handler(), nil
+}
+
+type workerSessionsFactorySessionScopeResolver struct {
+	sessions factorysessions.Service
+}
+
+func newWorkerSessionsFactorySessionScopeResolver(
+	sessions factorysessions.Service,
+) workersessionshttp.SessionScopeResolver {
+	if sessions == nil {
+		return nil
+	}
+	return workerSessionsFactorySessionScopeResolver{sessions: sessions}
+}
+
+func (resolver workerSessionsFactorySessionScopeResolver) ResolveWorkerSessionScope(
+	ctx context.Context,
+	sessionID string,
+) (workersessionshttp.SessionScope, error) {
+	projection, err := resolver.sessions.GetFactorySession(ctx, sessionID)
+	if err != nil {
+		if errors.Is(err, factorysessions.ErrSessionNotFound) || errors.Is(err, factorysessions.ErrNotFound) {
+			return workersessionshttp.SessionScope{}, workersessions.ErrObservationSessionNotFound
+		}
+		return workersessionshttp.SessionScope{}, err
+	}
+	return workersessionshttp.SessionScope{
+		EffectiveID: projection.Context.FactorySessionID,
+		IsDefault:   projection.Context.Session != nil && projection.Context.Session.IsDefault,
+	}, nil
+}
+
+// WorkerSessionsObservationForSession forwards the optional decorated read
+// capability through the composition-root adapter. The Worker Sessions HTTP
+// transport keeps only its narrow resolver contract; the Factory Sessions
+// service remains the owner of resolving an opened runtime's observation view.
+func (resolver workerSessionsFactorySessionScopeResolver) WorkerSessionsObservationForSession(
+	factorySessionID string,
+) workersessions.ObservationService {
+	if resolver.sessions == nil {
+		return nil
+	}
+	provider, ok := resolver.sessions.(interface {
+		WorkerSessionsObservationForSession(string) workersessions.ObservationService
+	})
+	if !ok {
+		return nil
+	}
+	return provider.WorkerSessionsObservationForSession(factorySessionID)
 }

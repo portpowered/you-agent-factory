@@ -15,6 +15,7 @@ import (
 	durableexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/durable_execution"
 	identity "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/identity"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/sessionvalidation"
+	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	"go.uber.org/zap"
 )
 
@@ -36,6 +37,23 @@ func (s *Service) ObserveForSession(
 		return factoryruntime.ObserveResult{}, fmt.Errorf("Factory Sessions live runtime gateway is required")
 	}
 	return s.liveRuntime.Observe(ctx, sessionID, request)
+}
+
+// WorkerSessionsObservationForSession resolves the opened runtime behind the
+// requested Factory Session and forwards its detached Worker Sessions read
+// projection. The HTTP process is built once, so session-scoped reads must not
+// retain the observation service from the session that happened to start it.
+func (s *Service) WorkerSessionsObservationForSession(factorySessionID string) workersessions.ObservationService {
+	if s == nil || s.host == nil {
+		return nil
+	}
+	provider, _ := s.host.(interface {
+		WorkerSessionsObservationForSession(string) workersessions.ObservationService
+	})
+	if provider == nil {
+		return nil
+	}
+	return provider.WorkerSessionsObservationForSession(factorySessionID)
 }
 
 // SubscribeFactoryEventsForSession routes session-scoped observation through
@@ -220,7 +238,7 @@ func SessionServiceHost(runtime *SessionRuntime) Host {
 	if runtime == nil {
 		return newSessionHost(
 			nil, nil, initializeFactoryScaffold, nil, nil, nil,
-			nil, nil, nil, nil, nil, nil, nil, nil, nil, nil,
+			nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil,
 		)
 	}
 	discoverTargets := func(folderPath string) ([]factorysessions.Target, error) {
@@ -269,6 +287,7 @@ func SessionServiceHost(runtime *SessionRuntime) Host {
 		backendScopeID,
 		logicalSessionKeyID,
 		streamGenerationID,
+		runtime.WorkerSessionsObservationForSession,
 		runtime.stopFactorySession,
 		runtime.observeLiveLifecycleControl,
 		runtime.durableExecutionService,
