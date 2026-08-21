@@ -101,13 +101,13 @@ func TestHistorySubsystem_RepeatedSnapshotExecutionDoesNotDoubleCountVisitHistor
 		}},
 		Dispatches: map[string]*interfaces.DispatchEntry{
 			"dispatch-repeated": {
-				ConsumedTokens: []factorytoken.Token{{
+				ConsumedTokens: factorytoken.ToWorkerSlice([]factorytoken.Token{{
 					Color: factorytoken.Color{WorkID: "work-repeated", WorkTypeID: "task"},
 					History: factorytoken.History{TotalVisits: map[string]int{
 						"process": 12,
 						"review":  11,
 					}},
-				}},
+				}}),
 			},
 		},
 	}

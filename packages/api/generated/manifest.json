@@ -211,7 +211,7 @@
       "path": "generated/mcp/tools.json"
     },
     "generated.openapi.openapi": {
-      "artifactHash": "5d5ad493edd16bdb5bc1453f4c2b54ed042ef03edfa48ee1b69ca7c6ccb5120a",
+      "artifactHash": "4fa4550b5ce079d4b8b2542612d46661d72560882315fc5dcc6d2b8ea385c994",
       "documentation": {
         "documentation": {
           "description": {
@@ -228,7 +228,7 @@
         ],
         "formatVersion": "1.0.0",
         "itemId": "generated.openapi.openapi",
-        "sourceHash": "5d5ad493edd16bdb5bc1453f4c2b54ed042ef03edfa48ee1b69ca7c6ccb5120a",
+        "sourceHash": "4fa4550b5ce079d4b8b2542612d46661d72560882315fc5dcc6d2b8ea385c994",
         "visibility": "public"
       },
       "family": "openapi",
@@ -271,7 +271,7 @@
       "path": "generated/schemas/factory.schema.json"
     },
     "generated.schemas.factory-event": {
-      "artifactHash": "55ac3aa5dd3043171efdea8a1fc9870b2099352ae260fcf8c852df58e59ee1d8",
+      "artifactHash": "6d837944a3b9c0cdf5b24293c97c8b79180a8ce6a610ea787d376c7bbc319836",
       "documentation": {
         "documentation": {
           "description": {
@@ -288,7 +288,7 @@
         ],
         "formatVersion": "1.0.0",
         "itemId": "generated.schemas.factory-event",
-        "sourceHash": "55ac3aa5dd3043171efdea8a1fc9870b2099352ae260fcf8c852df58e59ee1d8",
+        "sourceHash": "6d837944a3b9c0cdf5b24293c97c8b79180a8ce6a610ea787d376c7bbc319836",
         "visibility": "public"
       },
       "family": "config",
@@ -301,7 +301,7 @@
       "path": "generated/schemas/factory-event.schema.json"
     },
     "generated.schemas.factory-recording": {
-      "artifactHash": "5b229d99a5aa6ab725a85bd517ad09d7add4e33c8489393be3a60482c063df0c",
+      "artifactHash": "7d7f2dd5c99b4786314d349d7de079f10bbdf2fb3ab0115cbe8f6b3dcd9e566b",
       "documentation": {
         "documentation": {
           "description": {
@@ -318,7 +318,7 @@
         ],
         "formatVersion": "1.0.0",
         "itemId": "generated.schemas.factory-recording",
-        "sourceHash": "5b229d99a5aa6ab725a85bd517ad09d7add4e33c8489393be3a60482c063df0c",
+        "sourceHash": "7d7f2dd5c99b4786314d349d7de079f10bbdf2fb3ab0115cbe8f6b3dcd9e566b",
         "visibility": "public"
       },
       "family": "config",
