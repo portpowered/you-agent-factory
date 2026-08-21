@@ -53,9 +53,10 @@ describe("getWorkerDetailMessages", () => {
       expect(
         messages.localizeWorkerType("MODEL_WORKER").length,
       ).toBeGreaterThan(0);
-      expect(messages.localizeModelProvider("CODEX").length).toBeGreaterThan(
-        0,
+      expect(messages.localizeWorkerType("FUTURE_WORKER_KIND")).toBe(
+        "FUTURE_WORKER_KIND",
       );
+      expect(messages.localizeModelProvider("CODEX").length).toBeGreaterThan(0);
       expect(messages.localizeTimeoutUnit("s").length).toBeGreaterThan(0);
     },
   );

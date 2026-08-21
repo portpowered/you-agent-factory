@@ -7,6 +7,18 @@ export type FactoryGraphWorkerIconKind = Extract<
   "worker" | "script" | "codex" | "claude" | "antigravity"
 >;
 
+export const FACTORY_GRAPH_WORKER_TYPES = [
+  "INFERENCE_WORKER",
+  "AGENT_WORKER",
+  "SCRIPT_WORKER",
+  "POLLER_WORKER",
+  "MODEL_WORKER",
+  "HOSTED_WORKER",
+] as const;
+
+export type FactoryGraphWorkerType =
+  (typeof FACTORY_GRAPH_WORKER_TYPES)[number];
+
 /** Selects a worker glyph from projected, canonical worker metadata. */
 export function factoryGraphWorkerIconKind(
   workerType: string | null | undefined,
@@ -28,6 +40,28 @@ export function factoryGraphWorkerIconKind(
   }
 }
 
+export function isFactoryGraphKnownWorkerType(
+  workerType: string | null | undefined,
+): workerType is FactoryGraphWorkerType {
+  return (
+    typeof workerType === "string" &&
+    FACTORY_GRAPH_WORKER_TYPES.includes(
+      normalize(workerType) as FactoryGraphWorkerType,
+    )
+  );
+}
+
+/** Returns an unfamiliar worker kind unchanged for a neutral raw-value label. */
+export function factoryGraphUnknownWorkerType(
+  workerType: string | null | undefined,
+): string | undefined {
+  return typeof workerType === "string" &&
+    workerType.length > 0 &&
+    !isFactoryGraphKnownWorkerType(workerType)
+    ? workerType
+    : undefined;
+}
+
 /**
  * Temporary worker-owned seam for the parent node's resolved accent.
  *
@@ -37,8 +71,9 @@ export function factoryGraphWorkerIconKind(
  */
 export function factoryGraphWorkerIconClassName(
   visualState: FactoryGraphVisualState,
+  fallbackClassName = "text-info",
 ): string {
-  return factoryGraphNodeVisualIconClassName(visualState, "text-info");
+  return factoryGraphNodeVisualIconClassName(visualState, fallbackClassName);
 }
 
 function normalize(value: string | null | undefined): string {

@@ -36,7 +36,10 @@ export const FACTORY_EVENT_TYPES = {
 type FactorySchemas = components["schemas"];
 type GeneratedFactoryEvent = FactorySchemas["FactoryEvent"];
 
-export type FactoryEventType = FactorySchemas["FactoryEventType"];
+/** Event types are open so an older dashboard can retain newer events. */
+export type FactoryEventType =
+  | FactorySchemas["FactoryEventType"]
+  | (string & {});
 
 export type FactoryEventContext = FactorySchemas["FactoryEventContext"];
 

@@ -822,6 +822,23 @@ const LIFECYCLE_PHASE_TOPOLOGY = buildFactoryGraphTopologyFromDefinition(
   lifecycleFactoryDefinition,
 );
 
+const futureCanonicalFactoryDefinition = {
+  ...baseFactoryDefinition,
+  workers: baseFactoryDefinition.workers?.map((worker) => ({
+    ...worker,
+    type: "FUTURE_WORKER_KIND" as never,
+  })),
+  workTypes: baseFactoryDefinition.workTypes?.map((workType) => ({
+    ...workType,
+    states: workType.states.map((state, index) =>
+      index === 0 ? { ...state, type: "FUTURE_WORK_STATE" as never } : state,
+    ),
+  })),
+} satisfies CanonicalFactoryDefinition;
+
+const FUTURE_CANONICAL_VALUES_TOPOLOGY =
+  buildFactoryGraphTopologyFromDefinition(futureCanonicalFactoryDefinition);
+
 function WorkStateLifecyclePhasesStory() {
   const flow = buildFactoryGraphEditorFlowModel({
     canEditConnections: false,
@@ -837,6 +854,36 @@ function WorkStateLifecyclePhasesStory() {
   return (
     <div className="relative h-[520px] w-full rounded-[1.5rem] border border-outline bg-surface-container-high p-4">
       <FactoryGraphEditorWorkStatePhaseLegend visible={true} />
+      <ReactFlow
+        defaultEdgeOptions={{ selectable: false }}
+        edgeTypes={FACTORY_GRAPH_EDITOR_EDGE_TYPES}
+        edges={flow.edges}
+        fitView={true}
+        nodeTypes={FACTORY_GRAPH_EDITOR_NODE_TYPES}
+        nodes={flow.nodes}
+        nodesDraggable={false}
+      >
+        <Background />
+        <Controls showInteractive={false} />
+      </ReactFlow>
+    </div>
+  );
+}
+
+function FutureCanonicalValuesStory() {
+  const flow = buildFactoryGraphEditorFlowModel({
+    canEditConnections: false,
+    factoryDefinition: futureCanonicalFactoryDefinition,
+    pendingAdditionEdgeIds: new Set<string>(),
+    pendingConnectionSource: null,
+    pendingAdditionNodeIds: new Set<string>(),
+    pendingRemovalEdgeIds: new Set<string>(),
+    pendingRemovalNodeIds: new Set<string>(),
+    topology: FUTURE_CANONICAL_VALUES_TOPOLOGY,
+  });
+
+  return (
+    <div className="relative h-[520px] w-full rounded-[1.5rem] border border-outline bg-surface-container-high p-4">
       <ReactFlow
         defaultEdgeOptions={{ selectable: false }}
         edgeTypes={FACTORY_GRAPH_EDITOR_EDGE_TYPES}
@@ -1033,6 +1080,27 @@ export const WorkStateLifecyclePhases = {
     await expect(
       within(legend as HTMLElement).getByText("Completed"),
     ).toBeVisible();
+  },
+};
+
+export const FutureCanonicalValues = {
+  render: () => <FutureCanonicalValuesStory />,
+  play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+    const canvas = within(canvasElement);
+    await expect(await canvas.findByText("FUTURE_WORKER_KIND")).toBeVisible();
+    await expect(await canvas.findByText("FUTURE_WORK_STATE")).toBeVisible();
+    await expect(
+      canvas
+        .getByText("FUTURE_WORKER_KIND")
+        .closest("article")
+        ?.className.includes("border-outline bg-surface"),
+    ).toBe(true);
+    await expect(
+      canvas
+        .getByText("FUTURE_WORK_STATE")
+        .closest("article")
+        ?.className.includes("border-outline bg-surface"),
+    ).toBe(true);
   },
 };
 

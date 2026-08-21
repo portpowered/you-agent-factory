@@ -4,7 +4,9 @@ import type {
   FactoryWorkState,
 } from "../draft/factory-graph-draft-types";
 
-export type FactoryGraphWorkStateType = FactoryWorkState["type"];
+export type FactoryGraphWorkStateType =
+  | FactoryWorkState["type"]
+  | (string & {});
 
 /**
  * Resolves the canonical lifecycle type for a work-state graph node from the

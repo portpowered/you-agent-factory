@@ -200,4 +200,23 @@ describe("CurrentActivity worker node icons", () => {
       expect(icon?.getAttribute("class")).toContain(iconClassName);
     },
   );
+
+  it("keeps an unfamiliar worker kind as an accessible raw neutral label", () => {
+    const { container, getByText } = renderWorkerNode({
+      workerType: "FUTURE_WORKER_KIND",
+    });
+    const shell = container.querySelector(
+      "[data-current-activity-node-type='worker']",
+    );
+    const kindLabel = getByText("FUTURE_WORKER_KIND");
+
+    expect(kindLabel.getAttribute("data-worker-kind-label")).toBe("true");
+    expect(kindLabel.className).toContain("text-on-surface-variant");
+    expect(shell?.className).toContain("border-outline bg-surface");
+    expect(
+      container
+        .querySelector("[data-worker-label-zone]")
+        ?.getAttribute("aria-label"),
+    ).toBe("worker:writer (FUTURE_WORKER_KIND)");
+  });
 });

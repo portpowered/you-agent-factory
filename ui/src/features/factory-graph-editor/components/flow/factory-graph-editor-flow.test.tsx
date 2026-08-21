@@ -569,8 +569,8 @@ describe("factory graph editor work state lifecycle styling", () => {
     const queuedNode = (await screen.findByTitle("story:queued")).closest(
       "article",
     );
-    expect(queuedNode?.className).toContain("border-info-border");
-    expect(queuedNode?.className).toContain("bg-info-container");
+    expect(queuedNode?.className).toContain("border-outline");
+    expect(queuedNode?.className).toContain("bg-surface");
   });
 
   it("keeps draft addition and removal treatments visible on phase-colored nodes", async () => {

@@ -172,6 +172,59 @@ test("keeps authored dimensions when replay advances to a later runtime tick", (
   });
 });
 
+test("forwards a future worker kind from the replay Factory into the node", () => {
+  const source = {
+    factory: {
+      name: "Future worker kinds",
+      workers: [
+        {
+          name: "next-worker",
+          type: "FUTURE_WORKER_KIND" as never,
+        },
+      ],
+    },
+    runtime: {
+      activity: {
+        activeDispatchOverlays: [],
+        activeWorkstationNodeIds: [],
+        issues: [],
+        resourceOccupancy: [],
+        selectedTick: 1,
+      },
+      load: {
+        issues: [],
+        resourceOccupancy: [],
+        selectedTick: 1,
+        workStateCounts: [],
+      },
+      topology: {
+        connections: [],
+        issues: [],
+        nodes: [
+          {
+            entityId: "next-worker",
+            handles: [],
+            id: "worker:next-worker",
+            kind: "worker",
+            label: "next-worker",
+          },
+        ],
+        ok: true,
+        selectedTick: 1,
+      },
+    },
+    selectedTick: 1,
+  } satisfies FactoryGraphSource;
+
+  const worker = projectFactoryGraphReplayFlow(source).nodes.find(
+    (node) => node.id === "worker:next-worker",
+  );
+
+  expect(worker?.data).toMatchObject({
+    workerType: "FUTURE_WORKER_KIND",
+  });
+});
+
 test("keeps replay graph identity while selected-tick Work volume changes", () => {
   const sourceForWorkItems = (workIds: string[], selectedTick: number) =>
     ({

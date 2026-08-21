@@ -184,6 +184,13 @@ describe("FactoryRecordingTopologyReplay compatibility states", () => {
     const futureRecording = recording(true) as Record<string, unknown>;
     const factory = futureRecording.factory as Record<string, unknown>;
     factory.futureFactoryMetadata = "factory-secret";
+    factory.workers = [{ name: "future-worker", type: "FUTURE_WORKER_KIND" }];
+    factory.workTypes = [
+      {
+        name: "story",
+        states: [{ name: "paused", type: "FUTURE_WORK_STATE" }],
+      },
+    ];
     const topologyEvent = (
       futureRecording.events as Record<string, unknown>[]
     )[0];
@@ -206,6 +213,14 @@ describe("FactoryRecordingTopologyReplay compatibility states", () => {
     );
 
     expect(screen.getByTestId("controlled-topology-renderer")).toBeVisible();
+    expect(screen.getByText("FUTURE_WORKER_KIND")).toBeVisible();
+    expect(screen.getByText("FUTURE_WORK_STATE")).toBeVisible();
+    expect(
+      screen.getByText("FUTURE_WORKER_KIND").closest("article")?.className,
+    ).toContain("border-outline bg-surface");
+    expect(
+      screen.getByText("FUTURE_WORK_STATE").closest("article")?.className,
+    ).toContain("border-outline bg-surface");
     expect(topologyRegion()).not.toHaveTextContent(messages.topology.failed);
     await waitFor(() =>
       expect(onError).toHaveBeenCalledWith(

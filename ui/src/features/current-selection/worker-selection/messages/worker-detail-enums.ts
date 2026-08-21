@@ -1,4 +1,5 @@
 import {
+  type EnumLabelCatalog,
   type LocalizedMessageCatalog,
   localizeEnumLabel,
   resolveLocalizedMessages,
@@ -56,18 +57,13 @@ const workerDetailEnumMessagesByLocale = {
         value,
       }),
     localizeWorkerType: (value: string) =>
-      localizeEnumLabel({
-        category: "kind",
-        labels: {
-          AGENT_WORKER: "Agent worker",
-          HOSTED_WORKER: "Hosted worker (legacy)",
-          INFERENCE_WORKER: "Inference worker",
-          MODEL_WORKER: "Model worker (legacy)",
-          POLLER_WORKER: "Poller worker",
-          SCRIPT_WORKER: "Script worker",
-        },
-        locale: "en",
-        value,
+      localizeWorkerTypeLabel(value, "en", {
+        AGENT_WORKER: "Agent worker",
+        HOSTED_WORKER: "Hosted worker (legacy)",
+        INFERENCE_WORKER: "Inference worker",
+        MODEL_WORKER: "Model worker (legacy)",
+        POLLER_WORKER: "Poller worker",
+        SCRIPT_WORKER: "Script worker",
       }),
   },
   ja: {
@@ -113,18 +109,13 @@ const workerDetailEnumMessagesByLocale = {
         value,
       }),
     localizeWorkerType: (value: string) =>
-      localizeEnumLabel({
-        category: "kind",
-        labels: {
-          AGENT_WORKER: "エージェントワーカー",
-          HOSTED_WORKER: "ホスト型ワーカー（レガシー）",
-          INFERENCE_WORKER: "推論ワーカー",
-          MODEL_WORKER: "モデルワーカー（レガシー）",
-          POLLER_WORKER: "ポーラーワーカー",
-          SCRIPT_WORKER: "スクリプトワーカー",
-        },
-        locale: "ja",
-        value,
+      localizeWorkerTypeLabel(value, "ja", {
+        AGENT_WORKER: "エージェントワーカー",
+        HOSTED_WORKER: "ホスト型ワーカー（レガシー）",
+        INFERENCE_WORKER: "推論ワーカー",
+        MODEL_WORKER: "モデルワーカー（レガシー）",
+        POLLER_WORKER: "ポーラーワーカー",
+        SCRIPT_WORKER: "スクリプトワーカー",
       }),
   },
   ko: {
@@ -170,18 +161,13 @@ const workerDetailEnumMessagesByLocale = {
         value,
       }),
     localizeWorkerType: (value: string) =>
-      localizeEnumLabel({
-        category: "kind",
-        labels: {
-          AGENT_WORKER: "에이전트 워커",
-          HOSTED_WORKER: "호스티드 워커(레거시)",
-          INFERENCE_WORKER: "추론 워커",
-          MODEL_WORKER: "모델 워커(레거시)",
-          POLLER_WORKER: "폴러 워커",
-          SCRIPT_WORKER: "스크립트 워커",
-        },
-        locale: "ko",
-        value,
+      localizeWorkerTypeLabel(value, "ko", {
+        AGENT_WORKER: "에이전트 워커",
+        HOSTED_WORKER: "호스티드 워커(레거시)",
+        INFERENCE_WORKER: "추론 워커",
+        MODEL_WORKER: "모델 워커(레거시)",
+        POLLER_WORKER: "폴러 워커",
+        SCRIPT_WORKER: "스크립트 워커",
       }),
   },
   "zh-CN": {
@@ -227,21 +213,30 @@ const workerDetailEnumMessagesByLocale = {
         value,
       }),
     localizeWorkerType: (value: string) =>
-      localizeEnumLabel({
-        category: "kind",
-        labels: {
-          AGENT_WORKER: "Agent worker",
-          HOSTED_WORKER: "托管 worker（旧版）",
-          INFERENCE_WORKER: "推理 worker",
-          MODEL_WORKER: "模型 worker（旧版）",
-          POLLER_WORKER: "轮询 worker",
-          SCRIPT_WORKER: "脚本 worker",
-        },
-        locale: "zh-CN",
-        value,
+      localizeWorkerTypeLabel(value, "zh-CN", {
+        AGENT_WORKER: "Agent worker",
+        HOSTED_WORKER: "托管 worker（旧版）",
+        INFERENCE_WORKER: "推理 worker",
+        MODEL_WORKER: "模型 worker（旧版）",
+        POLLER_WORKER: "轮询 worker",
+        SCRIPT_WORKER: "脚本 worker",
       }),
   },
 } satisfies LocalizedMessageCatalog<WorkerDetailEnumMessages>;
+
+function localizeWorkerTypeLabel(
+  value: string,
+  locale: string,
+  labels: Record<string, string>,
+): string {
+  const catalog: EnumLabelCatalog<string> = {
+    category: "kind",
+    labels,
+  };
+  return Object.hasOwn(labels, value.trim())
+    ? localizeEnumLabel({ ...catalog, locale, value })
+    : value;
+}
 
 export function getWorkerDetailEnumMessages(
   locale?: string | null,

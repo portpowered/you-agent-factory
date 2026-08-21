@@ -24,13 +24,14 @@ import type { FactoryGraphPlaceRef } from "./semantic-support-nodes.js";
 import { resolveFactoryGraphVisualState } from "./visual-state.js";
 import { factoryGraphWorkProgressMode } from "./work-progress-presentation.js";
 import {
-  type FactoryGraphWorkStateType,
+  type FactoryGraphWorkStateTypeValue,
+  factoryGraphUnknownWorkStateType,
   workStatePhaseSurfaceClassName,
 } from "./work-state-presentation.js";
 
 export interface FactoryGraphSemanticPlaceRef extends FactoryGraphPlaceRef {
   kind: "constraint" | "limit" | "resource" | "work_state" | (string & {});
-  state_category?: FactoryGraphWorkStateType;
+  state_category?: FactoryGraphWorkStateTypeValue;
 }
 
 export interface FactoryGraphBasePlaceNodeData extends Record<string, unknown> {
@@ -191,6 +192,9 @@ function FactoryGraphStatePositionContent({
   visualState: ReturnType<typeof resolveFactoryGraphVisualState>;
 }) {
   const label = factoryGraphPlaceLabel(place);
+  const unknownWorkStateType = factoryGraphUnknownWorkStateType(
+    place.state_category,
+  );
   return (
     <>
       <span
@@ -202,7 +206,18 @@ function FactoryGraphStatePositionContent({
           place={place}
           visualState={visualState}
         />
-        <FactoryGraphPlaceLabelText dataPrefix="state" place={place} />
+        <span className="grid min-w-0 gap-px overflow-hidden">
+          {unknownWorkStateType ? (
+            <span
+              className="block overflow-hidden text-[0.62rem] font-bold uppercase leading-none text-on-surface-variant"
+              data-state-category-label
+              title={unknownWorkStateType}
+            >
+              {unknownWorkStateType}
+            </span>
+          ) : null}
+          <FactoryGraphPlaceLabelText dataPrefix="state" place={place} />
+        </span>
       </span>
       <span
         className="flex min-h-5 w-full shrink-0 items-center justify-center overflow-hidden"

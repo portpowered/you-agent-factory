@@ -212,6 +212,38 @@ function snapshotWithLongStateLabels(): DashboardSnapshot {
   return snapshot;
 }
 
+function snapshotWithFutureCanonicalValues(): DashboardSnapshot {
+  const snapshot = structuredClone(semanticWorkflowDashboardSnapshot);
+  const futureWorker = snapshot.factory?.workers?.find(
+    (worker) => worker.name === "writer",
+  );
+  if (futureWorker) {
+    futureWorker.type = "FUTURE_WORKER_KIND" as never;
+  }
+
+  const futureState = snapshot.factory?.workTypes
+    ?.find((workType) => workType.name === "story")
+    ?.states.find((state) => state.name === "ready");
+  if (futureState) {
+    futureState.type = "FUTURE_WORK_STATE" as never;
+  }
+
+  for (const workstation of Object.values(
+    snapshot.topology.workstation_nodes_by_id,
+  )) {
+    for (const place of [
+      ...(workstation.input_places ?? []),
+      ...(workstation.output_places ?? []),
+    ]) {
+      if (place.place_id === "story:ready") {
+        place.state_category = "FUTURE_WORK_STATE";
+      }
+    }
+  }
+
+  return snapshot;
+}
+
 function createFactoryImportValue(): FactoryPngImportValue {
   return {
     factory: {
@@ -603,6 +635,29 @@ export const SemanticWorkflow = {
     await expect(
       (await canvas.findAllByRole("button", { name: /Active Story/ }))[0],
     ).toHaveAttribute("aria-pressed", "true");
+  },
+};
+
+export const FutureCanonicalValues = {
+  render: () => (
+    <CurrentActivityStory snapshot={snapshotWithFutureCanonicalValues()} />
+  ),
+  play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+    const canvas = within(canvasElement);
+    await expect(await canvas.findByText("FUTURE_WORKER_KIND")).toBeVisible();
+    await expect(await canvas.findByText("FUTURE_WORK_STATE")).toBeVisible();
+    await expect(
+      canvas
+        .getByText("FUTURE_WORKER_KIND")
+        .closest("article")
+        ?.className.includes("border-outline bg-surface"),
+    ).toBe(true);
+    await expect(
+      canvas
+        .getByText("FUTURE_WORK_STATE")
+        .closest("article")
+        ?.className.includes("border-outline bg-surface"),
+    ).toBe(true);
   },
 };
 
