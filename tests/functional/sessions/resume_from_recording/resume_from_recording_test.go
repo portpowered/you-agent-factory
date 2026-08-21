@@ -481,7 +481,11 @@ func requireResumeFromRecordingWorkStateEvent(
 			return event
 		}
 	}
-	t.Fatalf("public Factory Events contain no WORK_STATE_CHANGE for Work %q to %s", workID, state)
+	types := make([]factoryapi.FactoryEventType, 0, len(events))
+	for _, event := range events {
+		types = append(types, event.Type)
+	}
+	t.Fatalf("public Factory Events contain no WORK_STATE_CHANGE for Work %q to %s; types=%#v", workID, state, types)
 	return factoryapi.FactoryEvent{}
 }
 
