@@ -470,17 +470,6 @@ func TestValidateProjectionConsistencyFromFixtures(t *testing.T) {
 	}
 }
 
-func resultRequestFromFixture(result map[string]any) factorysessionexecution.ResultRequest {
-	req := factorysessionexecution.ResultRequest{}
-	if mode := stringValue(result, "mode"); mode != "" {
-		req.Mode = factorysessionexecution.ResultMode(mode)
-	}
-	if includeArtifacts, ok := result["includeArtifacts"].(bool); ok {
-		req.IncludeArtifacts = includeArtifacts
-	}
-	return req
-}
-
 func resultFromFixture(result map[string]any) factorysessionexecution.ResultReadResult {
 	out := factorysessionexecution.ResultReadResult{
 		SessionID:    stringValue(result, "sessionId"),

@@ -3,21 +3,11 @@ package authored
 import (
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 	"time"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 )
-
-func containsAll(value string, substrings ...string) bool {
-	for _, substring := range substrings {
-		if !strings.Contains(value, substring) {
-			return false
-		}
-	}
-	return true
-}
 
 func TestLoadWorkerConfig_ModelWorker(t *testing.T) {
 	dir := t.TempDir()
