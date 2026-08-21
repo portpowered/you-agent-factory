@@ -7,6 +7,7 @@ import (
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/orchestrators/petri"
 	factorytoken "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/token"
+	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
 func testPlaces() map[string]*petri.Place {
@@ -72,7 +73,7 @@ func TestApplyCreate(t *testing.T) {
 
 	newTok := testToken("t2", "")
 	err := applyMutations(marking, places, []interfaces.MarkingMutation{
-		{Type: interfaces.MutationCreate, ToPlace: "wt:init", Reason: "token submitted", NewToken: newTok},
+		{Type: interfaces.MutationCreate, ToPlace: "wt:init", Reason: "token submitted", NewToken: workerToken(newTok)},
 	}, time.Unix(1, 0))
 
 	if err != nil {
@@ -98,7 +99,7 @@ func TestApplyCreate_PreservesPrecomputedEnteredAt(t *testing.T) {
 	newTok := testToken("t2", "")
 	newTok.EnteredAt = expectedEnteredAt
 	err := applyMutations(marking, places, []interfaces.MarkingMutation{
-		{Type: interfaces.MutationCreate, ToPlace: "wt:init", Reason: "token submitted", NewToken: newTok},
+		{Type: interfaces.MutationCreate, ToPlace: "wt:init", Reason: "token submitted", NewToken: workerToken(newTok)},
 	}, time.Unix(1, 0))
 
 	if err != nil {
@@ -182,7 +183,7 @@ func TestApplyCreateNonExistentPlace(t *testing.T) {
 
 	newTok := testToken("t1", "")
 	err := applyMutations(marking, places, []interfaces.MarkingMutation{
-		{Type: interfaces.MutationCreate, ToPlace: "wt:nowhere", NewToken: newTok},
+		{Type: interfaces.MutationCreate, ToPlace: "wt:nowhere", NewToken: workerToken(newTok)},
 	}, time.Unix(1, 0))
 
 	if err == nil {
@@ -199,7 +200,7 @@ func TestApplyMultipleMutations(t *testing.T) {
 	newTok := testToken("t2", "")
 	err := applyMutations(marking, places, []interfaces.MarkingMutation{
 		{Type: interfaces.MutationMove, TokenID: "t1", FromPlace: "wt:init", ToPlace: "wt:process", Reason: "advance"},
-		{Type: interfaces.MutationCreate, ToPlace: "wt:init", Reason: "new work", NewToken: newTok},
+		{Type: interfaces.MutationCreate, ToPlace: "wt:init", Reason: "new work", NewToken: workerToken(newTok)},
 	}, time.Unix(1, 0))
 
 	if err != nil {
@@ -212,6 +213,14 @@ func TestApplyMultipleMutations(t *testing.T) {
 	if marking.Tokens["t2"].PlaceID != "wt:init" {
 		t.Errorf("t2 should be in wt:init")
 	}
+}
+
+func workerToken(value *factorytoken.Token) *workerexecution.Token {
+	if value == nil {
+		return nil
+	}
+	projected := factorytoken.ToWorker(*value)
+	return &projected
 }
 
 func TestApplyCreateMissingNewToken(t *testing.T) {

@@ -2,6 +2,7 @@ package factory
 
 import (
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factorytoken "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/token"
 )
 
 // PublicWorkTokens is the deduplicated public work token set from marking and
@@ -42,7 +43,7 @@ func CollectPublicWorkTokens(
 			continue
 		}
 		for i := range entry.ConsumedTokens {
-			token := entry.ConsumedTokens[i]
+			token := factorytoken.FromWorker(entry.ConsumedTokens[i])
 			if !IsPublicWorkToken(&token) {
 				continue
 			}
@@ -74,5 +75,5 @@ func CollectPublicWorkTokens(
 func IsPublicWorkToken(token *RuntimeToken) bool {
 	return token != nil &&
 		token.Color.DataType != RuntimeTokenDataTypeResource &&
-		!interfaces.IsSystemTimeToken(token)
+		token.Color.WorkTypeID != interfaces.SystemTimeWorkTypeID
 }

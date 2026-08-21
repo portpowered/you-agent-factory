@@ -323,6 +323,8 @@ func TestProjectCleanInvocationSnapshotSkipsNilTokensAndProjectsFailureFacts(t *
 			DataType: factorytoken.DataTypeWork, Payload: []byte("failed output"),
 		},
 	}
+	workerToken := factorytoken.ToWorker(*token)
+	outputToken := workerToken
 	snapshot := &interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
 		Marking: petri.MarkingSnapshot{Tokens: map[string]*factorytoken.Token{
 			"nil-token":    nil,
@@ -332,8 +334,8 @@ func TestProjectCleanInvocationSnapshotSkipsNilTokensAndProjectsFailureFacts(t *
 			Outcome:         workers.OutcomeFailed,
 			Reason:          "worker failed",
 			FailureMetadata: &workers.WorkFailureMetadata{Type: workers.WorkFailureTypeTimeout},
-			ConsumedTokens:  []workers.Token{*token},
-			OutputMutations: []interfaces.TokenMutationRecord{{Token: nil}, {Token: token}},
+			ConsumedTokens:  []workers.Token{workerToken},
+			OutputMutations: []interfaces.TokenMutationRecord{{Token: nil}, {Token: &outputToken}},
 		}},
 	}
 

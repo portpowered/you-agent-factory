@@ -38,7 +38,7 @@ func canonicalWorkerTestPath(value string) string {
 }
 
 func TestResolveTemplateFields_WorkingDirectory(t *testing.T) {
-	tokens := []factoryruntime.RuntimeToken{
+	tokens := []workers.Token{
 		{
 			ID: "tok-1",
 			Color: factoryruntime.RuntimeTokenColor{
@@ -65,7 +65,7 @@ func TestResolveTemplateFields_WorkingDirectory(t *testing.T) {
 }
 
 func TestResolveTemplateFields_Env(t *testing.T) {
-	tokens := []factoryruntime.RuntimeToken{
+	tokens := []workers.Token{
 		{
 			ID: "tok-1",
 			Color: factoryruntime.RuntimeTokenColor{
@@ -106,7 +106,7 @@ func TestResolveTemplateFields_Env(t *testing.T) {
 }
 
 func TestResolveTemplateFields_ProjectVariableUsesTag(t *testing.T) {
-	tokens := []factoryruntime.RuntimeToken{
+	tokens := []workers.Token{
 		{
 			ID: "tok-1",
 			Color: factoryruntime.RuntimeTokenColor{
@@ -141,7 +141,7 @@ func TestResolveTemplateFields_ProjectVariableUsesTag(t *testing.T) {
 }
 
 func TestResolveTemplateFields_ProjectVariableFallsBackToContextThenNeutralDefault(t *testing.T) {
-	tokens := []factoryruntime.RuntimeToken{
+	tokens := []workers.Token{
 		{ID: "tok-1", Color: factoryruntime.RuntimeTokenColor{
 			WorkID: "work-1",
 			Tags: map[string]string{
@@ -193,7 +193,7 @@ func TestResolveTemplateFields_ProjectVariableFallsBackToContextThenNeutralDefau
 }
 
 func TestResolveTemplateFields_InvalidTemplate(t *testing.T) {
-	tokens := []factoryruntime.RuntimeToken{
+	tokens := []workers.Token{
 		{ID: "tok-1", Color: factoryruntime.RuntimeTokenColor{WorkID: "work-1"}},
 	}
 
@@ -213,7 +213,7 @@ func TestResolveTemplateFields_InvalidTemplate(t *testing.T) {
 }
 
 func TestResolveTemplateFields_MissingTagKey(t *testing.T) {
-	tokens := []factoryruntime.RuntimeToken{
+	tokens := []workers.Token{
 		{
 			ID: "tok-1",
 			Color: factoryruntime.RuntimeTokenColor{
@@ -242,7 +242,7 @@ func TestResolveTemplateFields_MissingTagKey(t *testing.T) {
 }
 
 func TestResolveTemplateFields_WorkIDAndPayload(t *testing.T) {
-	tokens := []factoryruntime.RuntimeToken{
+	tokens := []workers.Token{
 		{
 			ID: "tok-1",
 			Color: factoryruntime.RuntimeTokenColor{
@@ -275,7 +275,7 @@ func TestResolveTemplateFields_WorkIDAndPayload(t *testing.T) {
 }
 
 func TestResolveTemplateFields_EnvInvalidTemplate(t *testing.T) {
-	tokens := []factoryruntime.RuntimeToken{
+	tokens := []workers.Token{
 		{ID: "tok-1", Color: factoryruntime.RuntimeTokenColor{WorkID: "work-1"}},
 	}
 
@@ -298,7 +298,7 @@ func TestResolveTemplateFields_EnvInvalidTemplate(t *testing.T) {
 }
 
 func TestResolveTemplateFields_Worktree(t *testing.T) {
-	tokens := []factoryruntime.RuntimeToken{
+	tokens := []workers.Token{
 		{
 			ID: "tok-1",
 			Color: factoryruntime.RuntimeTokenColor{
@@ -325,7 +325,7 @@ func TestResolveTemplateFields_Worktree(t *testing.T) {
 }
 
 func TestResolveTemplateFields_ResolvesExplicitRuntimeFieldsTogether(t *testing.T) {
-	tokens := []factoryruntime.RuntimeToken{
+	tokens := []workers.Token{
 		{
 			ID: "tok-1",
 			Color: factoryruntime.RuntimeTokenColor{

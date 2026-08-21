@@ -7,6 +7,7 @@ import (
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/orchestrators/petri"
 	factorytoken "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/token"
+	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
 func TestSnapshotHasActiveWork(t *testing.T) {
@@ -233,11 +234,11 @@ func engineStateSnapshotFixture() interfaces.EngineStateSnapshot[petri.MarkingSn
 				TransitionID:    "t1",
 				WorkstationName: "review",
 				StartTime:       now,
-				ConsumedTokens: []factorytoken.Token{{
+				ConsumedTokens: []workerexecution.Token{{
 					ID:        "tok-2",
-					PlaceID:   "task:processing",
+					State:     "processing",
 					CreatedAt: now.Add(-time.Minute),
-					Color:     factorytoken.Color{WorkID: "work-1", WorkTypeID: "task", TraceID: "trace-1"},
+					Color:     workerexecution.Color{WorkID: "work-1", WorkTypeID: "task", TraceID: "trace-1"},
 				}},
 				HeldMutations: []interfaces.MarkingMutation{{
 					Type: interfaces.MutationConsume, TokenID: "tok-2", FromPlace: "task:processing",
@@ -251,8 +252,8 @@ func engineStateSnapshotFixture() interfaces.EngineStateSnapshot[petri.MarkingSn
 			WorkstationName: "plan",
 			Outcome:         "ACCEPTED",
 			Duration:        5 * time.Second,
-			ConsumedTokens: []factorytoken.Token{{
-				ID: "tok-0", PlaceID: "task:init", Color: factorytoken.Color{WorkID: "work-0", WorkTypeID: "task", TraceID: "trace-1"},
+			ConsumedTokens: []workerexecution.Token{{
+				ID: "tok-0", State: "init", Color: workerexecution.Color{WorkID: "work-0", WorkTypeID: "task", TraceID: "trace-1"},
 			}},
 			OutputMutations: []interfaces.TokenMutationRecord{{
 				DispatchID:   "dispatch-0",
@@ -261,11 +262,11 @@ func engineStateSnapshotFixture() interfaces.EngineStateSnapshot[petri.MarkingSn
 				Type:         interfaces.MutationCreate,
 				TokenID:      "work-0",
 				ToPlace:      "task:complete",
-				Token: &factorytoken.Token{
+				Token: workerToken(&factorytoken.Token{
 					ID:      "work-0",
 					PlaceID: "task:complete",
 					Color:   factorytoken.Color{WorkID: "work-0", WorkTypeID: "task", TraceID: "trace-1"},
-				},
+				}),
 			}},
 		}},
 		ActiveThrottlePauses: []interfaces.ActiveThrottlePause{{
@@ -280,4 +281,12 @@ func engineStateSnapshotFixture() interfaces.EngineStateSnapshot[petri.MarkingSn
 		Uptime:       10 * time.Minute,
 		Topology:     topology,
 	}
+}
+
+func workerToken(value *factorytoken.Token) *workerexecution.Token {
+	if value == nil {
+		return nil
+	}
+	projected := factorytoken.ToWorker(*value)
+	return &projected
 }

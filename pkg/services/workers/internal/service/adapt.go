@@ -326,7 +326,7 @@ func inputTokensFromWorkInputs(inputs []workers.WorkInput) []workers.Token {
 			Content:    work.CloneWorkContentParts(input.Content),
 			Payload:    payloadFromContent(input.Content),
 		}
-		tokens = append(tokens, workers.Token{Color: color})
+		tokens = append(tokens, workers.Token{State: input.State, Color: color})
 	}
 	return tokens
 }

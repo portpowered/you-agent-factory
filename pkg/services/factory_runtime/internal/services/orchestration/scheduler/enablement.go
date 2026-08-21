@@ -11,6 +11,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/orchestrators/petri"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/state"
 	factorytoken "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/token"
+	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
 // EnablementEvaluator wraps transition enablement logic with structured logging.
@@ -158,7 +159,7 @@ func (e *EnablementEvaluator) checkTransitionEnabled(_ context.Context, tr *petr
 	return interfaces.EnabledTransition{
 		TransitionID: tr.ID,
 		WorkerType:   tr.WorkerType,
-		Bindings:     result,
+		Bindings:     workerBindings(result),
 		ArcModes:     arcModes,
 	}, true
 }
@@ -257,7 +258,7 @@ func (e *EnablementEvaluator) findSingleTokenBindingTransition(
 	return interfaces.EnabledTransition{
 		TransitionID: tr.ID,
 		WorkerType:   tr.WorkerType,
-		Bindings:     search.result,
+		Bindings:     workerBindings(search.result),
 		ArcModes:     search.arcModes,
 	}, true
 }
@@ -580,7 +581,7 @@ func expandRepeatedBindingCandidates(
 			key := arcKey(arc)
 			arcModes[key] = arc.Mode
 			if arc.Mode == interfaces.ArcModeObserve {
-				bindings[key] = append([]factorytoken.Token(nil), base.Bindings[key]...)
+				bindings[key] = runtimeTokens(base.Bindings[key])
 				continue
 			}
 			bindings[key] = []factorytoken.Token{arcTokens[key][candidateIndex]}
@@ -588,11 +589,36 @@ func expandRepeatedBindingCandidates(
 		expanded = append(expanded, interfaces.EnabledTransition{
 			TransitionID: base.TransitionID,
 			WorkerType:   base.WorkerType,
-			Bindings:     bindings,
+			Bindings:     workerBindings(bindings),
 			ArcModes:     arcModes,
 		})
 	}
 	return expanded
+}
+
+func workerBindings(bindings map[string][]factorytoken.Token) map[string][]workerexecution.Token {
+	if len(bindings) == 0 {
+		return nil
+	}
+	projected := make(map[string][]workerexecution.Token, len(bindings))
+	for name, tokens := range bindings {
+		projected[name] = make([]workerexecution.Token, len(tokens))
+		for index, value := range tokens {
+			projected[name][index] = factorytoken.ToWorker(value)
+		}
+	}
+	return projected
+}
+
+func runtimeTokens(tokens []workerexecution.Token) []factorytoken.Token {
+	if len(tokens) == 0 {
+		return nil
+	}
+	projected := make([]factorytoken.Token, len(tokens))
+	for index, value := range tokens {
+		projected[index] = factorytoken.FromWorker(value)
+	}
+	return projected
 }
 
 func isSingleTokenCardinality(cardinality petri.ArcCardinality) bool {

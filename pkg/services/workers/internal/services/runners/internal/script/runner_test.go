@@ -85,7 +85,6 @@ func TestRunnerResolvesConfiguredInvocationDeterministically(t *testing.T) {
 	assertEnv(t, captured.Env, "RUNTIME", "request-env")
 	assertEnvCount(t, captured.Env, "RUNTIME", 1)
 	if captured.DispatchID != "dispatch-1" ||
-		captured.TransitionID != "transition-1" ||
 		captured.WorkerType != "request-worker" ||
 		captured.WorkstationName != "request-workstation" ||
 		captured.ProjectID != "request-project" ||
@@ -822,7 +821,7 @@ func TestRunnerSnapshotsCallerOwnedDataBeforeInjectedWork(t *testing.T) {
 	if captured.Execution.RequestID != "request-1" {
 		t.Fatalf("captured request ID = %q, want request-1", captured.Execution.RequestID)
 	}
-	if got := captured.InputTokens[0].(workers.Token).Color.Tags["lane"]; got != "fast" {
+	if got := captured.Inputs[0].Tags["lane"]; got != "fast" {
 		t.Fatalf("captured input tag = %q, want fast", got)
 	}
 }

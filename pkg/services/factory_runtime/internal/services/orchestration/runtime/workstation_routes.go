@@ -802,7 +802,7 @@ func orderedRuntimeWorkDispatchTokens(
 
 	byPlace := make(map[string][]int)
 	for index, token := range tokens {
-		byPlace[token.PlaceID] = append(byPlace[token.PlaceID], index)
+		byPlace[workerTokenPlaceKey(token)] = append(byPlace[workerTokenPlaceKey(token)], index)
 	}
 	ordered := make([]workers.Token, 0, len(tokens))
 	used := make([]bool, len(tokens))
@@ -825,6 +825,21 @@ func orderedRuntimeWorkDispatchTokens(
 		ordered = append(ordered, token)
 	}
 	return ordered, nil
+}
+
+func workerTokenPlaceKey(token workers.Token) string {
+	prefix := strings.TrimSpace(token.Color.WorkTypeID)
+	if prefix == "" {
+		prefix = strings.TrimSpace(token.Color.Name)
+	}
+	stateName := strings.TrimSpace(token.State)
+	if prefix == "" {
+		return stateName
+	}
+	if stateName == "" {
+		return prefix
+	}
+	return prefix + ":" + stateName
 }
 
 func resolveRuntimeWorkerDefinition(

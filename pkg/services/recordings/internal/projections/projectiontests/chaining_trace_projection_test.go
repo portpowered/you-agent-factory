@@ -17,7 +17,7 @@ func chainingTraceProjectionEvents() []factoryapi.FactoryEvent {
 		DisplayName:            "Input Z",
 		CurrentChainingTraceID: "chain-z",
 		TraceID:                "chain-z",
-		PlaceID:                "task:init",
+		State:                  "init",
 	}
 	inputA := work.FactoryWorkItem{
 		ID:                     "work-a",
@@ -25,7 +25,7 @@ func chainingTraceProjectionEvents() []factoryapi.FactoryEvent {
 		DisplayName:            "Input A",
 		CurrentChainingTraceID: "chain-a",
 		TraceID:                "chain-a",
-		PlaceID:                "task:init",
+		State:                  "init",
 	}
 	output := work.FactoryWorkItem{
 		ID:                       "work-out",

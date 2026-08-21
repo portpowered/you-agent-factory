@@ -478,10 +478,10 @@ func TestWorkRuntimeAdapterMoveWorkFailsClosedWithoutRuntime(t *testing.T) {
 func TestWorkRuntimeAdapterProjectsDetachedPublicWorkIdentityStateAndRelations(t *testing.T) {
 	tags := map[string]string{"owner": "docs"}
 	previous := []string{"chain-a"}
-	token := &workers.Token{
+	token := &factory.RuntimeToken{
 		ID:      "tok-review",
 		PlaceID: "story:review",
-		Color: workers.Color{
+		Color: factory.RuntimeTokenColor{
 			WorkID: "work-review", WorkTypeID: "story", Name: "Review PRD",
 			TraceID: "trace-1", PreviousChainingTraceIDs: previous, Tags: tags,
 			Relations: []work.Relation{{Type: work.RelationDependsOn, TargetWorkID: "work-draft", RequiredState: "complete"}},
@@ -498,7 +498,7 @@ func TestWorkRuntimeAdapterProjectsDetachedPublicWorkIdentityStateAndRelations(t
 		dispatchHistory: []factory.CompletedDispatch{{
 			DispatchID: "dispatch-context", Outcome: workers.OutcomeAccepted,
 			ExpectedArtifactContext: &work.ExpectedArtifactTemplateContext{Project: "project-7", SessionID: "session-9"},
-			ConsumedTokens:          []workers.Token{*token},
+			ConsumedTokens:          []workers.Token{{ID: token.ID, State: "review", Color: token.Color}},
 		}},
 	})
 	if got.CursorID != "tok-review" || got.WorkID != "work-review" || got.State == nil || got.State.Name != "review" || got.State.Type != work.StateTypeProcessing {
@@ -519,7 +519,7 @@ func TestWorkRuntimeAdapterProjectsDetachedPublicWorkIdentityStateAndRelations(t
 }
 
 func TestWorkRuntimeAdapterProjectsDispatchOnlyWorkAsProcessing(t *testing.T) {
-	token := &workers.Token{ID: "tok-dispatch", PlaceID: "story:review", Color: workers.Color{WorkID: "work-dispatch", WorkTypeID: "story"}}
+	token := &factory.RuntimeToken{ID: "tok-dispatch", PlaceID: "story:review", Color: factory.RuntimeTokenColor{WorkID: "work-dispatch", WorkTypeID: "story"}}
 	got := runtimeWorkItem(token, &factory.Net{}, true, nil)
 	if got.State == nil || got.State.Name != "review" || got.State.Type != work.StateTypeProcessing {
 		t.Fatalf("dispatch-only Work state = %#v", got.State)

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 	"sync"
 
@@ -476,6 +477,15 @@ func workInputsFromTokens(tokens []workers.Token, dispatch work.WorkDispatch) ([
 	inputs := make([]workers.WorkInput, 0, len(tokens))
 	invocation := work.InvocationArguments{}
 	attemptNumber := 1
+	namesByTokenID := make(map[string][]string)
+	for name, tokenIDs := range dispatch.InputBindings {
+		for _, tokenID := range tokenIDs {
+			namesByTokenID[tokenID] = append(namesByTokenID[tokenID], name)
+		}
+	}
+	for tokenID := range namesByTokenID {
+		sort.Strings(namesByTokenID[tokenID])
+	}
 	for _, token := range tokens {
 		if token.Color.DataType == workers.DataTypeResource {
 			continue
@@ -504,6 +514,9 @@ func workInputsFromTokens(tokens []workers.Token, dispatch work.WorkDispatch) ([
 			}}
 		}
 		inputs = append(inputs, workers.WorkInput{
+			Kind:       string(token.Color.DataType),
+			State:      token.State,
+			InputNames: append([]string(nil), namesByTokenID[token.ID]...),
 			WorkID:     token.Color.WorkID,
 			Name:       token.Color.Name,
 			WorkTypeID: token.Color.WorkTypeID,

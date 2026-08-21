@@ -29,9 +29,9 @@ func TestProjectFactorySessionStopSummaryProjectsPetriDispatchStatuses(t *testin
 		t.Run(tc.name, func(t *testing.T) {
 			snapshot, token := stoppedWorkSnapshot(now, "blocked")
 			if tc.active {
-				snapshot.Dispatches = map[string]*interfaces.DispatchEntry{"dispatch-1": {DispatchID: "dispatch-1", WorkstationName: "review", ConsumedTokens: []workerexecution.Token{*token}}}
+				snapshot.Dispatches = map[string]*interfaces.DispatchEntry{"dispatch-1": {DispatchID: "dispatch-1", WorkstationName: "review", ConsumedTokens: []workerexecution.Token{{ID: token.ID, State: "blocked", Color: token.Color}}}}
 			} else {
-				snapshot.DispatchHistory = []interfaces.CompletedDispatch{{DispatchID: "dispatch-1", WorkstationName: "review", Outcome: tc.outcome, EndTime: now, ConsumedTokens: []workerexecution.Token{*token}}}
+				snapshot.DispatchHistory = []interfaces.CompletedDispatch{{DispatchID: "dispatch-1", WorkstationName: "review", Outcome: tc.outcome, EndTime: now, ConsumedTokens: []workerexecution.Token{{ID: token.ID, State: "blocked", Color: token.Color}}}}
 			}
 			summary := sessionprojection.ProjectFactorySessionStopSummary("session-1", snapshot, nil)
 			if summary == nil || summary.LatestDispatch == nil || summary.LatestDispatch.Status != tc.want {
@@ -70,7 +70,7 @@ func TestProjectFactorySessionStopSummaryPreservesStructuredSchemaViolationReaso
 			Type:   workerexecution.WorkFailureTypeStructuredOutputSchemaViolation,
 		},
 		EndTime:        now,
-		ConsumedTokens: []workerexecution.Token{*token},
+		ConsumedTokens: []workerexecution.Token{{ID: token.ID, State: "blocked", Color: token.Color}},
 	}}
 
 	summary := sessionprojection.ProjectFactorySessionStopSummary("session-1", snapshot, nil)

@@ -4,7 +4,6 @@ import (
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	"github.com/portpowered/infinite-you/pkg/services/work"
-	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	"sort"
 	"strings"
 )
@@ -15,7 +14,7 @@ func ClassifyMissingPrimaryResultFromSnapshot(sessionID string, snapshot *interf
 	if snapshot == nil || strings.TrimSpace(input.RequestID) == "" {
 		return nil
 	}
-	tokens := make([]*workerexecution.Token, 0, len(snapshot.Marking.Tokens))
+	tokens := make([]*factory.RuntimeToken, 0, len(snapshot.Marking.Tokens))
 	for _, token := range snapshot.Marking.Tokens {
 		tokens = append(tokens, token)
 	}
@@ -34,7 +33,7 @@ func ClassifyMissingPrimaryResultFromSnapshot(sessionID string, snapshot *interf
 	})
 	for _, wantState := range []string{"blocked", "needs-human"} {
 		for _, token := range tokens {
-			if token == nil || token.Color.DataType == workerexecution.DataTypeResource {
+			if token == nil || token.Color.DataType == factory.RuntimeTokenDataTypeResource {
 				continue
 			}
 			if strings.TrimSpace(token.Color.RequestID) != strings.TrimSpace(input.RequestID) || tokenStateName(token.PlaceID) != wantState {
@@ -42,7 +41,7 @@ func ClassifyMissingPrimaryResultFromSnapshot(sessionID string, snapshot *interf
 			}
 			return work.ClassifyMissingPrimaryResultWorkItem(input.RequestID, input.InvocationReturn, work.FactoryWorkItem{
 				ID: token.Color.WorkID, WorkTypeID: token.Color.WorkTypeID,
-				DisplayName: token.Color.Name, PlaceID: token.PlaceID,
+				DisplayName: token.Color.Name, State: tokenStateName(token.PlaceID),
 			}, sessionID)
 		}
 	}
@@ -51,13 +50,13 @@ func ClassifyMissingPrimaryResultFromSnapshot(sessionID string, snapshot *interf
 
 func tokenStateName(placeID string) string {
 	trimmed := strings.TrimSpace(placeID)
-	if _, suffix, ok := strings.Cut(trimmed, ":"); ok {
-		return suffix
+	if index := strings.LastIndexByte(trimmed, ':'); index >= 0 {
+		return trimmed[index+1:]
 	}
 	return trimmed
 }
 
-func tokenPlaceID(token *workerexecution.Token) string {
+func tokenPlaceID(token *factory.RuntimeToken) string {
 	if token == nil {
 		return ""
 	}

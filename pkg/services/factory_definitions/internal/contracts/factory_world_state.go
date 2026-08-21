@@ -64,7 +64,7 @@ func (s FactoryWorldState) InvocationWorldState() work.InvocationWorldState {
 		for index, record := range records {
 			mapped[index] = work.InvocationWorkStateChange{
 				WorkID: record.WorkID, WorkTypeName: record.WorkTypeName,
-				ToState: record.ToState, ToPlaceID: record.ToPlaceID, RequestID: record.RequestID,
+				ToState: record.ToState, RequestID: record.RequestID,
 			}
 		}
 		changes[id] = mapped

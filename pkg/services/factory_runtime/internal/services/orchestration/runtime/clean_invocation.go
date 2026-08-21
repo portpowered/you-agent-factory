@@ -115,14 +115,16 @@ func projectCleanInvocationSnapshot(
 		}
 		projected.Consumed = make([]factory.CleanInvocationWork, 0, len(completion.ConsumedTokens))
 		for index := range completion.ConsumedTokens {
-			projected.Consumed = append(projected.Consumed, cleanInvocationWorkFromToken(snapshot.Topology, &completion.ConsumedTokens[index]))
+			token := factorytoken.FromWorker(completion.ConsumedTokens[index])
+			projected.Consumed = append(projected.Consumed, cleanInvocationWorkFromToken(snapshot.Topology, &token))
 		}
 		projected.Outputs = make([]factory.CleanInvocationWork, 0, len(completion.OutputMutations))
 		for _, mutation := range completion.OutputMutations {
 			if mutation.Token == nil {
 				continue
 			}
-			projected.Outputs = append(projected.Outputs, cleanInvocationWorkFromToken(snapshot.Topology, mutation.Token))
+			token := factorytoken.FromWorker(*mutation.Token)
+			projected.Outputs = append(projected.Outputs, cleanInvocationWorkFromToken(snapshot.Topology, &token))
 		}
 		result.DispatchHistory = append(result.DispatchHistory, projected)
 	}
@@ -290,8 +292,8 @@ func restoredWorkPlacements(
 	}
 	if restored.PlaceOccupancyByID == nil {
 		for workID, item := range items {
-			if item.PlaceID != "" {
-				placements[workID] = item.PlaceID
+			if item.WorkTypeID != "" && item.State != "" {
+				placements[workID] = state.PlaceID(item.WorkTypeID, item.State)
 			}
 		}
 	}
@@ -333,9 +335,6 @@ func restoredWorkPlacementID(
 ) string {
 	if placeID != "" || restored.PlaceOccupancyByID != nil {
 		return placeID
-	}
-	if item.PlaceID != "" {
-		return item.PlaceID
 	}
 	if item.WorkTypeID != "" && item.State != "" {
 		return state.PlaceID(item.WorkTypeID, item.State)

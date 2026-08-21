@@ -481,7 +481,7 @@ func TestProjectRuntime_BlockedAndNeedsHumanSessionsIncludeStopSummary(t *testin
 						Outcome:         workerexecution.OutcomeFailed,
 						Reason:          tc.wantSummary,
 						EndTime:         now,
-						ConsumedTokens:  []factoryruntime.RuntimeToken{{Color: factoryruntime.RuntimeTokenColor{WorkID: "work-goal-stop"}}},
+						ConsumedTokens:  []workerexecution.Token{{Color: workerexecution.Color{WorkID: "work-goal-stop"}}},
 					}},
 				},
 				Now: now,
@@ -715,7 +715,7 @@ func TestSessionResponse_PetriRuntimeOmitsDispatchesWhenCanonicalStateExists(t *
 				TransitionID:    "tr-process",
 				WorkstationName: "process",
 				StartTime:       now,
-				ConsumedTokens:  []factoryruntime.RuntimeToken{*token},
+				ConsumedTokens:  []workerexecution.Token{{ID: token.ID, State: "init", Color: token.Color}},
 			},
 		},
 		Topology: &factoryruntime.Net{

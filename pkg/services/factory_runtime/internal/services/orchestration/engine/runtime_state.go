@@ -47,7 +47,7 @@ func (rs *RuntimeState) Snapshot() interfaces.EngineStateSnapshot[petri.MarkingS
 		for k, v := range rs.Dispatches {
 			cp := *v
 			cp.ExpectedArtifactContext = cloneExpectedArtifactTemplateContext(v.ExpectedArtifactContext)
-			cp.ConsumedTokens = factorytoken.CloneSlice(v.ConsumedTokens)
+			cp.ConsumedTokens = cloneWorkerTokens(v.ConsumedTokens)
 			if v.HeldMutations != nil {
 				cp.HeldMutations = make([]interfaces.MarkingMutation, len(v.HeldMutations))
 				copy(cp.HeldMutations, v.HeldMutations)
@@ -85,7 +85,7 @@ func deepCopyCompletedDispatch(d interfaces.CompletedDispatch) interfaces.Comple
 	cp.ExpectedArtifactContext = cloneExpectedArtifactTemplateContext(d.ExpectedArtifactContext)
 	cp.ArtifactVerification = d.ArtifactVerification.Clone()
 	cp.ProviderSession = (d.ProviderSession).Clone()
-	cp.ConsumedTokens = factorytoken.CloneSlice(d.ConsumedTokens)
+	cp.ConsumedTokens = cloneWorkerTokens(d.ConsumedTokens)
 	if d.OutputMutations != nil {
 		cp.OutputMutations = make([]interfaces.TokenMutationRecord, len(d.OutputMutations))
 		for i := range d.OutputMutations {
@@ -116,7 +116,8 @@ func deepCopyWorkResult(result workerexecution.WorkResult) workerexecution.WorkR
 func deepCopyTokenMutationRecord(m interfaces.TokenMutationRecord) interfaces.TokenMutationRecord {
 	cp := m
 	if m.Token != nil {
-		tokenCopy := factorytoken.Clone(*m.Token)
+		runtimeToken := factorytoken.FromWorker(*m.Token)
+		tokenCopy := factorytoken.ToWorker(runtimeToken)
 		cp.Token = &tokenCopy
 	}
 	return cp
@@ -312,13 +313,17 @@ func cloneDispatchEntries(entries map[string]*interfaces.DispatchEntry) map[stri
 		}
 		copyEntry := *entry
 		copyEntry.ExpectedArtifactContext = cloneExpectedArtifactTemplateContext(entry.ExpectedArtifactContext)
-		copyEntry.ConsumedTokens = factorytoken.CloneSlice(entry.ConsumedTokens)
+		copyEntry.ConsumedTokens = cloneWorkerTokens(entry.ConsumedTokens)
 		if entry.HeldMutations != nil {
 			copyEntry.HeldMutations = append([]interfaces.MarkingMutation(nil), entry.HeldMutations...)
 		}
 		clone[id] = &copyEntry
 	}
 	return clone
+}
+
+func cloneWorkerTokens(values []workerexecution.Token) []workerexecution.Token {
+	return factorytoken.ToWorkerSlice(factorytoken.FromWorkerSlice(values))
 }
 
 // GetResultBuffer returns the runtime-owned work result buffer used to hand

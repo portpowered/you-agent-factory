@@ -98,7 +98,7 @@ func TestReconstructFactoryWorldState_ActiveRequestAtSelectedTick(t *testing.T) 
 	t0 := time.Date(2026, 4, 16, 8, 0, 0, 0, time.UTC)
 	events := []factoryapi.FactoryEvent{
 		initialStructureEvent(t0),
-		workInputEventWithToken(1, t0.Add(time.Second), "tok-task-1", work.FactoryWorkItem{ID: "work-1", WorkTypeID: "task", TraceID: "trace-1", PlaceID: "task:init"}),
+		workInputEventWithToken(1, t0.Add(time.Second), "tok-task-1", work.FactoryWorkItem{ID: "work-1", WorkTypeID: "task", TraceID: "trace-1", State: "init"}),
 		workstationRequestEvent(2, t0.Add(2*time.Second), interfaces.WorkstationRequestPayload{
 			DispatchID:   "dispatch-1",
 			TransitionID: "t-review",
@@ -106,7 +106,7 @@ func TestReconstructFactoryWorldState_ActiveRequestAtSelectedTick(t *testing.T) 
 			Inputs: []interfaces.WorkstationInput{{
 				TokenID:  "tok-task-1",
 				PlaceID:  "task:init",
-				WorkItem: &work.FactoryWorkItem{ID: "work-1", WorkTypeID: "task", TraceID: "trace-1", PlaceID: "task:init"},
+				WorkItem: &work.FactoryWorkItem{ID: "work-1", WorkTypeID: "task", TraceID: "trace-1", State: "init"},
 			}},
 		}),
 	}
@@ -156,7 +156,7 @@ func TestReconstructFactoryWorldState_FallsBackToPayloadDispatchChainingLineageF
 			DisplayName:            "Input",
 			CurrentChainingTraceID: "chain-input",
 			TraceID:                "trace-input",
-			PlaceID:                "task:init",
+			State:                  "init",
 		}),
 		generatedProjectionEvent(
 			factoryapi.FactoryEventTypeDispatchRequest,
@@ -195,7 +195,7 @@ func TestReconstructFactoryWorldState_RetainsInferenceAttemptsByDispatchID(t *te
 	t0 := time.Date(2026, 4, 18, 12, 0, 0, 0, time.UTC)
 	events := []factoryapi.FactoryEvent{
 		initialStructureEvent(t0),
-		workInputEventWithToken(1, t0.Add(time.Second), "tok-task-1", work.FactoryWorkItem{ID: "work-1", WorkTypeID: "task", TraceID: "trace-1", PlaceID: "task:init"}),
+		workInputEventWithToken(1, t0.Add(time.Second), "tok-task-1", work.FactoryWorkItem{ID: "work-1", WorkTypeID: "task", TraceID: "trace-1", State: "init"}),
 		workstationRequestEvent(2, t0.Add(2*time.Second), interfaces.WorkstationRequestPayload{
 			DispatchID:   "dispatch-1",
 			TransitionID: "t-review",
@@ -203,7 +203,7 @@ func TestReconstructFactoryWorldState_RetainsInferenceAttemptsByDispatchID(t *te
 			Inputs: []interfaces.WorkstationInput{{
 				TokenID:  "tok-task-1",
 				PlaceID:  "task:init",
-				WorkItem: &work.FactoryWorkItem{ID: "work-1", WorkTypeID: "task", TraceID: "trace-1", PlaceID: "task:init"},
+				WorkItem: &work.FactoryWorkItem{ID: "work-1", WorkTypeID: "task", TraceID: "trace-1", State: "init"},
 			}},
 		}),
 		inferenceRequestEvent(3, t0.Add(3*time.Second), factoryapi.InferenceRequestEventPayload{
@@ -293,7 +293,7 @@ func TestReconstructFactoryWorldState_RetainsScriptAttemptsByDispatchID(t *testi
 	t0 := time.Date(2026, 4, 22, 12, 0, 0, 0, time.UTC)
 	events := []factoryapi.FactoryEvent{
 		initialStructureEvent(t0),
-		workInputEventWithToken(1, t0.Add(time.Second), "tok-task-1", work.FactoryWorkItem{ID: "work-1", WorkTypeID: "task", TraceID: "trace-1", PlaceID: "task:init"}),
+		workInputEventWithToken(1, t0.Add(time.Second), "tok-task-1", work.FactoryWorkItem{ID: "work-1", WorkTypeID: "task", TraceID: "trace-1", State: "init"}),
 		workstationRequestEvent(2, t0.Add(2*time.Second), interfaces.WorkstationRequestPayload{
 			DispatchID:   "dispatch-script-1",
 			TransitionID: "t-review",
@@ -301,7 +301,7 @@ func TestReconstructFactoryWorldState_RetainsScriptAttemptsByDispatchID(t *testi
 			Inputs: []interfaces.WorkstationInput{{
 				TokenID:  "tok-task-1",
 				PlaceID:  "task:init",
-				WorkItem: &work.FactoryWorkItem{ID: "work-1", WorkTypeID: "task", TraceID: "trace-1", PlaceID: "task:init"},
+				WorkItem: &work.FactoryWorkItem{ID: "work-1", WorkTypeID: "task", TraceID: "trace-1", State: "init"},
 			}},
 		}),
 		scriptRequestEvent(3, t0.Add(3*time.Second), factoryapi.ScriptRequestEventPayload{
@@ -369,7 +369,7 @@ func TestReconstructFactoryWorldState_PreservesWindowsProcessFailureDetail(t *te
 	const message = "provider error: internal_server_error: codex exited with code 4294967295: stderr: OpenAI Codex v0.118.0 (research preview)"
 	workItem := work.FactoryWorkItem{
 		ID: "work-safe-windows-process-failure", WorkTypeID: "task",
-		TraceID: "trace-safe-windows-process-failure", PlaceID: "task:init",
+		TraceID: "trace-safe-windows-process-failure", State: "init",
 	}
 	events := []factoryapi.FactoryEvent{
 		initialStructureEvent(t0),
@@ -393,13 +393,13 @@ func TestReconstructFactoryWorldState_PreservesWindowsProcessFailureDetail(t *te
 				ToPlace: "task:failed",
 				WorkItem: &work.FactoryWorkItem{
 					ID: workItem.ID, WorkTypeID: workItem.WorkTypeID,
-					TraceID: workItem.TraceID, PlaceID: "task:failed",
+					TraceID: workItem.TraceID, State: "failed",
 				},
 			}},
 			TerminalWork: &interfaces.FactoryTerminalWork{
 				WorkItem: work.FactoryWorkItem{
 					ID: workItem.ID, WorkTypeID: workItem.WorkTypeID,
-					TraceID: workItem.TraceID, PlaceID: "task:failed",
+					TraceID: workItem.TraceID, State: "failed",
 				},
 				Status: "FAILED",
 			},
@@ -462,7 +462,7 @@ func TestReconstructFactoryWorldState_PreservesCanonicalProviderMetadata(t *test
 	t0 := time.Date(2026, 4, 18, 10, 30, 0, 0, time.UTC)
 	events := []factoryapi.FactoryEvent{
 		initialStructureEvent(t0),
-		workInputEventWithToken(1, t0.Add(time.Second), "tok-task-1", work.FactoryWorkItem{ID: "work-1", WorkTypeID: "task", TraceID: "trace-1", PlaceID: "task:init"}),
+		workInputEventWithToken(1, t0.Add(time.Second), "tok-task-1", work.FactoryWorkItem{ID: "work-1", WorkTypeID: "task", TraceID: "trace-1", State: "init"}),
 		workstationRequestEvent(2, t0.Add(2*time.Second), interfaces.WorkstationRequestPayload{
 			DispatchID:   "dispatch-1",
 			TransitionID: "t-review",
@@ -470,7 +470,7 @@ func TestReconstructFactoryWorldState_PreservesCanonicalProviderMetadata(t *test
 			Inputs: []interfaces.WorkstationInput{{
 				TokenID:  "tok-task-1",
 				PlaceID:  "task:init",
-				WorkItem: &work.FactoryWorkItem{ID: "work-1", WorkTypeID: "task", TraceID: "trace-1", PlaceID: "task:init"},
+				WorkItem: &work.FactoryWorkItem{ID: "work-1", WorkTypeID: "task", TraceID: "trace-1", State: "init"},
 			}},
 		}),
 		inferenceResponseEvent(3, t0.Add(2500*time.Millisecond), factoryapi.InferenceResponseEventPayload{
@@ -530,7 +530,7 @@ func TestReconstructFactoryWorldState_MapsLegacyProviderFailureOnlyWireToFailure
 	failureType := factoryapi.WorkFailureType(workerexecution.WorkFailureTypeInternalServerError)
 	events := []factoryapi.FactoryEvent{
 		initialStructureEvent(t0),
-		workInputEventWithToken(1, t0.Add(time.Second), "tok-task-1", work.FactoryWorkItem{ID: "work-1", WorkTypeID: "task", TraceID: "trace-1", PlaceID: "task:init"}),
+		workInputEventWithToken(1, t0.Add(time.Second), "tok-task-1", work.FactoryWorkItem{ID: "work-1", WorkTypeID: "task", TraceID: "trace-1", State: "init"}),
 		workstationRequestEvent(2, t0.Add(2*time.Second), interfaces.WorkstationRequestPayload{
 			DispatchID:   "dispatch-legacy-wire",
 			TransitionID: "t-review",
@@ -538,7 +538,7 @@ func TestReconstructFactoryWorldState_MapsLegacyProviderFailureOnlyWireToFailure
 			Inputs: []interfaces.WorkstationInput{{
 				TokenID:  "tok-task-1",
 				PlaceID:  "task:init",
-				WorkItem: &work.FactoryWorkItem{ID: "work-1", WorkTypeID: "task", TraceID: "trace-1", PlaceID: "task:init"},
+				WorkItem: &work.FactoryWorkItem{ID: "work-1", WorkTypeID: "task", TraceID: "trace-1", State: "init"},
 			}},
 		}),
 		generatedProjectionEvent(
@@ -583,7 +583,7 @@ func TestReconstructFactoryWorldState_MapsLegacyProviderFailureOnlyWireToFailure
 
 func TestReconstructFactoryWorldState_WorkInputTokenIDMatchesRequestConsumption(t *testing.T) {
 	t0 := time.Date(2026, 4, 16, 8, 0, 0, 0, time.UTC)
-	item := work.FactoryWorkItem{ID: "work-1", WorkTypeID: "task", TraceID: "trace-1", PlaceID: "task:init"}
+	item := work.FactoryWorkItem{ID: "work-1", WorkTypeID: "task", TraceID: "trace-1", State: "init"}
 	events := []factoryapi.FactoryEvent{
 		initialStructureEvent(t0),
 		workInputEventWithToken(1, t0.Add(time.Second), "tok-task-1", item),
@@ -687,7 +687,7 @@ func TestReconstructFactoryWorldState_FailedAndRejectedResponses(t *testing.T) {
 	t0 := time.Date(2026, 4, 16, 8, 0, 0, 0, time.UTC)
 	events := []factoryapi.FactoryEvent{
 		initialStructureEvent(t0),
-		workInputEvent(1, t0.Add(time.Second), work.FactoryWorkItem{ID: "work-failed", WorkTypeID: "task", TraceID: "trace-failed", PlaceID: "task:init"}),
+		workInputEvent(1, t0.Add(time.Second), work.FactoryWorkItem{ID: "work-failed", WorkTypeID: "task", TraceID: "trace-failed", State: "init"}),
 		workstationRequestEvent(2, t0.Add(2*time.Second), interfaces.WorkstationRequestPayload{
 			DispatchID:   "dispatch-failed",
 			TransitionID: "t-review",
@@ -695,7 +695,7 @@ func TestReconstructFactoryWorldState_FailedAndRejectedResponses(t *testing.T) {
 			Inputs: []interfaces.WorkstationInput{{
 				TokenID:  "work-failed",
 				PlaceID:  "task:init",
-				WorkItem: &work.FactoryWorkItem{ID: "work-failed", WorkTypeID: "task", TraceID: "trace-failed", PlaceID: "task:init"},
+				WorkItem: &work.FactoryWorkItem{ID: "work-failed", WorkTypeID: "task", TraceID: "trace-failed", State: "init"},
 			}},
 		}),
 		workstationResponseEvent(3, t0.Add(3*time.Second), interfaces.WorkstationResponsePayload{
@@ -705,7 +705,7 @@ func TestReconstructFactoryWorldState_FailedAndRejectedResponses(t *testing.T) {
 			Result:       interfaces.WorkstationResult{Outcome: "FAILED", Error: "boom"},
 			TraceData:    &interfaces.FactoryTraceData{TraceID: "trace-failed", WorkIDs: []string{"work-failed"}},
 		}),
-		workInputEvent(4, t0.Add(4*time.Second), work.FactoryWorkItem{ID: "work-rejected", WorkTypeID: "task", TraceID: "trace-rejected", PlaceID: "task:init"}),
+		workInputEvent(4, t0.Add(4*time.Second), work.FactoryWorkItem{ID: "work-rejected", WorkTypeID: "task", TraceID: "trace-rejected", State: "init"}),
 		workstationRequestEvent(5, t0.Add(5*time.Second), interfaces.WorkstationRequestPayload{
 			DispatchID:   "dispatch-rejected",
 			TransitionID: "t-review",
@@ -713,7 +713,7 @@ func TestReconstructFactoryWorldState_FailedAndRejectedResponses(t *testing.T) {
 			Inputs: []interfaces.WorkstationInput{{
 				TokenID:  "work-rejected",
 				PlaceID:  "task:init",
-				WorkItem: &work.FactoryWorkItem{ID: "work-rejected", WorkTypeID: "task", TraceID: "trace-rejected", PlaceID: "task:init"},
+				WorkItem: &work.FactoryWorkItem{ID: "work-rejected", WorkTypeID: "task", TraceID: "trace-rejected", State: "init"},
 			}},
 		}),
 		workstationResponseEvent(6, t0.Add(6*time.Second), interfaces.WorkstationResponsePayload{
@@ -729,7 +729,7 @@ func TestReconstructFactoryWorldState_FailedAndRejectedResponses(t *testing.T) {
 					ID:         "work-rejected",
 					WorkTypeID: "task",
 					TraceID:    "trace-rejected",
-					PlaceID:    "task:init",
+					State:      "init",
 				},
 			}},
 			TraceData: &interfaces.FactoryTraceData{TraceID: "trace-rejected", WorkIDs: []string{"work-rejected"}},
@@ -764,7 +764,7 @@ func TestReconstructFactoryWorldState_FailedTerminalWorkRetainsFailureDetails(t 
 			WorkTypeID:  "task",
 			DisplayName: "Blocked story",
 			TraceID:     "trace-failed",
-			PlaceID:     "task:init",
+			State:       "init",
 		}),
 		workstationRequestEvent(2, t0.Add(2*time.Second), interfaces.WorkstationRequestPayload{
 			DispatchID:   "dispatch-failed",
@@ -773,7 +773,7 @@ func TestReconstructFactoryWorldState_FailedTerminalWorkRetainsFailureDetails(t 
 			Inputs: []interfaces.WorkstationInput{{
 				TokenID:  "work-failed",
 				PlaceID:  "task:init",
-				WorkItem: &work.FactoryWorkItem{ID: "work-failed", WorkTypeID: "task", DisplayName: "Blocked story", TraceID: "trace-failed", PlaceID: "task:init"},
+				WorkItem: &work.FactoryWorkItem{ID: "work-failed", WorkTypeID: "task", DisplayName: "Blocked story", TraceID: "trace-failed", State: "init"},
 			}},
 		}),
 		workstationResponseEvent(3, t0.Add(3*time.Second), interfaces.WorkstationResponsePayload{
@@ -786,11 +786,11 @@ func TestReconstructFactoryWorldState_FailedTerminalWorkRetainsFailureDetails(t 
 				Type:     string(interfaces.MutationMove),
 				TokenID:  "work-failed-terminal",
 				ToPlace:  "task:failed",
-				WorkItem: &work.FactoryWorkItem{ID: "work-failed", WorkTypeID: "task", DisplayName: "Blocked story", TraceID: "trace-failed", PlaceID: "task:failed"},
+				WorkItem: &work.FactoryWorkItem{ID: "work-failed", WorkTypeID: "task", DisplayName: "Blocked story", TraceID: "trace-failed", State: "failed"},
 			}},
 			TraceData: &interfaces.FactoryTraceData{TraceID: "trace-failed", WorkIDs: []string{"work-failed"}},
 			TerminalWork: &interfaces.FactoryTerminalWork{
-				WorkItem: work.FactoryWorkItem{ID: "work-failed", WorkTypeID: "task", DisplayName: "Blocked story", TraceID: "trace-failed", PlaceID: "task:failed"},
+				WorkItem: work.FactoryWorkItem{ID: "work-failed", WorkTypeID: "task", DisplayName: "Blocked story", TraceID: "trace-failed", State: "failed"},
 				Status:   "FAILED",
 			},
 		}),
@@ -833,7 +833,7 @@ func TestReconstructFactoryWorldState_OutputWorkStateReconstructsTerminalPlaceWi
 			WorkTypeID:  "task",
 			DisplayName: "Classifier terminal output",
 			TraceID:     "trace-1",
-			PlaceID:     "task:init",
+			State:       "init",
 		}),
 		workstationRequestEvent(2, t0.Add(2*time.Second), interfaces.WorkstationRequestPayload{
 			DispatchID:   "dispatch-1",
@@ -842,7 +842,7 @@ func TestReconstructFactoryWorldState_OutputWorkStateReconstructsTerminalPlaceWi
 			Inputs: []interfaces.WorkstationInput{{
 				TokenID:  "work-1",
 				PlaceID:  "task:init",
-				WorkItem: &work.FactoryWorkItem{ID: "work-1", WorkTypeID: "task", DisplayName: "Classifier terminal output", TraceID: "trace-1", PlaceID: "task:init"},
+				WorkItem: &work.FactoryWorkItem{ID: "work-1", WorkTypeID: "task", DisplayName: "Classifier terminal output", TraceID: "trace-1", State: "init"},
 			}},
 		}),
 		workstationResponseEvent(3, t0.Add(3*time.Second), interfaces.WorkstationResponsePayload{
@@ -870,8 +870,8 @@ func TestReconstructFactoryWorldState_OutputWorkStateReconstructsTerminalPlaceWi
 	if !ok {
 		t.Fatalf("TerminalWorkByID = %#v, want work-1 indexed from outputWork state", state.TerminalWorkByID)
 	}
-	if terminal.WorkItem.PlaceID != "task:complete" {
-		t.Fatalf("terminal place = %q, want task:complete reconstructed from task+complete state", terminal.WorkItem.PlaceID)
+	if terminal.WorkItem.WorkTypeID+":"+terminal.WorkItem.State != "task:complete" {
+		t.Fatalf("terminal place = %q, want task:complete reconstructed from task+complete state", terminal.WorkItem.WorkTypeID+":"+terminal.WorkItem.State)
 	}
 	if terminal.Status != "TERMINAL" {
 		t.Fatalf("terminal status = %q, want TERMINAL", terminal.Status)
@@ -887,7 +887,7 @@ func TestReconstructFactoryWorldState_WorkStateChangeMovesFromFailedToInProgress
 			WorkTypeID:  "task",
 			DisplayName: "Recover me",
 			TraceID:     "trace-recover",
-			PlaceID:     "task:init",
+			State:       "init",
 		}),
 		workstationRequestEvent(2, t0.Add(2*time.Second), interfaces.WorkstationRequestPayload{
 			DispatchID:   "dispatch-failed",
@@ -896,7 +896,7 @@ func TestReconstructFactoryWorldState_WorkStateChangeMovesFromFailedToInProgress
 			Inputs: []interfaces.WorkstationInput{{
 				TokenID:  "work-recover",
 				PlaceID:  "task:init",
-				WorkItem: &work.FactoryWorkItem{ID: "work-recover", WorkTypeID: "task", TraceID: "trace-recover", PlaceID: "task:init"},
+				WorkItem: &work.FactoryWorkItem{ID: "work-recover", WorkTypeID: "task", TraceID: "trace-recover", State: "init"},
 			}},
 		}),
 		workstationResponseEvent(3, t0.Add(3*time.Second), interfaces.WorkstationResponsePayload{
@@ -908,7 +908,7 @@ func TestReconstructFactoryWorldState_WorkStateChangeMovesFromFailedToInProgress
 				Type:     string(interfaces.MutationMove),
 				TokenID:  "work-recover",
 				ToPlace:  "task:failed",
-				WorkItem: &work.FactoryWorkItem{ID: "work-recover", WorkTypeID: "task", TraceID: "trace-recover", PlaceID: "task:failed", State: "failed"},
+				WorkItem: &work.FactoryWorkItem{ID: "work-recover", WorkTypeID: "task", TraceID: "trace-recover", State: "failed"},
 			}},
 			TraceData: &interfaces.FactoryTraceData{TraceID: "trace-recover", WorkIDs: []string{"work-recover"}},
 		}),
@@ -946,7 +946,7 @@ func TestReconstructFactoryWorldState_WorkStateChangeMovesFromFailedToInProgress
 		t.Fatalf("failure details = %#v, want retained history after leaving FAILED", recoveredState.FailureDetailsByWorkID["work-recover"])
 	}
 	item := recoveredState.WorkItemsByID["work-recover"]
-	if item.PlaceID != "task:review" || item.State != "review" {
+	if item.WorkTypeID+":"+item.State != "task:review" {
 		t.Fatalf("work item = %#v, want place task:review and state review", item)
 	}
 	assertWorkStateChangeRecord(t, recoveredState.WorkStateChangesByWorkID["work-recover"], interfaces.FactoryWorldWorkStateChangeRecord{
@@ -954,8 +954,6 @@ func TestReconstructFactoryWorldState_WorkStateChangeMovesFromFailedToInProgress
 		WorkTypeName: "task",
 		FromState:    "failed",
 		ToState:      "review",
-		FromPlaceID:  "task:failed",
-		ToPlaceID:    "task:review",
 		Source:       work.WorkStateChangeSourceCLI,
 		Tick:         4,
 	})
@@ -973,7 +971,7 @@ func TestReconstructFactoryWorldState_FailedDispatchRoutedToRetryStateIsNotFaile
 			WorkTypeID:  "task",
 			DisplayName: "Retry me",
 			TraceID:     "trace-retry",
-			PlaceID:     "task:init",
+			State:       "init",
 		}),
 		workstationRequestEvent(2, t0.Add(2*time.Second), interfaces.WorkstationRequestPayload{
 			DispatchID:   "dispatch-retry",
@@ -982,7 +980,7 @@ func TestReconstructFactoryWorldState_FailedDispatchRoutedToRetryStateIsNotFaile
 			Inputs: []interfaces.WorkstationInput{{
 				TokenID:  "work-retry",
 				PlaceID:  "task:init",
-				WorkItem: &work.FactoryWorkItem{ID: "work-retry", WorkTypeID: "task", TraceID: "trace-retry", PlaceID: "task:init"},
+				WorkItem: &work.FactoryWorkItem{ID: "work-retry", WorkTypeID: "task", TraceID: "trace-retry", State: "init"},
 			}},
 		}),
 		workstationResponseEvent(3, t0.Add(3*time.Second), interfaces.WorkstationResponsePayload{
@@ -994,7 +992,7 @@ func TestReconstructFactoryWorldState_FailedDispatchRoutedToRetryStateIsNotFaile
 				Type:     string(interfaces.MutationMove),
 				TokenID:  "work-retry",
 				ToPlace:  "task:ready",
-				WorkItem: &work.FactoryWorkItem{ID: "work-retry", WorkTypeID: "task", TraceID: "trace-retry", PlaceID: "task:ready", State: "ready"},
+				WorkItem: &work.FactoryWorkItem{ID: "work-retry", WorkTypeID: "task", TraceID: "trace-retry", State: "ready"},
 			}},
 			TraceData: &interfaces.FactoryTraceData{TraceID: "trace-retry", WorkIDs: []string{"work-retry"}},
 		}),
@@ -1010,7 +1008,7 @@ func TestReconstructFactoryWorldState_FailedDispatchRoutedToRetryStateIsNotFaile
 	if _, ok := state.ActiveWorkItemsByID["work-retry"]; !ok {
 		t.Fatalf("retry-routed work must remain active: %#v", state.ActiveWorkItemsByID)
 	}
-	if got := state.WorkItemsByID["work-retry"]; got.PlaceID != "task:ready" || got.State != "ready" {
+	if got := state.WorkItemsByID["work-retry"]; got.WorkTypeID+":"+got.State != "task:ready" {
 		t.Fatalf("retry-routed work = %#v, want task:ready", got)
 	}
 	if _, ok := state.FailureDetailsByWorkID["work-retry"]; !ok {
@@ -1030,7 +1028,6 @@ func TestReconstructFactoryWorldState_WorkStateChangeMovesFromInitialToArbitrary
 			WorkTypeID:  "task",
 			DisplayName: "Bootstrap",
 			TraceID:     "trace-bootstrap",
-			PlaceID:     "task:init",
 			State:       "init",
 		}),
 		workStateChangeEvent(2, t0.Add(2*time.Second), "work-bootstrap", "init", "review", "task:init", "task:review", factoryapi.WorkStateChangeSourceAPI),
@@ -1047,7 +1044,7 @@ func TestReconstructFactoryWorldState_WorkStateChangeMovesFromInitialToArbitrary
 		t.Fatalf("task:init occupancy = %#v, want empty after move", got)
 	}
 	item := state.WorkItemsByID["work-bootstrap"]
-	if item.PlaceID != "task:review" || item.State != "review" {
+	if item.WorkTypeID+":"+item.State != "task:review" {
 		t.Fatalf("work item = %#v, want place task:review and state review", item)
 	}
 	assertWorkStateChangeRecord(t, state.WorkStateChangesByWorkID["work-bootstrap"], interfaces.FactoryWorldWorkStateChangeRecord{
@@ -1055,8 +1052,6 @@ func TestReconstructFactoryWorldState_WorkStateChangeMovesFromInitialToArbitrary
 		WorkTypeName: "task",
 		FromState:    "init",
 		ToState:      "review",
-		FromPlaceID:  "task:init",
-		ToPlaceID:    "task:review",
 		Source:       work.WorkStateChangeSourceAPI,
 		Tick:         2,
 	})
@@ -1110,7 +1105,7 @@ func TestReconstructFactoryWorldState_LogicalMoveCronDispatchOmitsWorkerMetadata
 			WorkTypeID:  interfaces.SystemTimeWorkTypeID,
 			DisplayName: "scheduled-route tick",
 			TraceID:     "trace-time",
-			PlaceID:     interfaces.SystemTimePendingPlaceID,
+			State:       interfaces.SystemTimePendingState,
 			Tags: map[string]string{
 				interfaces.TimeWorkTagKeyCronWorkstation: "scheduled-route",
 			},
@@ -1122,7 +1117,7 @@ func TestReconstructFactoryWorldState_LogicalMoveCronDispatchOmitsWorkerMetadata
 			Inputs: []interfaces.WorkstationInput{{
 				TokenID:  "time-route",
 				PlaceID:  interfaces.SystemTimePendingPlaceID,
-				WorkItem: &work.FactoryWorkItem{ID: "time-route", WorkTypeID: interfaces.SystemTimeWorkTypeID, TraceID: "trace-time", PlaceID: interfaces.SystemTimePendingPlaceID},
+				WorkItem: &work.FactoryWorkItem{ID: "time-route", WorkTypeID: interfaces.SystemTimeWorkTypeID, TraceID: "trace-time", State: "pending"},
 			}},
 		}),
 	}

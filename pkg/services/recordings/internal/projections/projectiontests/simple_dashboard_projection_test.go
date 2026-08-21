@@ -20,7 +20,6 @@ func TestBuildSimpleDashboardProjection_RecordsWorkMoveHistory(t *testing.T) {
 			WorkTypeID:  "task",
 			DisplayName: "Bootstrap",
 			TraceID:     "trace-bootstrap",
-			PlaceID:     "task:init",
 			State:       "init",
 		}),
 		workStateChangeEvent(2, t0.Add(2*time.Second), "work-bootstrap", "init", "review", "task:init", "task:review", factoryapi.WorkStateChangeSourceAPI),
@@ -55,7 +54,7 @@ func TestBuildSimpleDashboardProjection_TracksActiveDispatchState(t *testing.T) 
 			WorkTypeID:  "task",
 			DisplayName: "Write docs",
 			TraceID:     "trace-1",
-			PlaceID:     "task:init",
+			State:       "init",
 		}),
 		workstationRequestEvent(2, t0.Add(2*time.Second), interfaces.WorkstationRequestPayload{
 			DispatchID:   "dispatch-1",
@@ -69,7 +68,7 @@ func TestBuildSimpleDashboardProjection_TracksActiveDispatchState(t *testing.T) 
 					WorkTypeID:  "task",
 					DisplayName: "Write docs",
 					TraceID:     "trace-1",
-					PlaceID:     "task:init",
+					State:       "init",
 				},
 			}},
 		}),
@@ -239,13 +238,13 @@ func dashboardProjectionWorkItem() work.FactoryWorkItem {
 		WorkTypeID:  "task",
 		DisplayName: "Write docs",
 		TraceID:     "trace-1",
-		PlaceID:     "task:init",
+		State:       "init",
 	}
 }
 
 func dashboardProjectionOutputWorkItem() work.FactoryWorkItem {
 	item := dashboardProjectionWorkItem()
-	item.PlaceID = ""
+	item.State = ""
 	return item
 }
 
@@ -303,8 +302,8 @@ func assertTerminalProjection(
 	if !ok {
 		t.Fatalf("FailedWorkItemsByID = %#v, want work-1", state.FailedWorkItemsByID)
 	}
-	if failed.PlaceID != wantTerminalPlace {
-		t.Fatalf("failed work place = %q, want %q", failed.PlaceID, wantTerminalPlace)
+	if failed.WorkTypeID+":"+failed.State != wantTerminalPlace {
+		t.Fatalf("failed work place = %q, want %q", failed.WorkTypeID+":"+failed.State, wantTerminalPlace)
 	}
 	if len(state.FailureDetailsByWorkID) != wantFailureDetailCount {
 		t.Fatalf("FailureDetailsByWorkID = %#v, want %d detail(s)", state.FailureDetailsByWorkID, wantFailureDetailCount)

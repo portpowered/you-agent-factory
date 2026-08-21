@@ -431,7 +431,7 @@ func projectedMarkingTokens(marking *factory.PetriMarkingSnapshot) []RuntimeToke
 	tokens := make([]RuntimeToken, 0, len(tokenIDs))
 	for _, tokenID := range tokenIDs {
 		token := marking.Tokens[tokenID]
-		if token == nil || interfaces.IsSystemTimeToken(token) {
+		if token == nil || token.Color.WorkTypeID == interfaces.SystemTimeWorkTypeID {
 			continue
 		}
 		tokens = append(tokens, projectedTokenResponse(token))
@@ -461,7 +461,7 @@ func projectedEnabledTransitions(
 	return projected
 }
 
-func projectedTokenResponse(token *workerexecution.Token) RuntimeToken {
+func projectedTokenResponse(token *factory.RuntimeToken) RuntimeToken {
 	resp := RuntimeToken{
 		ID:        token.ID,
 		PlaceID:   token.PlaceID,
@@ -509,7 +509,7 @@ func categorizeProjectionTokens(
 		return categories, resourceUsage(resourceCounts, resourceTotals)
 	}
 	for _, token := range marking.Tokens {
-		if token == nil || interfaces.IsSystemTimeToken(token) {
+		if token == nil || token.Color.WorkTypeID == interfaces.SystemTimeWorkTypeID {
 			continue
 		}
 		if token.Color.DataType == workerexecution.DataTypeResource {
@@ -542,7 +542,7 @@ func countProjectionTokens(marking *factory.PetriMarkingSnapshot) int {
 	}
 	count := 0
 	for _, token := range marking.Tokens {
-		if token == nil || interfaces.IsSystemTimeToken(token) {
+		if token == nil || token.Color.WorkTypeID == interfaces.SystemTimeWorkTypeID {
 			continue
 		}
 		count++

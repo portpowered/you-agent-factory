@@ -484,8 +484,8 @@ func thinDispatchReplayArtifact(t *testing.T) (*interfaces.ReplayArtifact, facto
 				},
 			},
 			workers.Token{
-				ID:      "resource/executor-slot",
-				PlaceID: "executor-slot:available",
+				ID:    "resource/executor-slot",
+				State: "available",
 				Color: workers.Color{
 					WorkTypeID: "executor-slot",
 					DataType:   workers.DataTypeResource,
@@ -716,7 +716,7 @@ func assertThinReplayDispatchTokens(t *testing.T, recorded work.WorkDispatch) {
 			}
 			sawWork = true
 		case workers.DataTypeResource:
-			if token.Color.Name != "executor-slot" || token.PlaceID != "executor-slot:available" {
+			if token.Color.Name != "executor-slot" || token.State != "available" {
 				t.Fatalf("resource token = %#v, want executor-slot usage", token)
 			}
 			sawResource = true
@@ -903,8 +903,8 @@ func TestReduceReplayEvents_OperatorWorkStateChanges(t *testing.T) {
 	if change.change.WorkID != "work-recover" || change.observedTick != 4 {
 		t.Fatalf("work state change = %#v, want work-recover at tick 4", change)
 	}
-	if change.change.FromPlaceID != "task:failed" || change.change.ToPlaceID != "task:init" {
-		t.Fatalf("places = %q -> %q, want task:failed -> task:init", change.change.FromPlaceID, change.change.ToPlaceID)
+	if change.fromPlaceID != "task:failed" || change.toPlaceID != "task:init" {
+		t.Fatalf("places = %q -> %q, want task:failed -> task:init", change.fromPlaceID, change.toPlaceID)
 	}
 	if change.change.Source != work.WorkStateChangeSourceAPI {
 		t.Fatalf("source = %q, want api", change.change.Source)

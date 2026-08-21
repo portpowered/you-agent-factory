@@ -30,7 +30,7 @@ func TestFactoryWorldReducerAppliesCanonicalStructureAndStateEvents(t *testing.T
 	if err := reducer.applyStructureEvent(structure); err != nil {
 		t.Fatalf("applyStructureEvent: %v", err)
 	}
-	reducer.stateValue.WorkItemsByID["work-1"] = work.FactoryWorkItem{ID: "work-1", WorkTypeID: "task", State: "ready", PlaceID: "task:ready"}
+	reducer.stateValue.WorkItemsByID["work-1"] = work.FactoryWorkItem{ID: "work-1", WorkTypeID: "task", State: "ready"}
 	reducer.addWorkToken("work-1", "task:ready", reducer.stateValue.WorkItemsByID["work-1"])
 	workState := canonicalWorldProjectionEvent(t, interfaces.FactoryEventTypeWorkStateChange, interfaces.FactoryEventContext{EventTime: eventTime.Add(time.Second), Sequence: 2, Tick: 2}, interfaces.WorkStateChangeEventPayload{FromPlaceID: "task:ready", FromState: "ready", Source: work.WorkStateChangeSourceAPI, ToPlaceID: "task:done", ToState: "done", WorkID: "work-1", WorkTypeName: "task"})
 	if err := reducer.applyWorkStateChangeEvent(workState); err != nil {
@@ -255,7 +255,7 @@ func TestCanonicalDispatchResponseReconstructsCompletionAndReleasesResources(t *
 	if completion.DispatchID != dispatchID || completion.Result.FailureMetadata == nil || completion.Result.FailureMetadata.Type != workerexecution.WorkFailureTypeTimeout {
 		t.Fatalf("completion = %#v", completion)
 	}
-	if len(completion.OutputWorkItems) != 1 || completion.OutputWorkItems[0].PlaceID != "task:failed" || completion.OutputWorkItems[0].Content[0].Type != work.WorkContentPartTypeText {
+	if len(completion.OutputWorkItems) != 1 || completion.OutputWorkItems[0].State != "failed" || completion.OutputWorkItems[0].Content[0].Type != work.WorkContentPartTypeText {
 		t.Fatalf("output work = %#v", completion.OutputWorkItems)
 	}
 	if got := reducer.tokenPlaces[resourceToken]; got != "gpu:available" {

@@ -171,8 +171,8 @@ func TestRuntimeOpeningReconstructsCanonicalFactoryWorldStateFromFixture(t *test
 	if !ok {
 		t.Fatalf("reconstructed Work = %#v, want %s", restored.WorkItemsByID, workID)
 	}
-	if item.PlaceID != "task:init" || item.TraceID != traceID {
-		t.Fatalf("reconstructed Work placement/trace = (%q, %q), want task:init/%s", item.PlaceID, item.TraceID, traceID)
+	if item.State != "init" || item.TraceID != traceID {
+		t.Fatalf("reconstructed Work state/trace = (%q, %q), want init/%s", item.State, item.TraceID, traceID)
 	}
 	if got := restored.PlaceOccupancyByID["task:init"].WorkItemIDs; len(got) != 1 || got[0] != workID {
 		t.Fatalf("reconstructed Work occupancy = %#v, want [%s]", got, workID)

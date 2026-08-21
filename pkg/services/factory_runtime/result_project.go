@@ -12,6 +12,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factorytoken "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/token"
 )
 
 func hashLabel(path, text string) string {
@@ -395,7 +396,7 @@ func firstNonEmpty(values ...string) string {
 // Factory Runtime root so Factory Sessions does not grow another Petri-shaped
 // dependency while adapting the result to its Work read contract.
 type WorkArtifactProjectionInput struct {
-	Token           *workers.Token
+	Token           *RuntimeToken
 	Topology        *RuntimeNet
 	Dispatches      map[string]*DispatchEntry
 	DispatchHistory []CompletedDispatch
@@ -434,7 +435,7 @@ func (WorkArtifactProjection) Project(input WorkArtifactProjectionInput) []work.
 	}
 	return work.ExpectedArtifactReadModelProjector{}.Project(
 		workTypeDeclarations,
-		workstationArtifactDeclarationsForPlace(input.Topology, input.Token.PlaceID),
+	workstationArtifactDeclarationsForPlace(input.Topology, input.Token.PlaceID),
 		[]work.ExpectedArtifactInput{expectedArtifactInput(*input.Token)},
 		work.ExpectedArtifactObservation{},
 	)
@@ -457,12 +458,12 @@ func projectWorkExpectedArtifacts(
 type artifactDispatchFacts struct {
 	transitionID    string
 	workstationName string
-	inputs          []workers.Token
+	inputs          []RuntimeToken
 	observation     work.ExpectedArtifactObservation
 	templateContext *work.ExpectedArtifactTemplateContext
 }
 
-func activeArtifactDispatch(token *workers.Token, dispatches map[string]*DispatchEntry) (artifactDispatchFacts, bool) {
+func activeArtifactDispatch(token *RuntimeToken, dispatches map[string]*DispatchEntry) (artifactDispatchFacts, bool) {
 	ids := make([]string, 0, len(dispatches))
 	for id := range dispatches {
 		ids = append(ids, id)
@@ -473,26 +474,34 @@ func activeArtifactDispatch(token *workers.Token, dispatches map[string]*Dispatc
 		if dispatch == nil || !dispatchContainsWork(dispatch.ConsumedTokens, token.Color.WorkID) {
 			continue
 		}
+		inputs := make([]RuntimeToken, len(dispatch.ConsumedTokens))
+		for index, consumed := range dispatch.ConsumedTokens {
+			inputs[index] = factorytoken.FromWorker(consumed)
+		}
 		return artifactDispatchFacts{
 			transitionID:    dispatch.TransitionID,
 			workstationName: dispatch.WorkstationName,
-			inputs:          append([]workers.Token(nil), dispatch.ConsumedTokens...),
+			inputs:          inputs,
 			templateContext: cloneExpectedArtifactTemplateContext(dispatch.ExpectedArtifactContext),
 		}, true
 	}
 	return artifactDispatchFacts{}, false
 }
 
-func completedArtifactDispatch(token *workers.Token, dispatches []CompletedDispatch, results []workers.WorkResult) (artifactDispatchFacts, bool) {
+func completedArtifactDispatch(token *RuntimeToken, dispatches []CompletedDispatch, results []workers.WorkResult) (artifactDispatchFacts, bool) {
 	for index := len(dispatches) - 1; index >= 0; index-- {
 		dispatch := dispatches[index]
 		if !dispatchContainsWork(dispatch.ConsumedTokens, token.Color.WorkID) {
 			continue
 		}
+		inputs := make([]RuntimeToken, len(dispatch.ConsumedTokens))
+		for index, consumed := range dispatch.ConsumedTokens {
+			inputs[index] = factorytoken.FromWorker(consumed)
+		}
 		return artifactDispatchFacts{
 			transitionID:    dispatch.TransitionID,
 			workstationName: dispatch.WorkstationName,
-			inputs:          append([]workers.Token(nil), dispatch.ConsumedTokens...),
+			inputs:          inputs,
 			observation:     artifactObservation(dispatch, results),
 			templateContext: cloneExpectedArtifactTemplateContext(dispatch.ExpectedArtifactContext),
 		}, true
@@ -598,9 +607,9 @@ func transitionConsumesPlace(arcs []PetriArc, placeID string) bool {
 	return false
 }
 
-func expectedArtifactInputs(tokens []workers.Token, fallback *workers.Token) []work.ExpectedArtifactInput {
+func expectedArtifactInputs(tokens []RuntimeToken, fallback *RuntimeToken) []work.ExpectedArtifactInput {
 	if len(tokens) == 0 && fallback != nil {
-		tokens = []workers.Token{*fallback}
+		tokens = []RuntimeToken{*fallback}
 	}
 	inputs := make([]work.ExpectedArtifactInput, 0, len(tokens))
 	for _, token := range tokens {
@@ -609,7 +618,7 @@ func expectedArtifactInputs(tokens []workers.Token, fallback *workers.Token) []w
 	return inputs
 }
 
-func expectedArtifactInput(token workers.Token) work.ExpectedArtifactInput {
+func expectedArtifactInput(token RuntimeToken) work.ExpectedArtifactInput {
 	return work.ExpectedArtifactInput{
 		Name:       firstNonEmpty(token.Color.Name, token.Color.WorkID, token.ID),
 		WorkID:     token.Color.WorkID,

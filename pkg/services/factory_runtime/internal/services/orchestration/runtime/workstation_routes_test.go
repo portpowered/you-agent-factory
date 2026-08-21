@@ -464,7 +464,11 @@ func TestOrderedRuntimeWorkDispatchTokensUsesAuthoredInputAndResourceOrder(t *te
 	t.Parallel()
 
 	token := func(id, place string) workers.Token {
-		return workers.Token{ID: id, PlaceID: place}
+		prefix, stateName := place, ""
+		if index := strings.LastIndexByte(place, ':'); index >= 0 {
+			prefix, stateName = place[:index], place[index+1:]
+		}
+		return workers.Token{ID: id, State: stateName, Color: workers.Color{WorkTypeID: prefix}}
 	}
 	dispatch := work.WorkDispatch{InputTokens: workers.InputTokens(
 		token("unmatched", "other:state"),
@@ -584,10 +588,15 @@ func TestWorkInputsFromDispatchFiltersResourcesAndBuildsAttemptFacts(t *testing.
 	}}
 	dispatch := work.WorkDispatch{
 		TransitionID: "transition-inputs",
+		InputBindings: map[string][]string{
+			"primary":   {"legacy"},
+			"secondary": {"content"},
+		},
 		InputTokens: workers.InputTokens(
-			workers.Token{ID: "resource", Color: workers.Color{DataType: workers.DataTypeResource}},
+			workers.Token{ID: "resource", State: "ready", Color: workers.Color{DataType: workers.DataTypeResource}},
 			workers.Token{
-				ID: "legacy",
+				ID:    "legacy",
+				State: "init",
 				Color: workers.Color{
 					DataType:            workers.DataTypeWork,
 					WorkID:              "work-legacy",
@@ -603,7 +612,8 @@ func TestWorkInputsFromDispatchFiltersResourcesAndBuildsAttemptFacts(t *testing.
 				},
 			},
 			workers.Token{
-				ID: "content",
+				ID:    "content",
+				State: "review",
 				Color: workers.Color{
 					Name:       "content display name",
 					DataType:   workers.DataTypeWork,
@@ -628,10 +638,12 @@ func TestWorkInputsFromDispatchFiltersResourcesAndBuildsAttemptFacts(t *testing.
 	}
 	if inputs[0].WorkID != "work-legacy" || inputs[0].Content[0].Text != "legacy payload" ||
 		inputs[0].AttemptFacts.AttemptNumber != 3 || inputs[0].AttemptFacts.LastFailure != "last failure" ||
-		inputs[0].Tags["source"] != "legacy" {
+		inputs[0].Tags["source"] != "legacy" || inputs[0].Kind != string(workers.DataTypeWork) ||
+		inputs[0].State != "init" || len(inputs[0].InputNames) != 1 || inputs[0].InputNames[0] != "primary" {
 		t.Fatalf("legacy input = %#v, want payload fallback and attempt facts", inputs[0])
 	}
-	if inputs[1].WorkID != "work-content" || inputs[1].Name != "content display name" || inputs[1].Content[0].Text != "content body" || inputs[1].AttemptFacts.AttemptNumber != 5 {
+	if inputs[1].WorkID != "work-content" || inputs[1].Name != "content display name" || inputs[1].Content[0].Text != "content body" || inputs[1].AttemptFacts.AttemptNumber != 5 ||
+		inputs[1].State != "review" || len(inputs[1].InputNames) != 1 || inputs[1].InputNames[0] != "secondary" {
 		t.Fatalf("content input = %#v, want name, content, and attempt facts", inputs[1])
 	}
 }

@@ -253,8 +253,6 @@ func operatorMoveResultSchema() map[string]any {
 		"WorkTypeID":  stringProperty("Configured work type name for the moved item."),
 		"FromState":   stringProperty("State name before the move."),
 		"ToState":     stringProperty("State name after the move."),
-		"FromPlaceID": stringProperty("Internal place identifier before the move."),
-		"ToPlaceID":   stringProperty("Internal place identifier after the move."),
 		"TokenID":     stringProperty("Internal token identifier for the moved work item."),
 	})
 }

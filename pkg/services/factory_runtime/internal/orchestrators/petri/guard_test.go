@@ -6,6 +6,7 @@ import (
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorytoken "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/token"
 	"github.com/portpowered/infinite-you/pkg/services/work"
+	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
 func TestMatchColorGuard_PositiveMatch(t *testing.T) {
@@ -667,7 +668,7 @@ func TestAllWithParentGuard_UsesActiveDispatchAsProcessingChild(t *testing.T) {
 	matched, ok := guard.EvaluateRuntime(
 		RuntimeGuardContext{
 			ActiveDispatches: map[string]*interfaces.DispatchEntry{
-				"dispatch-child": {ConsumedTokens: []factorytoken.Token{processing}},
+				"dispatch-child": {ConsumedTokens: []workerexecution.Token{factorytoken.ToWorker(processing)}},
 			},
 			ParentChildRegistrations: ParentChildRegistrationProjection{
 				"parent-1": {Children: []factorytoken.Token{terminal, processing}, Complete: true},
@@ -871,7 +872,7 @@ func TestParentChildTokenHelpersFilterAndDeduplicateRuntimeFacts(t *testing.T) {
 		}},
 		map[string]*interfaces.DispatchEntry{
 			"nil-dispatch":      nil,
-			"matching-dispatch": {ConsumedTokens: []factorytoken.Token{valid}},
+			"matching-dispatch": {ConsumedTokens: []workerexecution.Token{factorytoken.ToWorker(valid)}},
 		},
 		"parent-1",
 		"child",

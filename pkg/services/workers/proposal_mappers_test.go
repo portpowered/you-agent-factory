@@ -18,7 +18,6 @@ func TestProposedOutputFromLegacyWorkResultDropsCanonicalIDs(t *testing.T) {
 			WorkTypeID:  "review",
 			DisplayName: "review-1",
 			State:       "init",
-			PlaceID:     "review:init",
 			Content: []work.WorkContentPart{{
 				Type: work.WorkContentPartTypeText,
 				Text: "review body",

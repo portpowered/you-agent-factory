@@ -3,6 +3,7 @@ package workers
 import (
 	"context"
 	"errors"
+	"sort"
 	"time"
 
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
@@ -258,12 +259,59 @@ func publishCompleteCommandOutput(observer OutputChunkObserver, stdout, stderr [
 func SubprocessRequestBase(dispatch work.WorkDispatch) CommandRequest {
 	cloned := work.CloneWorkDispatch(dispatch)
 	return CommandRequest{
-		DispatchID: cloned.DispatchID, TransitionID: cloned.TransitionID,
+		DispatchID: cloned.DispatchID,
 		WorkerType: cloned.WorkerType, WorkstationName: cloned.WorkstationName,
 		ProjectID: cloned.ProjectID, CurrentChainingTraceID: cloned.CurrentChainingTraceID,
 		PreviousChainingTraceIDs: cloned.PreviousChainingTraceIDs,
-		Execution:                cloned.Execution, InputBindings: cloned.InputBindings,
+		Execution:                cloned.Execution,
+		Inputs:                   workInputsFromDispatch(cloned),
 	}
+}
+
+func workInputsFromDispatch(dispatch work.WorkDispatch) []WorkInput {
+	tokens := WorkDispatchInputTokens(dispatch)
+	if len(tokens) == 0 {
+		return nil
+	}
+
+	namesByTokenID := make(map[string][]string)
+	for name, tokenIDs := range dispatch.InputBindings {
+		for _, tokenID := range tokenIDs {
+			namesByTokenID[tokenID] = append(namesByTokenID[tokenID], name)
+		}
+	}
+	for tokenID := range namesByTokenID {
+		sort.Strings(namesByTokenID[tokenID])
+	}
+
+	inputs := make([]WorkInput, 0, len(tokens))
+	for _, token := range tokens {
+		input := WorkInput{
+			Kind:       string(token.Color.DataType),
+			State:      token.State,
+			InputNames: append([]string(nil), namesByTokenID[token.ID]...),
+			WorkID:     token.Color.WorkID,
+			Name:       token.Color.Name,
+			WorkTypeID: token.Color.WorkTypeID,
+			RequestID:  token.Color.RequestID,
+			Content:    work.CloneWorkContentParts(token.Color.Content),
+			Tags:       cloneStringMap(token.Color.Tags),
+			Relations:  append([]work.Relation(nil), token.Color.Relations...),
+			Lineage: WorkLineage{
+				ParentWorkID: token.Color.ParentID,
+				TraceID:      token.Color.TraceID,
+				OriginRef:    token.Color.Name,
+			},
+		}
+		if len(input.Content) == 0 && len(token.Color.Payload) > 0 {
+			input.Content = []work.WorkContentPart{{
+				Type: work.WorkContentPartTypeText,
+				Text: string(token.Color.Payload),
+			}}
+		}
+		inputs = append(inputs, input)
+	}
+	return inputs
 }
 
 func CommandRunnerWithLogging(runner CommandRunner, logger logging.Logger, clock Clock) CommandRunner {

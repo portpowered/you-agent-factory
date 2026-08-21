@@ -66,9 +66,9 @@ func TestRequestClonesNormalizeEmptyInputTokensToNil(t *testing.T) {
 		t.Fatalf("provider input tokens = %#v, want nil", got)
 	}
 	if got := workerexecution.CloneSubprocessExecutionRequest(workerexecution.SubprocessExecutionRequest{
-		InputTokens: []any{},
-	}).InputTokens; got != nil {
-		t.Fatalf("subprocess input tokens = %#v, want nil", got)
+		Inputs: []workerexecution.WorkInput{},
+	}).Inputs; got != nil {
+		t.Fatalf("subprocess inputs = %#v, want nil", got)
 	}
 }
 

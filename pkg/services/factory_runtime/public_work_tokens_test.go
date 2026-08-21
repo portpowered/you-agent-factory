@@ -6,6 +6,7 @@ import (
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
 func TestCollectPublicWorkTokens_MarkingOnlyUnchanged(t *testing.T) {
@@ -39,7 +40,7 @@ func TestCollectPublicWorkTokens_DispatchOnlyVisible(t *testing.T) {
 	dispatches := map[string]*interfaces.DispatchEntry{
 		"dispatch-1": {
 			DispatchID:     "dispatch-1",
-			ConsumedTokens: []factoryruntime.RuntimeToken{dispatchToken},
+			ConsumedTokens: workerDispatchTokens(dispatchToken),
 		},
 	}
 
@@ -71,7 +72,7 @@ func TestCollectPublicWorkTokens_MarkingWinsOnWorkIDDedupe(t *testing.T) {
 		},
 	}
 	dispatches := map[string]*interfaces.DispatchEntry{
-		"dispatch-1": {ConsumedTokens: []factoryruntime.RuntimeToken{dispatchToken}},
+		"dispatch-1": {ConsumedTokens: workerDispatchTokens(dispatchToken)},
 	}
 
 	got := factoryruntime.CollectPublicWorkTokens(map[string]*factoryruntime.RuntimeToken{
@@ -111,15 +112,15 @@ func TestCollectPublicWorkTokens_ExcludesResourceAndSystemTime(t *testing.T) {
 	}
 	dispatches := map[string]*interfaces.DispatchEntry{
 		"dispatch-1": {
-			ConsumedTokens: []factoryruntime.RuntimeToken{
-				{
+			ConsumedTokens: workerDispatchTokens(
+				factoryruntime.RuntimeToken{
 					ID: "tok-dispatch-resource",
 					Color: factoryruntime.RuntimeTokenColor{
 						DataType: factoryruntime.RuntimeTokenDataTypeResource,
 						WorkID:   "resource-dispatch",
 					},
 				},
-				{
+				factoryruntime.RuntimeToken{
 					ID: "tok-dispatch-system",
 					Color: factoryruntime.RuntimeTokenColor{
 						DataType:   factoryruntime.RuntimeTokenDataTypeWork,
@@ -127,7 +128,7 @@ func TestCollectPublicWorkTokens_ExcludesResourceAndSystemTime(t *testing.T) {
 						WorkID:     "system-dispatch",
 					},
 				},
-				{
+				factoryruntime.RuntimeToken{
 					ID:      "tok-dispatch-work",
 					PlaceID: "task:processing",
 					Color: factoryruntime.RuntimeTokenColor{
@@ -136,7 +137,7 @@ func TestCollectPublicWorkTokens_ExcludesResourceAndSystemTime(t *testing.T) {
 						WorkTypeID: "task",
 					},
 				},
-			},
+			),
 		},
 	}
 
@@ -145,6 +146,24 @@ func TestCollectPublicWorkTokens_ExcludesResourceAndSystemTime(t *testing.T) {
 	if _, ok := got.InFlightOnlyByID["tok-dispatch-work"]; !ok {
 		t.Fatalf("InFlightOnlyByID = %#v, want tok-dispatch-work", got.InFlightOnlyByID)
 	}
+}
+
+func workerDispatchTokens(values ...factoryruntime.RuntimeToken) []workerexecution.Token {
+	if len(values) == 0 {
+		return nil
+	}
+	projected := make([]workerexecution.Token, len(values))
+	for index, value := range values {
+		stateName := value.PlaceID
+		for separator := len(stateName) - 1; separator >= 0; separator-- {
+			if stateName[separator] == ':' {
+				stateName = stateName[separator+1:]
+				break
+			}
+		}
+		projected[index] = workerexecution.Token{ID: value.ID, State: stateName, Color: value.Color, CreatedAt: value.CreatedAt, EnteredAt: value.EnteredAt, History: value.History}
+	}
+	return projected
 }
 
 func TestIsPublicWorkToken(t *testing.T) {

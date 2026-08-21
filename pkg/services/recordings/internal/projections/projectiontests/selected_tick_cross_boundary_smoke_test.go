@@ -255,9 +255,9 @@ func assertTimeEqual(t *testing.T, label string, got, want time.Time) {
 }
 
 func crossBoundarySelectedTickEvents(t0 time.Time) []generated.FactoryEvent {
-	pending := work.FactoryWorkItem{ID: "work-runtime-pending", WorkTypeID: "task", DisplayName: "Pending Runtime Story", TraceID: "trace-runtime-pending", PlaceID: "task:init"}
-	completed := work.FactoryWorkItem{ID: "work-runtime-completed", WorkTypeID: "task", DisplayName: "Completed Runtime Story", TraceID: "trace-runtime-completed", PlaceID: "task:init"}
-	failed := work.FactoryWorkItem{ID: "work-runtime-failed", WorkTypeID: "task", DisplayName: "Failed Runtime Story", TraceID: "trace-runtime-failed", PlaceID: "task:init"}
+	pending := work.FactoryWorkItem{ID: "work-runtime-pending", WorkTypeID: "task", DisplayName: "Pending Runtime Story", TraceID: "trace-runtime-pending", State: "init"}
+	completed := work.FactoryWorkItem{ID: "work-runtime-completed", WorkTypeID: "task", DisplayName: "Completed Runtime Story", TraceID: "trace-runtime-completed", State: "init"}
+	failed := work.FactoryWorkItem{ID: "work-runtime-failed", WorkTypeID: "task", DisplayName: "Failed Runtime Story", TraceID: "trace-runtime-failed", State: "init"}
 
 	return []generated.FactoryEvent{
 		crossBoundaryInitialStructureEvent(t0),

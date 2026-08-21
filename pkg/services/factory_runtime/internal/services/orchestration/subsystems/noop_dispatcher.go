@@ -114,7 +114,7 @@ func (d *NoOpDispatcherSubsystem) Execute(ctx context.Context, snapshot *interfa
 			CurrentChainingTraceID:   factorytoken.CurrentChainingTraceID(inputTokens, interfaces.SystemTimeWorkTypeID),
 			PreviousChainingTraceIDs: factorytoken.PreviousChainingTraceIDs(inputTokens),
 			Execution:                execution,
-			InputTokens:              workers.InputTokens(inputTokens...),
+			InputTokens:              workers.InputTokens(factorytoken.ToWorkerSlice(inputTokens)...),
 		}
 		dispatchRecords = append(dispatchRecords, interfaces.DispatchRecord{
 			Dispatch:  dispatch,

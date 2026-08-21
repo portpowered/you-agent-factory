@@ -1,6 +1,7 @@
 package state_test
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime"
@@ -13,10 +14,10 @@ import (
 func TestWorkArtifactProjection_UsesActiveDispatchAndRecordedContext(t *testing.T) {
 	t.Parallel()
 
-	token := workerexecution.Token{
+	token := factory.RuntimeToken{
 		ID:      "token-1",
 		PlaceID: "story:init",
-		Color: workerexecution.Color{
+		Color: factory.RuntimeTokenColor{
 			Name:       "review request",
 			WorkID:     "work-1",
 			WorkTypeID: "story",
@@ -45,7 +46,7 @@ func TestWorkArtifactProjection_UsesActiveDispatchAndRecordedContext(t *testing.
 			ExpectedArtifactContext: &work.ExpectedArtifactTemplateContext{
 				Project: "project-7", SessionID: "session-9",
 			},
-			ConsumedTokens: []workerexecution.Token{token},
+			ConsumedTokens: []workerexecution.Token{workerToken(token)},
 		},
 	}
 
@@ -67,7 +68,7 @@ func TestWorkArtifactProjection_UsesActiveDispatchAndRecordedContext(t *testing.
 func TestWorkArtifactProjection_UsesCompletedVerificationAndResultFallbacks(t *testing.T) {
 	t.Parallel()
 
-	token := workerexecution.Token{ID: "token-1", PlaceID: "story:init", Color: workerexecution.Color{
+	token := factory.RuntimeToken{ID: "token-1", PlaceID: "story:init", Color: factory.RuntimeTokenColor{
 		Name: "story", WorkID: "work-1", WorkTypeID: "story", DataType: workerexecution.DataTypeWork,
 	}}
 	net := &runtimestate.Net{
@@ -82,7 +83,7 @@ func TestWorkArtifactProjection_UsesCompletedVerificationAndResultFallbacks(t *t
 	failed := (factory.WorkArtifactProjection{}).Project(factory.WorkArtifactProjectionInput{
 		Token: tokenPointer(token), Topology: net,
 		DispatchHistory: []factory.CompletedDispatch{{
-			DispatchID: "dispatch-1", TransitionID: "review", WorkstationName: "review", ConsumedTokens: []workerexecution.Token{token},
+			DispatchID: "dispatch-1", TransitionID: "review", WorkstationName: "review", ConsumedTokens: []workerexecution.Token{workerToken(token)},
 			ExpectedArtifactContext: &work.ExpectedArtifactTemplateContext{Project: "project-7", SessionID: "session-9"},
 		}},
 		Results: []workerexecution.WorkResult{{
@@ -99,7 +100,7 @@ func TestWorkArtifactProjection_UsesCompletedVerificationAndResultFallbacks(t *t
 	accepted := (factory.WorkArtifactProjection{}).Project(factory.WorkArtifactProjectionInput{
 		Token: tokenPointer(token), Topology: net,
 		DispatchHistory: []factory.CompletedDispatch{{
-			DispatchID: "dispatch-accepted", TransitionID: "review", ConsumedTokens: []workerexecution.Token{token}, Outcome: workerexecution.OutcomeAccepted,
+			DispatchID: "dispatch-accepted", TransitionID: "review", ConsumedTokens: []workerexecution.Token{workerToken(token)}, Outcome: workerexecution.OutcomeAccepted,
 		}},
 	})
 	if len(accepted) != 2 || accepted[0].Verification != work.ExpectedArtifactVerificationSatisfied || accepted[1].Verification != work.ExpectedArtifactVerificationSatisfied {
@@ -109,7 +110,7 @@ func TestWorkArtifactProjection_UsesCompletedVerificationAndResultFallbacks(t *t
 	pending := (factory.WorkArtifactProjection{}).Project(factory.WorkArtifactProjectionInput{
 		Token: tokenPointer(token), Topology: net,
 		DispatchHistory: []factory.CompletedDispatch{{
-			DispatchID: "dispatch-failed", TransitionID: "review", ConsumedTokens: []workerexecution.Token{token}, Outcome: workerexecution.OutcomeFailed,
+			DispatchID: "dispatch-failed", TransitionID: "review", ConsumedTokens: []workerexecution.Token{workerToken(token)}, Outcome: workerexecution.OutcomeFailed,
 		}},
 	})
 	if len(pending) != 2 || pending[0].Verification != work.ExpectedArtifactVerificationPending || pending[1].Verification != work.ExpectedArtifactVerificationPending {
@@ -124,7 +125,7 @@ func TestWorkArtifactProjection_FallsBackToPlaceTopologyAndHandlesEmptyInput(t *
 	if got != nil {
 		t.Fatalf("nil token projection = %#v, want nil", got)
 	}
-	token := workerexecution.Token{ID: "token-1", PlaceID: "story:init", Color: workerexecution.Color{
+	token := factory.RuntimeToken{ID: "token-1", PlaceID: "story:init", Color: factory.RuntimeTokenColor{
 		WorkID: "work-1", WorkTypeID: "story", DataType: workerexecution.DataTypeWork,
 	}}
 	net := &runtimestate.Net{
@@ -143,6 +144,14 @@ func TestWorkArtifactProjection_FallsBackToPlaceTopologyAndHandlesEmptyInput(t *
 	}
 }
 
-func tokenPointer(token workerexecution.Token) *workerexecution.Token {
+func tokenPointer(token factory.RuntimeToken) *factory.RuntimeToken {
 	return &token
+}
+
+func workerToken(token factory.RuntimeToken) workerexecution.Token {
+	state := token.PlaceID
+	if index := strings.LastIndexByte(state, ':'); index >= 0 {
+		state = state[index+1:]
+	}
+	return workerexecution.Token{ID: token.ID, State: state, Color: token.Color}
 }

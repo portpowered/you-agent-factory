@@ -409,7 +409,6 @@ func TestClassifyFailedInvocation_MatchesFailedWorkByRequestStateChange(t *testi
 		WorkID:       failedChild.ID,
 		WorkTypeName: failedChild.WorkTypeID,
 		ToState:      "failed",
-		ToPlaceID:    failedChild.PlaceID,
 		RequestID:    "request-1",
 	}}
 	state.FailedWorkItemsByID[failedChild.ID] = failedChild
@@ -565,7 +564,6 @@ func invocationWorkItem(workID, workTypeName, stateName, name, placeID string) w
 		State:       stateName,
 		DisplayName: name,
 		TraceID:     workID + "-trace",
-		PlaceID:     placeID,
 		Content: []work.WorkContentPart{{
 			Type: work.WorkContentPartTypeText,
 			Text: workID + "-content",

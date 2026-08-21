@@ -440,13 +440,25 @@ func (h *FactoryEventHistory) RecordWorkStateChange(tick int, record work.WorkSt
 			WorkTypeName:  workTypeName,
 			FromState:     record.FromState,
 			ToState:       record.ToState,
-			FromPlaceID:   record.FromPlaceID,
-			ToPlaceID:     record.ToPlaceID,
+			FromPlaceID:   workStatePlaceID(record.WorkTypeID, record.FromState),
+			ToPlaceID:     workStatePlaceID(record.WorkTypeID, record.ToState),
 			Source:        record.Source,
 			TriggerWorkID: stringPtrIfNotEmpty(record.TriggerWorkID),
 			Reason:        stringPtrIfNotEmpty(record.Reason),
 		},
 	))
+}
+
+func workStatePlaceID(workTypeID, state string) string {
+	workTypeID = strings.TrimSpace(workTypeID)
+	state = strings.TrimSpace(state)
+	if workTypeID == "" {
+		return state
+	}
+	if state == "" {
+		return workTypeID
+	}
+	return workTypeID + ":" + state
 }
 
 // RecordFactoryStateChange records a runtime lifecycle transition.

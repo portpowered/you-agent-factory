@@ -289,8 +289,8 @@ func (r *factoryWorldReducer) applyWorkRequest(context interfaces.FactoryEventCo
 		if workItems[i].TraceID == "" {
 			workItems[i].TraceID = traceID
 		}
-		if workItems[i].PlaceID == "" {
-			workItems[i].PlaceID = r.initialPlaceForWorkType(workItems[i].WorkTypeID)
+		if workItems[i].State == "" {
+			workItems[i].State = stateFromPlaceID(r.initialPlaceForWorkType(workItems[i].WorkTypeID))
 		}
 	}
 	r.stateValue.WorkRequestsByID[requestID] = interfaces.WorkRequestPayload{
@@ -305,7 +305,7 @@ func (r *factoryWorldReducer) applyWorkRequest(context interfaces.FactoryEventCo
 		r.stateValue.PayloadLineage.RecordWorkRequestSnapshot(context.Tick, requestID, item)
 		r.stateValue.WorkItemsByID[item.ID] = item
 		r.stateValue.ActiveWorkItemsByID[item.ID] = item
-		r.addWorkToken(item.ID, item.PlaceID, item)
+		r.addWorkToken(item.ID, r.placeForWorkTypeState(item.WorkTypeID, item.State), item)
 		r.addTraceWork(item.TraceID, item.ID)
 	}
 	for _, relation := range r.factoryRelationsFromRequest(payload.Relations, context) {
@@ -648,13 +648,22 @@ func placeIDMatchesWorkType(placeID string, workTypeID string) bool {
 	return prefix == workTypeID
 }
 
+func stateFromPlaceID(placeID string) string {
+	trimmed := strings.TrimSpace(placeID)
+	if index := strings.LastIndexByte(trimmed, ':'); index >= 0 {
+		return trimmed[index+1:]
+	}
+	return trimmed
+}
+
 func (r *factoryWorldReducer) terminalWorkForCompletion(outcome workerexecution.WorkOutcome, workIDs []string) *interfaces.FactoryTerminalWork {
 	for _, workID := range sortedStrings(workIDs) {
 		item, ok := r.stateValue.WorkItemsByID[workID]
-		if !ok || item.PlaceID == "" {
+		placeID := r.workPlaces[workID]
+		if !ok || placeID == "" {
 			continue
 		}
-		category := r.placeCats[item.PlaceID]
+		category := r.placeCats[placeID]
 		if category == "TERMINAL" || category == "FAILED" ||
 			(outcome == workerexecution.OutcomeFailed && strings.TrimSpace(item.State) == "") {
 			return &interfaces.FactoryTerminalWork{WorkItem: item, Status: category}
@@ -903,9 +912,6 @@ func mergeFactoryWorkItem(existing work.FactoryWorkItem, incoming work.FactoryWo
 	}
 	if incoming.ParentID == "" {
 		incoming.ParentID = existing.ParentID
-	}
-	if incoming.PlaceID == "" {
-		incoming.PlaceID = existing.PlaceID
 	}
 	if incoming.Tags == nil {
 		incoming.Tags = cloneStringMap(existing.Tags)

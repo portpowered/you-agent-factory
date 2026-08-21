@@ -63,10 +63,11 @@ func (value *Color) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-// Token is the Worker-facing view of one runtime dispatch input.
+// Token is the Worker-facing view of one Work dispatch input. Runtime place
+// identifiers are translated into State before this value reaches Workers.
 type Token struct {
 	ID        string    `json:"id"`
-	PlaceID   string    `json:"place_id"`
+	State     string    `json:"state,omitempty"`
 	Color     Color     `json:"color"`
 	CreatedAt time.Time `json:"created_at"`
 	EnteredAt time.Time `json:"entered_at"`

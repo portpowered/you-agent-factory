@@ -8,11 +8,9 @@ import (
 	"runtime"
 	"strings"
 	"testing"
-	"time"
 
 	runtimefixtures "github.com/portpowered/infinite-you/internal/testutil/runtimefixtures"
 	workerconfig "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	workers "github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
@@ -213,19 +211,14 @@ func TestMockWorkerCommandRunner_SelectsByWorkerWorkstationAndInput(t *testing.T
 	result, err := runner.Run(context.Background(), workers.CommandRequest{
 		WorkerType:      "worker",
 		WorkstationName: "process",
-		InputBindings: map[string][]string{
-			"work": {"token-1"},
-		},
-		InputTokens: inputTokens(factoryruntime.RuntimeToken{
-			ID:      "token-1",
-			PlaceID: "task:init",
-			Color: factoryruntime.RuntimeTokenColor{
-				DataType:   factoryruntime.RuntimeTokenDataTypeWork,
-				WorkID:     "work-1",
-				WorkTypeID: "task",
-				TraceID:    "trace-1",
-			},
-		}),
+		Inputs: []workers.WorkInput{{
+			Kind:       string(workers.DataTypeWork),
+			State:      "init",
+			InputNames: []string{"work"},
+			WorkID:     "work-1",
+			WorkTypeID: "task",
+			Lineage:    workers.WorkLineage{TraceID: "trace-1"},
+		}},
 	})
 	if err != nil {
 		t.Fatalf("Run returned error: %v", err)
@@ -399,40 +392,19 @@ func TestRejectResultNilConfigDefaultsToExitCodeOne(t *testing.T) {
 	}
 }
 
-func TestCommandRequestInputTokensDecodesStructuredAndSkipsInvalid(t *testing.T) {
-	timestamp := time.Unix(1700000000, 0).UTC()
+func TestCommandRequestInputsProjectToMockInputTokens(t *testing.T) {
 	tokens := commandRequestInputTokens(workers.CommandRequest{
-		InputTokens: []any{
-			factoryruntime.RuntimeToken{
-				ID:      "token-direct",
-				PlaceID: "task:init",
-				Color: factoryruntime.RuntimeTokenColor{
-					DataType:   factoryruntime.RuntimeTokenDataTypeWork,
-					WorkID:     "work-1",
-					WorkTypeID: "task",
-				},
-			},
-			map[string]any{
-				"id":         "token-map",
-				"place_id":   "task:ready",
-				"created_at": timestamp.Format(time.RFC3339Nano),
-				"entered_at": timestamp.Format(time.RFC3339Nano),
-				"color": map[string]any{
-					"data_type":    string(factoryruntime.RuntimeTokenDataTypeWork),
-					"work_id":      "work-2",
-					"work_type_id": "task",
-				},
-				"history": map[string]any{},
-			},
-			make(chan int),
+		Inputs: []workers.WorkInput{
+			{Kind: string(workers.DataTypeWork), State: "init", WorkID: "work-1", WorkTypeID: "task"},
+			{Kind: string(workers.DataTypeWork), State: "ready", WorkID: "work-2", WorkTypeID: "task"},
 		},
 	})
 
 	if len(tokens) != 2 {
-		t.Fatalf("decoded token count = %d, want 2", len(tokens))
+		t.Fatalf("projected token count = %d, want 2", len(tokens))
 	}
-	if tokens[0].ID != "token-direct" || tokens[1].ID != "token-map" {
-		t.Fatalf("decoded tokens = %#v, want direct and JSON-decoded tokens", tokens)
+	if tokens[0].ID != "input-0" || tokens[0].State != "init" || tokens[1].State != "ready" {
+		t.Fatalf("projected tokens = %#v, want ordered state facts", tokens)
 	}
 }
 
@@ -448,22 +420,32 @@ func TestMockWorkInputSelectorMatchesSkipsResourcesAndChecksAllFields(t *testing
 		Channel:     "chat",
 		PayloadHash: "sha256:" + hex.EncodeToString(sum[:]),
 	}
-	tokens := []factoryruntime.RuntimeToken{
+	tokens := []mockInputToken{
 		{
-			ID:      "resource-1",
-			PlaceID: "resource:ready",
-			Color:   factoryruntime.RuntimeTokenColor{DataType: factoryruntime.RuntimeTokenDataTypeResource},
+			ID:    "resource-1",
+			State: "ready",
+			Color: struct {
+				WorkID     string            `json:"work_id"`
+				WorkTypeID string            `json:"work_type_id"`
+				DataType   string            `json:"data_type"`
+				TraceID    string            `json:"trace_id"`
+				Tags       map[string]string `json:"tags"`
+				Payload    []byte            `json:"payload"`
+			}{DataType: string(workers.DataTypeResource)},
 		},
 		{
-			ID:      "token-1",
-			PlaceID: "task:ready",
-			Color: factoryruntime.RuntimeTokenColor{
-				DataType:   factoryruntime.RuntimeTokenDataTypeWork,
-				WorkID:     "work-1",
-				WorkTypeID: "task",
-				TraceID:    "trace-1",
-				Tags:       map[string]string{"channel": "chat"},
-				Payload:    payload,
+			ID:    "token-1",
+			State: "ready",
+			Color: struct {
+				WorkID     string            `json:"work_id"`
+				WorkTypeID string            `json:"work_type_id"`
+				DataType   string            `json:"data_type"`
+				TraceID    string            `json:"trace_id"`
+				Tags       map[string]string `json:"tags"`
+				Payload    []byte            `json:"payload"`
+			}{
+				DataType: string(workers.DataTypeWork), WorkID: "work-1", WorkTypeID: "task",
+				TraceID: "trace-1", Tags: map[string]string{"channel": "chat"}, Payload: payload,
 			},
 		},
 	}
@@ -477,16 +459,18 @@ func TestMockWorkInputSelectorMatchesSkipsResourcesAndChecksAllFields(t *testing
 }
 
 func TestSelectorHelpersCoverMismatchBranches(t *testing.T) {
-	token := factoryruntime.RuntimeToken{
-		ID:      "token-1",
-		PlaceID: "task:ready",
-		Color: factoryruntime.RuntimeTokenColor{
-			DataType:   factoryruntime.RuntimeTokenDataTypeWork,
-			WorkID:     "work-1",
-			WorkTypeID: "task",
-			TraceID:    "trace-1",
-			Tags:       map[string]string{"channel": "chat"},
-			Payload:    []byte("payload"),
+	token := mockInputToken{
+		ID: "token-1", State: "ready",
+		Color: struct {
+			WorkID     string            `json:"work_id"`
+			WorkTypeID string            `json:"work_type_id"`
+			DataType   string            `json:"data_type"`
+			TraceID    string            `json:"trace_id"`
+			Tags       map[string]string `json:"tags"`
+			Payload    []byte            `json:"payload"`
+		}{
+			DataType: string(workers.DataTypeWork), WorkID: "work-1", WorkTypeID: "task",
+			TraceID: "trace-1", Tags: map[string]string{"channel": "chat"}, Payload: []byte("payload"),
 		},
 	}
 
@@ -523,8 +507,8 @@ func TestHelperFunctions(t *testing.T) {
 	if bindingContainsToken(map[string][]string{"work": {"other"}}, "work", "token-1") {
 		t.Fatal("bindingContainsToken matched missing token")
 	}
-	if tokenState(factoryruntime.RuntimeToken{PlaceID: "no-prefix", Color: factoryruntime.RuntimeTokenColor{WorkTypeID: "task"}}) != "" {
-		t.Fatal("tokenState returned non-empty state for unrelated place")
+	if tokenState(mockInputToken{State: ""}) != "" {
+		t.Fatal("tokenState returned non-empty state for empty state fact")
 	}
 	if payloadHash(nil) != "" {
 		t.Fatal("payloadHash returned non-empty hash for empty payload")
@@ -561,12 +545,4 @@ func (r *inspectingCommandRunner) Run(ctx context.Context, req workers.CommandRe
 	r.req = req
 	_, r.hasDeadline = ctx.Deadline()
 	return workers.CommandResult{}, nil
-}
-
-func inputTokens(tokens ...factoryruntime.RuntimeToken) []any {
-	out := make([]any, 0, len(tokens))
-	for _, token := range tokens {
-		out = append(out, token)
-	}
-	return out
 }

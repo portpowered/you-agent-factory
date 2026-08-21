@@ -150,7 +150,7 @@ func assertCurrentRestoredResourceTokens(
 	t *testing.T,
 	snapshot *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net],
 	placeID string,
-	expectedResources []*workerexecution.Token,
+	expectedResources []*factoryruntime.RuntimeToken,
 ) {
 	t.Helper()
 	wantIDs := []string{expectedResources[0].ID, expectedResources[1].ID}
@@ -162,7 +162,7 @@ func assertCurrentRestoredResourceTokens(
 func restoredWorkTokenFromSnapshot(
 	t *testing.T,
 	snapshot *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net],
-) *workerexecution.Token {
+) *factoryruntime.RuntimeToken {
 	t.Helper()
 	workTokenIDs := snapshot.Marking.PlaceTokens["task:done"]
 	if len(workTokenIDs) != 1 {
@@ -177,7 +177,7 @@ func restoredWorkTokenFromSnapshot(
 
 func assertRestoredWorkToken(
 	t *testing.T,
-	token *workerexecution.Token,
+	token *factoryruntime.RuntimeToken,
 	item work.FactoryWorkItem,
 ) {
 	t.Helper()
@@ -196,7 +196,7 @@ func assertRestoredWorkToken(
 	}
 }
 
-func assertRestoredWorkPayload(t *testing.T, token *workerexecution.Token, item work.FactoryWorkItem) {
+func assertRestoredWorkPayload(t *testing.T, token *factoryruntime.RuntimeToken, item work.FactoryWorkItem) {
 	t.Helper()
 	if !reflect.DeepEqual(token.Color.Content, item.Content) ||
 		!reflect.DeepEqual(token.Color.StructuredResult, item.StructuredResult) {
@@ -212,13 +212,13 @@ func restoredWorldStateFixture(base time.Time, resourcePlaceID string) *interfac
 				ID: "work-restored", WorkTypeID: "task", State: "done", DisplayName: "Restored work",
 				ChainingTraceDepth: 2, CurrentChainingTraceID: "chain-current",
 				PreviousChainingTraceIDs: []string{"chain-previous"}, TraceID: "trace-restored",
-				ParentID: "parent-restored", PlaceID: "task:done",
-				Content: []work.WorkContentPart{{Type: work.WorkContentPartTypeText, Text: "recorded content"}},
-				Tags:    map[string]string{"priority": "high"}, StructuredResult: map[string]any{"answer": "recorded"},
+				ParentID: "parent-restored",
+				Content:  []work.WorkContentPart{{Type: work.WorkContentPartTypeText, Text: "recorded content"}},
+				Tags:     map[string]string{"priority": "high"}, StructuredResult: map[string]any{"answer": "recorded"},
 			},
 			// This item is retained in the historical Work index but is not
 			// present in current occupancy; it must not become a live token.
-			"work-not-on-board": {ID: "work-not-on-board", WorkTypeID: "task", State: "init", PlaceID: "task:init"},
+			"work-not-on-board": {ID: "work-not-on-board", WorkTypeID: "task", State: "init"},
 		},
 		WorkRequestsByID: map[string]interfaces.WorkRequestPayload{
 			"request-restored": {RequestID: "request-restored", WorkItems: []work.FactoryWorkItem{{ID: "work-restored"}}},
