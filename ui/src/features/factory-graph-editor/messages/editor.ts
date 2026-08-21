@@ -612,8 +612,6 @@ function describeEnglishModelOperationContentType(
       return "Image";
     case "AUDIO":
       return "Audio";
-    case "VIDEO":
-      return "Video";
     case "JSON":
       return "JSON";
     case "BINARY":
@@ -1523,8 +1521,6 @@ const factoryGraphEditorMessagesByLocale: LocalizedMessageCatalog<FactoryGraphEd
             return "图像";
           case "AUDIO":
             return "音频";
-          case "VIDEO":
-            return "视频";
           case "JSON":
             return "JSON";
           case "BINARY":
