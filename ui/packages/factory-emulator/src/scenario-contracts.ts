@@ -89,6 +89,8 @@ export type FactoryEmulatorScenarioIssueCode =
   | "unsupported_schema_version"
   | "unstable_identity";
 
+export type FactoryEmulatorScenarioCompatibilityIssueCode = "unsupported_field";
+
 export interface FactoryEmulatorScenarioIssue {
   readonly category: "structure" | "semantic";
   readonly code: FactoryEmulatorScenarioIssueCode;
@@ -96,17 +98,32 @@ export interface FactoryEmulatorScenarioIssue {
   readonly message: string;
 }
 
+export function isFactoryEmulatorScenarioCompatibilityIssueCode(
+  code: FactoryEmulatorScenarioIssueCode,
+): code is FactoryEmulatorScenarioCompatibilityIssueCode {
+  return code === "unsupported_field";
+}
+
 export type SafeParseFactoryEmulatorScenarioResult =
-  | { readonly success: true; readonly data: FactoryEmulatorScenario }
+  | {
+      readonly success: true;
+      readonly data: FactoryEmulatorScenario;
+      readonly diagnostics: readonly FactoryEmulatorScenarioIssue[];
+    }
   | {
       readonly success: false;
       readonly issues: readonly FactoryEmulatorScenarioIssue[];
+      readonly diagnostics: readonly FactoryEmulatorScenarioIssue[];
     };
 
 export class FactoryEmulatorScenarioValidationError extends Error {
   readonly issues: readonly FactoryEmulatorScenarioIssue[];
+  readonly diagnostics: readonly FactoryEmulatorScenarioIssue[];
 
-  constructor(issues: readonly FactoryEmulatorScenarioIssue[]) {
+  constructor(
+    issues: readonly FactoryEmulatorScenarioIssue[],
+    diagnostics: readonly FactoryEmulatorScenarioIssue[] = [],
+  ) {
     super(
       issues.length === 1
         ? `Factory emulator scenario validation failed: ${issues[0]?.message}`
@@ -114,5 +131,6 @@ export class FactoryEmulatorScenarioValidationError extends Error {
     );
     this.name = "FactoryEmulatorScenarioValidationError";
     this.issues = issues;
+    this.diagnostics = diagnostics;
   }
 }

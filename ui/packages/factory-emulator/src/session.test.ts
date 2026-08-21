@@ -111,6 +111,40 @@ describe("Factory emulator session lifecycle", () => {
     }
     expect(writes).toBe(0);
   });
+
+  it("accepts additive execution metadata without executing it", async () => {
+    const writes: FactoryEvent[][] = [];
+    const futureScenario = {
+      ...scenario,
+      script: "throw new Error('must not execute')",
+      futureExecution: { provider: "new-runtime" },
+    } as FactoryEmulatorScenario;
+    const emulator = harness(
+      {
+        write: async (events) => {
+          writes.push(structuredClone(events) as FactoryEvent[]);
+        },
+      },
+      futureScenario,
+    );
+
+    await expect(emulator.start()).resolves.toMatchObject({
+      status: "started",
+      batches: [
+        expect.arrayContaining([
+          expect.objectContaining({ type: "RUN_REQUEST" }),
+          expect.objectContaining({ type: "INITIAL_STRUCTURE_REQUEST" }),
+          expect.objectContaining({ type: "SESSION_STARTED" }),
+        ]),
+      ],
+    });
+    expect(writes).toHaveLength(1);
+    expect(writes[0]?.map(({ type }) => type)).toEqual([
+      "RUN_REQUEST",
+      "INITIAL_STRUCTURE_REQUEST",
+      "SESSION_STARTED",
+    ]);
+  });
 });
 
 const executionFactory = {

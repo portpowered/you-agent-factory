@@ -100,6 +100,9 @@ export type FactoryVisualizationLayoutIssueCode =
   | "image_too_large"
   | "aggregate_image_bytes_exceeded";
 
+export type FactoryVisualizationLayoutCompatibilityIssueCode =
+  "unsupported_field";
+
 export interface FactoryVisualizationLayoutIssue {
   category: "structure" | "semantic";
   code: FactoryVisualizationLayoutIssueCode;
@@ -107,6 +110,20 @@ export interface FactoryVisualizationLayoutIssue {
   message: string;
 }
 
+export function isFactoryVisualizationLayoutCompatibilityIssueCode(
+  code: FactoryVisualizationLayoutIssueCode,
+): code is FactoryVisualizationLayoutCompatibilityIssueCode {
+  return code === "unsupported_field";
+}
+
 export type SafeParseFactoryVisualizationLayoutResult =
-  | { success: true; data: FactoryVisualizationLayoutV1 }
-  | { success: false; issues: readonly FactoryVisualizationLayoutIssue[] };
+  | {
+      success: true;
+      data: FactoryVisualizationLayoutV1;
+      diagnostics: readonly FactoryVisualizationLayoutIssue[];
+    }
+  | {
+      success: false;
+      issues: readonly FactoryVisualizationLayoutIssue[];
+      diagnostics: readonly FactoryVisualizationLayoutIssue[];
+    };

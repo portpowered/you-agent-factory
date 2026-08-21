@@ -51,9 +51,12 @@ image annotations plus text or image empty states keyed by canonical topology
 node ID. Empty-state references are checked against the canonical topology
 projected from the supplied Factory, and blank, unknown, or duplicate node IDs
 are rejected. `safeParseFactoryVisualizationLayout` returns stable issue codes
-and input paths instead of throwing. The contract contains data only: no
-callback, URL, link, HTML, Markdown, topology connection, route, event,
-persistence, or runtime-effect field is supported.
+and input paths instead of throwing; additive fields are retained in the
+detached data and returned as `diagnostics`, while blocking issues remain in
+`issues`. The contract contains data only: no callback, URL, link, HTML,
+Markdown, topology connection, route, event, persistence, or runtime-effect
+field is executable or supported. Such dedicated safety violations remain
+blocking even when the field is also reported as an additive-field diagnostic.
 
 Embedded sources accept only PNG, JPEG, or WebP signatures encoded as strict
 canonical padded base64. Alternative text is required, each decoded image is

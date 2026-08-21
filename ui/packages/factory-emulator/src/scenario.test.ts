@@ -51,6 +51,7 @@ function expectIssue(input: unknown, code: string, path?: readonly unknown[]) {
   );
 }
 
+// biome-ignore lint/complexity/noExcessiveLinesPerFunction: The contract suite keeps additive-field and schema-boundary scenarios together.
 describe("Factory emulator scenario contract", () => {
   it("publishes and parses the checked-in versioned example", () => {
     expect(scenarioSchema.$id).toContain("/ui/factory-emulator/scenario/v1");
@@ -87,6 +88,95 @@ describe("Factory emulator scenario contract", () => {
     });
   });
 
+  it("accepts additive fields at supported nesting levels with exact-path diagnostics", () => {
+    const sourceRule = structuredClone(exampleScenario.rules[0]);
+    const sourceOutcome = structuredClone(sourceRule.outcomes[0]);
+    const sourceSubmission = structuredClone(
+      exampleScenario.initialSubmissions[0],
+    );
+    if (!sourceOutcome || !sourceSubmission) {
+      throw new Error("Expected the example scenario to contain fixtures.");
+    }
+    const input = scenarioWith({
+      futureMetadata: { revision: 2 },
+      factory: {
+        ...structuredClone(exampleScenario.factory),
+        futureMetadata: true,
+      },
+      rules: [
+        {
+          ...sourceRule,
+          futureMetadata: true,
+          selector: {
+            ...sourceRule.selector,
+            futureMetadata: true,
+            input: {
+              ...sourceRule.selector.input,
+              futureMetadata: true,
+            },
+          },
+          cursor: { ...sourceRule.cursor, futureMetadata: true },
+          outcomes: [{ ...sourceOutcome, futureMetadata: true }],
+        },
+      ],
+      unmatched: { behavior: "error", futureMetadata: true },
+      initialSubmissions: [{ ...sourceSubmission, futureMetadata: true }],
+    });
+
+    const result = safeParseFactoryEmulatorScenario(input, factory);
+
+    expect(result).toMatchObject({
+      success: true,
+      data: {
+        factory: { name: "customer-support" },
+        rules: [{ selector: { input: { workType: "ticket" } } }],
+      },
+    });
+    if (result.success) {
+      expect(result.diagnostics).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            code: "unsupported_field",
+            path: ["futureMetadata"],
+          }),
+          expect.objectContaining({
+            code: "unsupported_field",
+            path: ["factory", "futureMetadata"],
+          }),
+          expect.objectContaining({
+            code: "unsupported_field",
+            path: ["rules", 0, "futureMetadata"],
+          }),
+          expect.objectContaining({
+            code: "unsupported_field",
+            path: ["rules", 0, "selector", "futureMetadata"],
+          }),
+          expect.objectContaining({
+            code: "unsupported_field",
+            path: ["rules", 0, "selector", "input", "futureMetadata"],
+          }),
+          expect.objectContaining({
+            code: "unsupported_field",
+            path: ["rules", 0, "cursor", "futureMetadata"],
+          }),
+          expect.objectContaining({
+            code: "unsupported_field",
+            path: ["rules", 0, "outcomes", 0, "futureMetadata"],
+          }),
+          expect.objectContaining({
+            code: "unsupported_field",
+            path: ["unmatched", "futureMetadata"],
+          }),
+          expect.objectContaining({
+            code: "unsupported_field",
+            path: ["initialSubmissions", 0, "futureMetadata"],
+          }),
+        ]),
+      );
+    }
+    expect(() => parseFactoryEmulatorScenario(input, factory)).not.toThrow();
+  });
+
   it("reports unsupported versions, unstable identities, and non-normalized UTC", () => {
     expectIssue(
       scenarioWith({ schemaVersion: "factory-emulator-scenario/v2" }),
@@ -106,6 +196,32 @@ describe("Factory emulator scenario contract", () => {
       "invalid_start_at",
       ["startAt"],
     );
+  });
+
+  it("keeps known type failures blocking while retaining additive diagnostics", () => {
+    const result = safeParseFactoryEmulatorScenario(
+      scenarioWith({
+        seed: 42,
+        futureMetadata: "private-value-not-in-diagnostic",
+      }),
+      factory,
+    );
+
+    expect(result).toMatchObject({ success: false });
+    if (!result.success) {
+      expect(result.issues).toContainEqual(
+        expect.objectContaining({ code: "invalid_type", path: ["seed"] }),
+      );
+      expect(result.diagnostics).toContainEqual(
+        expect.objectContaining({
+          code: "unsupported_field",
+          path: ["futureMetadata"],
+        }),
+      );
+      expect(result.diagnostics[0]?.message).not.toContain(
+        "private-value-not-in-diagnostic",
+      );
+    }
   });
 
   it("reports duplicate rule and initial-submission identities", () => {
@@ -265,7 +381,7 @@ describe("Factory emulator scenario boundaries", () => {
     );
   });
 
-  it("rejects prohibited executable fields at the contract boundary", () => {
+  it("ignores execution-like additive fields while diagnosing their paths", () => {
     for (const field of [
       "passthroughWorker",
       "providerDeltas",
@@ -274,9 +390,20 @@ describe("Factory emulator scenario boundaries", () => {
       "script",
       "spawnedWork",
     ]) {
-      expectIssue(scenarioWith({ [field]: true }), "unsupported_field", [
-        field,
-      ]);
+      const result = safeParseFactoryEmulatorScenario(
+        scenarioWith({ [field]: true }),
+        factory,
+      );
+      expect(result).toMatchObject({ success: true });
+      if (result.success) {
+        expect(result.diagnostics).toContainEqual(
+          expect.objectContaining({
+            code: "unsupported_field",
+            path: [field],
+          }),
+        );
+        expect(result.data.rules).toHaveLength(exampleScenario.rules.length);
+      }
     }
   });
 

@@ -51,11 +51,13 @@ export {
 } from "./visualization-layout.js";
 export {
   FACTORY_VISUALIZATION_LAYOUT_SCHEMA_VERSION,
+  isFactoryVisualizationLayoutCompatibilityIssueCode,
   type FactoryVisualizationAnnotation,
   type FactoryVisualizationEmbeddedImageSource,
   type FactoryVisualizationImageAnnotation,
   type FactoryVisualizationImageContent,
   type FactoryVisualizationLayoutIssue,
+  type FactoryVisualizationLayoutCompatibilityIssueCode,
   type FactoryVisualizationLayoutIssueCode,
   type FactoryVisualizationLayoutV1,
   type FactoryVisualizationNodeEmptyState,

@@ -202,6 +202,18 @@ describe("invalid Factory visualization node references", () => {
       expect(result.issues).toEqual(
         expect.arrayContaining([
           expect.objectContaining({
+            code: "unsafe_content_field",
+            path: ["nodeEmptyStates", 0, "content", "callback"],
+          }),
+          expect.objectContaining({
+            code: "unsafe_content_field",
+            path: ["nodeEmptyStates", 0, "content", "connection"],
+          }),
+        ]),
+      );
+      expect(result.diagnostics).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
             code: "unsupported_field",
             path: ["nodeEmptyStates", 0, "content", "altText"],
           }),
@@ -210,11 +222,11 @@ describe("invalid Factory visualization node references", () => {
             path: ["nodeEmptyStates", 0, "content", "source"],
           }),
           expect.objectContaining({
-            code: "unsafe_content_field",
+            code: "unsupported_field",
             path: ["nodeEmptyStates", 0, "content", "callback"],
           }),
           expect.objectContaining({
-            code: "unsafe_content_field",
+            code: "unsupported_field",
             path: ["nodeEmptyStates", 0, "content", "connection"],
           }),
         ]),
