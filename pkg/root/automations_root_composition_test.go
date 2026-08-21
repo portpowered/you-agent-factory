@@ -93,6 +93,15 @@ func TestCostsQueryFromProcessResolvesTypedCapability(t *testing.T) {
 	if query := CostsQueryFromProcess(nil); query != nil {
 		t.Fatalf("CostsQueryFromProcess(nil) = %#v, want nil", query)
 	}
+	withoutCosts, err := initializerapplication.NewProcessWithRuntimeCostsAndExecution(
+		nil, nil, rootWorkerProcessRegistry{}, rootWorkerProcessLifecycle{}, nil, nil, nil, nil, nil, nil,
+	)
+	if err != nil {
+		t.Fatalf("NewProcessWithRuntimeCostsAndExecution(without costs) error = %v", err)
+	}
+	if query := CostsQueryFromProcess(withoutCosts); query != nil {
+		t.Fatalf("CostsQueryFromProcess(without costs) = %#v, want nil", query)
+	}
 	want := costs.CostsQuery(func(context.Context, costs.QueryRequest) (costs.Report, error) {
 		return costs.Report{Status: costs.StatusNoUsage}, nil
 	})
