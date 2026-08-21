@@ -51,12 +51,15 @@ func run(cfg config, stdout, stderr io.Writer) error {
 	if err != nil {
 		return err
 	}
-	if err := validateOpenMoveLedgerSchema(repoRoot, moves); err != nil {
-		return fmt.Errorf("[agent-factory:package-target-manifest] %w", err)
-	}
 	findings, err := scanPackageTargetFindings(repoRoot, moves.Moves)
 	if err != nil {
 		return err
+	}
+	if err := validateOpenMoveLedgerSchema(repoRoot, moves); err != nil {
+		writePackageTargetObservationCounts(stderr, findings)
+		writePackageTargetTestOnlyObservations(stderr, findings)
+		writePackageTargetViolationCountsForFindings(stderr, packageTargetProductionRows(findings), findings)
+		return fmt.Errorf("[agent-factory:package-target-manifest] %w", err)
 	}
 	productionStale := packageTargetProductionStaleRows(moves.Moves, findings)
 	if len(productionStale) > 0 {

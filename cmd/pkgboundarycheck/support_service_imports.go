@@ -171,6 +171,15 @@ func partitionSupportServiceImportFindings(
 		if err != nil {
 			return nil, nil, err
 		}
+		if class != productionSourceClass {
+			return nil, nil, fmt.Errorf(
+				"reusable support service import baseline entry %s -> %s class = %q, want %q",
+				entry.FilePath,
+				entry.ImportPath,
+				class,
+				productionSourceClass,
+			)
+		}
 		key := supportServiceImportKey(entry.FilePath, entry.ImportPath, class)
 		if _, duplicate := baselineByKey[key]; duplicate {
 			return nil, nil, fmt.Errorf(
@@ -182,14 +191,20 @@ func partitionSupportServiceImportFindings(
 		baselineByKey[key] = entry
 	}
 
-	var blocking []supportServiceImportFinding
+	var visible []supportServiceImportFinding
 	seen := make(map[string]struct{}, len(findings))
 	for _, finding := range findings {
+		if effectiveBoundarySourceClass(finding.class, finding.filePath) != productionSourceClass {
+			// Test-only support imports remain visible to the report, but this
+			// general dependency baseline is production-only.
+			visible = append(visible, finding)
+			continue
+		}
 		key := supportServiceImportKey(finding.filePath, finding.importPath, finding.class)
 		seen[key] = struct{}{}
 		entry, recorded := baselineByKey[key]
 		if !recorded {
-			blocking = append(blocking, finding)
+			visible = append(visible, finding)
 			continue
 		}
 		if entry.Owner != finding.owner {
@@ -214,7 +229,7 @@ func partitionSupportServiceImportFindings(
 		}
 		return strings.Compare(left.ImportPath, right.ImportPath)
 	})
-	return blocking, stale, nil
+	return visible, stale, nil
 }
 
 func validateSupportServiceImportBaselineEntry(entry supportServiceImportBaselineEntry) error {
@@ -278,8 +293,9 @@ func createSupportServiceImportBaseline(cfg config) error {
 	if err != nil {
 		return err
 	}
+	findings = filterSupportServiceImportsByClass(findings, productionSourceClass)
 	if len(findings) == 0 {
-		return fmt.Errorf("refusing to create empty reusable support service import baseline: no migration debt exists")
+		return fmt.Errorf("refusing to create empty reusable support service import baseline: no production migration debt exists")
 	}
 	baseline := supportServiceImportBaseline{
 		Version: 1,

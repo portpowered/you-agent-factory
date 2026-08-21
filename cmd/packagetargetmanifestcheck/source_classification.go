@@ -133,6 +133,21 @@ func packageTargetProductionStaleRows(moves []PackageMapping, findings []package
 	return stale
 }
 
+func packageTargetProductionRows(findings []packageTargetFinding) []PackageMapping {
+	rows := make([]PackageMapping, 0, len(findings))
+	for _, finding := range findings {
+		if finding.Class != packageTargetProductionSourceClass {
+			continue
+		}
+		rows = append(rows, PackageMapping{
+			PackagePath: finding.PackagePath,
+			Destination: finding.Destination,
+			Successor:   finding.Successor,
+		})
+	}
+	return rows
+}
+
 func packageTargetRowKey(row PackageMapping) string {
 	return strings.Join([]string{row.PackagePath, row.Destination, row.Successor}, "\x00")
 }

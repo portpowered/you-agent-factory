@@ -220,18 +220,20 @@ func TestRunRejectsUnrecordedCrossOwnerTestServiceInternal(t *testing.T) {
 	)
 
 	stdout := &bytes.Buffer{}
-	err := run(config{root: repoRoot, packageRoot: defaultScanRoot}, stdout, &bytes.Buffer{})
-	if err != nil {
-		t.Fatalf("run() error = %v, want test-only service import to remain non-blocking", err)
+	stderr := &bytes.Buffer{}
+	err := run(config{root: repoRoot, packageRoot: defaultScanRoot}, stdout, stderr)
+	if err == nil {
+		t.Fatal("run() error = nil, want unrecorded test-only service import to remain blocking")
 	}
+	output := stdout.String() + stderr.String()
 	for _, want := range []string{
 		"prohibited test import of service internals",
 		"pkg/services/factory_sessions/internal/execution/runtimepersist",
 		"[class=test-only]",
 		"dependency violation counts: production=0 test-only=2",
 	} {
-		if !strings.Contains(stdout.String(), want) {
-			t.Fatalf("run() stdout = %q, want %q", stdout.String(), want)
+		if !strings.Contains(output, want) {
+			t.Fatalf("run() output = %q, want %q", output, want)
 		}
 	}
 }
@@ -293,10 +295,10 @@ func TestRunAllowsRecordedTestServiceInternalAndRejectsStaleEntry(t *testing.T) 
 		}
 		writeTestServiceImportBaseline(t, repoRoot, filePath, importPath, "factory_sessions")
 
-		stdout := &bytes.Buffer{}
-		err := run(config{root: repoRoot, packageRoot: defaultScanRoot}, stdout, &bytes.Buffer{})
-		if err != nil || !strings.Contains(stdout.String(), "stale test service import baseline entry") {
-			t.Fatalf("run() = %v stdout=%q, want visible non-blocking stale test baseline", err, stdout.String())
+		stderr := &bytes.Buffer{}
+		err := run(config{root: repoRoot, packageRoot: defaultScanRoot}, &bytes.Buffer{}, stderr)
+		if err == nil || !strings.Contains(stderr.String(), "stale test service import baseline entry") {
+			t.Fatalf("run() = %v stderr=%q, want blocking stale test baseline", err, stderr.String())
 		}
 	})
 }

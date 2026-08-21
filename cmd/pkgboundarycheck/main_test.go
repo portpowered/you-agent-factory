@@ -299,18 +299,21 @@ func directImplementation() { hostedsources.New() }
 `)
 
 	stdout := &bytes.Buffer{}
-	err := run(config{root: repoRoot, packageRoot: defaultScanRoot}, stdout, &bytes.Buffer{})
-	if err != nil {
-		t.Fatalf("run() error = %v, want test-only external-effect construction to remain non-blocking", err)
+	stderr := &bytes.Buffer{}
+	err := run(config{root: repoRoot, packageRoot: defaultScanRoot}, stdout, stderr)
+	if err == nil {
+		t.Fatal("run() error = nil, want the unrecorded dedicated test-service import to remain blocking")
 	}
+	output := stdout.String() + stderr.String()
 	for _, want := range []string{
 		"prohibited product-service construction: github.com/portpowered/infinite-you/pkg/services/automations/internal/services/hosted_sources.New",
+		"prohibited test import of service internals: github.com/portpowered/infinite-you/pkg/services/automations/internal/services/hosted_sources",
 		"[class=test-only]",
 		"dependency violation counts: production=0 test-only=2",
 		"construct the collaborator in pkg/wire and inject its service-root role",
 	} {
-		if got := stdout.String(); !strings.Contains(got, want) {
-			t.Fatalf("run() stdout = %q, want substring %q", got, want)
+		if !strings.Contains(output, want) {
+			t.Fatalf("run() output = %q, want substring %q", output, want)
 		}
 	}
 }

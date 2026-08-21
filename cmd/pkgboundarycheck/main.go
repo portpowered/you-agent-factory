@@ -676,7 +676,16 @@ func runWithPolicy(cfg config, policy boundaryPolicy, stdout io.Writer, stderr i
 }
 
 func countBlockingViolations(findings scanResult) int {
-	count := len(findings.rootPackageFindings) +
+	return countAlwaysBlockingViolations(findings) +
+		countProductionBoundaryViolations(findings) +
+		// Test-service imports are an intentional test-specific policy. They
+		// remain blocking even though their source class is test-only.
+		len(findings.testServiceImportFindings) +
+		len(findings.staleTestServiceBaselineEntries)
+}
+
+func countAlwaysBlockingViolations(findings scanResult) int {
+	return len(findings.rootPackageFindings) +
 		len(findings.retiredPackageRootFindings) +
 		len(findings.migrationShimFindings) +
 		len(findings.handwrittenGeneratedFindings) +
@@ -688,10 +697,20 @@ func countBlockingViolations(findings scanResult) int {
 		len(findings.productionDefaultFindings) +
 		len(findings.staleProductionDefaultEntries) +
 		len(findings.initializerBehaviorFindings) +
-		len(findings.staleInitializerBehaviorEntries)
-	count += len(findings.testBehaviorFindings) + len(findings.staleTestBehaviorEntries)
-	count += len(findings.petriPublicSurfaceFindings) + len(findings.stalePetriPublicSurfaceEntries)
-	count += len(findings.providerEffectOwnershipFindings)
+		len(findings.staleInitializerBehaviorEntries) +
+		len(findings.testBehaviorFindings) +
+		len(findings.staleTestBehaviorEntries) +
+		len(findings.petriPublicSurfaceFindings) +
+		len(findings.stalePetriPublicSurfaceEntries) +
+		len(findings.providerEffectOwnershipFindings)
+}
+
+func countProductionBoundaryViolations(findings scanResult) int {
+	return countProductionBoundaryImports(findings) + countProductionBoundaryBaselines(findings)
+}
+
+func countProductionBoundaryImports(findings scanResult) int {
+	count := 0
 	count += countProductionBoundaryFindings(
 		findings.retiredPackageImportFindings,
 		func(finding retiredPackageImportFinding) boundarySourceClass { return finding.class },
@@ -713,11 +732,6 @@ func countBlockingViolations(findings scanResult) int {
 		func(finding peerServiceImportFinding) string { return finding.filePath },
 	)
 	count += countProductionBoundaryFindings(
-		findings.testServiceImportFindings,
-		func(finding testServiceImportFinding) boundarySourceClass { return finding.class },
-		func(finding testServiceImportFinding) string { return finding.filePath },
-	)
-	count += countProductionBoundaryFindings(
 		findings.supportServiceImportFindings,
 		func(finding supportServiceImportFinding) boundarySourceClass { return finding.class },
 		func(finding supportServiceImportFinding) string { return finding.filePath },
@@ -737,6 +751,11 @@ func countBlockingViolations(findings scanResult) int {
 		func(finding transportServiceImplementationFinding) boundarySourceClass { return finding.class },
 		func(finding transportServiceImplementationFinding) string { return finding.filePath },
 	)
+	return count
+}
+
+func countProductionBoundaryBaselines(findings scanResult) int {
+	count := 0
 	count += countProductionBoundaryFindings(
 		findings.stalePeerServiceBaselineEntries,
 		func(entry peerServiceImportBaselineEntry) boundarySourceClass {
@@ -744,14 +763,6 @@ func countBlockingViolations(findings scanResult) int {
 			return class
 		},
 		func(entry peerServiceImportBaselineEntry) string { return entry.FilePath },
-	)
-	count += countProductionBoundaryFindings(
-		findings.staleTestServiceBaselineEntries,
-		func(entry testServiceImportBaselineEntry) boundarySourceClass {
-			class, _ := sourceClassFromBaseline(entry.Class, entry.FilePath)
-			return class
-		},
-		func(entry testServiceImportBaselineEntry) string { return entry.FilePath },
 	)
 	count += countProductionBoundaryFindings(
 		findings.staleSupportServiceBaselineEntries,

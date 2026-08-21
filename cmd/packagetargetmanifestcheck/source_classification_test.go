@@ -23,8 +23,9 @@ func TestRunClassifiesPackageTargetEdgesBySourceClass(t *testing.T) {
 		{
 			name:       "production-only",
 			production: true,
+			wantErr:    true,
 			counts:     "package-target observations: production=1 test-only=0",
-			violations: "dependency violation counts: production=0 test-only=0",
+			violations: "dependency violation counts: production=1 test-only=0",
 		},
 		{
 			name:       "test-only",
@@ -37,8 +38,9 @@ func TestRunClassifiesPackageTargetEdgesBySourceClass(t *testing.T) {
 			name:       "mixed",
 			production: true,
 			testOnly:   true,
+			wantErr:    true,
 			counts:     "package-target observations: production=1 test-only=1",
-			violations: "dependency violation counts: production=0 test-only=1",
+			violations: "dependency violation counts: production=1 test-only=1",
 		},
 	}
 
@@ -51,18 +53,32 @@ func TestRunClassifiesPackageTargetEdgesBySourceClass(t *testing.T) {
 				writeGoPackage(t, root, "pkg/services/work/edge", "package edge\n")
 			}
 			if test.testOnly {
-				writeGoPackage(t, root, "pkg/services/work/edge", "package edge_test\n", "edge_test.go")
+				writeGoPackage(t, root, "pkg/services/work/testedge", "package testedge_test\n", "testedge_test.go")
 			}
-			writeFixtureMoveLedger(t, root, []PackageMapping{{
-				PackagePath: "pkg/services/work/edge",
-				Destination: "work/internal",
-				Successor:   "pkg/services/work/internal",
-			}})
+			rows := make([]PackageMapping, 0, 2)
+			if test.production {
+				rows = append(rows, PackageMapping{
+					PackagePath: "pkg/services/work/edge",
+					Destination: "work/not-a-closed-destination",
+					Successor:   "pkg/services/work/not-a-closed-destination",
+				})
+			}
+			if test.testOnly {
+				rows = append(rows, PackageMapping{
+					PackagePath: "pkg/services/work/testedge",
+					Destination: "work/internal",
+					Successor:   "pkg/services/work/internal",
+				})
+			}
+			writeFixtureMoveLedger(t, root, rows)
 
 			var stdout, stderr bytes.Buffer
 			err := run(config{root: root}, &stdout, &stderr)
 			if (err != nil) != test.wantErr {
 				t.Fatalf("run() error = %v, wantErr=%t; stdout=%q stderr=%q", err, test.wantErr, stdout.String(), stderr.String())
+			}
+			if test.wantErr && (err == nil || !strings.Contains(err.Error(), "not-a-closed-destination")) {
+				t.Fatalf("run() error = %v, want the production migration gate to reject the closed-destination violation", err)
 			}
 			output := stdout.String() + stderr.String()
 			for _, want := range []string{test.counts, test.violations} {
