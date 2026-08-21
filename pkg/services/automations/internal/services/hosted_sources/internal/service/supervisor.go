@@ -8,9 +8,9 @@ import (
 	"sync"
 	"time"
 
-	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	hostedsources "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/hosted_sources"
 	hostedlinear "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/hosted_sources/internal/linear"
+	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"go.uber.org/zap"
 )
 
@@ -76,10 +76,13 @@ func (p *LinearPoller) supervise(ctx context.Context) {
 			return
 		}
 
-		backoff := restartBackoff(attempt)
+		backoff, delaySource := retryDelay(attempt, runErr)
 		logger.Warn("hosted linear poller restarting",
 			zap.Int("attempt", attempt),
+			zap.Int("consecutive_failures", attempt),
 			zap.Duration("backoff", backoff),
+			zap.Duration("selected_delay", backoff),
+			zap.String("delay_source", delaySource),
 			zap.Error(runErr),
 		)
 
@@ -110,6 +113,7 @@ func (p *LinearPoller) run(ctx context.Context, logger *zap.Logger) error {
 	pollerClient := hostedlinear.Client{
 		Endpoint:   p.linearEndpoint,
 		HTTPClient: p.httpClient,
+		Clock:      p.clock,
 		Logger:     logger,
 	}
 	checkpointPath := hostedlinear.CheckpointPath(p.runtimeConfig, p.workstation, p.worker)
@@ -164,6 +168,17 @@ func restartBackoff(attempt int) time.Duration {
 		}
 	}
 	return backoff
+}
+
+func retryDelay(attempt int, runErr error) (time.Duration, string) {
+	backoff := restartBackoff(attempt)
+	var rateLimitErr *hostedlinear.RateLimitError
+	if errors.As(runErr, &rateLimitErr) {
+		if providerDelay, ok := rateLimitErr.RetryDelay(); ok {
+			return providerDelay, "provider"
+		}
+	}
+	return backoff, "computed"
 }
 
 func stopReason(err error) string {
