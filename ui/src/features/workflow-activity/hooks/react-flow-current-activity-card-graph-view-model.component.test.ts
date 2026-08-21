@@ -164,9 +164,14 @@ function renderGraphViewModelWithLayout(
     editor?: Partial<
       Pick<
         Parameters<typeof useCurrentActivityGraphViewModel>[0]["editor"],
-        "activeTool" | "canInteractWithEditor" | "editorMode"
+        | "activeTool"
+        | "canInteractWithEditor"
+        | "editorMode"
+        | "expandedNodeIds"
+        | "nodeResizeControls"
       >
     >;
+    expandedNodeIds?: ReadonlySet<string>;
     renderedLayout?: FactoryLayout;
     selectedWaypointEdgeId?: string | null;
     snapshot?: DashboardSnapshot;
@@ -206,13 +211,19 @@ function renderGraphViewModelWithLayout(
     ({
       currentGraphLayout,
       currentSnapshot,
+      currentExpandedNodeIds,
     }: {
       currentGraphLayout: GraphLayout;
+      currentExpandedNodeIds?: ReadonlySet<string>;
       currentSnapshot?: DashboardSnapshot;
     }) =>
       useCurrentActivityGraphViewModel({
         editor: {
           ...editor,
+          expandedNodeIds:
+            currentExpandedNodeIds ??
+            options.expandedNodeIds ??
+            EMPTY_EXPANDED_NODE_IDS,
           graphProjection: {
             ...editor.graphProjection,
             graphLayout: currentGraphLayout,
@@ -232,12 +243,15 @@ function renderGraphViewModelWithLayout(
       }),
     {
       initialProps: {
+        currentExpandedNodeIds: options.expandedNodeIds,
         currentGraphLayout: graphLayout,
         currentSnapshot: snapshot,
       },
     },
   );
 }
+
+const EMPTY_EXPANDED_NODE_IDS = new Set<string>();
 
 function snapshotWithGraphOverlay(
   input: {
@@ -1576,6 +1590,54 @@ describe("current activity graph live node resize", () => {
 
     expect(nodeResizeControls(result, "workstation:review")).toBeUndefined();
     expect(result.current.nodes[0]?.width).toBe(220);
+  });
+});
+
+describe("current activity graph host-controlled resize", () => {
+  it("projects host-committed expansion for a non-workstation node", () => {
+    const placeNodeId = "place:story:queued";
+    const hostResizeController = {
+      enabled: true,
+      onResizeEnd: vi.fn(),
+    };
+    const { rerender, result } = renderGraphViewModelWithLayout(
+      semanticNodeResizeLayout(),
+      {
+        editor: { nodeResizeControls: hostResizeController },
+      },
+    );
+    const expanded = () =>
+      (
+        result.current.nodes.find((node) => node.id === placeNodeId)?.data as
+          | { expanded?: boolean }
+          | undefined
+      )?.expanded;
+
+    expect(expanded()).toBe(false);
+
+    act(() => {
+      nodeResizeControls(result, placeNodeId)?.onResizeEnd?.({
+        height: 220,
+        width: 240,
+      });
+    });
+
+    expect(hostResizeController.onResizeEnd).toHaveBeenCalledWith(
+      {
+        family: "work-state",
+        nodeId: placeNodeId,
+        position: { x: 120, y: 300 },
+      },
+      { height: 220, width: 240 },
+    );
+    expect(expanded()).toBe(false);
+
+    rerender({
+      currentExpandedNodeIds: new Set([placeNodeId]),
+      currentGraphLayout: semanticNodeResizeLayout(),
+    });
+
+    expect(expanded()).toBe(true);
   });
 });
 // Component lane: requires DOM APIs.

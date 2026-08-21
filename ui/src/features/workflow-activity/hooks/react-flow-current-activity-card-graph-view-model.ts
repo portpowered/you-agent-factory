@@ -55,6 +55,7 @@ const EMPTY_TRANSIENT_NODE_POSITIONS = new Map<
   { x: number; y: number }
 >();
 const EMPTY_RESIZE_DIMENSIONS = new Map<string, FactoryGraphNodeDimensions>();
+const EMPTY_EXPANDED_NODE_IDS = new Set<string>();
 
 export type CurrentActivityGraphRenderProjection = {
   canonicalLayoutViewport: { x: number; y: number; zoom: number } | null;
@@ -76,6 +77,7 @@ export type CurrentActivityGraphViewModelEditorInput = Omit<
     readonly { x: number; y: number }[]
   >;
   graphProjection: CurrentActivityGraphRenderProjection;
+  expandedNodeIds?: ReadonlySet<string>;
   handleConnectionAnchorClick: CurrentActivityEditorState["onConnectionAnchorClick"];
   selectedWaypointEdgeId?: string | null;
   validationTargets?: CurrentActivityEditorState["validationTargets"];
@@ -336,6 +338,7 @@ function useCurrentActivityGraphNodePresentation(
   graphSelection: FactoryGraphEditorSelectionController,
   dimensionsByNodeId: ReadonlyMap<string, FactoryGraphNodeDimensions>,
   liveDimensionsByNodeId: ReadonlyMap<string, FactoryGraphNodeDimensions>,
+  expandedNodeIds: ReadonlySet<string>,
   positionChangesEnabled: boolean,
 ) {
   const basePositionKey = useMemo(
@@ -442,13 +445,14 @@ function useCurrentActivityGraphNodePresentation(
         return projectCurrentActivityNodePresentation(
           node,
           presentation,
-          resizedDimensions !== undefined,
+          resizedDimensions !== undefined || expandedNodeIds.has(node.id),
         );
       }),
     [
       baseNodes,
       dimensionsByNodeId,
       graphSelection,
+      expandedNodeIds,
       liveDimensionsByNodeId,
       transientPositionsByNodeId,
     ],
@@ -703,6 +707,7 @@ export function useCurrentActivityGraphViewModel({
       graphSelection,
       nodeResizeState.dimensionsByNodeId,
       nodeResizeState.liveDimensionsByNodeId,
+      editor.expandedNodeIds ?? EMPTY_EXPANDED_NODE_IDS,
       editor.editorMode && editor.canInteractWithEditor,
     );
   const { handleEdgesChange } = useCurrentActivityGraphEdgePresentation(
