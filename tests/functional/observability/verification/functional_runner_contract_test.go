@@ -83,6 +83,34 @@ func TestFunctionalCoverageCommandSmoke_ReportsExplicitTierSelection(t *testing.
 	}
 }
 
+// TestFunctionalTestVizLaneScriptSmoke_ForwardsExplicitFunctionalJobs proves
+// the CI-only runner override reaches the canonical Make invocation and its
+// diagnostic without changing the wrapper's command ownership.
+func TestFunctionalTestVizLaneScriptSmoke_ForwardsExplicitFunctionalJobs(t *testing.T) {
+	repoRoot := testutil.MustRepoPath(t, ".")
+	makePath := writeExecutableScript(t, "fake-make-functional-jobs", `#!/bin/sh
+printf '%s\n' "fake-make:$* FUNCTIONAL_DEFAULT_JOBS=${FUNCTIONAL_DEFAULT_JOBS:-unset}"
+`)
+	artifactRoot := filepath.Join(t.TempDir(), "functional-test-viz-jobs-artifacts")
+
+	output, err := runScript(
+		repoRoot,
+		filepath.Join(repoRoot, "scripts", "ci", "run-functional-test-viz.sh"),
+		fmt.Sprintf("FUNCTIONAL_TEST_VIZ_DIR=%s", artifactRoot),
+		"FUNCTIONAL_DEFAULT_JOBS=4",
+		fmt.Sprintf("MAKE_BIN=%s", makePath),
+	)
+	if err != nil {
+		t.Fatalf("run functional test viz script with explicit jobs: %v\n%s", err, output)
+	}
+	if !strings.Contains(output, "quarantine=tests/functional/functional-quarantine.json jobs=4") {
+		t.Fatalf("functional runner diagnostic missing selected jobs:\n%s", output)
+	}
+	if !strings.Contains(output, "fake-make:functional-test-viz FUNCTIONAL_TEST_VIZ_DIR="+artifactRoot+" FUNCTIONAL_DEFAULT_JOBS=4") {
+		t.Fatalf("functional Make invocation did not receive the explicit jobs override:\n%s", output)
+	}
+}
+
 // TestFunctionalTestVizLaneScriptSmoke_TimesOutAndRetainsDiagnostics proves a
 // budget expiry fails the process while preserving output produced before the
 // interruption, including inventory and quarantine diagnostics.
