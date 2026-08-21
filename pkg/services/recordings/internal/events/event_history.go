@@ -533,6 +533,28 @@ func humanApprovalWorkstationID(
 // record before any event that depends on it (the Worker Session's own
 // opening or output records) can be observed.
 func (h *FactoryEventHistory) RecordDispatchWorkerSessionAssociation(tick int, dispatchID string, workerSessionID string, requestID string, eventTime time.Time) {
+	h.RecordDispatchWorkerSessionAssociationWithExecution(
+		tick,
+		dispatchID,
+		workerSessionID,
+		requestID,
+		recordings.DispatchWorkerSessionExecutionFacts{},
+		eventTime,
+	)
+}
+
+// RecordDispatchWorkerSessionAssociationWithExecution retains the resolved
+// execution facts alongside the internal association. The public Factory
+// Event mapper decodes only workerSessionId, while Runtime replay reads the
+// additional fields directly from the canonical payload.
+func (h *FactoryEventHistory) RecordDispatchWorkerSessionAssociationWithExecution(
+	tick int,
+	dispatchID string,
+	workerSessionID string,
+	requestID string,
+	facts recordings.DispatchWorkerSessionExecutionFacts,
+	eventTime time.Time,
+) {
 	if h == nil || dispatchID == "" || workerSessionID == "" {
 		return
 	}
@@ -546,10 +568,21 @@ func (h *FactoryEventHistory) RecordDispatchWorkerSessionAssociation(tick int, d
 			DispatchID: stringPtr(dispatchID),
 			RequestID:  stringPtrIfNotEmpty(requestID),
 		}),
-		interfaces.DispatchWorkerSessionAssociationEventPayload{
+		dispatchWorkerSessionAssociationEventPayload{
 			WorkerSessionID: workerSessionID,
+			Model:           strings.TrimSpace(facts.Model),
+			ReasoningEffort: strings.TrimSpace(facts.ReasoningEffort),
 		},
 	))
+}
+
+// dispatchWorkerSessionAssociationEventPayload is intentionally private: the
+// resolved execution facts are replay metadata for the Worker Session read
+// projection, not additions to the public Factory Event response contract.
+type dispatchWorkerSessionAssociationEventPayload struct {
+	WorkerSessionID string `json:"workerSessionId"`
+	Model           string `json:"model,omitempty"`
+	ReasoningEffort string `json:"reasoningEffort,omitempty"`
 }
 
 // RecordWorkstationResponse records a completed dispatch and its outputs.

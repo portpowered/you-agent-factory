@@ -417,6 +417,7 @@ func openRuntime(
 	setWorkerProgressPublisher(durableExecution.Service, runtimeProgressPublisher(startupRuntime))
 	setWorkerAttemptStarter(durableExecution.Service, runtimeWorkerAttemptStarter(startupRuntime))
 	opened := assembleRuntimeProducts(
+		ctx,
 		factoryDefinitions,
 		service4,
 		invocationDomain,

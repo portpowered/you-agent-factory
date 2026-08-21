@@ -12,6 +12,7 @@ import (
 	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
+	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
@@ -61,11 +62,16 @@ func startThroughStatelessWorkers(
 		}
 	}
 	if cfg.eventHistory != nil {
-		cfg.eventHistory.RecordDispatchWorkerSessionAssociation(
+		recordDispatchWorkerSessionAssociation(
+			cfg.eventHistory,
 			request.Execution.Dispatch.Execution.DispatchCreatedTick,
 			request.Execution.Dispatch.DispatchID,
 			sessionID,
 			request.Execution.Dispatch.Execution.RequestID,
+			recordings.DispatchWorkerSessionExecutionFacts{
+				Model:           executeRequest.Target.Model.Name,
+				ReasoningEffort: executeRequest.Target.Model.ReasoningEffort,
+			},
 			cfg.clock.Now(),
 		)
 	}
@@ -608,11 +614,16 @@ func (f *factoryImpl) InvokeWorker(
 	// per attempt, and for every Worker but a resumed one it is that same
 	// caller ID.
 	execution := providerInvocationExecutionRequest(f, req, sessionID)
-	f.eventHistory.RecordDispatchWorkerSessionAssociation(
+	recordDispatchWorkerSessionAssociation(
+		f.eventHistory,
 		f.currentTick(),
 		dispatchID,
 		sessionID,
 		execution.Execution.Dispatch.Execution.RequestID,
+		recordings.DispatchWorkerSessionExecutionFacts{
+			Model:           execution.Execution.Model,
+			ReasoningEffort: execution.Execution.ReasoningEffort,
+		},
 		f.cfg.clock.Now(),
 	)
 
@@ -650,11 +661,16 @@ func (f *factoryImpl) invokeStatelessWorker(
 	}
 	if f.cfg.eventHistory != nil {
 		sessionID := runtimeWorkerSessionID(f.cfg, execution, executeRequest, false)
-		f.cfg.eventHistory.RecordDispatchWorkerSessionAssociation(
+		recordDispatchWorkerSessionAssociation(
+			f.cfg.eventHistory,
 			f.currentTick(),
 			dispatchID,
 			sessionID,
 			executeRequest.Input.Dispatch.Execution.RequestID,
+			recordings.DispatchWorkerSessionExecutionFacts{
+				Model:           executeRequest.Target.Model.Name,
+				ReasoningEffort: executeRequest.Target.Model.ReasoningEffort,
+			},
 			f.cfg.clock.Now(),
 		)
 	}

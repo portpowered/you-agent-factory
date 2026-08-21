@@ -1,6 +1,7 @@
 package runtimeopening
 
 import (
+	"context"
 	"strings"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
@@ -35,6 +36,10 @@ type workerSessionsObservationProvider interface {
 	WorkerSessionsObservation() workersessions.ObservationService
 }
 
+type workerSessionsObservationForSessionProvider interface {
+	WorkerSessionsObservationForSession(string) workersessions.ObservationService
+}
+
 func historicalReplayRuntimeProducts(
 	logger *zap.Logger,
 	projection recordingreplay.RecordingReplayProjection,
@@ -53,6 +58,7 @@ func historicalReplayRuntimeProducts(
 }
 
 func assembleRuntimeProducts(
+	ctx context.Context,
 	factoryDefinitions factorydefinitions.Service,
 	factorySessionGateway factorysessions.Service,
 	sessionInvocation roles.SessionInvoker,
@@ -74,26 +80,18 @@ func assembleRuntimeProducts(
 	closeResources func() error,
 	factorySessionIDs ...string,
 ) runtimeProducts {
-	var bindRuntime func(factoryruntime.RuntimeBinding) error
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	factorySessionID := ""
 	if len(factorySessionIDs) > 0 {
 		factorySessionID = strings.TrimSpace(factorySessionIDs[0])
 	}
-	if factorySessionID != "" {
-		if binder, ok := factoryRuntime.(interface {
-			BindRuntime(string, factoryruntime.RuntimeBinding) error
-		}); ok {
-			bindRuntime = func(binding factoryruntime.RuntimeBinding) error {
-				return binder.BindRuntime(factorySessionID, binding)
-			}
-		}
-	}
+	bindRuntime := runtimeBindingForSession(factoryRuntime, factorySessionID)
+	effectiveFactorySessionID := resolveOpenedFactorySessionID(ctx, factorySessionGateway, factorySessionID)
 	workerPrompts, _ := workerService.(workers.PromptTemplates)
 	liveControl, _ := factorySessionGateway.(factorysessions.LiveControlService)
-	var workerSessions workersessions.ObservationService
-	if provider, ok := factoryRuntime.(workerSessionsObservationProvider); ok {
-		workerSessions = provider.WorkerSessionsObservation()
-	}
+	workerSessions := openedWorkerSessionsObservation(factoryRuntime, startup, effectiveFactorySessionID)
 	inputResolver, _ := sessionInvocation.(roles.InvocationInputResolver)
 	resources := roles.RuntimeResources{
 		Logger: startup.RuntimeLogger(), Close: closeResources,
@@ -138,4 +136,63 @@ func assembleRuntimeProducts(
 			Resources: resources,
 		},
 	}
+}
+
+func runtimeBindingForSession(
+	factoryRuntime factoryruntime.Service,
+	factorySessionID string,
+) func(factoryruntime.RuntimeBinding) error {
+	if strings.TrimSpace(factorySessionID) == "" {
+		return nil
+	}
+	binder, ok := factoryRuntime.(interface {
+		BindRuntime(string, factoryruntime.RuntimeBinding) error
+	})
+	if !ok {
+		return nil
+	}
+	return func(binding factoryruntime.RuntimeBinding) error {
+		return binder.BindRuntime(factorySessionID, binding)
+	}
+}
+
+func resolveOpenedFactorySessionID(
+	ctx context.Context,
+	factorySessionGateway factorysessions.Service,
+	factorySessionID string,
+) string {
+	effectiveID := factorySessionID
+	if factorySessionGateway == nil || factorySessionID == "" {
+		return effectiveID
+	}
+	projection, err := factorySessionGateway.GetFactorySession(ctx, factorySessionID)
+	if err != nil {
+		return effectiveID
+	}
+	if resolved := strings.TrimSpace(projection.Context.FactorySessionID); resolved != "" {
+		return resolved
+	}
+	return effectiveID
+}
+
+func openedWorkerSessionsObservation(
+	factoryRuntime factoryruntime.Service,
+	startup runtimeports.RuntimeInstance,
+	effectiveFactorySessionID string,
+) workersessions.ObservationService {
+	// The process Factory Sessions root resolves its current selected runtime,
+	// which is not necessarily the runtime being opened here. Prefer the
+	// session's freshly assembled runtime instance so its observation decorator
+	// retains the matching Worker Sessions registry and canonical event ledger.
+	observationRuntime := factoryRuntime
+	if startup != nil && startup.RuntimeService() != nil {
+		observationRuntime = startup.RuntimeService()
+	}
+	if provider, ok := observationRuntime.(workerSessionsObservationForSessionProvider); ok {
+		return provider.WorkerSessionsObservationForSession(effectiveFactorySessionID)
+	}
+	if provider, ok := observationRuntime.(workerSessionsObservationProvider); ok {
+		return provider.WorkerSessionsObservation()
+	}
+	return nil
 }

@@ -595,52 +595,6 @@ func recordedWorkExists(world interfaces.FactoryWorldState, events []interfaces.
 	return false
 }
 
-func recordedObservationFromFact(fact recordedDispatchObservation, clock factory.Clock) workersessions.Observation {
-	state := fact.state
-	if state == "" {
-		state = workersessions.StateStarting
-	}
-	observation := workersessions.Observation{
-		WorkerSessionID:          fact.workerSessionID,
-		ProviderSessionAvailable: fact.provider != nil && fact.provider.ID != "",
-		WorkIDs:                  append([]string(nil), fact.workIDs...),
-		TurnID:                   fact.turnID,
-		AttemptID:                fact.dispatchID,
-		State:                    state,
-		DurationBasis:            workersessions.DurationBasisUnavailable,
-		Transcript:               workersessions.TranscriptAvailabilityUnavailable,
-	}
-	if fact.provider != nil {
-		observation.ProviderSession = providerSessionRef(*fact.provider)
-	}
-	if !fact.startedAt.IsZero() {
-		started := fact.startedAt.UTC()
-		observation.StartedAt = &started
-		if fact.endedAt != nil {
-			ended := fact.endedAt.UTC()
-			observation.EndedAt = &ended
-			duration := ended.Sub(started)
-			if duration < 0 {
-				duration = 0
-			}
-			observation.Duration = &duration
-			observation.DurationBasis = workersessions.DurationBasisRecordedTimestamps
-		} else if !state.Terminal() && clock != nil {
-			duration := clock.Now().Sub(started)
-			if duration < 0 {
-				duration = 0
-			}
-			observation.Duration = &duration
-			observation.DurationBasis = workersessions.DurationBasisActiveClock
-		}
-	}
-	if fact.failure != nil {
-		failure := *fact.failure
-		observation.Failure = &failure
-	}
-	return observation
-}
-
 func recordedObservationState(outcome string) workersessions.State {
 	switch workers.WorkOutcome(outcome) {
 	case workers.OutcomeAccepted, workers.OutcomeContinue:
@@ -768,40 +722,75 @@ func recordedProviderFailureKind(detail *workers.FailureDetail) providers.Execut
 }
 
 func mergeRecordedObservations(recorded, live []workersessions.Observation) []workersessions.Observation {
-	if len(recorded) == 0 {
+	if len(recorded) == 0 && len(live) == 0 {
 		return nil
 	}
-	bySession := make(map[string]workersessions.Observation, len(live))
+
+	// Recorded facts remain authoritative for an overlapping Worker Session,
+	// while the live registry can contain a session whose association has not
+	// reached the durable projection yet. Clone both sources so the read
+	// decorator never mutates a service-owned observation while reconciling the
+	// two views.
+	merged := make([]workersessions.Observation, 0, len(recorded)+len(live))
+	seen := make(map[string]struct{}, len(recorded)+len(live))
+	liveBySession := make(map[string]workersessions.Observation, len(live))
 	for _, observation := range live {
-		bySession[observation.WorkerSessionID] = observation
+		liveBySession[observation.WorkerSessionID] = observation.Clone()
 	}
-	for index := range recorded {
-		liveObservation, ok := bySession[recorded[index].WorkerSessionID]
-		if !ok {
+
+	for _, recordedObservation := range recorded {
+		if _, alreadyAdded := seen[recordedObservation.WorkerSessionID]; alreadyAdded {
 			continue
 		}
-		if liveObservation.StartedAt != nil {
-			started := *liveObservation.StartedAt
-			recorded[index].StartedAt = &started
+		seen[recordedObservation.WorkerSessionID] = struct{}{}
+		mergedObservation := recordedObservation.Clone()
+		if liveObservation, ok := liveBySession[recordedObservation.WorkerSessionID]; ok {
+			mergeLiveObservation(&mergedObservation, liveObservation)
 		}
-		if liveObservation.ProviderSessionAvailable {
-			recorded[index].ProviderSession = liveObservation.ProviderSession.Clone()
-			recorded[index].ProviderSessionAvailable = true
-		}
-		if liveObservation.TokenUsage != nil {
-			clone := liveObservation.TokenUsage.Clone()
-			recorded[index].TokenUsage = &clone
-		}
-		if liveObservation.Transcript != workersessions.TranscriptAvailabilityUnavailable {
-			recorded[index].Transcript = liveObservation.Transcript
-			recorded[index].Parse = liveObservation.Parse
-		}
-		if recorded[index].Failure == nil && liveObservation.Failure != nil {
-			failure := *liveObservation.Failure
-			recorded[index].Failure = &failure
-		}
+		merged = append(merged, mergedObservation)
 	}
-	return recorded
+
+	for _, liveObservation := range live {
+		if _, alreadyAdded := seen[liveObservation.WorkerSessionID]; alreadyAdded {
+			continue
+		}
+		seen[liveObservation.WorkerSessionID] = struct{}{}
+		merged = append(merged, liveObservation.Clone())
+	}
+	sortObservationAttempts(merged)
+	return merged
+}
+
+func mergeLiveObservation(recorded *workersessions.Observation, live workersessions.Observation) {
+	if recorded == nil {
+		return
+	}
+	if live.StartedAt != nil {
+		started := *live.StartedAt
+		recorded.StartedAt = &started
+	}
+	if live.Model != nil && strings.TrimSpace(*live.Model) != "" {
+		recorded.Model = cloneRecordedString(live.Model)
+	}
+	if live.ReasoningEffort != nil && strings.TrimSpace(*live.ReasoningEffort) != "" {
+		recorded.ReasoningEffort = cloneRecordedString(live.ReasoningEffort)
+	}
+	if live.ProviderSessionAvailable {
+		recorded.ProviderSession = live.ProviderSession.Clone()
+		recorded.ProviderSessionAvailable = true
+	}
+	if live.TokenUsage != nil {
+		clone := live.TokenUsage.Clone()
+		recorded.TokenUsage = &clone
+	}
+	if live.Transcript != workersessions.TranscriptAvailabilityUnavailable {
+		recorded.Transcript = live.Transcript
+		recorded.Parse = live.Parse.Clone()
+	}
+	if recorded.Failure == nil && live.Failure != nil {
+		failure := *live.Failure
+		recorded.Failure = &failure
+	}
 }
 
 func sortObservationAttempts(observations []workersessions.Observation) {

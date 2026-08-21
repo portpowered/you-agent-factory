@@ -147,6 +147,8 @@ func (h *Handler) writeMappedError(w http.ResponseWriter, err error) {
 	switch {
 	case errors.Is(err, work.ErrWorkNotFound):
 		writeError(w, http.StatusNotFound, "work not found", "NOT_FOUND")
+	case errors.Is(err, workersessions.ErrObservationSessionNotFound):
+		writeError(w, http.StatusNotFound, "worker session observation not found", "NOT_FOUND")
 	case errors.Is(err, workersessions.ErrInvalidObservationScope),
 		errors.Is(err, workersessions.ErrInvalidObservationPagination),
 		errors.Is(err, workersessions.ErrInvalidState),

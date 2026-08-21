@@ -1926,3 +1926,143 @@ func (ledger *modelRecordingLedger) RecordModelEvent(event workers.ModelEvent) {
 }
 
 type runtimeLedgerWithoutWorkerRecorder struct{ recordings.RuntimeLedger }
+
+// runtimeWorkerSessionsService is a small service-root test double. It keeps
+// identity reservation and cancellation observable while delegating execution
+// to the already injected Workers root, so Runtime tests do not construct peer
+// services through their private wire packages.
+type runtimeWorkerSessionsService struct {
+	*fakeWorkerSessionsService
+
+	mu       sync.Mutex
+	sessions map[string]workersessions.Session
+}
+
+func newRuntimeWorkerSessionsService(execution workers.Service) *runtimeWorkerSessionsService {
+	return &runtimeWorkerSessionsService{
+		fakeWorkerSessionsService: &fakeWorkerSessionsService{execution: execution},
+		sessions:                  make(map[string]workersessions.Session),
+	}
+}
+
+func (service *runtimeWorkerSessionsService) Reserve(
+	ctx context.Context,
+	request workersessions.ReserveRequest,
+) (workersessions.Session, error) {
+	if err := ctx.Err(); err != nil {
+		return workersessions.Session{}, err
+	}
+	service.mu.Lock()
+	defer service.mu.Unlock()
+	if _, exists := service.sessions[request.ID]; exists {
+		return workersessions.Session{}, workersessions.ErrSessionAlreadyExists
+	}
+	session := workersessions.Session{ID: request.ID, State: workersessions.StateReserved}
+	service.sessions[request.ID] = session
+	return session.Clone(), nil
+}
+
+func (service *runtimeWorkerSessionsService) Get(
+	ctx context.Context,
+	request workersessions.GetRequest,
+) (workersessions.Session, error) {
+	if err := ctx.Err(); err != nil {
+		return workersessions.Session{}, err
+	}
+	service.mu.Lock()
+	defer service.mu.Unlock()
+	session, ok := service.sessions[request.ID]
+	if !ok {
+		return workersessions.Session{}, workersessions.ErrSessionNotFound
+	}
+	return session.Clone(), nil
+}
+
+func (service *runtimeWorkerSessionsService) Cancel(
+	ctx context.Context,
+	request workersessions.ControlRequest,
+) (workersessions.ControlResult, error) {
+	if err := ctx.Err(); err != nil {
+		return workersessions.ControlResult{}, err
+	}
+	service.mu.Lock()
+	defer service.mu.Unlock()
+	session, ok := service.sessions[request.ID]
+	if !ok {
+		return workersessions.ControlResult{}, workersessions.ErrSessionNotFound
+	}
+	session.State = workersessions.StateCanceled
+	service.sessions[request.ID] = session
+	return workersessions.ControlResult{
+		Session: session.Clone(), Action: workersessions.ControlActionCancel,
+		Outcome: workersessions.ControlOutcomeApplied, DispatchID: request.ID,
+	}, nil
+}
+
+func (service *runtimeWorkerSessionsService) InvokeSession(
+	ctx context.Context,
+	request workersessions.InvokeSessionRequest,
+) (workersessions.InvokeSessionResult, error) {
+	service.mu.Lock()
+	session, ok := service.sessions[request.ID]
+	service.mu.Unlock()
+	if !ok {
+		return workersessions.InvokeSessionResult{}, workersessions.ErrSessionNotFound
+	}
+	if session.State == workersessions.StateCanceled {
+		return workersessions.InvokeSessionResult{
+			Session:     session.Clone(),
+			Dispatch:    canceledRuntimeDispatch(request.Execution),
+			DispatchErr: workers.ErrWorkstationDispatchCanceled,
+		}, nil
+	}
+
+	maxAttempts := request.Retry.Attempts()
+	for attempt := 1; attempt <= maxAttempts; attempt++ {
+		execution := workers.CloneWorkstationExecutionRequest(request.Execution.Execution)
+		if attempt > 1 {
+			execution.Dispatch.DispatchID = fmt.Sprintf("%s/attempt/%d", request.ID, attempt)
+		}
+		dispatchRequest := workers.WorkstationDispatchRequest{
+			WorkstationName: request.Execution.WorkstationName,
+			Execution:       execution,
+		}
+		executeResult, executeErr := service.execution.Execute(ctx, testExecuteRequestFromDispatch(dispatchRequest))
+		dispatchResult := testDispatchResultFromExecute(dispatchRequest, executeResult, executeErr)
+		if dispatchResult.TerminalOutcome == workers.WorkstationDispatchTerminalOutcomeFailed &&
+			dispatchResult.Result.FailureMetadata != nil &&
+			dispatchResult.Result.FailureMetadata.Family == workers.WorkFailureFamilyRetryable &&
+			attempt < maxAttempts {
+			continue
+		}
+		service.mu.Lock()
+		switch dispatchResult.TerminalOutcome {
+		case workers.WorkstationDispatchTerminalOutcomeCompleted:
+			session.State = workersessions.StateCompleted
+		case workers.WorkstationDispatchTerminalOutcomeCanceled:
+			session.State = workersessions.StateCanceled
+		default:
+			session.State = workersessions.StateFailed
+		}
+		service.sessions[request.ID] = session
+		service.mu.Unlock()
+		return workersessions.InvokeSessionResult{
+			Session: session.Clone(), Dispatch: dispatchResult, DispatchErr: executeErr,
+		}, nil
+	}
+	return workersessions.InvokeSessionResult{}, errors.New("runtime Worker Sessions test service exhausted retry attempts")
+}
+
+func canceledRuntimeDispatch(request workers.WorkstationDispatchRequest) workers.WorkstationDispatchResult {
+	return workers.WorkstationDispatchResult{
+		DispatchID:      request.Execution.Dispatch.DispatchID,
+		WorkstationName: request.WorkstationName,
+		TerminalOutcome: workers.WorkstationDispatchTerminalOutcomeCanceled,
+		Result: workers.WorkResult{
+			DispatchID:   request.Execution.Dispatch.DispatchID,
+			TransitionID: request.Execution.Dispatch.TransitionID,
+			Outcome:      workers.OutcomeFailed,
+			Error:        workers.ErrWorkstationDispatchCanceled.Error(),
+		},
+	}
+}

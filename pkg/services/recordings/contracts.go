@@ -266,6 +266,8 @@ type (
 	RunResponseEventPayload                                    = recordingcontracts.RunResponseEventPayload
 	RuntimeEventLedger                                         = recordingcontracts.RuntimeEventLedger
 	RuntimeLedger                                              = recordingcontracts.RuntimeLedger
+	DispatchWorkerSessionExecutionFacts                        = recordingcontracts.DispatchWorkerSessionExecutionFacts
+	DispatchWorkerSessionAssociationRecorder                   = recordingcontracts.DispatchWorkerSessionAssociationRecorder
 	HumanApprovalRequestRecorder                               = recordingcontracts.HumanApprovalRequestRecorder
 	RuntimeOpeningRequest                                      = recordingcontracts.RuntimeOpeningRequest
 	RuntimeScopeRequest                                        = recordingcontracts.RuntimeScopeRequest

@@ -13,6 +13,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
 	durableexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/durable_execution"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/stream"
+	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 )
 
 // Host exposes composition-root seams required by the session gateway.
@@ -40,6 +41,7 @@ type dependencyHost struct {
 	backendScopeID                func() string
 	logicalSessionKeyID           func(*livesession.LiveSession) string
 	streamGenerationID            func(*livesession.LiveSession) string
+	workerSessionsObservation     func(string) workersessions.ObservationService
 	liveSessionEvents             func(*livesession.LiveSession) []interfaces.FactoryEvent
 	sessionFactory                func(string) (factory.Service, error)
 	stopLiveSession               func(string) error
@@ -161,6 +163,13 @@ func (h dependencyHost) SessionFactory(sessionID string) (factory.Service, error
 		return nil, fmt.Errorf("factory service is required")
 	}
 	return h.sessionFactory(sessionID)
+}
+
+func (h dependencyHost) WorkerSessionsObservationForSession(factorySessionID string) workersessions.ObservationService {
+	if h.workerSessionsObservation == nil {
+		return nil
+	}
+	return h.workerSessionsObservation(factorySessionID)
 }
 
 func (h dependencyHost) StopLiveSession(sessionID string) error {

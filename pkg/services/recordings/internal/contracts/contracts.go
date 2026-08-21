@@ -1811,6 +1811,30 @@ type RuntimeLedger interface {
 	SetInitialStructureFactory(*interfaces.FactorySnapshot)
 }
 
+// DispatchWorkerSessionExecutionFacts carries the resolved execution facts
+// needed by the Factory Runtime Worker Session read projection. These facts
+// are retained in the internal association payload without widening the
+// public Factory Event contract.
+type DispatchWorkerSessionExecutionFacts struct {
+	Model           string
+	ReasoningEffort string
+}
+
+// DispatchWorkerSessionAssociationRecorder is an optional RuntimeLedger
+// capability. Older ledgers keep using RecordDispatchWorkerSessionAssociation;
+// ledgers that retain resolved execution facts implement this extension so
+// replay and closed-session reads can project them without a live registry.
+type DispatchWorkerSessionAssociationRecorder interface {
+	RecordDispatchWorkerSessionAssociationWithExecution(
+		tick int,
+		dispatchID string,
+		workerSessionID string,
+		requestID string,
+		facts DispatchWorkerSessionExecutionFacts,
+		eventTime time.Time,
+	)
+}
+
 // HumanApprovalRequestRecorder is the optional Recordings capability used by
 // Factory Runtime to publish a pending HUMAN_APPROVAL_REQUESTED fact without
 // widening every legacy RuntimeLedger test double.

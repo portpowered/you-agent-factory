@@ -681,6 +681,20 @@ func TestRecordedWorkerSessionObservationProjectsDurableRecordingHealth(t *testi
 		})
 	}
 
+	reader.snapshot = recordings.WorkerRecordingSnapshot{RecordingID: "recording-health"}
+	observation, err := service.GetObservationByWorkerSessionID(context.Background(), workersessions.GetObservationByWorkerSessionIDRequest{WorkerSessionID: fixture.workerSessionID})
+	if err != nil {
+		t.Fatalf("GetObservationByWorkerSessionID(empty in-flight snapshot) error = %v", err)
+	}
+	if observation.RecordingHealth != "" || observation.RecordingHealthReason != "" {
+		t.Fatalf("empty in-flight snapshot health = %q/%q, want absent", observation.RecordingHealth, observation.RecordingHealthReason)
+	}
+
+	reader.err = recordings.ErrWorkerRecordingIncomplete
+	if _, err := service.GetObservationByWorkerSessionID(context.Background(), workersessions.GetObservationByWorkerSessionIDRequest{WorkerSessionID: fixture.workerSessionID}); err != nil {
+		t.Fatalf("GetObservationByWorkerSessionID(in-flight recording) error = %v, want readable partial source", err)
+	}
+
 	reader.err = recordings.ErrWorkerRecordingReplay
 	if _, err := service.GetObservationByWorkerSessionID(context.Background(), workersessions.GetObservationByWorkerSessionIDRequest{WorkerSessionID: fixture.workerSessionID}); !errors.Is(err, workersessions.ErrObservationRecordingCorrupt) {
 		t.Fatalf("corrupt recording error = %v, want ErrObservationRecordingCorrupt", err)
