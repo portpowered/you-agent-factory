@@ -62,6 +62,46 @@ func TestReconstructRestoredWorldStateUsesLatestReplayTick(t *testing.T) {
 	}
 }
 
+func TestResumeInputSelectsRecordedEventsForRestoredWorldState(t *testing.T) {
+	resumeEvents := []interfaces.FactoryEvent{
+		{Id: "resume-event", Context: interfaces.FactoryEventContext{Tick: 9}},
+	}
+	resumeInput := &recordings.LoadResumeInputResult{
+		Input: recordings.LoadReplayInputResult{
+			Legacy: &recordings.ReplayArtifact{Events: resumeEvents},
+		},
+	}
+
+	selected, err := restoredEventsForOpening(nil, resumeInput)
+	if err != nil {
+		t.Fatalf("restoredEventsForOpening(resume) error = %v", err)
+	}
+	opening := &assemblyWorldStateOpening{state: interfaces.FactoryWorldState{Tick: 9}}
+	state, err := reconstructRestoredWorldState(opening, selected)
+	if err != nil {
+		t.Fatalf("reconstructRestoredWorldState(resume) error = %v", err)
+	}
+	if state == nil || state.Tick != 9 {
+		t.Fatalf("resumed state = %#v, want selected tick 9", state)
+	}
+	if len(opening.events) != 1 || opening.events[0].Id != "resume-event" {
+		t.Fatalf("reconstructed resume events = %#v, want selected recording event", opening.events)
+	}
+}
+
+func TestResumeInputRejectsPortableOrEmptyHistory(t *testing.T) {
+	for name, input := range map[string]*recordings.LoadResumeInputResult{
+		"portable":     {Input: recordings.LoadReplayInputResult{Portable: &recordings.PortableRecording{}}},
+		"empty legacy": {Input: recordings.LoadReplayInputResult{Legacy: &recordings.ReplayArtifact{}}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			if _, err := restoredEventsForOpening(nil, input); err == nil {
+				t.Fatal("restoredEventsForOpening() error = nil, want invalid resume history")
+			}
+		})
+	}
+}
+
 func TestNewAssemblyRequiresWireConstructedRuntimeFactory(t *testing.T) {
 	assembly, err := NewAssembly(nil, stubWorkerSessionsFactory, nil)
 	if err == nil || !strings.Contains(err.Error(), "Factory Runtime factory is required") {

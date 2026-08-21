@@ -190,7 +190,12 @@ func TestRuntimeOpeningRequestRoundTripsResumePathToRecordingsContract(t *testin
 	const resumePath = "source.recording.json"
 	resumeInput := recordings.LoadResumeInputResult{
 		Input: recordings.LoadReplayInputResult{
-			Legacy: &factorydefinitions.ReplayArtifact{},
+			Legacy: &factorydefinitions.ReplayArtifact{
+				Events: []factorydefinitions.FactoryEvent{{
+					Id:      "resume-event",
+					Context: factorydefinitions.FactoryEventContext{Tick: 7},
+				}},
+			},
 		},
 	}
 	request := factorysessions.RuntimeOpeningRequest{
@@ -379,7 +384,12 @@ func TestOpenForRequestConsumesResumeSourceBeforeLiveSuccessorActivation(t *test
 	root := &resumeRoutingRoot{}
 	resumeInput := recordings.LoadResumeInputResult{
 		Input: recordings.LoadReplayInputResult{
-			Legacy: &factorydefinitions.ReplayArtifact{},
+			Legacy: &factorydefinitions.ReplayArtifact{
+				Events: []factorydefinitions.FactoryEvent{{
+					Id:      "resume-event",
+					Context: factorydefinitions.FactoryEventContext{Tick: 7},
+				}},
+			},
 		},
 	}
 	resumeRuntime := &resumeInputRuntime{result: resumeInput}
@@ -404,6 +414,10 @@ func TestOpenForRequestConsumesResumeSourceBeforeLiveSuccessorActivation(t *test
 	}
 	if root.activation.Inputs.ResumeInput != resumeInput {
 		t.Fatalf("activation resume input = %#v, want %#v", root.activation.Inputs.ResumeInput, resumeInput)
+	}
+	if len(root.activation.Inputs.ResumeInput.Input.Legacy.Events) != 1 ||
+		root.activation.Inputs.ResumeInput.Input.Legacy.Events[0].Id != "resume-event" {
+		t.Fatalf("activation resume events = %#v, want selected recording event", root.activation.Inputs.ResumeInput.Input.Legacy.Events)
 	}
 	if root.activation.Inputs.Recordings.ResumePath != "source.recording.json" {
 		t.Fatalf("activation resume path = %q, want source.recording.json", root.activation.Inputs.Recordings.ResumePath)

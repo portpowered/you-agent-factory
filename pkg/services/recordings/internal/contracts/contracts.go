@@ -192,9 +192,9 @@ type LoadResumeInputRequest struct {
 }
 
 // LoadResumeInputResult contains the detached input facts selected for a live
-// continuation. The current compatibility seam reuses the path loader's
-// detached families; a later Recordings resume implementation can replace
-// this adapter without changing the Factory Sessions opening contract.
+// continuation. Factory Runtime consumes the legacy Factory-event family to
+// seed the live successor's initial world state; portable inspection inputs
+// remain a separate, read-only product.
 type LoadResumeInputResult struct {
 	Input LoadReplayInputResult
 }
