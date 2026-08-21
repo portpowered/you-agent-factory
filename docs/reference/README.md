@@ -30,7 +30,7 @@ concept owners below when you need the complete customer-facing contract.
 | `factory-validation` | Required pre-run static gate, current validation checks, exact source commands, and validation limits | [Factory validation](factory-validation.md) |
 | `mock-workers` | `--with-mock-workers` and the `mockWorkers` JSON contract | [Mock workers](mock-workers.md) |
 | `record-replay` | Default recording, `--record`, `--replay`, `--resume`, and `--no-record` | [Record, replay, and resume](record-replay.md) |
-| `operations` | Real-pipeline lifetime, finite-drain classification, and same-name restart recovery | [Operations](operations.md) |
+| `operations` | Real-pipeline lifetime, finite-drain classification, and recorded-state restart recovery | [Operations](operations.md) |
 | `work` | Submitted work: session-scoped work routes, tags, and batch cross-links | [Submitted work](work.md) |
 | `sessions` | Session list, session show, pause and resume, factory query, status API, dashboard, and run modes | [Sessions](sessions.md) |
 | `metrics` | Factory Runtime metrics and exact operator-configured cost rollups with deterministic grouping, coverage, and Factory Session scope | [Metrics](metrics.md) |
