@@ -357,9 +357,21 @@ jobs:
           FUNCTIONAL_TEST_BUDGET: "75m"
           FUNCTIONAL_SHORT: "false"
           FUNCTIONAL_DEFAULT_JOBS: ${{ steps.functional-parallelism.outputs.jobs }}
+          FUNCTIONAL_GOCOVERAGE_EXIT_FILE: .artifacts/functional-test-viz/gocoveragecheck-exit-code.txt
+          FUNCTIONAL_COVERAGE_VERDICT_FILE: .artifacts/functional-test-viz/functional-coverage-verdict.txt
           INFINITE_YOU_RUN_ACPX_REAL_CLIENT: "1"
           INFINITE_YOU_REQUIRE_ACPX_REAL_CLIENT: "1"
           INFINITE_YOU_ACPX_EVIDENCE_OUTPUT: ${{ github.workspace }}/.artifacts/functional-test-viz/real-acpx-evidence.json
+      # Ordinary test and coverage-gate failures are deferred by the runner so
+      # this step is the only failing log for those outcomes. Timeout and
+      # infrastructure failures keep the full run step failed instead.
+      - name: Report functional coverage verdict
+        if: always() && matrix.suite == 'functional'
+        run: bash scripts/ci/publish-functional-coverage-verdict.sh
+        env:
+          FUNCTIONAL_TEST_VIZ_DIR: .artifacts/functional-test-viz
+          FUNCTIONAL_GOCOVERAGE_EXIT_FILE: .artifacts/functional-test-viz/gocoveragecheck-exit-code.txt
+          FUNCTIONAL_COVERAGE_VERDICT_FILE: .artifacts/functional-test-viz/functional-coverage-verdict.txt
       - name: Publish functional test job summary
         if: always() && matrix.suite == 'functional'
         run: bash scripts/ci/publish-functional-test-summary.sh
@@ -381,6 +393,8 @@ jobs:
             .artifacts/functional-test-viz/coverage.out
             .artifacts/functional-test-viz/command.log
             .artifacts/functional-test-viz/diagnostic-status.txt
+            .artifacts/functional-test-viz/gocoveragecheck-exit-code.txt
+            .artifacts/functional-test-viz/functional-coverage-verdict.txt
             .artifacts/functional-test-viz/real-acpx-evidence.json
           if-no-files-found: ignore
           retention-days: 14

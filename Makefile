@@ -148,6 +148,10 @@ FUNCTIONAL_TEST_VIZ_PROFILE ?= $(FUNCTIONAL_TEST_VIZ_DIR)/coverage.out
 FUNCTIONAL_TEST_VIZ_JSON ?= $(FUNCTIONAL_TEST_VIZ_DIR)/coverage-summary.json
 FUNCTIONAL_TEST_VIZ_TIMING ?= $(FUNCTIONAL_TEST_VIZ_DIR)/functional-timing-summary.json
 FUNCTIONAL_TEST_VIZ_MARKDOWN ?= $(FUNCTIONAL_TEST_VIZ_DIR)/functional-tests.md
+# The Linux CI wrapper sets this optional handoff so an ordinary
+# gocoveragecheck failure can be reported by its compact terminal verdict step.
+# An unset path preserves the historical fail-fast target behavior.
+FUNCTIONAL_GOCOVERAGE_EXIT_FILE ?=
 BACKEND_SIZE_ROOT ?= .
 PACKAGE_MAINT_ROOT ?= .
 PACKAGE_FILE_COUNT_ROOT ?= .
@@ -483,7 +487,7 @@ readme-check:
 test: test-unit test-ci-workflows
 
 test-ci-workflows:
-	$(NODE) --test scripts/default-pipeline.test.mjs scripts/development-package-workflow.test.mjs scripts/verification-policy.test.mjs scripts/ci/lane-budget.test.mjs scripts/ci/backend-lint-report.test.mjs scripts/ci/backend-lint-workflow.test.mjs scripts/ci/functional-coverage-comment.test.mjs scripts/ci/unit-coverage-report.test.mjs
+	$(NODE) --test scripts/default-pipeline.test.mjs scripts/development-package-workflow.test.mjs scripts/verification-policy.test.mjs scripts/ci/lane-budget.test.mjs scripts/ci/backend-lint-report.test.mjs scripts/ci/backend-lint-workflow.test.mjs scripts/ci/functional-coverage-comment.test.mjs scripts/ci/functional-coverage-verdict.test.mjs scripts/ci/unit-coverage-report.test.mjs
 
 test-full:
 	$(GO) test ./... -timeout $(GO_TEST_TIMEOUT)
@@ -538,14 +542,17 @@ functional-boundary-check:
 # so already-written diagnostics (for example coverage.out / coverage-summary.json
 # after a floor fail, or those files before a render fail) remain inspectable.
 # gocoveragecheck writes -json-output after a completed measurement even when a
-# floor fails; Make then stops before Markdown so the failure stays non-zero.
+# floor fails. Without FUNCTIONAL_GOCOVERAGE_EXIT_FILE, Make stops before
+# Markdown so the failure stays non-zero; the Linux CI wrapper sets that path
+# to hand an ordinary exit-1 outcome to its compact verdict step.
 functional-test-viz:
 	$(MAKE) functional-boundary-check
 	$(call ensure_directory,$(FUNCTIONAL_TEST_VIZ_DIR))
 	$(MAKE) test-functional-coverage \
 		GO_FUNCTIONAL_COVERAGE_PROFILE=$(FUNCTIONAL_TEST_VIZ_PROFILE) \
 		GO_FUNCTIONAL_COVERAGE_JSON_OUTPUT=$(FUNCTIONAL_TEST_VIZ_JSON) \
-		GO_FUNCTIONAL_COVERAGE_TIMING_OUTPUT=$(FUNCTIONAL_TEST_VIZ_TIMING)
+		GO_FUNCTIONAL_COVERAGE_TIMING_OUTPUT=$(FUNCTIONAL_TEST_VIZ_TIMING) \
+		FUNCTIONAL_GOCOVERAGE_EXIT_FILE=$(FUNCTIONAL_GOCOVERAGE_EXIT_FILE)
 	$(GO) run ./cmd/functionaltestviz \
 		-coverage-summary $(FUNCTIONAL_TEST_VIZ_JSON) \
 		-timing-summary $(FUNCTIONAL_TEST_VIZ_TIMING) \
@@ -691,7 +698,14 @@ test-unit-coverage:
 test-functional-coverage:
 	$(MAKE) functional-boundary-check
 	@echo "Functional tier: name=$(FUNCTIONAL_TEST_TIER) trigger=$(FUNCTIONAL_TEST_TRIGGER) short=$(FUNCTIONAL_SHORT) budget=$(FUNCTIONAL_TEST_BUDGET) selection=subtractive quarantine=$(FUNCTIONAL_QUARANTINE)"
-	$(GO) run ./cmd/gocoveragecheck -suite functional -stream -jobs $(FUNCTIONAL_DEFAULT_JOBS) -min $(GO_FUNCTIONAL_COVERAGE_MIN) -package-manifest $(GO_FUNCTIONAL_COVERAGE_MANIFEST) -functional-quarantine $(FUNCTIONAL_QUARANTINE) -timeout $(GO_COVERAGE_TIMEOUT) $(if $(filter false 0 no,$(FUNCTIONAL_SHORT)),-short=false,) $(if $(GO_FUNCTIONAL_COVERAGE_PROFILE),-profile $(GO_FUNCTIONAL_COVERAGE_PROFILE),) $(if $(GO_FUNCTIONAL_COVERAGE_JSON_OUTPUT),-json-output $(GO_FUNCTIONAL_COVERAGE_JSON_OUTPUT),) $(if $(GO_FUNCTIONAL_COVERAGE_TIMING_OUTPUT),-timing-output $(GO_FUNCTIONAL_COVERAGE_TIMING_OUTPUT),)
+	@set +e; \
+	$(GO) run ./cmd/gocoveragecheck -suite functional -stream -jobs $(FUNCTIONAL_DEFAULT_JOBS) -min $(GO_FUNCTIONAL_COVERAGE_MIN) -package-manifest $(GO_FUNCTIONAL_COVERAGE_MANIFEST) -functional-quarantine $(FUNCTIONAL_QUARANTINE) -timeout $(GO_COVERAGE_TIMEOUT) $(if $(filter false 0 no,$(FUNCTIONAL_SHORT)),-short=false,) $(if $(GO_FUNCTIONAL_COVERAGE_PROFILE),-profile $(GO_FUNCTIONAL_COVERAGE_PROFILE),) $(if $(GO_FUNCTIONAL_COVERAGE_JSON_OUTPUT),-json-output $(GO_FUNCTIONAL_COVERAGE_JSON_OUTPUT),) $(if $(GO_FUNCTIONAL_COVERAGE_TIMING_OUTPUT),-timing-output $(GO_FUNCTIONAL_COVERAGE_TIMING_OUTPUT),); \
+	status=$$?; \
+	if [ -n "$(FUNCTIONAL_GOCOVERAGE_EXIT_FILE)" ]; then \
+		printf '%s\n' "$$status" > "$(FUNCTIONAL_GOCOVERAGE_EXIT_FILE)"; \
+		if [ "$$status" -eq 1 ]; then exit 0; fi; \
+	fi; \
+	exit "$$status"
 
 script-timeout-companion-smoke-100:
 	$(GO) test -tags=$(FUNCTIONAL_LONG_TAGS) ./tests/functional/workers/inference -run $(SCRIPT_TIMEOUT_COMPANION_SMOKE_TEST) -count=$(SCRIPT_TIMEOUT_COMPANION_SMOKE_COUNT) -timeout $(SCRIPT_TIMEOUT_COMPANION_SMOKE_TIMEOUT)

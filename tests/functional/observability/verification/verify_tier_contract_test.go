@@ -665,7 +665,16 @@ func TestBackendVerificationLaneScriptSmoke_PreservesFailureExitAndLog(t *testin
 // TestFunctionalTestVizLaneScriptSmoke_UsesCanonicalOwnedCommandAndCapturesLog prove run-functional-test-viz.sh invokes the canonical make target with the shared artifact directory and captures command.log.
 func TestFunctionalTestVizLaneScriptSmoke_UsesCanonicalOwnedCommandAndCapturesLog(t *testing.T) {
 	repoRoot := testutil.MustRepoPath(t, ".")
-	makePath := writeExecutableScript(t, "fake-make-functional-viz", "#!/bin/sh\nprintf '%s\\n' \"fake-make:$*\"\n")
+	makePath := writeExecutableScript(t, "fake-make-functional-viz", `#!/bin/sh
+for argument in "$@"; do
+  case "$argument" in
+    FUNCTIONAL_GOCOVERAGE_EXIT_FILE=*)
+      printf '%s\n' '0' > "${argument#*=}"
+      ;;
+  esac
+done
+printf '%s\n' "fake-make:$*"
+`)
 	artifactRoot := filepath.Join(t.TempDir(), "functional-test-viz-artifacts")
 
 	output, err := runScript(
