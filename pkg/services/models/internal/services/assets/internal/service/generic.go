@@ -325,7 +325,7 @@ func (s *service) genericArtifactsFromRequirements(
 }
 func (s *service) genericCacheRoots(
 	scope models.RuntimeScopeConfig,
-		kind models.AssetArtifactKind,
+	kind models.AssetArtifactKind,
 ) ([]string, error) {
 	home, err := s.resolveHome()
 	home = strings.TrimSpace(home)
@@ -421,27 +421,40 @@ func (s *service) discoverContentAddressedRequirements(
 		if !entry.IsDir() || strings.HasSuffix(entry.Name(), ".partial") {
 			continue
 		}
-		metadataPath := filepath.Join(base, entry.Name(), assetMetadataName)
-		body, readErr := s.readFile(metadataPath)
-		if readErr != nil {
-			continue
+		if requirements := s.matchContentAddressedRequirements(base, kind, source, entry.Name()); len(requirements) > 0 {
+			return requirements
 		}
-		var metadata genericCacheMetadata
-		if json.Unmarshal(body, &metadata) != nil || metadata.Kind != kind || len(metadata.Artifacts) == 0 {
-			continue
-		}
-		if metadata.SourceKey != "" && metadata.SourceKey != genericSourceIdentity(source) {
-			continue
-		}
-		if metadata.SourceKey == "" && metadata.Source != "" && metadata.Source != source.safe {
-			continue
-		}
-		if metadata.Source == "" && !strings.HasPrefix(metadata.Identity, kind+"|"+source.safe+"|") {
-			continue
-		}
-		return append([]models.AssetRequirement(nil), metadata.Artifacts...)
 	}
 	return nil
+}
+
+func (s *service) matchContentAddressedRequirements(
+	base, kind string,
+	source genericSource,
+	entryName string,
+) []models.AssetRequirement {
+	body, err := s.readFile(filepath.Join(base, entryName, assetMetadataName))
+	if err != nil {
+		return nil
+	}
+	var metadata genericCacheMetadata
+	if json.Unmarshal(body, &metadata) != nil || !matchesContentAddressedMetadata(metadata, kind, source) {
+		return nil
+	}
+	return append([]models.AssetRequirement(nil), metadata.Artifacts...)
+}
+
+func matchesContentAddressedMetadata(metadata genericCacheMetadata, kind string, source genericSource) bool {
+	if metadata.Kind != kind || len(metadata.Artifacts) == 0 {
+		return false
+	}
+	if metadata.SourceKey != "" {
+		return metadata.SourceKey == genericSourceIdentity(source)
+	}
+	if metadata.Source != "" {
+		return metadata.Source == source.safe
+	}
+	return strings.HasPrefix(metadata.Identity, kind+"|"+source.safe+"|")
 }
 
 func (s *service) discoverSnapshotRequirements(root string) []models.AssetRequirement {
@@ -773,22 +786,12 @@ func genericRevisionFailure() error {
 
 func parseGenericFileSource(raw string) (genericSource, error) {
 	parsed, err := url.Parse(raw)
-	if err != nil || parsed.User != nil || parsed.RawQuery != "" || parsed.Fragment != "" {
+	if err != nil || !validGenericFileURL(parsed) {
 		return genericSource{}, models.ErrModelReferenceInvalid
 	}
-	localPath, err := url.PathUnescape(parsed.Path)
+	localPath, err := genericFileURLPath(parsed)
 	if err != nil {
 		return genericSource{}, models.ErrModelReferenceInvalid
-	}
-	if parsed.Host != "" && !strings.EqualFold(parsed.Host, "localhost") {
-		if len(parsed.Host) != 2 || parsed.Host[1] != ':' || !isASCIIAlphaByte(parsed.Host[0]) {
-			return genericSource{}, models.ErrModelReferenceInvalid
-		}
-		localPath = parsed.Host + localPath
-	}
-	if len(localPath) >= 3 && localPath[0] == '/' && localPath[2] == ':' &&
-		isASCIIAlphaByte(localPath[1]) {
-		localPath = localPath[1:]
 	}
 	if localPath == "" {
 		return genericSource{}, models.ErrModelReferenceInvalid
@@ -796,6 +799,27 @@ func parseGenericFileSource(raw string) (genericSource, error) {
 	return genericSource{
 		kind: genericSourceFile, safe: "file://local", localPath: filepath.FromSlash(localPath),
 	}, nil
+}
+
+func validGenericFileURL(parsed *url.URL) bool {
+	return parsed.User == nil && parsed.RawQuery == "" && parsed.Fragment == ""
+}
+
+func genericFileURLPath(parsed *url.URL) (string, error) {
+	localPath, err := url.PathUnescape(parsed.Path)
+	if err != nil {
+		return "", err
+	}
+	if parsed.Host != "" && !strings.EqualFold(parsed.Host, "localhost") {
+		if len(parsed.Host) != 2 || parsed.Host[1] != ':' || !isASCIIAlphaByte(parsed.Host[0]) {
+			return "", models.ErrModelReferenceInvalid
+		}
+		localPath = parsed.Host + localPath
+	}
+	if len(localPath) >= 3 && localPath[0] == '/' && localPath[2] == ':' && isASCIIAlphaByte(localPath[1]) {
+		localPath = localPath[1:]
+	}
+	return localPath, nil
 }
 
 func isImmutableGenericRevision(value string) bool {
