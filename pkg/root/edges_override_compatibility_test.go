@@ -18,6 +18,50 @@ import (
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 )
 
+func TestBuildProcessStartsFactoryWithFutureDefinitionFields(t *testing.T) {
+	t.Parallel()
+
+	factoryDir := rootFactoryWithProvider(t, "codex")
+	factoryPath := filepath.Join(factoryDir, "factory.json")
+	raw, err := os.ReadFile(factoryPath)
+	if err != nil {
+		t.Fatalf("ReadFile(factory.json): %v", err)
+	}
+	var document map[string]any
+	if err := json.Unmarshal(raw, &document); err != nil {
+		t.Fatalf("decode factory.json: %v", err)
+	}
+	document["logicalRoundTrip"] = map[string]any{
+		"mode":   "v2",
+		"secret": "must-not-leak",
+	}
+	workers, ok := document["workers"].([]any)
+	if !ok || len(workers) == 0 {
+		t.Fatal("factory.json has no worker to extend")
+	}
+	workers[0].(map[string]any)["futurePolicy"] = map[string]any{"mode": "v2"}
+	encoded, err := json.Marshal(document)
+	if err != nil {
+		t.Fatalf("encode future factory.json: %v", err)
+	}
+	if err := os.WriteFile(factoryPath, encoded, 0o600); err != nil {
+		t.Fatalf("WriteFile(factory.json): %v", err)
+	}
+
+	process, err := BuildProcess(context.Background(), serviceedges.Edges{})
+	if err != nil {
+		t.Fatalf("BuildProcess() error = %v", err)
+	}
+	if err := process.Execute(Input{
+		Args:             []string{"you", "run", "--dir", factoryDir, "--with-mock-workers", "--quiet", "--no-record"},
+		Env:              homeEnvironment(t.TempDir()),
+		Context:          context.Background(),
+		WorkingDirectory: factoryDir,
+	}); err != nil {
+		t.Fatalf("Process.Execute(run) error = %v", err)
+	}
+}
+
 func TestBuildProcessAppliesTypedEdgesExternalEffectOverride(t *testing.T) {
 	t.Parallel()
 
