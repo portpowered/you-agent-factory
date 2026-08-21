@@ -64,7 +64,11 @@ func discoverFunctionalTestInventoryWithPatterns(listPatterns, packages []string
 }
 
 func listFunctionalTestPackages(packages []string, repoRoot string) ([]functionalGoListPackage, error) {
-	args := append([]string{"list", "-json"}, packages...)
+	// The inventory only needs package locations and build-selected test file
+	// names. -find keeps go list from resolving imports and dependencies for
+	// every functional package; the AST parser below remains responsible for
+	// validating the selected source files.
+	args := append([]string{"list", "-json", "-find"}, packages...)
 	stdout, stderr, err := runCommand(commandInvocation{
 		name: "go",
 		args: args,

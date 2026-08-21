@@ -59,8 +59,8 @@ func TestBeta(t *testing.T) {}
 	if !slices.Equal(inventory.Tests[packageA], []string{"TestAdded", "TestAlpha"}) || !slices.Equal(inventory.Tests[packageB], []string{"TestBeta"}) {
 		t.Fatalf("inventory tests = %+v, want both package test lists", inventory.Tests)
 	}
-	if gotInvocation.name != "go" || gotInvocation.dir != repoRoot || !slices.Equal(gotInvocation.args, []string{"list", "-json", packageA, packageB}) {
-		t.Fatalf("discovery invocation = %+v, want go list -json for sorted packages", gotInvocation)
+	if gotInvocation.name != "go" || gotInvocation.dir != repoRoot || !slices.Equal(gotInvocation.args, []string{"list", "-json", "-find", packageA, packageB}) {
+		t.Fatalf("discovery invocation = %+v, want go list -json -find for sorted packages", gotInvocation)
 	}
 }
 
@@ -101,8 +101,8 @@ func TestSelected(t *testing.T) {}
 	if !slices.Equal(inventory.Packages, []string{packagePath}) || !slices.Equal(inventory.Tests[packagePath], []string{"TestSelected"}) {
 		t.Fatalf("inventory = %+v, want selected package only", inventory)
 	}
-	if gotInvocation.name != "go" || gotInvocation.dir != repoRoot || !slices.Equal(gotInvocation.args, []string{"list", "-json", "./tests/functional/..."}) {
-		t.Fatalf("discovery invocation = %+v, want one current-tree go list pattern", gotInvocation)
+	if gotInvocation.name != "go" || gotInvocation.dir != repoRoot || !slices.Equal(gotInvocation.args, []string{"list", "-json", "-find", "./tests/functional/..."}) {
+		t.Fatalf("discovery invocation = %+v, want one current-tree go list -find pattern", gotInvocation)
 	}
 }
 
@@ -284,8 +284,8 @@ func TestTwo(t *testing.T) {}
 	}
 
 	commandRunner = func(invocation commandInvocation) (string, string, error) {
-		if invocation.name != "go" || !slices.Equal(invocation.args, []string{"list", "-json", packagePath}) {
-			t.Fatalf("discovery invocation = %+v, want go list -json", invocation)
+		if invocation.name != "go" || !slices.Equal(invocation.args, []string{"list", "-json", "-find", packagePath}) {
+			t.Fatalf("discovery invocation = %+v, want go list -json -find", invocation)
 		}
 		return marshalFunctionalGoListPackage(t, functionalGoListPackage{
 			ImportPath:  packagePath,
