@@ -1373,6 +1373,57 @@ function workstationResizeLayout(): GraphLayout {
   };
 }
 
+function semanticNodeResizeLayout(): GraphLayout {
+  return {
+    edges: [],
+    height: 520,
+    nodes: [
+      {
+        column: 0,
+        height: 160,
+        nodeId: "workstation:review",
+        nodeKind: "workstation",
+        row: 0,
+        width: 220,
+        workstationNodeId: "review",
+        x: 120,
+        y: 80,
+      },
+      {
+        column: 0,
+        height: 86,
+        nodeId: "place:story:queued",
+        nodeKind: "state_position",
+        place: {
+          kind: "work_state",
+          place_id: "story:queued",
+          state_category: "INITIAL",
+          state_value: "queued",
+          type_id: "story",
+        },
+        row: 1,
+        width: 164,
+        x: 120,
+        y: 300,
+      },
+      {
+        column: 1,
+        displayLabel: "Runbook",
+        fileType: "DOC",
+        height: 86,
+        nodeId: "doc:factory/docs/runbook.md",
+        nodeKind: "doc",
+        row: 0,
+        targetPath: "factory/docs/runbook.md",
+        width: 168,
+        x: 420,
+        y: 80,
+      },
+    ],
+    width: 720,
+  };
+}
+
 function nodeResizeControls(
   result: { current: CurrentActivityGraphViewModelResult },
   nodeId: string,
@@ -1486,6 +1537,35 @@ describe("current activity graph live node resize", () => {
     });
 
     expect(expanded()).toBe(true);
+  });
+
+  it("requests the expanded content variant for every resized semantic node family", () => {
+    const { result } = renderGraphViewModelWithLayout(
+      semanticNodeResizeLayout(),
+    );
+    const nodeIDs = [
+      "workstation:review",
+      "place:story:queued",
+      "doc:factory/docs/runbook.md",
+    ];
+
+    const expanded = (nodeId: string) =>
+      (
+        result.current.nodes.find((node) => node.id === nodeId)?.data as
+          | { expanded?: boolean }
+          | undefined
+      )?.expanded;
+
+    for (const nodeId of nodeIDs) {
+      expect(expanded(nodeId)).toBe(false);
+      act(() => {
+        nodeResizeControls(result, nodeId)?.onResizeEnd?.({
+          height: 220,
+          width: 240,
+        });
+      });
+      expect(expanded(nodeId)).toBe(true);
+    }
   });
 
   it("does not resize while the editor cannot be interacted with", () => {

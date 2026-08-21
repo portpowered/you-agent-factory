@@ -21,6 +21,7 @@ import {
 export interface FactoryGraphDocNodeData extends Record<string, unknown> {
   activeFlow?: boolean;
   displayLabel: string;
+  expanded?: boolean;
   focused?: boolean;
   factoryGraphNodeId?: string;
   fileType?: string;

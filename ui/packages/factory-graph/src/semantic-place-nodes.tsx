@@ -38,6 +38,7 @@ export interface FactoryGraphSemanticPlaceRef extends FactoryGraphPlaceRef {
 export interface FactoryGraphBasePlaceNodeData extends Record<string, unknown> {
   activeFlow: boolean;
   activeItemLabels: string[];
+  expanded?: boolean;
   focused?: boolean;
   factoryGraphNodeId?: string;
   handles: FactoryGraphNodeHandle[];

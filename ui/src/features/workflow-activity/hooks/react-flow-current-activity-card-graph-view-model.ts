@@ -439,17 +439,11 @@ function useCurrentActivityGraphNodePresentation(
           position: transientPositionsByNodeId.get(node.id) ?? node.position,
           selected: graphSelection.isNodeSelected(node.id),
         };
-        // Overriding `data` across the whole union would sever the link
-        // between each node's `type` and its `data`; only the workstation
-        // view has an expanded content variant, so narrow before stamping it.
-        if (node.type === "workstation") {
-          return {
-            ...node,
-            ...presentation,
-            data: { ...node.data, expanded: resizedDimensions !== undefined },
-          };
-        }
-        return { ...node, ...presentation };
+        return projectCurrentActivityNodePresentation(
+          node,
+          presentation,
+          resizedDimensions !== undefined,
+        );
       }),
     [
       baseNodes,
@@ -461,6 +455,34 @@ function useCurrentActivityGraphNodePresentation(
   );
 
   return { displayNodes, handleNodesChange };
+}
+
+type CurrentActivityNodePresentation = {
+  height?: number;
+  measured?: FactoryGraphNodeDimensions;
+  position: { x: number; y: number };
+  selected: boolean;
+  width?: number;
+};
+
+/**
+ * Preserve the React Flow node/data discriminant while adding presentation
+ * state shared by every semantic node family. Each factory-graph data
+ * contract declares `expanded`, but TypeScript cannot retain that invariant
+ * through a spread over the discriminated union without this narrow helper.
+ */
+function projectCurrentActivityNodePresentation<
+  Node extends CurrentActivityNode,
+>(
+  node: Node,
+  presentation: CurrentActivityNodePresentation,
+  expanded: boolean,
+): Node {
+  return {
+    ...node,
+    ...presentation,
+    data: { ...node.data, expanded },
+  } as Node;
 }
 
 function useCurrentActivityGraphEdges({

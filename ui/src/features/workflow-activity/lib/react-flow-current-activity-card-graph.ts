@@ -598,7 +598,7 @@ function buildPlaceNodeData(
           input.selection.nodeId === factoryGraphNodeId),
       resizeControls: resizeControlsForNode({
         family: placeNodeFamily(place, factoryGraphNode),
-        nodeId: factoryGraphNodeId,
+        nodeId: positionedNode.nodeId,
         position: { x: positionedNode.x, y: positionedNode.y },
         resizeController: input.editor?.nodeResizeControls,
       }),

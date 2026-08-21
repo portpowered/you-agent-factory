@@ -32,6 +32,7 @@ export interface FactoryGraphPlaceRef {
 
 export interface FactoryGraphWorkerNodeData extends Record<string, unknown> {
   activeFlow: boolean;
+  expanded?: boolean;
   focused?: boolean;
   factoryGraphNodeId?: string;
   handles: FactoryGraphNodeHandle[];
@@ -52,6 +53,7 @@ export type FactoryGraphWorkerNode = Node<FactoryGraphWorkerNodeData, "worker">;
 
 export interface FactoryGraphWorkTypeNodeData extends Record<string, unknown> {
   activeFlow: boolean;
+  expanded?: boolean;
   focused?: boolean;
   factoryGraphNodeId?: string;
   handles: FactoryGraphNodeHandle[];
@@ -75,6 +77,7 @@ export type FactoryGraphWorkTypeNode = Node<
 
 export interface FactoryGraphResourceNodeData extends Record<string, unknown> {
   activeFlow: boolean;
+  expanded?: boolean;
   focused?: boolean;
   factoryGraphNodeId?: string;
   handles: FactoryGraphNodeHandle[];
