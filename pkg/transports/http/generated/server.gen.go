@@ -7528,7 +7528,7 @@ type SubmitWorkRequest struct {
 	// Name Optional authored name for this single-work submission. When omitted, the server assigns the single-work request's canonical identity.
 	Name *string `json:"name,omitempty"`
 
-	// Payload Opaque work payload forwarded as raw JSON.
+	// Payload Opaque work payload forwarded as raw JSON. Each submitted Work payload is limited to 65,536 bytes measured from its compact UTF-8 JSON value; exactly 65,536 bytes is allowed. An oversized submission returns the operation's 400 BAD_REQUEST ErrorResponse with payloadBytes and payloadLimitBytes; those values count bytes, not characters.
 	Payload interface{} `json:"payload,omitempty"`
 
 	// Relations Optional token-level runtime relations preserved on the submitted work item.
@@ -7666,7 +7666,7 @@ type Work struct {
 	// Name A human readable name for the work, not unique
 	Name string `json:"name"`
 
-	// Payload Opaque work payload forwarded as raw JSON, or a binary data, or whatever else.
+	// Payload Opaque work payload forwarded as raw JSON. Each submitted Work payload is limited to 65,536 bytes measured from its compact UTF-8 JSON value; exactly 65,536 bytes is allowed. A batch is rejected atomically with a 400 BAD_REQUEST ErrorResponse when any Work payload exceeds this limit. The reported payloadBytes value is a byte count, not a character count.
 	Payload interface{} `json:"payload,omitempty"`
 
 	// PreviousChainingTraceIds Explicit predecessor chaining traces that directly caused this work item.
@@ -7916,7 +7916,7 @@ type WorkRequest struct {
 	// Type Kind of work request accepted by the factory.
 	Type WorkRequestType `json:"type"`
 
-	// Works A batch of work items to be submitted together.
+	// Works A batch of work items to be submitted together. Each Work payload uses the compact UTF-8 JSON byte limit documented by the Work schema; a batch is rejected atomically when any Work exceeds 65,536 bytes.
 	Works *[]Work `json:"works,omitempty"`
 }
 

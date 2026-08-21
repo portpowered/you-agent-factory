@@ -25,6 +25,14 @@ var (
 	ErrWorkRequestRejected = errors.New("Work Request rejected")
 )
 
+// MaxWorkPayloadBytes is the inclusive compact UTF-8 JSON byte limit for one
+// Work payload at admission.
+const MaxWorkPayloadBytes = requestadmission.MaxWorkPayloadBytes
+
+// PayloadSizeError identifies the Work admission failure caused by exceeding
+// MaxWorkPayloadBytes without retaining the payload content.
+type PayloadSizeError = requestadmission.PayloadSizeError
+
 // ErrConflictingWorkRequestTraceFields reports conflicting current and legacy
 // trace identities on one Work request.
 var ErrConflictingWorkRequestTraceFields = requestadmission.ErrConflictingWorkRequestTraceFields

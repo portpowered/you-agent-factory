@@ -1255,7 +1255,7 @@ export interface components {
       items?: components["schemas"]["SubmitWorkItemList"];
       /** @description Optional canonical ordered work content parts for this submission. */
       content?: components["schemas"]["WorkContent"];
-      /** @description Opaque work payload forwarded as raw JSON. */
+      /** @description Opaque work payload forwarded as raw JSON. Each submitted Work payload is limited to 65,536 bytes measured from its compact UTF-8 JSON value; exactly 65,536 bytes is allowed. An oversized submission returns the operation's 400 BAD_REQUEST ErrorResponse with payloadBytes and payloadLimitBytes; those values count bytes, not characters. */
       payload?: unknown;
       tags?: components["schemas"]["StringMap"];
       /** @description Optional token-level runtime relations preserved on the submitted work item. */
@@ -6671,7 +6671,7 @@ export interface components {
       /** @description Optional default chaining-trace identifier applied to submitted work items that omit it. */
       currentChainingTraceId?: string;
       type: components["schemas"]["WorkRequestType"];
-      /** @description A batch of work items to be submitted together. */
+      /** @description A batch of work items to be submitted together. Each Work payload uses the compact UTF-8 JSON byte limit documented by the Work schema; a batch is rejected atomically when any Work exceeds 65,536 bytes. */
       works?: components["schemas"]["Work"][];
       /** @description Relationships between various work items. */
       relations?: components["schemas"]["Relation"][];
@@ -6703,7 +6703,7 @@ export interface components {
       traceId?: string;
       /** @description Optional canonical ordered work content parts for this work item. */
       content?: components["schemas"]["WorkContent"];
-      /** @description Opaque work payload forwarded as raw JSON, or a binary data, or whatever else. */
+      /** @description Opaque work payload forwarded as raw JSON. Each submitted Work payload is limited to 65,536 bytes measured from its compact UTF-8 JSON value; exactly 65,536 bytes is allowed. A batch is rejected atomically with a 400 BAD_REQUEST ErrorResponse when any Work payload exceeds this limit. The reported payloadBytes value is a byte count, not a character count. */
       payload?: unknown;
       /** @description Optional JSON value produced by a workstation whose outputSchema validated the worker response. JSON null is distinct from an omitted value. */
       structuredResult?: unknown;

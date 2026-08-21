@@ -31,6 +31,15 @@ type CodedError interface {
 	CLIErrorMessage() string
 }
 
+// FamilyCodedError optionally supplies the public ErrorResponse family along
+// with the already-sanitized CLI code and message. Command packages that
+// preserve a transport-owned bad-request diagnostic can use this seam without
+// making the central renderer inspect or unwrap private causes.
+type FamilyCodedError interface {
+	CodedError
+	CLIErrorFamily() factoryapi.ErrorFamily
+}
+
 // InvocationCodedError supports the existing invocation error vocabulary
 // without forcing older command packages to rename their methods.
 type InvocationCodedError interface {
@@ -177,6 +186,14 @@ type fields struct {
 func diagnosticFields(err error) (fields, bool) {
 	if err == nil {
 		return fields{}, false
+	}
+	var familyCoded FamilyCodedError
+	if errors.As(err, &familyCoded) {
+		return fields{
+			code:    strings.TrimSpace(familyCoded.CLIErrorCode()),
+			message: strings.TrimSpace(familyCoded.CLIErrorMessage()),
+			family:  familyCoded.CLIErrorFamily(),
+		}, true
 	}
 	var coded CodedError
 	if errors.As(err, &coded) {

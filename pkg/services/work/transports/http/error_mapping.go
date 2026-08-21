@@ -56,6 +56,11 @@ func RootErrorResponse(err error) (int, factoryapi.ErrorResponse, bool) {
 		return badRequestErrorResponse("invalid Work Request")
 	}
 
+	var payloadSize *work.PayloadSizeError
+	if errors.As(err, &payloadSize) {
+		return badRequestErrorResponse(payloadSize.Error())
+	}
+
 	var stagingErr *work.ContentStagingError
 	if errors.As(err, &stagingErr) {
 		return badRequestErrorResponse(stagingErr.Message)

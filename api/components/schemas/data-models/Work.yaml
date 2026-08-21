@@ -39,7 +39,12 @@ properties:
     $ref: './WorkContent.yaml'
     description: Optional canonical ordered work content parts for this work item.
   payload:
-    description: Opaque work payload forwarded as raw JSON, or a binary data, or whatever else. 
+    description: >-
+      Opaque work payload forwarded as raw JSON. Each submitted Work payload is
+      limited to 65,536 bytes measured from its compact UTF-8 JSON value;
+      exactly 65,536 bytes is allowed. A batch is rejected atomically with a
+      400 BAD_REQUEST ErrorResponse when any Work payload exceeds this limit.
+      The reported payloadBytes value is a byte count, not a character count.
   structuredResult:
     description: Optional JSON value produced by a workstation whose outputSchema validated the worker response. JSON null is distinct from an omitted value.
   tags:
