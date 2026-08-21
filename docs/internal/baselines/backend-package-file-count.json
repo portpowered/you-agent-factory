@@ -315,7 +315,7 @@
     },
     {
       "packagePath": "pkg/transports/cli",
-      "fileCount": 30,
+      "fileCount": 29,
       "owner": "cli-maintainers",
       "removalReason": "Split the oversized root run tests into focused command and behavior files; continue extracting command ownership into focused packages."
     },
@@ -351,7 +351,7 @@
     },
     {
       "packagePath": "pkg/transports/cli/run",
-      "fileCount": 31,
+      "fileCount": 30,
       "owner": "cli-maintainers",
       "removalReason": "Split run invocation, presentation, and input behavior."
     },
