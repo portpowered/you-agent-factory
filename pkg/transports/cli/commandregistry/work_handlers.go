@@ -31,8 +31,8 @@ const (
 	workMoveStateNameInputID          = "you.work.move.arg.1"
 	workMoveSessionInputID            = "you.work.move.flag.session"
 	workMoveRequestIDInputID          = "you.work.move.flag.request-id"
-	workVisualizeBatchInputID         = "you.work.visualize.arg.0"
-	workVisualizeFormatInputID        = "you.work.visualize.flag.format"
+	workRenderBatchInputID            = "you.work.render.arg.0"
+	workRenderFormatInputID           = "you.work.render.flag.format"
 	workApprovalListSessionInputID    = "you.work.approval.list.flag.session"
 	workApprovalShowApprovalIDInputID = "you.work.approval.show.arg.0"
 	workApprovalShowSessionInputID    = "you.work.approval.show.flag.session"
@@ -105,7 +105,7 @@ type ResolvedMoveBinding struct {
 }
 
 // ResolvedVisualizeBinding supplies the local operation used by the Work
-// visualize stable-input adapter.
+// render stable-input adapter.
 type ResolvedVisualizeBinding struct {
 	VisualizeWork func(workcli.VisualizeConfig) error
 }
@@ -470,7 +470,7 @@ func resolvedMoveConfig(
 	}, nil
 }
 
-// ResolvedVisualizeRunE maps canonical Work visualize input IDs into one local
+// ResolvedVisualizeRunE maps canonical Work render input IDs into one local
 // request without retaining Cobra-backed pointers between invocations.
 func ResolvedVisualizeRunE(binding ResolvedVisualizeBinding) ResolvedWorkRunE {
 	return func(
@@ -479,15 +479,15 @@ func ResolvedVisualizeRunE(binding ResolvedVisualizeBinding) ResolvedWorkRunE {
 		_ resolvedinput.Inputs,
 	) error {
 		if binding.VisualizeWork == nil {
-			return fmt.Errorf("work visualize service is required")
+			return fmt.Errorf("work render service is required")
 		}
-		batchFile, err := inputs.String(workVisualizeBatchInputID)
+		batchFile, err := inputs.String(workRenderBatchInputID)
 		if err != nil {
-			return fmt.Errorf("resolve work visualize inputs: %w", err)
+			return fmt.Errorf("resolve work render inputs: %w", err)
 		}
-		format, err := inputs.String(workVisualizeFormatInputID)
+		format, err := inputs.String(workRenderFormatInputID)
 		if err != nil {
-			return fmt.Errorf("resolve work visualize inputs: %w", err)
+			return fmt.Errorf("resolve work render inputs: %w", err)
 		}
 		return binding.VisualizeWork(workcli.VisualizeConfig{
 			Context: cmd.Context(), BatchFile: batchFile,

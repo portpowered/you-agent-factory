@@ -15,10 +15,10 @@ import (
 
 const visualizeBatchRequestID = "work-visualize-dependency-graph"
 
-// TestWorkVisualizeProducesDeterministicGraph proves you work visualize renders
+// TestWorkRenderProducesDeterministicGraph proves you work render renders
 // the same Mermaid dependency graph for a local FACTORY_REQUEST_BATCH on every
 // invocation without submitting work or contacting a running factory.
-func TestWorkVisualizeProducesDeterministicGraph(t *testing.T) {
+func TestWorkRenderProducesDeterministicGraph(t *testing.T) {
 	harness := builtcliacceptance.NewHarness(t, testutil.MustRepoRoot(t))
 	session := harness.NewSession(t)
 	batchPath := writeVisualizeDependencyBatchFile(t, session.WorkDir)
@@ -26,11 +26,11 @@ func TestWorkVisualizeProducesDeterministicGraph(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	first, err := session.Run(ctx, "work", "visualize", batchPath)
-	firstOut := session.RequireSuccess(t, "first visualize", first, err).Stdout
+	first, err := session.Run(ctx, "work", "render", batchPath)
+	firstOut := session.RequireSuccess(t, "first render", first, err).Stdout
 
-	second, err := session.Run(ctx, "work", "visualize", batchPath)
-	secondOut := session.RequireSuccess(t, "second visualize", second, err).Stdout
+	second, err := session.Run(ctx, "work", "render", batchPath)
+	secondOut := session.RequireSuccess(t, "second render", second, err).Stdout
 
 	if firstOut != secondOut {
 		t.Fatalf("visualize output not deterministic:\nfirst:\n%s\nsecond:\n%s", firstOut, secondOut)

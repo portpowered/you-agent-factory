@@ -699,7 +699,7 @@ submitted batch. For `DEPENDS_ON`, declare the source by name and identify the
 target by name, ID, or both. Live admission normalizes the target reference to
 its canonical Work ID.
 
-## Visualize batch dependencies (`you work visualize`)
+## Render batch dependencies (`you work render`)
 
 Inspect declared work dependencies in a local batch file without submitting it
 to a factory. The command is **read-only**: it parses the batch JSON from disk,
@@ -712,14 +712,14 @@ declared batch relations (`DEPENDS_ON` and `PARENT_CHILD`) using
 
 | Output | Command |
 |--------|---------|
-| Raw Mermaid `flowchart` (default) | `you work visualize <batch-file.json>` |
-| Markdown with fenced `mermaid` block | `you work visualize --format markdown-mermaid <batch-file.json>` |
+| Raw Mermaid `flowchart` (default) | `you work render <batch-file.json>` |
+| Markdown with fenced `mermaid` block | `you work render --format markdown-mermaid <batch-file.json>` |
 
 Redirect stdout to save the diagram for your own renderer or docs tooling:
 
 ```text
-you work visualize batch.json > my-graph.mermaid
-you work visualize --format markdown-mermaid batch.json > graph.md
+you work render batch.json > my-graph.mermaid
+you work render --format markdown-mermaid batch.json > graph.md
 ```
 
 On success, graph output goes to stdout and diagnostics go to stderr. Invalid

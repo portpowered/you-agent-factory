@@ -21,5 +21,5 @@ var WorkFamilyCommandIDs = []string{
 	"you.work.watch",
 	"you.work.show",
 	"you.work.move",
-	"you.work.visualize",
+	"you.work.render",
 }

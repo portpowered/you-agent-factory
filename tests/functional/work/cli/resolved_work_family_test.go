@@ -18,7 +18,7 @@ import (
 )
 
 // TestResolvedWorkFamilyExecutesEveryPublicOperationFromStableInputs proves list,
-// watch, show, move, and visualize work CLI commands execute through resolved handlers.
+// watch, show, move, and render work CLI commands execute through resolved handlers.
 func TestResolvedWorkFamilyExecutesEveryPublicOperationFromStableInputs(t *testing.T) {
 	observed := &resolvedWorkFamilyObservations{}
 	handlers := resolvedWorkFamilyHandlers(observed)
@@ -87,7 +87,7 @@ func assertResolvedWorkFamilyCommands(t *testing.T, handlers commandregistry.Res
 	assertResolvedWorkExecution(t, handlers, []string{"--server", "https://factory.example", "--debug", "work", "watch", "--session", "session-w", "--follow"}, "watched\n")
 	assertResolvedWorkExecution(t, handlers, []string{"--server", "https://factory.example", "--json", "work", "show", "--session", "session-b", "work-b"}, "shown\n")
 	assertResolvedWorkExecution(t, handlers, []string{"--server", "https://factory.example", "--verbose", "work", "move", "--session", "session-c", "--request-id", "request-c", "work-c", "complete"}, "moved\n")
-	assertResolvedWorkExecution(t, handlers, []string{"work", "visualize", "--format", "markdown-mermaid", "batch.json"}, "visualized\n")
+	assertResolvedWorkExecution(t, handlers, []string{"work", "render", "--format", "markdown-mermaid", "batch.json"}, "visualized\n")
 }
 
 func assertResolvedWorkFamilyObservations(t *testing.T, observed *resolvedWorkFamilyObservations) {
@@ -155,7 +155,7 @@ func resolvedWorkFamilyRoot(
 		"you.work.approval.show": handlers.ApprovalShow,
 		"you.work.list":          handlers.List, "you.work.watch": handlers.Watch,
 		"you.work.show": handlers.Show, "you.work.move": handlers.Move,
-		"you.work.visualize": handlers.Visualize,
+		"you.work.render": handlers.Visualize,
 	}
 	cobraHandlers := make(climanifestcobra.CobraHandlerRegistry, len(byCommandID))
 	for commandID, handler := range byCommandID {

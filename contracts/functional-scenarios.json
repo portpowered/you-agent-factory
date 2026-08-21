@@ -566,8 +566,8 @@
       "reviewedReason": "No qualifying repository-owned functional test currently invokes and observes this component through its customer boundary."
     },
     {
-      "stableId": "cli/you.work.visualize",
-      "name": "you work visualize",
+      "stableId": "cli/you.work.render",
+      "name": "you work render",
       "interface": "cli",
       "classification": "runnable",
       "status": "missing",

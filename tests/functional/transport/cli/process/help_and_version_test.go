@@ -43,7 +43,7 @@ var forbiddenRootDiscoveryCommands = []string{
 	"resume",
 	"dispatches",
 	"move",
-	"visualize",
+	"render",
 	"inspect",
 	"invoke",
 	"pull",

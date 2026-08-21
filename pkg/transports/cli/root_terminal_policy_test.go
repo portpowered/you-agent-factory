@@ -426,7 +426,7 @@ func TestProductionWorkCommandUsesGeneratedFamily(t *testing.T) {
 	if approval.RunE != nil {
 		t.Fatal("generated work approval parent must remain non-runnable")
 	}
-	for _, path := range []string{"list", "watch", "show", "move", "visualize"} {
+	for _, path := range []string{"list", "watch", "show", "move", "render"} {
 		if _, _, err := work.Find([]string{path}); err != nil {
 			t.Fatalf("generated work tree missing %q: %v", path, err)
 		}
@@ -463,12 +463,12 @@ func TestProductionWorkCommandAttachesHandwrittenRunE(t *testing.T) {
 	if move.RunE == nil {
 		t.Fatal("generated work move must attach handwritten RunE")
 	}
-	visualize, _, err := work.Find([]string{"visualize"})
+	visualize, _, err := work.Find([]string{"render"})
 	if err != nil {
-		t.Fatalf("Find(visualize) error = %v", err)
+		t.Fatalf("Find(render) error = %v", err)
 	}
 	if visualize.RunE == nil {
-		t.Fatal("generated work visualize must attach handwritten RunE")
+		t.Fatal("generated work render must attach handwritten RunE")
 	}
 }
 
@@ -488,7 +488,7 @@ func TestProductionRootUsesGeneratedWorkFamilyCutover(t *testing.T) {
 	if approval.RunE != nil {
 		t.Fatal("you work approval must remain non-runnable through generated cutover")
 	}
-	for _, path := range []string{"list", "watch", "show", "move", "visualize"} {
+	for _, path := range []string{"list", "watch", "show", "move", "render"} {
 		leaf, _, err := root.Find([]string{"work", path})
 		if err != nil {
 			t.Fatalf("Find(work %s) error = %v", path, err)

@@ -48,8 +48,8 @@ you work approval list	list	you work approval
 you work approval show	show <approval-id>	you work approval
 you work list	list	you work
 you work move	move <work-id> <state-name>	you work
+you work render	render <batch-file.json>	you work
 you work show	show <work-id>	you work
-you work visualize	visualize <batch-file.json>	you work
 you work watch	watch [--session <session>] [--follow]	you work
 you worker-sessions	worker-sessions	you
 you worker-sessions cancel	cancel <worker-session-id>	you worker-sessions

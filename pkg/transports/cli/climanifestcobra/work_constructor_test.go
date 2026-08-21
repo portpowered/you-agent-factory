@@ -240,7 +240,7 @@ func TestNewResolvedWorkCommandTreeBuildsOnlyGeneratedWorkFamily(t *testing.T) {
 		{"work", "watch"},
 		{"work", "show"},
 		{"work", "move"},
-		{"work", "visualize"},
+		{"work", "render"},
 	} {
 		command, remaining, findErr := root.Find(path)
 		if findErr != nil || len(remaining) != 0 || !command.Runnable() {
@@ -317,14 +317,14 @@ func TestNewResolvedWorkCommandTreeSuppliesFreshTypedSnapshots(t *testing.T) {
 
 func TestNewResolvedWorkCommandTreeResolvesGeneratedArgumentsAndDefaults(t *testing.T) {
 	var showInputs resolvedinput.Inputs
-	var visualizeInputs resolvedinput.Inputs
+	var renderInputs resolvedinput.Inputs
 	handlers := noopResolvedWorkHandlers()
 	handlers.Show = func(_ *cobra.Command, local, _ resolvedinput.Inputs) error {
 		showInputs = local
 		return nil
 	}
 	handlers.Visualize = func(_ *cobra.Command, local, _ resolvedinput.Inputs) error {
-		visualizeInputs = local
+		renderInputs = local
 		return nil
 	}
 	root, err := NewResolvedWorkCommandTree(handlers)
@@ -341,12 +341,12 @@ func TestNewResolvedWorkCommandTreeResolvesGeneratedArgumentsAndDefaults(t *test
 	if err != nil {
 		t.Fatal(err)
 	}
-	root.SetArgs([]string{"work", "visualize", "batch.json"})
+	root.SetArgs([]string{"work", "render", "batch.json"})
 	if err := root.Execute(); err != nil {
-		t.Fatalf("visualize Execute() error = %v", err)
+		t.Fatalf("render Execute() error = %v", err)
 	}
-	assertResolvedString(t, visualizeInputs, "you.work.visualize.arg.0", "batch.json")
-	assertResolvedString(t, visualizeInputs, "you.work.visualize.flag.format", "mermaid")
+	assertResolvedString(t, renderInputs, "you.work.render.arg.0", "batch.json")
+	assertResolvedString(t, renderInputs, "you.work.render.flag.format", "mermaid")
 }
 
 func TestNewResolvedWorkCommandTreeEnforcesManifestArgumentCardinality(t *testing.T) {

@@ -6804,13 +6804,13 @@
           },
           "description": {
             "id": "you.work.description",
-            "canonicalEnglish": "Inspect and control work on a running you-agent-factory service.\n\nSubcommands:\n  list       list work from GET /factory-sessions/{session_id}/work with optional filters and pagination\n  show       show one work item from GET /factory-sessions/{session_id}/work/{work_id}\n  move       move one work item to another authored state through POST /factory-sessions/{session_id}/work/{work_id}/move\n  visualize  read a local FACTORY_REQUEST_BATCH JSON file and render its dependency graph to stdout\n\nAPI-backed list, show, and move commands target the default compatibility session unless --session is set. Use global --json to emit API-shaped responses on stdout; diagnostics stay on stderr when --verbose or --debug is set."
+            "canonicalEnglish": "Inspect and control work on a running you-agent-factory service.\n\nSubcommands:\n  list       list work from GET /factory-sessions/{session_id}/work with optional filters and pagination\n  show       show one work item from GET /factory-sessions/{session_id}/work/{work_id}\n  move       move one work item to another authored state through POST /factory-sessions/{session_id}/work/{work_id}/move\n  render     read a local FACTORY_REQUEST_BATCH JSON file and render its dependency graph to stdout\n\nAPI-backed list, show, and move commands target the default compatibility session unless --session is set. Use global --json to emit API-shaped responses on stdout; diagnostics stay on stderr when --verbose or --debug is set."
           }
         },
         "examples": [
           "you work list",
           "you work show work-123",
-          "you work visualize batch.json"
+          "you work render batch.json"
         ],
         "visibility": "public",
         "sourceHash": "1c5e9c676da355e5e981a4a64db36f2e5264a63ea42a00aca07844e07a825e0a"
@@ -6825,7 +6825,7 @@
       "runnable": false,
       "usage": {
         "line": "work",
-        "example": "  # List work on the default compatibility session.\n  you work list\n\n  # Show one work item after submit.\n  you work show work-123\n\n  # Render a local batch dependency graph.\n  you work visualize batch.json > graph.mermaid"
+        "example": "  # List work on the default compatibility session.\n  you work list\n\n  # Show one work item after submit.\n  you work show work-123\n\n  # Render a local batch dependency graph.\n  you work render batch.json > graph.mermaid"
       },
       "flags": {
         "you.work.flag.debug": {
@@ -8928,34 +8928,34 @@
         ]
       }
     },
-    "you.work.visualize": {
-      "id": "you.work.visualize",
-      "name": "visualize",
-      "path": "you work visualize",
+    "you.work.render": {
+      "id": "you.work.render",
+      "name": "render",
+      "path": "you work render",
       "aliases": [],
       "documentation": {
         "formatVersion": "1.0.0",
-        "itemId": "you.work.visualize",
+        "itemId": "you.work.render",
         "documentation": {
           "title": {
-            "id": "you.work.visualize.title",
+            "id": "you.work.render.title",
             "canonicalEnglish": "Render a work batch dependency graph as Mermaid"
           },
           "description": {
-            "id": "you.work.visualize.description",
-            "canonicalEnglish": "Read a local FACTORY_REQUEST_BATCH JSON file from disk and render its declared work dependencies as a diagram.\n\nThe required <batch-file.json> argument is a path to any readable batch file. Graph nodes represent work items; directed edges represent declared dependency relations from the batch.\n\nOutput format (default: mermaid):\n  mermaid           Raw Mermaid flowchart syntax written to stdout.\n  markdown-mermaid  Markdown with a title and one fenced mermaid code block.\n\nThis command is read-only. It does not submit work, contact a running factory, or render diagram images.\n\nRedirect stdout to save output, for example:\n  you work visualize batch.json > my-graph.mermaid\n  you work visualize --format markdown-mermaid batch.json > graph.md"
+            "id": "you.work.render.description",
+            "canonicalEnglish": "Read a local FACTORY_REQUEST_BATCH JSON file from disk and render its declared work dependencies as a diagram.\n\nThe required <batch-file.json> argument is a path to any readable batch file. Graph nodes represent work items; directed edges represent declared dependency relations from the batch.\n\nOutput format (default: mermaid):\n  mermaid           Raw Mermaid flowchart syntax written to stdout.\n  markdown-mermaid  Markdown with a title and one fenced mermaid code block.\n\nThis command is read-only. It does not submit work, contact a running factory, or render diagram images.\n\nRedirect stdout to save output, for example:\n  you work render batch.json > my-graph.mermaid\n  you work render --format markdown-mermaid batch.json > graph.md"
           }
         },
         "examples": [
-          "you work visualize batch.json",
-          "you work visualize --format markdown-mermaid batch.json"
+          "you work render batch.json",
+          "you work render --format markdown-mermaid batch.json"
         ],
         "visibility": "public",
         "sourceHash": "b3c7f04e96b30509996b53c99586102e5bfe92661b99dea91eeb46d4a43354b8"
       },
       "lifecycle": {
         "formatVersion": "1.0.0",
-        "itemId": "you.work.visualize",
+        "itemId": "you.work.render",
         "state": "active",
         "since": "1.0.0"
       },
@@ -8963,12 +8963,12 @@
       "runnable": true,
       "placement": "local-only",
       "usage": {
-        "line": "visualize <batch-file.json>",
-        "example": "  # Default: raw Mermaid flowchart to stdout.\n  you work visualize batch.json > my-graph.mermaid\n\n  # Markdown with embedded Mermaid diagram.\n  you work visualize --format markdown-mermaid batch.json > graph.md"
+        "line": "render <batch-file.json>",
+        "example": "  # Default: raw Mermaid flowchart to stdout.\n  you work render batch.json > my-graph.mermaid\n\n  # Markdown with embedded Mermaid diagram.\n  you work render --format markdown-mermaid batch.json > graph.md"
       },
       "arguments": {
-        "you.work.visualize.arg.0": {
-          "id": "you.work.visualize.arg.0",
+        "you.work.render.arg.0": {
+          "id": "you.work.render.arg.0",
           "name": "batch-file.json",
           "position": 0,
           "kind": "positional",
@@ -8987,8 +8987,8 @@
         }
       },
       "flags": {
-        "you.work.visualize.flag.debug": {
-          "id": "you.work.visualize.flag.debug",
+        "you.work.render.flag.debug": {
+          "id": "you.work.render.flag.debug",
           "long": "debug",
           "shorthand": "d",
           "aliases": [],
@@ -9006,13 +9006,13 @@
           "visibility": "visible",
           "lifecycle": {
             "formatVersion": "1.0.0",
-            "itemId": "you.work.visualize.flag.debug",
+            "itemId": "you.work.render.flag.debug",
             "state": "active",
             "since": "1.0.0"
           }
         },
-        "you.work.visualize.flag.json": {
-          "id": "you.work.visualize.flag.json",
+        "you.work.render.flag.json": {
+          "id": "you.work.render.flag.json",
           "long": "json",
           "shorthand": "",
           "aliases": [],
@@ -9030,21 +9030,21 @@
           "visibility": "visible",
           "lifecycle": {
             "formatVersion": "1.0.0",
-            "itemId": "you.work.visualize.flag.json",
+            "itemId": "you.work.render.flag.json",
             "state": "active",
             "since": "1.0.0"
           }
         },
-        "you.work.visualize.flag.remote": {
+        "you.work.render.flag.remote": {
           "aliases": [],
           "binding": "",
           "changedDefault": false,
           "completion": "none",
           "default": "false",
-          "id": "you.work.visualize.flag.remote",
+          "id": "you.work.render.flag.remote",
           "lifecycle": {
             "formatVersion": "1.0.0",
-            "itemId": "you.work.visualize.flag.remote",
+            "itemId": "you.work.render.flag.remote",
             "since": "1.0.0",
             "state": "active"
           },
@@ -9059,8 +9059,8 @@
           "valueType": "bool",
           "visibility": "visible"
         },
-        "you.work.visualize.flag.server": {
-          "id": "you.work.visualize.flag.server",
+        "you.work.render.flag.server": {
+          "id": "you.work.render.flag.server",
           "long": "server",
           "shorthand": "",
           "aliases": [],
@@ -9078,13 +9078,13 @@
           "visibility": "visible",
           "lifecycle": {
             "formatVersion": "1.0.0",
-            "itemId": "you.work.visualize.flag.server",
+            "itemId": "you.work.render.flag.server",
             "state": "active",
             "since": "1.0.0"
           }
         },
-        "you.work.visualize.flag.verbose": {
-          "id": "you.work.visualize.flag.verbose",
+        "you.work.render.flag.verbose": {
+          "id": "you.work.render.flag.verbose",
           "long": "verbose",
           "shorthand": "v",
           "aliases": [],
@@ -9102,13 +9102,13 @@
           "visibility": "visible",
           "lifecycle": {
             "formatVersion": "1.0.0",
-            "itemId": "you.work.visualize.flag.verbose",
+            "itemId": "you.work.render.flag.verbose",
             "state": "active",
             "since": "1.0.0"
           }
         },
-        "you.work.visualize.flag.format": {
-          "id": "you.work.visualize.flag.format",
+        "you.work.render.flag.format": {
+          "id": "you.work.render.flag.format",
           "long": "format",
           "usage": "output format: mermaid or markdown-mermaid",
           "shorthand": "",
@@ -9126,13 +9126,13 @@
           "visibility": "visible",
           "lifecycle": {
             "formatVersion": "1.0.0",
-            "itemId": "you.work.visualize.flag.format",
+            "itemId": "you.work.render.flag.format",
             "state": "active",
             "since": "1.0.0"
           }
         },
-        "you.work.visualize.flag.port": {
-          "id": "you.work.visualize.flag.port",
+        "you.work.render.flag.port": {
+          "id": "you.work.render.flag.port",
           "long": "port",
           "usage": "deprecated; use --server",
           "shorthand": "",
@@ -9150,14 +9150,14 @@
           "visibility": "hidden",
           "lifecycle": {
             "formatVersion": "1.0.0",
-            "itemId": "you.work.visualize.flag.port",
+            "itemId": "you.work.render.flag.port",
             "state": "active",
             "since": "1.0.0"
           }
         }
       },
       "handler": {
-        "id": "you.work.visualize.handler"
+        "id": "you.work.render.handler"
       },
       "precedence": {
         "order": [
@@ -9188,37 +9188,37 @@
         ]
       },
       "outputs": {
-        "you.work.visualize.output.mermaid": {
-          "id": "you.work.visualize.output.mermaid",
+        "you.work.render.output.mermaid": {
+          "id": "you.work.render.output.mermaid",
           "channel": "stdout",
           "format": "text"
         },
-        "you.work.visualize.output.markdown-mermaid": {
-          "id": "you.work.visualize.output.markdown-mermaid",
+        "you.work.render.output.markdown-mermaid": {
+          "id": "you.work.render.output.markdown-mermaid",
           "channel": "stdout",
           "format": "text"
         }
       },
       "exits": {
-        "you.work.visualize.exit.success": {
-          "id": "you.work.visualize.exit.success",
+        "you.work.render.exit.success": {
+          "id": "you.work.render.exit.success",
           "code": 0,
           "kind": "success"
         },
-        "you.work.visualize.exit.failure": {
-          "id": "you.work.visualize.exit.failure",
+        "you.work.render.exit.failure": {
+          "id": "you.work.render.exit.failure",
           "code": 1,
           "kind": "failure"
         },
-        "you.work.visualize.exit.usage": {
-          "id": "you.work.visualize.exit.usage",
+        "you.work.render.exit.usage": {
+          "id": "you.work.render.exit.usage",
           "code": 1,
           "kind": "usage"
         }
       },
       "sideEffects": {
-        "you.work.visualize.side-effect.filesystem": {
-          "id": "you.work.visualize.side-effect.filesystem",
+        "you.work.render.side-effect.filesystem": {
+          "id": "you.work.render.side-effect.filesystem",
           "kind": "filesystem"
         }
       },
