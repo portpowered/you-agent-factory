@@ -32,9 +32,9 @@ func TestHTTPGenericInvocationContractsPreserveOrderedInputsAndNamedOutputs(t *t
 	outputMode := factoryapi.ModelInvocationOutputModeJSON
 	offline := true
 	inputs := []factoryapi.ModelInvocationInput{
-		{Name: "prompt", Modality: factoryapi.ModelOperationContentTypeText, Content: stringPtr("compare")},
-		{Name: "image", Modality: factoryapi.ModelOperationContentTypeImage, MediaType: stringPtr("image/png"), Content: stringPtr("first")},
-		{Name: "image", Modality: factoryapi.ModelOperationContentTypeImage, MediaType: stringPtr("image/jpeg"), Content: stringPtr("second")},
+		{Name: "prompt", Modality: factoryapi.ModelInvocationContentTypeText, Content: stringPtr("compare")},
+		{Name: "image", Modality: factoryapi.ModelInvocationContentTypeImage, MediaType: stringPtr("image/png"), Content: stringPtr("first")},
+		{Name: "image", Modality: factoryapi.ModelInvocationContentTypeImage, MediaType: stringPtr("image/jpeg"), Content: stringPtr("second")},
 	}
 	parameters := []factoryapi.ModelInvocationParameter{{Name: "temperature", Value: map[string]any{"value": 0.2}}}
 	mapped, err := modelhttp.GenericInvocationRequestFromGenerated(factoryapi.GenericModelInvocationRequest{

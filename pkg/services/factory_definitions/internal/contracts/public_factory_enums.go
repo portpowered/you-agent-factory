@@ -161,7 +161,6 @@ var publicFactoryWorkerModelOperationContentTypeAliases = map[string]string{
 	workerconfig.ModelOperationContentTypeText:   workerconfig.ModelOperationContentTypeText,
 	workerconfig.ModelOperationContentTypeImage:  workerconfig.ModelOperationContentTypeImage,
 	workerconfig.ModelOperationContentTypeAudio:  workerconfig.ModelOperationContentTypeAudio,
-	workerconfig.ModelOperationContentTypeVideo:  workerconfig.ModelOperationContentTypeVideo,
 	workerconfig.ModelOperationContentTypeJSON:   workerconfig.ModelOperationContentTypeJSON,
 	workerconfig.ModelOperationContentTypeBinary: workerconfig.ModelOperationContentTypeBinary,
 }

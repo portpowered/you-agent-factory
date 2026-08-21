@@ -77,9 +77,17 @@ actions:
             - ModelOperationContentTypeText
             - ModelOperationContentTypeImage
             - ModelOperationContentTypeAudio
-            - ModelOperationContentTypeVideo
             - ModelOperationContentTypeJSON
             - ModelOperationContentTypeBinary
+    - target: $.components.schemas.ModelInvocationContentType
+      update:
+        x-enum-varnames:
+            - ModelInvocationContentTypeText
+            - ModelInvocationContentTypeImage
+            - ModelInvocationContentTypeAudio
+            - ModelInvocationContentTypeVideo
+            - ModelInvocationContentTypeJSON
+            - ModelInvocationContentTypeBinary
     - target: $.components.schemas.ModelInvocationOutputMode
       update:
         x-enum-varnames:

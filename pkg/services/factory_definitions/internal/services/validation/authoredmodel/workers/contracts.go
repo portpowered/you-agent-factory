@@ -77,7 +77,6 @@ const (
 	ModelOperationContentTypeText   = "TEXT"
 	ModelOperationContentTypeImage  = "IMAGE"
 	ModelOperationContentTypeAudio  = "AUDIO"
-	ModelOperationContentTypeVideo  = "VIDEO"
 	ModelOperationContentTypeJSON   = "JSON"
 	ModelOperationContentTypeBinary = "BINARY"
 )
@@ -90,10 +89,7 @@ type ModelOperation struct {
 type ModelOperationSlot struct {
 	Name         string   `json:"name" yaml:"name"`
 	ContentTypes []string `json:"contentTypes,omitempty" yaml:"contentTypes,omitempty"`
-	Modality     string   `json:"modality,omitempty" yaml:"modality,omitempty"`
 	Required     bool     `json:"required,omitempty" yaml:"required,omitempty"`
-	Repeatable   *bool    `json:"repeatable,omitempty" yaml:"repeatable,omitempty"`
-	MediaTypes   []string `json:"mediaTypes,omitempty" yaml:"mediaTypes,omitempty"`
 }
 
 const (

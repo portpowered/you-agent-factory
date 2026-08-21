@@ -10,7 +10,6 @@ import (
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-	"github.com/portpowered/infinite-you/pkg/transports/mapping/optional"
 	contentcontract "github.com/portpowered/infinite-you/pkg/transports/mapping/workcontent"
 )
 
@@ -676,10 +675,7 @@ func modelOperationSlotsInternalFromAPI(slots *[]factoryapi.ModelOperationSlot) 
 		values[i] = interfaces.ModelOperationSlot{
 			Name:         slot.Name,
 			ContentTypes: modelOperationContentTypesInternalFromAPI(slot.ContentTypes),
-			Modality:     internalFactoryModelOperationContentTypeFromPublic(valueOrEmpty(slot.Modality)),
 			Required:     boolValue(slot.Required),
-			Repeatable:   cloneBoolPointer(slot.Repeatable),
-			MediaTypes:   optional.StringsValue(slot.MediaTypes),
 		}
 	}
 	return values
@@ -1064,7 +1060,6 @@ const (
 	publicFactoryModelOperationContentTypeText   = "TEXT"
 	publicFactoryModelOperationContentTypeImage  = "IMAGE"
 	publicFactoryModelOperationContentTypeAudio  = "AUDIO"
-	publicFactoryModelOperationContentTypeVideo  = "VIDEO"
 	publicFactoryModelOperationContentTypeJSON   = "JSON"
 	publicFactoryModelOperationContentTypeBinary = "BINARY"
 	publicFactoryWorkerProviderScriptWrap        = "SCRIPT_WRAP"
@@ -1106,7 +1101,6 @@ var publicFactoryModelOperationContentTypeAliases = map[string]string{
 	publicFactoryModelOperationContentTypeText:   publicFactoryModelOperationContentTypeText,
 	publicFactoryModelOperationContentTypeImage:  publicFactoryModelOperationContentTypeImage,
 	publicFactoryModelOperationContentTypeAudio:  publicFactoryModelOperationContentTypeAudio,
-	publicFactoryModelOperationContentTypeVideo:  publicFactoryModelOperationContentTypeVideo,
 	publicFactoryModelOperationContentTypeJSON:   publicFactoryModelOperationContentTypeJSON,
 	publicFactoryModelOperationContentTypeBinary: publicFactoryModelOperationContentTypeBinary,
 }

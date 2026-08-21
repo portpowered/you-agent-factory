@@ -21,7 +21,7 @@ properties:
     type: array
     description: Provider-agnostic operations supported by this managed runtime.
     items:
-      $ref: '../data-models/ModelOperation.yaml'
+      $ref: './ModelInvocationOperation.yaml'
   diagnostics:
     $ref: '../shared/StringMap.yaml'
     description: Concise managed-runtime diagnostics in customer-relevant terms.

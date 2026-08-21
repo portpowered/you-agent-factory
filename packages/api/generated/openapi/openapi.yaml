@@ -4078,7 +4078,7 @@ components:
           type: array
           description: Provider-agnostic operations supported by this managed runtime.
           items:
-            $ref: '#/components/schemas/ModelOperation'
+            $ref: '#/components/schemas/ModelInvocationOperation'
         diagnostics:
           $ref: '#/components/schemas/StringMap'
           description: Concise managed-runtime diagnostics in customer-relevant terms.
@@ -4209,12 +4209,12 @@ components:
           description: |
             Provider-agnostic operations supported by the managed runtime. Mirrors `managedRuntime.supportedOperations` for compatibility with earlier discovery fields.
           items:
-            $ref: '#/components/schemas/ModelOperation'
+            $ref: '#/components/schemas/ModelInvocationOperation'
         modalities:
           type: array
           description: Uppercase content modalities observed across the model's declared operation inputs and outputs.
           items:
-            $ref: '#/components/schemas/ModelOperationContentType'
+            $ref: '#/components/schemas/ModelInvocationContentType'
         resources:
           type: array
           description: Factory resource summaries associated with this model's workers or explicit model metadata.
@@ -4253,12 +4253,12 @@ components:
           description: |
             Union of provider-agnostic operations supported by workers for this managed runtime. Mirrors `managedRuntime.supportedOperations` for compatibility with earlier inspect fields.
           items:
-            $ref: '#/components/schemas/ModelOperation'
+            $ref: '#/components/schemas/ModelInvocationOperation'
         modalities:
           type: array
           description: Uppercase content modalities observed across all declared operation inputs and outputs.
           items:
-            $ref: '#/components/schemas/ModelOperationContentType'
+            $ref: '#/components/schemas/ModelInvocationContentType'
         resources:
           type: array
           description: Factory resource summaries associated with this model's workers or explicit model metadata.
@@ -4295,7 +4295,7 @@ components:
           minLength: 1
           description: Input slot name declared by the selected operation.
         modality:
-          $ref: '#/components/schemas/ModelOperationContentType'
+          $ref: '#/components/schemas/ModelInvocationContentType'
           description: Provider-neutral modality of the supplied value.
         contentType:
           type: string
@@ -4323,7 +4323,7 @@ components:
           minLength: 1
           description: Output slot name declared by the selected operation.
         modality:
-          $ref: '#/components/schemas/ModelOperationContentType'
+          $ref: '#/components/schemas/ModelInvocationContentType'
           description: Provider-neutral modality of the output.
         contentType:
           type: string
@@ -4337,6 +4337,66 @@ components:
         artifact:
           $ref: '#/components/schemas/ModelInvocationArtifact'
           description: Optional opaque artifact metadata for materialized output.
+    ModelInvocationContentType:
+      type: string
+      description: Uppercase provider-neutral content modality used by generic model invocation contracts.
+      enum:
+        - TEXT
+        - IMAGE
+        - AUDIO
+        - VIDEO
+        - JSON
+        - BINARY
+    ModelInvocationSlot:
+      type: object
+      additionalProperties: false
+      required:
+        - name
+        - contentTypes
+      description: One named provider-neutral slot in a generic model invocation operation.
+      properties:
+        name:
+          type: string
+          description: Stable slot name used by generic invocation inputs, outputs, and diagnostics.
+        contentTypes:
+          type: array
+          minItems: 1
+          description: Uppercase content types accepted or produced by this generic slot.
+          items:
+            $ref: '#/components/schemas/ModelInvocationContentType'
+        modality:
+          $ref: '#/components/schemas/ModelInvocationContentType'
+          description: Provider-neutral modality of values accepted or produced by this slot.
+        required:
+          type: boolean
+          description: Whether this slot is required by the selected operation.
+        repeatable:
+          type: boolean
+          description: Whether the slot accepts or produces multiple ordered values.
+        mediaTypes:
+          type: array
+          description: Accepted or produced MIME-type patterns for this slot.
+          items:
+            type: string
+    ModelInvocationOperation:
+      type: object
+      additionalProperties: false
+      required:
+        - name
+      description: One provider-neutral operation exposed by a managed model runtime.
+      properties:
+        name:
+          $ref: '#/components/schemas/ModelOperationName'
+        inputs:
+          type: array
+          description: Named generic invocation input slots this model can consume.
+          items:
+            $ref: '#/components/schemas/ModelInvocationSlot'
+        outputs:
+          type: array
+          description: Named generic invocation output slots this model can produce.
+          items:
+            $ref: '#/components/schemas/ModelInvocationSlot'
     ModelInvocationArtifact:
       type: object
       additionalProperties: false
@@ -4644,7 +4704,7 @@ components:
           type: array
           description: Operations declared by this worker for the selected model.
           items:
-            $ref: '#/components/schemas/ModelOperation'
+            $ref: '#/components/schemas/ModelInvocationOperation'
         resourceNames:
           type: array
           description: Factory resource names referenced by the worker declaration.
@@ -12636,19 +12696,9 @@ components:
           description: Uppercase content types accepted or produced by this slot.
           items:
             $ref: '#/components/schemas/ModelOperationContentType'
-        modality:
-          $ref: '#/components/schemas/ModelOperationContentType'
         required:
           type: boolean
           description: Whether this input slot must be resolved before invocation starts. Output slots omit this field when not needed.
-        repeatable:
-          type: boolean
-          description: Whether the slot accepts or produces multiple ordered values.
-        mediaTypes:
-          type: array
-          description: Accepted or produced MIME-type patterns for this slot.
-          items:
-            type: string
     ModelOperationContentType:
       type: string
       description: Uppercase content-part categories supported by worker model-operation capability slots.
@@ -12656,7 +12706,6 @@ components:
         - TEXT
         - IMAGE
         - AUDIO
-        - VIDEO
         - JSON
         - BINARY
     RunnerID:

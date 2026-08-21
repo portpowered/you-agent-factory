@@ -2531,6 +2531,12 @@ components:
       $ref: './components/schemas/api/ModelInvocationInput.yaml'
     ModelInvocationOutput:
       $ref: './components/schemas/api/ModelInvocationOutput.yaml'
+    ModelInvocationContentType:
+      $ref: './components/schemas/api/ModelInvocationContentType.yaml'
+    ModelInvocationSlot:
+      $ref: './components/schemas/api/ModelInvocationSlot.yaml'
+    ModelInvocationOperation:
+      $ref: './components/schemas/api/ModelInvocationOperation.yaml'
     ModelInvocationArtifact:
       $ref: './components/schemas/api/ModelInvocationArtifact.yaml'
     ModelInvocationParameter:

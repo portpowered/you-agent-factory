@@ -833,6 +833,16 @@ const (
 	ManagedRuntimeReadinessStateUNSUPPORTED ManagedRuntimeReadinessState = "UNSUPPORTED"
 )
 
+// Defines values for ModelInvocationContentType.
+const (
+	ModelInvocationContentTypeAudio  ModelInvocationContentType = "AUDIO"
+	ModelInvocationContentTypeBinary ModelInvocationContentType = "BINARY"
+	ModelInvocationContentTypeImage  ModelInvocationContentType = "IMAGE"
+	ModelInvocationContentTypeJSON   ModelInvocationContentType = "JSON"
+	ModelInvocationContentTypeText   ModelInvocationContentType = "TEXT"
+	ModelInvocationContentTypeVideo  ModelInvocationContentType = "VIDEO"
+)
+
 // Defines values for ModelInvocationFailureClass.
 const (
 	ModelInvocationFailureClassArtifact              ModelInvocationFailureClass = "ARTIFACT"
@@ -878,7 +888,6 @@ const (
 	ModelOperationContentTypeImage  ModelOperationContentType = "IMAGE"
 	ModelOperationContentTypeJSON   ModelOperationContentType = "JSON"
 	ModelOperationContentTypeText   ModelOperationContentType = "TEXT"
-	ModelOperationContentTypeVideo  ModelOperationContentType = "VIDEO"
 )
 
 // Defines values for ModelPullOutcome.
@@ -5596,7 +5605,7 @@ type ManagedRuntime struct {
 	ReadinessState ManagedRuntimeReadinessState `json:"readinessState"`
 
 	// SupportedOperations Provider-agnostic operations supported by this managed runtime.
-	SupportedOperations []ModelOperation `json:"supportedOperations"`
+	SupportedOperations []ModelInvocationOperation `json:"supportedOperations"`
 }
 
 // ManagedRuntimeLifecycleState Customer-facing lifecycle position for one managed runtime. Lifecycle state tracks install, cache, and load progression independently from short-lived readiness used by invocation surfaces.
@@ -5650,7 +5659,7 @@ type ModelCapability struct {
 	ModelProvider *WorkerModelProvider `json:"modelProvider,omitempty"`
 
 	// Operations Operations declared by this worker for the selected model.
-	Operations []ModelOperation `json:"operations"`
+	Operations []ModelInvocationOperation `json:"operations"`
 
 	// ProviderLocality Provider locality for a model worker capability declaration.
 	ProviderLocality WorkerModelLocality `json:"providerLocality"`
@@ -5673,13 +5682,13 @@ type ModelDetail struct {
 	ManagedRuntime ManagedRuntime `json:"managedRuntime"`
 
 	// Modalities Uppercase content modalities observed across all declared operation inputs and outputs.
-	Modalities []ModelOperationContentType `json:"modalities"`
+	Modalities []ModelInvocationContentType `json:"modalities"`
 
 	// Name Stable managed runtime identity such as `OMNIVOICE_Q4_K_M`. Mirrors `managedRuntime.identity` for compatibility with earlier inspect fields.
 	Name string `json:"name"`
 
 	// Operations Union of provider-agnostic operations supported by workers for this managed runtime. Mirrors `managedRuntime.supportedOperations` for compatibility with earlier inspect fields.
-	Operations []ModelOperation `json:"operations"`
+	Operations []ModelInvocationOperation `json:"operations"`
 
 	// ProviderLocality Provider locality for a model worker capability declaration.
 	ProviderLocality WorkerModelLocality `json:"providerLocality"`
@@ -5706,6 +5715,9 @@ type ModelInvocationArtifact struct {
 	// SizeBytes Artifact size in bytes, when known.
 	SizeBytes *int64 `json:"sizeBytes,omitempty"`
 }
+
+// ModelInvocationContentType Uppercase provider-neutral content modality used by generic model invocation contracts.
+type ModelInvocationContentType string
 
 // ModelInvocationFailure Customer-safe typed failure for a generic model invocation.
 type ModelInvocationFailure struct {
@@ -5748,11 +5760,23 @@ type ModelInvocationInput struct {
 	// MediaType Concrete MIME type for media or file-backed content, when known.
 	MediaType *string `json:"mediaType,omitempty"`
 
-	// Modality Uppercase content-part categories supported by worker model-operation capability slots.
-	Modality ModelOperationContentType `json:"modality"`
+	// Modality Uppercase provider-neutral content modality used by generic model invocation contracts.
+	Modality ModelInvocationContentType `json:"modality"`
 
 	// Name Input slot name declared by the selected operation.
 	Name string `json:"name"`
+}
+
+// ModelInvocationOperation One provider-neutral operation exposed by a managed model runtime.
+type ModelInvocationOperation struct {
+	// Inputs Named generic invocation input slots this model can consume.
+	Inputs *[]ModelInvocationSlot `json:"inputs,omitempty"`
+
+	// Name Uppercase public operation identifier such as `TTS`, `ASR`, or `EMBED`.
+	Name ModelOperationName `json:"name"`
+
+	// Outputs Named generic invocation output slots this model can produce.
+	Outputs *[]ModelInvocationSlot `json:"outputs,omitempty"`
 }
 
 // ModelInvocationOptions Optional direct-invocation controls for response shaping and transport.
@@ -5774,8 +5798,8 @@ type ModelInvocationOutput struct {
 	// MediaType Concrete MIME type for media or file-backed output, when known.
 	MediaType *string `json:"mediaType,omitempty"`
 
-	// Modality Uppercase content-part categories supported by worker model-operation capability slots.
-	Modality ModelOperationContentType `json:"modality"`
+	// Modality Uppercase provider-neutral content modality used by generic model invocation contracts.
+	Modality ModelInvocationContentType `json:"modality"`
 
 	// Name Output slot name declared by the selected operation.
 	Name string `json:"name"`
@@ -5832,6 +5856,27 @@ type ModelInvocationResponse struct {
 // ModelInvocationResponseMode Requested direct-invocation response mode.
 type ModelInvocationResponseMode string
 
+// ModelInvocationSlot One named provider-neutral slot in a generic model invocation operation.
+type ModelInvocationSlot struct {
+	// ContentTypes Uppercase content types accepted or produced by this generic slot.
+	ContentTypes []ModelInvocationContentType `json:"contentTypes"`
+
+	// MediaTypes Accepted or produced MIME-type patterns for this slot.
+	MediaTypes *[]string `json:"mediaTypes,omitempty"`
+
+	// Modality Uppercase provider-neutral content modality used by generic model invocation contracts.
+	Modality *ModelInvocationContentType `json:"modality,omitempty"`
+
+	// Name Stable slot name used by generic invocation inputs, outputs, and diagnostics.
+	Name string `json:"name"`
+
+	// Repeatable Whether the slot accepts or produces multiple ordered values.
+	Repeatable *bool `json:"repeatable,omitempty"`
+
+	// Required Whether this slot is required by the selected operation.
+	Required *bool `json:"required,omitempty"`
+}
+
 // ModelLoadState Compatibility lifecycle projection for one managed runtime. Prefer `managedRuntime.lifecycleState` for the canonical managed-runtime vocabulary. `UNLOADED` maps to managed lifecycle `NOT_INSTALLED` or `LOADED` depending on cache and load state; `NOT_APPLICABLE` maps to managed lifecycle `NOT_APPLICABLE` for cloud-backed runtimes.
 type ModelLoadState string
 
@@ -5858,17 +5903,8 @@ type ModelOperationSlot struct {
 	// ContentTypes Uppercase content types accepted or produced by this slot.
 	ContentTypes []ModelOperationContentType `json:"contentTypes"`
 
-	// MediaTypes Accepted or produced MIME-type patterns for this slot.
-	MediaTypes *[]string `json:"mediaTypes,omitempty"`
-
-	// Modality Uppercase content-part categories supported by worker model-operation capability slots.
-	Modality *ModelOperationContentType `json:"modality,omitempty"`
-
 	// Name Stable slot name used by workstation-side bindings and diagnostics.
 	Name string `json:"name"`
-
-	// Repeatable Whether the slot accepts or produces multiple ordered values.
-	Repeatable *bool `json:"repeatable,omitempty"`
 
 	// Required Whether this input slot must be resolved before invocation starts. Output slots omit this field when not needed.
 	Required *bool `json:"required,omitempty"`
@@ -6043,13 +6079,13 @@ type ModelSummary struct {
 	ManagedRuntime ManagedRuntime `json:"managedRuntime"`
 
 	// Modalities Uppercase content modalities observed across the model's declared operation inputs and outputs.
-	Modalities []ModelOperationContentType `json:"modalities"`
+	Modalities []ModelInvocationContentType `json:"modalities"`
 
 	// Name Stable managed runtime identity such as `OMNIVOICE_Q4_K_M`. Mirrors `managedRuntime.identity` for compatibility with earlier discovery fields.
 	Name string `json:"name"`
 
 	// Operations Provider-agnostic operations supported by the managed runtime. Mirrors `managedRuntime.supportedOperations` for compatibility with earlier discovery fields.
-	Operations []ModelOperation `json:"operations"`
+	Operations []ModelInvocationOperation `json:"operations"`
 
 	// ProviderLocality Provider locality for a model worker capability declaration.
 	ProviderLocality WorkerModelLocality `json:"providerLocality"`

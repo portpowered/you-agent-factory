@@ -10,7 +10,7 @@ properties:
     minLength: 1
     description: Input slot name declared by the selected operation.
   modality:
-    $ref: '../data-models/ModelOperationContentType.yaml'
+    $ref: './ModelInvocationContentType.yaml'
     description: Provider-neutral modality of the supplied value.
   contentType:
     type: string

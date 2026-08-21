@@ -184,7 +184,6 @@ const (
 	ModelOperationContentTypeImage                       = workerconfig.ModelOperationContentTypeImage
 	ModelOperationContentTypeJSON                        = workerconfig.ModelOperationContentTypeJSON
 	ModelOperationContentTypeText                        = workerconfig.ModelOperationContentTypeText
-	ModelOperationContentTypeVideo                       = workerconfig.ModelOperationContentTypeVideo
 	WorkerModelProviderDefault                           = contracts.WorkerModelProviderDefault
 	WorkstationTypeLogical                               = contracts.WorkstationTypeLogical
 	WorkstationTypePoller                                = contracts.WorkstationTypePoller

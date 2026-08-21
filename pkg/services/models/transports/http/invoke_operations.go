@@ -246,7 +246,7 @@ func genericInferenceOutputToGenerated(
 ) factoryapi.ModelInvocationOutput {
 	projected := factoryapi.ModelInvocationOutput{
 		Name:     output.Name,
-		Modality: factoryapi.ModelOperationContentType(output.Modality),
+		Modality: factoryapi.ModelInvocationContentType(output.Modality),
 	}
 	projected.ContentType = nonEmptyStringPointer(output.ContentType)
 	projected.MediaType = nonEmptyStringPointer(output.MediaType)

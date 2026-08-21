@@ -423,29 +423,21 @@ func normalizeFactoryModelOperationSlots(operation map[string]any, key string, f
 			continue
 		}
 		contentTypes, ok := slot["contentTypes"].([]any)
-		if ok {
-			for contentTypeIndex, contentTypeAny := range contentTypes {
-				contentType, ok := contentTypeAny.(string)
-				if !ok {
-					continue
-				}
-				canonical := interfaces.StrictPublicFactoryWorkerModelOperationContentType(contentType)
-				if canonical == "" {
-					return fmt.Errorf("%s[%d].contentTypes[%d]: unsupported value %q", fieldPath, slotIndex, contentTypeIndex, contentType)
-				}
-				contentTypes[contentTypeIndex] = canonical
-			}
-			slot["contentTypes"] = contentTypes
-		}
-		modality, ok := slot["modality"].(string)
 		if !ok {
 			continue
 		}
-		canonical := interfaces.StrictPublicFactoryWorkerModelOperationContentType(modality)
-		if canonical == "" {
-			return fmt.Errorf("%s[%d].modality: unsupported value %q", fieldPath, slotIndex, modality)
+		for contentTypeIndex, contentTypeAny := range contentTypes {
+			contentType, ok := contentTypeAny.(string)
+			if !ok {
+				continue
+			}
+			canonical := interfaces.StrictPublicFactoryWorkerModelOperationContentType(contentType)
+			if canonical == "" {
+				return fmt.Errorf("%s[%d].contentTypes[%d]: unsupported value %q", fieldPath, slotIndex, contentTypeIndex, contentType)
+			}
+			contentTypes[contentTypeIndex] = canonical
 		}
-		slot["modality"] = canonical
+		slot["contentTypes"] = contentTypes
 	}
 	return nil
 }

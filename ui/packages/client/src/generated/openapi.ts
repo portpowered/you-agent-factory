@@ -1884,7 +1884,7 @@ export interface components {
       lifecycleState: components["schemas"]["ManagedRuntimeLifecycleState"];
       locality: components["schemas"]["WorkerModelLocality"];
       /** @description Provider-agnostic operations supported by this managed runtime. */
-      supportedOperations: components["schemas"]["ModelOperation"][];
+      supportedOperations: components["schemas"]["ModelInvocationOperation"][];
       /** @description Concise managed-runtime diagnostics in customer-relevant terms. */
       diagnostics?: components["schemas"]["StringMap"];
     };
@@ -1934,9 +1934,9 @@ export interface components {
       status: components["schemas"]["ModelStatus"];
       loadState: components["schemas"]["ModelLoadState"];
       /** @description Provider-agnostic operations supported by the managed runtime. Mirrors `managedRuntime.supportedOperations` for compatibility with earlier discovery fields. */
-      operations: components["schemas"]["ModelOperation"][];
+      operations: components["schemas"]["ModelInvocationOperation"][];
       /** @description Uppercase content modalities observed across the model's declared operation inputs and outputs. */
-      modalities: components["schemas"]["ModelOperationContentType"][];
+      modalities: components["schemas"]["ModelInvocationContentType"][];
       /** @description Factory resource summaries associated with this model's workers or explicit model metadata. */
       resources: components["schemas"]["ModelResourceSummary"][];
     };
@@ -1949,9 +1949,9 @@ export interface components {
       status: components["schemas"]["ModelStatus"];
       loadState: components["schemas"]["ModelLoadState"];
       /** @description Union of provider-agnostic operations supported by workers for this managed runtime. Mirrors `managedRuntime.supportedOperations` for compatibility with earlier inspect fields. */
-      operations: components["schemas"]["ModelOperation"][];
+      operations: components["schemas"]["ModelInvocationOperation"][];
       /** @description Uppercase content modalities observed across all declared operation inputs and outputs. */
-      modalities: components["schemas"]["ModelOperationContentType"][];
+      modalities: components["schemas"]["ModelInvocationContentType"][];
       /** @description Factory resource summaries associated with this model's workers or explicit model metadata. */
       resources: components["schemas"]["ModelResourceSummary"][];
       /** @description Worker-scoped capability declarations that contribute to this discovered model. */
@@ -1968,7 +1968,7 @@ export interface components {
       /** @description Input slot name declared by the selected operation. */
       name: string;
       /** @description Provider-neutral modality of the supplied value. */
-      modality: components["schemas"]["ModelOperationContentType"];
+      modality: components["schemas"]["ModelInvocationContentType"];
       /** @description Logical content type retained for compatibility with prepared invocation inputs. */
       contentType?: string;
       /** @description Concrete MIME type for media or file-backed content, when known. */
@@ -1983,7 +1983,7 @@ export interface components {
       /** @description Output slot name declared by the selected operation. */
       name: string;
       /** @description Provider-neutral modality of the output. */
-      modality: components["schemas"]["ModelOperationContentType"];
+      modality: components["schemas"]["ModelInvocationContentType"];
       /** @description Logical content type retained for compatibility with prepared invocation outputs. */
       contentType?: string;
       /** @description Concrete MIME type for media or file-backed output, when known. */
@@ -1992,6 +1992,34 @@ export interface components {
       content?: string;
       /** @description Optional opaque artifact metadata for materialized output. */
       artifact?: components["schemas"]["ModelInvocationArtifact"];
+    };
+    /**
+     * @description Uppercase provider-neutral content modality used by generic model invocation contracts.
+     * @enum {string}
+     */
+    ModelInvocationContentType: ModelInvocationContentType;
+    /** @description One named provider-neutral slot in a generic model invocation operation. */
+    ModelInvocationSlot: {
+      /** @description Stable slot name used by generic invocation inputs, outputs, and diagnostics. */
+      name: string;
+      /** @description Uppercase content types accepted or produced by this generic slot. */
+      contentTypes: components["schemas"]["ModelInvocationContentType"][];
+      /** @description Provider-neutral modality of values accepted or produced by this slot. */
+      modality?: components["schemas"]["ModelInvocationContentType"];
+      /** @description Whether this slot is required by the selected operation. */
+      required?: boolean;
+      /** @description Whether the slot accepts or produces multiple ordered values. */
+      repeatable?: boolean;
+      /** @description Accepted or produced MIME-type patterns for this slot. */
+      mediaTypes?: string[];
+    };
+    /** @description One provider-neutral operation exposed by a managed model runtime. */
+    ModelInvocationOperation: {
+      name: components["schemas"]["ModelOperationName"];
+      /** @description Named generic invocation input slots this model can consume. */
+      inputs?: components["schemas"]["ModelInvocationSlot"][];
+      /** @description Named generic invocation output slots this model can produce. */
+      outputs?: components["schemas"]["ModelInvocationSlot"][];
     };
     ModelInvocationArtifact: {
       /** @description Opaque Models-owned artifact reference; cache paths and storage handles are never exposed. */
@@ -2141,7 +2169,7 @@ export interface components {
       modelProvider?: components["schemas"]["WorkerModelProvider"];
       providerLocality: components["schemas"]["WorkerModelLocality"];
       /** @description Operations declared by this worker for the selected model. */
-      operations: components["schemas"]["ModelOperation"][];
+      operations: components["schemas"]["ModelInvocationOperation"][];
       /** @description Factory resource names referenced by the worker declaration. */
       resourceNames: string[];
     };
@@ -6099,13 +6127,8 @@ export interface components {
       name: string;
       /** @description Uppercase content types accepted or produced by this slot. */
       contentTypes: components["schemas"]["ModelOperationContentType"][];
-      modality?: components["schemas"]["ModelOperationContentType"];
       /** @description Whether this input slot must be resolved before invocation starts. Output slots omit this field when not needed. */
       required?: boolean;
-      /** @description Whether the slot accepts or produces multiple ordered values. */
-      repeatable?: boolean;
-      /** @description Accepted or produced MIME-type patterns for this slot. */
-      mediaTypes?: string[];
     };
     /**
      * @description Uppercase content-part categories supported by worker model-operation capability slots.
@@ -9735,6 +9758,16 @@ export const ManagedRuntimeReadinessState = {
 } as const;
 export type ManagedRuntimeReadinessState =
   (typeof ManagedRuntimeReadinessState)[keyof typeof ManagedRuntimeReadinessState];
+export const ModelInvocationContentType = {
+  TEXT: "TEXT",
+  IMAGE: "IMAGE",
+  AUDIO: "AUDIO",
+  VIDEO: "VIDEO",
+  JSON: "JSON",
+  BINARY: "BINARY",
+} as const;
+export type ModelInvocationContentType =
+  (typeof ModelInvocationContentType)[keyof typeof ModelInvocationContentType];
 export const ModelInvocationOutputMode = {
   AUTO: "AUTO",
   INLINE: "INLINE",
@@ -11026,7 +11059,6 @@ export const ModelOperationContentType = {
   TEXT: "TEXT",
   IMAGE: "IMAGE",
   AUDIO: "AUDIO",
-  VIDEO: "VIDEO",
   JSON: "JSON",
   BINARY: "BINARY",
 } as const;

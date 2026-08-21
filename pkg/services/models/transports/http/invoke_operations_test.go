@@ -182,13 +182,64 @@ func TestGenericInvocationMappingPreservesRepeatedOMNIInputsAndJSONOrder(t *test
 	assertGenericInvocationRequestJSON(t, generated)
 }
 
+func TestGeneratedModelInvocationOperationRoundTripPreservesVideoSlotMetadata(t *testing.T) {
+	t.Parallel()
+
+	video := factoryapi.ModelInvocationContentTypeVideo
+	required := false
+	repeatable := true
+	mediaTypes := []string{"video/*"}
+	inputs := []factoryapi.ModelInvocationSlot{{
+		Name:         "video",
+		ContentTypes: []factoryapi.ModelInvocationContentType{video},
+		Modality:     &video,
+		Required:     &required,
+		Repeatable:   &repeatable,
+		MediaTypes:   &mediaTypes,
+	}}
+	want := factoryapi.ModelInvocationOperation{Name: models.OperationOMNI, Inputs: &inputs}
+
+	encoded, err := json.Marshal(want)
+	if err != nil {
+		t.Fatalf("marshal generic operation: %v", err)
+	}
+	var got factoryapi.ModelInvocationOperation
+	if err := json.Unmarshal(encoded, &got); err != nil {
+		t.Fatalf("unmarshal generic operation: %v", err)
+	}
+	assertVideoSlotRoundTrip(t, got)
+}
+
+func assertVideoSlotRoundTrip(t *testing.T, operation factoryapi.ModelInvocationOperation) {
+	t.Helper()
+	if operation.Inputs == nil || len(*operation.Inputs) != 1 {
+		t.Fatalf("generic operation inputs = %#v, want one video slot", operation.Inputs)
+	}
+	slot := (*operation.Inputs)[0]
+	if slot.Name != "video" || len(slot.ContentTypes) != 1 || slot.ContentTypes[0] != factoryapi.ModelInvocationContentTypeVideo {
+		t.Fatalf("generic video slot identity = %#v", slot)
+	}
+	if slot.Modality == nil || *slot.Modality != factoryapi.ModelInvocationContentTypeVideo {
+		t.Fatalf("generic video slot modality = %#v", slot.Modality)
+	}
+	if slot.Required == nil || *slot.Required {
+		t.Fatalf("generic video slot required = %#v, want false", slot.Required)
+	}
+	if slot.Repeatable == nil || !*slot.Repeatable {
+		t.Fatalf("generic video slot repeatable = %#v, want true", slot.Repeatable)
+	}
+	if slot.MediaTypes == nil || len(*slot.MediaTypes) != 1 || (*slot.MediaTypes)[0] != "video/*" {
+		t.Fatalf("generic video slot media types = %#v", slot.MediaTypes)
+	}
+}
+
 func genericOMNIRequestForTest() factoryapi.GenericModelInvocationRequest {
 	outputMode := factoryapi.ModelInvocationOutputModeJSON
 	offline := true
 	inputs := []factoryapi.ModelInvocationInput{
-		{Name: "prompt", Modality: factoryapi.ModelOperationContentTypeText, Content: stringPointer("compare")},
-		{Name: "image", Modality: factoryapi.ModelOperationContentTypeImage, MediaType: stringPointer("image/png"), Content: stringPointer("first")},
-		{Name: "image", Modality: factoryapi.ModelOperationContentTypeImage, MediaType: stringPointer("image/jpeg"), Content: stringPointer("second")},
+		{Name: "prompt", Modality: factoryapi.ModelInvocationContentTypeText, Content: stringPointer("compare")},
+		{Name: "image", Modality: factoryapi.ModelInvocationContentTypeImage, MediaType: stringPointer("image/png"), Content: stringPointer("first")},
+		{Name: "image", Modality: factoryapi.ModelInvocationContentTypeImage, MediaType: stringPointer("image/jpeg"), Content: stringPointer("second")},
 	}
 	parameters := []factoryapi.ModelInvocationParameter{{Name: "temperature", Value: map[string]any{"value": 0.2}}}
 	return factoryapi.GenericModelInvocationRequest{
@@ -314,7 +365,7 @@ func TestGenericInvocationRequestMappingRejectsInvalidArtifactAsTypedFailure(t *
 
 	inputs := []factoryapi.ModelInvocationInput{{
 		Name:        "image",
-		Modality:    factoryapi.ModelOperationContentTypeImage,
+		Modality:    factoryapi.ModelInvocationContentTypeImage,
 		ArtifactRef: stringPointer(" "),
 	}}
 	_, err := GenericInvocationRequestFromGenerated(factoryapi.GenericModelInvocationRequest{
@@ -341,9 +392,9 @@ func assertGeneratedClientRequestRoundTrip(t *testing.T) {
 	outputMode := generatedclient.ModelInvocationOutputModeJSON
 	offline := true
 	inputs := []generatedclient.ModelInvocationInput{
-		{Name: "prompt", Modality: generatedclient.ModelOperationContentTypeText, Content: stringPointer("compare")},
-		{Name: "image", Modality: generatedclient.ModelOperationContentTypeImage, MediaType: stringPointer("image/png"), Content: stringPointer("first")},
-		{Name: "image", Modality: generatedclient.ModelOperationContentTypeImage, MediaType: stringPointer("image/jpeg"), Content: stringPointer("second")},
+		{Name: "prompt", Modality: generatedclient.ModelInvocationContentTypeText, Content: stringPointer("compare")},
+		{Name: "image", Modality: generatedclient.ModelInvocationContentTypeImage, MediaType: stringPointer("image/png"), Content: stringPointer("first")},
+		{Name: "image", Modality: generatedclient.ModelInvocationContentTypeImage, MediaType: stringPointer("image/jpeg"), Content: stringPointer("second")},
 	}
 	request := generatedclient.GenericModelInvocationRequest{
 		Scope:      "scope-client-001",

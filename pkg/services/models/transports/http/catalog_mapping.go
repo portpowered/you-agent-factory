@@ -32,10 +32,10 @@ func detailToGenerated(detail models.Detail) factoryapi.ModelDetail {
 	}
 }
 
-func operationsToGenerated(operations []models.Operation) []factoryapi.ModelOperation {
-	converted := make([]factoryapi.ModelOperation, 0, len(operations))
+func operationsToGenerated(operations []models.Operation) []factoryapi.ModelInvocationOperation {
+	converted := make([]factoryapi.ModelInvocationOperation, 0, len(operations))
 	for _, operation := range operations {
-		item := factoryapi.ModelOperation{Name: operation.Name}
+		item := factoryapi.ModelInvocationOperation{Name: operation.Name}
 		if operation.Inputs != nil {
 			inputs := slotsToGenerated(operation.Inputs)
 			item.Inputs = &inputs
@@ -49,14 +49,14 @@ func operationsToGenerated(operations []models.Operation) []factoryapi.ModelOper
 	return converted
 }
 
-func slotsToGenerated(slots []models.OperationSlot) []factoryapi.ModelOperationSlot {
-	converted := make([]factoryapi.ModelOperationSlot, 0, len(slots))
+func slotsToGenerated(slots []models.OperationSlot) []factoryapi.ModelInvocationSlot {
+	converted := make([]factoryapi.ModelInvocationSlot, 0, len(slots))
 	for _, slot := range slots {
-		contentTypes := make([]factoryapi.ModelOperationContentType, 0, len(slot.ContentTypes))
+		contentTypes := make([]factoryapi.ModelInvocationContentType, 0, len(slot.ContentTypes))
 		for _, contentType := range slot.ContentTypes {
-			contentTypes = append(contentTypes, factoryapi.ModelOperationContentType(contentType))
+			contentTypes = append(contentTypes, factoryapi.ModelInvocationContentType(contentType))
 		}
-		converted = append(converted, factoryapi.ModelOperationSlot{
+		converted = append(converted, factoryapi.ModelInvocationSlot{
 			Name:         slot.Name,
 			ContentTypes: contentTypes,
 			Modality:     modelOperationModality(slot.Modality),
@@ -68,11 +68,11 @@ func slotsToGenerated(slots []models.OperationSlot) []factoryapi.ModelOperationS
 	return converted
 }
 
-func modelOperationModality(modality models.Modality) *factoryapi.ModelOperationContentType {
+func modelOperationModality(modality models.Modality) *factoryapi.ModelInvocationContentType {
 	if modality == "" {
 		return nil
 	}
-	value := factoryapi.ModelOperationContentType(modality)
+	value := factoryapi.ModelInvocationContentType(modality)
 	return &value
 }
 
@@ -92,10 +92,10 @@ func modelOperationMediaTypes(mediaTypes []string) *[]string {
 	return &copied
 }
 
-func modalitiesToGenerated(modalities []string) []factoryapi.ModelOperationContentType {
-	converted := make([]factoryapi.ModelOperationContentType, 0, len(modalities))
+func modalitiesToGenerated(modalities []string) []factoryapi.ModelInvocationContentType {
+	converted := make([]factoryapi.ModelInvocationContentType, 0, len(modalities))
 	for _, modality := range modalities {
-		converted = append(converted, factoryapi.ModelOperationContentType(modality))
+		converted = append(converted, factoryapi.ModelInvocationContentType(modality))
 	}
 	return converted
 }
