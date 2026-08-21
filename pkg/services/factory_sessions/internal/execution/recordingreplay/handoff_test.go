@@ -19,12 +19,16 @@ type handoffLiveOwner struct {
 	resumeIntCalls int
 	startCalls     int
 	listCalls      int
+	queryCalls     int
+	queryRequest   fse.DispatchQueryRequest
 
 	resumeResult    fse.LifecycleControlResult
 	resumeErr       error
 	resumeIntResult fse.AsyncStartResult
 	resumeIntErr    error
 	dispatches      fse.ListDispatchesResult
+	queryResult     fse.ListDispatchesResult
+	queryErr        error
 }
 
 func (s *handoffLiveOwner) HasRestorableState(context.Context, string) (bool, error) {
@@ -59,6 +63,12 @@ func (s *handoffLiveOwner) Resume(context.Context, string, fse.ControlRequest) (
 func (s *handoffLiveOwner) ListDispatches(context.Context, string) (fse.ListDispatchesResult, error) {
 	s.listCalls++
 	return s.dispatches, nil
+}
+
+func (s *handoffLiveOwner) QueryDispatches(_ context.Context, request fse.DispatchQueryRequest) (fse.ListDispatchesResult, error) {
+	s.queryCalls++
+	s.queryRequest = request
+	return s.queryResult, s.queryErr
 }
 
 var _ fse.Service = (*handoffLiveOwner)(nil)
@@ -107,6 +117,10 @@ func TestServiceResumeUsesLiveResultAndMakesLiveOwnerAuthoritative(t *testing.T)
 			SessionID:  sessionID,
 			Dispatches: []fse.DispatchSummary{{ID: "live-dispatch", Status: fse.DispatchStatusRunning}},
 		},
+		queryResult: fse.ListDispatchesResult{
+			SessionID:  sessionID,
+			Dispatches: []fse.DispatchSummary{{ID: "live-dispatch", Status: fse.DispatchStatusRunning}},
+		},
 	}
 	service := NewService(projection, live)
 
@@ -123,6 +137,22 @@ func TestServiceResumeUsesLiveResultAndMakesLiveOwnerAuthoritative(t *testing.T)
 	}
 	if len(dispatches.Dispatches) != 1 || dispatches.Dispatches[0].ID != "live-dispatch" || live.listCalls != 1 {
 		t.Fatalf("ListDispatches after handoff = %#v, live calls = %d", dispatches, live.listCalls)
+	}
+	queried, err := service.QueryDispatches(context.Background(), fse.DispatchQueryRequest{
+		SessionID: sessionID,
+		Filters:   fse.DispatchFilters{Status: fse.DispatchStatusRunning},
+	})
+	if err != nil {
+		t.Fatalf("QueryDispatches after handoff error = %v", err)
+	}
+	if !reflect.DeepEqual(queried, live.queryResult) || live.queryCalls != 1 || live.queryRequest.Filters.Status != fse.DispatchStatusRunning {
+		t.Fatalf("QueryDispatches after handoff = %#v, calls = %d request = %#v", queried, live.queryCalls, live.queryRequest)
+	}
+	if _, err := service.QueryDispatches(context.Background(), fse.DispatchQueryRequest{SessionID: "missing"}); !errors.Is(err, fse.ErrSessionNotFound) {
+		t.Fatalf("unknown QueryDispatches error = %v, want ErrSessionNotFound", err)
+	}
+	if live.queryCalls != 1 {
+		t.Fatalf("unknown QueryDispatches reached live owner: calls = %d, want 1", live.queryCalls)
 	}
 }
 

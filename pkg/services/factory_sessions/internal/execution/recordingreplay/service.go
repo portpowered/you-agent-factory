@@ -119,7 +119,7 @@ func (s *Service) GetSession(ctx context.Context, id string) (fse.SessionReadRes
 	if err := s.session(id); err != nil {
 		return fse.SessionReadResult{}, err
 	}
-	if owner, handedOff := s.handedOffOwnerForSession(); handedOff {
+	if owner, handedOff := s.handedOffOwnerForSession(id); handedOff {
 		return owner.GetSession(ctx, id)
 	}
 	return s.projection.Session, nil
@@ -183,7 +183,7 @@ func (s *Service) GetResult(ctx context.Context, id string, req fse.ResultReques
 	if err := s.session(id); err != nil {
 		return fse.ResultReadResult{}, err
 	}
-	if owner, handedOff := s.handedOffOwnerForSession(); handedOff {
+	if owner, handedOff := s.handedOffOwnerForSession(id); handedOff {
 		return owner.GetResult(ctx, id, req)
 	}
 	normalized, err := fse.NormalizeResultRequest(req)
@@ -202,14 +202,20 @@ func (s *Service) ListDispatches(ctx context.Context, id string) (fse.ListDispat
 	if err := s.session(id); err != nil {
 		return fse.ListDispatchesResult{}, err
 	}
-	if owner, handedOff := s.handedOffOwnerForSession(); handedOff {
+	if owner, handedOff := s.handedOffOwnerForSession(id); handedOff {
 		return owner.ListDispatches(ctx, id)
 	}
-	return fse.ListDispatchesResult{SessionID: id}, nil
+	return fse.ListDispatchesResult{
+		SessionID:  id,
+		Dispatches: []fse.DispatchSummary{},
+	}, nil
 }
 
 func (s *Service) QueryDispatches(ctx context.Context, request fse.DispatchQueryRequest) (fse.ListDispatchesResult, error) {
-	if owner, handedOff := s.handedOffOwnerForSession(); handedOff {
+	if err := s.session(request.SessionID); err != nil {
+		return fse.ListDispatchesResult{}, err
+	}
+	if owner, handedOff := s.handedOffOwnerForSession(request.SessionID); handedOff {
 		return owner.QueryDispatches(ctx, request)
 	}
 	result, err := s.ListDispatches(ctx, request.SessionID)
@@ -222,7 +228,7 @@ func (s *Service) GetDispatch(ctx context.Context, id, dispatchID string) (fse.D
 	if err := s.session(id); err != nil {
 		return fse.DispatchDetail{}, err
 	}
-	if owner, handedOff := s.handedOffOwnerForSession(); handedOff {
+	if owner, handedOff := s.handedOffOwnerForSession(id); handedOff {
 		return owner.GetDispatch(ctx, id, dispatchID)
 	}
 	return fse.DispatchDetail{}, fse.ErrDispatchNotFound
@@ -231,7 +237,7 @@ func (s *Service) ListArtifacts(ctx context.Context, id string) (fse.ListArtifac
 	if err := s.session(id); err != nil {
 		return fse.ListArtifactsResult{}, err
 	}
-	if owner, handedOff := s.handedOffOwnerForSession(); handedOff {
+	if owner, handedOff := s.handedOffOwnerForSession(id); handedOff {
 		return owner.ListArtifacts(ctx, id)
 	}
 	return s.projection.Artifacts, nil
@@ -240,7 +246,7 @@ func (s *Service) GetArtifact(ctx context.Context, id, artifactID string) (fse.A
 	if err := s.session(id); err != nil {
 		return fse.ArtifactDetail{}, err
 	}
-	if owner, handedOff := s.handedOffOwnerForSession(); handedOff {
+	if owner, handedOff := s.handedOffOwnerForSession(id); handedOff {
 		return owner.GetArtifact(ctx, id, artifactID)
 	}
 	for _, artifact := range s.projection.Artifacts.Artifacts {
@@ -254,7 +260,7 @@ func (s *Service) ReadEvents(ctx context.Context, id string, req fse.EventReconn
 	if err := s.session(id); err != nil {
 		return fse.EventReadResult{}, err
 	}
-	if owner, handedOff := s.handedOffOwnerForSession(); handedOff {
+	if owner, handedOff := s.handedOffOwnerForSession(id); handedOff {
 		return owner.ReadEvents(ctx, id, req)
 	}
 	events, err := fse.FilterEventsAfterReconnect(s.projection.Events.Events, req, id)

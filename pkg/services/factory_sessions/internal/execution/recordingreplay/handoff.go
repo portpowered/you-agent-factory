@@ -23,9 +23,9 @@ func (s *Service) handedOffOwner() (fse.Service, bool) {
 	return s.live, s.handedOff && s.live != nil
 }
 
-func (s *Service) handedOffOwnerForSession() (fse.Service, bool) {
+func (s *Service) handedOffOwnerForSession(sessionID string) (fse.Service, bool) {
 	owner, handedOff := s.handedOffOwner()
-	if !handedOff || s.session(s.projection.Session.SessionID) != nil {
+	if !handedOff || s.session(sessionID) != nil {
 		return nil, false
 	}
 	return owner, true
@@ -35,7 +35,7 @@ func (s *Service) handedOffOwnerForSessionOperation(sessionID string) (fse.Servi
 	if err := s.session(sessionID); err != nil {
 		return nil, err
 	}
-	owner, handedOff := s.handedOffOwnerForSession()
+	owner, handedOff := s.handedOffOwnerForSession(sessionID)
 	if !handedOff {
 		return nil, ErrNonLiveReplay
 	}
