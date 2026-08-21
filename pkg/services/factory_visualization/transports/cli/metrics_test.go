@@ -189,6 +189,46 @@ func TestMetricsCommand_JSONIsDeterministicAndPreservesMissingLatency(t *testing
 	}
 }
 
+func TestMetricsCommand_PresentsQueryCostAvailabilityInHumanAndJSON(t *testing.T) {
+	tests := []struct {
+		name         string
+		availability factoryvisualization.RuntimeMetricsCostAvailability
+		want         string
+	}{
+		{name: "unavailable", availability: factoryvisualization.RuntimeMetricsCostUnavailable, want: "unavailable"},
+		{name: "query-provided state", availability: "ESTIMATED", want: "estimated"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			query := metricsQueryStub(func(context.Context, factoryvisualization.RuntimeMetricsQueryRequest) (factoryvisualization.RuntimeMetricsQueryResult, error) {
+				result := metricsResult()
+				result.Cost.Availability = test.availability
+				return result, nil
+			})
+
+			human, err := executeMetricsCommand(t, query, nil)
+			if err != nil {
+				t.Fatalf("execute human metrics: %v", err)
+			}
+			if !strings.Contains(human, "Cost: "+test.want+"\n") {
+				t.Fatalf("human cost = %q, want %q", human, "Cost: "+test.want)
+			}
+
+			jsonOutput, err := executeMetricsCommandWithJSON(t, query, nil, true)
+			if err != nil {
+				t.Fatalf("execute JSON metrics: %v", err)
+			}
+			var document metricsJSONDocument
+			if err := json.Unmarshal([]byte(jsonOutput), &document); err != nil {
+				t.Fatalf("decode JSON output: %v\n%s", err, jsonOutput)
+			}
+			if document.Cost.Availability != test.want {
+				t.Fatalf("JSON cost availability = %q, want %q", document.Cost.Availability, test.want)
+			}
+		})
+	}
+}
+
 func TestMetricsCommand_EmptyResultShowsZeroCountsAndNoSamples(t *testing.T) {
 	output, err := executeMetricsCommand(t, metricsQueryStub(func(context.Context, factoryvisualization.RuntimeMetricsQueryRequest) (factoryvisualization.RuntimeMetricsQueryResult, error) {
 		return factoryvisualization.RuntimeMetricsQueryResult{
@@ -222,6 +262,11 @@ func TestMetricsCommand_RejectsUnsupportedGroupingBeforeQuery(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), `invalid --group-by "region"`) || !strings.Contains(err.Error(), "workstation, worker, or provider") {
 		t.Fatalf("error = %v, want actionable group validation error", err)
 	}
+	var metricsErr *visualizationcli.MetricsError
+	if !errors.As(err, &metricsErr) || metricsErr.CLIErrorCode() != visualizationcli.MetricsInvalidGroupByCode ||
+		metricsErr.CLIErrorMessage() != `invalid --group-by "region": choose workstation, worker, or provider` {
+		t.Fatalf("error = %#v, want coded invalid-group failure", err)
+	}
 	if called {
 		t.Fatal("invalid grouping invoked the metrics query")
 	}
@@ -233,15 +278,69 @@ func TestMetricsCommand_RejectsUnsupportedGroupingBeforeQuery(t *testing.T) {
 func TestMetricsCommand_QueryFailureDoesNotWritePartialOutput(t *testing.T) {
 	for _, jsonOutput := range []bool{false, true} {
 		t.Run(fmt.Sprintf("json=%t", jsonOutput), func(t *testing.T) {
-			wantErr := errors.New("metrics artifact unavailable")
+			wantErr := errors.New("metrics artifact unavailable: credential=do-not-leak")
 			output, err := executeMetricsCommandWithJSON(t, metricsQueryStub(func(context.Context, factoryvisualization.RuntimeMetricsQueryRequest) (factoryvisualization.RuntimeMetricsQueryResult, error) {
 				return factoryvisualization.RuntimeMetricsQueryResult{}, wantErr
 			}), nil, jsonOutput)
-			if err == nil || !strings.Contains(err.Error(), wantErr.Error()) {
-				t.Fatalf("error = %v, want query failure", err)
+			if err == nil || !errors.Is(err, wantErr) || !strings.HasPrefix(err.Error(), "METRICS_QUERY_FAILED: query Factory Runtime metrics:") {
+				t.Fatalf("error = %v, want safe coded query failure", err)
+			}
+			if strings.Contains(err.Error(), "credential=do-not-leak") {
+				t.Fatalf("query failure exposed its underlying payload: %v", err)
 			}
 			if output != "" {
 				t.Fatalf("query failure wrote partial output %q", output)
+			}
+		})
+	}
+}
+
+func TestMetricsCommand_HomeResolutionFailuresAreCodedAndPrecedeQuery(t *testing.T) {
+	resolverErr := errors.New("home lookup credential=do-not-leak")
+	tests := []struct {
+		name      string
+		home      func() (string, error)
+		wantCause error
+	}{
+		{
+			name: "resolver failure",
+			home: func() (string, error) { return "", resolverErr }, wantCause: resolverErr,
+		},
+		{
+			name: "empty path",
+			home: func() (string, error) { return "  ", nil },
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			queryCalled := false
+			var output bytes.Buffer
+			err := visualizationcli.RunMetrics(context.Background(), visualizationcli.MetricsConfig{
+				GroupBy: "workstation", Output: &output, HomeDir: test.home,
+				Query: metricsQueryStub(func(context.Context, factoryvisualization.RuntimeMetricsQueryRequest) (factoryvisualization.RuntimeMetricsQueryResult, error) {
+					queryCalled = true
+					return factoryvisualization.RuntimeMetricsQueryResult{}, nil
+				}),
+			})
+			if err == nil {
+				t.Fatal("RunMetrics() error = nil, want home-resolution failure")
+			}
+			var metricsErr *visualizationcli.MetricsError
+			if !errors.As(err, &metricsErr) || metricsErr.CLIErrorCode() != visualizationcli.MetricsHomeDirectoryFailedCode ||
+				!strings.Contains(metricsErr.CLIErrorMessage(), "resolve metrics home directory") {
+				t.Fatalf("error = %#v, want coded home-resolution failure", err)
+			}
+			if test.wantCause != nil && !errors.Is(err, test.wantCause) {
+				t.Fatalf("error = %v, want resolver cause", err)
+			}
+			if strings.Contains(err.Error(), "credential=do-not-leak") {
+				t.Fatalf("home failure exposed its underlying payload: %v", err)
+			}
+			if queryCalled {
+				t.Fatal("home-resolution failure invoked the metrics query")
+			}
+			if output.Len() != 0 {
+				t.Fatalf("home-resolution failure wrote output %q", output.String())
 			}
 		})
 	}
