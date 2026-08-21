@@ -1,0 +1,60 @@
+{
+  "schemaVersion": 1,
+  "kind": "localai-backend-artifacts",
+  "publication": {
+    "id": "localai-backends-v1-fixture",
+    "releaseTag": "localai-backends-v1-fixture",
+    "repository": "portpowered/infinite-you",
+    "pinFingerprint": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "source": {
+      "repository": "https://github.com/mudler/LocalAI.git",
+      "commit": "b224c96db6f4b87306a33a808650bfce63b12588"
+    },
+    "protocol": {
+      "path": "backend/backend.proto",
+      "revision": "ad62c6df07ae1169eb14411a565a689cd996b19c"
+    },
+    "toolchain": {
+      "goVersion": "1.25.4",
+      "cmakeVersion": "3.31.10",
+      "protobufVersion": "27.1",
+      "grpcVersion": "1.59.0",
+      "grpcCommit": "08cc1787de022069135004adfdd17938b5062319",
+      "vcpkgCommit": "7f3781e19cc7d4e4882a4caec01668c6f7b5c163"
+    }
+  },
+  "artifacts": [
+    {
+      "id": "localai-vibevoice/linux-amd64",
+      "backend": {
+        "id": "localai-vibevoice",
+        "source": {
+          "repository": "https://github.com/mudler/vibevoice.cpp",
+          "commit": "000e37282bc5bb09edc20f7047a47924122ba3a0",
+          "pinVariable": "VIBEVOICE_CPP_VERSION"
+        }
+      },
+      "source": {
+        "repository": "https://github.com/mudler/LocalAI.git",
+        "commit": "b224c96db6f4b87306a33a808650bfce63b12588",
+        "path": "backend/go/vibevoice-cpp"
+      },
+      "protocol": {
+        "path": "backend/backend.proto",
+        "revision": "ad62c6df07ae1169eb14411a565a689cd996b19c"
+      },
+      "target": {
+        "id": "linux-amd64",
+        "operatingSystem": "linux",
+        "architecture": "amd64",
+        "accelerators": ["cpu"]
+      },
+      "artifact": {
+        "name": "localai-backend-localai-vibevoice-linux-amd64-000e37282bc5bb09edc20f7047a47924122ba3a0.tar.gz",
+        "location": "https://github.com/portpowered/infinite-you/releases/download/localai-backends-v1-fixture/localai-backend-localai-vibevoice-linux-amd64-000e37282bc5bb09edc20f7047a47924122ba3a0.tar.gz",
+        "sizeBytes": 22,
+        "sha256": "10a84e67d02d078f711608accf13cb80b6724a4c03dc4acae5ba936831801172"
+      }
+    }
+  ]
+}
