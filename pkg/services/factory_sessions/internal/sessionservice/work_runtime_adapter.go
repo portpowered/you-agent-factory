@@ -147,7 +147,7 @@ type runtimeReadFacts struct {
 }
 
 func runtimeWorkItem(
-	token *factoryruntime.RuntimeToken,
+	token *workers.Token,
 	net *legacysnapshot.RuntimeTopology,
 	inFlight bool,
 	names map[string]string,
@@ -165,19 +165,11 @@ func runtimeWorkItem(
 	return item
 }
 
-func runtimeWorkState(token *factoryruntime.RuntimeToken, net *legacysnapshot.RuntimeTopology, inFlight bool) *work.State {
+func runtimeWorkState(token *workers.Token, net *legacysnapshot.RuntimeTopology, inFlight bool) *work.State {
 	if token == nil {
 		return nil
 	}
-	workType, stateName := factoryruntime.SplitPlaceID(token.PlaceID)
-	if token.Color.WorkTypeID != "" {
-		workType = token.Color.WorkTypeID
-	}
-	if net != nil {
-		if place, ok := net.Places[token.PlaceID]; ok {
-			workType, stateName = place.TypeID, place.State
-		}
-	}
+	workType, stateName := token.Color.WorkTypeID, token.State
 	if stateName == "" {
 		return nil
 	}
@@ -194,7 +186,7 @@ func runtimeWorkTypes(net *legacysnapshot.RuntimeTopology) map[string]*legacysna
 	}
 	return net.WorkTypes
 }
-func runtimeWorkNames(tokens []*factoryruntime.RuntimeToken) map[string]string {
+func runtimeWorkNames(tokens []*workers.Token) map[string]string {
 	result := make(map[string]string, len(tokens))
 	for _, token := range tokens {
 		if token != nil && token.Color.WorkID != "" {

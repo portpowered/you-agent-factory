@@ -27,7 +27,6 @@ func TestPackagedSubagentInvocationPrimaryResult_ReturnsAgentResponseNotSubmitte
 		WorkTypeID: PackagedWorkTypeName,
 		State:      "complete",
 		TraceID:    requestID,
-		PlaceID:    PackagedWorkTypeName + ":complete",
 		Content: []work.WorkContentPart{{
 			Type: work.WorkContentPartTypeText,
 			Text: agentResponse,

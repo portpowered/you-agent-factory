@@ -82,11 +82,12 @@ func TestProjectFactorySessionStopSummaryPreservesStructuredSchemaViolationReaso
 	}
 }
 
-func stoppedWorkSnapshot(now time.Time, stateName string) (*legacysnapshot.Snapshot, *factoryruntime.RuntimeToken) {
+func stoppedWorkSnapshot(now time.Time, stateName string) (*legacysnapshot.Snapshot, *workerexecution.Token) {
 	placeID := "goal:" + stateName
-	token := &factoryruntime.RuntimeToken{ID: "token-1", PlaceID: placeID, EnteredAt: now, Color: factoryruntime.RuntimeTokenColor{WorkID: "work-1", WorkTypeID: "goal", Name: "Goal"}}
+	runtimeToken := &factoryruntime.RuntimeToken{ID: "token-1", PlaceID: placeID, EnteredAt: now, Color: factoryruntime.RuntimeTokenColor{WorkID: "work-1", WorkTypeID: "goal", Name: "Goal"}}
+	token := &workerexecution.Token{ID: runtimeToken.ID, State: stateName, EnteredAt: now, Color: runtimeToken.Color}
 	return &legacysnapshot.Snapshot{
-		Marking:  factoryruntime.PetriMarkingSnapshot{Tokens: map[string]*factoryruntime.RuntimeToken{token.ID: token}},
+		Marking:  factoryruntime.PetriMarkingSnapshot{Tokens: map[string]*factoryruntime.RuntimeToken{runtimeToken.ID: runtimeToken}},
 		Topology: &factoryruntime.Net{Places: map[string]*factoryruntime.PetriPlace{placeID: {ID: placeID, TypeID: "goal", State: stateName}}},
 	}, token
 }

@@ -420,23 +420,21 @@ func projectedJavaScriptBudgets(raw json.RawMessage) *RuntimeBudgets {
 }
 
 func projectedMarkingTokens(marking *factory.PetriMarkingSnapshot) []RuntimeToken {
-	if marking == nil || len(marking.Tokens) == 0 {
+	if marking == nil {
 		return []RuntimeToken{}
 	}
-	tokenIDs := make([]string, 0, len(marking.Tokens))
-	for tokenID := range marking.Tokens {
-		tokenIDs = append(tokenIDs, tokenID)
+	tokens := factory.CollectPublicWorkTokens(marking.Tokens, nil).MarkingTokens
+	if len(tokens) == 0 {
+		return []RuntimeToken{}
 	}
-	sort.Strings(tokenIDs)
-	tokens := make([]RuntimeToken, 0, len(tokenIDs))
-	for _, tokenID := range tokenIDs {
-		token := marking.Tokens[tokenID]
-		if token == nil || token.Color.WorkTypeID == interfaces.SystemTimeWorkTypeID {
+	projected := make([]RuntimeToken, 0, len(tokens))
+	for _, token := range tokens {
+		if token.Color.WorkTypeID == interfaces.SystemTimeWorkTypeID {
 			continue
 		}
-		tokens = append(tokens, projectedTokenResponse(token))
+		projected = append(projected, projectedTokenResponse(token))
 	}
-	return tokens
+	return projected
 }
 
 func projectedEnabledTransitions(
@@ -461,10 +459,10 @@ func projectedEnabledTransitions(
 	return projected
 }
 
-func projectedTokenResponse(token *factory.RuntimeToken) RuntimeToken {
+func projectedTokenResponse(token workerexecution.Token) RuntimeToken {
 	resp := RuntimeToken{
 		ID:        token.ID,
-		PlaceID:   token.PlaceID,
+		PlaceID:   workerTokenPlaceID(token),
 		WorkID:    token.Color.WorkID,
 		WorkType:  token.Color.WorkTypeID,
 		TraceID:   token.Color.TraceID,
@@ -498,6 +496,18 @@ func projectedTokenResponse(token *factory.RuntimeToken) RuntimeToken {
 	return resp
 }
 
+func workerTokenPlaceID(token workerexecution.Token) string {
+	prefix := firstNonEmptyString(token.Color.WorkTypeID, token.Color.Name)
+	state := strings.TrimSpace(token.State)
+	if prefix == "" {
+		return state
+	}
+	if state == "" {
+		return prefix
+	}
+	return prefix + ":" + state
+}
+
 func categorizeProjectionTokens(
 	marking *factory.PetriMarkingSnapshot,
 	net *factory.RuntimeNet,
@@ -508,12 +518,12 @@ func categorizeProjectionTokens(
 	if marking == nil {
 		return categories, resourceUsage(resourceCounts, resourceTotals)
 	}
-	for _, token := range marking.Tokens {
-		if token == nil || token.Color.WorkTypeID == interfaces.SystemTimeWorkTypeID {
+	for _, token := range factory.CollectPublicWorkTokens(marking.Tokens, nil).MarkingTokens {
+		if token.Color.WorkTypeID == interfaces.SystemTimeWorkTypeID {
 			continue
 		}
 		if token.Color.DataType == workerexecution.DataTypeResource {
-			resourceID, resourceState := factory.SplitPlaceID(token.PlaceID)
+			resourceID, resourceState := workerResourceIdentity(token)
 			if _, ok := resourceTotals[resourceID]; !ok {
 				resourceTotals[resourceID]++
 			}
@@ -522,7 +532,7 @@ func categorizeProjectionTokens(
 			}
 			continue
 		}
-		switch projectionStateCategory(net, token.PlaceID) {
+		switch projectionStateCategory(net, token.Color.WorkTypeID, token.State) {
 		case factory.StateCategoryFailed:
 			categories.Failed++
 		case factory.StateCategoryTerminal:
@@ -541,8 +551,8 @@ func countProjectionTokens(marking *factory.PetriMarkingSnapshot) int {
 		return 0
 	}
 	count := 0
-	for _, token := range marking.Tokens {
-		if token == nil || token.Color.WorkTypeID == interfaces.SystemTimeWorkTypeID {
+	for _, token := range factory.CollectPublicWorkTokens(marking.Tokens, nil).MarkingTokens {
+		if token.Color.WorkTypeID == interfaces.SystemTimeWorkTypeID {
 			continue
 		}
 		count++
@@ -550,11 +560,15 @@ func countProjectionTokens(marking *factory.PetriMarkingSnapshot) int {
 	return count
 }
 
-func projectionStateCategory(net *factory.RuntimeNet, placeID string) factory.StateCategory {
+func projectionStateCategory(net *factory.RuntimeNet, workTypeID, stateName string) factory.StateCategory {
 	if net == nil {
 		return factory.StateCategoryProcessing
 	}
-	return net.StateCategoryForPlace(placeID)
+	return factory.CategoryForState(net.WorkTypes, workTypeID, stateName)
+}
+
+func workerResourceIdentity(token workerexecution.Token) (string, string) {
+	return firstNonEmptyString(token.Color.WorkTypeID, token.Color.Name, token.Color.WorkID), token.State
 }
 
 func resourceTotalsFromTopology(net *factory.RuntimeNet) map[string]int {

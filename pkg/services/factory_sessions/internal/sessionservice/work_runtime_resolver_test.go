@@ -478,10 +478,10 @@ func TestWorkRuntimeAdapterMoveWorkFailsClosedWithoutRuntime(t *testing.T) {
 func TestWorkRuntimeAdapterProjectsDetachedPublicWorkIdentityStateAndRelations(t *testing.T) {
 	tags := map[string]string{"owner": "docs"}
 	previous := []string{"chain-a"}
-	token := &factory.RuntimeToken{
-		ID:      "tok-review",
-		PlaceID: "story:review",
-		Color: factory.RuntimeTokenColor{
+	token := &workers.Token{
+		ID:    "tok-review",
+		State: "review",
+		Color: workers.Color{
 			WorkID: "work-review", WorkTypeID: "story", Name: "Review PRD",
 			TraceID: "trace-1", PreviousChainingTraceIDs: previous, Tags: tags,
 			Relations: []work.Relation{{Type: work.RelationDependsOn, TargetWorkID: "work-draft", RequiredState: "complete"}},
@@ -519,7 +519,7 @@ func TestWorkRuntimeAdapterProjectsDetachedPublicWorkIdentityStateAndRelations(t
 }
 
 func TestWorkRuntimeAdapterProjectsDispatchOnlyWorkAsProcessing(t *testing.T) {
-	token := &factory.RuntimeToken{ID: "tok-dispatch", PlaceID: "story:review", Color: factory.RuntimeTokenColor{WorkID: "work-dispatch", WorkTypeID: "story"}}
+	token := &workers.Token{ID: "tok-dispatch", State: "review", Color: workers.Color{WorkID: "work-dispatch", WorkTypeID: "story"}}
 	got := runtimeWorkItem(token, &factory.Net{}, true, nil)
 	if got.State == nil || got.State.Name != "review" || got.State.Type != work.StateTypeProcessing {
 		t.Fatalf("dispatch-only Work state = %#v", got.State)

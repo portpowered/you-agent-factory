@@ -40,7 +40,6 @@ func TestPackagedTTSInvocationPrimaryResult_ReturnsMetadataNotRawAudio(t *testin
 		WorkTypeID: "task",
 		State:      "complete",
 		TraceID:    requestID,
-		PlaceID:    "task:complete",
 		Content:    metadataContent,
 	}
 

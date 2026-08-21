@@ -12,7 +12,7 @@ func TestInvocationPrimaryResult_ReturnsApprovedWorkOnly(t *testing.T) {
 	requestID, workID := "req-review", "work-review"
 	submitted := work.FactoryWorkItem{ID: workID, WorkTypeID: PackagedWorkTypeName, State: "init", TraceID: requestID, Content: []work.WorkContentPart{{Type: work.WorkContentPartTypeText, Text: "original request"}}}
 	approved := submitted
-	approved.State, approved.PlaceID = PackagedInvocationReturnTerminalState, PackagedWorkTypeName+":"+PackagedInvocationReturnTerminalState
+	approved.State = PackagedInvocationReturnTerminalState
 	approved.Content = []work.WorkContentPart{{Type: work.WorkContentPartTypeText, Text: "approved candidate work"}}
 	state := factorydefinitions.FactoryWorldState{PayloadLineage: work.WorkPayloadLineageProjection{}, WorkRequestsByID: map[string]factorydefinitions.WorkRequestPayload{requestID: {RequestID: requestID, WorkItems: []work.FactoryWorkItem{submitted}}}, TerminalWorkByID: map[string]factorydefinitions.FactoryTerminalWork{workID: {WorkItem: approved, Status: "TERMINAL"}}}
 	state.PayloadLineage.RecordWorkRequestSnapshot(1, requestID, submitted)

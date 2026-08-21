@@ -78,7 +78,6 @@ func packagedTTSFailureWorldState(requestID, workID, failureMessage string) fact
 	}
 	failed := submitted
 	failed.State = "failed"
-	failed.PlaceID = "task:failed"
 
 	state := factorydefinitions.FactoryWorldState{
 		WorkRequestsByID:       make(map[string]factorydefinitions.WorkRequestPayload),

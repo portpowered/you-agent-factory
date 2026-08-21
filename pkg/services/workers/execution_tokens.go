@@ -2,6 +2,7 @@ package workers
 
 import (
 	"encoding/json"
+	"strings"
 	"time"
 
 	"github.com/portpowered/infinite-you/pkg/platform/jsonvalue"
@@ -72,6 +73,36 @@ type Token struct {
 	CreatedAt time.Time `json:"created_at"`
 	EnteredAt time.Time `json:"entered_at"`
 	History   History   `json:"history"`
+}
+
+// UnmarshalJSON keeps persisted dispatch inputs readable after State replaced
+// the public place identifier. Historical snapshots used place_id for the
+// same authored state, so decode that value only at this compatibility seam.
+func (value *Token) UnmarshalJSON(data []byte) error {
+	type tokenAlias Token
+	var decoded tokenAlias
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		return err
+	}
+	var legacy struct {
+		PlaceID string `json:"place_id"`
+	}
+	if err := json.Unmarshal(data, &legacy); err != nil {
+		return err
+	}
+	*value = Token(decoded)
+	if strings.TrimSpace(value.State) == "" {
+		value.State = stateFromLegacyPlaceID(legacy.PlaceID)
+	}
+	return nil
+}
+
+func stateFromLegacyPlaceID(placeID string) string {
+	trimmed := strings.TrimSpace(placeID)
+	if index := strings.LastIndexByte(trimmed, ':'); index >= 0 {
+		return trimmed[index+1:]
+	}
+	return trimmed
 }
 
 // History contains the execution history needed for Worker prompt policy.

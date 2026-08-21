@@ -52,6 +52,30 @@ func TestCloneProviderInferenceRequestDeeplyDetachesInputTokens(t *testing.T) {
 	}
 }
 
+func TestWorkDispatchInputTokensMigratesLegacyPlaceIDToState(t *testing.T) {
+	t.Parallel()
+
+	dispatch := work.WorkDispatch{InputTokens: []any{
+		map[string]any{
+			"id":       "token-legacy",
+			"place_id": "task:review",
+			"color": map[string]any{
+				"work_id":      "work-1",
+				"work_type_id": "task",
+				"data_type":    "work",
+			},
+		},
+	}}
+
+	tokens := workerexecution.WorkDispatchInputTokens(dispatch)
+	if len(tokens) != 1 {
+		t.Fatalf("decoded tokens = %#v, want one token", tokens)
+	}
+	if tokens[0].ID != "token-legacy" || tokens[0].State != "review" {
+		t.Fatalf("decoded token = %#v, want legacy place projected to review state", tokens[0])
+	}
+}
+
 func TestRequestClonesNormalizeEmptyInputTokensToNil(t *testing.T) {
 	t.Parallel()
 

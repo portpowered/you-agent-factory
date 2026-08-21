@@ -195,7 +195,7 @@ func testWorkToken(id, workID, placeID, workTypeID string) *factoryruntime.Runti
 	}
 }
 
-func assertTokenIDs(t *testing.T, tokens []*factoryruntime.RuntimeToken, want []string) {
+func assertTokenIDs(t *testing.T, tokens []*workerexecution.Token, want []string) {
 	t.Helper()
 	got := tokenIDs(tokens)
 	slices.Sort(got)
@@ -211,7 +211,7 @@ func assertTokenIDs(t *testing.T, tokens []*factoryruntime.RuntimeToken, want []
 	}
 }
 
-func tokenIDs(tokens []*factoryruntime.RuntimeToken) []string {
+func tokenIDs(tokens []*workerexecution.Token) []string {
 	ids := make([]string, len(tokens))
 	for i, token := range tokens {
 		if token != nil {
