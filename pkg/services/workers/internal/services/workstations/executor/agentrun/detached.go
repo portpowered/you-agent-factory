@@ -2,6 +2,7 @@ package agentrun
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync"
 
@@ -73,6 +74,16 @@ func ExecuteDetached(
 		result.Diagnostics,
 	)
 	if err != nil {
+		// The go-agent-loop engine flattens a failing turn into
+		// errors.New(message) before it reaches the harness result, which
+		// destroys the typed provider error's retryable/terminal
+		// classification. The last runner turn observed that typed error
+		// first-hand, so re-attach it -- unless the loop ended for a
+		// caller-owned cancellation or deadline, which must keep precedence.
+		if runnerErr := observed.lastError(); runnerErr != nil &&
+			!errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
+			err = runnerErr
+		}
 		return result, err
 	}
 	publishAgentFinalMessage(
@@ -89,6 +100,7 @@ type lastRunnerResult struct {
 	runner   workerexecution.Runner
 	mu       sync.Mutex
 	result   workerexecution.RunnerExecutionResult
+	lastErr  error
 	executed bool
 }
 
@@ -99,6 +111,7 @@ func (observed *lastRunnerResult) Execute(
 	result, err := observed.runner.Execute(ctx, request)
 	observed.mu.Lock()
 	observed.result = result
+	observed.lastErr = err
 	observed.executed = true
 	observed.mu.Unlock()
 	return result, err
@@ -108,4 +121,13 @@ func (observed *lastRunnerResult) snapshot() (workerexecution.RunnerExecutionRes
 	observed.mu.Lock()
 	defer observed.mu.Unlock()
 	return observed.result, observed.executed
+}
+
+// lastError reports the typed error of the most recent runner turn, or nil when
+// that turn succeeded or no turn ran. A turn error terminates the agent loop,
+// so a non-nil value is always the root cause of a failed harness execution.
+func (observed *lastRunnerResult) lastError() error {
+	observed.mu.Lock()
+	defer observed.mu.Unlock()
+	return observed.lastErr
 }
