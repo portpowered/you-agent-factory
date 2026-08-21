@@ -182,13 +182,13 @@ func TestMetadata(t *testing.T) {}
 	commandRunner = func(invocation commandInvocation) (string, string, error) {
 		invocations = append(invocations, invocation)
 		switch {
-		case slices.Equal(invocation.args, []string{"list", functionalGoListErrorFlag, functionalGoListIdentityJSONFields, "-find", "./tests/functional/..."}):
+		case slices.Equal(invocation.args, []string{"list", functionalGoListErrorFlag, functionalGoListTestJSONFields, functionalGoListTestFlag, "./tests/functional/..."}):
 			return strings.Join([]string{
 				marshalFunctionalGoListPackage(t, functionalGoListPackage{ImportPath: supportPath, Dir: supportDir}),
-				marshalFunctionalGoListPackage(t, functionalGoListPackage{ImportPath: packagePath, Dir: packageDir}),
+				marshalFunctionalGoListPackage(t, functionalGoListPackage{ImportPath: packagePath, Dir: packageDir, TestGoFiles: []string{"metadata_test.go"}}),
+				marshalFunctionalGoListPackage(t, functionalGoListPackage{ImportPath: packagePath + ".test", Dir: packageDir}),
+				marshalFunctionalGoListPackage(t, functionalGoListPackage{ImportPath: packagePath + "_test [" + packagePath + ".test]", Dir: packageDir, ForTest: packagePath}),
 			}, "\n"), "", nil
-		case slices.Equal(invocation.args, []string{"list", functionalGoListErrorFlag, functionalGoListJSONFields, "-find", packagePath}):
-			return marshalFunctionalGoListPackage(t, functionalGoListPackage{ImportPath: packagePath, Dir: packageDir, TestGoFiles: []string{"metadata_test.go"}}), "", nil
 		default:
 			t.Fatalf("unexpected go list invocation: %+v", invocation)
 			return "", "", nil
@@ -205,8 +205,8 @@ func TestMetadata(t *testing.T) {}
 	if len(listed) != 1 || listed[0].ImportPath != packagePath || !slices.Equal(listed[0].TestGoFiles, []string{"metadata_test.go"}) {
 		t.Fatalf("listed metadata = %+v, want build-selected test files", listed)
 	}
-	if len(invocations) != 2 {
-		t.Fatalf("go list invocations = %d, want identity plus concrete metadata query: %+v", len(invocations), invocations)
+	if len(invocations) != 1 {
+		t.Fatalf("go list invocations = %d, want one test metadata query: %+v", len(invocations), invocations)
 	}
 	for _, invocation := range invocations {
 		if invocation.name != "go" || invocation.dir != repoRoot {

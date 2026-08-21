@@ -22,8 +22,9 @@ const (
 	functionalDiscoveryParallelThreshold = 8
 	functionalDiscoveryMaxJobs           = 4
 	functionalGoListErrorFlag            = "-e"
-	functionalGoListIdentityJSONFields   = "-json=Dir,ImportPath"
 	functionalGoListJSONFields           = "-json=Dir,ImportPath,TestGoFiles,XTestGoFiles"
+	functionalGoListTestJSONFields       = "-json=Dir,ImportPath,TestGoFiles,XTestGoFiles,ForTest"
+	functionalGoListTestFlag             = "-test"
 )
 
 type functionalGoListPackage struct {
@@ -31,6 +32,7 @@ type functionalGoListPackage struct {
 	ImportPath   string
 	TestGoFiles  []string
 	XTestGoFiles []string
+	ForTest      string
 	Error        *functionalGoListPackageError
 }
 
@@ -128,31 +130,33 @@ func listFunctionalTestPackageMetadata(patterns []string, repoRoot string) ([]fu
 		return nil, errors.New("resolve go coverage lane: no packages matched")
 	}
 
-	// Resolve the current-tree package identities separately from test-file
-	// metadata. The wildcard metadata query makes go list inspect every test
-	// file before it returns; the identity query stays cheap, and the concrete
-	// metadata batches retain the same build-selected TestGoFiles/XTestGoFiles
-	// authority without paying that wildcard cost.
-	identityPackages, err := listFunctionalTestPackageBatchWithFields(patterns, functionalGoListIdentityJSONFields, repoRoot)
+	// Ask go list for the test packages in one current-tree query. The -test
+	// output includes synthetic test-binary and external-test-package entries;
+	// only the ordinary package entries are functional inventory owners. This
+	// retains go list's build-selected TestGoFiles/XTestGoFiles authority while
+	// avoiding a second identity-to-metadata round trip for every package.
+	listedPackages, err := listFunctionalTestPackageBatchWithFieldsAndFlags(
+		patterns,
+		functionalGoListTestJSONFields,
+		[]string{functionalGoListTestFlag},
+		repoRoot,
+	)
 	if err != nil {
 		return nil, err
 	}
-	functionalPaths := make([]string, 0, len(identityPackages))
-	for _, pkg := range identityPackages {
+	functionalPackages := make([]functionalGoListPackage, 0, len(listedPackages))
+	for _, pkg := range listedPackages {
+		if pkg.ForTest != "" || strings.HasSuffix(pkg.ImportPath, ".test") {
+			continue
+		}
 		if isFunctionalTestPackage(pkg.ImportPath) {
-			functionalPaths = append(functionalPaths, pkg.ImportPath)
+			functionalPackages = append(functionalPackages, pkg)
 		}
 	}
-	functionalPaths = sortedUniqueStrings(functionalPaths)
-	if len(functionalPaths) == 0 {
+	if len(functionalPackages) == 0 {
 		return nil, errors.New("resolve go coverage lane: no packages matched")
 	}
-
-	listedPackages, err := listFunctionalTestPackages(functionalPaths, functionalPaths, functionalDiscoveryMaxJobs, repoRoot)
-	if err != nil {
-		return nil, err
-	}
-	return selectFunctionalPackageSet(functionalPaths, listedPackages)
+	return mergeFunctionalGoListPackages(functionalPackages)
 }
 
 func resolveFunctionalTestPackagesWithMetadata(cfg config, repoRoot string) ([]string, []functionalGoListPackage, error) {
@@ -235,11 +239,15 @@ func listFunctionalTestPackageBatch(packages []string, repoRoot string) ([]funct
 }
 
 func listFunctionalTestPackageBatchWithFields(packages []string, jsonFields string, repoRoot string) ([]functionalGoListPackage, error) {
+	return listFunctionalTestPackageBatchWithFieldsAndFlags(packages, jsonFields, []string{"-find"}, repoRoot)
+}
+
+func listFunctionalTestPackageBatchWithFieldsAndFlags(packages []string, jsonFields string, flags []string, repoRoot string) ([]functionalGoListPackage, error) {
 	// The inventory only needs package locations and build-selected test file
-	// names. -find keeps go list from resolving imports and dependencies for
-	// every functional package; the AST parser below remains responsible for
-	// validating the selected source files.
-	args := append([]string{"list", functionalGoListErrorFlag, jsonFields, "-find"}, packages...)
+	// names. The AST parser below remains responsible for validating the
+	// selected source files.
+	args := append([]string{"list", functionalGoListErrorFlag, jsonFields}, flags...)
+	args = append(args, packages...)
 	stdout, stderr, err := runCommand(commandInvocation{
 		name: "go",
 		args: args,
