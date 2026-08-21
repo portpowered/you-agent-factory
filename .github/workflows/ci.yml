@@ -224,6 +224,22 @@ jobs:
       - name: Build backend
         if: matrix.suite == 'unit'
         run: make build
+      - name: Select functional runner parallelism
+        if: matrix.suite == 'functional'
+        id: functional-parallelism
+        shell: bash
+        run: |
+          runner_cpus="$(nproc 2>/dev/null || true)"
+          case "$runner_cpus" in
+            ''|*[!0-9]*) runner_cpus=0 ;;
+          esac
+          if [ "$runner_cpus" -lt 2 ]; then
+            functional_jobs=2
+          else
+            functional_jobs="$runner_cpus"
+          fi
+          echo "Functional CI runner: logical_cpus=$runner_cpus jobs=$functional_jobs"
+          echo "jobs=$functional_jobs" >> "$GITHUB_OUTPUT"
       - name: Run backend coverage
         if: matrix.suite == 'unit'
         run: make test-unit-coverage
@@ -340,6 +356,7 @@ jobs:
           FUNCTIONAL_TEST_TRIGGER: ${{ github.event_name == 'push' && 'push-main' || 'pull_request' }}
           FUNCTIONAL_TEST_BUDGET: "75m"
           FUNCTIONAL_SHORT: "false"
+          FUNCTIONAL_DEFAULT_JOBS: ${{ steps.functional-parallelism.outputs.jobs }}
           INFINITE_YOU_RUN_ACPX_REAL_CLIENT: "1"
           INFINITE_YOU_REQUIRE_ACPX_REAL_CLIENT: "1"
           INFINITE_YOU_ACPX_EVIDENCE_OUTPUT: ${{ github.workspace }}/.artifacts/functional-test-viz/real-acpx-evidence.json

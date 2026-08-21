@@ -59,6 +59,23 @@ test("production Make computation yields the bounded numeric budget", (t) => {
 	assertBudgetOutput(result, 4);
 });
 
+test("explicit functional CI jobs override is shared by discovery and coverage only", (t) => {
+	if (!requireMake(t)) return;
+
+	const result = runMake(
+		[
+			"YOU_LOGICAL_CPUS=8",
+			"YOU_EXPECTED_CONCURRENT_LANES=4",
+			"FUNCTIONAL_DEFAULT_JOBS=4",
+		],
+		["-n", "test-unit", "test-functional", "test-functional-coverage"],
+	);
+	assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
+	assert.match(result.stdout, /unitlane -jobs 2/);
+	assert.match(result.stdout, /functionallane -jobs 4/);
+	assert.match(result.stdout, /gocoveragecheck -suite functional -stream -jobs 4/);
+});
+
 test("corrupted production result warns, falls back, and reaches numeric job flags", (t) => {
 	if (!requireMake(t)) return;
 
