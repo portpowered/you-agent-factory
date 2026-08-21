@@ -681,7 +681,7 @@ func discoverFunctionalPackageTests(pkg functionalGoListPackage) ([]string, erro
 		if err != nil {
 			return nil, fmt.Errorf("discover functional tests: read package %q file %q: %w", pkg.ImportPath, listedFile, err)
 		}
-		parsed, err := parser.ParseFile(token.NewFileSet(), filePath, source, 0)
+		parsed, err := parser.ParseFile(token.NewFileSet(), filePath, source, parser.SkipObjectResolution)
 		if err != nil {
 			return nil, fmt.Errorf("discover functional tests: parse package %q file %q: %w", pkg.ImportPath, listedFile, err)
 		}
