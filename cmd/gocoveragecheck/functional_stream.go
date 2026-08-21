@@ -23,9 +23,18 @@ type functionalStreamReporter struct {
 }
 
 type functionalStreamWriter struct {
-	reporter *functionalStreamReporter
-	pending  []byte
+	reporter           *functionalStreamReporter
+	pending            []byte
+	coverageOutputMode functionalCoverageOutputMode
 }
+
+type functionalCoverageOutputMode uint8
+
+const (
+	functionalCoverageOutputNormal functionalCoverageOutputMode = iota
+	functionalCoverageOutputSuppress
+	functionalCoverageOutputCompact
+)
 
 type lockedFunctionalStreamWriter struct {
 	reporter *functionalStreamReporter
@@ -98,13 +107,19 @@ func (writer *functionalStreamWriter) writeLineLocked(line []byte) error {
 
 	switch event.Action {
 	case "output":
-		if isRedundantCoverageOutputLine(event.Output) {
+		output := writer.filterCoverageOutput(event.Output)
+		if output == "" {
 			// The per-package coverage percentage is reported authoritatively
 			// by the end-of-run verdict block and the coverage-summary JSON.
-			// Streaming it once per package buries the actionable verdict.
+			// Streaming it once per package, including wrapped fragments, buries
+			// the actionable verdict.
 			return nil
 		}
-		output := compactSuccessfulCoverageOutputLine(event.Output)
+		compactContinuation := writer.coverageOutputMode == functionalCoverageOutputCompact
+		output = compactSuccessfulCoverageOutputLine(output)
+		if compactContinuation && !strings.Contains(output, "\n") {
+			output += "\n"
+		}
 		// Keep the child failure text readable in the job log while the
 		// command runner retains the original JSON bytes for timing parsing.
 		return writer.reporter.writeSink([]byte(output))
@@ -135,13 +150,72 @@ func (writer *functionalStreamWriter) writeLineLocked(line []byte) error {
 	}
 }
 
+// filterCoverageOutput suppresses the standalone per-package coverage line,
+// including a long line split across multiple test2json output events. It also
+// records a split successful package result so its coverpkg continuation can be
+// dropped after the compact prefix is rendered. Once a recognizable line
+// prefix has been seen without a newline, following bytes belong to that same
+// line until its newline; the next human diagnostic is then passed through.
+func (writer *functionalStreamWriter) filterCoverageOutput(output string) string {
+	var filtered strings.Builder
+	for {
+		if writer.coverageOutputMode != functionalCoverageOutputNormal {
+			newline := strings.IndexByte(output, '\n')
+			if newline < 0 {
+				return filtered.String()
+			}
+			writer.coverageOutputMode = functionalCoverageOutputNormal
+			output = output[newline+1:]
+			if output == "" {
+				return filtered.String()
+			}
+			continue
+		}
+
+		newline := strings.IndexByte(output, '\n')
+		if newline < 0 {
+			if isRedundantCoverageOutputLine(output) {
+				writer.coverageOutputMode = functionalCoverageOutputSuppress
+				return filtered.String()
+			}
+			if isSuccessfulCoverageOutputFragment(output) {
+				writer.coverageOutputMode = functionalCoverageOutputCompact
+			}
+			filtered.WriteString(output)
+			return filtered.String()
+		}
+
+		lineEnd := newline + 1
+		line := output[:lineEnd]
+		if !isRedundantCoverageOutputLine(line) {
+			filtered.WriteString(line)
+		}
+		output = output[lineEnd:]
+		if output == "" {
+			return filtered.String()
+		}
+	}
+}
+
+func isSuccessfulCoverageOutputFragment(output string) bool {
+	line, _, ok := singleFunctionalOutputLine(output)
+	if !ok || (!strings.HasPrefix(line, "ok ") && !strings.HasPrefix(line, "ok\t")) {
+		return false
+	}
+	return strings.Contains(line, "coverage: ") && strings.Contains(line, "% of statements in ")
+}
+
 // isRedundantCoverageOutputLine reports whether a go test output event is the
 // standalone per-package coverage percentage line. Only a line that is
 // entirely that report is suppressed: package result lines ("ok  pkg 1.2s
 // coverage: ..."), test failures, and panics keep their exact text so a hang
 // or crash stays diagnosable from the raw stream.
 func isRedundantCoverageOutputLine(output string) bool {
-	trimmed := strings.TrimSpace(output)
+	line, _, ok := singleFunctionalOutputLine(output)
+	if !ok {
+		return false
+	}
+	trimmed := strings.TrimSpace(line)
 	return strings.HasPrefix(trimmed, "coverage: ") && strings.Contains(trimmed, "% of statements")
 }
 

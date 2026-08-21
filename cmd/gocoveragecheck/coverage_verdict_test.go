@@ -17,8 +17,8 @@ var functionalVerdictCoverPackages = []string{
 }
 
 // fakeFunctionalCoverageCommand writes a profile with one below-floor package,
-// one near-floor package, and one comfortably passing package so the ordered
-// verdict block has something to order.
+// one near-floor package, and one comfortably passing package so the complete
+// ordered verdict block has something to order.
 func fakeFunctionalCoverageCommand(invocation commandInvocation) (string, string, error) {
 	if invocation.name != "go" || len(invocation.args) == 0 || invocation.args[0] != "test" {
 		return "", "", fmt.Errorf("unexpected command %q %v", invocation.name, invocation.args)
@@ -99,13 +99,15 @@ func TestFunctionalCoverageVerdictOrdersViolationsBeforeNearFloorAndTally(t *tes
 	}
 
 	violation := strings.Index(stdout, "  floor violation: package="+modulePath+"/pkg/config ")
-	nearFloor := strings.Index(stdout, "  near floor: package="+modulePath+"/pkg/service ")
+	configLine := strings.Index(stdout, "  package="+modulePath+"/pkg/config coverage=25.0% floor=80.0% delta=-55.0pp gate=fail lane=functional\n")
+	serviceLine := strings.Index(stdout, "  package="+modulePath+"/pkg/service coverage=90.0% floor=89.0% delta=+1.0pp gate=pass lane=functional\n")
+	wireLine := strings.Index(stdout, "  package="+modulePath+"/pkg/wire coverage=100.0% floor=50.0% delta=+50.0pp gate=pass lane=functional\n")
 	tally := strings.Index(stdout, "  tally: ")
-	if violation < 0 || nearFloor < 0 || tally < 0 {
-		t.Fatalf("verdict block missing sections (violation=%d nearFloor=%d tally=%d):\n%s", violation, nearFloor, tally, stdout)
+	if violation < 0 || configLine < 0 || serviceLine < 0 || wireLine < 0 || tally < 0 {
+		t.Fatalf("verdict block missing sections (violation=%d config=%d service=%d wire=%d tally=%d):\n%s", violation, configLine, serviceLine, wireLine, tally, stdout)
 	}
-	if !(violation < nearFloor && nearFloor < tally) {
-		t.Fatalf("verdict block order = violation@%d nearFloor@%d tally@%d, want violation first and tally last:\n%s", violation, nearFloor, tally, stdout)
+	if !(violation < configLine && configLine < serviceLine && serviceLine < wireLine && wireLine < tally) {
+		t.Fatalf("verdict block order = violation@%d config@%d service@%d wire@%d tally@%d, want headroom order and tally last:\n%s", violation, configLine, serviceLine, wireLine, tally, stdout)
 	}
 	if !strings.Contains(stdout, "delta=-55.0000 percentage-points covered=1/4 statements uncovered-blocks=2") {
 		t.Fatalf("floor violation line missing floor/actual/delta/blocks detail:\n%s", stdout)
@@ -113,9 +115,8 @@ func TestFunctionalCoverageVerdictOrdersViolationsBeforeNearFloorAndTally(t *tes
 	if !strings.Contains(stdout, "  tally: measured-packages=3 gated-packages=3 below-floor=1 near-floor=1 gate-failures=1\n") {
 		t.Fatalf("verdict tally line missing or wrong:\n%s", stdout)
 	}
-	// A comfortably passing package is neither a violation nor near its floor.
-	if strings.Contains(stdout, modulePath+"/pkg/wire") {
-		t.Fatalf("verdict block named a package with ample headroom:\n%s", stdout)
+	if strings.Contains(stdout, "  near floor: package=") || strings.Contains(stdout, "not shown") {
+		t.Fatalf("verdict block retained the elided near-floor format:\n%s", stdout)
 	}
 }
 
@@ -175,8 +176,20 @@ func TestFunctionalCoverageVerdictPassesWhenEveryPackageMeetsItsFloor(t *testing
 	if !strings.Contains(stdout, "  floor violations: none\n") {
 		t.Fatalf("verdict block missing the explicit no-violation line:\n%s", stdout)
 	}
+	for _, want := range []string{
+		"  package=" + modulePath + "/pkg/config coverage=25.0% floor=20.0% delta=+5.0pp gate=pass lane=functional\n",
+		"  package=" + modulePath + "/pkg/service coverage=90.0% floor=89.0% delta=+1.0pp gate=pass lane=functional\n",
+		"  package=" + modulePath + "/pkg/wire coverage=100.0% floor=50.0% delta=+50.0pp gate=pass lane=functional\n",
+	} {
+		if strings.Count(stdout, want) != 1 {
+			t.Fatalf("verdict line count for %q = %d, want one:\n%s", want, strings.Count(stdout, want), stdout)
+		}
+	}
 	if !strings.Contains(stdout, "  tally: measured-packages=3 gated-packages=3 below-floor=0 near-floor=1 gate-failures=0\n") {
 		t.Fatalf("passing verdict tally line missing or wrong:\n%s", stdout)
+	}
+	if strings.Contains(stdout, "  near floor: package=") || strings.Contains(stdout, "not shown") {
+		t.Fatalf("passing verdict retained the elided near-floor format:\n%s", stdout)
 	}
 	if !strings.Contains(stdout, "Go coverage") || !strings.Contains(stdout, "meets minimum") {
 		t.Fatalf("passing run lost its success message:\n%s", stdout)
@@ -223,7 +236,7 @@ func TestUnitCoverageRunKeepsRawPerPackageCoverageLines(t *testing.T) {
 	}
 }
 
-func TestNearFloorCoverageReportStatesOmittedPackages(t *testing.T) {
+func TestCoverageVerdictReportsEveryGatedPackage(t *testing.T) {
 	originalStdout := stdoutWriter
 	defer func() { stdoutWriter = originalStdout }()
 	var stdout bytes.Buffer
@@ -234,7 +247,8 @@ func TestNearFloorCoverageReportStatesOmittedPackages(t *testing.T) {
 		packageGates:  make(map[string]packageCoverageGate),
 		packageTotals: make(map[string]packageCoverageTotals),
 	}
-	for index := range nearFloorCoverageReportLimit + 3 {
+	const packageCount = 13
+	for index := range packageCount {
 		importPath := fmt.Sprintf("%s/pkg/near%02d", modulePath, index)
 		result.packageSummaries = append(result.packageSummaries, packageCoverageSummary{importPath: importPath, coverage: 51})
 		result.packageGates[importPath] = packageCoverageGate{Floor: &floor}
@@ -244,14 +258,51 @@ func TestNearFloorCoverageReportStatesOmittedPackages(t *testing.T) {
 	writeCoverageVerdict("Functional", result, nil)
 
 	got := stdout.String()
-	if count := strings.Count(got, "  near floor: package="); count != nearFloorCoverageReportLimit {
-		t.Fatalf("near-floor lines = %d, want the %d-row cap:\n%s", count, nearFloorCoverageReportLimit, got)
+	if count := strings.Count(got, "  package="); count != packageCount {
+		t.Fatalf("package verdict lines = %d, want all %d rows:\n%s", count, packageCount, got)
 	}
-	if !strings.Contains(got, "  near floor: 3 more package(s) within 2.0000 percentage points not shown\n") {
-		t.Fatalf("near-floor report did not state its omitted rows:\n%s", got)
+	if strings.Contains(got, "  near floor: package=") || strings.Contains(got, "not shown") {
+		t.Fatalf("complete verdict retained the elided near-floor format:\n%s", got)
 	}
 	if !strings.Contains(got, "near-floor=13") {
 		t.Fatalf("tally did not count every near-floor package:\n%s", got)
+	}
+}
+
+func TestCoverageVerdictReportsUngatedPackagesAfterGatedRows(t *testing.T) {
+	originalStdout := stdoutWriter
+	defer func() { stdoutWriter = originalStdout }()
+	var stdout bytes.Buffer
+	stdoutWriter = &stdout
+
+	floor := 80.0
+	gated := modulePath + "/pkg/gated"
+	ungated := modulePath + "/pkg/report-only"
+	result := coverageResult{
+		packageSummaries: []packageCoverageSummary{
+			{importPath: ungated, coverage: 5},
+			{importPath: gated, coverage: 25},
+		},
+		packageTotals: map[string]packageCoverageTotals{
+			gated: {coveredStatements: 25, totalStatements: 100},
+		},
+		packageGates: map[string]packageCoverageGate{
+			gated: {Floor: &floor},
+		},
+	}
+
+	writeCoverageVerdict("Functional", result, nil)
+
+	got := stdout.String()
+	wantGated := "  package=" + gated + " coverage=25.0% floor=80.0% delta=-55.0pp gate=fail lane=functional\n"
+	wantUngated := "  package=" + ungated + " coverage=5.0% floor=none delta=n/a gate=report-only lane=functional\n"
+	gatedIndex := strings.Index(got, wantGated)
+	ungatedIndex := strings.Index(got, wantUngated)
+	if gatedIndex < 0 || ungatedIndex < 0 || gatedIndex > ungatedIndex {
+		t.Fatalf("verdict rows = gated@%d report-only@%d, want gated first:\n%s", gatedIndex, ungatedIndex, got)
+	}
+	if !strings.Contains(got, "measured-packages=2 gated-packages=1 below-floor=1 near-floor=0 gate-failures=0") {
+		t.Fatalf("verdict tally did not distinguish report-only package:\n%s", got)
 	}
 }
 

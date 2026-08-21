@@ -18,8 +18,8 @@ var unitReportCoverPackages = []string{
 }
 
 // unitReportProfile has one below-floor package, one near-floor package, and
-// one comfortably passing package so the ordered verdict block and the JSON
-// coverage summary both have something to order.
+// one comfortably passing package so the complete ordered verdict block and
+// the JSON coverage summary both have something to order.
 func unitReportProfile() string {
 	return strings.Join([]string{
 		"mode: count",
@@ -228,7 +228,7 @@ func TestUnitCoverageLaneCollapsesPerPackageLinesWhenTheArtifactIsWritten(t *tes
 	block := stdout[strings.Index(stdout, "Unit package coverage verdict:"):]
 	var reported []string
 	for _, line := range strings.Split(block, "\n") {
-		if _, importPath, found := strings.Cut(strings.TrimSpace(line), "near floor: package="); found {
+		if _, importPath, found := strings.Cut(strings.TrimSpace(line), "package="); found {
 			reported = append(reported, strings.Fields(importPath)[0])
 		}
 	}

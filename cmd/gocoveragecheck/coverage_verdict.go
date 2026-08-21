@@ -12,19 +12,16 @@ import (
 const functionalCoverageSuite = "functional"
 const unitCoverageSuite = "unit"
 
-// nearFloorCoverageReportLimit caps how many passing near-floor packages the
-// verdict block names. The block stays readable at a glance while the omitted
-// count keeps the report honest about what it did not print.
-const nearFloorCoverageReportLimit = 10
-
 // nearFloorCoverageHeadroomPoints is the headroom in percentage points below
 // which a passing gated package is reported as near its floor.
 const nearFloorCoverageHeadroomPoints = 2.0
 
-// packageCoverageVerdict is one gated package's measured distance to its floor.
-// Headroom is negative exactly when the measurement is below the floor.
+// packageCoverageVerdict is one measured package's coverage and, when present,
+// its distance to the package floor. Headroom is negative when a measurable
+// package is below its floor. A package without a numeric floor is report-only.
 type packageCoverageVerdict struct {
 	importPath      string
+	hasFloor        bool
 	floor           float64
 	actual          float64
 	headroom        float64
@@ -37,8 +34,8 @@ type packageCoverageVerdict struct {
 //
 // A reporting lane replaces the raw "coverage: N% of statements" line per
 // measured package — 300+ consecutive lines that bury the one actionable
-// verdict — with a compact ordered block: floor violations first, then the
-// packages closest to their floor, then a single tally line.
+// verdict — with a compact ordered block: the existing floor diagnostics, one
+// complete package line per measured package, then a single tally line.
 //
 // Collapsing the listing is only safe when the complete per-package measurement
 // survives somewhere a reader can still reach. Two lanes qualify: the
@@ -89,15 +86,18 @@ func writePackageCoverageSummaries(summaries []packageCoverageSummary) {
 func writeCoverageVerdict(label string, result coverageResult, failures []string) {
 	verdicts := collectPackageCoverageVerdicts(result)
 	belowFloor, nearFloor := partitionPackageCoverageVerdicts(verdicts)
+	slices.SortStableFunc(verdicts, comparePackageCoverageVerdicts)
 
 	fmt.Fprintf(stdoutWriter, "%s package coverage verdict:\n", label)
 	writeBelowFloorCoverageLines(belowFloor)
-	writeNearFloorCoverageLines(nearFloor)
+	for _, verdict := range verdicts {
+		writePackageCoverageVerdictLine(verdict, coverageLaneNoun(label))
+	}
 	fmt.Fprintf(
 		stdoutWriter,
 		"  tally: measured-packages=%d gated-packages=%d below-floor=%d near-floor=%d gate-failures=%d\n",
 		len(result.packageSummaries),
-		len(verdicts),
+		countGatedPackageCoverageVerdicts(verdicts),
 		len(belowFloor),
 		len(nearFloor),
 		len(failures),
@@ -124,70 +124,65 @@ func writeBelowFloorCoverageLines(belowFloor []packageCoverageVerdict) {
 	}
 }
 
-func writeNearFloorCoverageLines(nearFloor []packageCoverageVerdict) {
-	if len(nearFloor) == 0 {
+func writePackageCoverageVerdictLine(verdict packageCoverageVerdict, lane string) {
+	if !verdict.hasFloor {
 		fmt.Fprintf(
 			stdoutWriter,
-			"  near floor: none within %.4f percentage points\n",
-			nearFloorCoverageHeadroomPoints,
+			"  package=%s coverage=%.1f%% floor=none delta=n/a gate=report-only lane=%s\n",
+			verdict.importPath,
+			verdict.actual,
+			lane,
 		)
 		return
 	}
-	reported := min(len(nearFloor), nearFloorCoverageReportLimit)
-	for _, verdict := range nearFloor[:reported] {
-		fmt.Fprintf(
-			stdoutWriter,
-			"  near floor: package=%s floor=%.4f%% actual=%.4f%% headroom=%+.4f percentage-points\n",
-			verdict.importPath,
-			verdict.floor,
-			verdict.actual,
-			verdict.headroom,
-		)
+
+	gate := "pass"
+	if verdict.measurable > 0 && verdict.headroom < 0 {
+		gate = "fail"
 	}
-	if omitted := len(nearFloor) - reported; omitted > 0 {
-		fmt.Fprintf(
-			stdoutWriter,
-			"  near floor: %d more package(s) within %.4f percentage points not shown\n",
-			omitted,
-			nearFloorCoverageHeadroomPoints,
-		)
-	}
+	fmt.Fprintf(
+		stdoutWriter,
+		"  package=%s coverage=%.1f%% floor=%.1f%% delta=%+.1fpp gate=%s lane=%s\n",
+		verdict.importPath,
+		verdict.actual,
+		verdict.floor,
+		verdict.headroom,
+		gate,
+		lane,
+	)
 }
 
-// collectPackageCoverageVerdicts reports one verdict per package that carries a
-// floor and has measurable statements. Packages without a floor, without a
-// measurable denominator (a vacuous pass), or covered by a measurement
-// exception have no distance to report and are excluded.
+// collectPackageCoverageVerdicts reports one verdict per measured package.
+// Numeric floors produce gate headroom; packages with no floor, including
+// measurement exceptions, remain visible as report-only rows.
 func collectPackageCoverageVerdicts(result coverageResult) []packageCoverageVerdict {
 	uncovered := uncoveredCoverageBlockCounts(result.coverageBlocks)
 	verdicts := make([]packageCoverageVerdict, 0, len(result.packageSummaries))
 	for _, summary := range result.packageSummaries {
 		gate := result.packageGates[summary.importPath]
-		if gate.Floor == nil {
-			continue
-		}
 		totals := result.packageTotals[summary.importPath]
-		if totals.totalStatements <= 0 {
-			continue
-		}
-		actual := float64(totals.coveredStatements) * 100 / float64(totals.totalStatements)
-		verdicts = append(verdicts, packageCoverageVerdict{
+		verdict := packageCoverageVerdict{
 			importPath:      summary.importPath,
-			floor:           *gate.Floor,
-			actual:          actual,
-			headroom:        actual - *gate.Floor,
+			actual:          summary.coverage,
 			covered:         totals.coveredStatements,
 			measurable:      totals.totalStatements,
 			uncoveredBlocks: uncovered[summary.importPath],
-		})
+		}
+		if gate.Floor != nil {
+			verdict.hasFloor = true
+			verdict.floor = *gate.Floor
+			verdict.headroom = verdict.actual - verdict.floor
+		}
+		verdicts = append(verdicts, verdict)
 	}
 	return verdicts
 }
 
 // partitionPackageCoverageVerdicts splits verdicts into below-floor packages
-// and passing packages within the near-floor band. Both are ordered by
-// headroom ascending — the worst regression and the closest near-miss first —
-// with import path as the deterministic tiebreak.
+// and passing packages within the near-floor band for the established
+// diagnostics and tally. Report-only and vacuously passing packages do not
+// participate in either count. Both returned groups are ordered by headroom
+// ascending with import path as the deterministic tiebreak.
 //
 // A zero floor is excluded from the near-floor band: coverage is never
 // negative, so a package sitting on a 0% floor cannot regress through it and
@@ -196,6 +191,9 @@ func partitionPackageCoverageVerdicts(verdicts []packageCoverageVerdict) (belowF
 	belowFloor = make([]packageCoverageVerdict, 0)
 	nearFloor = make([]packageCoverageVerdict, 0)
 	for _, verdict := range verdicts {
+		if !verdict.hasFloor || verdict.measurable <= 0 {
+			continue
+		}
 		switch {
 		case verdict.headroom < 0:
 			belowFloor = append(belowFloor, verdict)
@@ -208,6 +206,21 @@ func partitionPackageCoverageVerdicts(verdicts []packageCoverageVerdict) (belowF
 	return belowFloor, nearFloor
 }
 
+func comparePackageCoverageVerdicts(left packageCoverageVerdict, right packageCoverageVerdict) int {
+	if left.hasFloor != right.hasFloor {
+		if left.hasFloor {
+			return -1
+		}
+		return 1
+	}
+	if left.hasFloor {
+		if comparison := comparePackageCoverageHeadroom(left, right); comparison != 0 {
+			return comparison
+		}
+	}
+	return strings.Compare(left.importPath, right.importPath)
+}
+
 func comparePackageCoverageHeadroom(left, right packageCoverageVerdict) int {
 	if left.headroom < right.headroom {
 		return -1
@@ -216,6 +229,16 @@ func comparePackageCoverageHeadroom(left, right packageCoverageVerdict) int {
 		return 1
 	}
 	return strings.Compare(left.importPath, right.importPath)
+}
+
+func countGatedPackageCoverageVerdicts(verdicts []packageCoverageVerdict) int {
+	count := 0
+	for _, verdict := range verdicts {
+		if verdict.hasFloor {
+			count++
+		}
+	}
+	return count
 }
 
 // uncoveredCoverageBlockCounts counts zero-execution coverage blocks per

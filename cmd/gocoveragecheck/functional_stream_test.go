@@ -77,6 +77,73 @@ func TestFunctionalStreamCompactsSuccessfulPackageCoverageList(t *testing.T) {
 	}
 }
 
+func TestFunctionalStreamCompactsWrappedSuccessfulCoverageOutput(t *testing.T) {
+	var sink bytes.Buffer
+	reporter := newFunctionalStreamReporter(&sink)
+	writer := reporter.stdoutWriter()
+	packageName := modulePath + "/tests/functional/streaming"
+	coverPackages := make([]string, 530)
+	for index := range coverPackages {
+		coverPackages[index] = fmt.Sprintf("%s/pkg/cover%03d", modulePath, index)
+	}
+	coverList := strings.Join(coverPackages, ", ")
+	outputs := []string{
+		"ok  " + packageName + "\t1.234s\tcoverage: 42.7% of statements in " + coverList[:len(coverList)/2],
+		coverList[len(coverList)/2:] + "\n",
+	}
+	for _, output := range outputs {
+		event, err := json.Marshal(goTestTimingEvent{
+			Action:  "output",
+			Package: packageName,
+			Output:  output,
+		})
+		if err != nil {
+			t.Fatalf("marshal stream event: %v", err)
+		}
+		if _, err := writer.Write(append(event, '\n')); err != nil {
+			t.Fatalf("stream reporter write error = %v", err)
+		}
+	}
+
+	want := "ok  " + packageName + "\t1.234s\tcoverage: 42.7% of statements\n"
+	if got := sink.String(); got != want {
+		t.Fatalf("wrapped successful coverage output = %q, want %q", got, want)
+	}
+}
+
+func TestFunctionalStreamSuppressesWrappedStandaloneCoverageOutput(t *testing.T) {
+	var sink bytes.Buffer
+	reporter := newFunctionalStreamReporter(&sink)
+	writer := reporter.stdoutWriter()
+	packageName := modulePath + "/tests/functional/streaming"
+	coverPackages := make([]string, 530)
+	for index := range coverPackages {
+		coverPackages[index] = fmt.Sprintf("%s/pkg/cover%03d", modulePath, index)
+	}
+	events := []string{
+		"coverage: 71.4% of statements in ",
+		strings.Join(coverPackages, ", ") + "\n",
+		"--- FAIL: TestSomething (0.12s)\n",
+	}
+	for _, output := range events {
+		event, err := json.Marshal(goTestTimingEvent{
+			Action:  "output",
+			Package: packageName,
+			Output:  output,
+		})
+		if err != nil {
+			t.Fatalf("marshal stream event: %v", err)
+		}
+		if _, err := writer.Write(append(event, '\n')); err != nil {
+			t.Fatalf("stream reporter write error = %v", err)
+		}
+	}
+
+	if got := sink.String(); got != "--- FAIL: TestSomething (0.12s)\n" {
+		t.Fatalf("wrapped standalone coverage output = %q, want only the failure line", got)
+	}
+}
+
 func TestFunctionalStreamPreservesTimeoutOutputBeforeChildCompletes(t *testing.T) {
 	liveOutput, resultCh, releaseWriter, rawOutput := startFunctionalStreamChild(t, functionalStreamTimeoutMode)
 	waitForFunctionalStreamMarker(t, liveOutput, "goroutine 123 [running]")
