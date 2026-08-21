@@ -120,3 +120,9 @@ func ExtractModelsDocsFamily(manifest climanifest.Manifest) (climanifest.Manifes
 func ExtractProvidersFamily(manifest climanifest.Manifest) (climanifest.Manifest, error) {
 	return extractFamily(manifest, "providers", ProvidersFamilyCommandIDs)
 }
+
+// ExtractMetricsFamily returns manifest metadata for the local runtime-metrics
+// inspection command.
+func ExtractMetricsFamily(manifest climanifest.Manifest) (climanifest.Manifest, error) {
+	return extractFamily(manifest, "metrics", MetricsFamilyCommandIDs)
+}

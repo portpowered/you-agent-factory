@@ -20,6 +20,8 @@ import (
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorydefinitionscli "github.com/portpowered/infinite-you/pkg/services/factory_definitions/transports/cli"
 	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/transports/cli/cobracompletion"
+	configcli "github.com/portpowered/infinite-you/pkg/services/factory_definitions/transports/cli/config"
+	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/transports/cli/factoryload"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	sessioncli "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/cli/session"
 	factoryvisualization "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
@@ -38,9 +40,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifestcobra"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/cliserver"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/commandregistry"
-	configcli "github.com/portpowered/infinite-you/pkg/services/factory_definitions/transports/cli/config"
 	factorycli "github.com/portpowered/infinite-you/pkg/transports/cli/factory"
-	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/transports/cli/factoryload"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/generated"
 	mcpcli "github.com/portpowered/infinite-you/pkg/transports/cli/mcp"
 	cliobservation "github.com/portpowered/infinite-you/pkg/transports/cli/observation"
@@ -189,6 +189,7 @@ type CommandOperations struct {
 	ResponsePresentation              factoryvisualization.ResponsePresentation
 	ACP                               acpcli.Operations
 	ACPServer                         acp.Server
+	RuntimeMetricsQuery               factoryvisualization.RuntimeMetricsQuery
 }
 
 // CommandFactory constructs a fresh Cobra tree for each invocation from
@@ -262,6 +263,7 @@ type CommandFactory struct {
 	responsePresentation       factoryvisualization.ResponsePresentation
 	acp                        acpcli.Operations
 	acpServer                  acp.Server
+	runtimeMetricsQuery        factoryvisualization.RuntimeMetricsQuery
 }
 
 // NewCommandFactory copies the Wire-built graph without installing defaults.
@@ -331,6 +333,7 @@ func NewCommandFactory(operations CommandOperations) CommandFactory {
 		responsePresentation:              operations.ResponsePresentation,
 		acp:                               operations.ACP,
 		acpServer:                         operations.ACPServer,
+		runtimeMetricsQuery:               operations.RuntimeMetricsQuery,
 	}
 }
 

@@ -66,6 +66,12 @@ const (
 	// ProvidersFamilyCommandIDsPath is the generated providers stable command ID list.
 	ProvidersFamilyCommandIDsPath = "pkg/transports/cli/generated/providers_command_ids_gen.go"
 
+	// MetricsFamilyJSONPath is the generated metrics-family metadata artifact.
+	MetricsFamilyJSONPath = "pkg/transports/cli/generated/metrics_family.json"
+
+	// MetricsFamilyCommandIDsPath is the generated metrics stable command ID list.
+	MetricsFamilyCommandIDsPath = "pkg/transports/cli/generated/metrics_command_ids_gen.go"
+
 	MCPFamilyJSONPath          = "pkg/transports/cli/generated/mcp_family.json"
 	MCPFamilyCommandIDsPath    = "pkg/transports/cli/generated/mcp_command_ids_gen.go"
 	RuntimeFamilyManifestsPath = "pkg/transports/cli/generated/family_manifests_gen.go"
@@ -204,6 +210,20 @@ func ProvidersArtifact(store generatedartifacts.SourceStore, repositoryRoot stri
 	return contractjoiner.MarshalCanonicalJSON(family)
 }
 
+// MetricsArtifact returns deterministic generated metrics-family metadata.
+func MetricsArtifact(store generatedartifacts.SourceStore, repositoryRoot string) ([]byte, error) {
+	manifestPath := filepath.Join(repositoryRoot, filepath.FromSlash(ProductionManifestPath))
+	manifest, err := climanifest.LoadProduction(store, manifestPath)
+	if err != nil {
+		return nil, err
+	}
+	family, err := ExtractMetricsFamily(manifest)
+	if err != nil {
+		return nil, err
+	}
+	return contractjoiner.MarshalCanonicalJSON(family)
+}
+
 // MCPArtifact returns canonical MCP family metadata and enforces source classification.
 func MCPArtifact(store generatedartifacts.SourceStore, repositoryRoot string) ([]byte, error) {
 	production, err := climanifest.LoadProduction(store, filepath.Join(repositoryRoot, filepath.FromSlash(ProductionManifestPath)))
@@ -248,6 +268,7 @@ func Artifacts(store generatedartifacts.SourceStore, repositoryRoot string) ([]g
 		{FactoryConfigInitFamilyJSONPath, FactoryConfigInitFamilyArtifact},
 		{ModelsDocsFamilyJSONPath, ModelsDocsArtifact},
 		{ProvidersFamilyJSONPath, ProvidersArtifact},
+		{MetricsFamilyJSONPath, MetricsArtifact},
 		{MCPFamilyJSONPath, MCPArtifact},
 		{ServeFamilyJSONPath, ServeArtifact},
 	}
@@ -281,6 +302,8 @@ func Artifacts(store generatedartifacts.SourceStore, repositoryRoot string) ([]g
 		{Path: ModelsDocsFamilyCommandIDsPath, Payload: modelsDocsCommandIDsSource()},
 		{Path: ProvidersFamilyJSONPath, Absent: true},
 		{Path: ProvidersFamilyCommandIDsPath, Payload: providersCommandIDsSource()},
+		{Path: MetricsFamilyJSONPath, Absent: true},
+		{Path: MetricsFamilyCommandIDsPath, Payload: metricsCommandIDsSource()},
 		{Path: MCPFamilyJSONPath, Absent: true},
 		{Path: MCPFamilyCommandIDsPath, Payload: mcpCommandIDsSource()},
 		{Path: ServeFamilyJSONPath, Absent: true},
@@ -302,6 +325,7 @@ func runtimeFamilyManifestsSource(payloads map[string][]byte) ([]byte, error) {
 		{functionName: "factoryConfigInitFamilyManifestValue", path: FactoryConfigInitFamilyJSONPath},
 		{functionName: "modelsDocsFamilyManifestValue", path: ModelsDocsFamilyJSONPath},
 		{functionName: "providersFamilyManifestValue", path: ProvidersFamilyJSONPath},
+		{functionName: "metricsFamilyManifestValue", path: MetricsFamilyJSONPath},
 		{functionName: "runSubmitFamilyManifestValue", path: RunSubmitFamilyJSONPath},
 		{functionName: "mcpFamilyManifestValue", path: MCPFamilyJSONPath},
 		{functionName: "serveFamilyManifestValue", path: ServeFamilyJSONPath},
@@ -448,6 +472,14 @@ func providersCommandIDsSource() []byte {
 		"ProvidersFamilyCommandIDs lists the stable command IDs emitted from\n// contracts/cli/commands.json for the providers CLI family.",
 		"ProvidersFamilyCommandIDs",
 		ProvidersFamilyCommandIDs,
+	)
+}
+
+func metricsCommandIDsSource() []byte {
+	return renderCommandIDsSource(
+		"MetricsFamilyCommandIDs lists the stable command IDs emitted from\n// contracts/cli/commands.json for the runtime-metrics CLI family.",
+		"MetricsFamilyCommandIDs",
+		MetricsFamilyCommandIDs,
 	)
 }
 

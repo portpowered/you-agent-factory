@@ -51,6 +51,12 @@ func ProvidersFamilyManifest() (climanifest.Manifest, error) {
 	return providersFamilyManifestValue(), nil
 }
 
+// MetricsFamilyManifest returns generated metadata for the runtime-metrics
+// inspection command family.
+func MetricsFamilyManifest() (climanifest.Manifest, error) {
+	return metricsFamilyManifestValue(), nil
+}
+
 // RunSubmitFamilyManifest returns generated metadata for the run/submit family.
 func RunSubmitFamilyManifest() (climanifest.Manifest, error) {
 	return runSubmitFamilyManifestValue(), nil
