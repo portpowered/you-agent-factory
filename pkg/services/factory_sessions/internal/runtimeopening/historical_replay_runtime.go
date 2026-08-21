@@ -408,6 +408,7 @@ func assemblePortableReplayRuntime(
 		configured.Runtime.RuntimeInstanceID,
 		nil,
 		nil,
+		nil,
 		automationService,
 		false,
 	)
