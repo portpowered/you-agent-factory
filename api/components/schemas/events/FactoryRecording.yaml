@@ -1,5 +1,5 @@
 type: object
-additionalProperties: false
+additionalProperties: true
 description: >-
   Chapter-free recording of canonical Factory Events for exactly one Factory
   Session. Events remain in their recorded canonical order.

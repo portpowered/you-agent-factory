@@ -1,6 +1,6 @@
 type: object
 description: Trigger timing for scheduled workstations. Provide exactly one of a five-field cron schedule or a positive duration in every; Factory validation enforces the exclusive choice.
-additionalProperties: false
+additionalProperties: true
 properties:
   schedule:
     type: string

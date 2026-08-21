@@ -349,7 +349,7 @@ func TestPriceTableDecodeRejectsInvalidContractValues(t *testing.T) {
 		{name: "missing currency", payload: `{"priceTable":{"models":[]}}`, want: "currency is required"},
 		{name: "negative rate", payload: `{"priceTable":{"currency":"USD","models":[{"provider":"CODEX","model":"gpt-5","inputPerMillionTokens":"-1","outputPerMillionTokens":"2"}]}}`, want: "non-negative decimal"},
 		{name: "missing base rate", payload: `{"priceTable":{"currency":"USD","models":[{"provider":"CODEX","model":"gpt-5","outputPerMillionTokens":"2"}]}}`, want: "inputPerMillionTokens"},
-		{name: "unknown field", payload: `{"priceTable":{"currency":"USD","models":[],"unexpected":"value"}}`, want: "unknown field"},
+		{name: "missing model identity", payload: `{"priceTable":{"currency":"USD","models":[{"provider":"CODEX","inputPerMillionTokens":"1","outputPerMillionTokens":"2"}]}}`, want: "model must be non-empty"},
 	}
 	for _, testCase := range cases {
 		testCase := testCase

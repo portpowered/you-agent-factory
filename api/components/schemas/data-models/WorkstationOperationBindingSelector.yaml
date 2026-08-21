@@ -1,5 +1,5 @@
 type: object
-additionalProperties: false
+additionalProperties: true
 description: Selector fields used to resolve one content part from ordered runtime input.
 properties:
   slot:

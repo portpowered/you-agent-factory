@@ -1,5 +1,5 @@
 type: object
-additionalProperties: false
+additionalProperties: true
 description: >-
   Versioned Agent Factory event message. This is the intended canonical
   schema for customer event streams, history projection, record/replay

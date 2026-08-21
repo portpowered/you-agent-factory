@@ -1,5 +1,5 @@
 type: object
-additionalProperties: false
+additionalProperties: true
 description: >-
   A lifecycle state that a work item can occupy inside one work type.
 required:

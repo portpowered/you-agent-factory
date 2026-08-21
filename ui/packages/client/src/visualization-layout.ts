@@ -51,6 +51,14 @@ type InputPath = readonly (string | number)[];
 export interface FactoryVisualizationLayoutCanonicalNodeContext {
   canonicalNodeIds: ReadonlySet<string>;
 }
+
+function hasCanonicalNodeIds(
+  value: unknown,
+): value is FactoryVisualizationLayoutCanonicalNodeContext {
+  if (!isInputRecord(value)) return false;
+  return value.canonicalNodeIds instanceof Set;
+}
+
 const imageMediaTypes = new Set(["image/png", "image/jpeg", "image/webp"]);
 
 function unsupportedFields(
@@ -382,10 +390,9 @@ export function safeParseFactoryVisualizationLayout(
     total: 0,
     aggregateLimitReported: false,
   };
-  const canonicalNodeIds =
-    "canonicalNodeIds" in factory
-      ? factory.canonicalNodeIds
-      : factoryVisualizationCanonicalNodeIds(factory);
+  const canonicalNodeIds = hasCanonicalNodeIds(factory)
+    ? factory.canonicalNodeIds
+    : factoryVisualizationCanonicalNodeIds(factory);
   unsupportedFields(input, layoutFields, [], issues);
   if (
     stringField(input, "schemaVersion", [], issues) &&

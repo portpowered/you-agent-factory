@@ -1,5 +1,5 @@
 type: object
-additionalProperties: false
+additionalProperties: true
 required:
   - slot
 description: One workstation-authored binding for a provider-agnostic model-operation input slot.

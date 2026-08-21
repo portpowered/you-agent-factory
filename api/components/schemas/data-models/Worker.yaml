@@ -2,7 +2,7 @@ description: >-
   A reusable worker definition that tells the factory how a workstation
   should execute work, such as through a model-backed agent or a script.
 type: object
-additionalProperties: false
+additionalProperties: true
 required:
   - name
 properties:

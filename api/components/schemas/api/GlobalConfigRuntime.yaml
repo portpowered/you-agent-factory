@@ -1,5 +1,5 @@
 type: object
-additionalProperties: false
+additionalProperties: true
 description: Runtime observability settings loaded from operator configuration before command-line overrides.
 properties:
   logging:

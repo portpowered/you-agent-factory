@@ -1,5 +1,5 @@
 type: object
-additionalProperties: false
+additionalProperties: true
 required:
   - name
 description: One provider-agnostic operation exposed by a model worker, such as `TTS`.

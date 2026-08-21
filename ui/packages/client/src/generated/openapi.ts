@@ -10,6 +10,26 @@
  */
 
 export interface paths {
+  "/metrics/costs": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Get exact runtime cost rollups
+     * @description Values canonical Factory Runtime usage with the operator's explicit price table. The default scope covers all Factory Sessions. Supplying an unknown-but-valid Factory Session ID returns a successful no-usage report for that scope rather than unrelated usage. Missing prices are returned as UNPRICED rows and are never treated as zero.
+     */
+    get: operations["getMetricsCosts"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/worker-sessions": {
     parameters: {
       query?: never;
@@ -1791,6 +1811,124 @@ export interface components {
       /** @description Durable Factory event-stream generation that issued the position. */
       streamGenerationId?: string;
     };
+    CostsScope: {
+      /**
+       * @description Selection scope used to produce the report.
+       * @enum {string}
+       */
+      kind: CostsScopeKind;
+      /** @description Selected Factory Session identity when kind is FACTORY_SESSION. */
+      factory_session_id?: string;
+    };
+    CostsCoverage: {
+      /** @description Number of canonical usage rows encountered in the selection. */
+      encountered_rows: number;
+      /** @description Number of usage rows that have a complete configured valuation. */
+      priced_rows: number;
+      /** @description Number of usage rows returned as UNPRICED. */
+      unpriced_rows: number;
+      /** @description Distinct provider/model pairs encountered in the selection. */
+      encountered_provider_models: number;
+      /** @description Distinct provider/model pairs whose encountered rows are all priced. */
+      priced_provider_models: number;
+      /** @description Distinct provider/model pairs with one or more unpriced rows. */
+      unpriced_provider_models: number;
+    };
+    CostsLineItem: {
+      factory_session_id?: string;
+      work_id?: string;
+      dispatch_id?: string;
+      worker_session_id?: string;
+      provider?: string;
+      model?: string;
+      /** Format: int64 */
+      input_tokens?: number;
+      /** Format: int64 */
+      output_tokens?: number;
+      /** Format: int64 */
+      cached_input_tokens?: number;
+      /** Format: int64 */
+      reasoning_output_tokens?: number;
+      /**
+       * @description PRICED means every measured token class has a configured rate; UNPRICED means the row is retained with its tokens but cannot be fully valued.
+       * @enum {string}
+       */
+      status: CostsLineItemStatus;
+      /** @description Exact USD decimal amount; absent for UNPRICED rows and present as "0" for explicitly free usage. */
+      priced_amount?: string;
+      /** @description Actionable reason when status is UNPRICED. */
+      reason?: string;
+    };
+    CostsRollup: {
+      /** @description Stable dimension key for this rollup. */
+      key: string;
+      /** Format: int64 */
+      input_tokens?: number;
+      /** Format: int64 */
+      output_tokens?: number;
+      /** Format: int64 */
+      cached_input_tokens?: number;
+      /** Format: int64 */
+      reasoning_output_tokens?: number;
+      /**
+       * @description PRICED means all usage rows in the rollup are valued; PARTIAL means some are valued; UNPRICED means usage exists but none is valued; NO_USAGE means no canonical usage rows were encountered.
+       * @enum {string}
+       */
+      status: CostsRollupStatus;
+      /** @description Exact USD decimal subtotal; absent when no usage is priced. */
+      priced_subtotal?: string;
+      coverage: components["schemas"]["CostsCoverage"];
+    };
+    CostsProviderModelRollup: {
+      /** @description Canonical provider identity, when known. */
+      provider: string;
+      /** @description Exact resolved model identity, when known. */
+      model: string;
+      /** @description Stable public provider/model pair key in the form provider/model. */
+      key: string;
+      /** Format: int64 */
+      input_tokens?: number;
+      /** Format: int64 */
+      output_tokens?: number;
+      /** Format: int64 */
+      cached_input_tokens?: number;
+      /** Format: int64 */
+      reasoning_output_tokens?: number;
+      /**
+       * @description PRICED means all usage rows for this provider/model are valued; PARTIAL means some are valued; UNPRICED means usage exists but none is valued; NO_USAGE means this pair has no usage rows.
+       * @enum {string}
+       */
+      status: CostsProviderModelRollupStatus;
+      /** @description Exact USD decimal subtotal; absent when no usage is priced. */
+      priced_subtotal?: string;
+      coverage: components["schemas"]["CostsCoverage"];
+    };
+    CostsReport: {
+      scope: components["schemas"]["CostsScope"];
+      /**
+       * @description Currency of all configured rates and monetary amounts.
+       * @enum {string}
+       */
+      currency: CostsReportCurrency;
+      /**
+       * @description PRICED means every usage row is valued; PARTIAL means some rows are valued; UNPRICED means usage exists but none is valued; NO_USAGE means no canonical usage rows were encountered. Missing price is never represented as zero.
+       * @enum {string}
+       */
+      status: CostsReportStatus;
+      /** @description Exact USD decimal subtotal for fully priced rows; absent when no row is priced. */
+      priced_subtotal?: string;
+      coverage: components["schemas"]["CostsCoverage"];
+      /** @description Deterministically ordered canonical usage rows and their valuation status. */
+      line_items: components["schemas"]["CostsLineItem"][];
+      /** @description Rollups keyed by Work item identity. */
+      work_items: components["schemas"]["CostsRollup"][];
+      /** @description Rollups keyed by Worker Session identity. */
+      worker_sessions: components["schemas"]["CostsRollup"][];
+      /** @description Rollups keyed by canonical provider/model pair. */
+      provider_models: components["schemas"]["CostsProviderModelRollup"][];
+      /** @description Rollups keyed by Factory Session identity. */
+      factory_sessions: components["schemas"]["CostsRollup"][];
+    };
     WorkerSessionProviderSessionRef: {
       /** @description Provider identity that issued the correlated session. */
       provider: string;
@@ -2852,6 +2990,8 @@ export interface components {
       project?: string;
       /** @description Stable Factory Session identifier for the dispatch. */
       sessionId?: string;
+    } & {
+      [key: string]: unknown;
     };
     /** @description Stable replay-safe input value available to an expected-artifact template. This is intentionally smaller than the workstation prompt input surface so completion verification and historical Work reads can use the same values. */
     ExpectedArtifactTemplateInput: {
@@ -2866,6 +3006,8 @@ export interface components {
       tags?: components["schemas"]["StringMap"];
       /** @description The dispatch-time textual payload value. It is retained only in the artifact template context and is not added to the normal Work read. */
       payload?: string;
+    } & {
+      [key: string]: unknown;
     };
     /** @description One effective expected artifact declaration projected on a Work item. Pattern is the rendered workspace-relative literal path or glob, never a host path. */
     WorkExpectedArtifact: {
@@ -2878,6 +3020,8 @@ export interface components {
       verification: components["schemas"]["WorkExpectedArtifactVerification"];
       /** @description Why this declaration failed, when verification is FAILED. */
       reason?: components["schemas"]["ExpectedArtifactVerificationReason"];
+    } & {
+      [key: string]: unknown;
     };
     /**
      * @description Latest recorded verification state for one expected artifact declaration on a Work item.
@@ -2988,6 +3132,8 @@ export interface components {
        * @description When durable session execution started.
        */
       startedAt: string;
+    } & {
+      [key: string]: unknown;
     };
     /** @description Factory Session lifecycle pause recorded on the canonical factory event stream. Session identity lives in FactoryEvent.context; this payload carries replay-safe control-transition facts only. */
     SessionPausedEventPayload: {
@@ -3009,7 +3155,7 @@ export interface components {
        */
       resumedAt: string;
     };
-    /** @description Durable Factory Session lifecycle control recorded on the canonical factory event stream. Session identity lives in FactoryEvent.context; this payload carries replay-safe control facts only. */
+    /** @description Durable Factory Session lifecycle control recorded on the canonical factory event stream. Session identity lives in FactoryEvent.context; this payload carries replay-safe control facts only. Its operation and outcome shape is intentionally closed because it is a fixed control contract, not an extensible event metadata bag. */
     SessionLifecycleControlEventPayload: {
       operation: components["schemas"]["FactorySessionLifecycleControlKind"];
       outcome: components["schemas"]["FactorySessionLifecycleControlOutcome"];
@@ -4209,6 +4355,8 @@ export interface components {
         | components["schemas"]["JavaScriptCheckpointRefEventPayload"]
         | components["schemas"]["JavaScriptPhaseChangeEventPayload"]
         | components["schemas"]["ArtifactCreatedEventPayload"];
+    } & {
+      [key: string]: unknown;
     };
     /** @description Chapter-free recording of canonical Factory Events for exactly one Factory Session. Events remain in their recorded canonical order. */
     FactoryRecording: {
@@ -4221,6 +4369,8 @@ export interface components {
       sessionId: string;
       /** @description Canonical Factory Events in their original recorded order. */
       events: components["schemas"]["FactoryEvent"][];
+    } & {
+      [key: string]: unknown;
     };
     /**
      * @description Canonical event vocabulary for customer-visible runtime changes. Work entering the factory is represented as WORK_REQUEST, including single-work submissions that are normalized into one-work requests.
@@ -4265,6 +4415,8 @@ export interface components {
       previousChainingTraceIds?: string[];
       /** @description Human-readable source such as api, filewatcher, replay, cron, or worker. */
       source?: string;
+    } & {
+      [key: string]: unknown;
     };
     /**
      * @description Origin of a WORK_STATE_CHANGE event.
@@ -4313,6 +4465,8 @@ export interface components {
       factory: components["schemas"]["Factory"];
       wallClock?: components["schemas"]["WallClock"];
       diagnostics?: components["schemas"]["Diagnostics"];
+    } & {
+      [key: string]: unknown;
     };
     /** @description Runtime topology snapshot before work moves. */
     InitialStructureRequestEventPayload: {
@@ -4410,7 +4564,7 @@ export interface components {
       /** @enum {string} */
       status: HumanApprovalRequestedEventPayloadStatus;
     };
-    /** @description Canonical association between one Factory dispatch and the Worker Session allocated to execute it. Dispatch identity remains authoritative in FactoryEvent.context.dispatchId and is not repeated in this payload. */
+    /** @description Canonical association between one Factory dispatch and the Worker Session allocated to execute it. Dispatch identity remains authoritative in FactoryEvent.context.dispatchId and is not repeated in this payload. This public projection intentionally remains closed: canonical recording data may retain execution-only model and reasoningEffort facts, but this event serves only the Worker Session identity. */
     DispatchWorkerSessionAssociationEventPayload: {
       /** @description Non-empty Worker Session identity allocated for the dispatch. */
       workerSessionId: string;
@@ -5328,6 +5482,8 @@ export interface components {
       workers?: components["schemas"]["Worker"][];
       /** @description Processing steps that consume work, invoke workers, and emit the next work states. */
       workstations?: components["schemas"]["Workstation"][];
+    } & {
+      [key: string]: unknown;
     };
     /** @description One Factory-configured outbound webhook subscription. Secret material is represented only by a reference and is resolved at delivery time. */
     FactoryWebhook: {
@@ -5342,6 +5498,8 @@ export interface components {
       filter: components["schemas"]["FactoryWebhookFilter"];
       /** @description Optional bounded delivery policy. Omitted fields use the documented defaults. */
       deliveryPolicy?: components["schemas"]["FactoryWebhookDeliveryPolicy"];
+    } & {
+      [key: string]: unknown;
     };
     /** @description Canonical event filter for one outbound webhook subscription. */
     FactoryWebhookFilter: {
@@ -5349,6 +5507,8 @@ export interface components {
       eventTypes: components["schemas"]["FactoryWebhookEventType"][];
       /** @description Optional canonical dispatch statuses applied only to dispatch event types. */
       dispatchStatuses?: components["schemas"]["FactoryWebhookDispatchStatus"][];
+    } & {
+      [key: string]: unknown;
     };
     /**
      * @description Canonical Factory Event types supported by outbound webhook filters.
@@ -5372,6 +5532,8 @@ export interface components {
       backoffMultiplier?: number;
       /** @description Positive Go duration cap for one retry delay; it must not be below initialBackoff. */
       maxBackoff?: string;
+    } & {
+      [key: string]: unknown;
     };
     /** @description Authored orchestrator identity for one factory. When omitted, existing Petri factories load through compatibility defaulting to orchestrator.kind = PETRI. */
     FactoryOrchestrator: {
@@ -5435,6 +5597,8 @@ export interface components {
       unknownNamedArgumentPolicy?: components["schemas"]["FactoryInvocationUnknownNamedArgumentPolicy"];
       /** @description Optional customer-facing hint for the factory's primary output shape. */
       outputContract?: components["schemas"]["FactoryInvocationOutputContract"];
+    } & {
+      [key: string]: unknown;
     };
     /** @description One canonical invocation parameter declared on a factory. */
     FactoryInvocationParameter: {
@@ -5462,6 +5626,8 @@ export interface components {
       defaultValues?: string[];
       /** @description Accepted invocation bindings for this parameter across positional, named, and stdin sources. */
       bindings?: components["schemas"]["FactoryInvocationParameterBinding"][];
+    } & {
+      [key: string]: unknown;
     };
     /** @description One public binding that exposes a parameter to callers. */
     FactoryInvocationParameterBinding: {
@@ -5469,6 +5635,8 @@ export interface components {
       kind: components["schemas"]["FactoryInvocationParameterBindingKind"];
       /** @description 1-based positional slot used when kind is POSITIONAL. */
       position?: number;
+    } & {
+      [key: string]: unknown;
     };
     /**
      * @description Public invocation binding kinds supported by factory signatures.
@@ -5502,6 +5670,8 @@ export interface components {
       fileExtension?: string;
       /** @description Human-readable summary of the primary output contract. */
       description?: string;
+    } & {
+      [key: string]: unknown;
     };
     /**
      * @description High-level output shape hint exposed by a factory invocation signature.
@@ -5516,6 +5686,8 @@ export interface components {
       description: components["schemas"]["NameValue"];
       /** @description Structured invocation arguments; values are never parsed or executed while loading the Factory. */
       args: components["schemas"]["FactoryInvocationArguments"];
+    } & {
+      [key: string]: unknown;
     };
     /** @description Structured Factory invocation arguments keyed by parameter name, external name, or alias. Each value is either one string or an ordered array of strings. */
     FactoryInvocationArguments: {
@@ -5531,6 +5703,8 @@ export interface components {
       terminalState?: string;
       /** @description Optional authored work name filter used by EXPLICIT policy selection. */
       workName?: string;
+    } & {
+      [key: string]: unknown;
     };
     /**
      * @description Primary-result selection policy for factory invocation responses. SUBMITTED_WORK_TERMINAL traces the work submitted by the invocation until it reaches its first terminal output. EXPLICIT selects configured work content from the invocation submit scope.
@@ -5547,6 +5721,8 @@ export interface components {
       model?: string;
       /** @description Duration string that controls how long the factory should keep re-checking throttle history before allowing the lane again. */
       refreshWindow: string;
+    } & {
+      [key: string]: unknown;
     };
     /** @description Canonical portability manifest for Agent Factory bundles. Required tools are validation-only PATH dependencies; bundled files carry portable content for restoration inside the factory boundary. */
     ResourceManifest: {
@@ -5554,6 +5730,8 @@ export interface components {
       requiredTools?: components["schemas"]["RequiredTool"][];
       /** @description Portable bundled files that belong inside the factory boundary. Entries are explicit only, use factory-relative target paths, and must stay under the canonical script, docs, or inputs roots for SCRIPT, DOC, or INPUT entries, or match the supported root-helper allowlist for ROOT_HELPER entries. Export, share, flatten, and materialize flows auto-discover SCRIPT and DOC files under the documented factory subtrees, but ROOT_HELPER entries such as Makefile are opt-in manifest entries that travel only when explicitly declared here. In v1 shared-factory flows, INPUT entries capture the source factory's current starter work at share time and are restored as independent recipient copies. */
       bundledFiles?: components["schemas"]["BundledFile"][];
+    } & {
+      [key: string]: unknown;
     };
     /** @description One declarative external tool dependency for a portable factory. */
     RequiredTool: {
@@ -5565,6 +5743,8 @@ export interface components {
       purpose?: string;
       /** @description Optional argument vector used by future validation flows to probe the tool version without changing the executable lookup token. */
       versionArgs?: string[];
+    } & {
+      [key: string]: unknown;
     };
     /** @description One explicit portable bundled file entry carried by the factory portability manifest. SCRIPT files target factory/scripts/..., DOC files target factory/docs/..., INPUT files target factory/inputs/<work-type>/<channel>/..., and ROOT_HELPER files target supported project-root helper paths such as Makefile only when declared explicitly in bundledFiles. Export and flatten do not auto-discover project-root helpers. In v1 shared-factory exports, INPUT entries encode a share-time snapshot of starter work that is copied into the recipient factory as detached seeded work. */
     BundledFile: {
@@ -5578,6 +5758,8 @@ export interface components {
       /** @description Canonical factory-relative restoration target for the bundled file. Absolute paths, backslash-separated paths, and paths that require dot-segment normalization are rejected. */
       targetPath: string;
       content: components["schemas"]["BundledFileContent"];
+    } & {
+      [key: string]: unknown;
     };
     /** @description Inline content payload for a portable bundled file. */
     BundledFileContent: {
@@ -5588,12 +5770,16 @@ export interface components {
       encoding: BundledFileContentEncoding;
       /** @description Inline bundled file content carried in the manifest. SCRIPT and DOC files under factory/scripts/ and factory/docs/ may be discovered during flatten, but supported root helper paths such as Makefile are bundled only when they appear as explicit ROOT_HELPER entries in bundledFiles. */
       inline: string;
+    } & {
+      [key: string]: unknown;
     };
     /** @description Declared types of inputs. Used to force the inputs of a certain work type to be of a certain shape, like a specific JSON structure. */
     InputType: {
       /** @description Input type name. The reserved name "default" is implicit. */
       name: string;
       type: components["schemas"]["InputKind"];
+    } & {
+      [key: string]: unknown;
     };
     /**
      * @description Kinds of input. `DEFAULT` passes opaque input through to workstations as-is.
@@ -5614,6 +5800,8 @@ export interface components {
       handlingBehavior?: components["schemas"]["WorkTypeHandlingBehavior"][];
       /** @description Expected output declarations inherited by workstations handling this work type. */
       expectedArtifacts?: components["schemas"]["ExpectedArtifact"][];
+    } & {
+      [key: string]: unknown;
     };
     /** @description A lifecycle state that a work item can occupy inside one work type. */
     WorkState: {
@@ -5623,6 +5811,8 @@ export interface components {
       name: string;
       /** @description Lifecycle category for this state, such as initial, processing, terminal, or failed. */
       type: components["schemas"]["WorkStateType"];
+    } & {
+      [key: string]: unknown;
     };
     /**
      * @description Categories of work states. The factory runtime treats these categories differently for lifecycle tracking and metrics purposes. Initial: The work is waiting to be picked up by a workstation. Processing: The work has been partially processed, and is continuing through its lifecycle. Terminal: The work has completed successfully. Failed: The work has failed.
@@ -5647,6 +5837,8 @@ export interface components {
       loadPolicy?: string;
       /** @description Provider identity associated with this resource, especially for `PROVIDER_QUOTA` resources. */
       provider?: string;
+    } & {
+      [key: string]: unknown;
     };
     /**
      * @description Uppercase resource families supported by the public factory-config contract.
@@ -5696,6 +5888,8 @@ export interface components {
       agentTools?: components["schemas"]["AgentWorkerToolsConfig"];
       /** @description Inline worker instructions or script body when the worker is authored directly in factory config. */
       body?: string;
+    } & {
+      [key: string]: unknown;
     };
     /** @description Explicit agent-loop tool policy for AGENT_WORKER definitions. Tool execution stays disabled unless this block is present with a non-DISABLED policy. */
     AgentWorkerToolsConfig: {
@@ -6124,6 +6318,8 @@ export interface components {
       inputs?: components["schemas"]["ModelOperationSlot"][];
       /** @description Named operation output slots this worker can produce. */
       outputs?: components["schemas"]["ModelOperationSlot"][];
+    } & {
+      [key: string]: unknown;
     };
     /** @description One named capability slot declared by a model operation. */
     ModelOperationSlot: {
@@ -6133,6 +6329,8 @@ export interface components {
       contentTypes: components["schemas"]["ModelOperationContentType"][];
       /** @description Whether this input slot must be resolved before invocation starts. Output slots omit this field when not needed. */
       required?: boolean;
+    } & {
+      [key: string]: unknown;
     };
     /**
      * @description Uppercase content-part categories supported by worker model-operation capability slots.
@@ -6213,6 +6411,8 @@ export interface components {
       worktree?: string;
       /** @description Environment variables added to the workstation execution context. */
       env?: components["schemas"]["StringMap"];
+    } & {
+      [key: string]: unknown;
     };
     /**
      * @description Optional worker-output parsing mode for model workstations. When set to `decision-envelope`, agent output is parsed as a reviewer/checker JSON envelope that maps directly onto WorkResult outcome, feedback, output, and optional recorded output work instead of stop-token routing.
@@ -6224,6 +6424,8 @@ export interface components {
       label: string;
       /** @description One or more authored destinations emitted when this classifier label is selected. */
       outputs: components["schemas"]["WorkstationIO"][];
+    } & {
+      [key: string]: unknown;
     };
     /** @description Retry and execution ceilings applied to one workstation definition. */
     WorkstationLimits: {
@@ -6237,6 +6439,8 @@ export interface components {
       maxGeneratedWorkItemsArgument?: string;
       /** @description Offset added to the invocation argument before applying the generated-Work ceiling. */
       maxGeneratedWorkItemsArgumentOffset?: number;
+    } & {
+      [key: string]: unknown;
     };
     /**
      * @description Scheduling kind for a workstation, which determines how the engine schedules and dispatches work to it. Standard workstations are scheduled as soon as their inputs are ready, and can have multiple work items in-flight at the same time.  Repeater workstations are triggered whenever their inputs change, and will reloop the outputs on rejection back to the initial place. Cron workstations create internal time work and dispatch their configured worker when time and input guards are satisfied. Poller workstations bind a poller-capable worker that the service runtime supervises as a long-lived ingress loop.
@@ -6264,11 +6468,15 @@ export interface components {
       jitter?: string;
       /** @description Positive Go duration after due_at before a stale cron time token expires and can be consumed by the system expiry transition. Defaults to the duration until the next scheduled cron fire when omitted. */
       expiryWindow?: string;
+    } & {
+      [key: string]: unknown;
     };
     /** @description Optional workstation policy for how downstream work receives payload content after this workstation completes. When omitted, downstream work uses the workstation output payload. */
     WorkPropagation: {
       /** @description Propagation mode for downstream work payload selection after this workstation succeeds. */
       mode: components["schemas"]["WorkPropagationMode"];
+    } & {
+      [key: string]: unknown;
     };
     /**
      * @description Work payload propagation mode for a workstation. OUTPUT_AS_PAYLOAD uses the workstation output as the downstream work payload. PRESERVE_INPUT keeps the consumed input payload for downstream work instead of replacing it with the workstation output.
@@ -6298,6 +6506,8 @@ export interface components {
       matchInput?: string;
       /** @description For dynamic fanout input guards, the workstation that spawns the children for count tracking. */
       spawnedBy?: string;
+    } & {
+      [key: string]: unknown;
     };
     GuardMatchConfig: {
       /** @description Field selector resolved against each candidate input, such as `.Name` or `.Tags["_last_output"]`. */
@@ -6311,6 +6521,8 @@ export interface components {
       state: string;
       /** @description Per-input guards that must pass before this specific input can be used. */
       guards?: components["schemas"]["InputGuard"][];
+    } & {
+      [key: string]: unknown;
     };
     Transition: {
       /** @description Source workstation name. */
@@ -6587,11 +6799,14 @@ export interface components {
       /** @description Stable identifier for the local provider-backed runtime boundary. */
       backendScopeID?: string;
       defaults?: components["schemas"]["GlobalConfigDefaults"];
+      priceTable?: components["schemas"]["GlobalConfigPriceTable"];
       runtime?: components["schemas"]["GlobalConfigRuntime"];
       models?: components["schemas"]["GlobalConfigModels"];
       workers?: components["schemas"]["GlobalConfigWorkers"];
       /** @description Named worker model presets loaded from the shared configuration file. */
       workerPresets?: components["schemas"]["GlobalConfigWorkerPreset"][];
+    } & {
+      [key: string]: unknown;
     };
     /** @description Operator defaults that participate independently in file, environment, and flag precedence. */
     GlobalConfigDefaults: {
@@ -6599,6 +6814,37 @@ export interface components {
       workerModelProvider?: string;
       /** @description Default worker model name. */
       workerModel?: string;
+    } & {
+      [key: string]: unknown;
+    };
+    /** @description Operator-authored USD rates per one million tokens. Omit this property to use an empty table; no provider or model prices are supplied by default. */
+    GlobalConfigPriceTable: {
+      /**
+       * @description Currency used by every configured rate. This contract supports USD only.
+       * @enum {string}
+       */
+      currency: GlobalConfigPriceTableCurrency;
+      /** @description Deterministic provider/model price entries. */
+      models: components["schemas"]["GlobalConfigPriceTableModel"][];
+    } & {
+      [key: string]: unknown;
+    };
+    /** @description Exact operator-authored rates for one provider and model identity. */
+    GlobalConfigPriceTableModel: {
+      /** @description Canonical provider identity or a supported built-in alias; the Operator Settings decoder trims and canonicalizes this value. */
+      provider: string;
+      /** @description Exact model identifier. It is trimmed but never guessed or aliased. */
+      model: string;
+      /** @description Non-negative USD rate per one million uncached input tokens. */
+      inputPerMillionTokens: string;
+      /** @description Non-negative USD rate per one million non-reasoning output tokens. */
+      outputPerMillionTokens: string;
+      /** @description Optional non-negative USD rate per one million cached input tokens. */
+      cachedInputPerMillionTokens?: string;
+      /** @description Optional non-negative USD rate per one million reasoning output tokens. */
+      reasoningOutputPerMillionTokens?: string;
+    } & {
+      [key: string]: unknown;
     };
     /** @description Runtime observability settings loaded from operator configuration before command-line overrides. */
     GlobalConfigRuntime: {
@@ -6606,6 +6852,8 @@ export interface components {
       logging?: components["schemas"]["GlobalConfigRuntimeArtifactSettings"];
       /** @description Runtime metrics storage settings. Omitted values use the documented production defaults. */
       metrics?: components["schemas"]["GlobalConfigRuntimeArtifactSettings"];
+    } & {
+      [key: string]: unknown;
     };
     /** @description Rolling-file storage settings for one runtime observability artifact. */
     GlobalConfigRuntimeArtifactSettings: {
@@ -6631,6 +6879,8 @@ export interface components {
        * @default false
        */
       compress: boolean;
+    } & {
+      [key: string]: unknown;
     };
     /** @description Optional operator model overlays keyed by model name. A model entry may override one or more built-in fields or fully describe a new model name. */
     GlobalConfigModels: {
@@ -6645,6 +6895,8 @@ export interface components {
       loadPolicy?: components["schemas"]["GlobalConfigModelLoadPolicy"];
       /** @description Ordered generic operation names supported by this model. */
       operations?: components["schemas"]["GlobalConfigModelOperation"][];
+    } & {
+      [key: string]: unknown;
     };
     /**
      * @description Operator model load policy. Runtime activation is owned by Models.
@@ -6664,6 +6916,8 @@ export interface components {
       /** @description Optional model name, trimmed when present. */
       model?: string;
       reasoningEffort?: components["schemas"]["GlobalConfigWorkerPresetReasoningEffort"];
+    } & {
+      [key: string]: unknown;
     };
     /** @description Canonical provider identity or built-in compatibility alias; surrounding whitespace is trimmed, and symbolic DEFAULT is not accepted for presets. */
     GlobalConfigWorkerPresetModelProvider: string;
@@ -6734,6 +6988,8 @@ export interface components {
       stopSummary?: components["schemas"]["FactoryStopSummary"];
       /** @description Pending HUMAN_APPROVAL request currently owning this Work item, when present. */
       humanApproval?: components["schemas"]["HumanApproval"];
+    } & {
+      [key: string]: unknown;
     };
     /** @description Ordered canonical content parts for one work item. */
     WorkContent: components["schemas"]["WorkContentPart"][];
@@ -6831,6 +7087,8 @@ export interface components {
       type?: components["schemas"]["ModelOperationContentType"];
       /** @description Match a content part by its role field. */
       role?: string;
+    } & {
+      [key: string]: unknown;
     };
     /** @description One workstation-authored binding for a provider-agnostic model-operation input slot. */
     WorkstationOperationBinding: {
@@ -6842,6 +7100,8 @@ export interface components {
       config?: components["schemas"]["WorkContent"];
       /** @description Optional final fallback content when neither runtime input nor config content resolves the slot. */
       defaultContent?: components["schemas"]["WorkContent"];
+    } & {
+      [key: string]: unknown;
     };
     /** @description Default worker selection for one named JavaScript child-agent role. */
     FactoryOrchestratorJavaScriptAgent: {
@@ -6869,6 +7129,8 @@ export interface components {
        * @default false
        */
       nonEmpty: boolean;
+    } & {
+      [key: string]: unknown;
     };
     /** @description Two-dimensional authored graph layout coordinate. */
     FactoryLayoutPoint: {
@@ -7079,11 +7341,15 @@ export interface components {
       workType?: string;
       /** @description Canonical submitted work state emitted for matched Linear issues. */
       state?: string;
+    } & {
+      [key: string]: unknown;
     };
     /** @description Optional claim-related configuration that v1 hosted Linear workers explicitly allow. */
     HostedLinearWorkerClaim: {
       /** @description Linear issue field name to use when deriving optional assignee claim metadata. */
       assigneeField?: string;
+    } & {
+      [key: string]: unknown;
     };
     /** @description Provider-specific poller configuration for the built-in hosted Linear worker. */
     HostedLinearWorkerConfig: {
@@ -7097,6 +7363,8 @@ export interface components {
       mapping?: components["schemas"]["HostedLinearWorkerMapping"];
       /** @description Optional claim-related configuration that v1 hosted Linear polling allows. */
       claim?: components["schemas"]["HostedLinearWorkerClaim"];
+    } & {
+      [key: string]: unknown;
     };
     /**
      * @description Guard condition attached to one specific workstation input.
@@ -7119,6 +7387,8 @@ export interface components {
       matchInput?: string;
       /** @description For dynamic fanout input guards, the workstation that spawns the children for count tracking. */
       spawnedBy?: string;
+    } & {
+      [key: string]: unknown;
     };
     /**
      * @description Guard condition attached to a workstation as a whole.
@@ -7131,6 +7401,8 @@ export interface components {
       workstations: string[];
       /** @description Absolute raw-visit ceiling across both paired workstations; it must exceed the containing guard's maxVisits. */
       maxRawVisits: number;
+    } & {
+      [key: string]: unknown;
     };
     /** @description Guard attached to a workstation as a whole. */
     WorkstationGuard: {
@@ -7152,6 +7424,8 @@ export interface components {
       matchInput?: string;
       /** @description For dynamic fanout input guards, the workstation that spawns the children for count tracking. */
       spawnedBy?: string;
+    } & {
+      [key: string]: unknown;
     };
     GlobalConfigACPIntegration: {
       /** @description Stable settings-entry identity. This is distinct from the provider name selected by a Worker. */
@@ -7176,9 +7450,13 @@ export interface components {
       /** @description Operator-selected ACP provider integrations. Availability is derived by the Providers catalog and is never persisted here. */
       integrations?: components["schemas"]["GlobalConfigACPIntegration"][];
       agentProfile?: components["schemas"]["GlobalConfigACPAgentProfile"];
+    } & {
+      [key: string]: unknown;
     };
     GlobalConfigWorkers: {
       acp?: components["schemas"]["GlobalConfigACPSettings"];
+    } & {
+      [key: string]: unknown;
     };
   };
   responses: {
@@ -7515,6 +7793,31 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+  getMetricsCosts: {
+    parameters: {
+      query?: {
+        /** @description Optional Factory Session identity to scope the report. */
+        session_id?: string;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Exact cost report with priced and unpriced coverage. */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["CostsReport"];
+        };
+      };
+      400: components["responses"]["BadRequest"];
+      500: components["responses"]["InternalError"];
+    };
+  };
   listWorkerSessions: {
     parameters: {
       query?: {
@@ -9740,6 +10043,47 @@ export const WorkerSessionEventDelivery = {
 } as const;
 export type WorkerSessionEventDelivery =
   (typeof WorkerSessionEventDelivery)[keyof typeof WorkerSessionEventDelivery];
+export const CostsScopeKind = {
+  ALL_FACTORY_SESSIONS: "ALL_FACTORY_SESSIONS",
+  FACTORY_SESSION: "FACTORY_SESSION",
+} as const;
+export type CostsScopeKind =
+  (typeof CostsScopeKind)[keyof typeof CostsScopeKind];
+export const CostsLineItemStatus = {
+  PRICED: "PRICED",
+  UNPRICED: "UNPRICED",
+} as const;
+export type CostsLineItemStatus =
+  (typeof CostsLineItemStatus)[keyof typeof CostsLineItemStatus];
+export const CostsRollupStatus = {
+  PRICED: "PRICED",
+  PARTIAL: "PARTIAL",
+  UNPRICED: "UNPRICED",
+  NO_USAGE: "NO_USAGE",
+} as const;
+export type CostsRollupStatus =
+  (typeof CostsRollupStatus)[keyof typeof CostsRollupStatus];
+export const CostsProviderModelRollupStatus = {
+  PRICED: "PRICED",
+  PARTIAL: "PARTIAL",
+  UNPRICED: "UNPRICED",
+  NO_USAGE: "NO_USAGE",
+} as const;
+export type CostsProviderModelRollupStatus =
+  (typeof CostsProviderModelRollupStatus)[keyof typeof CostsProviderModelRollupStatus];
+export const CostsReportCurrency = {
+  USD: "USD",
+} as const;
+export type CostsReportCurrency =
+  (typeof CostsReportCurrency)[keyof typeof CostsReportCurrency];
+export const CostsReportStatus = {
+  PRICED: "PRICED",
+  PARTIAL: "PARTIAL",
+  UNPRICED: "UNPRICED",
+  NO_USAGE: "NO_USAGE",
+} as const;
+export type CostsReportStatus =
+  (typeof CostsReportStatus)[keyof typeof CostsReportStatus];
 export const ManagedRuntimeLifecycleState = {
   // Managed install and cache lifecycle does not apply, such as for cloud-backed runtimes.
   NOT_APPLICABLE: "NOT_APPLICABLE",
@@ -11209,6 +11553,11 @@ export const FactoryValidationSubjectLocation = {
 } as const;
 export type FactoryValidationSubjectLocation =
   (typeof FactoryValidationSubjectLocation)[keyof typeof FactoryValidationSubjectLocation];
+export const GlobalConfigPriceTableCurrency = {
+  USD: "USD",
+} as const;
+export type GlobalConfigPriceTableCurrency =
+  (typeof GlobalConfigPriceTableCurrency)[keyof typeof GlobalConfigPriceTableCurrency];
 export const GlobalConfigModelLoadPolicy = {
   ON_DEMAND: "ON_DEMAND",
 } as const;

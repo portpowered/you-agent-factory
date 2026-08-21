@@ -1,5 +1,5 @@
 type: object
-additionalProperties: false
+additionalProperties: true
 description: >-
   Stable replay-safe input value available to an expected-artifact template.
   This is intentionally smaller than the workstation prompt input surface so

@@ -129,7 +129,7 @@ export function parseSessionFactoryPutFactory(
     | components["schemas"]["SaveFactoryForSessionRequest"]
     | components["schemas"]["Factory"];
   if ("factory" in parsed && parsed.factory) {
-    return parsed.factory;
+    return parsed.factory as components["schemas"]["Factory"];
   }
   return parsed as components["schemas"]["Factory"];
 }

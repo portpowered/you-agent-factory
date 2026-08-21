@@ -1,6 +1,6 @@
 type: object
 description: Guard attached to one specific workstation input.
-additionalProperties: false
+additionalProperties: true
 required:
   - type
 properties:

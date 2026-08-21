@@ -1,6 +1,6 @@
 description: Optional claim-related configuration that v1 hosted Linear workers explicitly allow.
 type: object
-additionalProperties: false
+additionalProperties: true
 properties:
   assigneeField:
     type: string

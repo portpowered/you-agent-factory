@@ -1,5 +1,5 @@
 type: object
-additionalProperties: false
+additionalProperties: true
 description: Rolling-file storage settings for one runtime observability artifact.
 properties:
   directory:

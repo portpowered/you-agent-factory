@@ -1,5 +1,5 @@
 type: object
-additionalProperties: false
+additionalProperties: true
 description: Shared operator configuration stored in .you-agent-factory/config.json.
 properties:
   backendScopeID:

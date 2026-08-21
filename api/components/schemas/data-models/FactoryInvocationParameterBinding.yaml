@@ -1,5 +1,5 @@
 type: object
-additionalProperties: false
+additionalProperties: true
 required:
   - kind
 description: One public binding that exposes a parameter to callers.

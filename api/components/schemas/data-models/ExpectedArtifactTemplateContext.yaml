@@ -1,5 +1,5 @@
 type: object
-additionalProperties: false
+additionalProperties: true
 description: >-
   Stable, non-host context used when rendering expected-artifact patterns.
   Filesystem paths, environment variables, and Factory documentation are not

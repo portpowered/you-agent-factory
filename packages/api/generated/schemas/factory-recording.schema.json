@@ -108,7 +108,7 @@
       "type": "object"
     },
     "BundledFile": {
-      "additionalProperties": false,
+      "additionalProperties": true,
       "description": "One explicit portable bundled file entry carried by the factory portability manifest. SCRIPT files target factory/scripts/..., DOC files target factory/docs/..., INPUT files target factory/inputs/\u003cwork-type\u003e/\u003cchannel\u003e/..., and ROOT_HELPER files target supported project-root helper paths such as Makefile only when declared explicitly in bundledFiles. Export and flatten do not auto-discover project-root helpers. In v1 shared-factory exports, INPUT entries encode a share-time snapshot of starter work that is copied into the recipient factory as detached seeded work.",
       "properties": {
         "content": {
@@ -141,7 +141,7 @@
       "type": "object"
     },
     "BundledFileContent": {
-      "additionalProperties": false,
+      "additionalProperties": true,
       "description": "Inline content payload for a portable bundled file.",
       "properties": {
         "encoding": {
@@ -172,7 +172,7 @@
       "type": "string"
     },
     "ClassificationRoute": {
-      "additionalProperties": false,
+      "additionalProperties": true,
       "properties": {
         "label": {
           "description": "Case-sensitive classifier label that must match the trimmed classifier output exactly.",
@@ -533,7 +533,7 @@
     },
     "DispatchWorkerSessionAssociationEventPayload": {
       "additionalProperties": false,
-      "description": "Canonical association between one Factory dispatch and the Worker Session allocated to execute it. Dispatch identity remains authoritative in FactoryEvent.context.dispatchId and is not repeated in this payload.",
+      "description": "Canonical association between one Factory dispatch and the Worker Session allocated to execute it. Dispatch identity remains authoritative in FactoryEvent.context.dispatchId and is not repeated in this payload. This public projection intentionally remains closed: canonical recording data may retain execution-only model and reasoningEffort facts, but this event serves only the Worker Session identity.",
       "properties": {
         "workerSessionId": {
           "description": "Non-empty Worker Session identity allocated for the dispatch.",
@@ -547,7 +547,7 @@
       "type": "object"
     },
     "ExpectedArtifact": {
-      "additionalProperties": false,
+      "additionalProperties": true,
       "description": "One expected output declaration relative to the dispatch workspace. Pattern is a workspace-relative literal path or glob and may use the replay-safe dispatch template fields `.Inputs` (the replay-safe fields are documented by `ExpectedArtifactTemplateInput`), `.Context.Project`, and `.Context.SessionID` inside a Go template action. Prompt-only fields, host paths, environment variables, and Factory documentation are not supported.",
       "properties": {
         "name": {
@@ -573,7 +573,7 @@
       "type": "object"
     },
     "ExpectedArtifactTemplateContext": {
-      "additionalProperties": false,
+      "additionalProperties": true,
       "description": "Stable, non-host context used when rendering expected-artifact patterns. Filesystem paths, environment variables, and Factory documentation are not part of this replayable vocabulary.",
       "properties": {
         "inputs": {
@@ -595,7 +595,7 @@
       "type": "object"
     },
     "ExpectedArtifactTemplateInput": {
-      "additionalProperties": false,
+      "additionalProperties": true,
       "description": "Stable replay-safe input value available to an expected-artifact template. This is intentionally smaller than the workstation prompt input surface so completion verification and historical Work reads can use the same values.",
       "properties": {
         "dataType": {
@@ -688,7 +688,7 @@
       "type": "string"
     },
     "Factory": {
-      "additionalProperties": false,
+      "additionalProperties": true,
       "description": "Top-level factory.json contract. Declare the work types, resources, portability resources, workers, and workstations that make up one authored factory here. Guarded loop breakers should be authored as guarded LOGICAL_MOVE workstations using VISIT_COUNT guards instead of a top-level exhaustion-rules field.",
       "properties": {
         "description": {
@@ -1211,7 +1211,7 @@
       "type": "object"
     },
     "FactoryEvent": {
-      "additionalProperties": false,
+      "additionalProperties": true,
       "description": "Versioned Agent Factory event message. This is the intended canonical schema for customer event streams, history projection, record/replay artifacts, and runtime diagnostics. New fields use camelCase even when older REST resource schemas still contain legacy snake_case fields.",
       "discriminator": {
         "mapping": {
@@ -1839,7 +1839,7 @@
       "type": "object"
     },
     "FactoryEventContext": {
-      "additionalProperties": false,
+      "additionalProperties": true,
       "properties": {
         "checkpointId": {
           "description": "Canonical checkpoint identifier for checkpoint-scoped events; payloads must not restate it.",
@@ -1982,7 +1982,7 @@
       "type": "string"
     },
     "FactoryGuard": {
-      "additionalProperties": false,
+      "additionalProperties": true,
       "description": "Factory-level guard attached at the root factory definition.",
       "properties": {
         "model": {
@@ -2042,7 +2042,7 @@
       "type": "object"
     },
     "FactoryInvocationExample": {
-      "additionalProperties": false,
+      "additionalProperties": true,
       "description": "One example invocation for docs, help, and packaged-factory inspection.",
       "properties": {
         "args": {
@@ -2075,7 +2075,7 @@
       "type": "object"
     },
     "FactoryInvocationOutputContract": {
-      "additionalProperties": false,
+      "additionalProperties": true,
       "description": "Customer-facing output hint for a factory invocation signature.",
       "properties": {
         "contentType": {
@@ -2115,7 +2115,7 @@
       "type": "string"
     },
     "FactoryInvocationParameter": {
-      "additionalProperties": false,
+      "additionalProperties": true,
       "description": "One canonical invocation parameter declared on a factory.",
       "properties": {
         "aliases": {
@@ -2193,7 +2193,7 @@
       "type": "object"
     },
     "FactoryInvocationParameterBinding": {
-      "additionalProperties": false,
+      "additionalProperties": true,
       "description": "One public binding that exposes a parameter to callers.",
       "properties": {
         "kind": {
@@ -2248,7 +2248,7 @@
       "type": "string"
     },
     "FactoryInvocationSignature": {
-      "additionalProperties": false,
+      "additionalProperties": true,
       "description": "Canonical callable argument contract for invoking one factory. When present, CLI, API, dashboard, docs, and packaged-factory surfaces should discover and normalize invocation inputs from this shared schema instead of transport- or factory-specific argument definitions.",
       "properties": {
         "outputContract": {
@@ -3266,7 +3266,7 @@
       "type": "object"
     },
     "FactoryWebhook": {
-      "additionalProperties": false,
+      "additionalProperties": true,
       "description": "One Factory-configured outbound webhook subscription. Secret material is represented only by a reference and is resolved at delivery time.",
       "properties": {
         "deliveryPolicy": {
@@ -3310,7 +3310,7 @@
       "type": "object"
     },
     "FactoryWebhookDeliveryPolicy": {
-      "additionalProperties": false,
+      "additionalProperties": true,
       "description": "Bounded outbound delivery policy. Durations use Go duration syntax. Omitted values resolve to a 10 second request timeout, 5 total attempts, 1 second initial backoff, 2.0 multiplier, and 30 second maximum backoff.",
       "properties": {
         "backoffMultiplier": {
@@ -3357,7 +3357,7 @@
       "type": "string"
     },
     "FactoryWebhookFilter": {
-      "additionalProperties": false,
+      "additionalProperties": true,
       "description": "Canonical event filter for one outbound webhook subscription.",
       "properties": {
         "dispatchStatuses": {
@@ -3415,7 +3415,7 @@
       "type": "object"
     },
     "HostedLinearWorkerClaim": {
-      "additionalProperties": false,
+      "additionalProperties": true,
       "description": "Optional claim-related configuration that v1 hosted Linear workers explicitly allow.",
       "properties": {
         "assigneeField": {
@@ -3426,7 +3426,7 @@
       "type": "object"
     },
     "HostedLinearWorkerConfig": {
-      "additionalProperties": false,
+      "additionalProperties": true,
       "description": "Provider-specific poller configuration for the built-in hosted Linear worker.",
       "properties": {
         "claim": {
@@ -3467,7 +3467,7 @@
       "type": "object"
     },
     "HostedLinearWorkerMapping": {
-      "additionalProperties": false,
+      "additionalProperties": true,
       "description": "Deterministic issue-to-work mapping fields owned by a hosted Linear worker.",
       "properties": {
         "state": {
@@ -3745,7 +3745,7 @@
       "type": "object"
     },
     "InputGuard": {
-      "additionalProperties": false,
+      "additionalProperties": true,
       "description": "Guard attached to one specific workstation input.",
       "properties": {
         "matchConfig": {
@@ -3810,7 +3810,7 @@
       "type": "string"
     },
     "InputType": {
-      "additionalProperties": false,
+      "additionalProperties": true,
       "description": "Declared types of inputs. Used to force the inputs of a certain work type to be of a certain shape, like a specific JSON structure.",
       "properties": {
         "name": {
@@ -3866,7 +3866,7 @@
       "type": "object"
     },
     "InvocationReturn": {
-      "additionalProperties": false,
+      "additionalProperties": true,
       "description": "Factory-authored policy for selecting the primary result returned by CLI and API invocations. When omitted from a Factory, runtimes use the documented SUBMITTED_WORK_TERMINAL fallback.",
       "properties": {
         "policy": {
@@ -4005,7 +4005,7 @@
       "type": "object"
     },
     "LogicalRoundTrip": {
-      "additionalProperties": false,
+      "additionalProperties": true,
       "description": "Optional paired workstation policy for charging one logical visit per process/review round trip.",
       "properties": {
         "maxRawVisits": {
@@ -4030,7 +4030,7 @@
       "type": "object"
     },
     "ModelOperation": {
-      "additionalProperties": false,
+      "additionalProperties": true,
       "description": "One provider-agnostic operation exposed by a model worker, such as `TTS`.",
       "properties": {
         "inputs": {
@@ -4073,7 +4073,7 @@
       "type": "string"
     },
     "ModelOperationSlot": {
-      "additionalProperties": false,
+      "additionalProperties": true,
       "description": "One named capability slot declared by a model operation.",
       "properties": {
         "contentTypes": {
@@ -4552,7 +4552,7 @@
       "type": "object"
     },
     "RequiredTool": {
-      "additionalProperties": false,
+      "additionalProperties": true,
       "description": "One declarative external tool dependency for a portable factory.",
       "properties": {
         "command": {
@@ -4613,7 +4613,7 @@
       "type": "string"
     },
     "Resource": {
-      "additionalProperties": false,
+      "additionalProperties": true,
       "description": "Shared capacity that limits how much work the factory can run at once, such as worker slots or external service quotas.",
       "properties": {
         "backend": {
@@ -4661,7 +4661,7 @@
       "type": "object"
     },
     "ResourceManifest": {
-      "additionalProperties": false,
+      "additionalProperties": true,
       "description": "Canonical portability manifest for Agent Factory bundles. Required tools are validation-only PATH dependencies; bundled files carry portable content for restoration inside the factory boundary.",
       "properties": {
         "bundledFiles": {
@@ -4708,7 +4708,7 @@
       "type": "string"
     },
     "RunRequestEventPayload": {
-      "additionalProperties": false,
+      "additionalProperties": true,
       "properties": {
         "diagnostics": {
           "$ref": "#/$defs/Diagnostics"
@@ -4989,7 +4989,7 @@
     },
     "SessionLifecycleControlEventPayload": {
       "additionalProperties": false,
-      "description": "Durable Factory Session lifecycle control recorded on the canonical factory event stream. Session identity lives in FactoryEvent.context; this payload carries replay-safe control facts only.",
+      "description": "Durable Factory Session lifecycle control recorded on the canonical factory event stream. Session identity lives in FactoryEvent.context; this payload carries replay-safe control facts only. Its operation and outcome shape is intentionally closed because it is a fixed control contract, not an extensible event metadata bag.",
       "properties": {
         "newStatus": {
           "$ref": "#/$defs/FactorySessionDurableLifecycleStatus"
@@ -5084,7 +5084,7 @@
       "type": "object"
     },
     "SessionStartedEventPayload": {
-      "additionalProperties": false,
+      "additionalProperties": true,
       "description": "Session execution start recorded on the canonical factory event stream. Session and orchestrator identity live in FactoryEvent.context; this payload carries replay-safe factory and source facts only.",
       "properties": {
         "argsDigest": {
@@ -5139,7 +5139,7 @@
       "type": "object"
     },
     "Work": {
-      "additionalProperties": false,
+      "additionalProperties": true,
       "description": "A piece of work.",
       "properties": {
         "chainingTraceDepth": {
@@ -5372,7 +5372,7 @@
       "type": "string"
     },
     "WorkExpectedArtifact": {
-      "additionalProperties": false,
+      "additionalProperties": true,
       "description": "One effective expected artifact declaration projected on a Work item. Pattern is the rendered workspace-relative literal path or glob, never a host path.",
       "properties": {
         "name": {
@@ -5530,7 +5530,7 @@
       "type": "string"
     },
     "WorkPropagation": {
-      "additionalProperties": false,
+      "additionalProperties": true,
       "description": "Optional workstation policy for how downstream work receives payload content after this workstation completes. When omitted, downstream work uses the workstation output payload.",
       "properties": {
         "mode": {
@@ -5597,7 +5597,7 @@
       "type": "string"
     },
     "WorkState": {
-      "additionalProperties": false,
+      "additionalProperties": true,
       "description": "A lifecycle state that a work item can occupy inside one work type.",
       "properties": {
         "id": {
@@ -5724,7 +5724,7 @@
       "description": "Ordered inline text content for one work item."
     },
     "WorkType": {
-      "additionalProperties": false,
+      "additionalProperties": true,
       "description": "A named category of work that can move through the factory. Each work type declares the lifecycle states its work items can occupy.",
       "properties": {
         "description": {
@@ -5779,7 +5779,7 @@
       "type": "string"
     },
     "Worker": {
-      "additionalProperties": false,
+      "additionalProperties": true,
       "description": "A reusable worker definition that tells the factory how a workstation should execute work, such as through a model-backed agent or a script.",
       "properties": {
         "agentTools": {
@@ -5948,7 +5948,7 @@
       "type": "string"
     },
     "Workstation": {
-      "additionalProperties": false,
+      "additionalProperties": true,
       "description": "A processing step in the factory graph. Workstations consume authored work states, run a worker or logical move, and emit the next work states.",
       "properties": {
         "behavior": {
@@ -6156,7 +6156,7 @@
       "type": "object"
     },
     "WorkstationCron": {
-      "additionalProperties": false,
+      "additionalProperties": true,
       "description": "Trigger timing for scheduled workstations. Provide exactly one of a five-field cron schedule or a positive duration in every; Factory validation enforces the exclusive choice.",
       "properties": {
         "every": {
@@ -6184,7 +6184,7 @@
       "type": "object"
     },
     "WorkstationGuard": {
-      "additionalProperties": false,
+      "additionalProperties": true,
       "description": "Guard attached to a workstation as a whole.",
       "properties": {
         "logicalRoundTrip": {
@@ -6251,7 +6251,7 @@
       "type": "string"
     },
     "WorkstationIO": {
-      "additionalProperties": false,
+      "additionalProperties": true,
       "description": "One authored work-state reference consumed or emitted by a workstation.",
       "properties": {
         "guards": {
@@ -6288,7 +6288,7 @@
       "type": "string"
     },
     "WorkstationLimits": {
-      "additionalProperties": false,
+      "additionalProperties": true,
       "description": "Retry and execution ceilings applied to one workstation definition.",
       "properties": {
         "maxExecutionTime": {
@@ -6317,7 +6317,7 @@
       "type": "object"
     },
     "WorkstationOperationBinding": {
-      "additionalProperties": false,
+      "additionalProperties": true,
       "description": "One workstation-authored binding for a provider-agnostic model-operation input slot.",
       "properties": {
         "config": {
@@ -6355,7 +6355,7 @@
       "type": "object"
     },
     "WorkstationOperationBindingSelector": {
-      "additionalProperties": false,
+      "additionalProperties": true,
       "description": "Selector fields used to resolve one content part from ordered runtime input.",
       "properties": {
         "label": {
@@ -6406,7 +6406,7 @@
   },
   "$id": "https://schemas.portpowered.com/you/factory/factory-recording.schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "additionalProperties": false,
+  "additionalProperties": true,
   "description": "Chapter-free recording of canonical Factory Events for exactly one Factory Session. Events remain in their recorded canonical order.",
   "properties": {
     "events": {

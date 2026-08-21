@@ -1,6 +1,6 @@
 type: object
 description: Guard attached to a workstation as a whole.
-additionalProperties: false
+additionalProperties: true
 required:
   - type
 properties:

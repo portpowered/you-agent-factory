@@ -1590,7 +1590,8 @@ type BundledFile struct {
 	TargetPath string `json:"targetPath"`
 
 	// Type Portable file class. SCRIPT entries target factory/scripts/..., DOC entries target factory/docs/..., INPUT entries target factory/inputs/<work-type>/<channel>/..., and ROOT_HELPER entries target supported project-root helper files such as Makefile only when explicitly declared in bundledFiles. Shared-factory INPUT entries snapshot current source inputs at share time instead of creating a live link.
-	Type BundledFileType `json:"type"`
+	Type                 BundledFileType        `json:"type"`
+	AdditionalProperties map[string]interface{} `json:"-"`
 }
 
 // BundledFileType Portable file class. SCRIPT entries target factory/scripts/..., DOC entries target factory/docs/..., INPUT entries target factory/inputs/<work-type>/<channel>/..., and ROOT_HELPER entries target supported project-root helper files such as Makefile only when explicitly declared in bundledFiles. Shared-factory INPUT entries snapshot current source inputs at share time instead of creating a live link.
@@ -1602,7 +1603,8 @@ type BundledFileContent struct {
 	Encoding BundledFileContentEncoding `json:"encoding"`
 
 	// Inline Inline bundled file content carried in the manifest. SCRIPT and DOC files under factory/scripts/ and factory/docs/ may be discovered during flatten, but supported root helper paths such as Makefile are bundled only when they appear as explicit ROOT_HELPER entries in bundledFiles.
-	Inline string `json:"inline"`
+	Inline               string                 `json:"inline"`
+	AdditionalProperties map[string]interface{} `json:"-"`
 }
 
 // BundledFileContentEncoding Declared content encoding for the inline payload. V1 bundled files use UTF-8 text content.
@@ -1617,7 +1619,8 @@ type ClassificationRoute struct {
 	Label string `json:"label"`
 
 	// Outputs One or more authored destinations emitted when this classifier label is selected.
-	Outputs []WorkstationIO `json:"outputs"`
+	Outputs              []WorkstationIO        `json:"outputs"`
+	AdditionalProperties map[string]interface{} `json:"-"`
 }
 
 // CommandDiagnostic defines model for CommandDiagnostic.
@@ -1948,7 +1951,7 @@ type DispatchResponseEventPayload struct {
 	Usage            *FactoryDispatchUsage `json:"usage,omitempty"`
 }
 
-// DispatchWorkerSessionAssociationEventPayload Canonical association between one Factory dispatch and the Worker Session allocated to execute it. Dispatch identity remains authoritative in FactoryEvent.context.dispatchId and is not repeated in this payload.
+// DispatchWorkerSessionAssociationEventPayload Canonical association between one Factory dispatch and the Worker Session allocated to execute it. Dispatch identity remains authoritative in FactoryEvent.context.dispatchId and is not repeated in this payload. This public projection intentionally remains closed: canonical recording data may retain execution-only model and reasoningEffort facts, but this event serves only the Worker Session identity.
 type DispatchWorkerSessionAssociationEventPayload struct {
 	// WorkerSessionId Non-empty Worker Session identity allocated for the dispatch.
 	WorkerSessionId string `json:"workerSessionId"`
@@ -1997,7 +2000,8 @@ type ExpectedArtifact struct {
 	NonEmpty *bool `json:"nonEmpty,omitempty"`
 
 	// Pattern Workspace-relative literal path or glob template to verify.
-	Pattern string `json:"pattern"`
+	Pattern              string                 `json:"pattern"`
+	AdditionalProperties map[string]interface{} `json:"-"`
 }
 
 // ExpectedArtifactTemplateContext Stable, non-host context used when rendering expected-artifact patterns. Filesystem paths, environment variables, and Factory documentation are not part of this replayable vocabulary.
@@ -2009,7 +2013,8 @@ type ExpectedArtifactTemplateContext struct {
 	Project *string `json:"project,omitempty"`
 
 	// SessionId Stable Factory Session identifier for the dispatch.
-	SessionId *string `json:"sessionId,omitempty"`
+	SessionId            *string                `json:"sessionId,omitempty"`
+	AdditionalProperties map[string]interface{} `json:"-"`
 }
 
 // ExpectedArtifactTemplateInput Stable replay-safe input value available to an expected-artifact template. This is intentionally smaller than the workstation prompt input surface so completion verification and historical Work reads can use the same values.
@@ -2022,11 +2027,12 @@ type ExpectedArtifactTemplateInput struct {
 	Payload *string `json:"payload,omitempty"`
 
 	// Project Per-input project value resolved from the input project tag, dispatch context, or the default project.
-	Project    *string    `json:"project,omitempty"`
-	Tags       *StringMap `json:"tags,omitempty"`
-	TraceId    *string    `json:"traceId,omitempty"`
-	WorkId     *string    `json:"workId,omitempty"`
-	WorkTypeId *string    `json:"workTypeId,omitempty"`
+	Project              *string                `json:"project,omitempty"`
+	Tags                 *StringMap             `json:"tags,omitempty"`
+	TraceId              *string                `json:"traceId,omitempty"`
+	WorkId               *string                `json:"workId,omitempty"`
+	WorkTypeId           *string                `json:"workTypeId,omitempty"`
+	AdditionalProperties map[string]interface{} `json:"-"`
 }
 
 // ExpectedArtifactVerification Stable terminal verification summary emitted when a successful worker does not satisfy its effective expected artifact declarations.
@@ -2115,7 +2121,8 @@ type Factory struct {
 	Workers *[]Worker `json:"workers,omitempty"`
 
 	// Workstations Processing steps that consume work, invoke workers, and emit the next work states.
-	Workstations *[]Workstation `json:"workstations,omitempty"`
+	Workstations         *[]Workstation         `json:"workstations,omitempty"`
+	AdditionalProperties map[string]interface{} `json:"-"`
 }
 
 // FactoryArtifact defines model for FactoryArtifact.
@@ -2405,7 +2412,8 @@ type FactoryEvent struct {
 	SchemaVersion FactoryEventSchemaVersion `json:"schemaVersion"`
 
 	// Type Canonical event vocabulary for customer-visible runtime changes. Work entering the factory is represented as WORK_REQUEST, including single-work submissions that are normalized into one-work requests.
-	Type FactoryEventType `json:"type"`
+	Type                 FactoryEventType       `json:"type"`
+	AdditionalProperties map[string]interface{} `json:"-"`
 }
 
 // FactoryEvent_Payload defines model for FactoryEvent.Payload.
@@ -2467,7 +2475,8 @@ type FactoryEventContext struct {
 	TraceIds *[]string `json:"traceIds,omitempty"`
 
 	// WorkIds Canonical work identities correlated to this event; payloads must not restate them.
-	WorkIds *[]string `json:"workIds,omitempty"`
+	WorkIds              *[]string              `json:"workIds,omitempty"`
+	AdditionalProperties map[string]interface{} `json:"-"`
 }
 
 // FactoryEventSessionResultStatus Customer-visible session result availability for result update events.
@@ -2488,7 +2497,8 @@ type FactoryGuard struct {
 	RefreshWindow string `json:"refreshWindow"`
 
 	// Type Factory-level guard condition to evaluate before dispatch-ready transitions can proceed.
-	Type FactoryGuardType `json:"type"`
+	Type                 FactoryGuardType       `json:"type"`
+	AdditionalProperties map[string]interface{} `json:"-"`
 }
 
 // FactoryGuardType Factory-level guard condition attached at the root factory definition.
@@ -2517,7 +2527,8 @@ type FactoryInvocationExample struct {
 	Description NameValue `json:"description"`
 
 	// Name Stable example name.
-	Name string `json:"name"`
+	Name                 string                 `json:"name"`
+	AdditionalProperties map[string]interface{} `json:"-"`
 }
 
 // FactoryInvocationOutputContract Customer-facing output hint for a factory invocation signature.
@@ -2535,7 +2546,8 @@ type FactoryInvocationOutputContract struct {
 	Mode *FactoryInvocationOutputContractMode `json:"mode,omitempty"`
 
 	// PathParameter Parameter name that controls the destination path when the factory writes output to disk.
-	PathParameter *string `json:"pathParameter,omitempty"`
+	PathParameter        *string                `json:"pathParameter,omitempty"`
+	AdditionalProperties map[string]interface{} `json:"-"`
 }
 
 // FactoryInvocationOutputContractMode High-level output shape hint exposed by a factory invocation signature.
@@ -2577,7 +2589,8 @@ type FactoryInvocationParameter struct {
 	TypeHint *FactoryInvocationParameterTypeHint `json:"typeHint,omitempty"`
 
 	// ValueMode Declares whether the parameter consumes one value, repeated values, variadic values, or file contents.
-	ValueMode *FactoryInvocationParameterValueMode `json:"valueMode,omitempty"`
+	ValueMode            *FactoryInvocationParameterValueMode `json:"valueMode,omitempty"`
+	AdditionalProperties map[string]interface{}               `json:"-"`
 }
 
 // FactoryInvocationParameterBinding One public binding that exposes a parameter to callers.
@@ -2586,7 +2599,8 @@ type FactoryInvocationParameterBinding struct {
 	Kind FactoryInvocationParameterBindingKind `json:"kind"`
 
 	// Position 1-based positional slot used when kind is POSITIONAL.
-	Position *int `json:"position,omitempty"`
+	Position             *int                   `json:"position,omitempty"`
+	AdditionalProperties map[string]interface{} `json:"-"`
 }
 
 // FactoryInvocationParameterBindingKind Public invocation binding kinds supported by factory signatures.
@@ -2608,6 +2622,7 @@ type FactoryInvocationSignature struct {
 
 	// UnknownNamedArgumentPolicy Policy for named inputs that do not match any declared parameter binding.
 	UnknownNamedArgumentPolicy *FactoryInvocationUnknownNamedArgumentPolicy `json:"unknownNamedArgumentPolicy,omitempty"`
+	AdditionalProperties       map[string]interface{}                       `json:"-"`
 }
 
 // FactoryInvocationUnknownNamedArgumentPolicy Policy for named inputs that do not match any declared parameter binding.
@@ -3027,7 +3042,8 @@ type FactoryRecording struct {
 	SchemaVersion FactoryRecordingSchemaVersion `json:"schemaVersion"`
 
 	// SessionId Canonical identity of the Factory Session represented by every event.
-	SessionId string `json:"sessionId"`
+	SessionId            string                 `json:"sessionId"`
+	AdditionalProperties map[string]interface{} `json:"-"`
 }
 
 // FactoryRecordingSchemaVersion Version of the Factory Recording envelope schema.
@@ -4824,7 +4840,8 @@ type FactoryWebhook struct {
 	SigningSecretRef string `json:"signingSecretRef"`
 
 	// Url Absolute HTTP or HTTPS destination URL.
-	Url string `json:"url"`
+	Url                  string                 `json:"url"`
+	AdditionalProperties map[string]interface{} `json:"-"`
 }
 
 // FactoryWebhookDeliveryPolicy Bounded outbound delivery policy. Durations use Go duration syntax. Omitted values resolve to a 10 second request timeout, 5 total attempts, 1 second initial backoff, 2.0 multiplier, and 30 second maximum backoff.
@@ -4842,7 +4859,8 @@ type FactoryWebhookDeliveryPolicy struct {
 	MaxBackoff *string `json:"maxBackoff,omitempty"`
 
 	// RequestTimeout Positive Go duration allowed for one HTTP request attempt.
-	RequestTimeout *string `json:"requestTimeout,omitempty"`
+	RequestTimeout       *string                `json:"requestTimeout,omitempty"`
+	AdditionalProperties map[string]interface{} `json:"-"`
 }
 
 // FactoryWebhookDispatchStatus Canonical dispatch statuses supported by outbound webhook filters.
@@ -4857,7 +4875,8 @@ type FactoryWebhookFilter struct {
 	DispatchStatuses *[]FactoryWebhookDispatchStatus `json:"dispatchStatuses,omitempty"`
 
 	// EventTypes Canonical event types selected for delivery.
-	EventTypes []FactoryWebhookEventType `json:"eventTypes"`
+	EventTypes           []FactoryWebhookEventType `json:"eventTypes"`
+	AdditionalProperties map[string]interface{}    `json:"-"`
 }
 
 // FactoryWorldAgentRunInspectionView Customer-visible agent-run inspection for one workstation dispatch response.
@@ -5166,8 +5185,9 @@ type GlobalConfig struct {
 	Runtime *GlobalConfigRuntime `json:"runtime,omitempty"`
 
 	// WorkerPresets Named worker model presets loaded from the shared configuration file.
-	WorkerPresets *[]GlobalConfigWorkerPreset `json:"workerPresets,omitempty"`
-	Workers       *GlobalConfigWorkers        `json:"workers,omitempty"`
+	WorkerPresets        *[]GlobalConfigWorkerPreset `json:"workerPresets,omitempty"`
+	Workers              *GlobalConfigWorkers        `json:"workers,omitempty"`
+	AdditionalProperties map[string]interface{}      `json:"-"`
 }
 
 // GlobalConfigACPAgentProfile defines model for GlobalConfigACPAgentProfile.
@@ -5202,7 +5222,8 @@ type GlobalConfigACPSettings struct {
 	AgentProfile *GlobalConfigACPAgentProfile `json:"agentProfile,omitempty"`
 
 	// Integrations Operator-selected ACP provider integrations. Availability is derived by the Providers catalog and is never persisted here.
-	Integrations *[]GlobalConfigACPIntegration `json:"integrations,omitempty"`
+	Integrations         *[]GlobalConfigACPIntegration `json:"integrations,omitempty"`
+	AdditionalProperties map[string]interface{}        `json:"-"`
 }
 
 // GlobalConfigDefaults Operator defaults that participate independently in file, environment, and flag precedence.
@@ -5211,7 +5232,8 @@ type GlobalConfigDefaults struct {
 	WorkerModel *string `json:"workerModel,omitempty"`
 
 	// WorkerModelProvider Default worker model provider, including supported aliases and symbolic DEFAULT resolution.
-	WorkerModelProvider *string `json:"workerModelProvider,omitempty"`
+	WorkerModelProvider  *string                `json:"workerModelProvider,omitempty"`
+	AdditionalProperties map[string]interface{} `json:"-"`
 }
 
 // GlobalConfigModel Optional operator overlay for one model. Omitted fields preserve a built-in definition; new model names must provide every field.
@@ -5226,7 +5248,8 @@ type GlobalConfigModel struct {
 	Operations *[]GlobalConfigModelOperation `json:"operations,omitempty"`
 
 	// Source Model source path or provider-neutral source URI.
-	Source *string `json:"source,omitempty"`
+	Source               *string                `json:"source,omitempty"`
+	AdditionalProperties map[string]interface{} `json:"-"`
 }
 
 // GlobalConfigModelLoadPolicy Operator model load policy. Runtime activation is owned by Models.
@@ -5244,7 +5267,8 @@ type GlobalConfigPriceTable struct {
 	Currency GlobalConfigPriceTableCurrency `json:"currency"`
 
 	// Models Deterministic provider/model price entries.
-	Models []GlobalConfigPriceTableModel `json:"models"`
+	Models               []GlobalConfigPriceTableModel `json:"models"`
+	AdditionalProperties map[string]interface{}        `json:"-"`
 }
 
 // GlobalConfigPriceTableCurrency Currency used by every configured rate. This contract supports USD only.
@@ -5268,7 +5292,8 @@ type GlobalConfigPriceTableModel struct {
 	Provider string `json:"provider"`
 
 	// ReasoningOutputPerMillionTokens Optional non-negative USD rate per one million reasoning output tokens.
-	ReasoningOutputPerMillionTokens *string `json:"reasoningOutputPerMillionTokens,omitempty"`
+	ReasoningOutputPerMillionTokens *string                `json:"reasoningOutputPerMillionTokens,omitempty"`
+	AdditionalProperties            map[string]interface{} `json:"-"`
 }
 
 // GlobalConfigRuntime Runtime observability settings loaded from operator configuration before command-line overrides.
@@ -5277,7 +5302,8 @@ type GlobalConfigRuntime struct {
 	Logging *GlobalConfigRuntimeArtifactSettings `json:"logging,omitempty"`
 
 	// Metrics Runtime metrics storage settings. Omitted values use the documented production defaults.
-	Metrics *GlobalConfigRuntimeArtifactSettings `json:"metrics,omitempty"`
+	Metrics              *GlobalConfigRuntimeArtifactSettings `json:"metrics,omitempty"`
+	AdditionalProperties map[string]interface{}               `json:"-"`
 }
 
 // GlobalConfigRuntimeArtifactSettings Rolling-file storage settings for one runtime observability artifact.
@@ -5295,7 +5321,8 @@ type GlobalConfigRuntimeArtifactSettings struct {
 	MaxBackups *int `json:"maxBackups,omitempty"`
 
 	// MaxSizeMB Maximum artifact file size in megabytes before rotation.
-	MaxSizeMB *int `json:"maxSizeMB,omitempty"`
+	MaxSizeMB            *int                   `json:"maxSizeMB,omitempty"`
+	AdditionalProperties map[string]interface{} `json:"-"`
 }
 
 // GlobalConfigWorkerPreset Named worker model selection available to Factory Session runtime opening.
@@ -5310,7 +5337,8 @@ type GlobalConfigWorkerPreset struct {
 	ModelProvider GlobalConfigWorkerPresetModelProvider `json:"modelProvider"`
 
 	// ReasoningEffort Optional reasoning effort; surrounding whitespace and letter case are normalized, and an empty value is treated as unspecified.
-	ReasoningEffort *GlobalConfigWorkerPresetReasoningEffort `json:"reasoningEffort,omitempty"`
+	ReasoningEffort      *GlobalConfigWorkerPresetReasoningEffort `json:"reasoningEffort,omitempty"`
+	AdditionalProperties map[string]interface{}                   `json:"-"`
 }
 
 // GlobalConfigWorkerPresetModelProvider Canonical provider identity or built-in compatibility alias; surrounding whitespace is trimmed, and symbolic DEFAULT is not accepted for presets.
@@ -5321,7 +5349,8 @@ type GlobalConfigWorkerPresetReasoningEffort = string
 
 // GlobalConfigWorkers defines model for GlobalConfigWorkers.
 type GlobalConfigWorkers struct {
-	Acp *GlobalConfigACPSettings `json:"acp,omitempty"`
+	Acp                  *GlobalConfigACPSettings `json:"acp,omitempty"`
+	AdditionalProperties map[string]interface{}   `json:"-"`
 }
 
 // Guard Shared guard attached either to a workstation as a whole or to one specific workstation input.
@@ -5348,7 +5377,8 @@ type Guard struct {
 	Type GuardType `json:"type"`
 
 	// Workstation For `VISIT_COUNT` guards, the workstation whose visits are counted.
-	Workstation *string `json:"workstation,omitempty"`
+	Workstation          *string                `json:"workstation,omitempty"`
+	AdditionalProperties map[string]interface{} `json:"-"`
 }
 
 // GuardMatchConfig defines model for GuardMatchConfig.
@@ -5363,7 +5393,8 @@ type GuardType string
 // HostedLinearWorkerClaim Optional claim-related configuration that v1 hosted Linear workers explicitly allow.
 type HostedLinearWorkerClaim struct {
 	// AssigneeField Linear issue field name to use when deriving optional assignee claim metadata.
-	AssigneeField *string `json:"assigneeField,omitempty"`
+	AssigneeField        *string                `json:"assigneeField,omitempty"`
+	AdditionalProperties map[string]interface{} `json:"-"`
 }
 
 // HostedLinearWorkerConfig Provider-specific poller configuration for the built-in hosted Linear worker.
@@ -5381,7 +5412,8 @@ type HostedLinearWorkerConfig struct {
 	StateIds *[]string `json:"stateIds,omitempty"`
 
 	// TeamIds Optional Linear team identifiers that bound the poll source.
-	TeamIds *[]string `json:"teamIds,omitempty"`
+	TeamIds              *[]string              `json:"teamIds,omitempty"`
+	AdditionalProperties map[string]interface{} `json:"-"`
 }
 
 // HostedLinearWorkerMapping Deterministic issue-to-work mapping fields owned by a hosted Linear worker.
@@ -5390,7 +5422,8 @@ type HostedLinearWorkerMapping struct {
 	State *string `json:"state,omitempty"`
 
 	// WorkType Canonical submitted work type emitted for matched Linear issues.
-	WorkType *string `json:"workType,omitempty"`
+	WorkType             *string                `json:"workType,omitempty"`
+	AdditionalProperties map[string]interface{} `json:"-"`
 }
 
 // HostedWorkerAuth Hosted-worker authentication contract. V1 hosted workers accept only secret references rather than inline credentials or OAuth-style fields.
@@ -5542,7 +5575,8 @@ type InputGuard struct {
 	Type InputGuardType `json:"type"`
 
 	// Workstation For `VISIT_COUNT` guards, the workstation whose visits are counted.
-	Workstation *string `json:"workstation,omitempty"`
+	Workstation          *string                `json:"workstation,omitempty"`
+	AdditionalProperties map[string]interface{} `json:"-"`
 }
 
 // InputGuardType Guard condition attached to one specific workstation input.
@@ -5557,7 +5591,8 @@ type InputType struct {
 	Name string `json:"name"`
 
 	// Type Kinds of input. `DEFAULT` passes opaque input through to workstations as-is.
-	Type InputKind `json:"type"`
+	Type                 InputKind              `json:"type"`
+	AdditionalProperties map[string]interface{} `json:"-"`
 }
 
 // IntegerMap defines model for IntegerMap.
@@ -5664,7 +5699,8 @@ type InvocationReturn struct {
 	WorkName *string `json:"workName,omitempty"`
 
 	// WorkTypeName Work type name used by EXPLICIT policy selection.
-	WorkTypeName *string `json:"workTypeName,omitempty"`
+	WorkTypeName         *string                `json:"workTypeName,omitempty"`
+	AdditionalProperties map[string]interface{} `json:"-"`
 }
 
 // InvocationReturnPolicy Primary-result selection policy for factory invocation responses. SUBMITTED_WORK_TERMINAL traces the work submitted by the invocation until it reaches its first terminal output. EXPLICIT selects configured work content from the invocation submit scope.
@@ -5793,7 +5829,8 @@ type LogicalRoundTrip struct {
 	MaxRawVisits int `json:"maxRawVisits"`
 
 	// Workstations Exactly two workstation names whose visits form one logical round trip.
-	Workstations []string `json:"workstations"`
+	Workstations         []string               `json:"workstations"`
+	AdditionalProperties map[string]interface{} `json:"-"`
 }
 
 // ManagedRuntime defines model for ManagedRuntime.
@@ -6097,7 +6134,8 @@ type ModelOperation struct {
 	Name ModelOperationName `json:"name"`
 
 	// Outputs Named operation output slots this worker can produce.
-	Outputs *[]ModelOperationSlot `json:"outputs,omitempty"`
+	Outputs              *[]ModelOperationSlot  `json:"outputs,omitempty"`
+	AdditionalProperties map[string]interface{} `json:"-"`
 }
 
 // ModelOperationContentType Uppercase content-part categories supported by worker model-operation capability slots.
@@ -6115,7 +6153,8 @@ type ModelOperationSlot struct {
 	Name string `json:"name"`
 
 	// Required Whether this input slot must be resolved before invocation starts. Output slots omit this field when not needed.
-	Required *bool `json:"required,omitempty"`
+	Required             *bool                  `json:"required,omitempty"`
+	AdditionalProperties map[string]interface{} `json:"-"`
 }
 
 // ModelPullDownloadedFile defines model for ModelPullDownloadedFile.
@@ -7295,7 +7334,8 @@ type RequiredTool struct {
 	Purpose *string `json:"purpose,omitempty"`
 
 	// VersionArgs Optional argument vector used by future validation flows to probe the tool version without changing the executable lookup token.
-	VersionArgs *[]string `json:"versionArgs,omitempty"`
+	VersionArgs          *[]string              `json:"versionArgs,omitempty"`
+	AdditionalProperties map[string]interface{} `json:"-"`
 }
 
 // ResolvedModelOperationBinding defines model for ResolvedModelOperationBinding.
@@ -7337,7 +7377,8 @@ type Resource struct {
 	Provider *string `json:"provider,omitempty"`
 
 	// Type Optional uppercase resource family, such as `MODEL`, `PROVIDER_QUOTA`, or `INVOCATION_SLOT`.
-	Type *ResourceType `json:"type,omitempty"`
+	Type                 *ResourceType          `json:"type,omitempty"`
+	AdditionalProperties map[string]interface{} `json:"-"`
 }
 
 // ResourceManifest Canonical portability manifest for Agent Factory bundles. Required tools are validation-only PATH dependencies; bundled files carry portable content for restoration inside the factory boundary.
@@ -7346,7 +7387,8 @@ type ResourceManifest struct {
 	BundledFiles *[]BundledFile `json:"bundledFiles,omitempty"`
 
 	// RequiredTools Declarative external tools that must already resolve on PATH. These entries are validated but not embedded or installed.
-	RequiredTools *[]RequiredTool `json:"requiredTools,omitempty"`
+	RequiredTools        *[]RequiredTool        `json:"requiredTools,omitempty"`
+	AdditionalProperties map[string]interface{} `json:"-"`
 }
 
 // ResourceRequirement defines model for ResourceRequirement.
@@ -7370,9 +7412,10 @@ type RunRequestEventPayload struct {
 	Diagnostics *Diagnostics `json:"diagnostics,omitempty"`
 
 	// Factory Top-level factory.json contract. Declare the work types, resources, portability resources, workers, and workstations that make up one authored factory here. Guarded loop breakers should be authored as guarded LOGICAL_MOVE workstations using VISIT_COUNT guards instead of a top-level exhaustion-rules field.
-	Factory    Factory    `json:"factory"`
-	RecordedAt time.Time  `json:"recordedAt"`
-	WallClock  *WallClock `json:"wallClock,omitempty"`
+	Factory              Factory                `json:"factory"`
+	RecordedAt           time.Time              `json:"recordedAt"`
+	WallClock            *WallClock             `json:"wallClock,omitempty"`
+	AdditionalProperties map[string]interface{} `json:"-"`
 }
 
 // RunResponseEventPayload defines model for RunResponseEventPayload.
@@ -7508,7 +7551,7 @@ type SessionCompletedEventPayload struct {
 	ResultStatus *FactoryEventSessionResultStatus `json:"resultStatus,omitempty"`
 }
 
-// SessionLifecycleControlEventPayload Durable Factory Session lifecycle control recorded on the canonical factory event stream. Session identity lives in FactoryEvent.context; this payload carries replay-safe control facts only.
+// SessionLifecycleControlEventPayload Durable Factory Session lifecycle control recorded on the canonical factory event stream. Session identity lives in FactoryEvent.context; this payload carries replay-safe control facts only. Its operation and outcome shape is intentionally closed because it is a fixed control contract, not an extensible event metadata bag.
 type SessionLifecycleControlEventPayload struct {
 	// NewStatus Durable factory-session lifecycle status returned by execution start routes and later session read models. Live-session runtime statuses remain separate on the existing FactorySessionStatus schema.
 	NewStatus FactorySessionDurableLifecycleStatus `json:"newStatus"`
@@ -7577,7 +7620,8 @@ type SessionStartedEventPayload struct {
 	SourceRef *string `json:"sourceRef,omitempty"`
 
 	// StartedAt When durable session execution started.
-	StartedAt time.Time `json:"startedAt"`
+	StartedAt            time.Time              `json:"startedAt"`
+	AdditionalProperties map[string]interface{} `json:"-"`
 }
 
 // StageSubmitWorkFileRequest defines model for StageSubmitWorkFileRequest.
@@ -7904,7 +7948,8 @@ type Work struct {
 	WorkId *string `json:"workId,omitempty"`
 
 	// WorkTypeName Configured work type name from factory.json for this submitted work item.
-	WorkTypeName *string `json:"workTypeName,omitempty"`
+	WorkTypeName         *string                `json:"workTypeName,omitempty"`
+	AdditionalProperties map[string]interface{} `json:"-"`
 }
 
 // WorkAudioContentPart defines model for WorkAudioContentPart.
@@ -8029,7 +8074,8 @@ type WorkExpectedArtifact struct {
 	Reason *ExpectedArtifactVerificationReason `json:"reason,omitempty"`
 
 	// Verification Latest recorded verification state for one expected artifact declaration on a Work item.
-	Verification WorkExpectedArtifactVerification `json:"verification"`
+	Verification         WorkExpectedArtifactVerification `json:"verification"`
+	AdditionalProperties map[string]interface{}           `json:"-"`
 }
 
 // WorkExpectedArtifactVerification Latest recorded verification state for one expected artifact declaration on a Work item.
@@ -8107,7 +8153,8 @@ type WorkOutcome string
 // WorkPropagation Optional workstation policy for how downstream work receives payload content after this workstation completes. When omitted, downstream work uses the workstation output payload.
 type WorkPropagation struct {
 	// Mode Propagation mode for downstream work payload selection after this workstation succeeds.
-	Mode WorkPropagationMode `json:"mode"`
+	Mode                 WorkPropagationMode    `json:"mode"`
+	AdditionalProperties map[string]interface{} `json:"-"`
 }
 
 // WorkPropagationMode Work payload propagation mode for a workstation. OUTPUT_AS_PAYLOAD uses the workstation output as the downstream work payload. PRESERVE_INPUT keeps the consumed input payload for downstream work instead of replacing it with the workstation output.
@@ -8176,7 +8223,8 @@ type WorkState struct {
 	Name string `json:"name"`
 
 	// Type Lifecycle category for this state, such as initial, processing, terminal, or failed.
-	Type WorkStateType `json:"type"`
+	Type                 WorkStateType          `json:"type"`
+	AdditionalProperties map[string]interface{} `json:"-"`
 }
 
 // WorkStateChangeEventPayload Canonical Petri marking position change for work items in Petri-backed factories. JavaScript workflow progress is represented by JAVASCRIPT_PHASE_CHANGE events instead of WORK_STATE_CHANGE. Operator moves use source api or cli; automatic cascade propagation uses cascading-failure. FactoryEvent.context carries workIds and optional requestId for operator idempotency.
@@ -8254,7 +8302,8 @@ type WorkType struct {
 	Name string `json:"name"`
 
 	// States Lifecycle states available for work items of this type.
-	States []WorkState `json:"states"`
+	States               []WorkState            `json:"states"`
+	AdditionalProperties map[string]interface{} `json:"-"`
 }
 
 // WorkTypeHandlingBehavior Declares how the CLI should route simplified one-shot prompt submissions for this work type. DEFAULT marks the single work type that receives positional prompts from you run --factory.
@@ -8323,7 +8372,8 @@ type Worker struct {
 	Timeout *string `json:"timeout,omitempty"`
 
 	// Type Worker implementation family to instantiate for this definition.
-	Type *WorkerType `json:"type,omitempty"`
+	Type                 *WorkerType            `json:"type,omitempty"`
+	AdditionalProperties map[string]interface{} `json:"-"`
 }
 
 // WorkerModelLocality Provider locality for a model worker capability declaration.
@@ -9026,7 +9076,8 @@ type Workstation struct {
 	WorkingDirectory *string `json:"workingDirectory,omitempty"`
 
 	// Worktree Go template resolved and passed as the worktree path to CLI dispatchers.
-	Worktree *string `json:"worktree,omitempty"`
+	Worktree             *string                `json:"worktree,omitempty"`
+	AdditionalProperties map[string]interface{} `json:"-"`
 }
 
 // WorkstationCron Trigger timing for scheduled workstations. Provide exactly one of a five-field cron schedule or a positive duration in every; Factory validation enforces the exclusive choice.
@@ -9044,7 +9095,8 @@ type WorkstationCron struct {
 	Schedule *string `json:"schedule,omitempty"`
 
 	// TriggerAtStart When true, service startup submits one immediate internal time work item before waiting for the next scheduled cron fire.
-	TriggerAtStart *bool `json:"triggerAtStart,omitempty"`
+	TriggerAtStart       *bool                  `json:"triggerAtStart,omitempty"`
+	AdditionalProperties map[string]interface{} `json:"-"`
 }
 
 // WorkstationGuard Guard attached to a workstation as a whole.
@@ -9074,7 +9126,8 @@ type WorkstationGuard struct {
 	Type WorkstationGuardType `json:"type"`
 
 	// Workstation For `VISIT_COUNT` guards, the workstation whose visits are counted.
-	Workstation *string `json:"workstation,omitempty"`
+	Workstation          *string                `json:"workstation,omitempty"`
+	AdditionalProperties map[string]interface{} `json:"-"`
 }
 
 // WorkstationGuardType Guard condition attached to a workstation as a whole.
@@ -9089,7 +9142,8 @@ type WorkstationIO struct {
 	State string `json:"state"`
 
 	// WorkType Name of the work type consumed or emitted at this edge of the workstation.
-	WorkType string `json:"workType"`
+	WorkType             string                 `json:"workType"`
+	AdditionalProperties map[string]interface{} `json:"-"`
 }
 
 // WorkstationKind Scheduling kind for a workstation, which determines how the engine schedules and dispatches work to it. Standard workstations are scheduled as soon as their inputs are ready, and can have multiple work items in-flight at the same time.  Repeater workstations are triggered whenever their inputs change, and will reloop the outputs on rejection back to the initial place. Cron workstations create internal time work and dispatch their configured worker when time and input guards are satisfied. Poller workstations bind a poller-capable worker that the service runtime supervises as a long-lived ingress loop.
@@ -9110,7 +9164,8 @@ type WorkstationLimits struct {
 	MaxGeneratedWorkItemsArgumentOffset *int `json:"maxGeneratedWorkItemsArgumentOffset,omitempty"`
 
 	// MaxRetries Maximum number of retry attempts after a failed dispatch before the workstation gives up.
-	MaxRetries *int `json:"maxRetries,omitempty"`
+	MaxRetries           *int                   `json:"maxRetries,omitempty"`
+	AdditionalProperties map[string]interface{} `json:"-"`
 }
 
 // WorkstationOperationBinding One workstation-authored binding for a provider-agnostic model-operation input slot.
@@ -9125,7 +9180,8 @@ type WorkstationOperationBinding struct {
 	Selector *WorkstationOperationBindingSelector `json:"selector,omitempty"`
 
 	// Slot Stable input slot name declared by the worker operation.
-	Slot string `json:"slot"`
+	Slot                 string                 `json:"slot"`
+	AdditionalProperties map[string]interface{} `json:"-"`
 }
 
 // WorkstationOperationBindingSelector Selector fields used to resolve one content part from ordered runtime input.
@@ -9140,7 +9196,8 @@ type WorkstationOperationBindingSelector struct {
 	Slot *string `json:"slot,omitempty"`
 
 	// Type Match a content part by its uppercase public type.
-	Type *ModelOperationContentType `json:"type,omitempty"`
+	Type                 *ModelOperationContentType `json:"type,omitempty"`
+	AdditionalProperties map[string]interface{}     `json:"-"`
 }
 
 // WorkstationOutcomeFormat Optional worker-output parsing mode for model workstations. When set to `decision-envelope`, agent output is parsed as a reviewer/checker JSON envelope that maps directly onto WorkResult outcome, feedback, output, and optional recorded output work instead of stop-token routing.
@@ -9375,6 +9432,2270 @@ type GetMetricsCostsParams struct {
 	SessionId *string `form:"session_id,omitempty" json:"session_id,omitempty"`
 }
 
+// Getter for additional properties for BundledFile. Returns the specified
+// element and whether it was found
+func (a BundledFile) Get(fieldName string) (value interface{}, found bool) {
+	if a.AdditionalProperties != nil {
+		value, found = a.AdditionalProperties[fieldName]
+	}
+	return
+}
+
+// Setter for additional properties for BundledFile
+func (a *BundledFile) Set(fieldName string, value interface{}) {
+	if a.AdditionalProperties == nil {
+		a.AdditionalProperties = make(map[string]interface{})
+	}
+	a.AdditionalProperties[fieldName] = value
+}
+
+// Override default JSON handling for BundledFile to handle AdditionalProperties
+func (a *BundledFile) UnmarshalJSON(b []byte) error {
+	object := make(map[string]json.RawMessage)
+	err := json.Unmarshal(b, &object)
+	if err != nil {
+		return err
+	}
+
+	if raw, found := object["content"]; found {
+		err = json.Unmarshal(raw, &a.Content)
+		if err != nil {
+			return fmt.Errorf("error reading 'content': %w", err)
+		}
+		delete(object, "content")
+	}
+
+	if raw, found := object["id"]; found {
+		err = json.Unmarshal(raw, &a.Id)
+		if err != nil {
+			return fmt.Errorf("error reading 'id': %w", err)
+		}
+		delete(object, "id")
+	}
+
+	if raw, found := object["targetPath"]; found {
+		err = json.Unmarshal(raw, &a.TargetPath)
+		if err != nil {
+			return fmt.Errorf("error reading 'targetPath': %w", err)
+		}
+		delete(object, "targetPath")
+	}
+
+	if raw, found := object["type"]; found {
+		err = json.Unmarshal(raw, &a.Type)
+		if err != nil {
+			return fmt.Errorf("error reading 'type': %w", err)
+		}
+		delete(object, "type")
+	}
+
+	if len(object) != 0 {
+		a.AdditionalProperties = make(map[string]interface{})
+		for fieldName, fieldBuf := range object {
+			var fieldVal interface{}
+			err := json.Unmarshal(fieldBuf, &fieldVal)
+			if err != nil {
+				return fmt.Errorf("error unmarshaling field %s: %w", fieldName, err)
+			}
+			a.AdditionalProperties[fieldName] = fieldVal
+		}
+	}
+	return nil
+}
+
+// Override default JSON handling for BundledFile to handle AdditionalProperties
+func (a BundledFile) MarshalJSON() ([]byte, error) {
+	var err error
+	object := make(map[string]json.RawMessage)
+
+	object["content"], err = json.Marshal(a.Content)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling 'content': %w", err)
+	}
+
+	if a.Id != nil {
+		object["id"], err = json.Marshal(a.Id)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'id': %w", err)
+		}
+	}
+
+	object["targetPath"], err = json.Marshal(a.TargetPath)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling 'targetPath': %w", err)
+	}
+
+	object["type"], err = json.Marshal(a.Type)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling 'type': %w", err)
+	}
+
+	for fieldName, field := range a.AdditionalProperties {
+		object[fieldName], err = json.Marshal(field)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling '%s': %w", fieldName, err)
+		}
+	}
+	return json.Marshal(object)
+}
+
+// Getter for additional properties for BundledFileContent. Returns the specified
+// element and whether it was found
+func (a BundledFileContent) Get(fieldName string) (value interface{}, found bool) {
+	if a.AdditionalProperties != nil {
+		value, found = a.AdditionalProperties[fieldName]
+	}
+	return
+}
+
+// Setter for additional properties for BundledFileContent
+func (a *BundledFileContent) Set(fieldName string, value interface{}) {
+	if a.AdditionalProperties == nil {
+		a.AdditionalProperties = make(map[string]interface{})
+	}
+	a.AdditionalProperties[fieldName] = value
+}
+
+// Override default JSON handling for BundledFileContent to handle AdditionalProperties
+func (a *BundledFileContent) UnmarshalJSON(b []byte) error {
+	object := make(map[string]json.RawMessage)
+	err := json.Unmarshal(b, &object)
+	if err != nil {
+		return err
+	}
+
+	if raw, found := object["encoding"]; found {
+		err = json.Unmarshal(raw, &a.Encoding)
+		if err != nil {
+			return fmt.Errorf("error reading 'encoding': %w", err)
+		}
+		delete(object, "encoding")
+	}
+
+	if raw, found := object["inline"]; found {
+		err = json.Unmarshal(raw, &a.Inline)
+		if err != nil {
+			return fmt.Errorf("error reading 'inline': %w", err)
+		}
+		delete(object, "inline")
+	}
+
+	if len(object) != 0 {
+		a.AdditionalProperties = make(map[string]interface{})
+		for fieldName, fieldBuf := range object {
+			var fieldVal interface{}
+			err := json.Unmarshal(fieldBuf, &fieldVal)
+			if err != nil {
+				return fmt.Errorf("error unmarshaling field %s: %w", fieldName, err)
+			}
+			a.AdditionalProperties[fieldName] = fieldVal
+		}
+	}
+	return nil
+}
+
+// Override default JSON handling for BundledFileContent to handle AdditionalProperties
+func (a BundledFileContent) MarshalJSON() ([]byte, error) {
+	var err error
+	object := make(map[string]json.RawMessage)
+
+	object["encoding"], err = json.Marshal(a.Encoding)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling 'encoding': %w", err)
+	}
+
+	object["inline"], err = json.Marshal(a.Inline)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling 'inline': %w", err)
+	}
+
+	for fieldName, field := range a.AdditionalProperties {
+		object[fieldName], err = json.Marshal(field)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling '%s': %w", fieldName, err)
+		}
+	}
+	return json.Marshal(object)
+}
+
+// Getter for additional properties for ClassificationRoute. Returns the specified
+// element and whether it was found
+func (a ClassificationRoute) Get(fieldName string) (value interface{}, found bool) {
+	if a.AdditionalProperties != nil {
+		value, found = a.AdditionalProperties[fieldName]
+	}
+	return
+}
+
+// Setter for additional properties for ClassificationRoute
+func (a *ClassificationRoute) Set(fieldName string, value interface{}) {
+	if a.AdditionalProperties == nil {
+		a.AdditionalProperties = make(map[string]interface{})
+	}
+	a.AdditionalProperties[fieldName] = value
+}
+
+// Override default JSON handling for ClassificationRoute to handle AdditionalProperties
+func (a *ClassificationRoute) UnmarshalJSON(b []byte) error {
+	object := make(map[string]json.RawMessage)
+	err := json.Unmarshal(b, &object)
+	if err != nil {
+		return err
+	}
+
+	if raw, found := object["label"]; found {
+		err = json.Unmarshal(raw, &a.Label)
+		if err != nil {
+			return fmt.Errorf("error reading 'label': %w", err)
+		}
+		delete(object, "label")
+	}
+
+	if raw, found := object["outputs"]; found {
+		err = json.Unmarshal(raw, &a.Outputs)
+		if err != nil {
+			return fmt.Errorf("error reading 'outputs': %w", err)
+		}
+		delete(object, "outputs")
+	}
+
+	if len(object) != 0 {
+		a.AdditionalProperties = make(map[string]interface{})
+		for fieldName, fieldBuf := range object {
+			var fieldVal interface{}
+			err := json.Unmarshal(fieldBuf, &fieldVal)
+			if err != nil {
+				return fmt.Errorf("error unmarshaling field %s: %w", fieldName, err)
+			}
+			a.AdditionalProperties[fieldName] = fieldVal
+		}
+	}
+	return nil
+}
+
+// Override default JSON handling for ClassificationRoute to handle AdditionalProperties
+func (a ClassificationRoute) MarshalJSON() ([]byte, error) {
+	var err error
+	object := make(map[string]json.RawMessage)
+
+	object["label"], err = json.Marshal(a.Label)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling 'label': %w", err)
+	}
+
+	if a.Outputs != nil {
+		object["outputs"], err = json.Marshal(a.Outputs)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'outputs': %w", err)
+		}
+	}
+
+	for fieldName, field := range a.AdditionalProperties {
+		object[fieldName], err = json.Marshal(field)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling '%s': %w", fieldName, err)
+		}
+	}
+	return json.Marshal(object)
+}
+
+// Getter for additional properties for ExpectedArtifact. Returns the specified
+// element and whether it was found
+func (a ExpectedArtifact) Get(fieldName string) (value interface{}, found bool) {
+	if a.AdditionalProperties != nil {
+		value, found = a.AdditionalProperties[fieldName]
+	}
+	return
+}
+
+// Setter for additional properties for ExpectedArtifact
+func (a *ExpectedArtifact) Set(fieldName string, value interface{}) {
+	if a.AdditionalProperties == nil {
+		a.AdditionalProperties = make(map[string]interface{})
+	}
+	a.AdditionalProperties[fieldName] = value
+}
+
+// Override default JSON handling for ExpectedArtifact to handle AdditionalProperties
+func (a *ExpectedArtifact) UnmarshalJSON(b []byte) error {
+	object := make(map[string]json.RawMessage)
+	err := json.Unmarshal(b, &object)
+	if err != nil {
+		return err
+	}
+
+	if raw, found := object["name"]; found {
+		err = json.Unmarshal(raw, &a.Name)
+		if err != nil {
+			return fmt.Errorf("error reading 'name': %w", err)
+		}
+		delete(object, "name")
+	}
+
+	if raw, found := object["nonEmpty"]; found {
+		err = json.Unmarshal(raw, &a.NonEmpty)
+		if err != nil {
+			return fmt.Errorf("error reading 'nonEmpty': %w", err)
+		}
+		delete(object, "nonEmpty")
+	}
+
+	if raw, found := object["pattern"]; found {
+		err = json.Unmarshal(raw, &a.Pattern)
+		if err != nil {
+			return fmt.Errorf("error reading 'pattern': %w", err)
+		}
+		delete(object, "pattern")
+	}
+
+	if len(object) != 0 {
+		a.AdditionalProperties = make(map[string]interface{})
+		for fieldName, fieldBuf := range object {
+			var fieldVal interface{}
+			err := json.Unmarshal(fieldBuf, &fieldVal)
+			if err != nil {
+				return fmt.Errorf("error unmarshaling field %s: %w", fieldName, err)
+			}
+			a.AdditionalProperties[fieldName] = fieldVal
+		}
+	}
+	return nil
+}
+
+// Override default JSON handling for ExpectedArtifact to handle AdditionalProperties
+func (a ExpectedArtifact) MarshalJSON() ([]byte, error) {
+	var err error
+	object := make(map[string]json.RawMessage)
+
+	object["name"], err = json.Marshal(a.Name)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling 'name': %w", err)
+	}
+
+	if a.NonEmpty != nil {
+		object["nonEmpty"], err = json.Marshal(a.NonEmpty)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'nonEmpty': %w", err)
+		}
+	}
+
+	object["pattern"], err = json.Marshal(a.Pattern)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling 'pattern': %w", err)
+	}
+
+	for fieldName, field := range a.AdditionalProperties {
+		object[fieldName], err = json.Marshal(field)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling '%s': %w", fieldName, err)
+		}
+	}
+	return json.Marshal(object)
+}
+
+// Getter for additional properties for ExpectedArtifactTemplateContext. Returns the specified
+// element and whether it was found
+func (a ExpectedArtifactTemplateContext) Get(fieldName string) (value interface{}, found bool) {
+	if a.AdditionalProperties != nil {
+		value, found = a.AdditionalProperties[fieldName]
+	}
+	return
+}
+
+// Setter for additional properties for ExpectedArtifactTemplateContext
+func (a *ExpectedArtifactTemplateContext) Set(fieldName string, value interface{}) {
+	if a.AdditionalProperties == nil {
+		a.AdditionalProperties = make(map[string]interface{})
+	}
+	a.AdditionalProperties[fieldName] = value
+}
+
+// Override default JSON handling for ExpectedArtifactTemplateContext to handle AdditionalProperties
+func (a *ExpectedArtifactTemplateContext) UnmarshalJSON(b []byte) error {
+	object := make(map[string]json.RawMessage)
+	err := json.Unmarshal(b, &object)
+	if err != nil {
+		return err
+	}
+
+	if raw, found := object["inputs"]; found {
+		err = json.Unmarshal(raw, &a.Inputs)
+		if err != nil {
+			return fmt.Errorf("error reading 'inputs': %w", err)
+		}
+		delete(object, "inputs")
+	}
+
+	if raw, found := object["project"]; found {
+		err = json.Unmarshal(raw, &a.Project)
+		if err != nil {
+			return fmt.Errorf("error reading 'project': %w", err)
+		}
+		delete(object, "project")
+	}
+
+	if raw, found := object["sessionId"]; found {
+		err = json.Unmarshal(raw, &a.SessionId)
+		if err != nil {
+			return fmt.Errorf("error reading 'sessionId': %w", err)
+		}
+		delete(object, "sessionId")
+	}
+
+	if len(object) != 0 {
+		a.AdditionalProperties = make(map[string]interface{})
+		for fieldName, fieldBuf := range object {
+			var fieldVal interface{}
+			err := json.Unmarshal(fieldBuf, &fieldVal)
+			if err != nil {
+				return fmt.Errorf("error unmarshaling field %s: %w", fieldName, err)
+			}
+			a.AdditionalProperties[fieldName] = fieldVal
+		}
+	}
+	return nil
+}
+
+// Override default JSON handling for ExpectedArtifactTemplateContext to handle AdditionalProperties
+func (a ExpectedArtifactTemplateContext) MarshalJSON() ([]byte, error) {
+	var err error
+	object := make(map[string]json.RawMessage)
+
+	if a.Inputs != nil {
+		object["inputs"], err = json.Marshal(a.Inputs)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'inputs': %w", err)
+		}
+	}
+
+	if a.Project != nil {
+		object["project"], err = json.Marshal(a.Project)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'project': %w", err)
+		}
+	}
+
+	if a.SessionId != nil {
+		object["sessionId"], err = json.Marshal(a.SessionId)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'sessionId': %w", err)
+		}
+	}
+
+	for fieldName, field := range a.AdditionalProperties {
+		object[fieldName], err = json.Marshal(field)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling '%s': %w", fieldName, err)
+		}
+	}
+	return json.Marshal(object)
+}
+
+// Getter for additional properties for ExpectedArtifactTemplateInput. Returns the specified
+// element and whether it was found
+func (a ExpectedArtifactTemplateInput) Get(fieldName string) (value interface{}, found bool) {
+	if a.AdditionalProperties != nil {
+		value, found = a.AdditionalProperties[fieldName]
+	}
+	return
+}
+
+// Setter for additional properties for ExpectedArtifactTemplateInput
+func (a *ExpectedArtifactTemplateInput) Set(fieldName string, value interface{}) {
+	if a.AdditionalProperties == nil {
+		a.AdditionalProperties = make(map[string]interface{})
+	}
+	a.AdditionalProperties[fieldName] = value
+}
+
+// Override default JSON handling for ExpectedArtifactTemplateInput to handle AdditionalProperties
+func (a *ExpectedArtifactTemplateInput) UnmarshalJSON(b []byte) error {
+	object := make(map[string]json.RawMessage)
+	err := json.Unmarshal(b, &object)
+	if err != nil {
+		return err
+	}
+
+	if raw, found := object["dataType"]; found {
+		err = json.Unmarshal(raw, &a.DataType)
+		if err != nil {
+			return fmt.Errorf("error reading 'dataType': %w", err)
+		}
+		delete(object, "dataType")
+	}
+
+	if raw, found := object["name"]; found {
+		err = json.Unmarshal(raw, &a.Name)
+		if err != nil {
+			return fmt.Errorf("error reading 'name': %w", err)
+		}
+		delete(object, "name")
+	}
+
+	if raw, found := object["parentId"]; found {
+		err = json.Unmarshal(raw, &a.ParentId)
+		if err != nil {
+			return fmt.Errorf("error reading 'parentId': %w", err)
+		}
+		delete(object, "parentId")
+	}
+
+	if raw, found := object["payload"]; found {
+		err = json.Unmarshal(raw, &a.Payload)
+		if err != nil {
+			return fmt.Errorf("error reading 'payload': %w", err)
+		}
+		delete(object, "payload")
+	}
+
+	if raw, found := object["project"]; found {
+		err = json.Unmarshal(raw, &a.Project)
+		if err != nil {
+			return fmt.Errorf("error reading 'project': %w", err)
+		}
+		delete(object, "project")
+	}
+
+	if raw, found := object["tags"]; found {
+		err = json.Unmarshal(raw, &a.Tags)
+		if err != nil {
+			return fmt.Errorf("error reading 'tags': %w", err)
+		}
+		delete(object, "tags")
+	}
+
+	if raw, found := object["traceId"]; found {
+		err = json.Unmarshal(raw, &a.TraceId)
+		if err != nil {
+			return fmt.Errorf("error reading 'traceId': %w", err)
+		}
+		delete(object, "traceId")
+	}
+
+	if raw, found := object["workId"]; found {
+		err = json.Unmarshal(raw, &a.WorkId)
+		if err != nil {
+			return fmt.Errorf("error reading 'workId': %w", err)
+		}
+		delete(object, "workId")
+	}
+
+	if raw, found := object["workTypeId"]; found {
+		err = json.Unmarshal(raw, &a.WorkTypeId)
+		if err != nil {
+			return fmt.Errorf("error reading 'workTypeId': %w", err)
+		}
+		delete(object, "workTypeId")
+	}
+
+	if len(object) != 0 {
+		a.AdditionalProperties = make(map[string]interface{})
+		for fieldName, fieldBuf := range object {
+			var fieldVal interface{}
+			err := json.Unmarshal(fieldBuf, &fieldVal)
+			if err != nil {
+				return fmt.Errorf("error unmarshaling field %s: %w", fieldName, err)
+			}
+			a.AdditionalProperties[fieldName] = fieldVal
+		}
+	}
+	return nil
+}
+
+// Override default JSON handling for ExpectedArtifactTemplateInput to handle AdditionalProperties
+func (a ExpectedArtifactTemplateInput) MarshalJSON() ([]byte, error) {
+	var err error
+	object := make(map[string]json.RawMessage)
+
+	if a.DataType != nil {
+		object["dataType"], err = json.Marshal(a.DataType)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'dataType': %w", err)
+		}
+	}
+
+	if a.Name != nil {
+		object["name"], err = json.Marshal(a.Name)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'name': %w", err)
+		}
+	}
+
+	if a.ParentId != nil {
+		object["parentId"], err = json.Marshal(a.ParentId)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'parentId': %w", err)
+		}
+	}
+
+	if a.Payload != nil {
+		object["payload"], err = json.Marshal(a.Payload)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'payload': %w", err)
+		}
+	}
+
+	if a.Project != nil {
+		object["project"], err = json.Marshal(a.Project)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'project': %w", err)
+		}
+	}
+
+	if a.Tags != nil {
+		object["tags"], err = json.Marshal(a.Tags)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'tags': %w", err)
+		}
+	}
+
+	if a.TraceId != nil {
+		object["traceId"], err = json.Marshal(a.TraceId)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'traceId': %w", err)
+		}
+	}
+
+	if a.WorkId != nil {
+		object["workId"], err = json.Marshal(a.WorkId)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'workId': %w", err)
+		}
+	}
+
+	if a.WorkTypeId != nil {
+		object["workTypeId"], err = json.Marshal(a.WorkTypeId)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'workTypeId': %w", err)
+		}
+	}
+
+	for fieldName, field := range a.AdditionalProperties {
+		object[fieldName], err = json.Marshal(field)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling '%s': %w", fieldName, err)
+		}
+	}
+	return json.Marshal(object)
+}
+
+// Getter for additional properties for Factory. Returns the specified
+// element and whether it was found
+func (a Factory) Get(fieldName string) (value interface{}, found bool) {
+	if a.AdditionalProperties != nil {
+		value, found = a.AdditionalProperties[fieldName]
+	}
+	return
+}
+
+// Setter for additional properties for Factory
+func (a *Factory) Set(fieldName string, value interface{}) {
+	if a.AdditionalProperties == nil {
+		a.AdditionalProperties = make(map[string]interface{})
+	}
+	a.AdditionalProperties[fieldName] = value
+}
+
+// Override default JSON handling for Factory to handle AdditionalProperties
+func (a *Factory) UnmarshalJSON(b []byte) error {
+	object := make(map[string]json.RawMessage)
+	err := json.Unmarshal(b, &object)
+	if err != nil {
+		return err
+	}
+
+	if raw, found := object["description"]; found {
+		err = json.Unmarshal(raw, &a.Description)
+		if err != nil {
+			return fmt.Errorf("error reading 'description': %w", err)
+		}
+		delete(object, "description")
+	}
+
+	if raw, found := object["examples"]; found {
+		err = json.Unmarshal(raw, &a.Examples)
+		if err != nil {
+			return fmt.Errorf("error reading 'examples': %w", err)
+		}
+		delete(object, "examples")
+	}
+
+	if raw, found := object["factoryDirectory"]; found {
+		err = json.Unmarshal(raw, &a.FactoryDirectory)
+		if err != nil {
+			return fmt.Errorf("error reading 'factoryDirectory': %w", err)
+		}
+		delete(object, "factoryDirectory")
+	}
+
+	if raw, found := object["guards"]; found {
+		err = json.Unmarshal(raw, &a.Guards)
+		if err != nil {
+			return fmt.Errorf("error reading 'guards': %w", err)
+		}
+		delete(object, "guards")
+	}
+
+	if raw, found := object["id"]; found {
+		err = json.Unmarshal(raw, &a.Id)
+		if err != nil {
+			return fmt.Errorf("error reading 'id': %w", err)
+		}
+		delete(object, "id")
+	}
+
+	if raw, found := object["inputTypes"]; found {
+		err = json.Unmarshal(raw, &a.InputTypes)
+		if err != nil {
+			return fmt.Errorf("error reading 'inputTypes': %w", err)
+		}
+		delete(object, "inputTypes")
+	}
+
+	if raw, found := object["invocationReturn"]; found {
+		err = json.Unmarshal(raw, &a.InvocationReturn)
+		if err != nil {
+			return fmt.Errorf("error reading 'invocationReturn': %w", err)
+		}
+		delete(object, "invocationReturn")
+	}
+
+	if raw, found := object["invocationSignature"]; found {
+		err = json.Unmarshal(raw, &a.InvocationSignature)
+		if err != nil {
+			return fmt.Errorf("error reading 'invocationSignature': %w", err)
+		}
+		delete(object, "invocationSignature")
+	}
+
+	if raw, found := object["layout"]; found {
+		err = json.Unmarshal(raw, &a.Layout)
+		if err != nil {
+			return fmt.Errorf("error reading 'layout': %w", err)
+		}
+		delete(object, "layout")
+	}
+
+	if raw, found := object["metadata"]; found {
+		err = json.Unmarshal(raw, &a.Metadata)
+		if err != nil {
+			return fmt.Errorf("error reading 'metadata': %w", err)
+		}
+		delete(object, "metadata")
+	}
+
+	if raw, found := object["name"]; found {
+		err = json.Unmarshal(raw, &a.Name)
+		if err != nil {
+			return fmt.Errorf("error reading 'name': %w", err)
+		}
+		delete(object, "name")
+	}
+
+	if raw, found := object["orchestrator"]; found {
+		err = json.Unmarshal(raw, &a.Orchestrator)
+		if err != nil {
+			return fmt.Errorf("error reading 'orchestrator': %w", err)
+		}
+		delete(object, "orchestrator")
+	}
+
+	if raw, found := object["resources"]; found {
+		err = json.Unmarshal(raw, &a.Resources)
+		if err != nil {
+			return fmt.Errorf("error reading 'resources': %w", err)
+		}
+		delete(object, "resources")
+	}
+
+	if raw, found := object["runner"]; found {
+		err = json.Unmarshal(raw, &a.Runner)
+		if err != nil {
+			return fmt.Errorf("error reading 'runner': %w", err)
+		}
+		delete(object, "runner")
+	}
+
+	if raw, found := object["sourceDirectory"]; found {
+		err = json.Unmarshal(raw, &a.SourceDirectory)
+		if err != nil {
+			return fmt.Errorf("error reading 'sourceDirectory': %w", err)
+		}
+		delete(object, "sourceDirectory")
+	}
+
+	if raw, found := object["supportingFiles"]; found {
+		err = json.Unmarshal(raw, &a.SupportingFiles)
+		if err != nil {
+			return fmt.Errorf("error reading 'supportingFiles': %w", err)
+		}
+		delete(object, "supportingFiles")
+	}
+
+	if raw, found := object["version"]; found {
+		err = json.Unmarshal(raw, &a.Version)
+		if err != nil {
+			return fmt.Errorf("error reading 'version': %w", err)
+		}
+		delete(object, "version")
+	}
+
+	if raw, found := object["webhooks"]; found {
+		err = json.Unmarshal(raw, &a.Webhooks)
+		if err != nil {
+			return fmt.Errorf("error reading 'webhooks': %w", err)
+		}
+		delete(object, "webhooks")
+	}
+
+	if raw, found := object["workTypes"]; found {
+		err = json.Unmarshal(raw, &a.WorkTypes)
+		if err != nil {
+			return fmt.Errorf("error reading 'workTypes': %w", err)
+		}
+		delete(object, "workTypes")
+	}
+
+	if raw, found := object["workers"]; found {
+		err = json.Unmarshal(raw, &a.Workers)
+		if err != nil {
+			return fmt.Errorf("error reading 'workers': %w", err)
+		}
+		delete(object, "workers")
+	}
+
+	if raw, found := object["workstations"]; found {
+		err = json.Unmarshal(raw, &a.Workstations)
+		if err != nil {
+			return fmt.Errorf("error reading 'workstations': %w", err)
+		}
+		delete(object, "workstations")
+	}
+
+	if len(object) != 0 {
+		a.AdditionalProperties = make(map[string]interface{})
+		for fieldName, fieldBuf := range object {
+			var fieldVal interface{}
+			err := json.Unmarshal(fieldBuf, &fieldVal)
+			if err != nil {
+				return fmt.Errorf("error unmarshaling field %s: %w", fieldName, err)
+			}
+			a.AdditionalProperties[fieldName] = fieldVal
+		}
+	}
+	return nil
+}
+
+// Override default JSON handling for Factory to handle AdditionalProperties
+func (a Factory) MarshalJSON() ([]byte, error) {
+	var err error
+	object := make(map[string]json.RawMessage)
+
+	if a.Description != nil {
+		object["description"], err = json.Marshal(a.Description)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'description': %w", err)
+		}
+	}
+
+	if a.Examples != nil {
+		object["examples"], err = json.Marshal(a.Examples)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'examples': %w", err)
+		}
+	}
+
+	if a.FactoryDirectory != nil {
+		object["factoryDirectory"], err = json.Marshal(a.FactoryDirectory)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'factoryDirectory': %w", err)
+		}
+	}
+
+	if a.Guards != nil {
+		object["guards"], err = json.Marshal(a.Guards)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'guards': %w", err)
+		}
+	}
+
+	if a.Id != nil {
+		object["id"], err = json.Marshal(a.Id)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'id': %w", err)
+		}
+	}
+
+	if a.InputTypes != nil {
+		object["inputTypes"], err = json.Marshal(a.InputTypes)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'inputTypes': %w", err)
+		}
+	}
+
+	if a.InvocationReturn != nil {
+		object["invocationReturn"], err = json.Marshal(a.InvocationReturn)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'invocationReturn': %w", err)
+		}
+	}
+
+	if a.InvocationSignature != nil {
+		object["invocationSignature"], err = json.Marshal(a.InvocationSignature)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'invocationSignature': %w", err)
+		}
+	}
+
+	if a.Layout != nil {
+		object["layout"], err = json.Marshal(a.Layout)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'layout': %w", err)
+		}
+	}
+
+	if a.Metadata != nil {
+		object["metadata"], err = json.Marshal(a.Metadata)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'metadata': %w", err)
+		}
+	}
+
+	object["name"], err = json.Marshal(a.Name)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling 'name': %w", err)
+	}
+
+	if a.Orchestrator != nil {
+		object["orchestrator"], err = json.Marshal(a.Orchestrator)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'orchestrator': %w", err)
+		}
+	}
+
+	if a.Resources != nil {
+		object["resources"], err = json.Marshal(a.Resources)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'resources': %w", err)
+		}
+	}
+
+	if a.Runner != nil {
+		object["runner"], err = json.Marshal(a.Runner)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'runner': %w", err)
+		}
+	}
+
+	if a.SourceDirectory != nil {
+		object["sourceDirectory"], err = json.Marshal(a.SourceDirectory)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'sourceDirectory': %w", err)
+		}
+	}
+
+	if a.SupportingFiles != nil {
+		object["supportingFiles"], err = json.Marshal(a.SupportingFiles)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'supportingFiles': %w", err)
+		}
+	}
+
+	if a.Version != nil {
+		object["version"], err = json.Marshal(a.Version)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'version': %w", err)
+		}
+	}
+
+	if a.Webhooks != nil {
+		object["webhooks"], err = json.Marshal(a.Webhooks)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'webhooks': %w", err)
+		}
+	}
+
+	if a.WorkTypes != nil {
+		object["workTypes"], err = json.Marshal(a.WorkTypes)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'workTypes': %w", err)
+		}
+	}
+
+	if a.Workers != nil {
+		object["workers"], err = json.Marshal(a.Workers)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'workers': %w", err)
+		}
+	}
+
+	if a.Workstations != nil {
+		object["workstations"], err = json.Marshal(a.Workstations)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'workstations': %w", err)
+		}
+	}
+
+	for fieldName, field := range a.AdditionalProperties {
+		object[fieldName], err = json.Marshal(field)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling '%s': %w", fieldName, err)
+		}
+	}
+	return json.Marshal(object)
+}
+
+// Getter for additional properties for FactoryEvent. Returns the specified
+// element and whether it was found
+func (a FactoryEvent) Get(fieldName string) (value interface{}, found bool) {
+	if a.AdditionalProperties != nil {
+		value, found = a.AdditionalProperties[fieldName]
+	}
+	return
+}
+
+// Setter for additional properties for FactoryEvent
+func (a *FactoryEvent) Set(fieldName string, value interface{}) {
+	if a.AdditionalProperties == nil {
+		a.AdditionalProperties = make(map[string]interface{})
+	}
+	a.AdditionalProperties[fieldName] = value
+}
+
+// Override default JSON handling for FactoryEvent to handle AdditionalProperties
+func (a *FactoryEvent) UnmarshalJSON(b []byte) error {
+	object := make(map[string]json.RawMessage)
+	err := json.Unmarshal(b, &object)
+	if err != nil {
+		return err
+	}
+
+	if raw, found := object["context"]; found {
+		err = json.Unmarshal(raw, &a.Context)
+		if err != nil {
+			return fmt.Errorf("error reading 'context': %w", err)
+		}
+		delete(object, "context")
+	}
+
+	if raw, found := object["id"]; found {
+		err = json.Unmarshal(raw, &a.Id)
+		if err != nil {
+			return fmt.Errorf("error reading 'id': %w", err)
+		}
+		delete(object, "id")
+	}
+
+	if raw, found := object["payload"]; found {
+		err = json.Unmarshal(raw, &a.Payload)
+		if err != nil {
+			return fmt.Errorf("error reading 'payload': %w", err)
+		}
+		delete(object, "payload")
+	}
+
+	if raw, found := object["schemaVersion"]; found {
+		err = json.Unmarshal(raw, &a.SchemaVersion)
+		if err != nil {
+			return fmt.Errorf("error reading 'schemaVersion': %w", err)
+		}
+		delete(object, "schemaVersion")
+	}
+
+	if raw, found := object["type"]; found {
+		err = json.Unmarshal(raw, &a.Type)
+		if err != nil {
+			return fmt.Errorf("error reading 'type': %w", err)
+		}
+		delete(object, "type")
+	}
+
+	if len(object) != 0 {
+		a.AdditionalProperties = make(map[string]interface{})
+		for fieldName, fieldBuf := range object {
+			var fieldVal interface{}
+			err := json.Unmarshal(fieldBuf, &fieldVal)
+			if err != nil {
+				return fmt.Errorf("error unmarshaling field %s: %w", fieldName, err)
+			}
+			a.AdditionalProperties[fieldName] = fieldVal
+		}
+	}
+	return nil
+}
+
+// Override default JSON handling for FactoryEvent to handle AdditionalProperties
+func (a FactoryEvent) MarshalJSON() ([]byte, error) {
+	var err error
+	object := make(map[string]json.RawMessage)
+
+	object["context"], err = json.Marshal(a.Context)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling 'context': %w", err)
+	}
+
+	object["id"], err = json.Marshal(a.Id)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling 'id': %w", err)
+	}
+
+	object["payload"], err = json.Marshal(a.Payload)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling 'payload': %w", err)
+	}
+
+	object["schemaVersion"], err = json.Marshal(a.SchemaVersion)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling 'schemaVersion': %w", err)
+	}
+
+	object["type"], err = json.Marshal(a.Type)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling 'type': %w", err)
+	}
+
+	for fieldName, field := range a.AdditionalProperties {
+		object[fieldName], err = json.Marshal(field)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling '%s': %w", fieldName, err)
+		}
+	}
+	return json.Marshal(object)
+}
+
+// Getter for additional properties for FactoryEventContext. Returns the specified
+// element and whether it was found
+func (a FactoryEventContext) Get(fieldName string) (value interface{}, found bool) {
+	if a.AdditionalProperties != nil {
+		value, found = a.AdditionalProperties[fieldName]
+	}
+	return
+}
+
+// Setter for additional properties for FactoryEventContext
+func (a *FactoryEventContext) Set(fieldName string, value interface{}) {
+	if a.AdditionalProperties == nil {
+		a.AdditionalProperties = make(map[string]interface{})
+	}
+	a.AdditionalProperties[fieldName] = value
+}
+
+// Override default JSON handling for FactoryEventContext to handle AdditionalProperties
+func (a *FactoryEventContext) UnmarshalJSON(b []byte) error {
+	object := make(map[string]json.RawMessage)
+	err := json.Unmarshal(b, &object)
+	if err != nil {
+		return err
+	}
+
+	if raw, found := object["checkpointId"]; found {
+		err = json.Unmarshal(raw, &a.CheckpointId)
+		if err != nil {
+			return fmt.Errorf("error reading 'checkpointId': %w", err)
+		}
+		delete(object, "checkpointId")
+	}
+
+	if raw, found := object["currentChainingTraceId"]; found {
+		err = json.Unmarshal(raw, &a.CurrentChainingTraceId)
+		if err != nil {
+			return fmt.Errorf("error reading 'currentChainingTraceId': %w", err)
+		}
+		delete(object, "currentChainingTraceId")
+	}
+
+	if raw, found := object["dispatchId"]; found {
+		err = json.Unmarshal(raw, &a.DispatchId)
+		if err != nil {
+			return fmt.Errorf("error reading 'dispatchId': %w", err)
+		}
+		delete(object, "dispatchId")
+	}
+
+	if raw, found := object["eventTime"]; found {
+		err = json.Unmarshal(raw, &a.EventTime)
+		if err != nil {
+			return fmt.Errorf("error reading 'eventTime': %w", err)
+		}
+		delete(object, "eventTime")
+	}
+
+	if raw, found := object["orchestratorDialect"]; found {
+		err = json.Unmarshal(raw, &a.OrchestratorDialect)
+		if err != nil {
+			return fmt.Errorf("error reading 'orchestratorDialect': %w", err)
+		}
+		delete(object, "orchestratorDialect")
+	}
+
+	if raw, found := object["orchestratorKind"]; found {
+		err = json.Unmarshal(raw, &a.OrchestratorKind)
+		if err != nil {
+			return fmt.Errorf("error reading 'orchestratorKind': %w", err)
+		}
+		delete(object, "orchestratorKind")
+	}
+
+	if raw, found := object["phaseId"]; found {
+		err = json.Unmarshal(raw, &a.PhaseId)
+		if err != nil {
+			return fmt.Errorf("error reading 'phaseId': %w", err)
+		}
+		delete(object, "phaseId")
+	}
+
+	if raw, found := object["phaseName"]; found {
+		err = json.Unmarshal(raw, &a.PhaseName)
+		if err != nil {
+			return fmt.Errorf("error reading 'phaseName': %w", err)
+		}
+		delete(object, "phaseName")
+	}
+
+	if raw, found := object["previousChainingTraceIds"]; found {
+		err = json.Unmarshal(raw, &a.PreviousChainingTraceIds)
+		if err != nil {
+			return fmt.Errorf("error reading 'previousChainingTraceIds': %w", err)
+		}
+		delete(object, "previousChainingTraceIds")
+	}
+
+	if raw, found := object["requestId"]; found {
+		err = json.Unmarshal(raw, &a.RequestId)
+		if err != nil {
+			return fmt.Errorf("error reading 'requestId': %w", err)
+		}
+		delete(object, "requestId")
+	}
+
+	if raw, found := object["sequence"]; found {
+		err = json.Unmarshal(raw, &a.Sequence)
+		if err != nil {
+			return fmt.Errorf("error reading 'sequence': %w", err)
+		}
+		delete(object, "sequence")
+	}
+
+	if raw, found := object["sessionId"]; found {
+		err = json.Unmarshal(raw, &a.SessionId)
+		if err != nil {
+			return fmt.Errorf("error reading 'sessionId': %w", err)
+		}
+		delete(object, "sessionId")
+	}
+
+	if raw, found := object["sessionSequence"]; found {
+		err = json.Unmarshal(raw, &a.SessionSequence)
+		if err != nil {
+			return fmt.Errorf("error reading 'sessionSequence': %w", err)
+		}
+		delete(object, "sessionSequence")
+	}
+
+	if raw, found := object["source"]; found {
+		err = json.Unmarshal(raw, &a.Source)
+		if err != nil {
+			return fmt.Errorf("error reading 'source': %w", err)
+		}
+		delete(object, "source")
+	}
+
+	if raw, found := object["tick"]; found {
+		err = json.Unmarshal(raw, &a.Tick)
+		if err != nil {
+			return fmt.Errorf("error reading 'tick': %w", err)
+		}
+		delete(object, "tick")
+	}
+
+	if raw, found := object["traceIds"]; found {
+		err = json.Unmarshal(raw, &a.TraceIds)
+		if err != nil {
+			return fmt.Errorf("error reading 'traceIds': %w", err)
+		}
+		delete(object, "traceIds")
+	}
+
+	if raw, found := object["workIds"]; found {
+		err = json.Unmarshal(raw, &a.WorkIds)
+		if err != nil {
+			return fmt.Errorf("error reading 'workIds': %w", err)
+		}
+		delete(object, "workIds")
+	}
+
+	if len(object) != 0 {
+		a.AdditionalProperties = make(map[string]interface{})
+		for fieldName, fieldBuf := range object {
+			var fieldVal interface{}
+			err := json.Unmarshal(fieldBuf, &fieldVal)
+			if err != nil {
+				return fmt.Errorf("error unmarshaling field %s: %w", fieldName, err)
+			}
+			a.AdditionalProperties[fieldName] = fieldVal
+		}
+	}
+	return nil
+}
+
+// Override default JSON handling for FactoryEventContext to handle AdditionalProperties
+func (a FactoryEventContext) MarshalJSON() ([]byte, error) {
+	var err error
+	object := make(map[string]json.RawMessage)
+
+	if a.CheckpointId != nil {
+		object["checkpointId"], err = json.Marshal(a.CheckpointId)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'checkpointId': %w", err)
+		}
+	}
+
+	if a.CurrentChainingTraceId != nil {
+		object["currentChainingTraceId"], err = json.Marshal(a.CurrentChainingTraceId)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'currentChainingTraceId': %w", err)
+		}
+	}
+
+	if a.DispatchId != nil {
+		object["dispatchId"], err = json.Marshal(a.DispatchId)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'dispatchId': %w", err)
+		}
+	}
+
+	object["eventTime"], err = json.Marshal(a.EventTime)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling 'eventTime': %w", err)
+	}
+
+	if a.OrchestratorDialect != nil {
+		object["orchestratorDialect"], err = json.Marshal(a.OrchestratorDialect)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'orchestratorDialect': %w", err)
+		}
+	}
+
+	if a.OrchestratorKind != nil {
+		object["orchestratorKind"], err = json.Marshal(a.OrchestratorKind)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'orchestratorKind': %w", err)
+		}
+	}
+
+	if a.PhaseId != nil {
+		object["phaseId"], err = json.Marshal(a.PhaseId)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'phaseId': %w", err)
+		}
+	}
+
+	if a.PhaseName != nil {
+		object["phaseName"], err = json.Marshal(a.PhaseName)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'phaseName': %w", err)
+		}
+	}
+
+	if a.PreviousChainingTraceIds != nil {
+		object["previousChainingTraceIds"], err = json.Marshal(a.PreviousChainingTraceIds)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'previousChainingTraceIds': %w", err)
+		}
+	}
+
+	if a.RequestId != nil {
+		object["requestId"], err = json.Marshal(a.RequestId)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'requestId': %w", err)
+		}
+	}
+
+	object["sequence"], err = json.Marshal(a.Sequence)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling 'sequence': %w", err)
+	}
+
+	if a.SessionId != nil {
+		object["sessionId"], err = json.Marshal(a.SessionId)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'sessionId': %w", err)
+		}
+	}
+
+	if a.SessionSequence != nil {
+		object["sessionSequence"], err = json.Marshal(a.SessionSequence)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'sessionSequence': %w", err)
+		}
+	}
+
+	if a.Source != nil {
+		object["source"], err = json.Marshal(a.Source)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'source': %w", err)
+		}
+	}
+
+	object["tick"], err = json.Marshal(a.Tick)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling 'tick': %w", err)
+	}
+
+	if a.TraceIds != nil {
+		object["traceIds"], err = json.Marshal(a.TraceIds)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'traceIds': %w", err)
+		}
+	}
+
+	if a.WorkIds != nil {
+		object["workIds"], err = json.Marshal(a.WorkIds)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'workIds': %w", err)
+		}
+	}
+
+	for fieldName, field := range a.AdditionalProperties {
+		object[fieldName], err = json.Marshal(field)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling '%s': %w", fieldName, err)
+		}
+	}
+	return json.Marshal(object)
+}
+
+// Getter for additional properties for FactoryGuard. Returns the specified
+// element and whether it was found
+func (a FactoryGuard) Get(fieldName string) (value interface{}, found bool) {
+	if a.AdditionalProperties != nil {
+		value, found = a.AdditionalProperties[fieldName]
+	}
+	return
+}
+
+// Setter for additional properties for FactoryGuard
+func (a *FactoryGuard) Set(fieldName string, value interface{}) {
+	if a.AdditionalProperties == nil {
+		a.AdditionalProperties = make(map[string]interface{})
+	}
+	a.AdditionalProperties[fieldName] = value
+}
+
+// Override default JSON handling for FactoryGuard to handle AdditionalProperties
+func (a *FactoryGuard) UnmarshalJSON(b []byte) error {
+	object := make(map[string]json.RawMessage)
+	err := json.Unmarshal(b, &object)
+	if err != nil {
+		return err
+	}
+
+	if raw, found := object["model"]; found {
+		err = json.Unmarshal(raw, &a.Model)
+		if err != nil {
+			return fmt.Errorf("error reading 'model': %w", err)
+		}
+		delete(object, "model")
+	}
+
+	if raw, found := object["modelProvider"]; found {
+		err = json.Unmarshal(raw, &a.ModelProvider)
+		if err != nil {
+			return fmt.Errorf("error reading 'modelProvider': %w", err)
+		}
+		delete(object, "modelProvider")
+	}
+
+	if raw, found := object["refreshWindow"]; found {
+		err = json.Unmarshal(raw, &a.RefreshWindow)
+		if err != nil {
+			return fmt.Errorf("error reading 'refreshWindow': %w", err)
+		}
+		delete(object, "refreshWindow")
+	}
+
+	if raw, found := object["type"]; found {
+		err = json.Unmarshal(raw, &a.Type)
+		if err != nil {
+			return fmt.Errorf("error reading 'type': %w", err)
+		}
+		delete(object, "type")
+	}
+
+	if len(object) != 0 {
+		a.AdditionalProperties = make(map[string]interface{})
+		for fieldName, fieldBuf := range object {
+			var fieldVal interface{}
+			err := json.Unmarshal(fieldBuf, &fieldVal)
+			if err != nil {
+				return fmt.Errorf("error unmarshaling field %s: %w", fieldName, err)
+			}
+			a.AdditionalProperties[fieldName] = fieldVal
+		}
+	}
+	return nil
+}
+
+// Override default JSON handling for FactoryGuard to handle AdditionalProperties
+func (a FactoryGuard) MarshalJSON() ([]byte, error) {
+	var err error
+	object := make(map[string]json.RawMessage)
+
+	if a.Model != nil {
+		object["model"], err = json.Marshal(a.Model)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'model': %w", err)
+		}
+	}
+
+	object["modelProvider"], err = json.Marshal(a.ModelProvider)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling 'modelProvider': %w", err)
+	}
+
+	object["refreshWindow"], err = json.Marshal(a.RefreshWindow)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling 'refreshWindow': %w", err)
+	}
+
+	object["type"], err = json.Marshal(a.Type)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling 'type': %w", err)
+	}
+
+	for fieldName, field := range a.AdditionalProperties {
+		object[fieldName], err = json.Marshal(field)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling '%s': %w", fieldName, err)
+		}
+	}
+	return json.Marshal(object)
+}
+
+// Getter for additional properties for FactoryInvocationExample. Returns the specified
+// element and whether it was found
+func (a FactoryInvocationExample) Get(fieldName string) (value interface{}, found bool) {
+	if a.AdditionalProperties != nil {
+		value, found = a.AdditionalProperties[fieldName]
+	}
+	return
+}
+
+// Setter for additional properties for FactoryInvocationExample
+func (a *FactoryInvocationExample) Set(fieldName string, value interface{}) {
+	if a.AdditionalProperties == nil {
+		a.AdditionalProperties = make(map[string]interface{})
+	}
+	a.AdditionalProperties[fieldName] = value
+}
+
+// Override default JSON handling for FactoryInvocationExample to handle AdditionalProperties
+func (a *FactoryInvocationExample) UnmarshalJSON(b []byte) error {
+	object := make(map[string]json.RawMessage)
+	err := json.Unmarshal(b, &object)
+	if err != nil {
+		return err
+	}
+
+	if raw, found := object["args"]; found {
+		err = json.Unmarshal(raw, &a.Args)
+		if err != nil {
+			return fmt.Errorf("error reading 'args': %w", err)
+		}
+		delete(object, "args")
+	}
+
+	if raw, found := object["description"]; found {
+		err = json.Unmarshal(raw, &a.Description)
+		if err != nil {
+			return fmt.Errorf("error reading 'description': %w", err)
+		}
+		delete(object, "description")
+	}
+
+	if raw, found := object["name"]; found {
+		err = json.Unmarshal(raw, &a.Name)
+		if err != nil {
+			return fmt.Errorf("error reading 'name': %w", err)
+		}
+		delete(object, "name")
+	}
+
+	if len(object) != 0 {
+		a.AdditionalProperties = make(map[string]interface{})
+		for fieldName, fieldBuf := range object {
+			var fieldVal interface{}
+			err := json.Unmarshal(fieldBuf, &fieldVal)
+			if err != nil {
+				return fmt.Errorf("error unmarshaling field %s: %w", fieldName, err)
+			}
+			a.AdditionalProperties[fieldName] = fieldVal
+		}
+	}
+	return nil
+}
+
+// Override default JSON handling for FactoryInvocationExample to handle AdditionalProperties
+func (a FactoryInvocationExample) MarshalJSON() ([]byte, error) {
+	var err error
+	object := make(map[string]json.RawMessage)
+
+	object["args"], err = json.Marshal(a.Args)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling 'args': %w", err)
+	}
+
+	object["description"], err = json.Marshal(a.Description)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling 'description': %w", err)
+	}
+
+	object["name"], err = json.Marshal(a.Name)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling 'name': %w", err)
+	}
+
+	for fieldName, field := range a.AdditionalProperties {
+		object[fieldName], err = json.Marshal(field)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling '%s': %w", fieldName, err)
+		}
+	}
+	return json.Marshal(object)
+}
+
+// Getter for additional properties for FactoryInvocationOutputContract. Returns the specified
+// element and whether it was found
+func (a FactoryInvocationOutputContract) Get(fieldName string) (value interface{}, found bool) {
+	if a.AdditionalProperties != nil {
+		value, found = a.AdditionalProperties[fieldName]
+	}
+	return
+}
+
+// Setter for additional properties for FactoryInvocationOutputContract
+func (a *FactoryInvocationOutputContract) Set(fieldName string, value interface{}) {
+	if a.AdditionalProperties == nil {
+		a.AdditionalProperties = make(map[string]interface{})
+	}
+	a.AdditionalProperties[fieldName] = value
+}
+
+// Override default JSON handling for FactoryInvocationOutputContract to handle AdditionalProperties
+func (a *FactoryInvocationOutputContract) UnmarshalJSON(b []byte) error {
+	object := make(map[string]json.RawMessage)
+	err := json.Unmarshal(b, &object)
+	if err != nil {
+		return err
+	}
+
+	if raw, found := object["contentType"]; found {
+		err = json.Unmarshal(raw, &a.ContentType)
+		if err != nil {
+			return fmt.Errorf("error reading 'contentType': %w", err)
+		}
+		delete(object, "contentType")
+	}
+
+	if raw, found := object["description"]; found {
+		err = json.Unmarshal(raw, &a.Description)
+		if err != nil {
+			return fmt.Errorf("error reading 'description': %w", err)
+		}
+		delete(object, "description")
+	}
+
+	if raw, found := object["fileExtension"]; found {
+		err = json.Unmarshal(raw, &a.FileExtension)
+		if err != nil {
+			return fmt.Errorf("error reading 'fileExtension': %w", err)
+		}
+		delete(object, "fileExtension")
+	}
+
+	if raw, found := object["mode"]; found {
+		err = json.Unmarshal(raw, &a.Mode)
+		if err != nil {
+			return fmt.Errorf("error reading 'mode': %w", err)
+		}
+		delete(object, "mode")
+	}
+
+	if raw, found := object["pathParameter"]; found {
+		err = json.Unmarshal(raw, &a.PathParameter)
+		if err != nil {
+			return fmt.Errorf("error reading 'pathParameter': %w", err)
+		}
+		delete(object, "pathParameter")
+	}
+
+	if len(object) != 0 {
+		a.AdditionalProperties = make(map[string]interface{})
+		for fieldName, fieldBuf := range object {
+			var fieldVal interface{}
+			err := json.Unmarshal(fieldBuf, &fieldVal)
+			if err != nil {
+				return fmt.Errorf("error unmarshaling field %s: %w", fieldName, err)
+			}
+			a.AdditionalProperties[fieldName] = fieldVal
+		}
+	}
+	return nil
+}
+
+// Override default JSON handling for FactoryInvocationOutputContract to handle AdditionalProperties
+func (a FactoryInvocationOutputContract) MarshalJSON() ([]byte, error) {
+	var err error
+	object := make(map[string]json.RawMessage)
+
+	if a.ContentType != nil {
+		object["contentType"], err = json.Marshal(a.ContentType)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'contentType': %w", err)
+		}
+	}
+
+	if a.Description != nil {
+		object["description"], err = json.Marshal(a.Description)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'description': %w", err)
+		}
+	}
+
+	if a.FileExtension != nil {
+		object["fileExtension"], err = json.Marshal(a.FileExtension)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'fileExtension': %w", err)
+		}
+	}
+
+	if a.Mode != nil {
+		object["mode"], err = json.Marshal(a.Mode)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'mode': %w", err)
+		}
+	}
+
+	if a.PathParameter != nil {
+		object["pathParameter"], err = json.Marshal(a.PathParameter)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'pathParameter': %w", err)
+		}
+	}
+
+	for fieldName, field := range a.AdditionalProperties {
+		object[fieldName], err = json.Marshal(field)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling '%s': %w", fieldName, err)
+		}
+	}
+	return json.Marshal(object)
+}
+
+// Getter for additional properties for FactoryInvocationParameter. Returns the specified
+// element and whether it was found
+func (a FactoryInvocationParameter) Get(fieldName string) (value interface{}, found bool) {
+	if a.AdditionalProperties != nil {
+		value, found = a.AdditionalProperties[fieldName]
+	}
+	return
+}
+
+// Setter for additional properties for FactoryInvocationParameter
+func (a *FactoryInvocationParameter) Set(fieldName string, value interface{}) {
+	if a.AdditionalProperties == nil {
+		a.AdditionalProperties = make(map[string]interface{})
+	}
+	a.AdditionalProperties[fieldName] = value
+}
+
+// Override default JSON handling for FactoryInvocationParameter to handle AdditionalProperties
+func (a *FactoryInvocationParameter) UnmarshalJSON(b []byte) error {
+	object := make(map[string]json.RawMessage)
+	err := json.Unmarshal(b, &object)
+	if err != nil {
+		return err
+	}
+
+	if raw, found := object["aliases"]; found {
+		err = json.Unmarshal(raw, &a.Aliases)
+		if err != nil {
+			return fmt.Errorf("error reading 'aliases': %w", err)
+		}
+		delete(object, "aliases")
+	}
+
+	if raw, found := object["bindings"]; found {
+		err = json.Unmarshal(raw, &a.Bindings)
+		if err != nil {
+			return fmt.Errorf("error reading 'bindings': %w", err)
+		}
+		delete(object, "bindings")
+	}
+
+	if raw, found := object["choices"]; found {
+		err = json.Unmarshal(raw, &a.Choices)
+		if err != nil {
+			return fmt.Errorf("error reading 'choices': %w", err)
+		}
+		delete(object, "choices")
+	}
+
+	if raw, found := object["defaultValue"]; found {
+		err = json.Unmarshal(raw, &a.DefaultValue)
+		if err != nil {
+			return fmt.Errorf("error reading 'defaultValue': %w", err)
+		}
+		delete(object, "defaultValue")
+	}
+
+	if raw, found := object["defaultValues"]; found {
+		err = json.Unmarshal(raw, &a.DefaultValues)
+		if err != nil {
+			return fmt.Errorf("error reading 'defaultValues': %w", err)
+		}
+		delete(object, "defaultValues")
+	}
+
+	if raw, found := object["description"]; found {
+		err = json.Unmarshal(raw, &a.Description)
+		if err != nil {
+			return fmt.Errorf("error reading 'description': %w", err)
+		}
+		delete(object, "description")
+	}
+
+	if raw, found := object["externalName"]; found {
+		err = json.Unmarshal(raw, &a.ExternalName)
+		if err != nil {
+			return fmt.Errorf("error reading 'externalName': %w", err)
+		}
+		delete(object, "externalName")
+	}
+
+	if raw, found := object["name"]; found {
+		err = json.Unmarshal(raw, &a.Name)
+		if err != nil {
+			return fmt.Errorf("error reading 'name': %w", err)
+		}
+		delete(object, "name")
+	}
+
+	if raw, found := object["required"]; found {
+		err = json.Unmarshal(raw, &a.Required)
+		if err != nil {
+			return fmt.Errorf("error reading 'required': %w", err)
+		}
+		delete(object, "required")
+	}
+
+	if raw, found := object["sensitive"]; found {
+		err = json.Unmarshal(raw, &a.Sensitive)
+		if err != nil {
+			return fmt.Errorf("error reading 'sensitive': %w", err)
+		}
+		delete(object, "sensitive")
+	}
+
+	if raw, found := object["typeHint"]; found {
+		err = json.Unmarshal(raw, &a.TypeHint)
+		if err != nil {
+			return fmt.Errorf("error reading 'typeHint': %w", err)
+		}
+		delete(object, "typeHint")
+	}
+
+	if raw, found := object["valueMode"]; found {
+		err = json.Unmarshal(raw, &a.ValueMode)
+		if err != nil {
+			return fmt.Errorf("error reading 'valueMode': %w", err)
+		}
+		delete(object, "valueMode")
+	}
+
+	if len(object) != 0 {
+		a.AdditionalProperties = make(map[string]interface{})
+		for fieldName, fieldBuf := range object {
+			var fieldVal interface{}
+			err := json.Unmarshal(fieldBuf, &fieldVal)
+			if err != nil {
+				return fmt.Errorf("error unmarshaling field %s: %w", fieldName, err)
+			}
+			a.AdditionalProperties[fieldName] = fieldVal
+		}
+	}
+	return nil
+}
+
+// Override default JSON handling for FactoryInvocationParameter to handle AdditionalProperties
+func (a FactoryInvocationParameter) MarshalJSON() ([]byte, error) {
+	var err error
+	object := make(map[string]json.RawMessage)
+
+	if a.Aliases != nil {
+		object["aliases"], err = json.Marshal(a.Aliases)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'aliases': %w", err)
+		}
+	}
+
+	if a.Bindings != nil {
+		object["bindings"], err = json.Marshal(a.Bindings)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'bindings': %w", err)
+		}
+	}
+
+	if a.Choices != nil {
+		object["choices"], err = json.Marshal(a.Choices)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'choices': %w", err)
+		}
+	}
+
+	if a.DefaultValue != nil {
+		object["defaultValue"], err = json.Marshal(a.DefaultValue)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'defaultValue': %w", err)
+		}
+	}
+
+	if a.DefaultValues != nil {
+		object["defaultValues"], err = json.Marshal(a.DefaultValues)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'defaultValues': %w", err)
+		}
+	}
+
+	if a.Description != nil {
+		object["description"], err = json.Marshal(a.Description)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'description': %w", err)
+		}
+	}
+
+	if a.ExternalName != nil {
+		object["externalName"], err = json.Marshal(a.ExternalName)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'externalName': %w", err)
+		}
+	}
+
+	object["name"], err = json.Marshal(a.Name)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling 'name': %w", err)
+	}
+
+	if a.Required != nil {
+		object["required"], err = json.Marshal(a.Required)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'required': %w", err)
+		}
+	}
+
+	if a.Sensitive != nil {
+		object["sensitive"], err = json.Marshal(a.Sensitive)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'sensitive': %w", err)
+		}
+	}
+
+	if a.TypeHint != nil {
+		object["typeHint"], err = json.Marshal(a.TypeHint)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'typeHint': %w", err)
+		}
+	}
+
+	if a.ValueMode != nil {
+		object["valueMode"], err = json.Marshal(a.ValueMode)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'valueMode': %w", err)
+		}
+	}
+
+	for fieldName, field := range a.AdditionalProperties {
+		object[fieldName], err = json.Marshal(field)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling '%s': %w", fieldName, err)
+		}
+	}
+	return json.Marshal(object)
+}
+
+// Getter for additional properties for FactoryInvocationParameterBinding. Returns the specified
+// element and whether it was found
+func (a FactoryInvocationParameterBinding) Get(fieldName string) (value interface{}, found bool) {
+	if a.AdditionalProperties != nil {
+		value, found = a.AdditionalProperties[fieldName]
+	}
+	return
+}
+
+// Setter for additional properties for FactoryInvocationParameterBinding
+func (a *FactoryInvocationParameterBinding) Set(fieldName string, value interface{}) {
+	if a.AdditionalProperties == nil {
+		a.AdditionalProperties = make(map[string]interface{})
+	}
+	a.AdditionalProperties[fieldName] = value
+}
+
+// Override default JSON handling for FactoryInvocationParameterBinding to handle AdditionalProperties
+func (a *FactoryInvocationParameterBinding) UnmarshalJSON(b []byte) error {
+	object := make(map[string]json.RawMessage)
+	err := json.Unmarshal(b, &object)
+	if err != nil {
+		return err
+	}
+
+	if raw, found := object["kind"]; found {
+		err = json.Unmarshal(raw, &a.Kind)
+		if err != nil {
+			return fmt.Errorf("error reading 'kind': %w", err)
+		}
+		delete(object, "kind")
+	}
+
+	if raw, found := object["position"]; found {
+		err = json.Unmarshal(raw, &a.Position)
+		if err != nil {
+			return fmt.Errorf("error reading 'position': %w", err)
+		}
+		delete(object, "position")
+	}
+
+	if len(object) != 0 {
+		a.AdditionalProperties = make(map[string]interface{})
+		for fieldName, fieldBuf := range object {
+			var fieldVal interface{}
+			err := json.Unmarshal(fieldBuf, &fieldVal)
+			if err != nil {
+				return fmt.Errorf("error unmarshaling field %s: %w", fieldName, err)
+			}
+			a.AdditionalProperties[fieldName] = fieldVal
+		}
+	}
+	return nil
+}
+
+// Override default JSON handling for FactoryInvocationParameterBinding to handle AdditionalProperties
+func (a FactoryInvocationParameterBinding) MarshalJSON() ([]byte, error) {
+	var err error
+	object := make(map[string]json.RawMessage)
+
+	object["kind"], err = json.Marshal(a.Kind)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling 'kind': %w", err)
+	}
+
+	if a.Position != nil {
+		object["position"], err = json.Marshal(a.Position)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'position': %w", err)
+		}
+	}
+
+	for fieldName, field := range a.AdditionalProperties {
+		object[fieldName], err = json.Marshal(field)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling '%s': %w", fieldName, err)
+		}
+	}
+	return json.Marshal(object)
+}
+
+// Getter for additional properties for FactoryInvocationSignature. Returns the specified
+// element and whether it was found
+func (a FactoryInvocationSignature) Get(fieldName string) (value interface{}, found bool) {
+	if a.AdditionalProperties != nil {
+		value, found = a.AdditionalProperties[fieldName]
+	}
+	return
+}
+
+// Setter for additional properties for FactoryInvocationSignature
+func (a *FactoryInvocationSignature) Set(fieldName string, value interface{}) {
+	if a.AdditionalProperties == nil {
+		a.AdditionalProperties = make(map[string]interface{})
+	}
+	a.AdditionalProperties[fieldName] = value
+}
+
+// Override default JSON handling for FactoryInvocationSignature to handle AdditionalProperties
+func (a *FactoryInvocationSignature) UnmarshalJSON(b []byte) error {
+	object := make(map[string]json.RawMessage)
+	err := json.Unmarshal(b, &object)
+	if err != nil {
+		return err
+	}
+
+	if raw, found := object["outputContract"]; found {
+		err = json.Unmarshal(raw, &a.OutputContract)
+		if err != nil {
+			return fmt.Errorf("error reading 'outputContract': %w", err)
+		}
+		delete(object, "outputContract")
+	}
+
+	if raw, found := object["parameters"]; found {
+		err = json.Unmarshal(raw, &a.Parameters)
+		if err != nil {
+			return fmt.Errorf("error reading 'parameters': %w", err)
+		}
+		delete(object, "parameters")
+	}
+
+	if raw, found := object["unknownNamedArgumentPolicy"]; found {
+		err = json.Unmarshal(raw, &a.UnknownNamedArgumentPolicy)
+		if err != nil {
+			return fmt.Errorf("error reading 'unknownNamedArgumentPolicy': %w", err)
+		}
+		delete(object, "unknownNamedArgumentPolicy")
+	}
+
+	if len(object) != 0 {
+		a.AdditionalProperties = make(map[string]interface{})
+		for fieldName, fieldBuf := range object {
+			var fieldVal interface{}
+			err := json.Unmarshal(fieldBuf, &fieldVal)
+			if err != nil {
+				return fmt.Errorf("error unmarshaling field %s: %w", fieldName, err)
+			}
+			a.AdditionalProperties[fieldName] = fieldVal
+		}
+	}
+	return nil
+}
+
+// Override default JSON handling for FactoryInvocationSignature to handle AdditionalProperties
+func (a FactoryInvocationSignature) MarshalJSON() ([]byte, error) {
+	var err error
+	object := make(map[string]json.RawMessage)
+
+	if a.OutputContract != nil {
+		object["outputContract"], err = json.Marshal(a.OutputContract)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'outputContract': %w", err)
+		}
+	}
+
+	if a.Parameters != nil {
+		object["parameters"], err = json.Marshal(a.Parameters)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'parameters': %w", err)
+		}
+	}
+
+	if a.UnknownNamedArgumentPolicy != nil {
+		object["unknownNamedArgumentPolicy"], err = json.Marshal(a.UnknownNamedArgumentPolicy)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'unknownNamedArgumentPolicy': %w", err)
+		}
+	}
+
+	for fieldName, field := range a.AdditionalProperties {
+		object[fieldName], err = json.Marshal(field)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling '%s': %w", fieldName, err)
+		}
+	}
+	return json.Marshal(object)
+}
+
+// Getter for additional properties for FactoryRecording. Returns the specified
+// element and whether it was found
+func (a FactoryRecording) Get(fieldName string) (value interface{}, found bool) {
+	if a.AdditionalProperties != nil {
+		value, found = a.AdditionalProperties[fieldName]
+	}
+	return
+}
+
+// Setter for additional properties for FactoryRecording
+func (a *FactoryRecording) Set(fieldName string, value interface{}) {
+	if a.AdditionalProperties == nil {
+		a.AdditionalProperties = make(map[string]interface{})
+	}
+	a.AdditionalProperties[fieldName] = value
+}
+
+// Override default JSON handling for FactoryRecording to handle AdditionalProperties
+func (a *FactoryRecording) UnmarshalJSON(b []byte) error {
+	object := make(map[string]json.RawMessage)
+	err := json.Unmarshal(b, &object)
+	if err != nil {
+		return err
+	}
+
+	if raw, found := object["events"]; found {
+		err = json.Unmarshal(raw, &a.Events)
+		if err != nil {
+			return fmt.Errorf("error reading 'events': %w", err)
+		}
+		delete(object, "events")
+	}
+
+	if raw, found := object["schemaVersion"]; found {
+		err = json.Unmarshal(raw, &a.SchemaVersion)
+		if err != nil {
+			return fmt.Errorf("error reading 'schemaVersion': %w", err)
+		}
+		delete(object, "schemaVersion")
+	}
+
+	if raw, found := object["sessionId"]; found {
+		err = json.Unmarshal(raw, &a.SessionId)
+		if err != nil {
+			return fmt.Errorf("error reading 'sessionId': %w", err)
+		}
+		delete(object, "sessionId")
+	}
+
+	if len(object) != 0 {
+		a.AdditionalProperties = make(map[string]interface{})
+		for fieldName, fieldBuf := range object {
+			var fieldVal interface{}
+			err := json.Unmarshal(fieldBuf, &fieldVal)
+			if err != nil {
+				return fmt.Errorf("error unmarshaling field %s: %w", fieldName, err)
+			}
+			a.AdditionalProperties[fieldName] = fieldVal
+		}
+	}
+	return nil
+}
+
+// Override default JSON handling for FactoryRecording to handle AdditionalProperties
+func (a FactoryRecording) MarshalJSON() ([]byte, error) {
+	var err error
+	object := make(map[string]json.RawMessage)
+
+	if a.Events != nil {
+		object["events"], err = json.Marshal(a.Events)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'events': %w", err)
+		}
+	}
+
+	object["schemaVersion"], err = json.Marshal(a.SchemaVersion)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling 'schemaVersion': %w", err)
+	}
+
+	object["sessionId"], err = json.Marshal(a.SessionId)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling 'sessionId': %w", err)
+	}
+
+	for fieldName, field := range a.AdditionalProperties {
+		object[fieldName], err = json.Marshal(field)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling '%s': %w", fieldName, err)
+		}
+	}
+	return json.Marshal(object)
+}
+
 // Getter for additional properties for FactorySessionEffectivePolicy. Returns the specified
 // element and whether it was found
 func (a FactorySessionEffectivePolicy) Get(fieldName string) (value interface{}, found bool) {
@@ -9499,6 +11820,5436 @@ func (a FactorySessionRequestedPolicy) MarshalJSON() ([]byte, error) {
 		object["policyHash"], err = json.Marshal(a.PolicyHash)
 		if err != nil {
 			return nil, fmt.Errorf("error marshaling 'policyHash': %w", err)
+		}
+	}
+
+	for fieldName, field := range a.AdditionalProperties {
+		object[fieldName], err = json.Marshal(field)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling '%s': %w", fieldName, err)
+		}
+	}
+	return json.Marshal(object)
+}
+
+// Getter for additional properties for FactoryWebhook. Returns the specified
+// element and whether it was found
+func (a FactoryWebhook) Get(fieldName string) (value interface{}, found bool) {
+	if a.AdditionalProperties != nil {
+		value, found = a.AdditionalProperties[fieldName]
+	}
+	return
+}
+
+// Setter for additional properties for FactoryWebhook
+func (a *FactoryWebhook) Set(fieldName string, value interface{}) {
+	if a.AdditionalProperties == nil {
+		a.AdditionalProperties = make(map[string]interface{})
+	}
+	a.AdditionalProperties[fieldName] = value
+}
+
+// Override default JSON handling for FactoryWebhook to handle AdditionalProperties
+func (a *FactoryWebhook) UnmarshalJSON(b []byte) error {
+	object := make(map[string]json.RawMessage)
+	err := json.Unmarshal(b, &object)
+	if err != nil {
+		return err
+	}
+
+	if raw, found := object["deliveryPolicy"]; found {
+		err = json.Unmarshal(raw, &a.DeliveryPolicy)
+		if err != nil {
+			return fmt.Errorf("error reading 'deliveryPolicy': %w", err)
+		}
+		delete(object, "deliveryPolicy")
+	}
+
+	if raw, found := object["enabled"]; found {
+		err = json.Unmarshal(raw, &a.Enabled)
+		if err != nil {
+			return fmt.Errorf("error reading 'enabled': %w", err)
+		}
+		delete(object, "enabled")
+	}
+
+	if raw, found := object["filter"]; found {
+		err = json.Unmarshal(raw, &a.Filter)
+		if err != nil {
+			return fmt.Errorf("error reading 'filter': %w", err)
+		}
+		delete(object, "filter")
+	}
+
+	if raw, found := object["name"]; found {
+		err = json.Unmarshal(raw, &a.Name)
+		if err != nil {
+			return fmt.Errorf("error reading 'name': %w", err)
+		}
+		delete(object, "name")
+	}
+
+	if raw, found := object["signingSecretRef"]; found {
+		err = json.Unmarshal(raw, &a.SigningSecretRef)
+		if err != nil {
+			return fmt.Errorf("error reading 'signingSecretRef': %w", err)
+		}
+		delete(object, "signingSecretRef")
+	}
+
+	if raw, found := object["url"]; found {
+		err = json.Unmarshal(raw, &a.Url)
+		if err != nil {
+			return fmt.Errorf("error reading 'url': %w", err)
+		}
+		delete(object, "url")
+	}
+
+	if len(object) != 0 {
+		a.AdditionalProperties = make(map[string]interface{})
+		for fieldName, fieldBuf := range object {
+			var fieldVal interface{}
+			err := json.Unmarshal(fieldBuf, &fieldVal)
+			if err != nil {
+				return fmt.Errorf("error unmarshaling field %s: %w", fieldName, err)
+			}
+			a.AdditionalProperties[fieldName] = fieldVal
+		}
+	}
+	return nil
+}
+
+// Override default JSON handling for FactoryWebhook to handle AdditionalProperties
+func (a FactoryWebhook) MarshalJSON() ([]byte, error) {
+	var err error
+	object := make(map[string]json.RawMessage)
+
+	if a.DeliveryPolicy != nil {
+		object["deliveryPolicy"], err = json.Marshal(a.DeliveryPolicy)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'deliveryPolicy': %w", err)
+		}
+	}
+
+	object["enabled"], err = json.Marshal(a.Enabled)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling 'enabled': %w", err)
+	}
+
+	object["filter"], err = json.Marshal(a.Filter)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling 'filter': %w", err)
+	}
+
+	object["name"], err = json.Marshal(a.Name)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling 'name': %w", err)
+	}
+
+	object["signingSecretRef"], err = json.Marshal(a.SigningSecretRef)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling 'signingSecretRef': %w", err)
+	}
+
+	object["url"], err = json.Marshal(a.Url)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling 'url': %w", err)
+	}
+
+	for fieldName, field := range a.AdditionalProperties {
+		object[fieldName], err = json.Marshal(field)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling '%s': %w", fieldName, err)
+		}
+	}
+	return json.Marshal(object)
+}
+
+// Getter for additional properties for FactoryWebhookDeliveryPolicy. Returns the specified
+// element and whether it was found
+func (a FactoryWebhookDeliveryPolicy) Get(fieldName string) (value interface{}, found bool) {
+	if a.AdditionalProperties != nil {
+		value, found = a.AdditionalProperties[fieldName]
+	}
+	return
+}
+
+// Setter for additional properties for FactoryWebhookDeliveryPolicy
+func (a *FactoryWebhookDeliveryPolicy) Set(fieldName string, value interface{}) {
+	if a.AdditionalProperties == nil {
+		a.AdditionalProperties = make(map[string]interface{})
+	}
+	a.AdditionalProperties[fieldName] = value
+}
+
+// Override default JSON handling for FactoryWebhookDeliveryPolicy to handle AdditionalProperties
+func (a *FactoryWebhookDeliveryPolicy) UnmarshalJSON(b []byte) error {
+	object := make(map[string]json.RawMessage)
+	err := json.Unmarshal(b, &object)
+	if err != nil {
+		return err
+	}
+
+	if raw, found := object["backoffMultiplier"]; found {
+		err = json.Unmarshal(raw, &a.BackoffMultiplier)
+		if err != nil {
+			return fmt.Errorf("error reading 'backoffMultiplier': %w", err)
+		}
+		delete(object, "backoffMultiplier")
+	}
+
+	if raw, found := object["initialBackoff"]; found {
+		err = json.Unmarshal(raw, &a.InitialBackoff)
+		if err != nil {
+			return fmt.Errorf("error reading 'initialBackoff': %w", err)
+		}
+		delete(object, "initialBackoff")
+	}
+
+	if raw, found := object["maxAttempts"]; found {
+		err = json.Unmarshal(raw, &a.MaxAttempts)
+		if err != nil {
+			return fmt.Errorf("error reading 'maxAttempts': %w", err)
+		}
+		delete(object, "maxAttempts")
+	}
+
+	if raw, found := object["maxBackoff"]; found {
+		err = json.Unmarshal(raw, &a.MaxBackoff)
+		if err != nil {
+			return fmt.Errorf("error reading 'maxBackoff': %w", err)
+		}
+		delete(object, "maxBackoff")
+	}
+
+	if raw, found := object["requestTimeout"]; found {
+		err = json.Unmarshal(raw, &a.RequestTimeout)
+		if err != nil {
+			return fmt.Errorf("error reading 'requestTimeout': %w", err)
+		}
+		delete(object, "requestTimeout")
+	}
+
+	if len(object) != 0 {
+		a.AdditionalProperties = make(map[string]interface{})
+		for fieldName, fieldBuf := range object {
+			var fieldVal interface{}
+			err := json.Unmarshal(fieldBuf, &fieldVal)
+			if err != nil {
+				return fmt.Errorf("error unmarshaling field %s: %w", fieldName, err)
+			}
+			a.AdditionalProperties[fieldName] = fieldVal
+		}
+	}
+	return nil
+}
+
+// Override default JSON handling for FactoryWebhookDeliveryPolicy to handle AdditionalProperties
+func (a FactoryWebhookDeliveryPolicy) MarshalJSON() ([]byte, error) {
+	var err error
+	object := make(map[string]json.RawMessage)
+
+	if a.BackoffMultiplier != nil {
+		object["backoffMultiplier"], err = json.Marshal(a.BackoffMultiplier)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'backoffMultiplier': %w", err)
+		}
+	}
+
+	if a.InitialBackoff != nil {
+		object["initialBackoff"], err = json.Marshal(a.InitialBackoff)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'initialBackoff': %w", err)
+		}
+	}
+
+	if a.MaxAttempts != nil {
+		object["maxAttempts"], err = json.Marshal(a.MaxAttempts)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'maxAttempts': %w", err)
+		}
+	}
+
+	if a.MaxBackoff != nil {
+		object["maxBackoff"], err = json.Marshal(a.MaxBackoff)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'maxBackoff': %w", err)
+		}
+	}
+
+	if a.RequestTimeout != nil {
+		object["requestTimeout"], err = json.Marshal(a.RequestTimeout)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'requestTimeout': %w", err)
+		}
+	}
+
+	for fieldName, field := range a.AdditionalProperties {
+		object[fieldName], err = json.Marshal(field)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling '%s': %w", fieldName, err)
+		}
+	}
+	return json.Marshal(object)
+}
+
+// Getter for additional properties for FactoryWebhookFilter. Returns the specified
+// element and whether it was found
+func (a FactoryWebhookFilter) Get(fieldName string) (value interface{}, found bool) {
+	if a.AdditionalProperties != nil {
+		value, found = a.AdditionalProperties[fieldName]
+	}
+	return
+}
+
+// Setter for additional properties for FactoryWebhookFilter
+func (a *FactoryWebhookFilter) Set(fieldName string, value interface{}) {
+	if a.AdditionalProperties == nil {
+		a.AdditionalProperties = make(map[string]interface{})
+	}
+	a.AdditionalProperties[fieldName] = value
+}
+
+// Override default JSON handling for FactoryWebhookFilter to handle AdditionalProperties
+func (a *FactoryWebhookFilter) UnmarshalJSON(b []byte) error {
+	object := make(map[string]json.RawMessage)
+	err := json.Unmarshal(b, &object)
+	if err != nil {
+		return err
+	}
+
+	if raw, found := object["dispatchStatuses"]; found {
+		err = json.Unmarshal(raw, &a.DispatchStatuses)
+		if err != nil {
+			return fmt.Errorf("error reading 'dispatchStatuses': %w", err)
+		}
+		delete(object, "dispatchStatuses")
+	}
+
+	if raw, found := object["eventTypes"]; found {
+		err = json.Unmarshal(raw, &a.EventTypes)
+		if err != nil {
+			return fmt.Errorf("error reading 'eventTypes': %w", err)
+		}
+		delete(object, "eventTypes")
+	}
+
+	if len(object) != 0 {
+		a.AdditionalProperties = make(map[string]interface{})
+		for fieldName, fieldBuf := range object {
+			var fieldVal interface{}
+			err := json.Unmarshal(fieldBuf, &fieldVal)
+			if err != nil {
+				return fmt.Errorf("error unmarshaling field %s: %w", fieldName, err)
+			}
+			a.AdditionalProperties[fieldName] = fieldVal
+		}
+	}
+	return nil
+}
+
+// Override default JSON handling for FactoryWebhookFilter to handle AdditionalProperties
+func (a FactoryWebhookFilter) MarshalJSON() ([]byte, error) {
+	var err error
+	object := make(map[string]json.RawMessage)
+
+	if a.DispatchStatuses != nil {
+		object["dispatchStatuses"], err = json.Marshal(a.DispatchStatuses)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'dispatchStatuses': %w", err)
+		}
+	}
+
+	if a.EventTypes != nil {
+		object["eventTypes"], err = json.Marshal(a.EventTypes)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'eventTypes': %w", err)
+		}
+	}
+
+	for fieldName, field := range a.AdditionalProperties {
+		object[fieldName], err = json.Marshal(field)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling '%s': %w", fieldName, err)
+		}
+	}
+	return json.Marshal(object)
+}
+
+// Getter for additional properties for GlobalConfig. Returns the specified
+// element and whether it was found
+func (a GlobalConfig) Get(fieldName string) (value interface{}, found bool) {
+	if a.AdditionalProperties != nil {
+		value, found = a.AdditionalProperties[fieldName]
+	}
+	return
+}
+
+// Setter for additional properties for GlobalConfig
+func (a *GlobalConfig) Set(fieldName string, value interface{}) {
+	if a.AdditionalProperties == nil {
+		a.AdditionalProperties = make(map[string]interface{})
+	}
+	a.AdditionalProperties[fieldName] = value
+}
+
+// Override default JSON handling for GlobalConfig to handle AdditionalProperties
+func (a *GlobalConfig) UnmarshalJSON(b []byte) error {
+	object := make(map[string]json.RawMessage)
+	err := json.Unmarshal(b, &object)
+	if err != nil {
+		return err
+	}
+
+	if raw, found := object["backendScopeID"]; found {
+		err = json.Unmarshal(raw, &a.BackendScopeID)
+		if err != nil {
+			return fmt.Errorf("error reading 'backendScopeID': %w", err)
+		}
+		delete(object, "backendScopeID")
+	}
+
+	if raw, found := object["defaults"]; found {
+		err = json.Unmarshal(raw, &a.Defaults)
+		if err != nil {
+			return fmt.Errorf("error reading 'defaults': %w", err)
+		}
+		delete(object, "defaults")
+	}
+
+	if raw, found := object["models"]; found {
+		err = json.Unmarshal(raw, &a.Models)
+		if err != nil {
+			return fmt.Errorf("error reading 'models': %w", err)
+		}
+		delete(object, "models")
+	}
+
+	if raw, found := object["priceTable"]; found {
+		err = json.Unmarshal(raw, &a.PriceTable)
+		if err != nil {
+			return fmt.Errorf("error reading 'priceTable': %w", err)
+		}
+		delete(object, "priceTable")
+	}
+
+	if raw, found := object["runtime"]; found {
+		err = json.Unmarshal(raw, &a.Runtime)
+		if err != nil {
+			return fmt.Errorf("error reading 'runtime': %w", err)
+		}
+		delete(object, "runtime")
+	}
+
+	if raw, found := object["workerPresets"]; found {
+		err = json.Unmarshal(raw, &a.WorkerPresets)
+		if err != nil {
+			return fmt.Errorf("error reading 'workerPresets': %w", err)
+		}
+		delete(object, "workerPresets")
+	}
+
+	if raw, found := object["workers"]; found {
+		err = json.Unmarshal(raw, &a.Workers)
+		if err != nil {
+			return fmt.Errorf("error reading 'workers': %w", err)
+		}
+		delete(object, "workers")
+	}
+
+	if len(object) != 0 {
+		a.AdditionalProperties = make(map[string]interface{})
+		for fieldName, fieldBuf := range object {
+			var fieldVal interface{}
+			err := json.Unmarshal(fieldBuf, &fieldVal)
+			if err != nil {
+				return fmt.Errorf("error unmarshaling field %s: %w", fieldName, err)
+			}
+			a.AdditionalProperties[fieldName] = fieldVal
+		}
+	}
+	return nil
+}
+
+// Override default JSON handling for GlobalConfig to handle AdditionalProperties
+func (a GlobalConfig) MarshalJSON() ([]byte, error) {
+	var err error
+	object := make(map[string]json.RawMessage)
+
+	if a.BackendScopeID != nil {
+		object["backendScopeID"], err = json.Marshal(a.BackendScopeID)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'backendScopeID': %w", err)
+		}
+	}
+
+	if a.Defaults != nil {
+		object["defaults"], err = json.Marshal(a.Defaults)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'defaults': %w", err)
+		}
+	}
+
+	if a.Models != nil {
+		object["models"], err = json.Marshal(a.Models)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'models': %w", err)
+		}
+	}
+
+	if a.PriceTable != nil {
+		object["priceTable"], err = json.Marshal(a.PriceTable)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'priceTable': %w", err)
+		}
+	}
+
+	if a.Runtime != nil {
+		object["runtime"], err = json.Marshal(a.Runtime)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'runtime': %w", err)
+		}
+	}
+
+	if a.WorkerPresets != nil {
+		object["workerPresets"], err = json.Marshal(a.WorkerPresets)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'workerPresets': %w", err)
+		}
+	}
+
+	if a.Workers != nil {
+		object["workers"], err = json.Marshal(a.Workers)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'workers': %w", err)
+		}
+	}
+
+	for fieldName, field := range a.AdditionalProperties {
+		object[fieldName], err = json.Marshal(field)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling '%s': %w", fieldName, err)
+		}
+	}
+	return json.Marshal(object)
+}
+
+// Getter for additional properties for GlobalConfigACPSettings. Returns the specified
+// element and whether it was found
+func (a GlobalConfigACPSettings) Get(fieldName string) (value interface{}, found bool) {
+	if a.AdditionalProperties != nil {
+		value, found = a.AdditionalProperties[fieldName]
+	}
+	return
+}
+
+// Setter for additional properties for GlobalConfigACPSettings
+func (a *GlobalConfigACPSettings) Set(fieldName string, value interface{}) {
+	if a.AdditionalProperties == nil {
+		a.AdditionalProperties = make(map[string]interface{})
+	}
+	a.AdditionalProperties[fieldName] = value
+}
+
+// Override default JSON handling for GlobalConfigACPSettings to handle AdditionalProperties
+func (a *GlobalConfigACPSettings) UnmarshalJSON(b []byte) error {
+	object := make(map[string]json.RawMessage)
+	err := json.Unmarshal(b, &object)
+	if err != nil {
+		return err
+	}
+
+	if raw, found := object["agentProfile"]; found {
+		err = json.Unmarshal(raw, &a.AgentProfile)
+		if err != nil {
+			return fmt.Errorf("error reading 'agentProfile': %w", err)
+		}
+		delete(object, "agentProfile")
+	}
+
+	if raw, found := object["integrations"]; found {
+		err = json.Unmarshal(raw, &a.Integrations)
+		if err != nil {
+			return fmt.Errorf("error reading 'integrations': %w", err)
+		}
+		delete(object, "integrations")
+	}
+
+	if len(object) != 0 {
+		a.AdditionalProperties = make(map[string]interface{})
+		for fieldName, fieldBuf := range object {
+			var fieldVal interface{}
+			err := json.Unmarshal(fieldBuf, &fieldVal)
+			if err != nil {
+				return fmt.Errorf("error unmarshaling field %s: %w", fieldName, err)
+			}
+			a.AdditionalProperties[fieldName] = fieldVal
+		}
+	}
+	return nil
+}
+
+// Override default JSON handling for GlobalConfigACPSettings to handle AdditionalProperties
+func (a GlobalConfigACPSettings) MarshalJSON() ([]byte, error) {
+	var err error
+	object := make(map[string]json.RawMessage)
+
+	if a.AgentProfile != nil {
+		object["agentProfile"], err = json.Marshal(a.AgentProfile)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'agentProfile': %w", err)
+		}
+	}
+
+	if a.Integrations != nil {
+		object["integrations"], err = json.Marshal(a.Integrations)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'integrations': %w", err)
+		}
+	}
+
+	for fieldName, field := range a.AdditionalProperties {
+		object[fieldName], err = json.Marshal(field)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling '%s': %w", fieldName, err)
+		}
+	}
+	return json.Marshal(object)
+}
+
+// Getter for additional properties for GlobalConfigDefaults. Returns the specified
+// element and whether it was found
+func (a GlobalConfigDefaults) Get(fieldName string) (value interface{}, found bool) {
+	if a.AdditionalProperties != nil {
+		value, found = a.AdditionalProperties[fieldName]
+	}
+	return
+}
+
+// Setter for additional properties for GlobalConfigDefaults
+func (a *GlobalConfigDefaults) Set(fieldName string, value interface{}) {
+	if a.AdditionalProperties == nil {
+		a.AdditionalProperties = make(map[string]interface{})
+	}
+	a.AdditionalProperties[fieldName] = value
+}
+
+// Override default JSON handling for GlobalConfigDefaults to handle AdditionalProperties
+func (a *GlobalConfigDefaults) UnmarshalJSON(b []byte) error {
+	object := make(map[string]json.RawMessage)
+	err := json.Unmarshal(b, &object)
+	if err != nil {
+		return err
+	}
+
+	if raw, found := object["workerModel"]; found {
+		err = json.Unmarshal(raw, &a.WorkerModel)
+		if err != nil {
+			return fmt.Errorf("error reading 'workerModel': %w", err)
+		}
+		delete(object, "workerModel")
+	}
+
+	if raw, found := object["workerModelProvider"]; found {
+		err = json.Unmarshal(raw, &a.WorkerModelProvider)
+		if err != nil {
+			return fmt.Errorf("error reading 'workerModelProvider': %w", err)
+		}
+		delete(object, "workerModelProvider")
+	}
+
+	if len(object) != 0 {
+		a.AdditionalProperties = make(map[string]interface{})
+		for fieldName, fieldBuf := range object {
+			var fieldVal interface{}
+			err := json.Unmarshal(fieldBuf, &fieldVal)
+			if err != nil {
+				return fmt.Errorf("error unmarshaling field %s: %w", fieldName, err)
+			}
+			a.AdditionalProperties[fieldName] = fieldVal
+		}
+	}
+	return nil
+}
+
+// Override default JSON handling for GlobalConfigDefaults to handle AdditionalProperties
+func (a GlobalConfigDefaults) MarshalJSON() ([]byte, error) {
+	var err error
+	object := make(map[string]json.RawMessage)
+
+	if a.WorkerModel != nil {
+		object["workerModel"], err = json.Marshal(a.WorkerModel)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'workerModel': %w", err)
+		}
+	}
+
+	if a.WorkerModelProvider != nil {
+		object["workerModelProvider"], err = json.Marshal(a.WorkerModelProvider)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'workerModelProvider': %w", err)
+		}
+	}
+
+	for fieldName, field := range a.AdditionalProperties {
+		object[fieldName], err = json.Marshal(field)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling '%s': %w", fieldName, err)
+		}
+	}
+	return json.Marshal(object)
+}
+
+// Getter for additional properties for GlobalConfigModel. Returns the specified
+// element and whether it was found
+func (a GlobalConfigModel) Get(fieldName string) (value interface{}, found bool) {
+	if a.AdditionalProperties != nil {
+		value, found = a.AdditionalProperties[fieldName]
+	}
+	return
+}
+
+// Setter for additional properties for GlobalConfigModel
+func (a *GlobalConfigModel) Set(fieldName string, value interface{}) {
+	if a.AdditionalProperties == nil {
+		a.AdditionalProperties = make(map[string]interface{})
+	}
+	a.AdditionalProperties[fieldName] = value
+}
+
+// Override default JSON handling for GlobalConfigModel to handle AdditionalProperties
+func (a *GlobalConfigModel) UnmarshalJSON(b []byte) error {
+	object := make(map[string]json.RawMessage)
+	err := json.Unmarshal(b, &object)
+	if err != nil {
+		return err
+	}
+
+	if raw, found := object["backend"]; found {
+		err = json.Unmarshal(raw, &a.Backend)
+		if err != nil {
+			return fmt.Errorf("error reading 'backend': %w", err)
+		}
+		delete(object, "backend")
+	}
+
+	if raw, found := object["loadPolicy"]; found {
+		err = json.Unmarshal(raw, &a.LoadPolicy)
+		if err != nil {
+			return fmt.Errorf("error reading 'loadPolicy': %w", err)
+		}
+		delete(object, "loadPolicy")
+	}
+
+	if raw, found := object["operations"]; found {
+		err = json.Unmarshal(raw, &a.Operations)
+		if err != nil {
+			return fmt.Errorf("error reading 'operations': %w", err)
+		}
+		delete(object, "operations")
+	}
+
+	if raw, found := object["source"]; found {
+		err = json.Unmarshal(raw, &a.Source)
+		if err != nil {
+			return fmt.Errorf("error reading 'source': %w", err)
+		}
+		delete(object, "source")
+	}
+
+	if len(object) != 0 {
+		a.AdditionalProperties = make(map[string]interface{})
+		for fieldName, fieldBuf := range object {
+			var fieldVal interface{}
+			err := json.Unmarshal(fieldBuf, &fieldVal)
+			if err != nil {
+				return fmt.Errorf("error unmarshaling field %s: %w", fieldName, err)
+			}
+			a.AdditionalProperties[fieldName] = fieldVal
+		}
+	}
+	return nil
+}
+
+// Override default JSON handling for GlobalConfigModel to handle AdditionalProperties
+func (a GlobalConfigModel) MarshalJSON() ([]byte, error) {
+	var err error
+	object := make(map[string]json.RawMessage)
+
+	if a.Backend != nil {
+		object["backend"], err = json.Marshal(a.Backend)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'backend': %w", err)
+		}
+	}
+
+	if a.LoadPolicy != nil {
+		object["loadPolicy"], err = json.Marshal(a.LoadPolicy)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'loadPolicy': %w", err)
+		}
+	}
+
+	if a.Operations != nil {
+		object["operations"], err = json.Marshal(a.Operations)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'operations': %w", err)
+		}
+	}
+
+	if a.Source != nil {
+		object["source"], err = json.Marshal(a.Source)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'source': %w", err)
+		}
+	}
+
+	for fieldName, field := range a.AdditionalProperties {
+		object[fieldName], err = json.Marshal(field)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling '%s': %w", fieldName, err)
+		}
+	}
+	return json.Marshal(object)
+}
+
+// Getter for additional properties for GlobalConfigPriceTable. Returns the specified
+// element and whether it was found
+func (a GlobalConfigPriceTable) Get(fieldName string) (value interface{}, found bool) {
+	if a.AdditionalProperties != nil {
+		value, found = a.AdditionalProperties[fieldName]
+	}
+	return
+}
+
+// Setter for additional properties for GlobalConfigPriceTable
+func (a *GlobalConfigPriceTable) Set(fieldName string, value interface{}) {
+	if a.AdditionalProperties == nil {
+		a.AdditionalProperties = make(map[string]interface{})
+	}
+	a.AdditionalProperties[fieldName] = value
+}
+
+// Override default JSON handling for GlobalConfigPriceTable to handle AdditionalProperties
+func (a *GlobalConfigPriceTable) UnmarshalJSON(b []byte) error {
+	object := make(map[string]json.RawMessage)
+	err := json.Unmarshal(b, &object)
+	if err != nil {
+		return err
+	}
+
+	if raw, found := object["currency"]; found {
+		err = json.Unmarshal(raw, &a.Currency)
+		if err != nil {
+			return fmt.Errorf("error reading 'currency': %w", err)
+		}
+		delete(object, "currency")
+	}
+
+	if raw, found := object["models"]; found {
+		err = json.Unmarshal(raw, &a.Models)
+		if err != nil {
+			return fmt.Errorf("error reading 'models': %w", err)
+		}
+		delete(object, "models")
+	}
+
+	if len(object) != 0 {
+		a.AdditionalProperties = make(map[string]interface{})
+		for fieldName, fieldBuf := range object {
+			var fieldVal interface{}
+			err := json.Unmarshal(fieldBuf, &fieldVal)
+			if err != nil {
+				return fmt.Errorf("error unmarshaling field %s: %w", fieldName, err)
+			}
+			a.AdditionalProperties[fieldName] = fieldVal
+		}
+	}
+	return nil
+}
+
+// Override default JSON handling for GlobalConfigPriceTable to handle AdditionalProperties
+func (a GlobalConfigPriceTable) MarshalJSON() ([]byte, error) {
+	var err error
+	object := make(map[string]json.RawMessage)
+
+	object["currency"], err = json.Marshal(a.Currency)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling 'currency': %w", err)
+	}
+
+	if a.Models != nil {
+		object["models"], err = json.Marshal(a.Models)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'models': %w", err)
+		}
+	}
+
+	for fieldName, field := range a.AdditionalProperties {
+		object[fieldName], err = json.Marshal(field)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling '%s': %w", fieldName, err)
+		}
+	}
+	return json.Marshal(object)
+}
+
+// Getter for additional properties for GlobalConfigPriceTableModel. Returns the specified
+// element and whether it was found
+func (a GlobalConfigPriceTableModel) Get(fieldName string) (value interface{}, found bool) {
+	if a.AdditionalProperties != nil {
+		value, found = a.AdditionalProperties[fieldName]
+	}
+	return
+}
+
+// Setter for additional properties for GlobalConfigPriceTableModel
+func (a *GlobalConfigPriceTableModel) Set(fieldName string, value interface{}) {
+	if a.AdditionalProperties == nil {
+		a.AdditionalProperties = make(map[string]interface{})
+	}
+	a.AdditionalProperties[fieldName] = value
+}
+
+// Override default JSON handling for GlobalConfigPriceTableModel to handle AdditionalProperties
+func (a *GlobalConfigPriceTableModel) UnmarshalJSON(b []byte) error {
+	object := make(map[string]json.RawMessage)
+	err := json.Unmarshal(b, &object)
+	if err != nil {
+		return err
+	}
+
+	if raw, found := object["cachedInputPerMillionTokens"]; found {
+		err = json.Unmarshal(raw, &a.CachedInputPerMillionTokens)
+		if err != nil {
+			return fmt.Errorf("error reading 'cachedInputPerMillionTokens': %w", err)
+		}
+		delete(object, "cachedInputPerMillionTokens")
+	}
+
+	if raw, found := object["inputPerMillionTokens"]; found {
+		err = json.Unmarshal(raw, &a.InputPerMillionTokens)
+		if err != nil {
+			return fmt.Errorf("error reading 'inputPerMillionTokens': %w", err)
+		}
+		delete(object, "inputPerMillionTokens")
+	}
+
+	if raw, found := object["model"]; found {
+		err = json.Unmarshal(raw, &a.Model)
+		if err != nil {
+			return fmt.Errorf("error reading 'model': %w", err)
+		}
+		delete(object, "model")
+	}
+
+	if raw, found := object["outputPerMillionTokens"]; found {
+		err = json.Unmarshal(raw, &a.OutputPerMillionTokens)
+		if err != nil {
+			return fmt.Errorf("error reading 'outputPerMillionTokens': %w", err)
+		}
+		delete(object, "outputPerMillionTokens")
+	}
+
+	if raw, found := object["provider"]; found {
+		err = json.Unmarshal(raw, &a.Provider)
+		if err != nil {
+			return fmt.Errorf("error reading 'provider': %w", err)
+		}
+		delete(object, "provider")
+	}
+
+	if raw, found := object["reasoningOutputPerMillionTokens"]; found {
+		err = json.Unmarshal(raw, &a.ReasoningOutputPerMillionTokens)
+		if err != nil {
+			return fmt.Errorf("error reading 'reasoningOutputPerMillionTokens': %w", err)
+		}
+		delete(object, "reasoningOutputPerMillionTokens")
+	}
+
+	if len(object) != 0 {
+		a.AdditionalProperties = make(map[string]interface{})
+		for fieldName, fieldBuf := range object {
+			var fieldVal interface{}
+			err := json.Unmarshal(fieldBuf, &fieldVal)
+			if err != nil {
+				return fmt.Errorf("error unmarshaling field %s: %w", fieldName, err)
+			}
+			a.AdditionalProperties[fieldName] = fieldVal
+		}
+	}
+	return nil
+}
+
+// Override default JSON handling for GlobalConfigPriceTableModel to handle AdditionalProperties
+func (a GlobalConfigPriceTableModel) MarshalJSON() ([]byte, error) {
+	var err error
+	object := make(map[string]json.RawMessage)
+
+	if a.CachedInputPerMillionTokens != nil {
+		object["cachedInputPerMillionTokens"], err = json.Marshal(a.CachedInputPerMillionTokens)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'cachedInputPerMillionTokens': %w", err)
+		}
+	}
+
+	object["inputPerMillionTokens"], err = json.Marshal(a.InputPerMillionTokens)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling 'inputPerMillionTokens': %w", err)
+	}
+
+	object["model"], err = json.Marshal(a.Model)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling 'model': %w", err)
+	}
+
+	object["outputPerMillionTokens"], err = json.Marshal(a.OutputPerMillionTokens)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling 'outputPerMillionTokens': %w", err)
+	}
+
+	object["provider"], err = json.Marshal(a.Provider)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling 'provider': %w", err)
+	}
+
+	if a.ReasoningOutputPerMillionTokens != nil {
+		object["reasoningOutputPerMillionTokens"], err = json.Marshal(a.ReasoningOutputPerMillionTokens)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'reasoningOutputPerMillionTokens': %w", err)
+		}
+	}
+
+	for fieldName, field := range a.AdditionalProperties {
+		object[fieldName], err = json.Marshal(field)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling '%s': %w", fieldName, err)
+		}
+	}
+	return json.Marshal(object)
+}
+
+// Getter for additional properties for GlobalConfigRuntime. Returns the specified
+// element and whether it was found
+func (a GlobalConfigRuntime) Get(fieldName string) (value interface{}, found bool) {
+	if a.AdditionalProperties != nil {
+		value, found = a.AdditionalProperties[fieldName]
+	}
+	return
+}
+
+// Setter for additional properties for GlobalConfigRuntime
+func (a *GlobalConfigRuntime) Set(fieldName string, value interface{}) {
+	if a.AdditionalProperties == nil {
+		a.AdditionalProperties = make(map[string]interface{})
+	}
+	a.AdditionalProperties[fieldName] = value
+}
+
+// Override default JSON handling for GlobalConfigRuntime to handle AdditionalProperties
+func (a *GlobalConfigRuntime) UnmarshalJSON(b []byte) error {
+	object := make(map[string]json.RawMessage)
+	err := json.Unmarshal(b, &object)
+	if err != nil {
+		return err
+	}
+
+	if raw, found := object["logging"]; found {
+		err = json.Unmarshal(raw, &a.Logging)
+		if err != nil {
+			return fmt.Errorf("error reading 'logging': %w", err)
+		}
+		delete(object, "logging")
+	}
+
+	if raw, found := object["metrics"]; found {
+		err = json.Unmarshal(raw, &a.Metrics)
+		if err != nil {
+			return fmt.Errorf("error reading 'metrics': %w", err)
+		}
+		delete(object, "metrics")
+	}
+
+	if len(object) != 0 {
+		a.AdditionalProperties = make(map[string]interface{})
+		for fieldName, fieldBuf := range object {
+			var fieldVal interface{}
+			err := json.Unmarshal(fieldBuf, &fieldVal)
+			if err != nil {
+				return fmt.Errorf("error unmarshaling field %s: %w", fieldName, err)
+			}
+			a.AdditionalProperties[fieldName] = fieldVal
+		}
+	}
+	return nil
+}
+
+// Override default JSON handling for GlobalConfigRuntime to handle AdditionalProperties
+func (a GlobalConfigRuntime) MarshalJSON() ([]byte, error) {
+	var err error
+	object := make(map[string]json.RawMessage)
+
+	if a.Logging != nil {
+		object["logging"], err = json.Marshal(a.Logging)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'logging': %w", err)
+		}
+	}
+
+	if a.Metrics != nil {
+		object["metrics"], err = json.Marshal(a.Metrics)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'metrics': %w", err)
+		}
+	}
+
+	for fieldName, field := range a.AdditionalProperties {
+		object[fieldName], err = json.Marshal(field)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling '%s': %w", fieldName, err)
+		}
+	}
+	return json.Marshal(object)
+}
+
+// Getter for additional properties for GlobalConfigRuntimeArtifactSettings. Returns the specified
+// element and whether it was found
+func (a GlobalConfigRuntimeArtifactSettings) Get(fieldName string) (value interface{}, found bool) {
+	if a.AdditionalProperties != nil {
+		value, found = a.AdditionalProperties[fieldName]
+	}
+	return
+}
+
+// Setter for additional properties for GlobalConfigRuntimeArtifactSettings
+func (a *GlobalConfigRuntimeArtifactSettings) Set(fieldName string, value interface{}) {
+	if a.AdditionalProperties == nil {
+		a.AdditionalProperties = make(map[string]interface{})
+	}
+	a.AdditionalProperties[fieldName] = value
+}
+
+// Override default JSON handling for GlobalConfigRuntimeArtifactSettings to handle AdditionalProperties
+func (a *GlobalConfigRuntimeArtifactSettings) UnmarshalJSON(b []byte) error {
+	object := make(map[string]json.RawMessage)
+	err := json.Unmarshal(b, &object)
+	if err != nil {
+		return err
+	}
+
+	if raw, found := object["compress"]; found {
+		err = json.Unmarshal(raw, &a.Compress)
+		if err != nil {
+			return fmt.Errorf("error reading 'compress': %w", err)
+		}
+		delete(object, "compress")
+	}
+
+	if raw, found := object["directory"]; found {
+		err = json.Unmarshal(raw, &a.Directory)
+		if err != nil {
+			return fmt.Errorf("error reading 'directory': %w", err)
+		}
+		delete(object, "directory")
+	}
+
+	if raw, found := object["maxAgeDays"]; found {
+		err = json.Unmarshal(raw, &a.MaxAgeDays)
+		if err != nil {
+			return fmt.Errorf("error reading 'maxAgeDays': %w", err)
+		}
+		delete(object, "maxAgeDays")
+	}
+
+	if raw, found := object["maxBackups"]; found {
+		err = json.Unmarshal(raw, &a.MaxBackups)
+		if err != nil {
+			return fmt.Errorf("error reading 'maxBackups': %w", err)
+		}
+		delete(object, "maxBackups")
+	}
+
+	if raw, found := object["maxSizeMB"]; found {
+		err = json.Unmarshal(raw, &a.MaxSizeMB)
+		if err != nil {
+			return fmt.Errorf("error reading 'maxSizeMB': %w", err)
+		}
+		delete(object, "maxSizeMB")
+	}
+
+	if len(object) != 0 {
+		a.AdditionalProperties = make(map[string]interface{})
+		for fieldName, fieldBuf := range object {
+			var fieldVal interface{}
+			err := json.Unmarshal(fieldBuf, &fieldVal)
+			if err != nil {
+				return fmt.Errorf("error unmarshaling field %s: %w", fieldName, err)
+			}
+			a.AdditionalProperties[fieldName] = fieldVal
+		}
+	}
+	return nil
+}
+
+// Override default JSON handling for GlobalConfigRuntimeArtifactSettings to handle AdditionalProperties
+func (a GlobalConfigRuntimeArtifactSettings) MarshalJSON() ([]byte, error) {
+	var err error
+	object := make(map[string]json.RawMessage)
+
+	if a.Compress != nil {
+		object["compress"], err = json.Marshal(a.Compress)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'compress': %w", err)
+		}
+	}
+
+	if a.Directory != nil {
+		object["directory"], err = json.Marshal(a.Directory)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'directory': %w", err)
+		}
+	}
+
+	if a.MaxAgeDays != nil {
+		object["maxAgeDays"], err = json.Marshal(a.MaxAgeDays)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'maxAgeDays': %w", err)
+		}
+	}
+
+	if a.MaxBackups != nil {
+		object["maxBackups"], err = json.Marshal(a.MaxBackups)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'maxBackups': %w", err)
+		}
+	}
+
+	if a.MaxSizeMB != nil {
+		object["maxSizeMB"], err = json.Marshal(a.MaxSizeMB)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'maxSizeMB': %w", err)
+		}
+	}
+
+	for fieldName, field := range a.AdditionalProperties {
+		object[fieldName], err = json.Marshal(field)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling '%s': %w", fieldName, err)
+		}
+	}
+	return json.Marshal(object)
+}
+
+// Getter for additional properties for GlobalConfigWorkerPreset. Returns the specified
+// element and whether it was found
+func (a GlobalConfigWorkerPreset) Get(fieldName string) (value interface{}, found bool) {
+	if a.AdditionalProperties != nil {
+		value, found = a.AdditionalProperties[fieldName]
+	}
+	return
+}
+
+// Setter for additional properties for GlobalConfigWorkerPreset
+func (a *GlobalConfigWorkerPreset) Set(fieldName string, value interface{}) {
+	if a.AdditionalProperties == nil {
+		a.AdditionalProperties = make(map[string]interface{})
+	}
+	a.AdditionalProperties[fieldName] = value
+}
+
+// Override default JSON handling for GlobalConfigWorkerPreset to handle AdditionalProperties
+func (a *GlobalConfigWorkerPreset) UnmarshalJSON(b []byte) error {
+	object := make(map[string]json.RawMessage)
+	err := json.Unmarshal(b, &object)
+	if err != nil {
+		return err
+	}
+
+	if raw, found := object["id"]; found {
+		err = json.Unmarshal(raw, &a.Id)
+		if err != nil {
+			return fmt.Errorf("error reading 'id': %w", err)
+		}
+		delete(object, "id")
+	}
+
+	if raw, found := object["model"]; found {
+		err = json.Unmarshal(raw, &a.Model)
+		if err != nil {
+			return fmt.Errorf("error reading 'model': %w", err)
+		}
+		delete(object, "model")
+	}
+
+	if raw, found := object["modelProvider"]; found {
+		err = json.Unmarshal(raw, &a.ModelProvider)
+		if err != nil {
+			return fmt.Errorf("error reading 'modelProvider': %w", err)
+		}
+		delete(object, "modelProvider")
+	}
+
+	if raw, found := object["reasoningEffort"]; found {
+		err = json.Unmarshal(raw, &a.ReasoningEffort)
+		if err != nil {
+			return fmt.Errorf("error reading 'reasoningEffort': %w", err)
+		}
+		delete(object, "reasoningEffort")
+	}
+
+	if len(object) != 0 {
+		a.AdditionalProperties = make(map[string]interface{})
+		for fieldName, fieldBuf := range object {
+			var fieldVal interface{}
+			err := json.Unmarshal(fieldBuf, &fieldVal)
+			if err != nil {
+				return fmt.Errorf("error unmarshaling field %s: %w", fieldName, err)
+			}
+			a.AdditionalProperties[fieldName] = fieldVal
+		}
+	}
+	return nil
+}
+
+// Override default JSON handling for GlobalConfigWorkerPreset to handle AdditionalProperties
+func (a GlobalConfigWorkerPreset) MarshalJSON() ([]byte, error) {
+	var err error
+	object := make(map[string]json.RawMessage)
+
+	object["id"], err = json.Marshal(a.Id)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling 'id': %w", err)
+	}
+
+	if a.Model != nil {
+		object["model"], err = json.Marshal(a.Model)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'model': %w", err)
+		}
+	}
+
+	object["modelProvider"], err = json.Marshal(a.ModelProvider)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling 'modelProvider': %w", err)
+	}
+
+	if a.ReasoningEffort != nil {
+		object["reasoningEffort"], err = json.Marshal(a.ReasoningEffort)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'reasoningEffort': %w", err)
+		}
+	}
+
+	for fieldName, field := range a.AdditionalProperties {
+		object[fieldName], err = json.Marshal(field)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling '%s': %w", fieldName, err)
+		}
+	}
+	return json.Marshal(object)
+}
+
+// Getter for additional properties for GlobalConfigWorkers. Returns the specified
+// element and whether it was found
+func (a GlobalConfigWorkers) Get(fieldName string) (value interface{}, found bool) {
+	if a.AdditionalProperties != nil {
+		value, found = a.AdditionalProperties[fieldName]
+	}
+	return
+}
+
+// Setter for additional properties for GlobalConfigWorkers
+func (a *GlobalConfigWorkers) Set(fieldName string, value interface{}) {
+	if a.AdditionalProperties == nil {
+		a.AdditionalProperties = make(map[string]interface{})
+	}
+	a.AdditionalProperties[fieldName] = value
+}
+
+// Override default JSON handling for GlobalConfigWorkers to handle AdditionalProperties
+func (a *GlobalConfigWorkers) UnmarshalJSON(b []byte) error {
+	object := make(map[string]json.RawMessage)
+	err := json.Unmarshal(b, &object)
+	if err != nil {
+		return err
+	}
+
+	if raw, found := object["acp"]; found {
+		err = json.Unmarshal(raw, &a.Acp)
+		if err != nil {
+			return fmt.Errorf("error reading 'acp': %w", err)
+		}
+		delete(object, "acp")
+	}
+
+	if len(object) != 0 {
+		a.AdditionalProperties = make(map[string]interface{})
+		for fieldName, fieldBuf := range object {
+			var fieldVal interface{}
+			err := json.Unmarshal(fieldBuf, &fieldVal)
+			if err != nil {
+				return fmt.Errorf("error unmarshaling field %s: %w", fieldName, err)
+			}
+			a.AdditionalProperties[fieldName] = fieldVal
+		}
+	}
+	return nil
+}
+
+// Override default JSON handling for GlobalConfigWorkers to handle AdditionalProperties
+func (a GlobalConfigWorkers) MarshalJSON() ([]byte, error) {
+	var err error
+	object := make(map[string]json.RawMessage)
+
+	if a.Acp != nil {
+		object["acp"], err = json.Marshal(a.Acp)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'acp': %w", err)
+		}
+	}
+
+	for fieldName, field := range a.AdditionalProperties {
+		object[fieldName], err = json.Marshal(field)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling '%s': %w", fieldName, err)
+		}
+	}
+	return json.Marshal(object)
+}
+
+// Getter for additional properties for Guard. Returns the specified
+// element and whether it was found
+func (a Guard) Get(fieldName string) (value interface{}, found bool) {
+	if a.AdditionalProperties != nil {
+		value, found = a.AdditionalProperties[fieldName]
+	}
+	return
+}
+
+// Setter for additional properties for Guard
+func (a *Guard) Set(fieldName string, value interface{}) {
+	if a.AdditionalProperties == nil {
+		a.AdditionalProperties = make(map[string]interface{})
+	}
+	a.AdditionalProperties[fieldName] = value
+}
+
+// Override default JSON handling for Guard to handle AdditionalProperties
+func (a *Guard) UnmarshalJSON(b []byte) error {
+	object := make(map[string]json.RawMessage)
+	err := json.Unmarshal(b, &object)
+	if err != nil {
+		return err
+	}
+
+	if raw, found := object["matchConfig"]; found {
+		err = json.Unmarshal(raw, &a.MatchConfig)
+		if err != nil {
+			return fmt.Errorf("error reading 'matchConfig': %w", err)
+		}
+		delete(object, "matchConfig")
+	}
+
+	if raw, found := object["matchInput"]; found {
+		err = json.Unmarshal(raw, &a.MatchInput)
+		if err != nil {
+			return fmt.Errorf("error reading 'matchInput': %w", err)
+		}
+		delete(object, "matchInput")
+	}
+
+	if raw, found := object["maxVisits"]; found {
+		err = json.Unmarshal(raw, &a.MaxVisits)
+		if err != nil {
+			return fmt.Errorf("error reading 'maxVisits': %w", err)
+		}
+		delete(object, "maxVisits")
+	}
+
+	if raw, found := object["maxVisitsArgument"]; found {
+		err = json.Unmarshal(raw, &a.MaxVisitsArgument)
+		if err != nil {
+			return fmt.Errorf("error reading 'maxVisitsArgument': %w", err)
+		}
+		delete(object, "maxVisitsArgument")
+	}
+
+	if raw, found := object["parentInput"]; found {
+		err = json.Unmarshal(raw, &a.ParentInput)
+		if err != nil {
+			return fmt.Errorf("error reading 'parentInput': %w", err)
+		}
+		delete(object, "parentInput")
+	}
+
+	if raw, found := object["spawnedBy"]; found {
+		err = json.Unmarshal(raw, &a.SpawnedBy)
+		if err != nil {
+			return fmt.Errorf("error reading 'spawnedBy': %w", err)
+		}
+		delete(object, "spawnedBy")
+	}
+
+	if raw, found := object["type"]; found {
+		err = json.Unmarshal(raw, &a.Type)
+		if err != nil {
+			return fmt.Errorf("error reading 'type': %w", err)
+		}
+		delete(object, "type")
+	}
+
+	if raw, found := object["workstation"]; found {
+		err = json.Unmarshal(raw, &a.Workstation)
+		if err != nil {
+			return fmt.Errorf("error reading 'workstation': %w", err)
+		}
+		delete(object, "workstation")
+	}
+
+	if len(object) != 0 {
+		a.AdditionalProperties = make(map[string]interface{})
+		for fieldName, fieldBuf := range object {
+			var fieldVal interface{}
+			err := json.Unmarshal(fieldBuf, &fieldVal)
+			if err != nil {
+				return fmt.Errorf("error unmarshaling field %s: %w", fieldName, err)
+			}
+			a.AdditionalProperties[fieldName] = fieldVal
+		}
+	}
+	return nil
+}
+
+// Override default JSON handling for Guard to handle AdditionalProperties
+func (a Guard) MarshalJSON() ([]byte, error) {
+	var err error
+	object := make(map[string]json.RawMessage)
+
+	if a.MatchConfig != nil {
+		object["matchConfig"], err = json.Marshal(a.MatchConfig)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'matchConfig': %w", err)
+		}
+	}
+
+	if a.MatchInput != nil {
+		object["matchInput"], err = json.Marshal(a.MatchInput)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'matchInput': %w", err)
+		}
+	}
+
+	if a.MaxVisits != nil {
+		object["maxVisits"], err = json.Marshal(a.MaxVisits)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'maxVisits': %w", err)
+		}
+	}
+
+	if a.MaxVisitsArgument != nil {
+		object["maxVisitsArgument"], err = json.Marshal(a.MaxVisitsArgument)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'maxVisitsArgument': %w", err)
+		}
+	}
+
+	if a.ParentInput != nil {
+		object["parentInput"], err = json.Marshal(a.ParentInput)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'parentInput': %w", err)
+		}
+	}
+
+	if a.SpawnedBy != nil {
+		object["spawnedBy"], err = json.Marshal(a.SpawnedBy)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'spawnedBy': %w", err)
+		}
+	}
+
+	object["type"], err = json.Marshal(a.Type)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling 'type': %w", err)
+	}
+
+	if a.Workstation != nil {
+		object["workstation"], err = json.Marshal(a.Workstation)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'workstation': %w", err)
+		}
+	}
+
+	for fieldName, field := range a.AdditionalProperties {
+		object[fieldName], err = json.Marshal(field)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling '%s': %w", fieldName, err)
+		}
+	}
+	return json.Marshal(object)
+}
+
+// Getter for additional properties for HostedLinearWorkerClaim. Returns the specified
+// element and whether it was found
+func (a HostedLinearWorkerClaim) Get(fieldName string) (value interface{}, found bool) {
+	if a.AdditionalProperties != nil {
+		value, found = a.AdditionalProperties[fieldName]
+	}
+	return
+}
+
+// Setter for additional properties for HostedLinearWorkerClaim
+func (a *HostedLinearWorkerClaim) Set(fieldName string, value interface{}) {
+	if a.AdditionalProperties == nil {
+		a.AdditionalProperties = make(map[string]interface{})
+	}
+	a.AdditionalProperties[fieldName] = value
+}
+
+// Override default JSON handling for HostedLinearWorkerClaim to handle AdditionalProperties
+func (a *HostedLinearWorkerClaim) UnmarshalJSON(b []byte) error {
+	object := make(map[string]json.RawMessage)
+	err := json.Unmarshal(b, &object)
+	if err != nil {
+		return err
+	}
+
+	if raw, found := object["assigneeField"]; found {
+		err = json.Unmarshal(raw, &a.AssigneeField)
+		if err != nil {
+			return fmt.Errorf("error reading 'assigneeField': %w", err)
+		}
+		delete(object, "assigneeField")
+	}
+
+	if len(object) != 0 {
+		a.AdditionalProperties = make(map[string]interface{})
+		for fieldName, fieldBuf := range object {
+			var fieldVal interface{}
+			err := json.Unmarshal(fieldBuf, &fieldVal)
+			if err != nil {
+				return fmt.Errorf("error unmarshaling field %s: %w", fieldName, err)
+			}
+			a.AdditionalProperties[fieldName] = fieldVal
+		}
+	}
+	return nil
+}
+
+// Override default JSON handling for HostedLinearWorkerClaim to handle AdditionalProperties
+func (a HostedLinearWorkerClaim) MarshalJSON() ([]byte, error) {
+	var err error
+	object := make(map[string]json.RawMessage)
+
+	if a.AssigneeField != nil {
+		object["assigneeField"], err = json.Marshal(a.AssigneeField)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'assigneeField': %w", err)
+		}
+	}
+
+	for fieldName, field := range a.AdditionalProperties {
+		object[fieldName], err = json.Marshal(field)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling '%s': %w", fieldName, err)
+		}
+	}
+	return json.Marshal(object)
+}
+
+// Getter for additional properties for HostedLinearWorkerConfig. Returns the specified
+// element and whether it was found
+func (a HostedLinearWorkerConfig) Get(fieldName string) (value interface{}, found bool) {
+	if a.AdditionalProperties != nil {
+		value, found = a.AdditionalProperties[fieldName]
+	}
+	return
+}
+
+// Setter for additional properties for HostedLinearWorkerConfig
+func (a *HostedLinearWorkerConfig) Set(fieldName string, value interface{}) {
+	if a.AdditionalProperties == nil {
+		a.AdditionalProperties = make(map[string]interface{})
+	}
+	a.AdditionalProperties[fieldName] = value
+}
+
+// Override default JSON handling for HostedLinearWorkerConfig to handle AdditionalProperties
+func (a *HostedLinearWorkerConfig) UnmarshalJSON(b []byte) error {
+	object := make(map[string]json.RawMessage)
+	err := json.Unmarshal(b, &object)
+	if err != nil {
+		return err
+	}
+
+	if raw, found := object["claim"]; found {
+		err = json.Unmarshal(raw, &a.Claim)
+		if err != nil {
+			return fmt.Errorf("error reading 'claim': %w", err)
+		}
+		delete(object, "claim")
+	}
+
+	if raw, found := object["mapping"]; found {
+		err = json.Unmarshal(raw, &a.Mapping)
+		if err != nil {
+			return fmt.Errorf("error reading 'mapping': %w", err)
+		}
+		delete(object, "mapping")
+	}
+
+	if raw, found := object["pollInterval"]; found {
+		err = json.Unmarshal(raw, &a.PollInterval)
+		if err != nil {
+			return fmt.Errorf("error reading 'pollInterval': %w", err)
+		}
+		delete(object, "pollInterval")
+	}
+
+	if raw, found := object["stateIds"]; found {
+		err = json.Unmarshal(raw, &a.StateIds)
+		if err != nil {
+			return fmt.Errorf("error reading 'stateIds': %w", err)
+		}
+		delete(object, "stateIds")
+	}
+
+	if raw, found := object["teamIds"]; found {
+		err = json.Unmarshal(raw, &a.TeamIds)
+		if err != nil {
+			return fmt.Errorf("error reading 'teamIds': %w", err)
+		}
+		delete(object, "teamIds")
+	}
+
+	if len(object) != 0 {
+		a.AdditionalProperties = make(map[string]interface{})
+		for fieldName, fieldBuf := range object {
+			var fieldVal interface{}
+			err := json.Unmarshal(fieldBuf, &fieldVal)
+			if err != nil {
+				return fmt.Errorf("error unmarshaling field %s: %w", fieldName, err)
+			}
+			a.AdditionalProperties[fieldName] = fieldVal
+		}
+	}
+	return nil
+}
+
+// Override default JSON handling for HostedLinearWorkerConfig to handle AdditionalProperties
+func (a HostedLinearWorkerConfig) MarshalJSON() ([]byte, error) {
+	var err error
+	object := make(map[string]json.RawMessage)
+
+	if a.Claim != nil {
+		object["claim"], err = json.Marshal(a.Claim)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'claim': %w", err)
+		}
+	}
+
+	if a.Mapping != nil {
+		object["mapping"], err = json.Marshal(a.Mapping)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'mapping': %w", err)
+		}
+	}
+
+	if a.PollInterval != nil {
+		object["pollInterval"], err = json.Marshal(a.PollInterval)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'pollInterval': %w", err)
+		}
+	}
+
+	if a.StateIds != nil {
+		object["stateIds"], err = json.Marshal(a.StateIds)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'stateIds': %w", err)
+		}
+	}
+
+	if a.TeamIds != nil {
+		object["teamIds"], err = json.Marshal(a.TeamIds)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'teamIds': %w", err)
+		}
+	}
+
+	for fieldName, field := range a.AdditionalProperties {
+		object[fieldName], err = json.Marshal(field)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling '%s': %w", fieldName, err)
+		}
+	}
+	return json.Marshal(object)
+}
+
+// Getter for additional properties for HostedLinearWorkerMapping. Returns the specified
+// element and whether it was found
+func (a HostedLinearWorkerMapping) Get(fieldName string) (value interface{}, found bool) {
+	if a.AdditionalProperties != nil {
+		value, found = a.AdditionalProperties[fieldName]
+	}
+	return
+}
+
+// Setter for additional properties for HostedLinearWorkerMapping
+func (a *HostedLinearWorkerMapping) Set(fieldName string, value interface{}) {
+	if a.AdditionalProperties == nil {
+		a.AdditionalProperties = make(map[string]interface{})
+	}
+	a.AdditionalProperties[fieldName] = value
+}
+
+// Override default JSON handling for HostedLinearWorkerMapping to handle AdditionalProperties
+func (a *HostedLinearWorkerMapping) UnmarshalJSON(b []byte) error {
+	object := make(map[string]json.RawMessage)
+	err := json.Unmarshal(b, &object)
+	if err != nil {
+		return err
+	}
+
+	if raw, found := object["state"]; found {
+		err = json.Unmarshal(raw, &a.State)
+		if err != nil {
+			return fmt.Errorf("error reading 'state': %w", err)
+		}
+		delete(object, "state")
+	}
+
+	if raw, found := object["workType"]; found {
+		err = json.Unmarshal(raw, &a.WorkType)
+		if err != nil {
+			return fmt.Errorf("error reading 'workType': %w", err)
+		}
+		delete(object, "workType")
+	}
+
+	if len(object) != 0 {
+		a.AdditionalProperties = make(map[string]interface{})
+		for fieldName, fieldBuf := range object {
+			var fieldVal interface{}
+			err := json.Unmarshal(fieldBuf, &fieldVal)
+			if err != nil {
+				return fmt.Errorf("error unmarshaling field %s: %w", fieldName, err)
+			}
+			a.AdditionalProperties[fieldName] = fieldVal
+		}
+	}
+	return nil
+}
+
+// Override default JSON handling for HostedLinearWorkerMapping to handle AdditionalProperties
+func (a HostedLinearWorkerMapping) MarshalJSON() ([]byte, error) {
+	var err error
+	object := make(map[string]json.RawMessage)
+
+	if a.State != nil {
+		object["state"], err = json.Marshal(a.State)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'state': %w", err)
+		}
+	}
+
+	if a.WorkType != nil {
+		object["workType"], err = json.Marshal(a.WorkType)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'workType': %w", err)
+		}
+	}
+
+	for fieldName, field := range a.AdditionalProperties {
+		object[fieldName], err = json.Marshal(field)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling '%s': %w", fieldName, err)
+		}
+	}
+	return json.Marshal(object)
+}
+
+// Getter for additional properties for InputGuard. Returns the specified
+// element and whether it was found
+func (a InputGuard) Get(fieldName string) (value interface{}, found bool) {
+	if a.AdditionalProperties != nil {
+		value, found = a.AdditionalProperties[fieldName]
+	}
+	return
+}
+
+// Setter for additional properties for InputGuard
+func (a *InputGuard) Set(fieldName string, value interface{}) {
+	if a.AdditionalProperties == nil {
+		a.AdditionalProperties = make(map[string]interface{})
+	}
+	a.AdditionalProperties[fieldName] = value
+}
+
+// Override default JSON handling for InputGuard to handle AdditionalProperties
+func (a *InputGuard) UnmarshalJSON(b []byte) error {
+	object := make(map[string]json.RawMessage)
+	err := json.Unmarshal(b, &object)
+	if err != nil {
+		return err
+	}
+
+	if raw, found := object["matchConfig"]; found {
+		err = json.Unmarshal(raw, &a.MatchConfig)
+		if err != nil {
+			return fmt.Errorf("error reading 'matchConfig': %w", err)
+		}
+		delete(object, "matchConfig")
+	}
+
+	if raw, found := object["matchInput"]; found {
+		err = json.Unmarshal(raw, &a.MatchInput)
+		if err != nil {
+			return fmt.Errorf("error reading 'matchInput': %w", err)
+		}
+		delete(object, "matchInput")
+	}
+
+	if raw, found := object["maxVisits"]; found {
+		err = json.Unmarshal(raw, &a.MaxVisits)
+		if err != nil {
+			return fmt.Errorf("error reading 'maxVisits': %w", err)
+		}
+		delete(object, "maxVisits")
+	}
+
+	if raw, found := object["parentInput"]; found {
+		err = json.Unmarshal(raw, &a.ParentInput)
+		if err != nil {
+			return fmt.Errorf("error reading 'parentInput': %w", err)
+		}
+		delete(object, "parentInput")
+	}
+
+	if raw, found := object["spawnedBy"]; found {
+		err = json.Unmarshal(raw, &a.SpawnedBy)
+		if err != nil {
+			return fmt.Errorf("error reading 'spawnedBy': %w", err)
+		}
+		delete(object, "spawnedBy")
+	}
+
+	if raw, found := object["type"]; found {
+		err = json.Unmarshal(raw, &a.Type)
+		if err != nil {
+			return fmt.Errorf("error reading 'type': %w", err)
+		}
+		delete(object, "type")
+	}
+
+	if raw, found := object["workstation"]; found {
+		err = json.Unmarshal(raw, &a.Workstation)
+		if err != nil {
+			return fmt.Errorf("error reading 'workstation': %w", err)
+		}
+		delete(object, "workstation")
+	}
+
+	if len(object) != 0 {
+		a.AdditionalProperties = make(map[string]interface{})
+		for fieldName, fieldBuf := range object {
+			var fieldVal interface{}
+			err := json.Unmarshal(fieldBuf, &fieldVal)
+			if err != nil {
+				return fmt.Errorf("error unmarshaling field %s: %w", fieldName, err)
+			}
+			a.AdditionalProperties[fieldName] = fieldVal
+		}
+	}
+	return nil
+}
+
+// Override default JSON handling for InputGuard to handle AdditionalProperties
+func (a InputGuard) MarshalJSON() ([]byte, error) {
+	var err error
+	object := make(map[string]json.RawMessage)
+
+	if a.MatchConfig != nil {
+		object["matchConfig"], err = json.Marshal(a.MatchConfig)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'matchConfig': %w", err)
+		}
+	}
+
+	if a.MatchInput != nil {
+		object["matchInput"], err = json.Marshal(a.MatchInput)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'matchInput': %w", err)
+		}
+	}
+
+	if a.MaxVisits != nil {
+		object["maxVisits"], err = json.Marshal(a.MaxVisits)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'maxVisits': %w", err)
+		}
+	}
+
+	if a.ParentInput != nil {
+		object["parentInput"], err = json.Marshal(a.ParentInput)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'parentInput': %w", err)
+		}
+	}
+
+	if a.SpawnedBy != nil {
+		object["spawnedBy"], err = json.Marshal(a.SpawnedBy)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'spawnedBy': %w", err)
+		}
+	}
+
+	object["type"], err = json.Marshal(a.Type)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling 'type': %w", err)
+	}
+
+	if a.Workstation != nil {
+		object["workstation"], err = json.Marshal(a.Workstation)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'workstation': %w", err)
+		}
+	}
+
+	for fieldName, field := range a.AdditionalProperties {
+		object[fieldName], err = json.Marshal(field)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling '%s': %w", fieldName, err)
+		}
+	}
+	return json.Marshal(object)
+}
+
+// Getter for additional properties for InputType. Returns the specified
+// element and whether it was found
+func (a InputType) Get(fieldName string) (value interface{}, found bool) {
+	if a.AdditionalProperties != nil {
+		value, found = a.AdditionalProperties[fieldName]
+	}
+	return
+}
+
+// Setter for additional properties for InputType
+func (a *InputType) Set(fieldName string, value interface{}) {
+	if a.AdditionalProperties == nil {
+		a.AdditionalProperties = make(map[string]interface{})
+	}
+	a.AdditionalProperties[fieldName] = value
+}
+
+// Override default JSON handling for InputType to handle AdditionalProperties
+func (a *InputType) UnmarshalJSON(b []byte) error {
+	object := make(map[string]json.RawMessage)
+	err := json.Unmarshal(b, &object)
+	if err != nil {
+		return err
+	}
+
+	if raw, found := object["name"]; found {
+		err = json.Unmarshal(raw, &a.Name)
+		if err != nil {
+			return fmt.Errorf("error reading 'name': %w", err)
+		}
+		delete(object, "name")
+	}
+
+	if raw, found := object["type"]; found {
+		err = json.Unmarshal(raw, &a.Type)
+		if err != nil {
+			return fmt.Errorf("error reading 'type': %w", err)
+		}
+		delete(object, "type")
+	}
+
+	if len(object) != 0 {
+		a.AdditionalProperties = make(map[string]interface{})
+		for fieldName, fieldBuf := range object {
+			var fieldVal interface{}
+			err := json.Unmarshal(fieldBuf, &fieldVal)
+			if err != nil {
+				return fmt.Errorf("error unmarshaling field %s: %w", fieldName, err)
+			}
+			a.AdditionalProperties[fieldName] = fieldVal
+		}
+	}
+	return nil
+}
+
+// Override default JSON handling for InputType to handle AdditionalProperties
+func (a InputType) MarshalJSON() ([]byte, error) {
+	var err error
+	object := make(map[string]json.RawMessage)
+
+	object["name"], err = json.Marshal(a.Name)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling 'name': %w", err)
+	}
+
+	object["type"], err = json.Marshal(a.Type)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling 'type': %w", err)
+	}
+
+	for fieldName, field := range a.AdditionalProperties {
+		object[fieldName], err = json.Marshal(field)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling '%s': %w", fieldName, err)
+		}
+	}
+	return json.Marshal(object)
+}
+
+// Getter for additional properties for InvocationReturn. Returns the specified
+// element and whether it was found
+func (a InvocationReturn) Get(fieldName string) (value interface{}, found bool) {
+	if a.AdditionalProperties != nil {
+		value, found = a.AdditionalProperties[fieldName]
+	}
+	return
+}
+
+// Setter for additional properties for InvocationReturn
+func (a *InvocationReturn) Set(fieldName string, value interface{}) {
+	if a.AdditionalProperties == nil {
+		a.AdditionalProperties = make(map[string]interface{})
+	}
+	a.AdditionalProperties[fieldName] = value
+}
+
+// Override default JSON handling for InvocationReturn to handle AdditionalProperties
+func (a *InvocationReturn) UnmarshalJSON(b []byte) error {
+	object := make(map[string]json.RawMessage)
+	err := json.Unmarshal(b, &object)
+	if err != nil {
+		return err
+	}
+
+	if raw, found := object["policy"]; found {
+		err = json.Unmarshal(raw, &a.Policy)
+		if err != nil {
+			return fmt.Errorf("error reading 'policy': %w", err)
+		}
+		delete(object, "policy")
+	}
+
+	if raw, found := object["terminalState"]; found {
+		err = json.Unmarshal(raw, &a.TerminalState)
+		if err != nil {
+			return fmt.Errorf("error reading 'terminalState': %w", err)
+		}
+		delete(object, "terminalState")
+	}
+
+	if raw, found := object["workName"]; found {
+		err = json.Unmarshal(raw, &a.WorkName)
+		if err != nil {
+			return fmt.Errorf("error reading 'workName': %w", err)
+		}
+		delete(object, "workName")
+	}
+
+	if raw, found := object["workTypeName"]; found {
+		err = json.Unmarshal(raw, &a.WorkTypeName)
+		if err != nil {
+			return fmt.Errorf("error reading 'workTypeName': %w", err)
+		}
+		delete(object, "workTypeName")
+	}
+
+	if len(object) != 0 {
+		a.AdditionalProperties = make(map[string]interface{})
+		for fieldName, fieldBuf := range object {
+			var fieldVal interface{}
+			err := json.Unmarshal(fieldBuf, &fieldVal)
+			if err != nil {
+				return fmt.Errorf("error unmarshaling field %s: %w", fieldName, err)
+			}
+			a.AdditionalProperties[fieldName] = fieldVal
+		}
+	}
+	return nil
+}
+
+// Override default JSON handling for InvocationReturn to handle AdditionalProperties
+func (a InvocationReturn) MarshalJSON() ([]byte, error) {
+	var err error
+	object := make(map[string]json.RawMessage)
+
+	object["policy"], err = json.Marshal(a.Policy)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling 'policy': %w", err)
+	}
+
+	if a.TerminalState != nil {
+		object["terminalState"], err = json.Marshal(a.TerminalState)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'terminalState': %w", err)
+		}
+	}
+
+	if a.WorkName != nil {
+		object["workName"], err = json.Marshal(a.WorkName)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'workName': %w", err)
+		}
+	}
+
+	if a.WorkTypeName != nil {
+		object["workTypeName"], err = json.Marshal(a.WorkTypeName)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'workTypeName': %w", err)
+		}
+	}
+
+	for fieldName, field := range a.AdditionalProperties {
+		object[fieldName], err = json.Marshal(field)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling '%s': %w", fieldName, err)
+		}
+	}
+	return json.Marshal(object)
+}
+
+// Getter for additional properties for LogicalRoundTrip. Returns the specified
+// element and whether it was found
+func (a LogicalRoundTrip) Get(fieldName string) (value interface{}, found bool) {
+	if a.AdditionalProperties != nil {
+		value, found = a.AdditionalProperties[fieldName]
+	}
+	return
+}
+
+// Setter for additional properties for LogicalRoundTrip
+func (a *LogicalRoundTrip) Set(fieldName string, value interface{}) {
+	if a.AdditionalProperties == nil {
+		a.AdditionalProperties = make(map[string]interface{})
+	}
+	a.AdditionalProperties[fieldName] = value
+}
+
+// Override default JSON handling for LogicalRoundTrip to handle AdditionalProperties
+func (a *LogicalRoundTrip) UnmarshalJSON(b []byte) error {
+	object := make(map[string]json.RawMessage)
+	err := json.Unmarshal(b, &object)
+	if err != nil {
+		return err
+	}
+
+	if raw, found := object["maxRawVisits"]; found {
+		err = json.Unmarshal(raw, &a.MaxRawVisits)
+		if err != nil {
+			return fmt.Errorf("error reading 'maxRawVisits': %w", err)
+		}
+		delete(object, "maxRawVisits")
+	}
+
+	if raw, found := object["workstations"]; found {
+		err = json.Unmarshal(raw, &a.Workstations)
+		if err != nil {
+			return fmt.Errorf("error reading 'workstations': %w", err)
+		}
+		delete(object, "workstations")
+	}
+
+	if len(object) != 0 {
+		a.AdditionalProperties = make(map[string]interface{})
+		for fieldName, fieldBuf := range object {
+			var fieldVal interface{}
+			err := json.Unmarshal(fieldBuf, &fieldVal)
+			if err != nil {
+				return fmt.Errorf("error unmarshaling field %s: %w", fieldName, err)
+			}
+			a.AdditionalProperties[fieldName] = fieldVal
+		}
+	}
+	return nil
+}
+
+// Override default JSON handling for LogicalRoundTrip to handle AdditionalProperties
+func (a LogicalRoundTrip) MarshalJSON() ([]byte, error) {
+	var err error
+	object := make(map[string]json.RawMessage)
+
+	object["maxRawVisits"], err = json.Marshal(a.MaxRawVisits)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling 'maxRawVisits': %w", err)
+	}
+
+	if a.Workstations != nil {
+		object["workstations"], err = json.Marshal(a.Workstations)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'workstations': %w", err)
+		}
+	}
+
+	for fieldName, field := range a.AdditionalProperties {
+		object[fieldName], err = json.Marshal(field)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling '%s': %w", fieldName, err)
+		}
+	}
+	return json.Marshal(object)
+}
+
+// Getter for additional properties for ModelOperation. Returns the specified
+// element and whether it was found
+func (a ModelOperation) Get(fieldName string) (value interface{}, found bool) {
+	if a.AdditionalProperties != nil {
+		value, found = a.AdditionalProperties[fieldName]
+	}
+	return
+}
+
+// Setter for additional properties for ModelOperation
+func (a *ModelOperation) Set(fieldName string, value interface{}) {
+	if a.AdditionalProperties == nil {
+		a.AdditionalProperties = make(map[string]interface{})
+	}
+	a.AdditionalProperties[fieldName] = value
+}
+
+// Override default JSON handling for ModelOperation to handle AdditionalProperties
+func (a *ModelOperation) UnmarshalJSON(b []byte) error {
+	object := make(map[string]json.RawMessage)
+	err := json.Unmarshal(b, &object)
+	if err != nil {
+		return err
+	}
+
+	if raw, found := object["inputs"]; found {
+		err = json.Unmarshal(raw, &a.Inputs)
+		if err != nil {
+			return fmt.Errorf("error reading 'inputs': %w", err)
+		}
+		delete(object, "inputs")
+	}
+
+	if raw, found := object["name"]; found {
+		err = json.Unmarshal(raw, &a.Name)
+		if err != nil {
+			return fmt.Errorf("error reading 'name': %w", err)
+		}
+		delete(object, "name")
+	}
+
+	if raw, found := object["outputs"]; found {
+		err = json.Unmarshal(raw, &a.Outputs)
+		if err != nil {
+			return fmt.Errorf("error reading 'outputs': %w", err)
+		}
+		delete(object, "outputs")
+	}
+
+	if len(object) != 0 {
+		a.AdditionalProperties = make(map[string]interface{})
+		for fieldName, fieldBuf := range object {
+			var fieldVal interface{}
+			err := json.Unmarshal(fieldBuf, &fieldVal)
+			if err != nil {
+				return fmt.Errorf("error unmarshaling field %s: %w", fieldName, err)
+			}
+			a.AdditionalProperties[fieldName] = fieldVal
+		}
+	}
+	return nil
+}
+
+// Override default JSON handling for ModelOperation to handle AdditionalProperties
+func (a ModelOperation) MarshalJSON() ([]byte, error) {
+	var err error
+	object := make(map[string]json.RawMessage)
+
+	if a.Inputs != nil {
+		object["inputs"], err = json.Marshal(a.Inputs)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'inputs': %w", err)
+		}
+	}
+
+	object["name"], err = json.Marshal(a.Name)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling 'name': %w", err)
+	}
+
+	if a.Outputs != nil {
+		object["outputs"], err = json.Marshal(a.Outputs)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'outputs': %w", err)
+		}
+	}
+
+	for fieldName, field := range a.AdditionalProperties {
+		object[fieldName], err = json.Marshal(field)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling '%s': %w", fieldName, err)
+		}
+	}
+	return json.Marshal(object)
+}
+
+// Getter for additional properties for ModelOperationSlot. Returns the specified
+// element and whether it was found
+func (a ModelOperationSlot) Get(fieldName string) (value interface{}, found bool) {
+	if a.AdditionalProperties != nil {
+		value, found = a.AdditionalProperties[fieldName]
+	}
+	return
+}
+
+// Setter for additional properties for ModelOperationSlot
+func (a *ModelOperationSlot) Set(fieldName string, value interface{}) {
+	if a.AdditionalProperties == nil {
+		a.AdditionalProperties = make(map[string]interface{})
+	}
+	a.AdditionalProperties[fieldName] = value
+}
+
+// Override default JSON handling for ModelOperationSlot to handle AdditionalProperties
+func (a *ModelOperationSlot) UnmarshalJSON(b []byte) error {
+	object := make(map[string]json.RawMessage)
+	err := json.Unmarshal(b, &object)
+	if err != nil {
+		return err
+	}
+
+	if raw, found := object["contentTypes"]; found {
+		err = json.Unmarshal(raw, &a.ContentTypes)
+		if err != nil {
+			return fmt.Errorf("error reading 'contentTypes': %w", err)
+		}
+		delete(object, "contentTypes")
+	}
+
+	if raw, found := object["name"]; found {
+		err = json.Unmarshal(raw, &a.Name)
+		if err != nil {
+			return fmt.Errorf("error reading 'name': %w", err)
+		}
+		delete(object, "name")
+	}
+
+	if raw, found := object["required"]; found {
+		err = json.Unmarshal(raw, &a.Required)
+		if err != nil {
+			return fmt.Errorf("error reading 'required': %w", err)
+		}
+		delete(object, "required")
+	}
+
+	if len(object) != 0 {
+		a.AdditionalProperties = make(map[string]interface{})
+		for fieldName, fieldBuf := range object {
+			var fieldVal interface{}
+			err := json.Unmarshal(fieldBuf, &fieldVal)
+			if err != nil {
+				return fmt.Errorf("error unmarshaling field %s: %w", fieldName, err)
+			}
+			a.AdditionalProperties[fieldName] = fieldVal
+		}
+	}
+	return nil
+}
+
+// Override default JSON handling for ModelOperationSlot to handle AdditionalProperties
+func (a ModelOperationSlot) MarshalJSON() ([]byte, error) {
+	var err error
+	object := make(map[string]json.RawMessage)
+
+	if a.ContentTypes != nil {
+		object["contentTypes"], err = json.Marshal(a.ContentTypes)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'contentTypes': %w", err)
+		}
+	}
+
+	object["name"], err = json.Marshal(a.Name)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling 'name': %w", err)
+	}
+
+	if a.Required != nil {
+		object["required"], err = json.Marshal(a.Required)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'required': %w", err)
+		}
+	}
+
+	for fieldName, field := range a.AdditionalProperties {
+		object[fieldName], err = json.Marshal(field)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling '%s': %w", fieldName, err)
+		}
+	}
+	return json.Marshal(object)
+}
+
+// Getter for additional properties for RequiredTool. Returns the specified
+// element and whether it was found
+func (a RequiredTool) Get(fieldName string) (value interface{}, found bool) {
+	if a.AdditionalProperties != nil {
+		value, found = a.AdditionalProperties[fieldName]
+	}
+	return
+}
+
+// Setter for additional properties for RequiredTool
+func (a *RequiredTool) Set(fieldName string, value interface{}) {
+	if a.AdditionalProperties == nil {
+		a.AdditionalProperties = make(map[string]interface{})
+	}
+	a.AdditionalProperties[fieldName] = value
+}
+
+// Override default JSON handling for RequiredTool to handle AdditionalProperties
+func (a *RequiredTool) UnmarshalJSON(b []byte) error {
+	object := make(map[string]json.RawMessage)
+	err := json.Unmarshal(b, &object)
+	if err != nil {
+		return err
+	}
+
+	if raw, found := object["command"]; found {
+		err = json.Unmarshal(raw, &a.Command)
+		if err != nil {
+			return fmt.Errorf("error reading 'command': %w", err)
+		}
+		delete(object, "command")
+	}
+
+	if raw, found := object["name"]; found {
+		err = json.Unmarshal(raw, &a.Name)
+		if err != nil {
+			return fmt.Errorf("error reading 'name': %w", err)
+		}
+		delete(object, "name")
+	}
+
+	if raw, found := object["purpose"]; found {
+		err = json.Unmarshal(raw, &a.Purpose)
+		if err != nil {
+			return fmt.Errorf("error reading 'purpose': %w", err)
+		}
+		delete(object, "purpose")
+	}
+
+	if raw, found := object["versionArgs"]; found {
+		err = json.Unmarshal(raw, &a.VersionArgs)
+		if err != nil {
+			return fmt.Errorf("error reading 'versionArgs': %w", err)
+		}
+		delete(object, "versionArgs")
+	}
+
+	if len(object) != 0 {
+		a.AdditionalProperties = make(map[string]interface{})
+		for fieldName, fieldBuf := range object {
+			var fieldVal interface{}
+			err := json.Unmarshal(fieldBuf, &fieldVal)
+			if err != nil {
+				return fmt.Errorf("error unmarshaling field %s: %w", fieldName, err)
+			}
+			a.AdditionalProperties[fieldName] = fieldVal
+		}
+	}
+	return nil
+}
+
+// Override default JSON handling for RequiredTool to handle AdditionalProperties
+func (a RequiredTool) MarshalJSON() ([]byte, error) {
+	var err error
+	object := make(map[string]json.RawMessage)
+
+	object["command"], err = json.Marshal(a.Command)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling 'command': %w", err)
+	}
+
+	object["name"], err = json.Marshal(a.Name)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling 'name': %w", err)
+	}
+
+	if a.Purpose != nil {
+		object["purpose"], err = json.Marshal(a.Purpose)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'purpose': %w", err)
+		}
+	}
+
+	if a.VersionArgs != nil {
+		object["versionArgs"], err = json.Marshal(a.VersionArgs)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'versionArgs': %w", err)
+		}
+	}
+
+	for fieldName, field := range a.AdditionalProperties {
+		object[fieldName], err = json.Marshal(field)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling '%s': %w", fieldName, err)
+		}
+	}
+	return json.Marshal(object)
+}
+
+// Getter for additional properties for Resource. Returns the specified
+// element and whether it was found
+func (a Resource) Get(fieldName string) (value interface{}, found bool) {
+	if a.AdditionalProperties != nil {
+		value, found = a.AdditionalProperties[fieldName]
+	}
+	return
+}
+
+// Setter for additional properties for Resource
+func (a *Resource) Set(fieldName string, value interface{}) {
+	if a.AdditionalProperties == nil {
+		a.AdditionalProperties = make(map[string]interface{})
+	}
+	a.AdditionalProperties[fieldName] = value
+}
+
+// Override default JSON handling for Resource to handle AdditionalProperties
+func (a *Resource) UnmarshalJSON(b []byte) error {
+	object := make(map[string]json.RawMessage)
+	err := json.Unmarshal(b, &object)
+	if err != nil {
+		return err
+	}
+
+	if raw, found := object["backend"]; found {
+		err = json.Unmarshal(raw, &a.Backend)
+		if err != nil {
+			return fmt.Errorf("error reading 'backend': %w", err)
+		}
+		delete(object, "backend")
+	}
+
+	if raw, found := object["capacity"]; found {
+		err = json.Unmarshal(raw, &a.Capacity)
+		if err != nil {
+			return fmt.Errorf("error reading 'capacity': %w", err)
+		}
+		delete(object, "capacity")
+	}
+
+	if raw, found := object["id"]; found {
+		err = json.Unmarshal(raw, &a.Id)
+		if err != nil {
+			return fmt.Errorf("error reading 'id': %w", err)
+		}
+		delete(object, "id")
+	}
+
+	if raw, found := object["loadPolicy"]; found {
+		err = json.Unmarshal(raw, &a.LoadPolicy)
+		if err != nil {
+			return fmt.Errorf("error reading 'loadPolicy': %w", err)
+		}
+		delete(object, "loadPolicy")
+	}
+
+	if raw, found := object["model"]; found {
+		err = json.Unmarshal(raw, &a.Model)
+		if err != nil {
+			return fmt.Errorf("error reading 'model': %w", err)
+		}
+		delete(object, "model")
+	}
+
+	if raw, found := object["name"]; found {
+		err = json.Unmarshal(raw, &a.Name)
+		if err != nil {
+			return fmt.Errorf("error reading 'name': %w", err)
+		}
+		delete(object, "name")
+	}
+
+	if raw, found := object["provider"]; found {
+		err = json.Unmarshal(raw, &a.Provider)
+		if err != nil {
+			return fmt.Errorf("error reading 'provider': %w", err)
+		}
+		delete(object, "provider")
+	}
+
+	if raw, found := object["type"]; found {
+		err = json.Unmarshal(raw, &a.Type)
+		if err != nil {
+			return fmt.Errorf("error reading 'type': %w", err)
+		}
+		delete(object, "type")
+	}
+
+	if len(object) != 0 {
+		a.AdditionalProperties = make(map[string]interface{})
+		for fieldName, fieldBuf := range object {
+			var fieldVal interface{}
+			err := json.Unmarshal(fieldBuf, &fieldVal)
+			if err != nil {
+				return fmt.Errorf("error unmarshaling field %s: %w", fieldName, err)
+			}
+			a.AdditionalProperties[fieldName] = fieldVal
+		}
+	}
+	return nil
+}
+
+// Override default JSON handling for Resource to handle AdditionalProperties
+func (a Resource) MarshalJSON() ([]byte, error) {
+	var err error
+	object := make(map[string]json.RawMessage)
+
+	if a.Backend != nil {
+		object["backend"], err = json.Marshal(a.Backend)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'backend': %w", err)
+		}
+	}
+
+	object["capacity"], err = json.Marshal(a.Capacity)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling 'capacity': %w", err)
+	}
+
+	if a.Id != nil {
+		object["id"], err = json.Marshal(a.Id)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'id': %w", err)
+		}
+	}
+
+	if a.LoadPolicy != nil {
+		object["loadPolicy"], err = json.Marshal(a.LoadPolicy)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'loadPolicy': %w", err)
+		}
+	}
+
+	if a.Model != nil {
+		object["model"], err = json.Marshal(a.Model)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'model': %w", err)
+		}
+	}
+
+	object["name"], err = json.Marshal(a.Name)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling 'name': %w", err)
+	}
+
+	if a.Provider != nil {
+		object["provider"], err = json.Marshal(a.Provider)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'provider': %w", err)
+		}
+	}
+
+	if a.Type != nil {
+		object["type"], err = json.Marshal(a.Type)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'type': %w", err)
+		}
+	}
+
+	for fieldName, field := range a.AdditionalProperties {
+		object[fieldName], err = json.Marshal(field)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling '%s': %w", fieldName, err)
+		}
+	}
+	return json.Marshal(object)
+}
+
+// Getter for additional properties for ResourceManifest. Returns the specified
+// element and whether it was found
+func (a ResourceManifest) Get(fieldName string) (value interface{}, found bool) {
+	if a.AdditionalProperties != nil {
+		value, found = a.AdditionalProperties[fieldName]
+	}
+	return
+}
+
+// Setter for additional properties for ResourceManifest
+func (a *ResourceManifest) Set(fieldName string, value interface{}) {
+	if a.AdditionalProperties == nil {
+		a.AdditionalProperties = make(map[string]interface{})
+	}
+	a.AdditionalProperties[fieldName] = value
+}
+
+// Override default JSON handling for ResourceManifest to handle AdditionalProperties
+func (a *ResourceManifest) UnmarshalJSON(b []byte) error {
+	object := make(map[string]json.RawMessage)
+	err := json.Unmarshal(b, &object)
+	if err != nil {
+		return err
+	}
+
+	if raw, found := object["bundledFiles"]; found {
+		err = json.Unmarshal(raw, &a.BundledFiles)
+		if err != nil {
+			return fmt.Errorf("error reading 'bundledFiles': %w", err)
+		}
+		delete(object, "bundledFiles")
+	}
+
+	if raw, found := object["requiredTools"]; found {
+		err = json.Unmarshal(raw, &a.RequiredTools)
+		if err != nil {
+			return fmt.Errorf("error reading 'requiredTools': %w", err)
+		}
+		delete(object, "requiredTools")
+	}
+
+	if len(object) != 0 {
+		a.AdditionalProperties = make(map[string]interface{})
+		for fieldName, fieldBuf := range object {
+			var fieldVal interface{}
+			err := json.Unmarshal(fieldBuf, &fieldVal)
+			if err != nil {
+				return fmt.Errorf("error unmarshaling field %s: %w", fieldName, err)
+			}
+			a.AdditionalProperties[fieldName] = fieldVal
+		}
+	}
+	return nil
+}
+
+// Override default JSON handling for ResourceManifest to handle AdditionalProperties
+func (a ResourceManifest) MarshalJSON() ([]byte, error) {
+	var err error
+	object := make(map[string]json.RawMessage)
+
+	if a.BundledFiles != nil {
+		object["bundledFiles"], err = json.Marshal(a.BundledFiles)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'bundledFiles': %w", err)
+		}
+	}
+
+	if a.RequiredTools != nil {
+		object["requiredTools"], err = json.Marshal(a.RequiredTools)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'requiredTools': %w", err)
+		}
+	}
+
+	for fieldName, field := range a.AdditionalProperties {
+		object[fieldName], err = json.Marshal(field)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling '%s': %w", fieldName, err)
+		}
+	}
+	return json.Marshal(object)
+}
+
+// Getter for additional properties for RunRequestEventPayload. Returns the specified
+// element and whether it was found
+func (a RunRequestEventPayload) Get(fieldName string) (value interface{}, found bool) {
+	if a.AdditionalProperties != nil {
+		value, found = a.AdditionalProperties[fieldName]
+	}
+	return
+}
+
+// Setter for additional properties for RunRequestEventPayload
+func (a *RunRequestEventPayload) Set(fieldName string, value interface{}) {
+	if a.AdditionalProperties == nil {
+		a.AdditionalProperties = make(map[string]interface{})
+	}
+	a.AdditionalProperties[fieldName] = value
+}
+
+// Override default JSON handling for RunRequestEventPayload to handle AdditionalProperties
+func (a *RunRequestEventPayload) UnmarshalJSON(b []byte) error {
+	object := make(map[string]json.RawMessage)
+	err := json.Unmarshal(b, &object)
+	if err != nil {
+		return err
+	}
+
+	if raw, found := object["diagnostics"]; found {
+		err = json.Unmarshal(raw, &a.Diagnostics)
+		if err != nil {
+			return fmt.Errorf("error reading 'diagnostics': %w", err)
+		}
+		delete(object, "diagnostics")
+	}
+
+	if raw, found := object["factory"]; found {
+		err = json.Unmarshal(raw, &a.Factory)
+		if err != nil {
+			return fmt.Errorf("error reading 'factory': %w", err)
+		}
+		delete(object, "factory")
+	}
+
+	if raw, found := object["recordedAt"]; found {
+		err = json.Unmarshal(raw, &a.RecordedAt)
+		if err != nil {
+			return fmt.Errorf("error reading 'recordedAt': %w", err)
+		}
+		delete(object, "recordedAt")
+	}
+
+	if raw, found := object["wallClock"]; found {
+		err = json.Unmarshal(raw, &a.WallClock)
+		if err != nil {
+			return fmt.Errorf("error reading 'wallClock': %w", err)
+		}
+		delete(object, "wallClock")
+	}
+
+	if len(object) != 0 {
+		a.AdditionalProperties = make(map[string]interface{})
+		for fieldName, fieldBuf := range object {
+			var fieldVal interface{}
+			err := json.Unmarshal(fieldBuf, &fieldVal)
+			if err != nil {
+				return fmt.Errorf("error unmarshaling field %s: %w", fieldName, err)
+			}
+			a.AdditionalProperties[fieldName] = fieldVal
+		}
+	}
+	return nil
+}
+
+// Override default JSON handling for RunRequestEventPayload to handle AdditionalProperties
+func (a RunRequestEventPayload) MarshalJSON() ([]byte, error) {
+	var err error
+	object := make(map[string]json.RawMessage)
+
+	if a.Diagnostics != nil {
+		object["diagnostics"], err = json.Marshal(a.Diagnostics)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'diagnostics': %w", err)
+		}
+	}
+
+	object["factory"], err = json.Marshal(a.Factory)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling 'factory': %w", err)
+	}
+
+	object["recordedAt"], err = json.Marshal(a.RecordedAt)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling 'recordedAt': %w", err)
+	}
+
+	if a.WallClock != nil {
+		object["wallClock"], err = json.Marshal(a.WallClock)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'wallClock': %w", err)
+		}
+	}
+
+	for fieldName, field := range a.AdditionalProperties {
+		object[fieldName], err = json.Marshal(field)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling '%s': %w", fieldName, err)
+		}
+	}
+	return json.Marshal(object)
+}
+
+// Getter for additional properties for SessionStartedEventPayload. Returns the specified
+// element and whether it was found
+func (a SessionStartedEventPayload) Get(fieldName string) (value interface{}, found bool) {
+	if a.AdditionalProperties != nil {
+		value, found = a.AdditionalProperties[fieldName]
+	}
+	return
+}
+
+// Setter for additional properties for SessionStartedEventPayload
+func (a *SessionStartedEventPayload) Set(fieldName string, value interface{}) {
+	if a.AdditionalProperties == nil {
+		a.AdditionalProperties = make(map[string]interface{})
+	}
+	a.AdditionalProperties[fieldName] = value
+}
+
+// Override default JSON handling for SessionStartedEventPayload to handle AdditionalProperties
+func (a *SessionStartedEventPayload) UnmarshalJSON(b []byte) error {
+	object := make(map[string]json.RawMessage)
+	err := json.Unmarshal(b, &object)
+	if err != nil {
+		return err
+	}
+
+	if raw, found := object["argsDigest"]; found {
+		err = json.Unmarshal(raw, &a.ArgsDigest)
+		if err != nil {
+			return fmt.Errorf("error reading 'argsDigest': %w", err)
+		}
+		delete(object, "argsDigest")
+	}
+
+	if raw, found := object["factoryId"]; found {
+		err = json.Unmarshal(raw, &a.FactoryId)
+		if err != nil {
+			return fmt.Errorf("error reading 'factoryId': %w", err)
+		}
+		delete(object, "factoryId")
+	}
+
+	if raw, found := object["policyHash"]; found {
+		err = json.Unmarshal(raw, &a.PolicyHash)
+		if err != nil {
+			return fmt.Errorf("error reading 'policyHash': %w", err)
+		}
+		delete(object, "policyHash")
+	}
+
+	if raw, found := object["sourceHash"]; found {
+		err = json.Unmarshal(raw, &a.SourceHash)
+		if err != nil {
+			return fmt.Errorf("error reading 'sourceHash': %w", err)
+		}
+		delete(object, "sourceHash")
+	}
+
+	if raw, found := object["sourceRef"]; found {
+		err = json.Unmarshal(raw, &a.SourceRef)
+		if err != nil {
+			return fmt.Errorf("error reading 'sourceRef': %w", err)
+		}
+		delete(object, "sourceRef")
+	}
+
+	if raw, found := object["startedAt"]; found {
+		err = json.Unmarshal(raw, &a.StartedAt)
+		if err != nil {
+			return fmt.Errorf("error reading 'startedAt': %w", err)
+		}
+		delete(object, "startedAt")
+	}
+
+	if len(object) != 0 {
+		a.AdditionalProperties = make(map[string]interface{})
+		for fieldName, fieldBuf := range object {
+			var fieldVal interface{}
+			err := json.Unmarshal(fieldBuf, &fieldVal)
+			if err != nil {
+				return fmt.Errorf("error unmarshaling field %s: %w", fieldName, err)
+			}
+			a.AdditionalProperties[fieldName] = fieldVal
+		}
+	}
+	return nil
+}
+
+// Override default JSON handling for SessionStartedEventPayload to handle AdditionalProperties
+func (a SessionStartedEventPayload) MarshalJSON() ([]byte, error) {
+	var err error
+	object := make(map[string]json.RawMessage)
+
+	if a.ArgsDigest != nil {
+		object["argsDigest"], err = json.Marshal(a.ArgsDigest)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'argsDigest': %w", err)
+		}
+	}
+
+	if a.FactoryId != nil {
+		object["factoryId"], err = json.Marshal(a.FactoryId)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'factoryId': %w", err)
+		}
+	}
+
+	if a.PolicyHash != nil {
+		object["policyHash"], err = json.Marshal(a.PolicyHash)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'policyHash': %w", err)
+		}
+	}
+
+	if a.SourceHash != nil {
+		object["sourceHash"], err = json.Marshal(a.SourceHash)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'sourceHash': %w", err)
+		}
+	}
+
+	if a.SourceRef != nil {
+		object["sourceRef"], err = json.Marshal(a.SourceRef)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'sourceRef': %w", err)
+		}
+	}
+
+	object["startedAt"], err = json.Marshal(a.StartedAt)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling 'startedAt': %w", err)
+	}
+
+	for fieldName, field := range a.AdditionalProperties {
+		object[fieldName], err = json.Marshal(field)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling '%s': %w", fieldName, err)
+		}
+	}
+	return json.Marshal(object)
+}
+
+// Getter for additional properties for Work. Returns the specified
+// element and whether it was found
+func (a Work) Get(fieldName string) (value interface{}, found bool) {
+	if a.AdditionalProperties != nil {
+		value, found = a.AdditionalProperties[fieldName]
+	}
+	return
+}
+
+// Setter for additional properties for Work
+func (a *Work) Set(fieldName string, value interface{}) {
+	if a.AdditionalProperties == nil {
+		a.AdditionalProperties = make(map[string]interface{})
+	}
+	a.AdditionalProperties[fieldName] = value
+}
+
+// Override default JSON handling for Work to handle AdditionalProperties
+func (a *Work) UnmarshalJSON(b []byte) error {
+	object := make(map[string]json.RawMessage)
+	err := json.Unmarshal(b, &object)
+	if err != nil {
+		return err
+	}
+
+	if raw, found := object["chainingTraceDepth"]; found {
+		err = json.Unmarshal(raw, &a.ChainingTraceDepth)
+		if err != nil {
+			return fmt.Errorf("error reading 'chainingTraceDepth': %w", err)
+		}
+		delete(object, "chainingTraceDepth")
+	}
+
+	if raw, found := object["content"]; found {
+		err = json.Unmarshal(raw, &a.Content)
+		if err != nil {
+			return fmt.Errorf("error reading 'content': %w", err)
+		}
+		delete(object, "content")
+	}
+
+	if raw, found := object["currentChainingTraceId"]; found {
+		err = json.Unmarshal(raw, &a.CurrentChainingTraceId)
+		if err != nil {
+			return fmt.Errorf("error reading 'currentChainingTraceId': %w", err)
+		}
+		delete(object, "currentChainingTraceId")
+	}
+
+	if raw, found := object["expectedArtifacts"]; found {
+		err = json.Unmarshal(raw, &a.ExpectedArtifacts)
+		if err != nil {
+			return fmt.Errorf("error reading 'expectedArtifacts': %w", err)
+		}
+		delete(object, "expectedArtifacts")
+	}
+
+	if raw, found := object["humanApproval"]; found {
+		err = json.Unmarshal(raw, &a.HumanApproval)
+		if err != nil {
+			return fmt.Errorf("error reading 'humanApproval': %w", err)
+		}
+		delete(object, "humanApproval")
+	}
+
+	if raw, found := object["name"]; found {
+		err = json.Unmarshal(raw, &a.Name)
+		if err != nil {
+			return fmt.Errorf("error reading 'name': %w", err)
+		}
+		delete(object, "name")
+	}
+
+	if raw, found := object["payload"]; found {
+		err = json.Unmarshal(raw, &a.Payload)
+		if err != nil {
+			return fmt.Errorf("error reading 'payload': %w", err)
+		}
+		delete(object, "payload")
+	}
+
+	if raw, found := object["previousChainingTraceIds"]; found {
+		err = json.Unmarshal(raw, &a.PreviousChainingTraceIds)
+		if err != nil {
+			return fmt.Errorf("error reading 'previousChainingTraceIds': %w", err)
+		}
+		delete(object, "previousChainingTraceIds")
+	}
+
+	if raw, found := object["relations"]; found {
+		err = json.Unmarshal(raw, &a.Relations)
+		if err != nil {
+			return fmt.Errorf("error reading 'relations': %w", err)
+		}
+		delete(object, "relations")
+	}
+
+	if raw, found := object["requestId"]; found {
+		err = json.Unmarshal(raw, &a.RequestId)
+		if err != nil {
+			return fmt.Errorf("error reading 'requestId': %w", err)
+		}
+		delete(object, "requestId")
+	}
+
+	if raw, found := object["state"]; found {
+		err = json.Unmarshal(raw, &a.State)
+		if err != nil {
+			return fmt.Errorf("error reading 'state': %w", err)
+		}
+		delete(object, "state")
+	}
+
+	if raw, found := object["stopSummary"]; found {
+		err = json.Unmarshal(raw, &a.StopSummary)
+		if err != nil {
+			return fmt.Errorf("error reading 'stopSummary': %w", err)
+		}
+		delete(object, "stopSummary")
+	}
+
+	if raw, found := object["structuredResult"]; found {
+		err = json.Unmarshal(raw, &a.StructuredResult)
+		if err != nil {
+			return fmt.Errorf("error reading 'structuredResult': %w", err)
+		}
+		delete(object, "structuredResult")
+	}
+
+	if raw, found := object["tags"]; found {
+		err = json.Unmarshal(raw, &a.Tags)
+		if err != nil {
+			return fmt.Errorf("error reading 'tags': %w", err)
+		}
+		delete(object, "tags")
+	}
+
+	if raw, found := object["traceId"]; found {
+		err = json.Unmarshal(raw, &a.TraceId)
+		if err != nil {
+			return fmt.Errorf("error reading 'traceId': %w", err)
+		}
+		delete(object, "traceId")
+	}
+
+	if raw, found := object["workId"]; found {
+		err = json.Unmarshal(raw, &a.WorkId)
+		if err != nil {
+			return fmt.Errorf("error reading 'workId': %w", err)
+		}
+		delete(object, "workId")
+	}
+
+	if raw, found := object["workTypeName"]; found {
+		err = json.Unmarshal(raw, &a.WorkTypeName)
+		if err != nil {
+			return fmt.Errorf("error reading 'workTypeName': %w", err)
+		}
+		delete(object, "workTypeName")
+	}
+
+	if len(object) != 0 {
+		a.AdditionalProperties = make(map[string]interface{})
+		for fieldName, fieldBuf := range object {
+			var fieldVal interface{}
+			err := json.Unmarshal(fieldBuf, &fieldVal)
+			if err != nil {
+				return fmt.Errorf("error unmarshaling field %s: %w", fieldName, err)
+			}
+			a.AdditionalProperties[fieldName] = fieldVal
+		}
+	}
+	return nil
+}
+
+// Override default JSON handling for Work to handle AdditionalProperties
+func (a Work) MarshalJSON() ([]byte, error) {
+	var err error
+	object := make(map[string]json.RawMessage)
+
+	if a.ChainingTraceDepth != nil {
+		object["chainingTraceDepth"], err = json.Marshal(a.ChainingTraceDepth)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'chainingTraceDepth': %w", err)
+		}
+	}
+
+	if a.Content != nil {
+		object["content"], err = json.Marshal(a.Content)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'content': %w", err)
+		}
+	}
+
+	if a.CurrentChainingTraceId != nil {
+		object["currentChainingTraceId"], err = json.Marshal(a.CurrentChainingTraceId)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'currentChainingTraceId': %w", err)
+		}
+	}
+
+	if a.ExpectedArtifacts != nil {
+		object["expectedArtifacts"], err = json.Marshal(a.ExpectedArtifacts)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'expectedArtifacts': %w", err)
+		}
+	}
+
+	if a.HumanApproval != nil {
+		object["humanApproval"], err = json.Marshal(a.HumanApproval)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'humanApproval': %w", err)
+		}
+	}
+
+	object["name"], err = json.Marshal(a.Name)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling 'name': %w", err)
+	}
+
+	object["payload"], err = json.Marshal(a.Payload)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling 'payload': %w", err)
+	}
+
+	if a.PreviousChainingTraceIds != nil {
+		object["previousChainingTraceIds"], err = json.Marshal(a.PreviousChainingTraceIds)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'previousChainingTraceIds': %w", err)
+		}
+	}
+
+	if a.Relations != nil {
+		object["relations"], err = json.Marshal(a.Relations)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'relations': %w", err)
+		}
+	}
+
+	if a.RequestId != nil {
+		object["requestId"], err = json.Marshal(a.RequestId)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'requestId': %w", err)
+		}
+	}
+
+	if a.State != nil {
+		object["state"], err = json.Marshal(a.State)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'state': %w", err)
+		}
+	}
+
+	if a.StopSummary != nil {
+		object["stopSummary"], err = json.Marshal(a.StopSummary)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'stopSummary': %w", err)
+		}
+	}
+
+	object["structuredResult"], err = json.Marshal(a.StructuredResult)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling 'structuredResult': %w", err)
+	}
+
+	if a.Tags != nil {
+		object["tags"], err = json.Marshal(a.Tags)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'tags': %w", err)
+		}
+	}
+
+	if a.TraceId != nil {
+		object["traceId"], err = json.Marshal(a.TraceId)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'traceId': %w", err)
+		}
+	}
+
+	if a.WorkId != nil {
+		object["workId"], err = json.Marshal(a.WorkId)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'workId': %w", err)
+		}
+	}
+
+	if a.WorkTypeName != nil {
+		object["workTypeName"], err = json.Marshal(a.WorkTypeName)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'workTypeName': %w", err)
+		}
+	}
+
+	for fieldName, field := range a.AdditionalProperties {
+		object[fieldName], err = json.Marshal(field)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling '%s': %w", fieldName, err)
+		}
+	}
+	return json.Marshal(object)
+}
+
+// Getter for additional properties for WorkExpectedArtifact. Returns the specified
+// element and whether it was found
+func (a WorkExpectedArtifact) Get(fieldName string) (value interface{}, found bool) {
+	if a.AdditionalProperties != nil {
+		value, found = a.AdditionalProperties[fieldName]
+	}
+	return
+}
+
+// Setter for additional properties for WorkExpectedArtifact
+func (a *WorkExpectedArtifact) Set(fieldName string, value interface{}) {
+	if a.AdditionalProperties == nil {
+		a.AdditionalProperties = make(map[string]interface{})
+	}
+	a.AdditionalProperties[fieldName] = value
+}
+
+// Override default JSON handling for WorkExpectedArtifact to handle AdditionalProperties
+func (a *WorkExpectedArtifact) UnmarshalJSON(b []byte) error {
+	object := make(map[string]json.RawMessage)
+	err := json.Unmarshal(b, &object)
+	if err != nil {
+		return err
+	}
+
+	if raw, found := object["name"]; found {
+		err = json.Unmarshal(raw, &a.Name)
+		if err != nil {
+			return fmt.Errorf("error reading 'name': %w", err)
+		}
+		delete(object, "name")
+	}
+
+	if raw, found := object["nonEmpty"]; found {
+		err = json.Unmarshal(raw, &a.NonEmpty)
+		if err != nil {
+			return fmt.Errorf("error reading 'nonEmpty': %w", err)
+		}
+		delete(object, "nonEmpty")
+	}
+
+	if raw, found := object["pattern"]; found {
+		err = json.Unmarshal(raw, &a.Pattern)
+		if err != nil {
+			return fmt.Errorf("error reading 'pattern': %w", err)
+		}
+		delete(object, "pattern")
+	}
+
+	if raw, found := object["reason"]; found {
+		err = json.Unmarshal(raw, &a.Reason)
+		if err != nil {
+			return fmt.Errorf("error reading 'reason': %w", err)
+		}
+		delete(object, "reason")
+	}
+
+	if raw, found := object["verification"]; found {
+		err = json.Unmarshal(raw, &a.Verification)
+		if err != nil {
+			return fmt.Errorf("error reading 'verification': %w", err)
+		}
+		delete(object, "verification")
+	}
+
+	if len(object) != 0 {
+		a.AdditionalProperties = make(map[string]interface{})
+		for fieldName, fieldBuf := range object {
+			var fieldVal interface{}
+			err := json.Unmarshal(fieldBuf, &fieldVal)
+			if err != nil {
+				return fmt.Errorf("error unmarshaling field %s: %w", fieldName, err)
+			}
+			a.AdditionalProperties[fieldName] = fieldVal
+		}
+	}
+	return nil
+}
+
+// Override default JSON handling for WorkExpectedArtifact to handle AdditionalProperties
+func (a WorkExpectedArtifact) MarshalJSON() ([]byte, error) {
+	var err error
+	object := make(map[string]json.RawMessage)
+
+	object["name"], err = json.Marshal(a.Name)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling 'name': %w", err)
+	}
+
+	object["nonEmpty"], err = json.Marshal(a.NonEmpty)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling 'nonEmpty': %w", err)
+	}
+
+	object["pattern"], err = json.Marshal(a.Pattern)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling 'pattern': %w", err)
+	}
+
+	if a.Reason != nil {
+		object["reason"], err = json.Marshal(a.Reason)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'reason': %w", err)
+		}
+	}
+
+	object["verification"], err = json.Marshal(a.Verification)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling 'verification': %w", err)
+	}
+
+	for fieldName, field := range a.AdditionalProperties {
+		object[fieldName], err = json.Marshal(field)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling '%s': %w", fieldName, err)
+		}
+	}
+	return json.Marshal(object)
+}
+
+// Getter for additional properties for WorkPropagation. Returns the specified
+// element and whether it was found
+func (a WorkPropagation) Get(fieldName string) (value interface{}, found bool) {
+	if a.AdditionalProperties != nil {
+		value, found = a.AdditionalProperties[fieldName]
+	}
+	return
+}
+
+// Setter for additional properties for WorkPropagation
+func (a *WorkPropagation) Set(fieldName string, value interface{}) {
+	if a.AdditionalProperties == nil {
+		a.AdditionalProperties = make(map[string]interface{})
+	}
+	a.AdditionalProperties[fieldName] = value
+}
+
+// Override default JSON handling for WorkPropagation to handle AdditionalProperties
+func (a *WorkPropagation) UnmarshalJSON(b []byte) error {
+	object := make(map[string]json.RawMessage)
+	err := json.Unmarshal(b, &object)
+	if err != nil {
+		return err
+	}
+
+	if raw, found := object["mode"]; found {
+		err = json.Unmarshal(raw, &a.Mode)
+		if err != nil {
+			return fmt.Errorf("error reading 'mode': %w", err)
+		}
+		delete(object, "mode")
+	}
+
+	if len(object) != 0 {
+		a.AdditionalProperties = make(map[string]interface{})
+		for fieldName, fieldBuf := range object {
+			var fieldVal interface{}
+			err := json.Unmarshal(fieldBuf, &fieldVal)
+			if err != nil {
+				return fmt.Errorf("error unmarshaling field %s: %w", fieldName, err)
+			}
+			a.AdditionalProperties[fieldName] = fieldVal
+		}
+	}
+	return nil
+}
+
+// Override default JSON handling for WorkPropagation to handle AdditionalProperties
+func (a WorkPropagation) MarshalJSON() ([]byte, error) {
+	var err error
+	object := make(map[string]json.RawMessage)
+
+	object["mode"], err = json.Marshal(a.Mode)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling 'mode': %w", err)
+	}
+
+	for fieldName, field := range a.AdditionalProperties {
+		object[fieldName], err = json.Marshal(field)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling '%s': %w", fieldName, err)
+		}
+	}
+	return json.Marshal(object)
+}
+
+// Getter for additional properties for WorkState. Returns the specified
+// element and whether it was found
+func (a WorkState) Get(fieldName string) (value interface{}, found bool) {
+	if a.AdditionalProperties != nil {
+		value, found = a.AdditionalProperties[fieldName]
+	}
+	return
+}
+
+// Setter for additional properties for WorkState
+func (a *WorkState) Set(fieldName string, value interface{}) {
+	if a.AdditionalProperties == nil {
+		a.AdditionalProperties = make(map[string]interface{})
+	}
+	a.AdditionalProperties[fieldName] = value
+}
+
+// Override default JSON handling for WorkState to handle AdditionalProperties
+func (a *WorkState) UnmarshalJSON(b []byte) error {
+	object := make(map[string]json.RawMessage)
+	err := json.Unmarshal(b, &object)
+	if err != nil {
+		return err
+	}
+
+	if raw, found := object["id"]; found {
+		err = json.Unmarshal(raw, &a.Id)
+		if err != nil {
+			return fmt.Errorf("error reading 'id': %w", err)
+		}
+		delete(object, "id")
+	}
+
+	if raw, found := object["name"]; found {
+		err = json.Unmarshal(raw, &a.Name)
+		if err != nil {
+			return fmt.Errorf("error reading 'name': %w", err)
+		}
+		delete(object, "name")
+	}
+
+	if raw, found := object["type"]; found {
+		err = json.Unmarshal(raw, &a.Type)
+		if err != nil {
+			return fmt.Errorf("error reading 'type': %w", err)
+		}
+		delete(object, "type")
+	}
+
+	if len(object) != 0 {
+		a.AdditionalProperties = make(map[string]interface{})
+		for fieldName, fieldBuf := range object {
+			var fieldVal interface{}
+			err := json.Unmarshal(fieldBuf, &fieldVal)
+			if err != nil {
+				return fmt.Errorf("error unmarshaling field %s: %w", fieldName, err)
+			}
+			a.AdditionalProperties[fieldName] = fieldVal
+		}
+	}
+	return nil
+}
+
+// Override default JSON handling for WorkState to handle AdditionalProperties
+func (a WorkState) MarshalJSON() ([]byte, error) {
+	var err error
+	object := make(map[string]json.RawMessage)
+
+	if a.Id != nil {
+		object["id"], err = json.Marshal(a.Id)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'id': %w", err)
+		}
+	}
+
+	object["name"], err = json.Marshal(a.Name)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling 'name': %w", err)
+	}
+
+	object["type"], err = json.Marshal(a.Type)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling 'type': %w", err)
+	}
+
+	for fieldName, field := range a.AdditionalProperties {
+		object[fieldName], err = json.Marshal(field)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling '%s': %w", fieldName, err)
+		}
+	}
+	return json.Marshal(object)
+}
+
+// Getter for additional properties for WorkType. Returns the specified
+// element and whether it was found
+func (a WorkType) Get(fieldName string) (value interface{}, found bool) {
+	if a.AdditionalProperties != nil {
+		value, found = a.AdditionalProperties[fieldName]
+	}
+	return
+}
+
+// Setter for additional properties for WorkType
+func (a *WorkType) Set(fieldName string, value interface{}) {
+	if a.AdditionalProperties == nil {
+		a.AdditionalProperties = make(map[string]interface{})
+	}
+	a.AdditionalProperties[fieldName] = value
+}
+
+// Override default JSON handling for WorkType to handle AdditionalProperties
+func (a *WorkType) UnmarshalJSON(b []byte) error {
+	object := make(map[string]json.RawMessage)
+	err := json.Unmarshal(b, &object)
+	if err != nil {
+		return err
+	}
+
+	if raw, found := object["description"]; found {
+		err = json.Unmarshal(raw, &a.Description)
+		if err != nil {
+			return fmt.Errorf("error reading 'description': %w", err)
+		}
+		delete(object, "description")
+	}
+
+	if raw, found := object["expectedArtifacts"]; found {
+		err = json.Unmarshal(raw, &a.ExpectedArtifacts)
+		if err != nil {
+			return fmt.Errorf("error reading 'expectedArtifacts': %w", err)
+		}
+		delete(object, "expectedArtifacts")
+	}
+
+	if raw, found := object["handlingBehavior"]; found {
+		err = json.Unmarshal(raw, &a.HandlingBehavior)
+		if err != nil {
+			return fmt.Errorf("error reading 'handlingBehavior': %w", err)
+		}
+		delete(object, "handlingBehavior")
+	}
+
+	if raw, found := object["id"]; found {
+		err = json.Unmarshal(raw, &a.Id)
+		if err != nil {
+			return fmt.Errorf("error reading 'id': %w", err)
+		}
+		delete(object, "id")
+	}
+
+	if raw, found := object["name"]; found {
+		err = json.Unmarshal(raw, &a.Name)
+		if err != nil {
+			return fmt.Errorf("error reading 'name': %w", err)
+		}
+		delete(object, "name")
+	}
+
+	if raw, found := object["states"]; found {
+		err = json.Unmarshal(raw, &a.States)
+		if err != nil {
+			return fmt.Errorf("error reading 'states': %w", err)
+		}
+		delete(object, "states")
+	}
+
+	if len(object) != 0 {
+		a.AdditionalProperties = make(map[string]interface{})
+		for fieldName, fieldBuf := range object {
+			var fieldVal interface{}
+			err := json.Unmarshal(fieldBuf, &fieldVal)
+			if err != nil {
+				return fmt.Errorf("error unmarshaling field %s: %w", fieldName, err)
+			}
+			a.AdditionalProperties[fieldName] = fieldVal
+		}
+	}
+	return nil
+}
+
+// Override default JSON handling for WorkType to handle AdditionalProperties
+func (a WorkType) MarshalJSON() ([]byte, error) {
+	var err error
+	object := make(map[string]json.RawMessage)
+
+	if a.Description != nil {
+		object["description"], err = json.Marshal(a.Description)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'description': %w", err)
+		}
+	}
+
+	if a.ExpectedArtifacts != nil {
+		object["expectedArtifacts"], err = json.Marshal(a.ExpectedArtifacts)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'expectedArtifacts': %w", err)
+		}
+	}
+
+	if a.HandlingBehavior != nil {
+		object["handlingBehavior"], err = json.Marshal(a.HandlingBehavior)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'handlingBehavior': %w", err)
+		}
+	}
+
+	if a.Id != nil {
+		object["id"], err = json.Marshal(a.Id)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'id': %w", err)
+		}
+	}
+
+	object["name"], err = json.Marshal(a.Name)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling 'name': %w", err)
+	}
+
+	if a.States != nil {
+		object["states"], err = json.Marshal(a.States)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'states': %w", err)
+		}
+	}
+
+	for fieldName, field := range a.AdditionalProperties {
+		object[fieldName], err = json.Marshal(field)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling '%s': %w", fieldName, err)
+		}
+	}
+	return json.Marshal(object)
+}
+
+// Getter for additional properties for Worker. Returns the specified
+// element and whether it was found
+func (a Worker) Get(fieldName string) (value interface{}, found bool) {
+	if a.AdditionalProperties != nil {
+		value, found = a.AdditionalProperties[fieldName]
+	}
+	return
+}
+
+// Setter for additional properties for Worker
+func (a *Worker) Set(fieldName string, value interface{}) {
+	if a.AdditionalProperties == nil {
+		a.AdditionalProperties = make(map[string]interface{})
+	}
+	a.AdditionalProperties[fieldName] = value
+}
+
+// Override default JSON handling for Worker to handle AdditionalProperties
+func (a *Worker) UnmarshalJSON(b []byte) error {
+	object := make(map[string]json.RawMessage)
+	err := json.Unmarshal(b, &object)
+	if err != nil {
+		return err
+	}
+
+	if raw, found := object["agentTools"]; found {
+		err = json.Unmarshal(raw, &a.AgentTools)
+		if err != nil {
+			return fmt.Errorf("error reading 'agentTools': %w", err)
+		}
+		delete(object, "agentTools")
+	}
+
+	if raw, found := object["args"]; found {
+		err = json.Unmarshal(raw, &a.Args)
+		if err != nil {
+			return fmt.Errorf("error reading 'args': %w", err)
+		}
+		delete(object, "args")
+	}
+
+	if raw, found := object["auth"]; found {
+		err = json.Unmarshal(raw, &a.Auth)
+		if err != nil {
+			return fmt.Errorf("error reading 'auth': %w", err)
+		}
+		delete(object, "auth")
+	}
+
+	if raw, found := object["body"]; found {
+		err = json.Unmarshal(raw, &a.Body)
+		if err != nil {
+			return fmt.Errorf("error reading 'body': %w", err)
+		}
+		delete(object, "body")
+	}
+
+	if raw, found := object["command"]; found {
+		err = json.Unmarshal(raw, &a.Command)
+		if err != nil {
+			return fmt.Errorf("error reading 'command': %w", err)
+		}
+		delete(object, "command")
+	}
+
+	if raw, found := object["description"]; found {
+		err = json.Unmarshal(raw, &a.Description)
+		if err != nil {
+			return fmt.Errorf("error reading 'description': %w", err)
+		}
+		delete(object, "description")
+	}
+
+	if raw, found := object["executorProvider"]; found {
+		err = json.Unmarshal(raw, &a.ExecutorProvider)
+		if err != nil {
+			return fmt.Errorf("error reading 'executorProvider': %w", err)
+		}
+		delete(object, "executorProvider")
+	}
+
+	if raw, found := object["id"]; found {
+		err = json.Unmarshal(raw, &a.Id)
+		if err != nil {
+			return fmt.Errorf("error reading 'id': %w", err)
+		}
+		delete(object, "id")
+	}
+
+	if raw, found := object["linear"]; found {
+		err = json.Unmarshal(raw, &a.Linear)
+		if err != nil {
+			return fmt.Errorf("error reading 'linear': %w", err)
+		}
+		delete(object, "linear")
+	}
+
+	if raw, found := object["model"]; found {
+		err = json.Unmarshal(raw, &a.Model)
+		if err != nil {
+			return fmt.Errorf("error reading 'model': %w", err)
+		}
+		delete(object, "model")
+	}
+
+	if raw, found := object["modelLocality"]; found {
+		err = json.Unmarshal(raw, &a.ModelLocality)
+		if err != nil {
+			return fmt.Errorf("error reading 'modelLocality': %w", err)
+		}
+		delete(object, "modelLocality")
+	}
+
+	if raw, found := object["modelProvider"]; found {
+		err = json.Unmarshal(raw, &a.ModelProvider)
+		if err != nil {
+			return fmt.Errorf("error reading 'modelProvider': %w", err)
+		}
+		delete(object, "modelProvider")
+	}
+
+	if raw, found := object["name"]; found {
+		err = json.Unmarshal(raw, &a.Name)
+		if err != nil {
+			return fmt.Errorf("error reading 'name': %w", err)
+		}
+		delete(object, "name")
+	}
+
+	if raw, found := object["operations"]; found {
+		err = json.Unmarshal(raw, &a.Operations)
+		if err != nil {
+			return fmt.Errorf("error reading 'operations': %w", err)
+		}
+		delete(object, "operations")
+	}
+
+	if raw, found := object["provider"]; found {
+		err = json.Unmarshal(raw, &a.Provider)
+		if err != nil {
+			return fmt.Errorf("error reading 'provider': %w", err)
+		}
+		delete(object, "provider")
+	}
+
+	if raw, found := object["reasoningEffort"]; found {
+		err = json.Unmarshal(raw, &a.ReasoningEffort)
+		if err != nil {
+			return fmt.Errorf("error reading 'reasoningEffort': %w", err)
+		}
+		delete(object, "reasoningEffort")
+	}
+
+	if raw, found := object["resources"]; found {
+		err = json.Unmarshal(raw, &a.Resources)
+		if err != nil {
+			return fmt.Errorf("error reading 'resources': %w", err)
+		}
+		delete(object, "resources")
+	}
+
+	if raw, found := object["skipPermissions"]; found {
+		err = json.Unmarshal(raw, &a.SkipPermissions)
+		if err != nil {
+			return fmt.Errorf("error reading 'skipPermissions': %w", err)
+		}
+		delete(object, "skipPermissions")
+	}
+
+	if raw, found := object["stopToken"]; found {
+		err = json.Unmarshal(raw, &a.StopToken)
+		if err != nil {
+			return fmt.Errorf("error reading 'stopToken': %w", err)
+		}
+		delete(object, "stopToken")
+	}
+
+	if raw, found := object["timeout"]; found {
+		err = json.Unmarshal(raw, &a.Timeout)
+		if err != nil {
+			return fmt.Errorf("error reading 'timeout': %w", err)
+		}
+		delete(object, "timeout")
+	}
+
+	if raw, found := object["type"]; found {
+		err = json.Unmarshal(raw, &a.Type)
+		if err != nil {
+			return fmt.Errorf("error reading 'type': %w", err)
+		}
+		delete(object, "type")
+	}
+
+	if len(object) != 0 {
+		a.AdditionalProperties = make(map[string]interface{})
+		for fieldName, fieldBuf := range object {
+			var fieldVal interface{}
+			err := json.Unmarshal(fieldBuf, &fieldVal)
+			if err != nil {
+				return fmt.Errorf("error unmarshaling field %s: %w", fieldName, err)
+			}
+			a.AdditionalProperties[fieldName] = fieldVal
+		}
+	}
+	return nil
+}
+
+// Override default JSON handling for Worker to handle AdditionalProperties
+func (a Worker) MarshalJSON() ([]byte, error) {
+	var err error
+	object := make(map[string]json.RawMessage)
+
+	if a.AgentTools != nil {
+		object["agentTools"], err = json.Marshal(a.AgentTools)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'agentTools': %w", err)
+		}
+	}
+
+	if a.Args != nil {
+		object["args"], err = json.Marshal(a.Args)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'args': %w", err)
+		}
+	}
+
+	if a.Auth != nil {
+		object["auth"], err = json.Marshal(a.Auth)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'auth': %w", err)
+		}
+	}
+
+	if a.Body != nil {
+		object["body"], err = json.Marshal(a.Body)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'body': %w", err)
+		}
+	}
+
+	if a.Command != nil {
+		object["command"], err = json.Marshal(a.Command)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'command': %w", err)
+		}
+	}
+
+	if a.Description != nil {
+		object["description"], err = json.Marshal(a.Description)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'description': %w", err)
+		}
+	}
+
+	if a.ExecutorProvider != nil {
+		object["executorProvider"], err = json.Marshal(a.ExecutorProvider)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'executorProvider': %w", err)
+		}
+	}
+
+	if a.Id != nil {
+		object["id"], err = json.Marshal(a.Id)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'id': %w", err)
+		}
+	}
+
+	if a.Linear != nil {
+		object["linear"], err = json.Marshal(a.Linear)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'linear': %w", err)
+		}
+	}
+
+	if a.Model != nil {
+		object["model"], err = json.Marshal(a.Model)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'model': %w", err)
+		}
+	}
+
+	if a.ModelLocality != nil {
+		object["modelLocality"], err = json.Marshal(a.ModelLocality)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'modelLocality': %w", err)
+		}
+	}
+
+	if a.ModelProvider != nil {
+		object["modelProvider"], err = json.Marshal(a.ModelProvider)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'modelProvider': %w", err)
+		}
+	}
+
+	object["name"], err = json.Marshal(a.Name)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling 'name': %w", err)
+	}
+
+	if a.Operations != nil {
+		object["operations"], err = json.Marshal(a.Operations)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'operations': %w", err)
+		}
+	}
+
+	if a.Provider != nil {
+		object["provider"], err = json.Marshal(a.Provider)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'provider': %w", err)
+		}
+	}
+
+	if a.ReasoningEffort != nil {
+		object["reasoningEffort"], err = json.Marshal(a.ReasoningEffort)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'reasoningEffort': %w", err)
+		}
+	}
+
+	if a.Resources != nil {
+		object["resources"], err = json.Marshal(a.Resources)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'resources': %w", err)
+		}
+	}
+
+	if a.SkipPermissions != nil {
+		object["skipPermissions"], err = json.Marshal(a.SkipPermissions)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'skipPermissions': %w", err)
+		}
+	}
+
+	if a.StopToken != nil {
+		object["stopToken"], err = json.Marshal(a.StopToken)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'stopToken': %w", err)
+		}
+	}
+
+	if a.Timeout != nil {
+		object["timeout"], err = json.Marshal(a.Timeout)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'timeout': %w", err)
+		}
+	}
+
+	if a.Type != nil {
+		object["type"], err = json.Marshal(a.Type)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'type': %w", err)
+		}
+	}
+
+	for fieldName, field := range a.AdditionalProperties {
+		object[fieldName], err = json.Marshal(field)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling '%s': %w", fieldName, err)
+		}
+	}
+	return json.Marshal(object)
+}
+
+// Getter for additional properties for Workstation. Returns the specified
+// element and whether it was found
+func (a Workstation) Get(fieldName string) (value interface{}, found bool) {
+	if a.AdditionalProperties != nil {
+		value, found = a.AdditionalProperties[fieldName]
+	}
+	return
+}
+
+// Setter for additional properties for Workstation
+func (a *Workstation) Set(fieldName string, value interface{}) {
+	if a.AdditionalProperties == nil {
+		a.AdditionalProperties = make(map[string]interface{})
+	}
+	a.AdditionalProperties[fieldName] = value
+}
+
+// Override default JSON handling for Workstation to handle AdditionalProperties
+func (a *Workstation) UnmarshalJSON(b []byte) error {
+	object := make(map[string]json.RawMessage)
+	err := json.Unmarshal(b, &object)
+	if err != nil {
+		return err
+	}
+
+	if raw, found := object["behavior"]; found {
+		err = json.Unmarshal(raw, &a.Behavior)
+		if err != nil {
+			return fmt.Errorf("error reading 'behavior': %w", err)
+		}
+		delete(object, "behavior")
+	}
+
+	if raw, found := object["body"]; found {
+		err = json.Unmarshal(raw, &a.Body)
+		if err != nil {
+			return fmt.Errorf("error reading 'body': %w", err)
+		}
+		delete(object, "body")
+	}
+
+	if raw, found := object["classificationRoutes"]; found {
+		err = json.Unmarshal(raw, &a.ClassificationRoutes)
+		if err != nil {
+			return fmt.Errorf("error reading 'classificationRoutes': %w", err)
+		}
+		delete(object, "classificationRoutes")
+	}
+
+	if raw, found := object["copyReferencedScripts"]; found {
+		err = json.Unmarshal(raw, &a.CopyReferencedScripts)
+		if err != nil {
+			return fmt.Errorf("error reading 'copyReferencedScripts': %w", err)
+		}
+		delete(object, "copyReferencedScripts")
+	}
+
+	if raw, found := object["cron"]; found {
+		err = json.Unmarshal(raw, &a.Cron)
+		if err != nil {
+			return fmt.Errorf("error reading 'cron': %w", err)
+		}
+		delete(object, "cron")
+	}
+
+	if raw, found := object["description"]; found {
+		err = json.Unmarshal(raw, &a.Description)
+		if err != nil {
+			return fmt.Errorf("error reading 'description': %w", err)
+		}
+		delete(object, "description")
+	}
+
+	if raw, found := object["env"]; found {
+		err = json.Unmarshal(raw, &a.Env)
+		if err != nil {
+			return fmt.Errorf("error reading 'env': %w", err)
+		}
+		delete(object, "env")
+	}
+
+	if raw, found := object["expectedArtifacts"]; found {
+		err = json.Unmarshal(raw, &a.ExpectedArtifacts)
+		if err != nil {
+			return fmt.Errorf("error reading 'expectedArtifacts': %w", err)
+		}
+		delete(object, "expectedArtifacts")
+	}
+
+	if raw, found := object["guards"]; found {
+		err = json.Unmarshal(raw, &a.Guards)
+		if err != nil {
+			return fmt.Errorf("error reading 'guards': %w", err)
+		}
+		delete(object, "guards")
+	}
+
+	if raw, found := object["id"]; found {
+		err = json.Unmarshal(raw, &a.Id)
+		if err != nil {
+			return fmt.Errorf("error reading 'id': %w", err)
+		}
+		delete(object, "id")
+	}
+
+	if raw, found := object["inputs"]; found {
+		err = json.Unmarshal(raw, &a.Inputs)
+		if err != nil {
+			return fmt.Errorf("error reading 'inputs': %w", err)
+		}
+		delete(object, "inputs")
+	}
+
+	if raw, found := object["limits"]; found {
+		err = json.Unmarshal(raw, &a.Limits)
+		if err != nil {
+			return fmt.Errorf("error reading 'limits': %w", err)
+		}
+		delete(object, "limits")
+	}
+
+	if raw, found := object["name"]; found {
+		err = json.Unmarshal(raw, &a.Name)
+		if err != nil {
+			return fmt.Errorf("error reading 'name': %w", err)
+		}
+		delete(object, "name")
+	}
+
+	if raw, found := object["onContinue"]; found {
+		err = json.Unmarshal(raw, &a.OnContinue)
+		if err != nil {
+			return fmt.Errorf("error reading 'onContinue': %w", err)
+		}
+		delete(object, "onContinue")
+	}
+
+	if raw, found := object["onFailure"]; found {
+		err = json.Unmarshal(raw, &a.OnFailure)
+		if err != nil {
+			return fmt.Errorf("error reading 'onFailure': %w", err)
+		}
+		delete(object, "onFailure")
+	}
+
+	if raw, found := object["onRejection"]; found {
+		err = json.Unmarshal(raw, &a.OnRejection)
+		if err != nil {
+			return fmt.Errorf("error reading 'onRejection': %w", err)
+		}
+		delete(object, "onRejection")
+	}
+
+	if raw, found := object["operation"]; found {
+		err = json.Unmarshal(raw, &a.Operation)
+		if err != nil {
+			return fmt.Errorf("error reading 'operation': %w", err)
+		}
+		delete(object, "operation")
+	}
+
+	if raw, found := object["operationBindings"]; found {
+		err = json.Unmarshal(raw, &a.OperationBindings)
+		if err != nil {
+			return fmt.Errorf("error reading 'operationBindings': %w", err)
+		}
+		delete(object, "operationBindings")
+	}
+
+	if raw, found := object["outcomeFormat"]; found {
+		err = json.Unmarshal(raw, &a.OutcomeFormat)
+		if err != nil {
+			return fmt.Errorf("error reading 'outcomeFormat': %w", err)
+		}
+		delete(object, "outcomeFormat")
+	}
+
+	if raw, found := object["outputContract"]; found {
+		err = json.Unmarshal(raw, &a.OutputContract)
+		if err != nil {
+			return fmt.Errorf("error reading 'outputContract': %w", err)
+		}
+		delete(object, "outputContract")
+	}
+
+	if raw, found := object["outputSchema"]; found {
+		err = json.Unmarshal(raw, &a.OutputSchema)
+		if err != nil {
+			return fmt.Errorf("error reading 'outputSchema': %w", err)
+		}
+		delete(object, "outputSchema")
+	}
+
+	if raw, found := object["outputs"]; found {
+		err = json.Unmarshal(raw, &a.Outputs)
+		if err != nil {
+			return fmt.Errorf("error reading 'outputs': %w", err)
+		}
+		delete(object, "outputs")
+	}
+
+	if raw, found := object["promptFile"]; found {
+		err = json.Unmarshal(raw, &a.PromptFile)
+		if err != nil {
+			return fmt.Errorf("error reading 'promptFile': %w", err)
+		}
+		delete(object, "promptFile")
+	}
+
+	if raw, found := object["resources"]; found {
+		err = json.Unmarshal(raw, &a.Resources)
+		if err != nil {
+			return fmt.Errorf("error reading 'resources': %w", err)
+		}
+		delete(object, "resources")
+	}
+
+	if raw, found := object["runner"]; found {
+		err = json.Unmarshal(raw, &a.Runner)
+		if err != nil {
+			return fmt.Errorf("error reading 'runner': %w", err)
+		}
+		delete(object, "runner")
+	}
+
+	if raw, found := object["stopWords"]; found {
+		err = json.Unmarshal(raw, &a.StopWords)
+		if err != nil {
+			return fmt.Errorf("error reading 'stopWords': %w", err)
+		}
+		delete(object, "stopWords")
+	}
+
+	if raw, found := object["type"]; found {
+		err = json.Unmarshal(raw, &a.Type)
+		if err != nil {
+			return fmt.Errorf("error reading 'type': %w", err)
+		}
+		delete(object, "type")
+	}
+
+	if raw, found := object["workPropagation"]; found {
+		err = json.Unmarshal(raw, &a.WorkPropagation)
+		if err != nil {
+			return fmt.Errorf("error reading 'workPropagation': %w", err)
+		}
+		delete(object, "workPropagation")
+	}
+
+	if raw, found := object["worker"]; found {
+		err = json.Unmarshal(raw, &a.Worker)
+		if err != nil {
+			return fmt.Errorf("error reading 'worker': %w", err)
+		}
+		delete(object, "worker")
+	}
+
+	if raw, found := object["workingDirectory"]; found {
+		err = json.Unmarshal(raw, &a.WorkingDirectory)
+		if err != nil {
+			return fmt.Errorf("error reading 'workingDirectory': %w", err)
+		}
+		delete(object, "workingDirectory")
+	}
+
+	if raw, found := object["worktree"]; found {
+		err = json.Unmarshal(raw, &a.Worktree)
+		if err != nil {
+			return fmt.Errorf("error reading 'worktree': %w", err)
+		}
+		delete(object, "worktree")
+	}
+
+	if len(object) != 0 {
+		a.AdditionalProperties = make(map[string]interface{})
+		for fieldName, fieldBuf := range object {
+			var fieldVal interface{}
+			err := json.Unmarshal(fieldBuf, &fieldVal)
+			if err != nil {
+				return fmt.Errorf("error unmarshaling field %s: %w", fieldName, err)
+			}
+			a.AdditionalProperties[fieldName] = fieldVal
+		}
+	}
+	return nil
+}
+
+// Override default JSON handling for Workstation to handle AdditionalProperties
+func (a Workstation) MarshalJSON() ([]byte, error) {
+	var err error
+	object := make(map[string]json.RawMessage)
+
+	if a.Behavior != nil {
+		object["behavior"], err = json.Marshal(a.Behavior)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'behavior': %w", err)
+		}
+	}
+
+	if a.Body != nil {
+		object["body"], err = json.Marshal(a.Body)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'body': %w", err)
+		}
+	}
+
+	if a.ClassificationRoutes != nil {
+		object["classificationRoutes"], err = json.Marshal(a.ClassificationRoutes)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'classificationRoutes': %w", err)
+		}
+	}
+
+	if a.CopyReferencedScripts != nil {
+		object["copyReferencedScripts"], err = json.Marshal(a.CopyReferencedScripts)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'copyReferencedScripts': %w", err)
+		}
+	}
+
+	if a.Cron != nil {
+		object["cron"], err = json.Marshal(a.Cron)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'cron': %w", err)
+		}
+	}
+
+	if a.Description != nil {
+		object["description"], err = json.Marshal(a.Description)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'description': %w", err)
+		}
+	}
+
+	if a.Env != nil {
+		object["env"], err = json.Marshal(a.Env)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'env': %w", err)
+		}
+	}
+
+	if a.ExpectedArtifacts != nil {
+		object["expectedArtifacts"], err = json.Marshal(a.ExpectedArtifacts)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'expectedArtifacts': %w", err)
+		}
+	}
+
+	if a.Guards != nil {
+		object["guards"], err = json.Marshal(a.Guards)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'guards': %w", err)
+		}
+	}
+
+	if a.Id != nil {
+		object["id"], err = json.Marshal(a.Id)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'id': %w", err)
+		}
+	}
+
+	if a.Inputs != nil {
+		object["inputs"], err = json.Marshal(a.Inputs)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'inputs': %w", err)
+		}
+	}
+
+	if a.Limits != nil {
+		object["limits"], err = json.Marshal(a.Limits)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'limits': %w", err)
+		}
+	}
+
+	object["name"], err = json.Marshal(a.Name)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling 'name': %w", err)
+	}
+
+	if a.OnContinue != nil {
+		object["onContinue"], err = json.Marshal(a.OnContinue)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'onContinue': %w", err)
+		}
+	}
+
+	if a.OnFailure != nil {
+		object["onFailure"], err = json.Marshal(a.OnFailure)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'onFailure': %w", err)
+		}
+	}
+
+	if a.OnRejection != nil {
+		object["onRejection"], err = json.Marshal(a.OnRejection)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'onRejection': %w", err)
+		}
+	}
+
+	if a.Operation != nil {
+		object["operation"], err = json.Marshal(a.Operation)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'operation': %w", err)
+		}
+	}
+
+	if a.OperationBindings != nil {
+		object["operationBindings"], err = json.Marshal(a.OperationBindings)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'operationBindings': %w", err)
+		}
+	}
+
+	if a.OutcomeFormat != nil {
+		object["outcomeFormat"], err = json.Marshal(a.OutcomeFormat)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'outcomeFormat': %w", err)
+		}
+	}
+
+	if a.OutputContract != nil {
+		object["outputContract"], err = json.Marshal(a.OutputContract)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'outputContract': %w", err)
+		}
+	}
+
+	if a.OutputSchema != nil {
+		object["outputSchema"], err = json.Marshal(a.OutputSchema)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'outputSchema': %w", err)
+		}
+	}
+
+	if a.Outputs != nil {
+		object["outputs"], err = json.Marshal(a.Outputs)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'outputs': %w", err)
+		}
+	}
+
+	if a.PromptFile != nil {
+		object["promptFile"], err = json.Marshal(a.PromptFile)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'promptFile': %w", err)
+		}
+	}
+
+	if a.Resources != nil {
+		object["resources"], err = json.Marshal(a.Resources)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'resources': %w", err)
+		}
+	}
+
+	if a.Runner != nil {
+		object["runner"], err = json.Marshal(a.Runner)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'runner': %w", err)
+		}
+	}
+
+	if a.StopWords != nil {
+		object["stopWords"], err = json.Marshal(a.StopWords)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'stopWords': %w", err)
+		}
+	}
+
+	if a.Type != nil {
+		object["type"], err = json.Marshal(a.Type)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'type': %w", err)
+		}
+	}
+
+	if a.WorkPropagation != nil {
+		object["workPropagation"], err = json.Marshal(a.WorkPropagation)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'workPropagation': %w", err)
+		}
+	}
+
+	if a.Worker != nil {
+		object["worker"], err = json.Marshal(a.Worker)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'worker': %w", err)
+		}
+	}
+
+	if a.WorkingDirectory != nil {
+		object["workingDirectory"], err = json.Marshal(a.WorkingDirectory)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'workingDirectory': %w", err)
+		}
+	}
+
+	if a.Worktree != nil {
+		object["worktree"], err = json.Marshal(a.Worktree)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'worktree': %w", err)
+		}
+	}
+
+	for fieldName, field := range a.AdditionalProperties {
+		object[fieldName], err = json.Marshal(field)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling '%s': %w", fieldName, err)
+		}
+	}
+	return json.Marshal(object)
+}
+
+// Getter for additional properties for WorkstationCron. Returns the specified
+// element and whether it was found
+func (a WorkstationCron) Get(fieldName string) (value interface{}, found bool) {
+	if a.AdditionalProperties != nil {
+		value, found = a.AdditionalProperties[fieldName]
+	}
+	return
+}
+
+// Setter for additional properties for WorkstationCron
+func (a *WorkstationCron) Set(fieldName string, value interface{}) {
+	if a.AdditionalProperties == nil {
+		a.AdditionalProperties = make(map[string]interface{})
+	}
+	a.AdditionalProperties[fieldName] = value
+}
+
+// Override default JSON handling for WorkstationCron to handle AdditionalProperties
+func (a *WorkstationCron) UnmarshalJSON(b []byte) error {
+	object := make(map[string]json.RawMessage)
+	err := json.Unmarshal(b, &object)
+	if err != nil {
+		return err
+	}
+
+	if raw, found := object["every"]; found {
+		err = json.Unmarshal(raw, &a.Every)
+		if err != nil {
+			return fmt.Errorf("error reading 'every': %w", err)
+		}
+		delete(object, "every")
+	}
+
+	if raw, found := object["expiryWindow"]; found {
+		err = json.Unmarshal(raw, &a.ExpiryWindow)
+		if err != nil {
+			return fmt.Errorf("error reading 'expiryWindow': %w", err)
+		}
+		delete(object, "expiryWindow")
+	}
+
+	if raw, found := object["jitter"]; found {
+		err = json.Unmarshal(raw, &a.Jitter)
+		if err != nil {
+			return fmt.Errorf("error reading 'jitter': %w", err)
+		}
+		delete(object, "jitter")
+	}
+
+	if raw, found := object["schedule"]; found {
+		err = json.Unmarshal(raw, &a.Schedule)
+		if err != nil {
+			return fmt.Errorf("error reading 'schedule': %w", err)
+		}
+		delete(object, "schedule")
+	}
+
+	if raw, found := object["triggerAtStart"]; found {
+		err = json.Unmarshal(raw, &a.TriggerAtStart)
+		if err != nil {
+			return fmt.Errorf("error reading 'triggerAtStart': %w", err)
+		}
+		delete(object, "triggerAtStart")
+	}
+
+	if len(object) != 0 {
+		a.AdditionalProperties = make(map[string]interface{})
+		for fieldName, fieldBuf := range object {
+			var fieldVal interface{}
+			err := json.Unmarshal(fieldBuf, &fieldVal)
+			if err != nil {
+				return fmt.Errorf("error unmarshaling field %s: %w", fieldName, err)
+			}
+			a.AdditionalProperties[fieldName] = fieldVal
+		}
+	}
+	return nil
+}
+
+// Override default JSON handling for WorkstationCron to handle AdditionalProperties
+func (a WorkstationCron) MarshalJSON() ([]byte, error) {
+	var err error
+	object := make(map[string]json.RawMessage)
+
+	if a.Every != nil {
+		object["every"], err = json.Marshal(a.Every)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'every': %w", err)
+		}
+	}
+
+	if a.ExpiryWindow != nil {
+		object["expiryWindow"], err = json.Marshal(a.ExpiryWindow)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'expiryWindow': %w", err)
+		}
+	}
+
+	if a.Jitter != nil {
+		object["jitter"], err = json.Marshal(a.Jitter)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'jitter': %w", err)
+		}
+	}
+
+	if a.Schedule != nil {
+		object["schedule"], err = json.Marshal(a.Schedule)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'schedule': %w", err)
+		}
+	}
+
+	if a.TriggerAtStart != nil {
+		object["triggerAtStart"], err = json.Marshal(a.TriggerAtStart)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'triggerAtStart': %w", err)
+		}
+	}
+
+	for fieldName, field := range a.AdditionalProperties {
+		object[fieldName], err = json.Marshal(field)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling '%s': %w", fieldName, err)
+		}
+	}
+	return json.Marshal(object)
+}
+
+// Getter for additional properties for WorkstationGuard. Returns the specified
+// element and whether it was found
+func (a WorkstationGuard) Get(fieldName string) (value interface{}, found bool) {
+	if a.AdditionalProperties != nil {
+		value, found = a.AdditionalProperties[fieldName]
+	}
+	return
+}
+
+// Setter for additional properties for WorkstationGuard
+func (a *WorkstationGuard) Set(fieldName string, value interface{}) {
+	if a.AdditionalProperties == nil {
+		a.AdditionalProperties = make(map[string]interface{})
+	}
+	a.AdditionalProperties[fieldName] = value
+}
+
+// Override default JSON handling for WorkstationGuard to handle AdditionalProperties
+func (a *WorkstationGuard) UnmarshalJSON(b []byte) error {
+	object := make(map[string]json.RawMessage)
+	err := json.Unmarshal(b, &object)
+	if err != nil {
+		return err
+	}
+
+	if raw, found := object["logicalRoundTrip"]; found {
+		err = json.Unmarshal(raw, &a.LogicalRoundTrip)
+		if err != nil {
+			return fmt.Errorf("error reading 'logicalRoundTrip': %w", err)
+		}
+		delete(object, "logicalRoundTrip")
+	}
+
+	if raw, found := object["matchConfig"]; found {
+		err = json.Unmarshal(raw, &a.MatchConfig)
+		if err != nil {
+			return fmt.Errorf("error reading 'matchConfig': %w", err)
+		}
+		delete(object, "matchConfig")
+	}
+
+	if raw, found := object["matchInput"]; found {
+		err = json.Unmarshal(raw, &a.MatchInput)
+		if err != nil {
+			return fmt.Errorf("error reading 'matchInput': %w", err)
+		}
+		delete(object, "matchInput")
+	}
+
+	if raw, found := object["maxVisits"]; found {
+		err = json.Unmarshal(raw, &a.MaxVisits)
+		if err != nil {
+			return fmt.Errorf("error reading 'maxVisits': %w", err)
+		}
+		delete(object, "maxVisits")
+	}
+
+	if raw, found := object["maxVisitsArgument"]; found {
+		err = json.Unmarshal(raw, &a.MaxVisitsArgument)
+		if err != nil {
+			return fmt.Errorf("error reading 'maxVisitsArgument': %w", err)
+		}
+		delete(object, "maxVisitsArgument")
+	}
+
+	if raw, found := object["parentInput"]; found {
+		err = json.Unmarshal(raw, &a.ParentInput)
+		if err != nil {
+			return fmt.Errorf("error reading 'parentInput': %w", err)
+		}
+		delete(object, "parentInput")
+	}
+
+	if raw, found := object["spawnedBy"]; found {
+		err = json.Unmarshal(raw, &a.SpawnedBy)
+		if err != nil {
+			return fmt.Errorf("error reading 'spawnedBy': %w", err)
+		}
+		delete(object, "spawnedBy")
+	}
+
+	if raw, found := object["type"]; found {
+		err = json.Unmarshal(raw, &a.Type)
+		if err != nil {
+			return fmt.Errorf("error reading 'type': %w", err)
+		}
+		delete(object, "type")
+	}
+
+	if raw, found := object["workstation"]; found {
+		err = json.Unmarshal(raw, &a.Workstation)
+		if err != nil {
+			return fmt.Errorf("error reading 'workstation': %w", err)
+		}
+		delete(object, "workstation")
+	}
+
+	if len(object) != 0 {
+		a.AdditionalProperties = make(map[string]interface{})
+		for fieldName, fieldBuf := range object {
+			var fieldVal interface{}
+			err := json.Unmarshal(fieldBuf, &fieldVal)
+			if err != nil {
+				return fmt.Errorf("error unmarshaling field %s: %w", fieldName, err)
+			}
+			a.AdditionalProperties[fieldName] = fieldVal
+		}
+	}
+	return nil
+}
+
+// Override default JSON handling for WorkstationGuard to handle AdditionalProperties
+func (a WorkstationGuard) MarshalJSON() ([]byte, error) {
+	var err error
+	object := make(map[string]json.RawMessage)
+
+	if a.LogicalRoundTrip != nil {
+		object["logicalRoundTrip"], err = json.Marshal(a.LogicalRoundTrip)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'logicalRoundTrip': %w", err)
+		}
+	}
+
+	if a.MatchConfig != nil {
+		object["matchConfig"], err = json.Marshal(a.MatchConfig)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'matchConfig': %w", err)
+		}
+	}
+
+	if a.MatchInput != nil {
+		object["matchInput"], err = json.Marshal(a.MatchInput)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'matchInput': %w", err)
+		}
+	}
+
+	if a.MaxVisits != nil {
+		object["maxVisits"], err = json.Marshal(a.MaxVisits)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'maxVisits': %w", err)
+		}
+	}
+
+	if a.MaxVisitsArgument != nil {
+		object["maxVisitsArgument"], err = json.Marshal(a.MaxVisitsArgument)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'maxVisitsArgument': %w", err)
+		}
+	}
+
+	if a.ParentInput != nil {
+		object["parentInput"], err = json.Marshal(a.ParentInput)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'parentInput': %w", err)
+		}
+	}
+
+	if a.SpawnedBy != nil {
+		object["spawnedBy"], err = json.Marshal(a.SpawnedBy)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'spawnedBy': %w", err)
+		}
+	}
+
+	object["type"], err = json.Marshal(a.Type)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling 'type': %w", err)
+	}
+
+	if a.Workstation != nil {
+		object["workstation"], err = json.Marshal(a.Workstation)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'workstation': %w", err)
+		}
+	}
+
+	for fieldName, field := range a.AdditionalProperties {
+		object[fieldName], err = json.Marshal(field)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling '%s': %w", fieldName, err)
+		}
+	}
+	return json.Marshal(object)
+}
+
+// Getter for additional properties for WorkstationIO. Returns the specified
+// element and whether it was found
+func (a WorkstationIO) Get(fieldName string) (value interface{}, found bool) {
+	if a.AdditionalProperties != nil {
+		value, found = a.AdditionalProperties[fieldName]
+	}
+	return
+}
+
+// Setter for additional properties for WorkstationIO
+func (a *WorkstationIO) Set(fieldName string, value interface{}) {
+	if a.AdditionalProperties == nil {
+		a.AdditionalProperties = make(map[string]interface{})
+	}
+	a.AdditionalProperties[fieldName] = value
+}
+
+// Override default JSON handling for WorkstationIO to handle AdditionalProperties
+func (a *WorkstationIO) UnmarshalJSON(b []byte) error {
+	object := make(map[string]json.RawMessage)
+	err := json.Unmarshal(b, &object)
+	if err != nil {
+		return err
+	}
+
+	if raw, found := object["guards"]; found {
+		err = json.Unmarshal(raw, &a.Guards)
+		if err != nil {
+			return fmt.Errorf("error reading 'guards': %w", err)
+		}
+		delete(object, "guards")
+	}
+
+	if raw, found := object["state"]; found {
+		err = json.Unmarshal(raw, &a.State)
+		if err != nil {
+			return fmt.Errorf("error reading 'state': %w", err)
+		}
+		delete(object, "state")
+	}
+
+	if raw, found := object["workType"]; found {
+		err = json.Unmarshal(raw, &a.WorkType)
+		if err != nil {
+			return fmt.Errorf("error reading 'workType': %w", err)
+		}
+		delete(object, "workType")
+	}
+
+	if len(object) != 0 {
+		a.AdditionalProperties = make(map[string]interface{})
+		for fieldName, fieldBuf := range object {
+			var fieldVal interface{}
+			err := json.Unmarshal(fieldBuf, &fieldVal)
+			if err != nil {
+				return fmt.Errorf("error unmarshaling field %s: %w", fieldName, err)
+			}
+			a.AdditionalProperties[fieldName] = fieldVal
+		}
+	}
+	return nil
+}
+
+// Override default JSON handling for WorkstationIO to handle AdditionalProperties
+func (a WorkstationIO) MarshalJSON() ([]byte, error) {
+	var err error
+	object := make(map[string]json.RawMessage)
+
+	if a.Guards != nil {
+		object["guards"], err = json.Marshal(a.Guards)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'guards': %w", err)
+		}
+	}
+
+	object["state"], err = json.Marshal(a.State)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling 'state': %w", err)
+	}
+
+	object["workType"], err = json.Marshal(a.WorkType)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling 'workType': %w", err)
+	}
+
+	for fieldName, field := range a.AdditionalProperties {
+		object[fieldName], err = json.Marshal(field)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling '%s': %w", fieldName, err)
+		}
+	}
+	return json.Marshal(object)
+}
+
+// Getter for additional properties for WorkstationLimits. Returns the specified
+// element and whether it was found
+func (a WorkstationLimits) Get(fieldName string) (value interface{}, found bool) {
+	if a.AdditionalProperties != nil {
+		value, found = a.AdditionalProperties[fieldName]
+	}
+	return
+}
+
+// Setter for additional properties for WorkstationLimits
+func (a *WorkstationLimits) Set(fieldName string, value interface{}) {
+	if a.AdditionalProperties == nil {
+		a.AdditionalProperties = make(map[string]interface{})
+	}
+	a.AdditionalProperties[fieldName] = value
+}
+
+// Override default JSON handling for WorkstationLimits to handle AdditionalProperties
+func (a *WorkstationLimits) UnmarshalJSON(b []byte) error {
+	object := make(map[string]json.RawMessage)
+	err := json.Unmarshal(b, &object)
+	if err != nil {
+		return err
+	}
+
+	if raw, found := object["maxExecutionTime"]; found {
+		err = json.Unmarshal(raw, &a.MaxExecutionTime)
+		if err != nil {
+			return fmt.Errorf("error reading 'maxExecutionTime': %w", err)
+		}
+		delete(object, "maxExecutionTime")
+	}
+
+	if raw, found := object["maxGeneratedWorkItems"]; found {
+		err = json.Unmarshal(raw, &a.MaxGeneratedWorkItems)
+		if err != nil {
+			return fmt.Errorf("error reading 'maxGeneratedWorkItems': %w", err)
+		}
+		delete(object, "maxGeneratedWorkItems")
+	}
+
+	if raw, found := object["maxGeneratedWorkItemsArgument"]; found {
+		err = json.Unmarshal(raw, &a.MaxGeneratedWorkItemsArgument)
+		if err != nil {
+			return fmt.Errorf("error reading 'maxGeneratedWorkItemsArgument': %w", err)
+		}
+		delete(object, "maxGeneratedWorkItemsArgument")
+	}
+
+	if raw, found := object["maxGeneratedWorkItemsArgumentOffset"]; found {
+		err = json.Unmarshal(raw, &a.MaxGeneratedWorkItemsArgumentOffset)
+		if err != nil {
+			return fmt.Errorf("error reading 'maxGeneratedWorkItemsArgumentOffset': %w", err)
+		}
+		delete(object, "maxGeneratedWorkItemsArgumentOffset")
+	}
+
+	if raw, found := object["maxRetries"]; found {
+		err = json.Unmarshal(raw, &a.MaxRetries)
+		if err != nil {
+			return fmt.Errorf("error reading 'maxRetries': %w", err)
+		}
+		delete(object, "maxRetries")
+	}
+
+	if len(object) != 0 {
+		a.AdditionalProperties = make(map[string]interface{})
+		for fieldName, fieldBuf := range object {
+			var fieldVal interface{}
+			err := json.Unmarshal(fieldBuf, &fieldVal)
+			if err != nil {
+				return fmt.Errorf("error unmarshaling field %s: %w", fieldName, err)
+			}
+			a.AdditionalProperties[fieldName] = fieldVal
+		}
+	}
+	return nil
+}
+
+// Override default JSON handling for WorkstationLimits to handle AdditionalProperties
+func (a WorkstationLimits) MarshalJSON() ([]byte, error) {
+	var err error
+	object := make(map[string]json.RawMessage)
+
+	if a.MaxExecutionTime != nil {
+		object["maxExecutionTime"], err = json.Marshal(a.MaxExecutionTime)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'maxExecutionTime': %w", err)
+		}
+	}
+
+	if a.MaxGeneratedWorkItems != nil {
+		object["maxGeneratedWorkItems"], err = json.Marshal(a.MaxGeneratedWorkItems)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'maxGeneratedWorkItems': %w", err)
+		}
+	}
+
+	if a.MaxGeneratedWorkItemsArgument != nil {
+		object["maxGeneratedWorkItemsArgument"], err = json.Marshal(a.MaxGeneratedWorkItemsArgument)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'maxGeneratedWorkItemsArgument': %w", err)
+		}
+	}
+
+	if a.MaxGeneratedWorkItemsArgumentOffset != nil {
+		object["maxGeneratedWorkItemsArgumentOffset"], err = json.Marshal(a.MaxGeneratedWorkItemsArgumentOffset)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'maxGeneratedWorkItemsArgumentOffset': %w", err)
+		}
+	}
+
+	if a.MaxRetries != nil {
+		object["maxRetries"], err = json.Marshal(a.MaxRetries)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'maxRetries': %w", err)
+		}
+	}
+
+	for fieldName, field := range a.AdditionalProperties {
+		object[fieldName], err = json.Marshal(field)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling '%s': %w", fieldName, err)
+		}
+	}
+	return json.Marshal(object)
+}
+
+// Getter for additional properties for WorkstationOperationBinding. Returns the specified
+// element and whether it was found
+func (a WorkstationOperationBinding) Get(fieldName string) (value interface{}, found bool) {
+	if a.AdditionalProperties != nil {
+		value, found = a.AdditionalProperties[fieldName]
+	}
+	return
+}
+
+// Setter for additional properties for WorkstationOperationBinding
+func (a *WorkstationOperationBinding) Set(fieldName string, value interface{}) {
+	if a.AdditionalProperties == nil {
+		a.AdditionalProperties = make(map[string]interface{})
+	}
+	a.AdditionalProperties[fieldName] = value
+}
+
+// Override default JSON handling for WorkstationOperationBinding to handle AdditionalProperties
+func (a *WorkstationOperationBinding) UnmarshalJSON(b []byte) error {
+	object := make(map[string]json.RawMessage)
+	err := json.Unmarshal(b, &object)
+	if err != nil {
+		return err
+	}
+
+	if raw, found := object["config"]; found {
+		err = json.Unmarshal(raw, &a.Config)
+		if err != nil {
+			return fmt.Errorf("error reading 'config': %w", err)
+		}
+		delete(object, "config")
+	}
+
+	if raw, found := object["defaultContent"]; found {
+		err = json.Unmarshal(raw, &a.DefaultContent)
+		if err != nil {
+			return fmt.Errorf("error reading 'defaultContent': %w", err)
+		}
+		delete(object, "defaultContent")
+	}
+
+	if raw, found := object["selector"]; found {
+		err = json.Unmarshal(raw, &a.Selector)
+		if err != nil {
+			return fmt.Errorf("error reading 'selector': %w", err)
+		}
+		delete(object, "selector")
+	}
+
+	if raw, found := object["slot"]; found {
+		err = json.Unmarshal(raw, &a.Slot)
+		if err != nil {
+			return fmt.Errorf("error reading 'slot': %w", err)
+		}
+		delete(object, "slot")
+	}
+
+	if len(object) != 0 {
+		a.AdditionalProperties = make(map[string]interface{})
+		for fieldName, fieldBuf := range object {
+			var fieldVal interface{}
+			err := json.Unmarshal(fieldBuf, &fieldVal)
+			if err != nil {
+				return fmt.Errorf("error unmarshaling field %s: %w", fieldName, err)
+			}
+			a.AdditionalProperties[fieldName] = fieldVal
+		}
+	}
+	return nil
+}
+
+// Override default JSON handling for WorkstationOperationBinding to handle AdditionalProperties
+func (a WorkstationOperationBinding) MarshalJSON() ([]byte, error) {
+	var err error
+	object := make(map[string]json.RawMessage)
+
+	if a.Config != nil {
+		object["config"], err = json.Marshal(a.Config)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'config': %w", err)
+		}
+	}
+
+	if a.DefaultContent != nil {
+		object["defaultContent"], err = json.Marshal(a.DefaultContent)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'defaultContent': %w", err)
+		}
+	}
+
+	if a.Selector != nil {
+		object["selector"], err = json.Marshal(a.Selector)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'selector': %w", err)
+		}
+	}
+
+	object["slot"], err = json.Marshal(a.Slot)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling 'slot': %w", err)
+	}
+
+	for fieldName, field := range a.AdditionalProperties {
+		object[fieldName], err = json.Marshal(field)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling '%s': %w", fieldName, err)
+		}
+	}
+	return json.Marshal(object)
+}
+
+// Getter for additional properties for WorkstationOperationBindingSelector. Returns the specified
+// element and whether it was found
+func (a WorkstationOperationBindingSelector) Get(fieldName string) (value interface{}, found bool) {
+	if a.AdditionalProperties != nil {
+		value, found = a.AdditionalProperties[fieldName]
+	}
+	return
+}
+
+// Setter for additional properties for WorkstationOperationBindingSelector
+func (a *WorkstationOperationBindingSelector) Set(fieldName string, value interface{}) {
+	if a.AdditionalProperties == nil {
+		a.AdditionalProperties = make(map[string]interface{})
+	}
+	a.AdditionalProperties[fieldName] = value
+}
+
+// Override default JSON handling for WorkstationOperationBindingSelector to handle AdditionalProperties
+func (a *WorkstationOperationBindingSelector) UnmarshalJSON(b []byte) error {
+	object := make(map[string]json.RawMessage)
+	err := json.Unmarshal(b, &object)
+	if err != nil {
+		return err
+	}
+
+	if raw, found := object["label"]; found {
+		err = json.Unmarshal(raw, &a.Label)
+		if err != nil {
+			return fmt.Errorf("error reading 'label': %w", err)
+		}
+		delete(object, "label")
+	}
+
+	if raw, found := object["role"]; found {
+		err = json.Unmarshal(raw, &a.Role)
+		if err != nil {
+			return fmt.Errorf("error reading 'role': %w", err)
+		}
+		delete(object, "role")
+	}
+
+	if raw, found := object["slot"]; found {
+		err = json.Unmarshal(raw, &a.Slot)
+		if err != nil {
+			return fmt.Errorf("error reading 'slot': %w", err)
+		}
+		delete(object, "slot")
+	}
+
+	if raw, found := object["type"]; found {
+		err = json.Unmarshal(raw, &a.Type)
+		if err != nil {
+			return fmt.Errorf("error reading 'type': %w", err)
+		}
+		delete(object, "type")
+	}
+
+	if len(object) != 0 {
+		a.AdditionalProperties = make(map[string]interface{})
+		for fieldName, fieldBuf := range object {
+			var fieldVal interface{}
+			err := json.Unmarshal(fieldBuf, &fieldVal)
+			if err != nil {
+				return fmt.Errorf("error unmarshaling field %s: %w", fieldName, err)
+			}
+			a.AdditionalProperties[fieldName] = fieldVal
+		}
+	}
+	return nil
+}
+
+// Override default JSON handling for WorkstationOperationBindingSelector to handle AdditionalProperties
+func (a WorkstationOperationBindingSelector) MarshalJSON() ([]byte, error) {
+	var err error
+	object := make(map[string]json.RawMessage)
+
+	if a.Label != nil {
+		object["label"], err = json.Marshal(a.Label)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'label': %w", err)
+		}
+	}
+
+	if a.Role != nil {
+		object["role"], err = json.Marshal(a.Role)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'role': %w", err)
+		}
+	}
+
+	if a.Slot != nil {
+		object["slot"], err = json.Marshal(a.Slot)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'slot': %w", err)
+		}
+	}
+
+	if a.Type != nil {
+		object["type"], err = json.Marshal(a.Type)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'type': %w", err)
 		}
 	}
 

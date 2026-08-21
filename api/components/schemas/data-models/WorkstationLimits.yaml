@@ -1,6 +1,6 @@
 type: object
 description: Retry and execution ceilings applied to one workstation definition.
-additionalProperties: false
+additionalProperties: true
 properties:
   maxRetries:
     type: integer

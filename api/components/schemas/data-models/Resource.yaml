@@ -2,7 +2,7 @@ description: >-
   Shared capacity that limits how much work the factory can run at once,
   such as worker slots or external service quotas.
 type: object
-additionalProperties: false
+additionalProperties: true
 required:
   - name
   - capacity
