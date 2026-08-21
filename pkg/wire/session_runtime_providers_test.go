@@ -740,19 +740,19 @@ type statelessBlockingCommandRunner struct {
 	once    sync.Once
 }
 
-func (runner *statelessBlockingCommandRunner) Run(ctx context.Context, _ workers.CommandRequest) (workers.CommandResult, error) {
+func (runner *statelessBlockingCommandRunner) Run(ctx context.Context, _ platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
 	runner.once.Do(func() { close(runner.started) })
 	<-ctx.Done()
-	return workers.CommandResult{}, ctx.Err()
+	return platformprocess.CommandResult{}, ctx.Err()
 }
 
 type statelessCompositionCommandRunner struct{}
 
 func (statelessCompositionCommandRunner) Run(
 	context.Context,
-	workers.CommandRequest,
-) (workers.CommandResult, error) {
-	return workers.CommandResult{Stdout: []byte("canonical-output")}, nil
+	platformprocess.CommandRequest,
+) (platformprocess.CommandResult, error) {
+	return platformprocess.CommandResult{Stdout: []byte("canonical-output")}, nil
 }
 
 type statelessProcessCommandRunner struct{}

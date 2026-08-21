@@ -11,6 +11,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners"
 	"github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/internal/testkit"
+	workerprocess "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/process"
 )
 
 func TestNewMockProductionRegistryIsInertAndResolvesWithoutExecution(t *testing.T) {
@@ -137,7 +138,7 @@ func TestNewMockProductionRegistryRejectsMissingConfig(t *testing.T) {
 func newExplicitMockRegistry(
 	t *testing.T,
 	config *workers.MockWorkersConfig,
-	next workers.CommandRunner,
+	next workerprocess.CommandRunner,
 ) runners.Service {
 	t.Helper()
 	registry, err := NewMockProductionRegistry(
@@ -192,10 +193,10 @@ type mockCommandSpy struct {
 
 func (spy *mockCommandSpy) Run(
 	context.Context,
-	workers.CommandRequest,
-) (workers.CommandResult, error) {
+	workerprocess.CommandRequest,
+) (workerprocess.CommandResult, error) {
 	if spy.calls != nil {
 		spy.calls.Add(1)
 	}
-	return workers.CommandResult{Stdout: []byte("unused")}, nil
+	return workerprocess.CommandResult{Stdout: []byte("unused")}, nil
 }

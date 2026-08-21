@@ -6,8 +6,8 @@ import (
 	"reflect"
 	"strings"
 	"testing"
-	"time"
 
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
@@ -44,11 +44,11 @@ func TestCanonicalMockCommandRunnerUsesDetachedOverride(t *testing.T) {
 	t.Parallel()
 
 	runner := NewContextualMockWorkerCommandRunner(canonicalCommandRunnerFunc(
-		func(_ context.Context, request workers.CommandRequest) (workers.CommandResult, error) {
-			return workers.CommandResult{Stdout: []byte("forwarded " + request.Command)}, nil
+		func(_ context.Context, request platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
+			return platformprocess.CommandResult{Stdout: []byte("forwarded " + request.Command)}, nil
 		},
 	))
-	result, err := runner.Run(context.Background(), workers.CommandRequest{Command: "codex"})
+	result, err := runner.Run(context.Background(), platformprocess.CommandRequest{Command: "codex"})
 	if err != nil || string(result.Stdout) != "forwarded codex" {
 		t.Fatalf("Run() = %#v, %v", result, err)
 	}
@@ -58,7 +58,7 @@ func TestCanonicalMockCommandRunnerUsesDetachedOverride(t *testing.T) {
 		workerexecution.WithMockWorkersConfig(context.Background(), configured),
 		workers.OutputPolicy{DecisionEnvelope: true},
 	)
-	result, err = runner.Run(ctx, workers.CommandRequest{Command: "codex"})
+	result, err = runner.Run(ctx, platformprocess.CommandRequest{Command: "codex"})
 	if err != nil || !strings.Contains(string(result.Stdout), "ACCEPTED") {
 		t.Fatalf("Run(mock) = %#v, %v", result, err)
 	}
@@ -73,8 +73,8 @@ func TestCanonicalMockCommandRunnerStreamsDetachedOverrideOutput(t *testing.T) {
 	t.Parallel()
 
 	runner := canonicalStreamingMockCommandRunner(t, canonicalCommandRunnerFunc(
-		func(context.Context, workers.CommandRequest) (workers.CommandResult, error) {
-			return workers.CommandResult{}, errors.New("next runner must not run when a detached override matches")
+		func(context.Context, platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
+			return platformprocess.CommandResult{}, errors.New("next runner must not run when a detached override matches")
 		},
 	))
 	exitCode := 7
@@ -90,7 +90,7 @@ func TestCanonicalMockCommandRunnerStreamsDetachedOverrideOutput(t *testing.T) {
 	})
 
 	var chunks []recordedOutputChunk
-	result, err := runner.RunStreaming(ctx, workers.CommandRequest{Command: "review"}, recordOutputChunks(&chunks))
+	result, err := runner.RunStreaming(ctx, platformprocess.CommandRequest{Command: "review"}, recordOutputChunks(&chunks))
 	if err != nil {
 		t.Fatalf("RunStreaming() error = %v", err)
 	}
@@ -101,8 +101,8 @@ func TestCanonicalMockCommandRunnerStreamsDetachedOverrideOutput(t *testing.T) {
 		t.Fatalf("RunStreaming() exit code = %d, want %d", result.ExitCode, exitCode)
 	}
 	assertStreamedChunks(t, chunks, []recordedOutputChunk{
-		{stream: workers.OutputStreamStdout, chunk: "override stdout"},
-		{stream: workers.OutputStreamStderr, chunk: "override stderr"},
+		{stream: platformprocess.OutputStreamStdout, chunk: "override stdout"},
+		{stream: platformprocess.OutputStreamStderr, chunk: "override stderr"},
 	})
 }
 
@@ -118,7 +118,7 @@ func TestCanonicalMockCommandRunnerDelegatesStreamingWithoutOverride(t *testing.
 	var chunks []recordedOutputChunk
 	result, err := runner.RunStreaming(
 		context.Background(),
-		workers.CommandRequest{Command: "codex"},
+		platformprocess.CommandRequest{Command: "codex"},
 		recordOutputChunks(&chunks),
 	)
 	if err != nil {
@@ -128,7 +128,7 @@ func TestCanonicalMockCommandRunnerDelegatesStreamingWithoutOverride(t *testing.
 		t.Fatalf("RunStreaming() result = %#v", result)
 	}
 	assertStreamedChunks(t, chunks, []recordedOutputChunk{
-		{stream: workers.OutputStreamStdout, chunk: "live chunk"},
+		{stream: platformprocess.OutputStreamStdout, chunk: "live chunk"},
 	})
 }
 
@@ -139,8 +139,8 @@ func TestCanonicalMockCommandRunnerPublishesCompletedOutputForBufferedEdge(t *te
 	t.Parallel()
 
 	runner := canonicalStreamingMockCommandRunner(t, canonicalCommandRunnerFunc(
-		func(_ context.Context, request workers.CommandRequest) (workers.CommandResult, error) {
-			return workers.CommandResult{
+		func(_ context.Context, request platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
+			return platformprocess.CommandResult{
 				Stdout: []byte("forwarded " + request.Command),
 				Stderr: []byte("forwarded diagnostics"),
 			}, nil
@@ -150,7 +150,7 @@ func TestCanonicalMockCommandRunnerPublishesCompletedOutputForBufferedEdge(t *te
 	var chunks []recordedOutputChunk
 	result, err := runner.RunStreaming(
 		context.Background(),
-		workers.CommandRequest{Command: "codex"},
+		platformprocess.CommandRequest{Command: "codex"},
 		recordOutputChunks(&chunks),
 	)
 	if err != nil {
@@ -160,40 +160,12 @@ func TestCanonicalMockCommandRunnerPublishesCompletedOutputForBufferedEdge(t *te
 		t.Fatalf("RunStreaming() result = %#v", result)
 	}
 	assertStreamedChunks(t, chunks, []recordedOutputChunk{
-		{stream: workers.OutputStreamStdout, chunk: "forwarded codex"},
-		{stream: workers.OutputStreamStderr, chunk: "forwarded diagnostics"},
+		{stream: platformprocess.OutputStreamStdout, chunk: "forwarded codex"},
+		{stream: platformprocess.OutputStreamStderr, chunk: "forwarded diagnostics"},
 	})
 
-	if _, err = runner.RunStreaming(context.Background(), workers.CommandRequest{Command: "codex"}, nil); err != nil {
+	if _, err = runner.RunStreaming(context.Background(), platformprocess.CommandRequest{Command: "codex"}, nil); err != nil {
 		t.Fatalf("RunStreaming(no observer) error = %v", err)
-	}
-}
-
-// TestCanonicalMockCommandRunnerRestoresConfiguredExitCodeForLogging proves the
-// diagnostics seam reports the authored mock exit code even though a rejected
-// Codex turn returns a successful process result.
-func TestCanonicalMockCommandRunnerRestoresConfiguredExitCodeForLogging(t *testing.T) {
-	t.Parallel()
-
-	runner := canonicalStreamingMockCommandRunner(t, stubCanonicalCommandRunner{})
-	request := workers.CommandRequest{Command: "codex"}
-	executed := workers.CommandResult{Stdout: []byte(`{"type":"turn.failed"}`)}
-
-	unchanged := runner.CommandResultForLogging(context.Background(), request, executed)
-	if unchanged.ExitCode != 0 {
-		t.Fatalf("CommandResultForLogging(no override) exit code = %d, want 0", unchanged.ExitCode)
-	}
-
-	exitCode := 42
-	ctx := workerexecution.WithMockWorkersConfig(context.Background(), &workers.MockWorkersConfig{
-		MockWorkers: []workers.MockWorkerConfig{{
-			RunType:      workers.MockWorkerRunTypeReject,
-			RejectConfig: &workers.MockWorkerRejectConfig{ExitCode: &exitCode},
-		}},
-	})
-	logged := runner.CommandResultForLogging(ctx, request, executed)
-	if logged.ExitCode != exitCode {
-		t.Fatalf("CommandResultForLogging(override) exit code = %d, want %d", logged.ExitCode, exitCode)
 	}
 }
 
@@ -203,7 +175,7 @@ func TestCanonicalMockCommandRunnerRequiresNextCommandRunner(t *testing.T) {
 	t.Parallel()
 
 	runner := NewContextualMockWorkerCommandRunner(nil)
-	_, err := runner.Run(context.Background(), workers.CommandRequest{Command: "codex"})
+	_, err := runner.Run(context.Background(), platformprocess.CommandRequest{Command: "codex"})
 	if err == nil || !strings.Contains(err.Error(), "next command runner is required") {
 		t.Fatalf("Run(no next runner) error = %v, want a required-next-runner failure", err)
 	}
@@ -306,8 +278,8 @@ func TestCanonicalConductorInvocationRejectsMissingRequiredEdges(t *testing.T) {
 // constructor validates before it yields an executor.
 type canonicalInvocationEdges struct {
 	providers     providers.Service
-	commandRunner workers.CommandRunner
-	commandClock  workers.Clock
+	commandRunner platformprocess.CommandRunner
+	commandClock  platformclock.Source
 	allocator     workers.PTYAllocator
 }
 
@@ -315,7 +287,7 @@ func canonicalInvocationTestEdges() canonicalInvocationEdges {
 	return canonicalInvocationEdges{
 		providers:     &statelessTestProviders{},
 		commandRunner: stubCanonicalCommandRunner{},
-		commandClock:  workers.ClockFunc(time.Now),
+		commandClock:  platformclock.Real{},
 		allocator:     &workers.MockPTYAllocator{},
 	}
 }
@@ -338,12 +310,11 @@ func newCanonicalConductorInvocation(
 // composed command edge at dispatch time: buffered execution, live streaming,
 // and diagnostics shaping.
 type canonicalStreamingCommandRunner interface {
-	workers.CommandRunner
-	RunStreaming(context.Context, workers.CommandRequest, workers.OutputChunkObserver) (workers.CommandResult, error)
-	CommandResultForLogging(context.Context, workers.CommandRequest, workers.CommandResult) workers.CommandResult
+	platformprocess.CommandRunner
+	RunStreaming(context.Context, platformprocess.CommandRequest, platformprocess.OutputChunkObserver) (platformprocess.CommandResult, error)
 }
 
-func canonicalStreamingMockCommandRunner(t *testing.T, next workers.CommandRunner) canonicalStreamingCommandRunner {
+func canonicalStreamingMockCommandRunner(t *testing.T, next platformprocess.CommandRunner) canonicalStreamingCommandRunner {
 	t.Helper()
 
 	runner, ok := NewContextualMockWorkerCommandRunner(next).(canonicalStreamingCommandRunner)
@@ -358,7 +329,7 @@ type recordedOutputChunk struct {
 	chunk  string
 }
 
-func recordOutputChunks(chunks *[]recordedOutputChunk) workers.OutputChunkObserver {
+func recordOutputChunks(chunks *[]recordedOutputChunk) platformprocess.OutputChunkObserver {
 	return func(stream string, chunk []byte) {
 		*chunks = append(*chunks, recordedOutputChunk{stream: stream, chunk: string(chunk)})
 	}
@@ -376,37 +347,37 @@ type streamingCanonicalCommandRunner struct {
 	chunk string
 }
 
-func (streamingCanonicalCommandRunner) Run(context.Context, workers.CommandRequest) (workers.CommandResult, error) {
-	return workers.CommandResult{}, errors.New("streaming edge must not fall back to buffered Run")
+func (streamingCanonicalCommandRunner) Run(context.Context, platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
+	return platformprocess.CommandResult{}, errors.New("streaming edge must not fall back to buffered Run")
 }
 
 func (runner streamingCanonicalCommandRunner) RunStreaming(
 	_ context.Context,
-	request workers.CommandRequest,
-	observer workers.OutputChunkObserver,
-) (workers.CommandResult, error) {
+	request platformprocess.CommandRequest,
+	observer platformprocess.OutputChunkObserver,
+) (platformprocess.CommandResult, error) {
 	if observer != nil {
-		observer(workers.OutputStreamStdout, []byte(runner.chunk))
+		observer(platformprocess.OutputStreamStdout, []byte(runner.chunk))
 	}
-	return workers.CommandResult{Stdout: []byte("streamed " + request.Command)}, nil
+	return platformprocess.CommandResult{Stdout: []byte("streamed " + request.Command)}, nil
 }
 
 type stubCanonicalCommandRunner struct{}
 
-func (stubCanonicalCommandRunner) Run(context.Context, workers.CommandRequest) (workers.CommandResult, error) {
-	return workers.CommandResult{}, nil
+func (stubCanonicalCommandRunner) Run(context.Context, platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
+	return platformprocess.CommandResult{}, nil
 }
 
 func (stubCanonicalCommandRunner) RunStreaming(
 	context.Context,
-	workers.CommandRequest,
+	platformprocess.CommandRequest,
 	platformprocess.OutputChunkObserver,
-) (workers.CommandResult, error) {
-	return workers.CommandResult{}, nil
+) (platformprocess.CommandResult, error) {
+	return platformprocess.CommandResult{}, nil
 }
 
-type canonicalCommandRunnerFunc func(context.Context, workers.CommandRequest) (workers.CommandResult, error)
+type canonicalCommandRunnerFunc func(context.Context, platformprocess.CommandRequest) (platformprocess.CommandResult, error)
 
-func (runner canonicalCommandRunnerFunc) Run(ctx context.Context, request workers.CommandRequest) (workers.CommandResult, error) {
+func (runner canonicalCommandRunnerFunc) Run(ctx context.Context, request platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
 	return runner(ctx, request)
 }

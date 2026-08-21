@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	providerswire "github.com/portpowered/infinite-you/pkg/services/providers/wire"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
@@ -17,7 +18,7 @@ import (
 // dependency selection.
 func newConfiguredProvidersService(
 	options []providerswire.Option,
-	agyRunner workers.CommandRunner,
+	agyRunner platformprocess.CommandRunner,
 ) (providers.Service, error) {
 	options = append(options, providerswire.WithAgyCommandRunner(agyRunner))
 	return providerswire.NewService(options...)

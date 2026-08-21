@@ -15,6 +15,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners"
 	"github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/internal/script"
 	"github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/internal/testkit"
+	workerprocess "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/process"
 )
 
 func TestNewScriptRegistryIsInertAndResolvesDetachedMetadata(t *testing.T) {
@@ -194,42 +195,42 @@ func TestScriptRegistryResolveAndExecuteConcurrently(t *testing.T) {
 
 type scriptConformanceCommand struct {
 	mu      sync.Mutex
-	request workers.CommandRequest
+	request workerprocess.CommandRequest
 	calls   *atomic.Int32
 }
 
 func (command *scriptConformanceCommand) Run(
 	ctx context.Context,
-	request workers.CommandRequest,
-) (workers.CommandResult, error) {
+	request workerprocess.CommandRequest,
+) (workerprocess.CommandResult, error) {
 	return command.RunStreaming(ctx, request, nil)
 }
 
 func (command *scriptConformanceCommand) RunStreaming(
 	_ context.Context,
-	request workers.CommandRequest,
+	request workerprocess.CommandRequest,
 	_ platformprocess.OutputChunkObserver,
-) (workers.CommandResult, error) {
+) (workerprocess.CommandResult, error) {
 	command.mu.Lock()
-	command.request = workers.CloneSubprocessExecutionRequest(request)
+	command.request = workerprocess.CloneCommandRequest(request)
 	command.mu.Unlock()
 	if command.calls != nil {
 		command.calls.Add(1)
 	}
 	if containsEnvironment(request.Env, "FAIL=true") {
-		return workers.CommandResult{Stderr: []byte("fixture failure")}, errors.New("fixture process failure")
+		return workerprocess.CommandResult{Stderr: []byte("fixture failure")}, errors.New("fixture process failure")
 	}
-	return workers.CommandResult{Stdout: []byte("fixture output")}, nil
+	return workerprocess.CommandResult{Stdout: []byte("fixture output")}, nil
 }
 
-func (command *scriptConformanceCommand) Request() workers.CommandRequest {
+func (command *scriptConformanceCommand) Request() workerprocess.CommandRequest {
 	command.mu.Lock()
 	defer command.mu.Unlock()
-	return workers.CloneSubprocessExecutionRequest(command.request)
+	return workerprocess.CloneCommandRequest(command.request)
 }
 
 func scriptDependencies(
-	command workers.CommandRunner,
+	command workerprocess.CommandRunner,
 	docs workers.FactoryDocsLoader,
 ) runners.ScriptDependencies {
 	return runners.ScriptDependencies{

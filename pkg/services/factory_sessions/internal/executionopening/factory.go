@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
@@ -34,7 +35,7 @@ type StandaloneSessionExecutionFactory = func(
 ) (durableexecution.Service, error)
 
 type WorkerInvocationWithProgressFactory = func(
-	workers.CommandRunner,
+	platformprocess.CommandRunner,
 	workers.PTYAllocator,
 	workers.ProgressPublisher,
 ) (workers.InvocationExecutor, error)

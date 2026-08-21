@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 
@@ -20,6 +21,7 @@ import (
 	workerprompting "github.com/portpowered/infinite-you/pkg/services/workers/internal/prompting"
 	executeservice "github.com/portpowered/infinite-you/pkg/services/workers/internal/service"
 	"github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners"
+	workerprocess "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/process"
 	runnerswire "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/wire"
 	"github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/executor/agentrun"
 	"github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/invocation"
@@ -37,11 +39,19 @@ var (
 // graph without exposing runner implementations or registries.
 type AgentDependencies = runners.AgentDependencies
 type ScriptConfig = runners.ScriptConfig
-type ScriptDependencies = runners.ScriptDependencies
+type ScriptDependencies struct {
+	CommandRunner platformprocess.CommandRunner
+	FactoryDocs   workers.FactoryDocsLoader
+	Now           func() time.Time
+	Publish       workers.ProgressPublisher
+	Record        workers.ScriptEventRecorder
+}
 type InferenceConfig = runners.InferenceConfig
 type InferenceDependencies = runners.InferenceDependencies
 type MockConfig = runners.MockConfig
-type MockDependencies = runners.MockDependencies
+type MockDependencies struct {
+	Next platformprocess.CommandRunner
+}
 
 // NewService constructs an inert Workers root from construction ports. It
 // composes the private runner registry once and installs a request-scoped
@@ -71,10 +81,11 @@ func NewService(
 	); err != nil {
 		return nil, err
 	}
+	privateScriptDependencies := privateScriptDependencies(scriptDependencies, logger, clock)
 	runnerRegistry, err := runnerswire.NewProductionRegistry(
 		agentDependencies,
 		scriptConfig,
-		scriptDependencies,
+		privateScriptDependencies,
 		inferenceConfig,
 		inferenceDependencies,
 	)
@@ -139,14 +150,15 @@ func NewMockService(
 	); err != nil {
 		return nil, err
 	}
+	privateScriptDependencies := privateScriptDependencies(scriptDependencies, logger, clock)
 	runnerRegistry, err := runnerswire.NewMockProductionRegistry(
 		agentDependencies,
 		scriptConfig,
-		scriptDependencies,
+		privateScriptDependencies,
 		inferenceConfig,
 		inferenceDependencies,
 		MockConfig{WorkersConfig: mockWorkers},
-		mockDependencies,
+		runners.MockDependencies{Next: workerprocess.AdaptPlatformCommandRunner(mockDependencies.Next)},
 	)
 	if err != nil {
 		return nil, fmt.Errorf("construct mock Workers: %w", err)
@@ -173,6 +185,30 @@ func NewMockService(
 		return nil, fmt.Errorf("construct mock Workers: %w", err)
 	}
 	return workersinternal.NewRoot(executeService)
+}
+
+func privateScriptDependencies(
+	dependencies ScriptDependencies,
+	logger logging.Logger,
+	clock func() time.Time,
+) runners.ScriptDependencies {
+	commandRunner := newContextualMockWorkerCommandRunner(
+		workerprocess.AdaptPlatformCommandRunner(dependencies.CommandRunner),
+	)
+	if commandRunner != nil && clock != nil {
+		commandRunner = workerprocess.CommandRunnerWithLogging(
+			commandRunner,
+			logger,
+			workerprocess.ClockFunc(clock),
+		)
+	}
+	return runners.ScriptDependencies{
+		CommandRunner: commandRunner,
+		FactoryDocs:   dependencies.FactoryDocs,
+		Now:           dependencies.Now,
+		Publish:       dependencies.Publish,
+		Record:        dependencies.Record,
+	}
 }
 
 func validateConstructionPorts(

@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/work"
@@ -193,10 +194,8 @@ func runWorkersCommandThroughRootProof(
 ) {
 	t.Helper()
 
-	commandRequest := workers.CommandRequest{
-		Command:    fixture.commandName,
-		DispatchID: fixture.dispatchID,
-		WorkerType: fixture.workerType,
+	commandRequest := platformprocess.CommandRequest{
+		Command: fixture.commandName,
 	}
 
 	commandResult, err := stub.Run(ctx, commandRequest)
@@ -205,13 +204,6 @@ func runWorkersCommandThroughRootProof(
 	}
 	if stub.lastCommand.Command != fixture.commandName {
 		t.Fatalf("recorded command = %q, want %q", stub.lastCommand.Command, fixture.commandName)
-	}
-	if stub.lastCommand.DispatchID != fixture.dispatchID {
-		t.Fatalf(
-			"recorded command dispatch id = %q, want %q",
-			stub.lastCommand.DispatchID,
-			fixture.dispatchID,
-		)
 	}
 	if commandResult.ExitCode != 0 {
 		t.Fatalf("command result exit code = %d, want 0", commandResult.ExitCode)
@@ -229,10 +221,10 @@ func TestFactorySessionsWorkersRootContractsCompileAtSessionsRoot(t *testing.T) 
 		_ workers.RuntimeOpeningRequest
 		_ workers.ProviderInferenceRequest
 		_ workers.InvocationInput
-		_ workers.CommandRequest
+		_ platformprocess.CommandRequest
 		_ providers.Service
 		_ workers.InvocationExecutor
-		_ workers.CommandRunner
+		_ platformprocess.CommandRunner
 		_ workers.PTYAllocator
 	)
 }
@@ -240,7 +232,7 @@ func TestFactorySessionsWorkersRootContractsCompileAtSessionsRoot(t *testing.T) 
 type workersRequestBoundaryStub struct {
 	lastInvocation workers.InvocationInput
 	lastInference  workers.ProviderInferenceRequest
-	lastCommand    workers.CommandRequest
+	lastCommand    platformprocess.CommandRequest
 }
 
 func (stub *workersRequestBoundaryStub) Execute(
@@ -270,8 +262,8 @@ func (stub *workersRequestBoundaryStub) Infer(
 
 func (stub *workersRequestBoundaryStub) Run(
 	_ context.Context,
-	request workers.CommandRequest,
-) (workers.CommandResult, error) {
+	request platformprocess.CommandRequest,
+) (platformprocess.CommandResult, error) {
 	stub.lastCommand = request
-	return workers.CommandResult{ExitCode: 0}, nil
+	return platformprocess.CommandResult{ExitCode: 0}, nil
 }

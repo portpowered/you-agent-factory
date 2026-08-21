@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	"github.com/portpowered/infinite-you/pkg/services/automations"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
@@ -38,8 +39,8 @@ func openRuntime(
 	clockEdge factoryruntime.Clock,
 	providerOverride providers.Service,
 	invocationMetricsRecorder roles.InvocationMetricsRecorder,
-	providerCommandRunner workers.CommandRunner,
-	scriptCommandRunner workers.CommandRunner,
+	providerCommandRunner platformprocess.CommandRunner,
+	scriptCommandRunner platformprocess.CommandRunner,
 	submissionRecorder recordings.SubmissionRecorder,
 	dispatchRecorder recordings.DispatchRecorder,
 	durableExecutionFactory DurableExecutionFactory,
@@ -693,7 +694,7 @@ type workerExecutionSetter interface {
 		string,
 		providers.Service,
 		*workers.MockWorkersConfig,
-		workers.CommandRunner,
+		platformprocess.CommandRunner,
 	)
 }
 
@@ -706,7 +707,7 @@ func setWorkerExecution(
 	generationID string,
 	providerOverride providers.Service,
 	mockWorkers *workers.MockWorkersConfig,
-	commandRunnerOverride workers.CommandRunner,
+	commandRunnerOverride platformprocess.CommandRunner,
 ) error {
 	setter, ok := execution.(workerExecutionSetter)
 	if !ok {

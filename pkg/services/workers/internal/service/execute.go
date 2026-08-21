@@ -14,6 +14,7 @@ import (
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers/internal/execution"
 	workerrecording "github.com/portpowered/infinite-you/pkg/services/workers/internal/execution/recording"
 	"github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners"
+	workerprocess "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/process"
 	workerexecutor "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/executor"
 )
 
@@ -223,7 +224,15 @@ func (s *Service) runRunner(
 		ctx = workerexecution.WithScriptEventRecorder(ctx, request.Input.ScriptEventRecorder)
 	}
 	if request.Input.CommandRunnerOverride != nil {
-		ctx = workerexecution.WithCommandRunnerOverride(ctx, request.Input.CommandRunnerOverride)
+		commandRunner := workerprocess.AdaptPlatformCommandRunner(request.Input.CommandRunnerOverride)
+		if commandRunner != nil && request.Input.ExecutionLogger != nil {
+			commandRunner = workerprocess.CommandRunnerWithLogging(
+				commandRunner,
+				request.Input.ExecutionLogger,
+				workerprocess.ClockFunc(s.clock),
+			)
+		}
+		ctx = workerexecution.WithWorkerCommandRunnerOverride(ctx, commandRunner)
 	}
 	runnerRequest := adaptRunnerRequest(request, identity, temporaryFiles)
 	if request.Target.Tools.AgentLoop {

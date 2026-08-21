@@ -15,6 +15,7 @@ import (
 	platformhttpserver "github.com/portpowered/infinite-you/pkg/platform/httpserver"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	platformmetrics "github.com/portpowered/infinite-you/pkg/platform/metrics"
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	platformpty "github.com/portpowered/infinite-you/pkg/platform/pty"
 	platformruntimeartifact "github.com/portpowered/infinite-you/pkg/platform/runtimeartifact"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
@@ -347,26 +348,26 @@ func provideFactoryRuntimeProviderCommandRunner(
 	edges serviceedges.Edges,
 ) (factorysessionwire.ProviderCommandRunner, error) {
 	if edges.ProviderCommandRunner != nil {
-		return workers.AdaptCommandRunner(edges.ProviderCommandRunner), nil
+		return edges.ProviderCommandRunner, nil
 	}
 	runner, err := providePlatformProcessCommandRunner(edges)
 	if err != nil {
 		return nil, err
 	}
-	return workers.AdaptCommandRunner(runner), nil
+	return runner, nil
 }
 
 func provideFactoryRuntimeScriptCommandRunner(
 	edges serviceedges.Edges,
 ) (factorysessionwire.ScriptCommandRunner, error) {
 	if edges.ScriptCommandRunner != nil {
-		return workers.AdaptCommandRunner(edges.ScriptCommandRunner), nil
+		return edges.ScriptCommandRunner, nil
 	}
 	runner, err := providePlatformProcessCommandRunner(edges)
 	if err != nil {
 		return nil, err
 	}
-	return workers.AdaptCommandRunner(runner), nil
+	return runner, nil
 }
 
 func provideSessionExecutionOpeningFactory(
@@ -430,7 +431,7 @@ func provideProvidersAgyPTYAllocator(edges serviceedges.Edges) (providerswire.PT
 }
 
 func provideWorkerCommandRunnerAdapter() factorysessionwire.WorkerCommandRunnerAdapter {
-	return workers.AdaptCommandRunner
+	return func(runner platformprocess.CommandRunner) platformprocess.CommandRunner { return runner }
 }
 
 func provideWorkRequestIDGenerator(edges serviceedges.Edges) work.RequestIDGenerator {

@@ -323,6 +323,22 @@ func TestProjectPlatformCommandRunnerRoundTripsAdaptedRunner(t *testing.T) {
 	}
 }
 
+func TestAdaptPlatformCommandRunnerRecoversPrivateRequestContext(t *testing.T) {
+	private := &privateRequestRecorder{}
+	projected := ProjectPlatformCommandRunner(private)
+	recovered := AdaptPlatformCommandRunner(projected)
+	request := commandTestRequest()
+
+	if _, err := recovered.Run(t.Context(), request); err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if private.request.WorkerType != request.WorkerType ||
+		private.request.WorkstationName != request.WorkstationName ||
+		private.request.DispatchID != request.DispatchID {
+		t.Fatalf("private request = %#v, want Workers correlation from %#v", private.request, request)
+	}
+}
+
 func TestProjectPlatformCommandRunnerPreservesWorkersStreaming(t *testing.T) {
 	streaming := &streamingWorkerRunner{}
 	projected := ProjectPlatformCommandRunner(streaming)
@@ -350,6 +366,18 @@ func TestProjectPlatformCommandRunnerPreservesWorkersStreaming(t *testing.T) {
 	if string(result.Stdout) != "live" {
 		t.Fatalf("stdout = %q, want live", result.Stdout)
 	}
+}
+
+type privateRequestRecorder struct {
+	request CommandRequest
+}
+
+func (runner *privateRequestRecorder) Run(
+	_ context.Context,
+	request CommandRequest,
+) (CommandResult, error) {
+	runner.request = request
+	return CommandResult{}, nil
 }
 
 type recordingLogger struct {

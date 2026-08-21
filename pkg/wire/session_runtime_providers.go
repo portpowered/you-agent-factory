@@ -129,7 +129,7 @@ func provideProvidersService(edges serviceedges.Edges) (providers.Service, error
 func provideConfiguredProvidersService(
 	edges serviceedges.Edges,
 	integrations []operatorsettings.ACPIntegration,
-	workersRunner workers.CommandRunner,
+	workersRunner platformprocess.CommandRunner,
 ) (providers.Service, error) {
 	agyPTYPlatform, err := provideProvidersAgyPTYPlatform(edges)
 	if err != nil {
@@ -151,9 +151,7 @@ func provideConfiguredProvidersService(
 		return newConfiguredProvidersService(options, loggedRunner)
 	}
 	if edges.ProviderCommandRunner != nil {
-		contextualRunner := workerswire.NewContextualMockWorkerCommandRunner(
-			workers.AdaptCommandRunner(edges.ProviderCommandRunner),
-		)
+		contextualRunner := workerswire.NewContextualMockWorkerCommandRunner(edges.ProviderCommandRunner)
 		loggedRunner := providerCommandRunnerWithLogging(edges, contextualRunner)
 		options = append(options, providerswire.WithCommandRunner(edges.ProviderCommandRunner))
 		options = append(options, providerswire.WithWorkersCommandRunner(loggedRunner))
@@ -163,9 +161,7 @@ func provideConfiguredProvidersService(
 	if err != nil {
 		return nil, err
 	}
-	contextualRunner := workerswire.NewContextualMockWorkerCommandRunner(
-		workers.AdaptCommandRunner(commandRunner),
-	)
+	contextualRunner := workerswire.NewContextualMockWorkerCommandRunner(commandRunner)
 	loggedRunner := providerCommandRunnerWithLogging(edges, contextualRunner)
 	options = append(options, providerswire.WithCommandRunner(commandRunner))
 	options = append(options, providerswire.WithWorkersCommandRunner(loggedRunner))
@@ -174,16 +170,16 @@ func provideConfiguredProvidersService(
 
 func providerCommandRunnerWithLogging(
 	edges serviceedges.Edges,
-	runner workers.CommandRunner,
-) workers.CommandRunner {
-	return workers.LoggingCommandRunner{
-		Runner: runner,
-		Logger: logging.NoopLogger{},
-		Clock:  effectiveProviderCommandClock(edges),
-	}
+	runner platformprocess.CommandRunner,
+) platformprocess.CommandRunner {
+	return workerswire.NewLoggingCommandRunner(
+		runner,
+		logging.NoopLogger{},
+		effectiveProviderCommandClock(edges).Now,
+	)
 }
 
-func effectiveProviderCommandClock(edges serviceedges.Edges) workers.Clock {
+func effectiveProviderCommandClock(edges serviceedges.Edges) platformclock.Source {
 	if edges.Clock != nil {
 		return edges.Clock
 	}
@@ -251,15 +247,15 @@ func resolveWorkersOperatingSystem(edges serviceedges.Edges) workers.OperatingSy
 // used by native executors and by migrated catalog Integrations on the
 // conductor path. Injected edges win; otherwise the platform process runner is
 // adapted once for both ownership boundaries.
-func provideWorkersProviderCommandRunner(edges serviceedges.Edges) (workers.CommandRunner, error) {
+func provideWorkersProviderCommandRunner(edges serviceedges.Edges) (platformprocess.CommandRunner, error) {
 	if edges.ProviderCommandRunner != nil {
-		return workers.AdaptCommandRunner(edges.ProviderCommandRunner), nil
+		return edges.ProviderCommandRunner, nil
 	}
 	defaultCommandRunner, err := providePlatformProcessCommandRunner(edges)
 	if err != nil {
 		return nil, err
 	}
-	return workers.AdaptCommandRunner(defaultCommandRunner), nil
+	return defaultCommandRunner, nil
 }
 
 func provideFactorySessionProviderIdentityResolver(
@@ -1024,12 +1020,7 @@ func provideStatelessWorkersServiceWithMock(
 	if err != nil {
 		return nil, fmt.Errorf("construct stateless Workers: %w", err)
 	}
-	scriptRunnerWithMocks := workerswire.NewContextualMockWorkerCommandRunner(scriptCommandRunner)
-	scriptRunner := workers.LoggingCommandRunner{
-		Runner: scriptRunnerWithMocks,
-		Logger: logging.NoopLogger{},
-		Clock:  workers.ClockFunc(clock.Now),
-	}
+	scriptRunner := scriptCommandRunner
 	agentDependencies := workerswire.AgentDependencies{
 		Providers: providersService,
 		Publish:   func(workers.ProgressFragment) {},
@@ -1185,7 +1176,7 @@ func provideConductorInvocationWithProgressFactory(
 	temporaryFiles := provideWorkersProviderTemporaryFileSystem(edges)
 	return func(
 		selectedProviders providers.Service,
-		runner workers.CommandRunner,
+		runner platformprocess.CommandRunner,
 		allocator workers.PTYAllocator,
 		publisher workers.ProgressPublisher,
 	) (workers.InvocationExecutor, error) {
@@ -1235,7 +1226,7 @@ func provideProviderFromCommandRunnerFactory(
 	}
 	operatingSystem := resolveWorkersOperatingSystem(edges)
 	temporaryFiles := provideWorkersProviderTemporaryFileSystem(edges)
-	return func(runner workers.CommandRunner) (providers.Service, error) {
+	return func(runner platformprocess.CommandRunner) (providers.Service, error) {
 		return workerswire.NewProviderFromCommandRunner(
 			providersService, runner, commandClock, allocator, resolveSymlinks,
 			executableLocator, executableInspector, executableFiles, operatingSystem, temporaryFiles,

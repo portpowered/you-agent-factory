@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	"github.com/portpowered/infinite-you/pkg/services/automations"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
@@ -29,8 +30,8 @@ type FactoryRuntimeAssembler interface {
 		factorydefinitions.WorkstationLoader,
 		factoryruntime.LoadedFactoryLoader,
 		providers.Service,
-		workers.CommandRunner,
-		workers.CommandRunner,
+		platformprocess.CommandRunner,
+		platformprocess.CommandRunner,
 		*workers.MockWorkersConfig,
 		factorydefinitions.RuntimeMode,
 		factoryruntime.Scheduler,

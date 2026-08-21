@@ -14,6 +14,7 @@ import (
 	execution "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution"
 	codex "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/codex"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
+	workerswire "github.com/portpowered/infinite-you/pkg/services/workers/wire"
 )
 
 func TestCommandEffectRoutesDispatchContextThroughMockWorkerRunner(t *testing.T) {
@@ -22,16 +23,15 @@ func TestCommandEffectRoutesDispatchContextThroughMockWorkerRunner(t *testing.T)
 	platformRunner := testutil.NewProviderCommandRunner(
 		platformprocess.CommandResult{Stdout: []byte("live provider should not run")},
 	)
-	effect := codex.NewCommandEffect(&workers.MockWorkerCommandRunner{
-		Config: &workers.MockWorkersConfig{
-			MockWorkers: []workers.MockWorkerConfig{{
+	effect := codex.NewCommandEffect(workerswire.NewMockCommandRunner(&workers.MockWorkersConfig{
+		MockWorkers: []workers.MockWorkerConfig{
+			{
 				WorkerName:      "mocked-worker",
 				WorkstationName: "mock-process",
 				RunType:         workers.MockWorkerRunTypeAccept,
-			}},
+			},
 		},
-		Next: workers.AdaptCommandRunner(platformRunner),
-	}, platformclock.Real{})
+	}, nil, platformRunner), platformclock.Real{})
 	if effect == nil {
 		t.Fatal("NewCommandEffect() returned nil")
 	}
@@ -55,7 +55,7 @@ func TestCommandEffectRejectsUnsupportedReasoningEffortBeforeDispatch(t *testing
 	t.Parallel()
 
 	platformRunner := testutil.NewProviderCommandRunner()
-	effect := codex.NewCommandEffect(workers.AdaptCommandRunner(platformRunner), platformclock.Real{})
+	effect := codex.NewCommandEffect(platformRunner, platformclock.Real{})
 	_, err := effect.Execute(context.Background(), execution.ContinuationRequest{ExecuteRequest: providers.ExecuteRequest{
 		Provider:        providers.IDCodex,
 		AttemptID:       "invalid-effort-dispatch",
@@ -77,7 +77,7 @@ func TestCommandEffectRendersResumeSessionBeforeFreshSessionFlags(t *testing.T) 
 	t.Parallel()
 
 	platformRunner := testutil.NewProviderCommandRunner()
-	effect := codex.NewCommandEffect(workers.AdaptCommandRunner(platformRunner), platformclock.Real{})
+	effect := codex.NewCommandEffect(platformRunner, platformclock.Real{})
 	if effect == nil {
 		t.Fatal("NewCommandEffect() returned nil")
 	}
@@ -117,7 +117,7 @@ func TestCommandEffectRendersLunaXHighReasoningEffort(t *testing.T) {
 	t.Parallel()
 
 	platformRunner := testutil.NewProviderCommandRunner()
-	effect := codex.NewCommandEffect(workers.AdaptCommandRunner(platformRunner), platformclock.Real{})
+	effect := codex.NewCommandEffect(platformRunner, platformclock.Real{})
 	if effect == nil {
 		t.Fatal("NewCommandEffect() returned nil")
 	}

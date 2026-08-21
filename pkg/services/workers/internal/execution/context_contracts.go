@@ -3,7 +3,9 @@ package workerexecution
 import (
 	"context"
 
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	workers "github.com/portpowered/infinite-you/pkg/services/workers"
+	workerprocess "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/process"
 )
 
 const (
@@ -103,7 +105,21 @@ func ScriptEventRecorderFromContext(ctx context.Context, fallback workers.Script
 // WithCommandRunnerOverride attaches a runtime-scoped command effect to one
 // detached execution. The override is consumed by the Script Runner only and
 // does not mutate the process-scoped runner registry.
-func WithCommandRunnerOverride(ctx context.Context, runner workers.CommandRunner) context.Context {
+func WithCommandRunnerOverride(ctx context.Context, runner platformprocess.CommandRunner) context.Context {
+	if ctx == nil || runner == nil {
+		return ctx
+	}
+	return context.WithValue(ctx, commandRunnerOverrideKey{}, runner)
+}
+
+// WithWorkerCommandRunnerOverride is the owner-internal counterpart used by
+// private runner tests and adapters that already operate on the enriched
+// Workers request. Peer services must use WithCommandRunnerOverride with the
+// platform process effect instead.
+func WithWorkerCommandRunnerOverride(
+	ctx context.Context,
+	runner workerprocess.CommandRunner,
+) context.Context {
 	if ctx == nil || runner == nil {
 		return ctx
 	}
@@ -112,10 +128,16 @@ func WithCommandRunnerOverride(ctx context.Context, runner workers.CommandRunner
 
 // CommandRunnerOverrideFromContext resolves the optional runtime-scoped
 // command effect, falling back to the construction-time runner.
-func CommandRunnerOverrideFromContext(ctx context.Context, fallback workers.CommandRunner) workers.CommandRunner {
+func CommandRunnerOverrideFromContext(
+	ctx context.Context,
+	fallback workerprocess.CommandRunner,
+) workerprocess.CommandRunner {
 	if ctx != nil {
-		if runner, ok := ctx.Value(commandRunnerOverrideKey{}).(workers.CommandRunner); ok && runner != nil {
+		if runner, ok := ctx.Value(commandRunnerOverrideKey{}).(workerprocess.CommandRunner); ok && runner != nil {
 			return runner
+		}
+		if runner, ok := ctx.Value(commandRunnerOverrideKey{}).(platformprocess.CommandRunner); ok && runner != nil {
+			return workerprocess.AdaptPlatformCommandRunner(runner)
 		}
 	}
 	return fallback

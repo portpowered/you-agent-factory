@@ -1,6 +1,7 @@
 package internal
 
 import (
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
@@ -17,8 +18,8 @@ import (
 // workers.Service.Execute, the named successor boundary.
 func NewConductorInvocationWithProgress(
 	providersService providers.Service,
-	commandRunner workers.CommandRunner,
-	commandClock workers.Clock,
+	commandRunner platformprocess.CommandRunner,
+	commandClock platformclock.Source,
 	allocator workers.PTYAllocator,
 	resolveSymlinks workers.ResolveExecutableSymlinks,
 	executableLocator platformprocess.ExecutableLocator,

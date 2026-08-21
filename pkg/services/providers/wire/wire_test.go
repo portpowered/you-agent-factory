@@ -656,8 +656,8 @@ type inertWorkersCommandRunner struct {
 
 func (r *inertWorkersCommandRunner) Run(
 	_ context.Context,
-	_ workers.CommandRequest,
-) (workers.CommandResult, error) {
+	_ platformprocess.CommandRequest,
+) (platformprocess.CommandResult, error) {
 	r.calls++
 	panic("workers command runner invoked during inert construction")
 }
@@ -711,10 +711,10 @@ type recordingWorkersCommandRunner struct {
 
 func (r *recordingWorkersCommandRunner) Run(
 	_ context.Context,
-	_ workers.CommandRequest,
-) (workers.CommandResult, error) {
+	_ platformprocess.CommandRequest,
+) (platformprocess.CommandResult, error) {
 	r.calls++
-	return workers.CommandResult{}, nil
+	return platformprocess.CommandResult{}, nil
 }
 
 type recordingPTYAllocator struct {

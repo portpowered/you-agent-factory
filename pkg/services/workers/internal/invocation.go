@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
@@ -22,8 +23,8 @@ import (
 // Service.Execute.
 func NewInvocationWithProgress(
 	providersService providers.Service,
-	commandRunner workers.CommandRunner,
-	commandClock workers.Clock,
+	commandRunner platformprocess.CommandRunner,
+	commandClock platformclock.Source,
 	allocator workers.PTYAllocator,
 	resolveSymlinks workers.ResolveExecutableSymlinks,
 	executableLocator platformprocess.ExecutableLocator,
@@ -42,8 +43,8 @@ func NewInvocationWithProgress(
 
 func newInvocation(
 	providersService providers.Service,
-	commandRunner workers.CommandRunner,
-	commandClock workers.Clock,
+	commandRunner platformprocess.CommandRunner,
+	commandClock platformclock.Source,
 	allocator workers.PTYAllocator,
 	resolveSymlinks workers.ResolveExecutableSymlinks,
 	executableLocator platformprocess.ExecutableLocator,

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"strings"
 
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factoryhost "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/host"
@@ -29,8 +30,8 @@ type Service struct {
 	workstationLoader          factorydefinitions.WorkstationLoader
 	loadFactory                factory.LoadedFactoryLoader
 	providerOverride           providers.Service
-	providerCommandRunner      workers.CommandRunner
-	scriptCommandRunner        workers.CommandRunner
+	providerCommandRunner      platformprocess.CommandRunner
+	scriptCommandRunner        platformprocess.CommandRunner
 	mockWorkersConfig          *workers.MockWorkersConfig
 	newMockCommandRunner       MockCommandRunnerFactory
 	clock                      factory.Clock
@@ -52,8 +53,8 @@ func New(
 	workstationLoader factorydefinitions.WorkstationLoader,
 	loadFactory factory.LoadedFactoryLoader,
 	providerOverride providers.Service,
-	providerCommandRunner workers.CommandRunner,
-	scriptCommandRunner workers.CommandRunner,
+	providerCommandRunner platformprocess.CommandRunner,
+	scriptCommandRunner platformprocess.CommandRunner,
 	mockWorkersConfig *workers.MockWorkersConfig,
 	newMockCommandRunner MockCommandRunnerFactory,
 	clock factory.Clock,
@@ -115,7 +116,7 @@ func (s *Service) BuildSpec(
 	loadedFactoryCfg factorydefinitions.MutableLoadedFactorySource,
 	runtimeInstanceID string,
 	replayProvider providers.Service,
-	replayCommandRunner workers.CommandRunner,
+	replayCommandRunner platformprocess.CommandRunner,
 	submissionHooks []factory.SubmissionHook,
 	completionPlanner factory.CompletionDeliveryPlanner,
 	preserveCompatibilityDefaultRecordPath bool,

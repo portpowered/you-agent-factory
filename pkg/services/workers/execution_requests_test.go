@@ -7,6 +7,7 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
+	workerprocess "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/process"
 )
 
 func TestCloneProviderInferenceRequestDeeplyDetachesInputTokens(t *testing.T) {
@@ -89,7 +90,7 @@ func TestRequestClonesNormalizeEmptyInputTokensToNil(t *testing.T) {
 	}).InputTokens; got != nil {
 		t.Fatalf("provider input tokens = %#v, want nil", got)
 	}
-	if got := workerexecution.CloneSubprocessExecutionRequest(workerexecution.SubprocessExecutionRequest{
+	if got := workerprocess.CloneCommandRequest(workerprocess.CommandRequest{
 		Inputs: []workerexecution.WorkInput{},
 	}).Inputs; got != nil {
 		t.Fatalf("subprocess inputs = %#v, want nil", got)

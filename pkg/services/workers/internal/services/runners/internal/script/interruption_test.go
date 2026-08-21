@@ -10,6 +10,7 @@ import (
 
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
+	workerprocess "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/process"
 )
 
 func TestRunnerNormalizesCancellationAndDeadlineAfterCommandStart(t *testing.T) {
@@ -143,16 +144,16 @@ type interruptingCommandEdge struct {
 
 func (edge *interruptingCommandEdge) Run(
 	ctx context.Context,
-	request workers.CommandRequest,
-) (workers.CommandResult, error) {
+	request workerprocess.CommandRequest,
+) (workerprocess.CommandResult, error) {
 	return edge.RunStreaming(ctx, request, nil)
 }
 
 func (edge *interruptingCommandEdge) RunStreaming(
 	ctx context.Context,
-	_ workers.CommandRequest,
+	_ workerprocess.CommandRequest,
 	observer platformprocess.OutputChunkObserver,
-) (workers.CommandResult, error) {
+) (workerprocess.CommandResult, error) {
 	edge.observations.Append("command")
 	if observer != nil {
 		observer(platformprocess.OutputStreamStdout, []byte("partial stdout"))
@@ -163,7 +164,7 @@ func (edge *interruptingCommandEdge) RunStreaming(
 	edge.mu.Lock()
 	edge.cleaned = true
 	edge.mu.Unlock()
-	return workers.CommandResult{
+	return workerprocess.CommandResult{
 		Stdout: []byte("partial stdout"),
 		Stderr: []byte("partial stderr"),
 	}, ctx.Err()

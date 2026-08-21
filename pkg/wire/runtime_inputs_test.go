@@ -643,10 +643,10 @@ func TestFactoryRuntimeEffectProvidersSelectExactProcessEdges(t *testing.T) {
 	if err != nil {
 		t.Fatalf("script command runner: %v", err)
 	}
-	if workers.ProjectPlatformCommandRunner(gotProvider) != providerRunner {
+	if gotProvider != providerRunner {
 		t.Fatalf("provider command runner = %v, want edge runner %v", gotProvider, providerRunner)
 	}
-	if workers.ProjectPlatformCommandRunner(gotScript) != scriptRunner {
+	if gotScript != scriptRunner {
 		t.Fatalf("script command runner = %v, want edge runner %v", gotScript, scriptRunner)
 	}
 }
