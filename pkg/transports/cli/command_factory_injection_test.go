@@ -512,6 +512,144 @@ func TestProductionMetricsCommandResolvesGlobalJSONAndSessionScope(t *testing.T)
 	}
 }
 
+type productionMetricsFailureCase struct {
+	name        string
+	args        []string
+	home        func() (string, error)
+	queryError  error
+	wantCode    string
+	wantFamily  string
+	wantMessage string
+	wantCalls   int
+	wantCause   error
+}
+
+func TestProductionMetricsCommandExecuteCommandPreservesCodedFailures(t *testing.T) {
+	t.Parallel()
+	queryCause := errors.New("metrics path=/private/credential=do-not-leak")
+	queryError := &factoryvisualization.RuntimeMetricsQueryError{
+		Kind:    factoryvisualization.RuntimeMetricsQueryReadFailed,
+		Message: "query Factory Runtime metrics: read artifacts",
+		Cause:   queryCause,
+	}
+	resolverCause := errors.New("home resolver credential=do-not-leak")
+	tests := []productionMetricsFailureCase{
+		{
+			name:        "invalid group",
+			args:        []string{"metrics", "--group-by", "region"},
+			home:        func() (string, error) { return "operator-home", nil },
+			wantCode:    "METRICS_INVALID_GROUP_BY",
+			wantFamily:  "BAD_REQUEST",
+			wantMessage: `invalid --group-by "region": choose workstation, worker, or provider`,
+		},
+		{
+			name:        "invalid group in JSON mode",
+			args:        []string{"--json", "metrics", "--group-by", "region"},
+			home:        func() (string, error) { return "operator-home", nil },
+			wantCode:    "METRICS_INVALID_GROUP_BY",
+			wantFamily:  "BAD_REQUEST",
+			wantMessage: `invalid --group-by "region": choose workstation, worker, or provider`,
+		},
+		{
+			name:        "home resolver failure",
+			args:        []string{"metrics"},
+			home:        func() (string, error) { return "", resolverCause },
+			wantCode:    "METRICS_HOME_DIRECTORY_FAILED",
+			wantFamily:  "INTERNAL_SERVER_ERROR",
+			wantMessage: "resolve metrics home directory: home directory could not be resolved; set HOME or USERPROFILE",
+			wantCause:   resolverCause,
+		},
+		{
+			name:        "empty home path",
+			args:        []string{"metrics"},
+			home:        func() (string, error) { return "  ", nil },
+			wantCode:    "METRICS_HOME_DIRECTORY_FAILED",
+			wantFamily:  "INTERNAL_SERVER_ERROR",
+			wantMessage: "resolve metrics home directory: resolver returned an empty path; set HOME or USERPROFILE",
+		},
+		{
+			name:        "query read failure",
+			args:        []string{"--json", "metrics"},
+			home:        func() (string, error) { return "operator-home", nil },
+			queryError:  queryError,
+			wantCode:    "METRICS_QUERY_FAILED",
+			wantFamily:  "INTERNAL_SERVER_ERROR",
+			wantMessage: "query Factory Runtime metrics: read artifacts",
+			wantCalls:   1,
+			wantCause:   queryCause,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			runProductionMetricsFailureCase(t, test)
+		})
+	}
+}
+
+func runProductionMetricsFailureCase(t *testing.T, test productionMetricsFailureCase) {
+	t.Helper()
+	queryCalls := 0
+	factory := withTestInjectedPlatformRoles(CommandFactory{
+		runtimeMetricsQuery: func(context.Context, factoryvisualization.RuntimeMetricsQueryRequest) (factoryvisualization.RuntimeMetricsQueryResult, error) {
+			queryCalls++
+			return factoryvisualization.RuntimeMetricsQueryResult{}, test.queryError
+		},
+	})
+	var stdout, stderr bytes.Buffer
+	err := factory.ExecuteCommand(startupcli.CommandInvocation{
+		Arguments: test.args,
+		Stdin:     strings.NewReader(""),
+		Stdout:    &stdout,
+		Stderr:    &stderr,
+		Context:   context.Background(),
+		HomeDir:   test.home,
+		LookupEnv: func(string) (string, bool) { return "", false },
+	})
+	if err == nil {
+		t.Fatal("ExecuteCommand() error = nil, want metrics failure")
+	}
+	if stdout.Len() != 0 {
+		t.Fatalf("stdout = %q, want empty failure output", stdout.String())
+	}
+	assertSingleMetricsDiagnostic(t, stderr.String(), test.wantCode, test.wantFamily, test.wantMessage)
+	if queryCalls != test.wantCalls {
+		t.Fatalf("metrics query calls = %d, want %d", queryCalls, test.wantCalls)
+	}
+	if test.wantCause != nil && !errors.Is(err, test.wantCause) {
+		t.Fatalf("ExecuteCommand() error = %v, want to preserve cause", err)
+	}
+	if test.queryError != nil {
+		var gotQueryError *factoryvisualization.RuntimeMetricsQueryError
+		if !errors.As(err, &gotQueryError) {
+			t.Fatalf("ExecuteCommand() error = %v, want query error classification preserved", err)
+		}
+	}
+	if strings.Contains(stderr.String(), "do-not-leak") {
+		t.Fatalf("central diagnostic exposed an underlying payload: %q", stderr.String())
+	}
+}
+
+func assertSingleMetricsDiagnostic(t *testing.T, output, wantCode, wantFamily, wantMessage string) {
+	t.Helper()
+	trimmed := strings.TrimSpace(output)
+	lines := strings.Split(trimmed, "\n")
+	if trimmed == "" || len(lines) != 1 {
+		t.Fatalf("diagnostic output = %q, want exactly one JSON line", output)
+	}
+	var diagnostic struct {
+		Code    string `json:"code"`
+		Family  string `json:"family"`
+		Message string `json:"message"`
+	}
+	if err := json.Unmarshal([]byte(trimmed), &diagnostic); err != nil {
+		t.Fatalf("decode central diagnostic: %v; output=%q", err, output)
+	}
+	if diagnostic.Code != wantCode || diagnostic.Family != wantFamily || diagnostic.Message != wantMessage {
+		t.Fatalf("diagnostic = %#v, want code %q, family %q, and message %q", diagnostic, wantCode, wantFamily, wantMessage)
+	}
+}
+
 type injectedModelsCLIService struct {
 	list func(modelscli.ListConfig) error
 }

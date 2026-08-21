@@ -23,7 +23,7 @@ func renderHumanMetrics(
 		fmt.Fprintf(&output, "Scope: Factory Session %s\n", sessionID)
 	}
 	fmt.Fprintf(&output, "Group by: %s\n", groupBy)
-	fmt.Fprintln(&output, "Cost: unavailable")
+	fmt.Fprintf(&output, "Cost: %s\n", normalizeMetricsCostAvailability(result.Cost.Availability))
 	fmt.Fprintln(&output)
 	fmt.Fprintln(&output, "Totals:")
 	renderMetricsAggregate(&output, "  ", result.Totals)
@@ -100,7 +100,7 @@ func renderMetricsOutput(
 			Counts:  "count",
 			Latency: "milliseconds",
 		},
-		Cost:   metricsJSONCost{Availability: "unavailable"},
+		Cost:   metricsJSONCost{Availability: normalizeMetricsCostAvailability(result.Cost.Availability)},
 		Totals: toJSONAggregate(result.Totals),
 		Groups: toJSONGroups(metricsBreakdowns(groupBy, result)),
 	}
@@ -109,6 +109,14 @@ func renderMetricsOutput(
 		return "", fmt.Errorf("encode metrics JSON: %w", err)
 	}
 	return string(append(encoded, '\n')), nil
+}
+
+func normalizeMetricsCostAvailability(availability factoryvisualization.RuntimeMetricsCostAvailability) string {
+	normalized := strings.ToLower(strings.TrimSpace(string(availability)))
+	if normalized == "" {
+		return "unavailable"
+	}
+	return normalized
 }
 
 func metricsJSONScopeForSession(sessionID string) metricsJSONScope {

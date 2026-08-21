@@ -82,17 +82,25 @@ func RunMetrics(ctx context.Context, config MetricsConfig) error {
 	sessionID := strings.TrimSpace(config.SessionID)
 	homeDir, err := config.HomeDir()
 	if err != nil {
-		return fmt.Errorf("resolve metrics home directory: %w", err)
+		return newMetricsError(
+			MetricsHomeDirectoryFailedCode,
+			"resolve metrics home directory: home directory could not be resolved; set HOME or USERPROFILE",
+			err,
+		)
 	}
 	if strings.TrimSpace(homeDir) == "" {
-		return fmt.Errorf("resolve metrics home directory: path is empty")
+		return newMetricsError(
+			MetricsHomeDirectoryFailedCode,
+			"resolve metrics home directory: resolver returned an empty path; set HOME or USERPROFILE",
+			nil,
+		)
 	}
 	result, err := config.Query.QueryRuntimeMetrics(ctx, factoryvisualization.RuntimeMetricsQueryRequest{
 		MetricsRoot: platformmetrics.RuntimeMetricsRoot(homeDir),
 		SessionID:   sessionID,
 	})
 	if err != nil {
-		return fmt.Errorf("query Factory Runtime metrics: %w", err)
+		return newMetricsQueryError(err)
 	}
 	output, err := renderMetricsOutput(groupBy, sessionID, config.JSON, result)
 	if err != nil {
@@ -112,10 +120,18 @@ func validateMetricsConfig(ctx context.Context, config MetricsConfig) error {
 		return fmt.Errorf("render metrics: output writer is required")
 	}
 	if config.Query == nil {
-		return fmt.Errorf("query Factory Runtime metrics: query operation is required")
+		return newMetricsError(
+			MetricsQueryFailedCode,
+			"query Factory Runtime metrics: query operation is required",
+			nil,
+		)
 	}
 	if config.HomeDir == nil {
-		return fmt.Errorf("resolve metrics home directory: resolver is required")
+		return newMetricsError(
+			MetricsHomeDirectoryFailedCode,
+			"resolve metrics home directory: resolver is required; set HOME or USERPROFILE",
+			nil,
+		)
 	}
 	return nil
 }
@@ -129,9 +145,13 @@ func normalizeMetricsGroupBy(value string) (string, error) {
 	case metricsGroupByWorkstation, metricsGroupByWorker, metricsGroupByProvider:
 		return groupBy, nil
 	default:
-		return "", fmt.Errorf(
-			"invalid --group-by %q: choose workstation, worker, or provider",
-			value,
+		return "", newMetricsError(
+			MetricsInvalidGroupByCode,
+			fmt.Sprintf(
+				"invalid --group-by %q: choose workstation, worker, or provider",
+				value,
+			),
+			nil,
 		)
 	}
 }
