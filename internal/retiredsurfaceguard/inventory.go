@@ -1,6 +1,8 @@
 package retiredsurfaceguard
 
-// SettledRetiredCLIPaths are hard-retired CLI surfaces from S11/S12/B08 closeout.
+// SettledRetiredCLIPaths are hard-retired CLI surfaces from completed CLI
+// migrations. The list is shared by absence tests so a retired path cannot
+// quietly reappear in a generated or handwritten command tree.
 func SettledRetiredCLIPaths() []string {
 	return append([]string(nil), settledRetiredCLIPaths...)
 }
@@ -22,6 +24,9 @@ var settledRetiredCLIPaths = []string{
 	"you config expand",
 	"you factory save",
 	"you factory validate",
+	"you factory query",
+	"you work visualize",
+	"you session dispatches",
 }
 
 var settledRetiredDocsTopics = []string{

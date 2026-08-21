@@ -92,7 +92,7 @@ currently shipped pause, resume, cancel, and terminate controls.
 | Observe ephemeral response events | `GET /factory-sessions/{session_id}/response-events` | No Factory Session-named spelling; use the API path | No Factory Session-named spelling; use the API path | No dashboard-owned response-event stream today |
 | Control lifecycle | `POST /factory-sessions/{session_id}/{pause\|resume\|cancel\|terminate}` | `you session pause\|resume\|cancel\|terminate {session_id}` | `you.factory_session.control` | Available actions on Factory Session detail |
 
-### Dispatch inspection after CLI removal
+### Migration guidance: dispatch inspection after CLI removal
 
 The `you session dispatches` command is removed. No single CLI command replaces every dispatch inspection need.
 

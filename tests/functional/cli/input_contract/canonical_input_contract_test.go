@@ -199,8 +199,8 @@ func TestGenericSessionProjectionEnforcesProductionInputContracts(t *testing.T) 
 		want string
 	}{
 		{
-			name: "required positional",
-			args: []string{"you", "session", "dispatches"},
+			name: "required positional on retained command",
+			args: []string{"you", "session", "delete"},
 			want: "requires at least 1 arg",
 		},
 		{

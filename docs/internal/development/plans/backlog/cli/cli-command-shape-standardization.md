@@ -6,6 +6,11 @@ Proposed. This is a breaking public CLI contract migration. The repository is
 currently its own primary consumer, so the plan deliberately prefers one
 coherent command tree over compatibility aliases.
 
+All old command literals in this plan are historical migration records. They
+describe the source side of an intentional cutover; they are not active
+customer invocations. Active guidance and the executable target tree use only
+the target paths.
+
 ## Problem statement
 
 The CLI has a strong manifest and drift-detection system, but it does not have

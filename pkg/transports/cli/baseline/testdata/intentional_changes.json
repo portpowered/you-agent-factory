@@ -1,4 +1,25 @@
 {
   "planned_removals": [],
-  "planned_moves": []
+  "planned_moves": [],
+  "completed_removals": [
+    {
+      "surface": "command",
+      "command_path": "you session dispatches",
+      "rationale": "Retired the low-value Session dispatch inventory without a CLI successor; REST and MCP dispatch reads remain available."
+    }
+  ],
+  "completed_moves": [
+    {
+      "surface": "command",
+      "from_command_path": "you factory query",
+      "to_command_path": "you factory show",
+      "rationale": "Renamed the Current Factory read to the canonical single-resource show verb without changing its operation."
+    },
+    {
+      "surface": "command",
+      "from_command_path": "you work visualize",
+      "to_command_path": "you work render",
+      "rationale": "Renamed the local Work dependency transformation to the precise render verb without changing its output or side effects."
+    }
+  ]
 }

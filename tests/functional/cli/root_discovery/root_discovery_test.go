@@ -41,10 +41,10 @@ func TestManifestProjectedRepresentativeHandlersAcceptCanonicalInputs(t *testing
 		{"you", "--server", unavailableServer, "session", "delete", "session-1", "--json"},
 		{"you", "--remote", "--server", unavailableServer, "session", "pause", "session-1", "--json"},
 		{"you", "--remote", "--server", unavailableServer, "session", "resume", "session-1", "--json"},
-		{"you", "--server", unavailableServer, "session", "dispatches", "session-1", "--json"},
 		{"you", "--server", unavailableServer, "work", "list", "--json"},
 		{"you", "--server", unavailableServer, "work", "show", "work-1", "--json"},
 		{"you", "--server", unavailableServer, "work", "move", "work-1", "complete", "--json"},
+		{"you", "--server", unavailableServer, "worker-sessions", "list", "--json"},
 	}
 	for _, args := range cases {
 		_, _, executeErr := executeFactoryArgs(
