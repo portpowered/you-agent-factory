@@ -240,6 +240,14 @@ jobs:
           fi
           echo "Functional CI runner: logical_cpus=$runner_cpus jobs=$functional_jobs"
           echo "jobs=$functional_jobs" >> "$GITHUB_OUTPUT"
+      - name: Verify quarantined package inventory on Linux
+        if: matrix.suite == 'functional'
+        run: bash scripts/ci/verify-functional-quarantine-packages.sh
+        env:
+          FUNCTIONAL_QUARANTINE_EVIDENCE_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          FUNCTIONAL_QUARANTINE_EVIDENCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          FUNCTIONAL_QUARANTINE_EVIDENCE_OUTPUT: .artifacts/functional-test-viz/quarantine-package-evidence.txt
+          FUNCTIONAL_QUARANTINE_EVIDENCE_TIMEOUT: 15m
       - name: Run backend coverage
         if: matrix.suite == 'unit'
         run: make test-unit-coverage
@@ -392,6 +400,7 @@ jobs:
             .artifacts/functional-test-viz/coverage-summary.json
             .artifacts/functional-test-viz/coverage.out
             .artifacts/functional-test-viz/command.log
+            .artifacts/functional-test-viz/quarantine-package-evidence.txt
             .artifacts/functional-test-viz/diagnostic-status.txt
             .artifacts/functional-test-viz/gocoveragecheck-exit-code.txt
             .artifacts/functional-test-viz/functional-coverage-verdict.txt
