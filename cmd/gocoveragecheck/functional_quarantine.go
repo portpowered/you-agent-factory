@@ -50,6 +50,7 @@ type functionalTestInventory struct {
 
 type functionalCoverageSelection struct {
 	Inventory                functionalTestInventory
+	SelectedTests            map[string][]string
 	Groups                   []coverageRunGroup
 	QuarantinedPackageCount  int
 	QuarantinedTestSelectors int
@@ -81,6 +82,9 @@ func resolveFunctionalCoverageSelection(path string, packages []string, timeout 
 		return functionalCoverageSelection{}, functionalQuarantine{}, err
 	}
 	if err := validateFunctionalQuarantine(manifest, inventory); err != nil {
+		return functionalCoverageSelection{}, functionalQuarantine{}, err
+	}
+	if err := verifyFunctionalTestQuarantineSelectors(manifest, timeout, short, jobs, repoRoot); err != nil {
 		return functionalCoverageSelection{}, functionalQuarantine{}, err
 	}
 	selection, err := buildFunctionalCoverageSelection(manifest, inventory)
@@ -497,7 +501,9 @@ func parseFunctionalTestList(output string, inventory functionalTestInventory, s
 		if _, known := inventory.Tests[event.Package]; !known {
 			return fmt.Errorf("discover functional tests: go test reported unexpected package %q", event.Package)
 		}
-		seenPackages[event.Package] = struct{}{}
+		if event.Test == "" && isFunctionalTestListTerminal(event.Action) {
+			seenPackages[event.Package] = struct{}{}
+		}
 		if event.Test != "" {
 			if err := addFunctionalTestName(inventory.Tests, event.Package, event.Test); err != nil {
 				return err
@@ -516,6 +522,95 @@ func parseFunctionalTestList(output string, inventory functionalTestInventory, s
 		}
 	}
 	return nil
+}
+
+func verifyFunctionalTestQuarantineSelectors(manifest functionalQuarantine, timeout time.Duration, short bool, jobs int, repoRoot string) error {
+	selectorPackages := make([]string, 0)
+	for _, entry := range manifest.Entries {
+		if entry.Test != "" {
+			selectorPackages = append(selectorPackages, entry.Package)
+		}
+	}
+	selectorPackages = sortedUniqueStrings(selectorPackages)
+	if len(selectorPackages) == 0 {
+		return nil
+	}
+
+	runtimeInventory, err := discoverFunctionalTestInventoryByRuntimeList(selectorPackages, timeout, short, jobs, repoRoot)
+	if err != nil {
+		return err
+	}
+	for _, entry := range manifest.Entries {
+		if entry.Test == "" {
+			continue
+		}
+		if !slices.Contains(runtimeInventory.Tests[entry.Package], entry.Test) {
+			return fmt.Errorf("validate functional quarantine: selector %q is not discoverable in package %q", entry.Test, entry.Package)
+		}
+	}
+	return nil
+}
+
+func discoverFunctionalTestInventoryByRuntimeList(packages []string, timeout time.Duration, short bool, jobs int, repoRoot string) (functionalTestInventory, error) {
+	packages = sortedUniqueStrings(packages)
+	if len(packages) == 0 {
+		return functionalTestInventory{}, errors.New("discover functional tests: no packages were selected for runtime verification")
+	}
+
+	args := []string{"test", "-list=^Test", "-json", fmt.Sprintf("-p=%d", maxFunctionalDiscoveryJobs(jobs)), "-count=1"}
+	if short {
+		args = append(args, "-short")
+	}
+	args = append(args, fmt.Sprintf("-timeout=%s", timeout))
+	args = append(args, packages...)
+	stdout, stderr, err := runCommand(commandInvocation{
+		name: "go",
+		args: args,
+		env:  os.Environ(),
+		dir:  repoRoot,
+	})
+	if err != nil {
+		detail := mergeGoTestFailureDetail(stderr, stdout)
+		if detail != "" {
+			return functionalTestInventory{}, fmt.Errorf("discover functional tests: runtime go test list: %w\n%s", err, detail)
+		}
+		return functionalTestInventory{}, fmt.Errorf("discover functional tests: runtime go test list: %w", err)
+	}
+
+	inventory := functionalTestInventory{
+		Packages: packages,
+		Tests:    make(map[string][]string, len(packages)),
+	}
+	for _, packagePath := range packages {
+		inventory.Tests[packagePath] = nil
+	}
+	seenPackages := make(map[string]struct{}, len(packages))
+	if err := parseFunctionalTestList(stdout, inventory, seenPackages); err != nil {
+		return functionalTestInventory{}, err
+	}
+	for _, packagePath := range packages {
+		if _, ok := seenPackages[packagePath]; !ok {
+			return functionalTestInventory{}, fmt.Errorf("discover functional tests: package %q did not report a terminal runtime list event", packagePath)
+		}
+		inventory.Tests[packagePath] = sortedUniqueStrings(inventory.Tests[packagePath])
+	}
+	return inventory, nil
+}
+
+func maxFunctionalDiscoveryJobs(jobs int) int {
+	if jobs < 1 {
+		return 1
+	}
+	return jobs
+}
+
+func isFunctionalTestListTerminal(action string) bool {
+	switch action {
+	case timingOutcomePass, timingOutcomeFail, timingOutcomeSkip:
+		return true
+	default:
+		return false
+	}
 }
 
 func addFunctionalTestName(tests map[string][]string, packagePath, name string) error {
@@ -608,6 +703,7 @@ func buildFunctionalCoverageSelection(manifest functionalQuarantine, inventory f
 
 	selection := functionalCoverageSelection{
 		Inventory:                inventory,
+		SelectedTests:            make(map[string][]string),
 		QuarantinedPackageCount:  len(packageExcluded),
 		QuarantinedTestSelectors: len(manifest.Entries) - len(packageExcluded),
 	}
@@ -629,6 +725,7 @@ func buildFunctionalCoverageSelection(manifest functionalQuarantine, inventory f
 			selection.TestExcludedPackageCount++
 			continue
 		}
+		selection.SelectedTests[packagePath] = append([]string(nil), selectedTests...)
 		pattern := ""
 		if len(excludedTests) > 0 {
 			pattern = exactFunctionalTestRunPattern(selectedTests)
@@ -667,6 +764,15 @@ func selectedFunctionalPackages(selection functionalCoverageSelection) []string 
 		packages = append(packages, group.Packages...)
 	}
 	return sortedUniqueStrings(packages)
+}
+
+func selectedFunctionalTestInventory(selection functionalCoverageSelection) functionalTestInventory {
+	packages := selectedFunctionalPackages(selection)
+	tests := make(map[string][]string, len(packages))
+	for _, packagePath := range packages {
+		tests[packagePath] = append([]string(nil), selection.SelectedTests[packagePath]...)
+	}
+	return functionalTestInventory{Packages: packages, Tests: tests}
 }
 
 func exactFunctionalTestRunPattern(testNames []string) string {

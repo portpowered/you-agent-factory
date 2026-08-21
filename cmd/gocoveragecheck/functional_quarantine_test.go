@@ -64,6 +64,12 @@ func TestFunctionalCoverageSelectionSubtractsOnlyDeclaredSelectors(t *testing.T)
 	if precise.RunPattern != "^(?:TestAdded|TestKeep)$" || !slices.Equal(precise.Packages, []string{packageA}) {
 		t.Fatalf("precise run group = %+v, want package A with only retained tests", precise)
 	}
+	if !slices.Equal(selection.SelectedTests[packageA], []string{"TestAdded", "TestKeep"}) {
+		t.Fatalf("selected tests for package A = %v, want retained tests only", selection.SelectedTests[packageA])
+	}
+	if _, found := selection.SelectedTests[packageB]; found {
+		t.Fatalf("selected tests unexpectedly retained package-quarantined package B: %+v", selection.SelectedTests)
+	}
 }
 
 func TestFunctionalQuarantineValidationFailsClosed(t *testing.T) {
@@ -375,6 +381,96 @@ func TestFunctionalDiscoveryFailsClosedForGoListAndFileErrors(t *testing.T) {
 			_, err := discoverFunctionalTestInventory([]string{packagePath}, 0, false, 0, root)
 			if err == nil || !strings.Contains(err.Error(), test.wantDetail) {
 				t.Fatalf("discoverFunctionalTestInventory() error = %v, want detail %q", err, test.wantDetail)
+			}
+		})
+	}
+}
+
+func TestFunctionalQuarantineRuntimeVerificationScopesListingToTestSelectors(t *testing.T) {
+	originalRunner := commandRunner
+	t.Cleanup(func() { commandRunner = originalRunner })
+
+	packageLevel := modulePath + "/tests/functional/package-level"
+	testLevel := modulePath + "/tests/functional/test-level"
+	unquarantined := modulePath + "/tests/functional/unquarantined"
+	var invocations []commandInvocation
+	commandRunner = func(invocation commandInvocation) (string, string, error) {
+		invocations = append(invocations, invocation)
+		return strings.Join([]string{
+			marshalFunctionalListEvent(goTestListEvent{Action: "start", Package: testLevel}),
+			marshalFunctionalListEvent(goTestListEvent{Action: "output", Package: testLevel, Output: "TestRuntimeSelector\n"}),
+			marshalFunctionalListEvent(goTestListEvent{Action: timingOutcomePass, Package: testLevel}),
+		}, "\n"), "", nil
+	}
+
+	manifest := functionalQuarantine{Entries: []functionalQuarantineEntry{
+		{Package: packageLevel, Bucket: functionalBucketEnvironment, Reason: "package precondition"},
+		{Package: testLevel, Test: "TestRuntimeSelector", Bucket: functionalBucketEnvironment, Reason: "test precondition"},
+	}}
+	if err := verifyFunctionalTestQuarantineSelectors(manifest, 2*time.Minute, true, 4, t.TempDir()); err != nil {
+		t.Fatalf("verifyFunctionalTestQuarantineSelectors() error = %v", err)
+	}
+	if len(invocations) != 1 {
+		t.Fatalf("runtime listing invocations = %d, want one for test-level selectors only", len(invocations))
+	}
+	invocation := invocations[0]
+	wantArgs := []string{"test", "-list=^Test", "-json", "-p=4", "-count=1", "-short", "-timeout=2m0s", testLevel}
+	if invocation.name != "go" || !slices.Equal(invocation.args, wantArgs) {
+		t.Fatalf("runtime listing invocation = %+v, want only test-level package %q with retained list flags", invocation, testLevel)
+	}
+	if strings.Contains(strings.Join(invocation.args, " "), packageLevel) || strings.Contains(strings.Join(invocation.args, " "), unquarantined) {
+		t.Fatalf("runtime listing included a package without a test-level selector: %+v", invocation.args)
+	}
+}
+
+func TestFunctionalQuarantineRuntimeVerificationRejectsStaleSelector(t *testing.T) {
+	originalRunner := commandRunner
+	t.Cleanup(func() { commandRunner = originalRunner })
+
+	packagePath := modulePath + "/tests/functional/test-level"
+	commandRunner = func(commandInvocation) (string, string, error) {
+		return strings.Join([]string{
+			marshalFunctionalListEvent(goTestListEvent{Action: "start", Package: packagePath}),
+			marshalFunctionalListEvent(goTestListEvent{Action: "output", Package: packagePath, Output: "TestCurrent\n"}),
+			marshalFunctionalListEvent(goTestListEvent{Action: timingOutcomePass, Package: packagePath}),
+		}, "\n"), "", nil
+	}
+
+	manifest := functionalQuarantine{Entries: []functionalQuarantineEntry{{
+		Package: packagePath, Test: "TestStale", Bucket: functionalBucketEnvironment, Reason: "stale selector fixture",
+	}}}
+	err := verifyFunctionalTestQuarantineSelectors(manifest, time.Minute, false, 1, t.TempDir())
+	if err == nil || !strings.Contains(err.Error(), `selector "TestStale" is not discoverable in package "`+packagePath+`"`) {
+		t.Fatalf("verifyFunctionalTestQuarantineSelectors() error = %v, want unchanged stale-selector diagnostic", err)
+	}
+}
+
+func TestFunctionalQuarantineRuntimeVerificationFailsClosedOnListErrors(t *testing.T) {
+	originalRunner := commandRunner
+	t.Cleanup(func() { commandRunner = originalRunner })
+
+	packagePath := modulePath + "/tests/functional/test-level"
+	manifest := functionalQuarantine{Entries: []functionalQuarantineEntry{{
+		Package: packagePath, Test: "TestCurrent", Bucket: functionalBucketEnvironment, Reason: "runtime list failure fixture",
+	}}}
+	for _, test := range []struct {
+		name      string
+		stdout    string
+		stderr    string
+		runnerErr error
+		want      string
+	}{
+		{name: "command failure", stderr: "compile failed", runnerErr: errors.New("exit status 1"), want: "runtime go test list"},
+		{name: "malformed event", stdout: "{not json", want: "decode go test list event"},
+		{name: "missing terminal event", stdout: marshalFunctionalListEvent(goTestListEvent{Action: "output", Package: packagePath, Output: "TestCurrent\n"}), want: "terminal runtime list event"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			commandRunner = func(commandInvocation) (string, string, error) {
+				return test.stdout, test.stderr, test.runnerErr
+			}
+			err := verifyFunctionalTestQuarantineSelectors(manifest, time.Minute, false, 1, t.TempDir())
+			if err == nil || !strings.Contains(err.Error(), test.want) {
+				t.Fatalf("verifyFunctionalTestQuarantineSelectors() error = %v, want substring %q", err, test.want)
 			}
 		})
 	}
