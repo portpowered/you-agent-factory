@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	recordingworkstation "github.com/portpowered/infinite-you/pkg/services/recordings/internal/projections/workstation"
@@ -228,7 +229,7 @@ type RuntimeOpening interface {
 	ReplayClock(*ReplayArtifact) Clock
 	ReplayExecution(*ReplayArtifact) (
 		providers.Service,
-		workerexecution.CommandRunner,
+		platformprocess.CommandRunner,
 		[]ReplayHook,
 		CompletionDeliveryPlanner,
 		error,
@@ -1342,7 +1343,7 @@ type BindReplayExecutionRequest struct {
 // peer-facing Service replay slice.
 type BindReplayExecutionResult struct {
 	Provider           providers.Service
-	CommandRunner      workerexecution.CommandRunner
+	CommandRunner      platformprocess.CommandRunner
 	Hooks              []ReplayHook
 	CompletionDelivery CompletionDeliveryPlanner
 }
@@ -1782,7 +1783,7 @@ type ReplayExecutionFactory func(
 	*ReplayArtifact,
 ) (
 	providers.Service,
-	workerexecution.CommandRunner,
+	platformprocess.CommandRunner,
 	[]ReplayHook,
 	CompletionDeliveryPlanner,
 	error,

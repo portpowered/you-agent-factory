@@ -171,12 +171,16 @@ func (a *Assembly) Assemble(
 			"Recordings runtime opening is required",
 		)
 	}
-	replayProvider, replayCommandRunner, replayHooks, completionPlanner, err := recordingsRuntime.ReplayExecution(
+	replayProvider, replayProcessRunner, replayHooks, completionPlanner, err := recordingsRuntime.ReplayExecution(
 		replayArtifact,
 	)
 	if err != nil {
 		return nil, nil, factoryruntime.SessionBuildSpec{}, nil, nil, err
 	}
+	// Recordings owns replay as a platform process effect. The Workers-owned
+	// execution boundary remains the next composition seam until its command
+	// port is privatized in the following migration story.
+	replayCommandRunner := workers.AdaptCommandRunner(replayProcessRunner)
 	spec, err := builder.BuildSpec(
 		ctx,
 		dir,
