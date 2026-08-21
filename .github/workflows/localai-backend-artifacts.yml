@@ -144,9 +144,18 @@ jobs:
             --backend "$BACKEND_ID" \
             --target "$TARGET_ID"
 
-      - name: Build the backend package
+      - name: Build the backend package on Windows
+        if: runner.os == 'Windows'
         working-directory: you-agent-factory
-        shell: ${{ runner.os == 'Windows' && 'msys2 {0}' || 'bash' }}
+        shell: msys2 {0}
+        run: |
+          set -euo pipefail
+          bash scripts/build-localai-backend-artifact.sh
+
+      - name: Build the backend package on Unix
+        if: runner.os != 'Windows'
+        working-directory: you-agent-factory
+        shell: bash
         run: |
           set -euo pipefail
           bash scripts/build-localai-backend-artifact.sh

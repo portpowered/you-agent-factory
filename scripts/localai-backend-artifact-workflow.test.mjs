@@ -226,6 +226,25 @@ test("the join rejects missing and unexpected matrix results", async (t) => {
 	);
 });
 
+test("the backend build uses one mutually-exclusive literal shell per runner OS", async () => {
+	const workflow = await readFile(".github/workflows/localai-backend-artifacts.yml", "utf8");
+	const buildSteps = [...workflow.matchAll(/      - name: Build the backend package on (Windows|Unix)\r?\n[\s\S]*?(?=\r?\n      - name:)/g)];
+
+	assert.deepEqual(
+		buildSteps.map(([, platform]) => platform),
+		["Windows", "Unix"],
+	);
+	const windowsStep = buildSteps.find(([, platform]) => platform === "Windows")[0];
+	const unixStep = buildSteps.find(([, platform]) => platform === "Unix")[0];
+	assert.match(windowsStep, /if: runner\.os == 'Windows'/);
+	assert.match(windowsStep, /shell: msys2 \{0\}/);
+	assert.equal((windowsStep.match(/bash scripts\/build-localai-backend-artifact\.sh/g) ?? []).length, 1);
+	assert.match(unixStep, /if: runner\.os != 'Windows'/);
+	assert.match(unixStep, /shell: bash/);
+	assert.equal((unixStep.match(/bash scripts\/build-localai-backend-artifact\.sh/g) ?? []).length, 1);
+	assert.doesNotMatch(workflow, /shell:\s*\$\{\{\s*runner\.os/);
+});
+
 test("the workflow uses immutable actions, package inputs, and the pinned tag guard", async () => {
 	const workflow = await readFile(".github/workflows/localai-backend-artifacts.yml", "utf8");
 	for (const revision of Object.values(config.workflowPins)) assert.match(workflow, new RegExp(`@${revision}`));
