@@ -148,8 +148,14 @@ func renderDispatchHuman(output io.Writer, dispatch factoryapi.FactorySessionDis
 	if dispatch.Attempt != nil {
 		attempt = fmt.Sprint(*dispatch.Attempt)
 	}
+	inputTokens, outputTokens, totalTokens := "unavailable", "unavailable", "unavailable"
 	if dispatch.Usage != nil && dispatch.Usage.DurationMillis != nil {
 		duration = fmt.Sprintf("%dms", *dispatch.Usage.DurationMillis)
+	}
+	if dispatch.Usage != nil {
+		inputTokens = formatOptionalInt64(dispatch.Usage.InputTokens)
+		outputTokens = formatOptionalInt64(dispatch.Usage.OutputTokens)
+		totalTokens = formatOptionalInt64(dispatch.Usage.TotalTokens)
 	}
 	artifacts, failure := "none", "none"
 	if dispatch.OutputArtifactIds != nil && len(*dispatch.OutputArtifactIds) > 0 {
@@ -162,6 +168,7 @@ func renderDispatchHuman(output io.Writer, dispatch factoryapi.FactorySessionDis
 		{"Phase", formatOptionalString(dispatch.Phase)}, {"Label", formatOptionalString(dispatch.Label)},
 		{"Runner", formatOptionalString(dispatch.RunnerId)}, {"Model", formatOptionalString(dispatch.Model)},
 		{"Provider sessions", providerSessions}, {"Attempt", attempt}, {"Duration", duration},
+		{"Input tokens", inputTokens}, {"Output tokens", outputTokens}, {"Total tokens", totalTokens},
 		{"Artifacts", artifacts}, {"Failure", failure},
 	}
 	for _, row := range rows {
@@ -170,4 +177,11 @@ func renderDispatchHuman(output io.Writer, dispatch factoryapi.FactorySessionDis
 		}
 	}
 	return nil
+}
+
+func formatOptionalInt64(value *int64) string {
+	if value == nil {
+		return "unavailable"
+	}
+	return fmt.Sprintf("%d", *value)
 }
