@@ -51,15 +51,6 @@ internal/testutil/mock_factory.go: unreachable func: MockFactory.acceptedWorkReq
 internal/testutil/mock_factory.go: unreachable func: MockFactory.applyMockOperatorMove
 internal/testutil/mock_factory.go: unreachable func: MockFactory.requireDurableExecutionService
 internal/testutil/mock_factory.go: unreachable func: findMockWorkToken
-internal/testutil/mock_factory_session.go: unreachable func: MockFactory.GetCurrentFactoryForSession
-internal/testutil/mock_factory_session.go: unreachable func: MockFactory.GetEngineStateSnapshotForSession
-internal/testutil/mock_factory_session.go: unreachable func: MockFactory.InvokeFactorySession
-internal/testutil/mock_factory_session.go: unreachable func: MockFactory.ProbeFactoryEventsForSession
-internal/testutil/mock_factory_session.go: unreachable func: MockFactory.SaveCurrentFactoryForSession
-internal/testutil/mock_factory_session.go: unreachable func: MockFactory.SubmitWorkRequestForSession
-internal/testutil/mock_factory_session.go: unreachable func: MockFactory.SubscribeFactoryEventsForSession
-internal/testutil/mock_factory_session.go: unreachable func: MockFactory.SubscribeFactoryResponseEventsForSession
-internal/testutil/mock_factory_session.go: unreachable func: MockFactory.WaitToComplete
 internal/testutil/validationassert/api.go: unreachable func: CanonicalAPITargetSignatures
 pkg/initializer/lifecycle/manager.go: unreachable func: Close
 pkg/platform/logging/runtime_logger.go: unreachable func: canonicalRuntimeLogDir

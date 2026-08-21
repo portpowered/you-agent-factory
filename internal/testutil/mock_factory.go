@@ -129,10 +129,6 @@ type FactorySessionRequestPreparation interface {
 }
 
 var _ petri.APIFactory = (*MockFactory)(nil)
-var _ apisurface.FactorySaveAPI = (*MockFactory)(nil)
-var _ apisurface.SessionAPI = (*MockFactory)(nil)
-var _ apisurface.WorkAPI = (*MockFactory)(nil)
-var _ apisurface.InvocationAPI = (*MockFactory)(nil)
 var _ apisurface.DurableSessionExecutionAPI = (*MockFactory)(nil)
 var _ apisurface.DurableSessionLifecycleAPI = (*MockFactory)(nil)
 
