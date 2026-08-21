@@ -13,13 +13,18 @@ import (
 var recordingsThinRootContractFiles = []string{
 	"contracts.go",
 	"contracts_test.go",
-	"root_surface_test.go",
+	"lifecycle_capability.go",
+	"lifecycle_capability_test.go",
+	"replay_artifact_capability.go",
+	"replay_artifact_capability_test.go",
+	"runtime_recording_binder.go",
 	"runtime_request_boundary_test.go",
 	"service_root_contract_fake_test.go",
 	"service_root_contract_invariants_test.go",
 	"service_root_contract_lifecycle_test.go",
 	"service_root_contract_replay_test.go",
 	"service_root_contract_seam_test.go",
+	"worker_capture.go",
 	"workers_root_boundary_test.go",
 }
 

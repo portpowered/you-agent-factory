@@ -14,10 +14,14 @@ import (
 )
 
 const (
-	DefaultLedgerPath    = "docs/temp/functional-tests-expansion/migration-ledger-inventory.json"
-	DefaultChecklistPath = "docs/temp/functional-tests-expansion/test-file-checklist.md"
-	FunctionalRoot       = "tests/functional"
-	InternalPrefix       = "tests/functional/internal/"
+	// CanonicalLedgerPath and CanonicalChecklistPath are committed under
+	// docs/internal so the checker never falls back to the ignored planner tree.
+	CanonicalLedgerPath    = "docs/internal/functional-tests-expansion/migration-ledger-inventory.json"
+	CanonicalChecklistPath = "docs/internal/functional-tests-expansion/test-file-checklist.md"
+	DefaultLedgerPath      = CanonicalLedgerPath
+	DefaultChecklistPath   = CanonicalChecklistPath
+	FunctionalRoot         = "tests/functional"
+	InternalPrefix         = "tests/functional/internal/"
 )
 
 var checklistPathPattern = regexp.MustCompile("`(tests/functional/[^`]+_test\\.go)`")
