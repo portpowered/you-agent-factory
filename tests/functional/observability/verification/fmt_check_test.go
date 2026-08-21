@@ -47,7 +47,7 @@ func TestFmtCheckReportsOnlyRealDrift(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read misformatted fixture before check: %v", err)
 	}
-	output, err := runMakefileTarget(fixtureRoot, makefilePath, "fmt-check")
+	output, err := runMakefileTargetWithArgs(fixtureRoot, makefilePath, "fmt-check", "--no-print-directory")
 	if err == nil {
 		t.Fatalf("fmt-check unexpectedly accepted misformatted fixture:\n%s", output)
 	}
@@ -66,7 +66,7 @@ func TestFmtCheckReportsOnlyRealDrift(t *testing.T) {
 	if err := os.WriteFile(fixturePath, formatted, 0o644); err != nil {
 		t.Fatalf("write formatted fixture: %v", err)
 	}
-	output, err = runMakefileTarget(fixtureRoot, makefilePath, "fmt-check")
+	output, err = runMakefileTargetWithArgs(fixtureRoot, makefilePath, "fmt-check", "--no-print-directory")
 	if err != nil {
 		t.Fatalf("fmt-check rejected formatted fixture: %v\n%s", err, output)
 	}
