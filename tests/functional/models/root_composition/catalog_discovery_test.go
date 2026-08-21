@@ -1,6 +1,7 @@
 package root_composition_test
 
 import (
+	"errors"
 	"testing"
 
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
@@ -9,6 +10,129 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
+
+func TestGenericModelContractsRemainDetachedAtApplicationRoot(t *testing.T) {
+	t.Parallel()
+
+	process := support.BuildProcess(t, serviceedges.Edges{})
+	help := support.FakeInputs(t.Context(), []string{"you", "session", "show", "--help"})
+	if err := process.Execute(help.Input); err != nil {
+		t.Fatalf("Process.Execute(session show help) error = %v", err)
+	}
+
+	operationCatalog := modelprovider.GenericOperationCatalog{}
+	contracts := operationCatalog.GenericOperationContracts()
+	wantNames := []string{
+		modelprovider.OperationOMNI,
+		modelprovider.OperationEMBED,
+		modelprovider.OperationTTS,
+		modelprovider.OperationASR,
+	}
+	if len(contracts) != len(wantNames) {
+		t.Fatalf("generic operation count = %d, want %d", len(contracts), len(wantNames))
+	}
+	for index, wantName := range wantNames {
+		if contracts[index].Name != wantName {
+			t.Fatalf("generic operation[%d] = %q, want %q", index, contracts[index].Name, wantName)
+		}
+	}
+	omni, ok := operationCatalog.GenericOperationContract(" omni ")
+	if !ok || len(omni.Inputs) != 5 || omni.Inputs[1].Name != "image" || !omni.Inputs[1].Repeatable {
+		t.Fatalf("OMNI contract = %#v, want named repeatable image slot", omni)
+	}
+	if _, ok := operationCatalog.GenericOperationContract("unknown"); ok {
+		t.Fatal("unknown generic operation unexpectedly resolved")
+	}
+
+	clonedOperation := omni.Clone()
+	clonedOperation.Inputs[1].MediaTypes[0] = "mutated/image"
+	freshOMNI, ok := operationCatalog.GenericOperationContract(modelprovider.OperationOMNI)
+	if !ok || freshOMNI.Inputs[1].MediaTypes[0] != "image/*" {
+		t.Fatalf("generic operation retained caller mutation: %#v", freshOMNI)
+	}
+
+	builtIns := modelprovider.BuiltInCatalog{}
+	definitions := builtIns.ModelDefinitions()
+	if len(definitions) != 4 || definitions[0].Name != modelprovider.BuiltInModelNameLLM ||
+		definitions[0].LoadPolicy != modelprovider.LoadPolicyOnDemand {
+		t.Fatalf("built-in definitions = %#v", definitions)
+	}
+	catalog := builtIns.ModelCatalog()
+	catalog[modelprovider.BuiltInModelNameLLM].Operations[0].Inputs[0].Name = "mutated"
+	if _, ok := builtIns.ModelDefinitionFor(" missing "); ok {
+		t.Fatal("missing built-in model unexpectedly resolved")
+	}
+	freshDefinition, ok := builtIns.ModelDefinitionFor(" LLM ")
+	if !ok || freshDefinition.Operations[0].Inputs[0].Name != "prompt" {
+		t.Fatalf("built-in catalog retained caller mutation: %#v", freshDefinition)
+	}
+
+	scope, err := (modelprovider.RuntimeScopeRef{}).Parse("scope-functional-models")
+	if err != nil {
+		t.Fatalf("parse model scope: %v", err)
+	}
+	request := modelprovider.GenericInvocationRequest{
+		Scope:     scope,
+		Holder:    "functional-test",
+		Model:     modelprovider.ModelReference{NameOrURI: "llm"},
+		Operation: modelprovider.OperationOMNI,
+		Inputs: []modelprovider.InferenceInput{
+			{Name: "prompt", Modality: modelprovider.ModalityText, Content: "compare"},
+			{Name: "image", Modality: modelprovider.ModalityImage, MediaType: "image/png", Content: "first"},
+			{Name: "image", Modality: modelprovider.ModalityImage, MediaType: "image/jpeg", Content: "second"},
+		},
+		Parameters: []modelprovider.OperationParameter{{Name: "temperature", Value: map[string]any{"value": 0.2}}},
+		OutputMode: modelprovider.OutputModeJSON,
+		Offline:    true,
+	}
+	if err := request.Validate(); err != nil {
+		t.Fatalf("generic request validation error = %v", err)
+	}
+	if len(request.Inputs) != 3 || request.Inputs[1].Name != "image" || request.Inputs[2].Content != "second" {
+		t.Fatalf("ordered generic inputs = %#v", request.Inputs)
+	}
+
+	artifact, err := (modelprovider.InferenceArtifactRef{}).Parse("artifact:functional-segments")
+	if err != nil {
+		t.Fatalf("parse output artifact: %v", err)
+	}
+	result := modelprovider.GenericInvocationResult{
+		Outputs: []modelprovider.InferenceOutput{
+			{Name: "transcript", Modality: modelprovider.ModalityText, Content: "hello"},
+			{Name: "segments", Modality: modelprovider.ModalityJSON, Artifact: &modelprovider.InferenceArtifact{
+				Artifact: artifact, Properties: map[string]string{"format": "json"},
+			}},
+		},
+	}
+	clonedResult := result.Clone()
+	clonedResult.Outputs[1].Artifact.Properties["format"] = "mutated"
+	if result.Outputs[1].Artifact.Properties["format"] != "json" {
+		t.Fatal("generic result clone shared artifact properties")
+	}
+
+	ready := modelprovider.Runtime{ReadinessState: modelprovider.ReadinessStateReady}
+	if err := ready.InvocationError(); err != nil {
+		t.Fatalf("ready runtime invocation error = %v, want nil", err)
+	}
+	missing := modelprovider.Runtime{
+		Identity:       "llm",
+		ReadinessState: modelprovider.ReadinessStateMissing,
+		LifecycleState: modelprovider.LifecycleStateNotInstalled,
+	}
+	missingErr := missing.InvocationError()
+	if missingErr == nil || !errors.Is(missingErr, modelprovider.ErrMissing) {
+		t.Fatalf("missing runtime invocation error = %v, want ErrMissing", missingErr)
+	}
+	failure := &modelprovider.InvocationFailure{
+		Class:     modelprovider.InvocationFailureClassMalformedResponse,
+		Message:   "response did not match the selected operation",
+		Model:     modelprovider.ModelReference{NameOrURI: "llm"},
+		Operation: modelprovider.OperationOMNI,
+	}
+	if failure.Error() != failure.Message || failure.Unwrap() != nil {
+		t.Fatalf("generic invocation failure = %#v", failure)
+	}
+}
 
 // TestModelsCatalogDiscoveryActivatesThroughRootBuildProcessAfterLifecycle proves
 // catalog discovery through GET /models after runtime lifecycle starts on a process

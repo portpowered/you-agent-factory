@@ -12,10 +12,97 @@ import (
 	"sync"
 	"testing"
 
+	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
-	settingswire "github.com/portpowered/infinite-you/pkg/services/operator_settings/wire"
 	globalconfigmapping "github.com/portpowered/infinite-you/pkg/services/operator_settings/transports/globalconfig"
+	settingswire "github.com/portpowered/infinite-you/pkg/services/operator_settings/wire"
+	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
+
+func TestOperatorConfigCore_ModelOverlaysRoundTripAndReportTypedFailures(t *testing.T) {
+	process := support.BuildProcess(t, serviceedges.Edges{})
+	help := support.FakeInputs(t.Context(), []string{"you", "session", "show", "--help"})
+	if err := process.Execute(help.Input); err != nil {
+		t.Fatalf("Process.Execute(session show help) error = %v", err)
+	}
+
+	initial := []byte(`{
+  "backendScopeID": " scope-functional-operator ",
+  "defaults": {"workerModelProvider": " CODEX ", "workerModel": " llm "},
+  "models": {
+    "llm": {"backend": " localai-llamacpp "},
+    "custom-model": {
+      "source": " hf://example/custom.gguf ",
+      "backend": " localai-llamacpp ",
+      "loadPolicy": " on_demand ",
+      "operations": [" omni "]
+    }
+  },
+  "runtime": {"logging": {"directory": "operator/logs", "maxSizeMB": 11}, "metrics": {"compress": true}},
+  "workerPresets": [{"id": "research", "modelProvider": "CODEX", "model": "gpt-5"}]
+}`)
+	decoded, err := globalconfigmapping.Decode(initial)
+	if err != nil {
+		t.Fatalf("Decode(model overlays) error = %v", err)
+	}
+	if decoded.BackendScopeID != "scope-functional-operator" || decoded.Defaults.WorkerModel != "llm" {
+		t.Fatalf("decoded identity/defaults = %#v", decoded)
+	}
+	llm, ok := decoded.Models["llm"]
+	if !ok || llm.Backend == nil || *llm.Backend != "localai-llamacpp" || llm.Source != nil {
+		t.Fatalf("decoded built-in overlay = %#v", llm)
+	}
+	custom, ok := decoded.Models["custom-model"]
+	if !ok || custom.Source == nil || *custom.Source != "hf://example/custom.gguf" || custom.LoadPolicy == nil ||
+		*custom.LoadPolicy != operatorsettings.ModelLoadPolicyOnDemand || len(custom.Operations) != 1 || custom.Operations[0] != "OMNI" {
+		t.Fatalf("decoded complete model = %#v", custom)
+	}
+	clone := decoded.Clone()
+	*clone.Models["llm"].Backend = "mutated"
+	clone.Models["custom-model"].Operations[0] = "ASR"
+	if *decoded.Models["llm"].Backend != "localai-llamacpp" || decoded.Models["custom-model"].Operations[0] != "OMNI" {
+		t.Fatal("Config.Clone shared model overlay state")
+	}
+
+	encoded, err := globalconfigmapping.Encode(decoded)
+	if err != nil {
+		t.Fatalf("Encode(model overlays) error = %v", err)
+	}
+	roundTrip, err := globalconfigmapping.Decode(encoded)
+	if err != nil {
+		t.Fatalf("Decode(encoded model overlays) error = %v", err)
+	}
+	if _, ok := roundTrip.Models["llm"]; !ok || roundTrip.Models["custom-model"].Operations[0] != "OMNI" ||
+		roundTrip.WorkerPresets[0].ID != "research" || roundTrip.Runtime.Logging.Directory != "operator/logs" {
+		t.Fatalf("round-trip config = %#v", roundTrip)
+	}
+
+	cases := []struct {
+		name      string
+		models    string
+		wantModel string
+		wantField string
+	}{
+		{name: "invalid name", models: `"bad name":{"backend":"backend"}`, wantModel: "bad name", wantField: "name"},
+		{name: "empty source", models: `"llm":{"source":""}`, wantModel: "llm", wantField: "source"},
+		{name: "unsupported policy", models: `"llm":{"loadPolicy":"ALWAYS"}`, wantModel: "llm", wantField: "loadPolicy"},
+		{name: "malformed operation", models: `"llm":{"operations":["UNKNOWN"]}`, wantModel: "llm", wantField: "operations"},
+		{name: "incomplete new model", models: `"custom":{"source":"hf://custom"}`, wantModel: "custom", wantField: "backend"},
+	}
+	for _, test := range cases {
+		t.Run(test.name, func(t *testing.T) {
+			payload := []byte(`{"models":{` + test.models + `}}`)
+			_, err := globalconfigmapping.Decode(payload)
+			var failure operatorsettings.ConfigurationFailure
+			if err == nil || !errors.Is(err, operatorsettings.ErrConfigurationInvalid) || !errors.As(err, &failure) {
+				t.Fatalf("Decode(%s) error = %v, failure = %#v", test.name, err, failure)
+			}
+			if failure.ModelName != test.wantModel || failure.Field != test.wantField {
+				t.Fatalf("configuration failure = %#v, want model=%q field=%q", failure, test.wantModel, test.wantField)
+			}
+		})
+	}
+}
 
 func TestOperatorConfigCore_PromptedAndPresuppliedUpdatesShareAtomicBehavior(t *testing.T) {
 	configPath := filepath.Join(t.TempDir(), "operator", "config.json")
