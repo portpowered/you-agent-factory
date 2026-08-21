@@ -73,10 +73,12 @@ const (
 	OutcomeRejected = workers.OutcomeRejected
 	OutcomeFailed   = workers.OutcomeFailed
 
-	ProviderResponseMetadataDurationMS    = workers.ProviderResponseMetadataDurationMS
-	ProviderResponseMetadataDurationAPIMS = workers.ProviderResponseMetadataDurationAPIMS
-	ProviderResponseMetadataInputTokens   = workers.ProviderResponseMetadataInputTokens
-	ProviderResponseMetadataOutputTokens  = workers.ProviderResponseMetadataOutputTokens
+	ProviderResponseMetadataDurationMS            = workers.ProviderResponseMetadataDurationMS
+	ProviderResponseMetadataDurationAPIMS         = workers.ProviderResponseMetadataDurationAPIMS
+	ProviderResponseMetadataInputTokens           = workers.ProviderResponseMetadataInputTokens
+	ProviderResponseMetadataOutputTokens          = workers.ProviderResponseMetadataOutputTokens
+	ProviderResponseMetadataCachedInputTokens     = workers.ProviderResponseMetadataCachedInputTokens
+	ProviderResponseMetadataReasoningOutputTokens = workers.ProviderResponseMetadataReasoningOutputTokens
 
 	WorkFailureFamilyTerminal  = workers.WorkFailureFamilyTerminal
 	WorkFailureFamilyRetryable = workers.WorkFailureFamilyRetryable

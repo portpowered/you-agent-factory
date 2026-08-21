@@ -54,7 +54,7 @@ func LoadFileConfig(files FileSystem, decode ConfigDecoder, path string) (Config
 	data, err := files.ReadFile(path)
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
-			return Config{PriceTable: DefaultPriceTable(), Runtime: defaultRuntimeSettings()}, nil
+			return Config{PriceTable: defaultPriceTable(), Runtime: defaultRuntimeSettings()}, nil
 		}
 		return Config{}, fmt.Errorf("read operator config %s: %w", path, err)
 	}

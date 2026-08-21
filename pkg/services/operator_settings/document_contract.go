@@ -181,7 +181,7 @@ func (settings DocumentRuntimeArtifactSettings) Clone() DocumentRuntimeArtifactS
 // EmptyDocument is a valid empty operator document with production-default
 // runtime artifact settings. It is a detached value, not a construction hook.
 var EmptyDocument = Document{
-	PriceTable: DefaultPriceTable(),
+	PriceTable: defaultPriceTable(),
 	Runtime:    defaultDocumentRuntimeSettings(),
 }
 

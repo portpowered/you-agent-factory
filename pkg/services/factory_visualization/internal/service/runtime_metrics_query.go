@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"errors"
+	"fmt"
 	"math"
 	"sort"
 	"strings"
@@ -89,12 +90,63 @@ func (q *metricsQuery) QueryRuntimeMetrics(
 		if !runtimeMetricRecordMatches(record, sessionID, runtimeID) {
 			continue
 		}
-		if accumulator.add(record) {
+		recognized, err := q.addRecord(accumulator, record, root)
+		if err != nil {
+			return RuntimeMetricsQueryResult{}, err
+		}
+		if recognized {
 			considered++
 		}
 	}
 
-	result := accumulator.result()
+	return q.finishQuery(accumulator, root, sessionID, runtimeID, considered)
+}
+
+func (q *metricsQuery) addRecord(
+	accumulator *metricsAccumulator,
+	record RuntimeMetricRecord,
+	root string,
+) (bool, error) {
+	metricName, _ := recordString(record, "metric_name")
+	isUsage := isUsageRuntimeMetric(metricName)
+	if isUsage {
+		if err := accumulator.addUsage(record); err != nil {
+			q.logger.Warn(
+				"Factory Runtime metrics usage record rejected",
+				"metrics_root", root,
+				"metric_name", metricName,
+				"error", err,
+			)
+			return false, &RuntimeMetricsQueryError{
+				Kind:    RuntimeMetricsQueryInvalidUsage,
+				Message: "query Factory Runtime metrics: usage record is invalid",
+				Cause:   err,
+			}
+		}
+	}
+	return accumulator.add(record) || isUsage, nil
+}
+
+func (q *metricsQuery) finishQuery(
+	accumulator *metricsAccumulator,
+	root string,
+	sessionID string,
+	runtimeID string,
+	considered int,
+) (RuntimeMetricsQueryResult, error) {
+	result, err := accumulator.result()
+	if err != nil {
+		q.logger.Warn(
+			"Factory Runtime metrics usage rows rejected",
+			"metrics_root", root,
+			"error", err,
+		)
+		return RuntimeMetricsQueryResult{}, &RuntimeMetricsQueryError{
+			Kind:    RuntimeMetricsQueryInvalidUsage,
+			Message: "query Factory Runtime metrics: usage rows are invalid",
+			Cause:   err,
+		}
+	}
 	q.logger.Info(
 		"Factory Runtime metrics query completed",
 		"metrics_root", root,
@@ -114,6 +166,24 @@ type metricsAccumulator struct {
 	workstations map[string]*metricAggregateBuilder
 	workerTypes  map[string]*metricAggregateBuilder
 	providers    map[string]*metricAggregateBuilder
+	usage        map[usageIdentity]*usageBuilder
+}
+
+type usageIdentity struct {
+	factorySessionID string
+	workID           string
+	dispatchID       string
+	workerSessionID  string
+	provider         string
+	model            string
+}
+
+type usageBuilder struct {
+	identity              usageIdentity
+	inputTokens           *int64
+	outputTokens          *int64
+	cachedInputTokens     *int64
+	reasoningOutputTokens *int64
 }
 
 type metricAggregateBuilder struct {
@@ -135,7 +205,82 @@ func newMetricsAccumulator() *metricsAccumulator {
 		workstations: make(map[string]*metricAggregateBuilder),
 		workerTypes:  make(map[string]*metricAggregateBuilder),
 		providers:    make(map[string]*metricAggregateBuilder),
+		usage:        make(map[usageIdentity]*usageBuilder),
 	}
+}
+
+func (a *metricsAccumulator) addUsage(record RuntimeMetricRecord) error {
+	metricName, ok := recordString(record, "metric_name")
+	if !ok || !isUsageRuntimeMetric(metricName) {
+		return nil
+	}
+	tokenCount, err := runtimeMetricTokenCount(record)
+	if err != nil {
+		return fmt.Errorf("%s: %w", metricName, err)
+	}
+	identity := usageIdentityFromRecord(record)
+	builder := a.usage[identity]
+	if builder == nil {
+		builder = &usageBuilder{identity: identity}
+		a.usage[identity] = builder
+	}
+	return builder.add(metricName, tokenCount)
+}
+
+func (builder *usageBuilder) add(metricName string, value int64) error {
+	var target **int64
+	switch metricName {
+	case factoryruntime.RuntimeProviderInputTokens:
+		target = &builder.inputTokens
+	case factoryruntime.RuntimeProviderOutputTokens:
+		target = &builder.outputTokens
+	case factoryruntime.RuntimeProviderCachedInputTokens:
+		target = &builder.cachedInputTokens
+	case factoryruntime.RuntimeProviderReasoningOutputTokens:
+		target = &builder.reasoningOutputTokens
+	default:
+		return fmt.Errorf("unsupported usage metric")
+	}
+	if *target == nil {
+		valueCopy := value
+		*target = &valueCopy
+		return nil
+	}
+	if value > math.MaxInt64-**target {
+		return fmt.Errorf("token count overflows int64")
+	}
+	**target += value
+	return nil
+}
+
+func usageIdentityFromRecord(record RuntimeMetricRecord) usageIdentity {
+	return usageIdentity{
+		factorySessionID: recordStringValue(record, "session_id"),
+		workID:           recordStringValue(record, "work_id"),
+		dispatchID:       recordStringValue(record, "dispatch_id"),
+		workerSessionID:  recordStringValue(record, "worker_session_id"),
+		provider:         recordStringValue(record, "provider"),
+		model:            recordStringValue(record, "model"),
+	}
+}
+
+func recordStringValue(record RuntimeMetricRecord, key string) string {
+	value, _ := recordString(record, key)
+	return strings.TrimSpace(value)
+}
+
+func runtimeMetricTokenCount(record RuntimeMetricRecord) (int64, error) {
+	value, ok := recordFloat(record, "value")
+	if !ok || math.IsNaN(value) || math.IsInf(value, 0) {
+		return 0, fmt.Errorf("value must be a finite number")
+	}
+	if value < 0 || math.Trunc(value) != value {
+		return 0, fmt.Errorf("value must be a non-negative integer")
+	}
+	if value >= float64(uint64(1)<<63) {
+		return 0, fmt.Errorf("value exceeds int64 range")
+	}
+	return int64(value), nil
 }
 
 func (a *metricsAccumulator) add(record RuntimeMetricRecord) bool {
@@ -221,6 +366,18 @@ func isSupportedRuntimeMetric(name string) bool {
 	}
 }
 
+func isUsageRuntimeMetric(name string) bool {
+	switch name {
+	case factoryruntime.RuntimeProviderInputTokens,
+		factoryruntime.RuntimeProviderOutputTokens,
+		factoryruntime.RuntimeProviderCachedInputTokens,
+		factoryruntime.RuntimeProviderReasoningOutputTokens:
+		return true
+	default:
+		return false
+	}
+}
+
 func (d *durationBuilder) add(value float64, unit string) {
 	if d.unit == "" {
 		d.unit = unit
@@ -228,14 +385,84 @@ func (d *durationBuilder) add(value float64, unit string) {
 	d.samples = append(d.samples, value)
 }
 
-func (a *metricsAccumulator) result() RuntimeMetricsQueryResult {
+func (a *metricsAccumulator) result() (RuntimeMetricsQueryResult, error) {
+	usageRows, err := sortedUsageRows(a.usage)
+	if err != nil {
+		return RuntimeMetricsQueryResult{}, err
+	}
 	return RuntimeMetricsQueryResult{
 		Cost:         RuntimeMetricsCost{Availability: RuntimeMetricsCostUnavailable},
 		Totals:       a.totals.result(),
 		Workstations: sortedBreakdowns(a.workstations),
 		WorkerTypes:  sortedBreakdowns(a.workerTypes),
 		Providers:    sortedBreakdowns(a.providers),
+		UsageRows:    usageRows,
+	}, nil
+}
+
+func sortedUsageRows(groups map[usageIdentity]*usageBuilder) ([]RuntimeMetricsUsageRow, error) {
+	identities := make([]usageIdentity, 0, len(groups))
+	for identity := range groups {
+		identities = append(identities, identity)
 	}
+	sort.Slice(identities, func(left, right int) bool {
+		return usageIdentityLess(identities[left], identities[right])
+	})
+	rows := make([]RuntimeMetricsUsageRow, 0, len(identities))
+	for _, identity := range identities {
+		row, err := groups[identity].result()
+		if err != nil {
+			return nil, err
+		}
+		rows = append(rows, row)
+	}
+	return rows, nil
+}
+
+func usageIdentityLess(left, right usageIdentity) bool {
+	for _, values := range [][2]string{
+		{left.factorySessionID, right.factorySessionID},
+		{left.workID, right.workID},
+		{left.dispatchID, right.dispatchID},
+		{left.workerSessionID, right.workerSessionID},
+		{left.provider, right.provider},
+		{left.model, right.model},
+	} {
+		if values[0] == values[1] {
+			continue
+		}
+		return values[0] < values[1]
+	}
+	return false
+}
+
+func (builder *usageBuilder) result() (RuntimeMetricsUsageRow, error) {
+	if builder.cachedInputTokens != nil && builder.inputTokens != nil && *builder.cachedInputTokens > *builder.inputTokens {
+		return RuntimeMetricsUsageRow{}, fmt.Errorf("cached input tokens exceed input tokens for dispatch %q", builder.identity.dispatchID)
+	}
+	if builder.reasoningOutputTokens != nil && builder.outputTokens != nil && *builder.reasoningOutputTokens > *builder.outputTokens {
+		return RuntimeMetricsUsageRow{}, fmt.Errorf("reasoning output tokens exceed output tokens for dispatch %q", builder.identity.dispatchID)
+	}
+	return RuntimeMetricsUsageRow{
+		FactorySessionID:      builder.identity.factorySessionID,
+		WorkID:                builder.identity.workID,
+		DispatchID:            builder.identity.dispatchID,
+		WorkerSessionID:       builder.identity.workerSessionID,
+		Provider:              builder.identity.provider,
+		Model:                 builder.identity.model,
+		InputTokens:           cloneInt64Pointer(builder.inputTokens),
+		OutputTokens:          cloneInt64Pointer(builder.outputTokens),
+		CachedInputTokens:     cloneInt64Pointer(builder.cachedInputTokens),
+		ReasoningOutputTokens: cloneInt64Pointer(builder.reasoningOutputTokens),
+	}, nil
+}
+
+func cloneInt64Pointer(value *int64) *int64 {
+	if value == nil {
+		return nil
+	}
+	clone := *value
+	return &clone
 }
 
 func sortedBreakdowns(groups map[string]*metricAggregateBuilder) []RuntimeMetricsBreakdown {

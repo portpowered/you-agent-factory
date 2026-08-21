@@ -359,5 +359,5 @@ func documentFromConfig(config Config) Document {
 }
 
 func emptyConfigDocument() ConfigDocument {
-	return ConfigDocument{config: Config{PriceTable: DefaultPriceTable(), Runtime: defaultRuntimeSettings()}}
+	return ConfigDocument{config: Config{PriceTable: defaultPriceTable(), Runtime: defaultRuntimeSettings()}}
 }

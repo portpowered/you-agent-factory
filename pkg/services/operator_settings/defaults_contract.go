@@ -93,8 +93,7 @@ type PriceTableModel struct {
 	ReasoningOutputPerMillionTokens *string
 }
 
-// DefaultPriceTable returns the detached default-empty USD table.
-func DefaultPriceTable() PriceTable {
+func defaultPriceTable() PriceTable {
 	return PriceTable{Currency: PriceTableCurrencyUSD, Models: []PriceTableModel{}}
 }
 

@@ -21,6 +21,8 @@ const (
 	RuntimeProviderDuration               = "provider.duration"
 	RuntimeProviderInputTokens            = "provider.input_tokens"
 	RuntimeProviderOutputTokens           = "provider.output_tokens"
+	RuntimeProviderCachedInputTokens      = "provider.cached_input_tokens"
+	RuntimeProviderReasoningOutputTokens  = "provider.reasoning_output_tokens"
 	RuntimeProviderCost                   = "provider.cost"
 	RuntimeScriptStarted                  = "script.started"
 	RuntimeScriptComplete                 = "script.completed"
