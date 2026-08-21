@@ -62,6 +62,51 @@ func TestFunctionalTimingSnapshotWritesMachineReadablePartialArtifact(t *testing
 	}
 }
 
+func TestFunctionalTimingSnapshotDoesNotRepeatPackageStatesDuringCompleteRun(t *testing.T) {
+	packages := []string{"pkg/alpha", "pkg/beta"}
+	tracker := newFunctionalTimingTracker(packages, time.Unix(300, 0))
+	var sink strings.Builder
+	snapshotter := newFunctionalTimingSnapshotter(tracker, "", &sink, nil)
+
+	snapshotter.observe(goTestTimingEvent{Action: "start", Package: packages[0]})
+	snapshotter.observe(goTestTimingEvent{Action: timingOutcomePass, Package: packages[0], Elapsed: 1})
+	snapshotter.observe(goTestTimingEvent{Action: "start", Package: packages[1]})
+	snapshotter.observe(goTestTimingEvent{Action: timingOutcomePass, Package: packages[1], Elapsed: 2})
+	if err := snapshotter.finish(functionalTimingSummaryJSON{Complete: true}, ""); err != nil {
+		t.Fatalf("finish complete timing snapshot: %v", err)
+	}
+
+	if got := strings.Count(sink.String(), "Functional package state:"); got != 0 {
+		t.Fatalf("complete run emitted %d package-state lines, want none; output=%q", got, sink.String())
+	}
+}
+
+func TestFunctionalTimingSnapshotEmitsIncompletePackageStatesOnceAtFinish(t *testing.T) {
+	packages := []string{"pkg/alpha", "pkg/beta", "pkg/gamma"}
+	tracker := newFunctionalTimingTracker(packages, time.Unix(400, 0))
+	var sink strings.Builder
+	snapshotter := newFunctionalTimingSnapshotter(tracker, "", &sink, nil)
+
+	snapshotter.observe(goTestTimingEvent{Action: "start", Package: packages[0]})
+	snapshotter.observe(goTestTimingEvent{Action: timingOutcomePass, Package: packages[1], Elapsed: 1})
+	if err := snapshotter.finish(functionalTimingSummaryJSON{Complete: false}, "tier budget expired"); err != nil {
+		t.Fatalf("finish incomplete timing snapshot: %v", err)
+	}
+
+	output := sink.String()
+	if got := strings.Count(output, "Functional package state:"); got != 2 {
+		t.Fatalf("incomplete run emitted %d package-state lines, want two; output=%q", got, output)
+	}
+	for _, packageName := range []string{packages[0], packages[2]} {
+		if got := strings.Count(output, "Functional package state: package="+packageName+" "); got != 1 {
+			t.Fatalf("package %q appeared in %d final state lines, want one; output=%q", packageName, got, output)
+		}
+	}
+	if strings.Contains(output, "Functional package state: package="+packages[1]+" ") {
+		t.Fatalf("completed package appeared in final state listing: %q", output)
+	}
+}
+
 func TestWritePartialCoverageSnapshotSkipsUntrustworthyProfile(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "coverage-summary.json")
 	err := writePartialCoverageSnapshot(

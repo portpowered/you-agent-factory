@@ -273,7 +273,7 @@ func (snapshotter *functionalTimingSnapshotter) finish(summary functionalTimingS
 	}
 	snapshotter.publishCoverageSnapshotLocked(true)
 	if !summary.Complete || strings.TrimSpace(reason) != "" {
-		snapshotter.emitSummary(summary, reason)
+		snapshotter.emitSummary(summary, reason, true)
 	}
 	return snapshotter.writeErr
 }
@@ -294,7 +294,7 @@ func (snapshotter *functionalTimingSnapshotter) publish(complete bool, reason st
 	}
 	snapshotter.publishCoverageSnapshotLocked(false)
 	if emit {
-		snapshotter.emitSummary(summary, reason)
+		snapshotter.emitSummary(summary, reason, false)
 	}
 }
 
@@ -312,12 +312,15 @@ func (snapshotter *functionalTimingSnapshotter) publishCoverageSnapshotLocked(fo
 	}
 }
 
-func (snapshotter *functionalTimingSnapshotter) emitSummary(summary functionalTimingSummaryJSON, reason string) {
+func (snapshotter *functionalTimingSnapshotter) emitSummary(summary functionalTimingSummaryJSON, reason string, includePackageStates bool) {
 	if snapshotter.sink == nil {
 		return
 	}
 	write := func() {
 		fmt.Fprintf(snapshotter.sink, "Functional timing snapshot: complete=%t packages=%d/%d wall=%.3fs reason=%s\n", summary.Complete, summary.PackageCount, summary.ExpectedPackageCount, summary.WallSeconds, reason)
+		if !includePackageStates {
+			return
+		}
 		for _, state := range summary.PackageStates {
 			if state.State == functionalPackageStateCompleted {
 				continue

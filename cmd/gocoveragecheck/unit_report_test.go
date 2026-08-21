@@ -455,10 +455,10 @@ func TestNonStreamingTimingObserverDoesNotWritePerEvent(t *testing.T) {
 	}
 }
 
-// TestStreamingTimingObserverStillPublishesPerEvent pins the functional lane's
-// behaviour in place: its progress lines are the live log a reader watches, so
-// the per-event publish must survive for a lane that has a sink.
-func TestStreamingTimingObserverStillPublishesPerEvent(t *testing.T) {
+// TestStreamingTimingObserverStillPublishesProgressSnapshot pins the
+// functional lane's one-line progress output while ensuring package states
+// remain reserved for the final incomplete snapshot.
+func TestStreamingTimingObserverStillPublishesProgressSnapshot(t *testing.T) {
 	packages := []string{modulePath + "/tests/functional/alpha", modulePath + "/tests/functional/beta"}
 	timingPath := filepath.Join(t.TempDir(), "functional-timing-summary.json")
 	tracker := newFunctionalTimingTracker(packages, time.Now())
@@ -469,7 +469,10 @@ func TestStreamingTimingObserverStillPublishesPerEvent(t *testing.T) {
 	snapshotter.stopAndWait()
 
 	if !strings.Contains(sink.String(), "Functional timing snapshot:") {
-		t.Fatalf("streaming lane emitted no progress line per event; got %q", sink.String())
+		t.Fatalf("streaming lane emitted no progress line; got %q", sink.String())
+	}
+	if strings.Contains(sink.String(), "Functional package state:") {
+		t.Fatalf("streaming progress emitted package state before final snapshot; got %q", sink.String())
 	}
 }
 

@@ -114,6 +114,9 @@ func (writer *functionalStreamWriter) writeLineLocked(line []byte) error {
 			return err
 		}
 	}
+	if isKnownFunctionalLifecycleAction(event.Action) {
+		return nil
+	}
 
 	switch event.Action {
 	case "output":
@@ -157,6 +160,18 @@ func (writer *functionalStreamWriter) writeLineLocked(line []byte) error {
 		// discarded if go test adds an event action this reporter does not
 		// understand yet.
 		return writer.reporter.writeSink(line)
+	}
+}
+
+// isKnownFunctionalLifecycleAction identifies test2json events that carry
+// timing state but no human-readable diagnostics. The observer above still
+// receives each event so timing snapshots and coverage tracking stay current.
+func isKnownFunctionalLifecycleAction(action string) bool {
+	switch action {
+	case "start", "run", "pause", "cont":
+		return true
+	default:
+		return false
 	}
 }
 
