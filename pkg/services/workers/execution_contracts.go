@@ -525,6 +525,7 @@ const (
 	ProviderResponseMetadataInspectionSourceBytes           = "inspection_source_bytes"
 	ProviderResponseMetadataInspectionLineCount             = "inspection_line_count"
 	ProviderResponseMetadataInspectionRecordCount           = "inspection_record_count"
+	ProviderResponseMetadataInspectionRecordsSkipped        = "inspection_records_skipped"
 	ProviderResponseMetadataInspectionTranscriptTruncated   = "inspection_transcript_truncated"
 	ProviderResponseMetadataInspectionDiagnosticsTruncated  = "inspection_diagnostics_truncated"
 	ProviderResponseMetadataInspectionRetainedTextTruncated = "inspection_retained_text_truncated"

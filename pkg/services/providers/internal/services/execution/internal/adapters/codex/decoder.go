@@ -29,6 +29,8 @@ type decoder struct {
 	diagnosticCount  int
 	retainedText     int64
 	limit            *streamLimit
+	skippedRecord    *streamLimit
+	recordSkips      int64
 	transcriptFull   bool
 	diagnosticsFull  bool
 	retainedTextFull bool
@@ -131,14 +133,14 @@ func (decoder *decoder) consume(chunk []byte) {
 				recordBytes := len(decoder.pending) + len(chunk)
 				decoder.pending = nil
 				decoder.discardLine = true
-				decoder.markResourceLimitAtLine("record", maxRecordBytes, int64(recordBytes), decoder.lineCount+1)
+				decoder.skipOversizedRecord(int64(recordBytes))
 				return
 			}
 			decoder.pending = append(decoder.pending, chunk...)
 			return
 		}
 		if len(decoder.pending)+newline > maxRecordBytes {
-			decoder.markResourceLimitAtLine("record", maxRecordBytes, int64(len(decoder.pending)+newline), decoder.lineCount+1)
+			decoder.skipOversizedRecord(int64(len(decoder.pending) + newline))
 		} else {
 			decoder.pending = append(decoder.pending, chunk[:newline]...)
 			if decoder.beginRecord() {
@@ -221,11 +223,14 @@ func (decoder *decoder) diagnostics() *providers.ExecuteDiagnostics {
 	if decoder.retainedTextFull {
 		metadata[inspectionRetainedTextTruncatedMetadata] = "true"
 	}
-	if decoder.limit != nil {
-		metadata[inspectionLimitCategoryMetadata] = decoder.limit.category
-		metadata[inspectionLimitConfiguredMetadata] = inspectionMetadataValue(decoder.limit.configured)
-		metadata[inspectionLimitObservedMetadata] = inspectionMetadataValue(decoder.limit.observed)
-		metadata[inspectionLimitLineMetadata] = inspectionMetadataValue(decoder.limit.line)
+	if limit := decoder.inspectionLimit(); limit != nil {
+		metadata[inspectionLimitCategoryMetadata] = limit.category
+		metadata[inspectionLimitConfiguredMetadata] = inspectionMetadataValue(limit.configured)
+		metadata[inspectionLimitObservedMetadata] = inspectionMetadataValue(limit.observed)
+		metadata[inspectionLimitLineMetadata] = inspectionMetadataValue(limit.line)
+	}
+	if decoder.recordSkips > 0 {
+		metadata[inspectionRecordsSkippedMetadata] = inspectionMetadataValue(decoder.recordSkips)
 	}
 	return &providers.ExecuteDiagnostics{
 		Progress: decoder.progressFacts(),
@@ -238,6 +243,25 @@ func (decoder *decoder) resourceFailure() *providers.ExecuteFailure {
 		return nil
 	}
 	return decoder.limit.failure(decoder.sessionRef(), decoder.diagnostics())
+}
+
+// inspectionLimit reports the fact that bounds stream inspection: a hard
+// stream limit when one tripped, otherwise the first skipped oversized record.
+func (decoder *decoder) inspectionLimit() *streamLimit {
+	if decoder.limit != nil {
+		return decoder.limit
+	}
+	return decoder.skippedRecord
+}
+
+// skippedRecordFailure classifies an execution whose final agent decision was
+// unrecoverable after one or more oversized records were skipped. It keeps the
+// pre-existing record-limit dependency classification for that terminal case.
+func (decoder *decoder) skippedRecordFailure() *providers.ExecuteFailure {
+	if decoder.skippedRecord == nil {
+		return nil
+	}
+	return decoder.skippedRecord.failure(decoder.sessionRef(), decoder.diagnostics())
 }
 
 func (decoder *decoder) beginRecord() bool {
@@ -396,6 +420,12 @@ func (decoder *decoder) addProgress(
 }
 
 func (decoder *decoder) addDiagnostic(code string) {
+	decoder.addDiagnosticEntry("Codex stream record was omitted", map[string]string{
+		"code": boundedDetail(code),
+	})
+}
+
+func (decoder *decoder) addDiagnosticEntry(detail string, metadata map[string]string) {
 	if decoder.diagnosticCount >= maxCodexDiagnosticFacts {
 		decoder.diagnosticsFull = true
 		return
@@ -406,13 +436,38 @@ func (decoder *decoder) addDiagnostic(code string) {
 		return
 	}
 	decoder.progress = append(decoder.progress, providers.ExecuteProgress{
-		Phase:  "diagnostic",
-		Detail: "Codex stream record was omitted",
-		Metadata: map[string]string{
-			"code": boundedDetail(code),
-		},
+		Phase:    "diagnostic",
+		Detail:   detail,
+		Metadata: metadata,
 	})
 	decoder.progressCount++
+}
+
+// skipOversizedRecord records that one over-limit JSONL record was discarded
+// without buffering it, then lets decoding continue with the next record. An
+// oversized mid-stream record (for example one tool result carrying a huge
+// aggregated command output) must not fail an otherwise-clean execution: the
+// stream's later final agent message remains authoritative. Nothing over
+// maxRecordBytes is ever retained, so the memory-safety bound is unchanged.
+func (decoder *decoder) skipOversizedRecord(observed int64) {
+	decoder.lineCount++
+	decoder.recordSkips++
+	if decoder.skippedRecord == nil {
+		decoder.skippedRecord = &streamLimit{
+			category:   "record",
+			configured: maxRecordBytes,
+			observed:   observed,
+			line:       decoder.lineCount,
+		}
+	}
+	decoder.addDiagnosticEntry(
+		"Codex stream record exceeded the record limit and was skipped",
+		map[string]string{
+			"code":         "record_skipped",
+			"record_bytes": inspectionMetadataValue(observed),
+			"line":         inspectionMetadataValue(decoder.lineCount),
+		},
+	)
 }
 
 func (decoder *decoder) markDecodeFailure(code string) {
