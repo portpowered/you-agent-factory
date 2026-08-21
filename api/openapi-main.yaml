@@ -2473,6 +2473,8 @@ components:
       $ref: './components/schemas/api/WorkerSessionTranscriptResponse.yaml'
     WorkerSessionObservation:
       $ref: './components/schemas/api/WorkerSessionObservation.yaml'
+    WorkerSessionTurnUsage:
+      $ref: './components/schemas/api/WorkerSessionTurnUsage.yaml'
     WorkerSessionEvent:
       $ref: './components/schemas/api/WorkerSessionEvent.yaml'
     WorkerSessionReplaySummary:

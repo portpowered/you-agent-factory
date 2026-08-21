@@ -349,8 +349,9 @@ func TestGetWorkerSessionObservationBySessionIDProjectsFailureDiagnostics(t *tes
 		State: workersessions.StateFailed, Duration: durationPtr(2500 * time.Millisecond),
 		DurationBasis: workersessions.DurationBasisRecordedTimestamps,
 		TokenUsage:    &workersessions.TokenUsage{TotalTokens: &total}, Transcript: workersessions.TranscriptAvailabilityAvailable,
-		Failure: failure,
-		Parse:   workersessions.ParseDiagnostics{EventCount: 4, Errors: []workersessions.ParseDiagnostic{{Code: "provider_session_parse_error", LineNumber: 3, Message: "malformed event"}}},
+		TurnUsage: &workersessions.TurnUsage{TurnCount: 3, FinalContextTokens: 450, PeakContextTokens: 450},
+		Failure:   failure,
+		Parse:     workersessions.ParseDiagnostics{EventCount: 4, Errors: []workersessions.ParseDiagnostic{{Code: "provider_session_parse_error", LineNumber: 3, Message: "malformed event"}}},
 	}}
 	handler := NewHandler(NewAdapter(service, workServiceStub{}), zap.NewNop())
 	recorder := httptest.NewRecorder()
@@ -375,6 +376,7 @@ func assertFailureObservationResponse(t *testing.T, payload []byte, service *fak
 	assertFailureObservationIdentity(t, response)
 	assertFailureObservationCause(t, response)
 	assertFailureObservationUsage(t, response, total, duration)
+	assertFailureObservationTurnUsage(t, response)
 	assertFailureObservationParse(t, response)
 	assertFailureObservationExecutionFacts(t, response)
 	assertFailureObservationRequest(t, service)
@@ -400,6 +402,13 @@ func assertFailureObservationUsage(t *testing.T, response factoryapi.WorkerSessi
 	t.Helper()
 	if response.TokenUsage == nil || response.TokenUsage.TotalTokens == nil || *response.TokenUsage.TotalTokens != total || response.DurationMillis == nil || *response.DurationMillis != duration {
 		t.Fatalf("usage/duration = %#v/%v, want %d/%d", response.TokenUsage, response.DurationMillis, total, duration)
+	}
+}
+
+func assertFailureObservationTurnUsage(t *testing.T, response factoryapi.WorkerSessionObservation) {
+	t.Helper()
+	if response.TurnUsage == nil || response.TurnUsage.TurnCount != 3 || response.TurnUsage.FinalContextTokens != 450 || response.TurnUsage.PeakContextTokens != 450 {
+		t.Fatalf("turn usage = %#v, want count/final/peak 3/450/450", response.TurnUsage)
 	}
 }
 

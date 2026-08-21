@@ -94,6 +94,7 @@ properties:
   turnUsage:
     $ref: './WorkerSessionTurnUsage.yaml'
     nullable: true
+    description: Optional provider-neutral per-turn context projection. Omitted when supported cumulative input evidence is unavailable.
   transcript:
     type: string
     enum:

@@ -8106,7 +8106,9 @@ type WorkerSessionObservation struct {
 	Transcript            WorkerSessionObservationTranscript `json:"transcript"`
 
 	// TurnId Optional turn correlation identifier.
-	TurnId    *string                 `json:"turnId"`
+	TurnId *string `json:"turnId"`
+
+	// TurnUsage Provider-neutral per-turn context projection derived from supported cumulative input counters. Absence means the transcript cannot support these metrics.
 	TurnUsage *WorkerSessionTurnUsage `json:"turnUsage,omitempty"`
 
 	// WorkIds Work identities correlated with this Worker Session attempt.
@@ -8284,15 +8286,15 @@ type WorkerSessionTranscriptResponse struct {
 	WorkerSessionId string `json:"workerSessionId"`
 }
 
-// WorkerSessionTurnUsage defines model for WorkerSessionTurnUsage.
+// WorkerSessionTurnUsage Provider-neutral per-turn context projection derived from supported cumulative input counters. Absence means the transcript cannot support these metrics.
 type WorkerSessionTurnUsage struct {
-	// FinalContextTokens Derived input tokens for the final supported turn, calculated by differencing cumulative input counters.
+	// FinalContextTokens Input tokens for the final supported turn, derived by subtracting its prior cumulative counter. The first counter uses zero.
 	FinalContextTokens int `json:"finalContextTokens"`
 
-	// PeakContextTokens Largest derived per-turn input token count among supported turns; this is not a price or cost calculation.
+	// PeakContextTokens Largest derived per-turn input token count; this is a context metric, not a pricing or cost calculation.
 	PeakContextTokens int `json:"peakContextTokens"`
 
-	// TurnCount Number of supported provider usage turns represented by the cumulative input counters.
+	// TurnCount Number of supported provider usage turns represented by the transcript's cumulative input counters.
 	TurnCount int `json:"turnCount"`
 }
 

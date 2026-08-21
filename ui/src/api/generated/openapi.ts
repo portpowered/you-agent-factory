@@ -1675,6 +1675,7 @@ export interface components {
       /** @enum {string} */
       durationBasis: WorkerSessionObservationDurationBasis;
       tokenUsage?: components["schemas"]["ProviderSessionTokenUsage"];
+      /** @description Optional provider-neutral per-turn context projection. Omitted when supported cumulative input evidence is unavailable. */
       turnUsage?: components["schemas"]["WorkerSessionTurnUsage"];
       /** @enum {string} */
       transcript: WorkerSessionObservationTranscript;
@@ -1687,6 +1688,15 @@ export interface components {
       /** @description Stable safe reason when recording health is DEGRADED or INCOMPLETE. */
       recordingHealthReason?: string;
       parse: components["schemas"]["WorkerSessionParseDiagnostics"];
+    };
+    /** @description Provider-neutral per-turn context projection derived from supported cumulative input counters. Absence means the transcript cannot support these metrics. */
+    WorkerSessionTurnUsage: {
+      /** @description Number of supported provider usage turns represented by the transcript's cumulative input counters. */
+      turnCount: number;
+      /** @description Input tokens for the final supported turn, derived by subtracting its prior cumulative counter. The first counter uses zero. */
+      finalContextTokens: number;
+      /** @description Largest derived per-turn input token count; this is a context metric, not a pricing or cost calculation. */
+      peakContextTokens: number;
     };
     WorkerSessionEvent: {
       delivery: components["schemas"]["WorkerSessionEventDelivery"];
@@ -6622,14 +6632,6 @@ export interface components {
      * @enum {string}
      */
     RelationType: RelationType;
-    WorkerSessionTurnUsage: {
-      /** @description Number of supported provider usage turns represented by the cumulative input counters. */
-      turnCount: number;
-      /** @description Derived input tokens for the final supported turn, calculated by differencing cumulative input counters. */
-      finalContextTokens: number;
-      /** @description Largest derived per-turn input token count among supported turns; this is not a price or cost calculation. */
-      peakContextTokens: number;
-    };
     /** @description Canonical content reference for file-backed parts. Supported schemes are file://, http://, https://, data:, and you-artifact:// for session-scoped factory artifact refs. */
     WorkContentURLProperty: string;
     /** @description Deprecated host-local file path. Use url instead. Legacy values may be normalized to url at ingest during migration. */
