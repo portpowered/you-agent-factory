@@ -91,6 +91,10 @@ endif
 endif
 
 FUNCTIONAL_DEFAULT_JOBS ?= $(GO_LANE_BUDGET)
+# CI may set this only for the instrumented functional coverage window. Leave
+# it empty by default so local invocations and discovery keep their existing
+# FUNCTIONAL_DEFAULT_JOBS behavior.
+FUNCTIONAL_TEST_JOBS ?=
 UNIT_DEFAULT_JOBS ?= $(GO_LANE_BUDGET)
 FUNCTIONAL_LONG_TAGS ?= functionallong
 FUNCTIONAL_LONG_PACKAGES := ./tests/functional/...
@@ -552,6 +556,7 @@ functional-test-viz:
 		GO_FUNCTIONAL_COVERAGE_PROFILE=$(FUNCTIONAL_TEST_VIZ_PROFILE) \
 		GO_FUNCTIONAL_COVERAGE_JSON_OUTPUT=$(FUNCTIONAL_TEST_VIZ_JSON) \
 		GO_FUNCTIONAL_COVERAGE_TIMING_OUTPUT=$(FUNCTIONAL_TEST_VIZ_TIMING) \
+		$(if $(strip $(FUNCTIONAL_TEST_JOBS)),FUNCTIONAL_TEST_JOBS=$(FUNCTIONAL_TEST_JOBS),) \
 		FUNCTIONAL_GOCOVERAGE_EXIT_FILE=$(FUNCTIONAL_GOCOVERAGE_EXIT_FILE)
 	$(GO) run ./cmd/functionaltestviz \
 		-coverage-summary $(FUNCTIONAL_TEST_VIZ_JSON) \
@@ -697,9 +702,9 @@ test-unit-coverage:
 # non-zero before gocoveragecheck starts.
 test-functional-coverage:
 	$(MAKE) functional-boundary-check
-	@echo "Functional tier: name=$(FUNCTIONAL_TEST_TIER) trigger=$(FUNCTIONAL_TEST_TRIGGER) short=$(FUNCTIONAL_SHORT) budget=$(FUNCTIONAL_TEST_BUDGET) selection=subtractive quarantine=$(FUNCTIONAL_QUARANTINE)"
+	@echo "Functional tier: name=$(FUNCTIONAL_TEST_TIER) trigger=$(FUNCTIONAL_TEST_TRIGGER) short=$(FUNCTIONAL_SHORT) budget=$(FUNCTIONAL_TEST_BUDGET) selection=subtractive quarantine=$(FUNCTIONAL_QUARANTINE) jobs=$(FUNCTIONAL_DEFAULT_JOBS) test_jobs=$(if $(strip $(FUNCTIONAL_TEST_JOBS)),$(FUNCTIONAL_TEST_JOBS),default)"
 	@set +e; \
-	$(GO) run ./cmd/gocoveragecheck -suite functional -stream -jobs $(FUNCTIONAL_DEFAULT_JOBS) -min $(GO_FUNCTIONAL_COVERAGE_MIN) -package-manifest $(GO_FUNCTIONAL_COVERAGE_MANIFEST) -functional-quarantine $(FUNCTIONAL_QUARANTINE) -timeout $(GO_COVERAGE_TIMEOUT) $(if $(filter false 0 no,$(FUNCTIONAL_SHORT)),-short=false,) $(if $(GO_FUNCTIONAL_COVERAGE_PROFILE),-profile $(GO_FUNCTIONAL_COVERAGE_PROFILE),) $(if $(GO_FUNCTIONAL_COVERAGE_JSON_OUTPUT),-json-output $(GO_FUNCTIONAL_COVERAGE_JSON_OUTPUT),) $(if $(GO_FUNCTIONAL_COVERAGE_TIMING_OUTPUT),-timing-output $(GO_FUNCTIONAL_COVERAGE_TIMING_OUTPUT),); \
+	$(GO) run ./cmd/gocoveragecheck -suite functional -stream -jobs $(FUNCTIONAL_DEFAULT_JOBS) $(if $(strip $(FUNCTIONAL_TEST_JOBS)),-test-jobs $(FUNCTIONAL_TEST_JOBS),) -min $(GO_FUNCTIONAL_COVERAGE_MIN) -package-manifest $(GO_FUNCTIONAL_COVERAGE_MANIFEST) -functional-quarantine $(FUNCTIONAL_QUARANTINE) -timeout $(GO_COVERAGE_TIMEOUT) $(if $(filter false 0 no,$(FUNCTIONAL_SHORT)),-short=false,) $(if $(GO_FUNCTIONAL_COVERAGE_PROFILE),-profile $(GO_FUNCTIONAL_COVERAGE_PROFILE),) $(if $(GO_FUNCTIONAL_COVERAGE_JSON_OUTPUT),-json-output $(GO_FUNCTIONAL_COVERAGE_JSON_OUTPUT),) $(if $(GO_FUNCTIONAL_COVERAGE_TIMING_OUTPUT),-timing-output $(GO_FUNCTIONAL_COVERAGE_TIMING_OUTPUT),); \
 	status=$$?; \
 	if [ -n "$(FUNCTIONAL_GOCOVERAGE_EXIT_FILE)" ]; then \
 		printf '%s\n' "$$status" > "$(FUNCTIONAL_GOCOVERAGE_EXIT_FILE)"; \

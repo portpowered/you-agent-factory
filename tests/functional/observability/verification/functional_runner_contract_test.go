@@ -83,6 +83,59 @@ func TestFunctionalCoverageCommandSmoke_ReportsExplicitTierSelection(t *testing.
 	}
 }
 
+// TestFunctionalCoverageCommandSmoke_SeparatesDiscoveryAndInstrumentedJobs
+// proves the CI-only override reaches the instrumented coverage invocation
+// while omission leaves the existing -jobs-only command unchanged.
+func TestFunctionalCoverageCommandSmoke_SeparatesDiscoveryAndInstrumentedJobs(t *testing.T) {
+	repoRoot := testutil.MustRepoPath(t, ".")
+	goStub := writeMakeEchoScript(t, "stub-go-functional-jobs")
+
+	for _, tc := range []struct {
+		name       string
+		testJobs   string
+		wantHeader string
+		wantFlag   string
+	}{{
+		name:       "functional CI override",
+		testJobs:   "8",
+		wantHeader: "jobs=4 test_jobs=8",
+		wantFlag:   "-test-jobs 8",
+	}, {
+		name:       "local default",
+		wantHeader: "jobs=4 test_jobs=default",
+	}} {
+		t.Run(tc.name, func(t *testing.T) {
+			makefilePath := writeVerifyFastWrapperMakefile(t, repoRoot, map[string]string{
+				"functional-boundary-check": "@printf '%s\\n' 'stub:boundary-ok'\n",
+			})
+			args := []string{
+				"FUNCTIONAL_DEFAULT_JOBS=4",
+				"GO=" + goStub,
+			}
+			if tc.testJobs != "" {
+				args = append(args, "FUNCTIONAL_TEST_JOBS="+tc.testJobs)
+			}
+			output, err := runMakefileTargetWithArgs(repoRoot, makefilePath, "test-functional-coverage", args...)
+			if err != nil {
+				t.Fatalf("run %s: %v\n%s", tc.name, err, output)
+			}
+			if !strings.Contains(output, tc.wantHeader) {
+				t.Fatalf("%s diagnostic missing %q:\n%s", tc.name, tc.wantHeader, output)
+			}
+			if !strings.Contains(output, "-jobs 4") {
+				t.Fatalf("%s did not preserve discovery jobs:\n%s", tc.name, output)
+			}
+			if tc.wantFlag != "" {
+				if !strings.Contains(output, tc.wantFlag) {
+					t.Fatalf("%s did not forward instrumented test jobs %q:\n%s", tc.name, tc.wantFlag, output)
+				}
+			} else if strings.Contains(output, "-test-jobs") {
+				t.Fatalf("%s unexpectedly changed the default command:\n%s", tc.name, output)
+			}
+		})
+	}
+}
+
 // TestFunctionalCoverageCommandSmoke_DefersOrdinaryGocoverageFailure proves
 // the CI-only handoff preserves gocoveragecheck's exact exit code while
 // allowing the compact verdict step to own an ordinary exit-1 outcome.
@@ -130,6 +183,7 @@ func TestFunctionalTestVizLaneScriptSmoke_TimesOutAndRetainsDiagnostics(t *testi
 
 	repoRoot := testutil.MustRepoPath(t, ".")
 	makePath := writeExecutableScript(t, "fake-make-functional-viz-timeout", `#!/bin/sh
+printf '%s\n' "fake-make: default_jobs=$FUNCTIONAL_DEFAULT_JOBS test_jobs=$FUNCTIONAL_TEST_JOBS"
 printf '%s\n' 'inventory: discovered-packages=147 observed-packages=12'
 printf '%s\n' 'quarantine: selector=./tests/functional/example bucket=ENVIRONMENT-DEPENDENT observed=skip'
 trap 'exit 143' TERM INT
@@ -145,6 +199,8 @@ sleep 2
 		"FUNCTIONAL_TEST_TIER=pr-short",
 		"FUNCTIONAL_TEST_TRIGGER=pull_request",
 		"FUNCTIONAL_SHORT=true",
+		"FUNCTIONAL_DEFAULT_JOBS=4",
+		"FUNCTIONAL_TEST_JOBS=8",
 		fmt.Sprintf("MAKE_BIN=%s", makePath),
 	)
 	if err == nil {
@@ -161,7 +217,8 @@ sleep 2
 	}
 	log := string(logBody)
 	for _, expected := range []string{
-		"tier=pr-short trigger=pull_request short=true budget=0.1s selection=subtractive",
+		"tier=pr-short trigger=pull_request short=true budget=0.1s selection=subtractive quarantine=tests/functional/functional-quarantine.json jobs=4 test_jobs=8",
+		"fake-make: default_jobs=4 test_jobs=8",
 		"inventory: discovered-packages=147 observed-packages=12",
 		"quarantine: selector=./tests/functional/example bucket=ENVIRONMENT-DEPENDENT observed=skip",
 		"tier timed out after budget=0.1s",
