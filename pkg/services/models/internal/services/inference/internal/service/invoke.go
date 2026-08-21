@@ -81,6 +81,23 @@ func catalogInvokeError(err error) error {
 	return err
 }
 
+func catalogOperation(detail models.Detail, requested string) models.Operation {
+	requested = strings.TrimSpace(requested)
+	for _, operation := range detail.Operations {
+		if strings.EqualFold(operation.Name, requested) {
+			return operation.Clone()
+		}
+	}
+	for _, capability := range detail.Capabilities {
+		for _, operation := range capability.Operations {
+			if strings.EqualFold(operation.Name, requested) {
+				return operation.Clone()
+			}
+		}
+	}
+	return models.Operation{}
+}
+
 func (s *service) nextInvocationRef() (models.ModelInvocationRef, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()

@@ -626,13 +626,6 @@ func assertGenericInvocationFailureCases(t *testing.T, base models.GenericInvoca
 			class: models.InvocationFailureClassInvalidModelReference,
 		},
 		{
-			name: "missing operation",
-			setup: func(request *models.GenericInvocationRequest) {
-				request.Operation = ""
-			},
-			class: models.InvocationFailureClassInvalidOperation,
-		},
-		{
 			name: "unnamed input slot",
 			setup: func(request *models.GenericInvocationRequest) {
 				request.Inputs = []models.InferenceInput{{}}
@@ -667,6 +660,11 @@ func assertGenericInvocationFailureCases(t *testing.T, base models.GenericInvoca
 				t.Fatalf("Validate() failure = %#v, want class %q", failure, test.class)
 			}
 		})
+	}
+	request := base
+	request.Operation = ""
+	if err := request.Validate(); err != nil {
+		t.Fatalf("Validate() with omitted operation = %v, want deferred operation selection", err)
 	}
 }
 

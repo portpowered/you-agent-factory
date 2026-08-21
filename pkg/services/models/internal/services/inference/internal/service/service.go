@@ -98,11 +98,12 @@ func (s *service) InvokeModelWithLease(
 		return models.InvokeModelResult{}, err
 	}
 
-	if _, err := s.catalog.GetCatalogModel(validationCtx, models.GetModelRequest{
+	catalogResult, err := s.catalog.GetCatalogModel(validationCtx, models.GetModelRequest{
 		Scope:     request.Scope,
 		Name:      request.ModelName,
 		Operation: request.Operation,
-	}); err != nil {
+	})
+	if err != nil {
 		return models.InvokeModelResult{}, catalogInvokeError(err)
 	}
 
@@ -145,7 +146,13 @@ func (s *service) InvokeModelWithLease(
 		return s.finishFailedInvocation(invokeCtx, request, invocation, err)
 	}
 
-	return s.finishCompletedInvocation(ctx, request, invocation, runtimeResult)
+	return s.finishCompletedInvocation(
+		ctx,
+		request,
+		invocation,
+		runtimeResult,
+		catalogOperation(catalogResult.Model, request.Operation),
+	)
 }
 
 func (s *service) ensureModelAssetsAvailable(
