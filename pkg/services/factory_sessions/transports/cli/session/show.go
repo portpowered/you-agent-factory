@@ -187,7 +187,7 @@ func renderShowResult(
 		{label: "Orchestrator kind", value: string(session.Runtime.OrchestratorKind)},
 		{label: "Runtime status", value: string(session.Runtime.Status)},
 		{label: "Factory state", value: session.Runtime.Progress.FactoryState},
-		{label: "Total tokens", value: fmt.Sprintf("%d", session.Runtime.Progress.TotalTokens)},
+		{label: "Work tokens (marking)", value: fmt.Sprintf("%d", session.Runtime.Progress.TotalTokens)},
 		{label: "In-flight dispatches", value: fmt.Sprintf("%d", session.Runtime.Progress.InFlightCount)},
 	}
 	if session.Runtime.Dialect != nil {

@@ -95,6 +95,7 @@ func TestShow_HumanOutputRendersPetriFactorySession(t *testing.T) {
 	output := out.String()
 	for _, want := range []string{
 		"Orchestrator kind:\tPETRI",
+		"Work tokens (marking):\t1",
 		"Petri marking tokens:\t1",
 		"Enabled transition:\ttr-process (worker-a)",
 	} {
@@ -104,6 +105,12 @@ func TestShow_HumanOutputRendersPetriFactorySession(t *testing.T) {
 	}
 	if strings.Contains(output, "Dynamic workflow:") {
 		t.Fatalf("Petri output should not include dynamic workflow shorthand: %s", output)
+	}
+	if strings.Contains(output, "Total tokens:") {
+		t.Fatalf("Petri output retained ambiguous total-token label: %s", output)
+	}
+	if strings.Contains(strings.ToLower(output), "cost") {
+		t.Fatalf("human output unexpectedly contains cost text: %s", output)
 	}
 }
 
@@ -128,6 +135,32 @@ func TestShow_JSONModeEmitsFactorySession(t *testing.T) {
 	}
 	if got.Id != "session-beta" || got.Runtime.OrchestratorKind != factoryapi.JAVASCRIPT {
 		t.Fatalf("session = %#v, want JavaScript session-beta", got)
+	}
+	var payload map[string]json.RawMessage
+	if err := json.Unmarshal(out.Bytes(), &payload); err != nil {
+		t.Fatalf("decode raw JSON: %v\n%s", err, out.String())
+	}
+	var runtime map[string]json.RawMessage
+	if err := json.Unmarshal(payload["runtime"], &runtime); err != nil {
+		t.Fatalf("decode runtime JSON: %v\n%s", err, out.String())
+	}
+	var progress map[string]json.RawMessage
+	if err := json.Unmarshal(runtime["progress"], &progress); err != nil {
+		t.Fatalf("decode progress JSON: %v\n%s", err, out.String())
+	}
+	totalTokens, ok := progress["totalTokens"]
+	if !ok {
+		t.Fatalf("JSON missing runtime.progress.totalTokens: %s", out.String())
+	}
+	var gotTotalTokens int
+	if err := json.Unmarshal(totalTokens, &gotTotalTokens); err != nil {
+		t.Fatalf("decode totalTokens: %v", err)
+	}
+	if gotTotalTokens != 0 {
+		t.Fatalf("totalTokens = %d, want 0", gotTotalTokens)
+	}
+	if strings.Contains(strings.ToLower(out.String()), "cost") {
+		t.Fatalf("JSON output unexpectedly contains cost text: %s", out.String())
 	}
 }
 
@@ -398,6 +431,7 @@ func TestShow_DurableSessionHumanOutputRendersLifecycleContinuity(t *testing.T) 
 
 func TestDispatches_DurableSessionJSONUsesListFactorySessionDispatchesResponse(t *testing.T) {
 	label := "step-one"
+	inputTokens, outputTokens, totalTokens := int64(12), int64(8), int64(20)
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if got, want := r.URL.Path, "/factory-sessions/dur-sess-js-interrupted-001/dispatches"; got != want {
 			t.Fatalf("path = %q, want %q", got, want)
@@ -411,6 +445,11 @@ func TestDispatches_DurableSessionJSONUsesListFactorySessionDispatchesResponse(t
 					Status:       factoryapi.FactoryDispatchStatusCOMPLETED,
 					DispatchKind: factoryapi.FactoryDispatchKindJAVASCRIPTAGENT,
 					Label:        &label,
+					Usage: &factoryapi.FactoryDispatchUsage{
+						InputTokens:  &inputTokens,
+						OutputTokens: &outputTokens,
+						TotalTokens:  &totalTokens,
+					},
 				},
 			},
 		}); err != nil {
@@ -438,6 +477,15 @@ func TestDispatches_DurableSessionJSONUsesListFactorySessionDispatchesResponse(t
 	}
 	if len(listed.Dispatches) != 1 {
 		t.Fatalf("dispatches = %#v, want one dispatch", listed.Dispatches)
+	}
+	usage := listed.Dispatches[0].Usage
+	if usage == nil || usage.InputTokens == nil || *usage.InputTokens != inputTokens ||
+		usage.OutputTokens == nil || *usage.OutputTokens != outputTokens ||
+		usage.TotalTokens == nil || *usage.TotalTokens != totalTokens {
+		t.Fatalf("usage = %#v, want input=%d output=%d total=%d", usage, inputTokens, outputTokens, totalTokens)
+	}
+	if strings.Contains(strings.ToLower(out.String()), "cost") {
+		t.Fatalf("JSON output unexpectedly contains cost text: %s", out.String())
 	}
 }
 
@@ -494,12 +542,64 @@ func TestDispatches_DurableSessionHumanOutputRendersDispatchSummaries(t *testing
 		"  Provider sessions:\tprovider-session-1",
 		"  Attempt:\t2",
 		"  Duration:\t1250ms",
+		"  Input tokens:\tunavailable",
+		"  Output tokens:\tunavailable",
+		"  Total tokens:\tunavailable",
 		"  Artifacts:\tartifact-1",
 		"  Failure:\tprovider unavailable",
 	} {
 		if !strings.Contains(output, want) {
 			t.Fatalf("output missing %q:\n%s", want, output)
 		}
+	}
+	for _, label := range []string{"Input tokens", "Output tokens", "Total tokens"} {
+		if strings.Contains(output, "  "+label+":\t0") {
+			t.Fatalf("nil usage value rendered as zero for %s:\n%s", label, output)
+		}
+	}
+}
+
+func TestDispatches_DurableSessionHumanOutputRendersPopulatedTokenUsage(t *testing.T) {
+	inputTokens, outputTokens, totalTokens := int64(17), int64(0), int64(17)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if err := json.NewEncoder(w).Encode(factoryapi.ListFactorySessionDispatchesResponse{
+			SessionId: "dur-sess-usage-001",
+			Dispatches: []factoryapi.FactorySessionDispatchSummary{{
+				Id:           "dispatch-usage-1",
+				Status:       factoryapi.FactoryDispatchStatusCOMPLETED,
+				DispatchKind: factoryapi.FactoryDispatchKindJAVASCRIPTAGENT,
+				Usage: &factoryapi.FactoryDispatchUsage{
+					InputTokens:  &inputTokens,
+					OutputTokens: &outputTokens,
+					TotalTokens:  &totalTokens,
+				},
+			}},
+		}); err != nil {
+			t.Fatalf("encode response: %v", err)
+		}
+	}))
+	defer srv.Close()
+
+	var out bytes.Buffer
+	if err := NewDispatches(testHTTPProtocol(t))(DispatchesConfig{
+		Context: context.Background(), Server: srv.URL, SessionID: "dur-sess-usage-001", Output: &out,
+	}); err != nil {
+		t.Fatalf("Dispatches durable human: %v", err)
+	}
+
+	output := out.String()
+	for _, want := range []string{
+		"  Input tokens:\t17",
+		"  Output tokens:\t0",
+		"  Total tokens:\t17",
+	} {
+		if !strings.Contains(output, want) {
+			t.Fatalf("output missing %q:\n%s", want, output)
+		}
+	}
+	if strings.Contains(strings.ToLower(output), "cost") {
+		t.Fatalf("human output unexpectedly contains cost text: %s", output)
 	}
 }
 
