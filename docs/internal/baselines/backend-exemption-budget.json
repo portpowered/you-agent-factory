@@ -231,18 +231,6 @@
     },
     {
       "rule": "backendsizecheck:ignore-file",
-      "target": "pkg/transports/mapping/factoryconfig/factory_config_mapping.go",
-      "owner": "backend-maintainers",
-      "removalReason": "refactor this target and remove this exemption when the threshold debt is resolved."
-    },
-    {
-      "rule": "backendsizecheck:ignore-file",
-      "target": "pkg/transports/mapping/factoryconfig/factory_config_mapping_internal.go",
-      "owner": "backend-maintainers",
-      "removalReason": "refactor this target and remove this exemption when the threshold debt is resolved."
-    },
-    {
-      "rule": "backendsizecheck:ignore-file",
       "target": "pkg/transports/mapping/factorysession/factory_session_mapper_test.go",
       "owner": "backend-maintainers",
       "removalReason": "pre-existing baseline debt recorded 2026-08-08; split this oversized code into focused units and remove this exemption."
@@ -2502,18 +2490,6 @@
       "target": "pkg/transports/http/servertests/server_durable_session_lifecycle_control_test.go",
       "owner": "backend-maintainers",
       "removalReason": "service-ownership migration preserves this consolidated file; split responsibilities and remove this exemption."
-    },
-    {
-      "rule": "pkgmaintcheck:ignore-file-lines",
-      "target": "pkg/transports/mapping/factoryconfig/factory_config_mapping.go",
-      "owner": "backend-maintainers",
-      "removalReason": "refactor this target and remove this exemption when the threshold debt is resolved."
-    },
-    {
-      "rule": "pkgmaintcheck:ignore-file-lines",
-      "target": "pkg/transports/mapping/factoryconfig/factory_config_mapping_internal.go",
-      "owner": "backend-maintainers",
-      "removalReason": "refactor this target and remove this exemption when the threshold debt is resolved."
     },
     {
       "rule": "pkgmaintcheck:ignore-file-lines",
