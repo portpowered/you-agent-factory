@@ -219,7 +219,7 @@ func assertDetachedMoveResult(
 	if result.WorkID != workID || result.FromState != fromState || result.ToState != toState {
 		t.Fatalf("move result = %#v, want detached %s->%s for %s", result, fromState, toState, workID)
 	}
-	if result.FromPlaceID != "" || result.ToPlaceID != "" || result.TokenID != "" {
+	if result.TokenID != "" {
 		t.Fatalf("move result leaked Petri fields: %#v", result)
 	}
 }
@@ -270,13 +270,11 @@ func (a *sealSessionAdapter) MoveWork(
 	}
 	a.workStates[workID] = stateName
 	return work.OperatorMoveResult{
-		WorkID:      workID,
-		WorkTypeID:  "story",
-		FromState:   fromState,
-		ToState:     stateName,
-		FromPlaceID: "story:" + fromState,
-		ToPlaceID:   "story:" + stateName,
-		TokenID:     "tok-seal",
+		WorkID:     workID,
+		WorkTypeID: "story",
+		FromState:  fromState,
+		ToState:    stateName,
+		TokenID:    "tok-seal",
 	}, nil
 }
 

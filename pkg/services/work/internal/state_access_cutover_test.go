@@ -22,13 +22,11 @@ func (f *petriMoveRuntime) MoveWork(
 	f.movedID = workID
 	f.source = source
 	return work.OperatorMoveResult{
-		WorkID:      workID,
-		WorkTypeID:  "story",
-		FromState:   "draft",
-		ToState:     "review",
-		FromPlaceID: "story.draft",
-		ToPlaceID:   "story.review",
-		TokenID:     "token-1",
+		WorkID:     workID,
+		WorkTypeID: "story",
+		FromState:  "draft",
+		ToState:    "review",
+		TokenID:    "token-1",
 	}, nil
 }
 
@@ -49,7 +47,7 @@ func TestNewServiceRoutesStateAccessSubmitMoveAndReadThroughDetachedResults(t *t
 	if err != nil {
 		t.Fatalf("MoveWorkForSession: %v", err)
 	}
-	if moved.FromPlaceID != "" || moved.ToPlaceID != "" || moved.TokenID != "" {
+	if moved.TokenID != "" {
 		t.Fatalf("MoveWorkForSession = %#v, want detached move result", moved)
 	}
 	if moved.WorkID != "work-1" || moved.FromState != "draft" || moved.ToState != "review" {
