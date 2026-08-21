@@ -1,0 +1,67 @@
+{
+  "schemaVersion": 1,
+  "localaiRepository": "https://github.com/mudler/LocalAI.git",
+  "localaiCommit": "b224c96db6f4b87306a33a808650bfce63b12588",
+  "protocolPath": "backend/backend.proto",
+  "protocolRevision": "ad62c6df07ae1169eb14411a565a689cd996b19c",
+  "grpcCommit": "08cc1787de022069135004adfdd17938b5062319",
+  "vcpkgCommit": "7f3781e19cc7d4e4882a4caec01668c6f7b5c163",
+  "toolchain": {
+    "goVersion": "1.25.4",
+    "cmakeVersion": "3.31.10",
+    "protobufVersion": "27.1",
+    "grpcVersion": "1.59.0"
+  },
+  "backends": [
+    {
+      "id": "localai-llamacpp",
+      "sourcePath": "backend/cpp/llama-cpp",
+      "sourceRepository": "https://github.com/ggerganov/llama.cpp",
+      "sourceCommit": "6b4dc2116a92c5c8f2782bfe51fabe5ee66fb5ef",
+      "sourcePinVariable": "LLAMA_VERSION",
+      "makeTarget": "package",
+      "binary": "grpc-server"
+    },
+    {
+      "id": "localai-whisper",
+      "sourcePath": "backend/go/whisper",
+      "sourceRepository": "https://github.com/ggml-org/whisper.cpp",
+      "sourceCommit": "080bbbe85230f624f0b52127f1ae1218247989f9",
+      "sourcePinVariable": "WHISPER_CPP_VERSION",
+      "makeTarget": "package",
+      "binary": "whisper"
+    },
+    {
+      "id": "localai-vibevoice",
+      "sourcePath": "backend/go/vibevoice-cpp",
+      "sourceRepository": "https://github.com/mudler/vibevoice.cpp",
+      "sourceCommit": "000e37282bc5bb09edc20f7047a47924122ba3a0",
+      "sourcePinVariable": "VIBEVOICE_CPP_VERSION",
+      "makeTarget": "package",
+      "binary": "vibevoice-cpp"
+    }
+  ],
+  "targets": [
+    {
+      "id": "darwin-arm64",
+      "os": "darwin",
+      "architecture": "arm64",
+      "runner": "macos-14",
+      "buildType": "metal"
+    },
+    {
+      "id": "linux-amd64",
+      "os": "linux",
+      "architecture": "amd64",
+      "runner": "ubuntu-24.04",
+      "buildType": "cpu"
+    },
+    {
+      "id": "windows-amd64",
+      "os": "windows",
+      "architecture": "amd64",
+      "runner": "windows-2022",
+      "buildType": "cpu"
+    }
+  ]
+}
