@@ -161,12 +161,17 @@ func TestResolveFunctionalTestPackagesWithMetadataUsesCurrentTreeGoList(t *testi
 	t.Cleanup(func() { commandRunner = originalRunner })
 
 	packagePath := modulePath + "/tests/functional/metadata"
+	secondPackagePath := modulePath + "/tests/functional/metadata-second"
 	supportPath := modulePath + "/tests/functional/internal/support"
 	repoRoot := t.TempDir()
 	packageDir := filepath.Join(repoRoot, "metadata")
+	secondPackageDir := filepath.Join(repoRoot, "metadata-second")
 	supportDir := filepath.Join(repoRoot, "support")
 	if err := os.MkdirAll(packageDir, 0o755); err != nil {
 		t.Fatalf("create package directory: %v", err)
+	}
+	if err := os.MkdirAll(secondPackageDir, 0o755); err != nil {
+		t.Fatalf("create second package directory: %v", err)
 	}
 	if err := os.MkdirAll(supportDir, 0o755); err != nil {
 		t.Fatalf("create support directory: %v", err)
@@ -186,10 +191,12 @@ func TestMetadata(t *testing.T) {}
 			return strings.Join([]string{
 				marshalFunctionalGoListPackage(t, functionalGoListPackage{ImportPath: supportPath, Dir: supportDir}),
 				marshalFunctionalGoListPackage(t, functionalGoListPackage{ImportPath: packagePath, Dir: packageDir}),
+				marshalFunctionalGoListPackage(t, functionalGoListPackage{ImportPath: secondPackagePath, Dir: secondPackageDir}),
 			}, "\n"), "", nil
-		case slices.Equal(invocation.args, []string{"list", functionalGoListErrorFlag, functionalGoListJSONFields, "-find", packagePath}):
+		case slices.Equal(invocation.args, []string{"list", functionalGoListErrorFlag, functionalGoListJSONFields, "-find", packagePath, secondPackagePath}):
 			return strings.Join([]string{
 				marshalFunctionalGoListPackage(t, functionalGoListPackage{ImportPath: packagePath, Dir: packageDir, TestGoFiles: []string{"metadata_test.go"}}),
+				marshalFunctionalGoListPackage(t, functionalGoListPackage{ImportPath: secondPackagePath, Dir: secondPackageDir, TestGoFiles: []string{"second_test.go"}}),
 			}, "\n"), "", nil
 		default:
 			t.Fatalf("unexpected go list invocation: %+v", invocation)
@@ -201,11 +208,11 @@ func TestMetadata(t *testing.T) {}
 	if err != nil {
 		t.Fatalf("resolveFunctionalTestPackagesWithMetadata() error = %v", err)
 	}
-	if !slices.Equal(packages, []string{packagePath}) {
-		t.Fatalf("packages = %v, want only runnable package", packages)
+	if !slices.Equal(packages, []string{packagePath, secondPackagePath}) {
+		t.Fatalf("packages = %v, want only runnable packages", packages)
 	}
-	if len(listed) != 1 || listed[0].ImportPath != packagePath || !slices.Equal(listed[0].TestGoFiles, []string{"metadata_test.go"}) {
-		t.Fatalf("listed metadata = %+v, want build-selected test files", listed)
+	if len(listed) != 2 || listed[0].ImportPath != packagePath || !slices.Equal(listed[0].TestGoFiles, []string{"metadata_test.go"}) || listed[1].ImportPath != secondPackagePath || !slices.Equal(listed[1].TestGoFiles, []string{"second_test.go"}) {
+		t.Fatalf("listed metadata = %+v, want one combined build-selected metadata query", listed)
 	}
 	if len(invocations) != 2 {
 		t.Fatalf("go list invocations = %d, want identity plus concrete metadata queries: %+v", len(invocations), invocations)

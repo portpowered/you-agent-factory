@@ -130,9 +130,11 @@ func listFunctionalTestPackageMetadata(patterns []string, repoRoot string) ([]fu
 
 	// Resolve package identities separately from test-file metadata. A wildcard
 	// metadata query makes one go list process inspect every test file before it
-	// returns. The identity query stays cheap; concrete metadata batches retain
-	// go list's build-selected TestGoFiles/XTestGoFiles authority while allowing
-	// independent package groups to be inspected concurrently.
+	// returns. The identity query stays cheap; a single concrete metadata query
+	// retains go list's build-selected TestGoFiles/XTestGoFiles authority while
+	// letting one go list process share its package-loading cache across the
+	// current tree. Splitting this same query into subprocess batches repeats
+	// that loading work and increases discovery latency on the coverage runner.
 	identityPackages, err := listFunctionalTestPackageBatchWithFieldsAndFlags(
 		patterns,
 		functionalGoListIdentityJSONFields,
@@ -153,13 +155,16 @@ func listFunctionalTestPackageMetadata(patterns []string, repoRoot string) ([]fu
 		return nil, errors.New("resolve go coverage lane: no packages matched")
 	}
 
-	listedPackages, err := listFunctionalTestPackagesWithMaxJobs(
+	listedPackages, err := listFunctionalTestPackageBatchWithFieldsAndFlags(
 		functionalPaths,
-		functionalPaths,
-		functionalDiscoveryMaxJobs,
-		functionalDiscoveryMaxJobs,
+		functionalGoListJSONFields,
+		[]string{"-find"},
 		repoRoot,
 	)
+	if err != nil {
+		return nil, err
+	}
+	listedPackages, err = mergeFunctionalGoListPackages(listedPackages)
 	if err != nil {
 		return nil, err
 	}
