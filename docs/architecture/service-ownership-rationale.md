@@ -36,6 +36,7 @@ external-effect package that is not a product service.
 - `automations`
 - `recordings`
 - `factory_visualization`
+- `costs`
 - `operator_settings`
 - `system_initialization`
 - `chat_sessions`
@@ -57,7 +58,7 @@ external-effect package that is not a product service.
 
 ## Owner Rationale Cards
 
-Each committed service — 17 top-level owners and 52 nested
+Each committed service — 18 top-level owners and 52 nested
 subservices — records the same six aspects: what it has authority over, what
 state it stores, what lifecycle it runs, who consumes it, where its transaction
 boundary sits, and how failures are surfaced and recovered.
@@ -152,6 +153,19 @@ Top-level owner · `pkg/services/chat_sessions`
 | Consumers | ACP transport, Factory Sessions target execution, Events sequencing, Worker Sessions response bridging, and Chat Sessions-owned transport adapters. |
 | Transaction boundary | Chat Session version guards serialize session-local mutations; Factory-target execution and event sequencing remain explicit cross-owner commands through published capabilities. |
 | Failure recovery | Typed validation, not-found, busy, conflict, transition, attachment-position, and retention-gap failures preserve the session boundary; retries converge through request identities and idempotent operations. |
+
+### `costs`
+
+Top-level owner · `pkg/services/costs`
+
+| Aspect | Rationale |
+| --- | --- |
+| Authority | Exact monetary valuation, pricing coverage, unpriced usage classification, and deterministic rollups over canonical runtime usage. |
+| State store | No durable state; each report uses detached Operator Settings and Factory Visualization results in local accumulators. |
+| Lifecycle | Stateless request operation constructed once by Wire; no autonomous lifecycle or hidden global price cache. |
+| Consumers | HTTP/CLI transports and the process root capability. |
+| Transaction boundary | One report reads the Operator Settings price table and the Factory Visualization metrics query, then owns all valuation and rollup decisions locally. |
+| Failure recovery | Missing identities, prices, and class-specific rates remain visible as UNPRICED line items; dependency and malformed-input failures are typed Costs outcomes. |
 
 ### `events`
 

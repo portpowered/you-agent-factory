@@ -1,6 +1,6 @@
 ---
 author: You Agent Factory Team
-last-modified: 2026-08-20
+last-modified: 2026-08-21
 doc-id: agent-factory/metrics
 ---
 
@@ -137,6 +137,72 @@ The `groups` array contains only the requested grouping. Groups are sorted by ke
 ```
 
 An unscoped JSON result uses `"kind": "all_factory_sessions"` and a null `factory_session_id`. Empty results use zero counts, empty failure maps, an empty groups array, and null percentile values.
+
+## Runtime Cost Rollups
+
+Use `you metrics costs` to inspect exact cost rollups through the running
+Factory API. This is a separate command from the local `you metrics` artifact
+reader:
+
+```bash
+you metrics costs
+you metrics costs --session session-123
+you --server http://localhost:7437 metrics costs --json
+```
+
+The optional `--session` filter selects one Factory Session. Global `--server`
+selects the Factory API; global `--json` emits the API-shaped report. A route
+failure returns an error without a partial success document.
+
+### Configure The Price Table
+
+The operator price table lives in `~/.you-agent-factory/config.json` under
+`priceTable`. Rates are USD per one million tokens and must be decimal strings:
+
+```json
+{
+  "priceTable": {
+    "currency": "USD",
+    "models": [
+      {
+        "provider": "CODEX",
+        "model": "gpt-5",
+        "inputPerMillionTokens": "2.5",
+        "cachedInputPerMillionTokens": "0.5",
+        "outputPerMillionTokens": "5.25",
+        "reasoningOutputPerMillionTokens": "10"
+      }
+    ]
+  }
+}
+```
+
+Input and output rates are required for every table entry. Cached-input and
+reasoning-output rates are optional, but a measured token class with no rate
+is `UNPRICED`. An omitted token measurement is distinct from an explicit zero;
+an explicit zero rate is valid and produces an exact `"0"` amount. Missing
+provider/model identity or an absent model entry also remains `UNPRICED`.
+Cached input is deducted from total input, and reasoning output is deducted
+from total output before the corresponding rates are applied.
+
+### Cost Report Fields And Status
+
+The JSON report contains `scope`, `currency`, `status`, `priced_subtotal`,
+`coverage`, `line_items`, `work_items`, `worker_sessions`, `provider_models`,
+and `factory_sessions`. Every money field is an exact decimal string; absent
+amounts are omitted rather than reported as zero. Arrays are deterministic.
+`coverage` reports `encountered_rows`, `priced_rows`, `unpriced_rows`, and the
+matching encountered/priced/unpriced distinct `provider_models` counts.
+
+`PRICED` means every usage row is valued, `PARTIAL` means some rows are valued,
+`UNPRICED` means usage exists but no row is valued, and `NO_USAGE` means no
+canonical usage rows were found. Each `line_items` row retains provider/model
+identity and all observed input, cached-input, output, and reasoning-output
+counts, plus an actionable `reason` when it is unpriced. Rollups cover all four
+dimensions: Work, Worker Session, provider/model, and Factory Session.
+
+The table is operator-authored reporting configuration. The command does not
+fetch live vendor pricing, query provider billing, or enforce billing limits.
 
 ## Related Topics
 

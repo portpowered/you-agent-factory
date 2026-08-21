@@ -4,6 +4,26 @@
  */
 
 export interface paths {
+  "/metrics/costs": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Get exact runtime cost rollups
+     * @description Values canonical Factory Runtime usage with the operator's explicit price table. The default scope covers all Factory Sessions. Supplying an unknown-but-valid Factory Session ID returns a successful no-usage report for that scope rather than unrelated usage. Missing prices are returned as UNPRICED rows and are never treated as zero.
+     */
+    get: operations["getMetricsCosts"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/worker-sessions": {
     parameters: {
       query?: never;
@@ -1784,6 +1804,124 @@ export interface components {
       position: number;
       /** @description Durable Factory event-stream generation that issued the position. */
       streamGenerationId?: string;
+    };
+    CostsScope: {
+      /**
+       * @description Selection scope used to produce the report.
+       * @enum {string}
+       */
+      kind: CostsScopeKind;
+      /** @description Selected Factory Session identity when kind is FACTORY_SESSION. */
+      factory_session_id?: string;
+    };
+    CostsCoverage: {
+      /** @description Number of canonical usage rows encountered in the selection. */
+      encountered_rows: number;
+      /** @description Number of usage rows that have a complete configured valuation. */
+      priced_rows: number;
+      /** @description Number of usage rows returned as UNPRICED. */
+      unpriced_rows: number;
+      /** @description Distinct provider/model pairs encountered in the selection. */
+      encountered_provider_models: number;
+      /** @description Distinct provider/model pairs whose encountered rows are all priced. */
+      priced_provider_models: number;
+      /** @description Distinct provider/model pairs with one or more unpriced rows. */
+      unpriced_provider_models: number;
+    };
+    CostsLineItem: {
+      factory_session_id?: string;
+      work_id?: string;
+      dispatch_id?: string;
+      worker_session_id?: string;
+      provider?: string;
+      model?: string;
+      /** Format: int64 */
+      input_tokens?: number;
+      /** Format: int64 */
+      output_tokens?: number;
+      /** Format: int64 */
+      cached_input_tokens?: number;
+      /** Format: int64 */
+      reasoning_output_tokens?: number;
+      /**
+       * @description PRICED means every measured token class has a configured rate; UNPRICED means the row is retained with its tokens but cannot be fully valued.
+       * @enum {string}
+       */
+      status: CostsLineItemStatus;
+      /** @description Exact USD decimal amount; absent for UNPRICED rows and present as "0" for explicitly free usage. */
+      priced_amount?: string;
+      /** @description Actionable reason when status is UNPRICED. */
+      reason?: string;
+    };
+    CostsRollup: {
+      /** @description Stable dimension key for this rollup. */
+      key: string;
+      /** Format: int64 */
+      input_tokens?: number;
+      /** Format: int64 */
+      output_tokens?: number;
+      /** Format: int64 */
+      cached_input_tokens?: number;
+      /** Format: int64 */
+      reasoning_output_tokens?: number;
+      /**
+       * @description PRICED means all usage rows in the rollup are valued; PARTIAL means some are valued; UNPRICED means usage exists but none is valued; NO_USAGE means no canonical usage rows were encountered.
+       * @enum {string}
+       */
+      status: CostsRollupStatus;
+      /** @description Exact USD decimal subtotal; absent when no usage is priced. */
+      priced_subtotal?: string;
+      coverage: components["schemas"]["CostsCoverage"];
+    };
+    CostsProviderModelRollup: {
+      /** @description Canonical provider identity, when known. */
+      provider: string;
+      /** @description Exact resolved model identity, when known. */
+      model: string;
+      /** @description Stable public provider/model pair key in the form provider/model. */
+      key: string;
+      /** Format: int64 */
+      input_tokens?: number;
+      /** Format: int64 */
+      output_tokens?: number;
+      /** Format: int64 */
+      cached_input_tokens?: number;
+      /** Format: int64 */
+      reasoning_output_tokens?: number;
+      /**
+       * @description PRICED means all usage rows for this provider/model are valued; PARTIAL means some are valued; UNPRICED means usage exists but none is valued; NO_USAGE means this pair has no usage rows.
+       * @enum {string}
+       */
+      status: CostsProviderModelRollupStatus;
+      /** @description Exact USD decimal subtotal; absent when no usage is priced. */
+      priced_subtotal?: string;
+      coverage: components["schemas"]["CostsCoverage"];
+    };
+    CostsReport: {
+      scope: components["schemas"]["CostsScope"];
+      /**
+       * @description Currency of all configured rates and monetary amounts.
+       * @enum {string}
+       */
+      currency: CostsReportCurrency;
+      /**
+       * @description PRICED means every usage row is valued; PARTIAL means some rows are valued; UNPRICED means usage exists but none is valued; NO_USAGE means no canonical usage rows were encountered. Missing price is never represented as zero.
+       * @enum {string}
+       */
+      status: CostsReportStatus;
+      /** @description Exact USD decimal subtotal for fully priced rows; absent when no row is priced. */
+      priced_subtotal?: string;
+      coverage: components["schemas"]["CostsCoverage"];
+      /** @description Deterministically ordered canonical usage rows and their valuation status. */
+      line_items: components["schemas"]["CostsLineItem"][];
+      /** @description Rollups keyed by Work item identity. */
+      work_items: components["schemas"]["CostsRollup"][];
+      /** @description Rollups keyed by Worker Session identity. */
+      worker_sessions: components["schemas"]["CostsRollup"][];
+      /** @description Rollups keyed by canonical provider/model pair. */
+      provider_models: components["schemas"]["CostsProviderModelRollup"][];
+      /** @description Rollups keyed by Factory Session identity. */
+      factory_sessions: components["schemas"]["CostsRollup"][];
     };
     WorkerSessionProviderSessionRef: {
       /** @description Provider identity that issued the correlated session. */
@@ -6581,6 +6719,7 @@ export interface components {
       /** @description Stable identifier for the local provider-backed runtime boundary. */
       backendScopeID?: string;
       defaults?: components["schemas"]["GlobalConfigDefaults"];
+      priceTable?: components["schemas"]["GlobalConfigPriceTable"];
       runtime?: components["schemas"]["GlobalConfigRuntime"];
       models?: components["schemas"]["GlobalConfigModels"];
       workers?: components["schemas"]["GlobalConfigWorkers"];
@@ -6593,6 +6732,31 @@ export interface components {
       workerModelProvider?: string;
       /** @description Default worker model name. */
       workerModel?: string;
+    };
+    /** @description Operator-authored USD rates per one million tokens. Omit this property to use an empty table; no provider or model prices are supplied by default. */
+    GlobalConfigPriceTable: {
+      /**
+       * @description Currency used by every configured rate. This contract supports USD only.
+       * @enum {string}
+       */
+      currency: GlobalConfigPriceTableCurrency;
+      /** @description Deterministic provider/model price entries. */
+      models: components["schemas"]["GlobalConfigPriceTableModel"][];
+    };
+    /** @description Exact operator-authored rates for one provider and model identity. */
+    GlobalConfigPriceTableModel: {
+      /** @description Canonical provider identity or a supported built-in alias; the Operator Settings decoder trims and canonicalizes this value. */
+      provider: string;
+      /** @description Exact model identifier. It is trimmed but never guessed or aliased. */
+      model: string;
+      /** @description Non-negative USD rate per one million uncached input tokens. */
+      inputPerMillionTokens: string;
+      /** @description Non-negative USD rate per one million non-reasoning output tokens. */
+      outputPerMillionTokens: string;
+      /** @description Optional non-negative USD rate per one million cached input tokens. */
+      cachedInputPerMillionTokens?: string;
+      /** @description Optional non-negative USD rate per one million reasoning output tokens. */
+      reasoningOutputPerMillionTokens?: string;
     };
     /** @description Runtime observability settings loaded from operator configuration before command-line overrides. */
     GlobalConfigRuntime: {
@@ -7509,6 +7673,31 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+  getMetricsCosts: {
+    parameters: {
+      query?: {
+        /** @description Optional Factory Session identity to scope the report. */
+        session_id?: string;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Exact cost report with priced and unpriced coverage. */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["CostsReport"];
+        };
+      };
+      400: components["responses"]["BadRequest"];
+      500: components["responses"]["InternalError"];
+    };
+  };
   listWorkerSessions: {
     parameters: {
       query?: {
@@ -9734,6 +9923,47 @@ export const WorkerSessionEventDelivery = {
 } as const;
 export type WorkerSessionEventDelivery =
   (typeof WorkerSessionEventDelivery)[keyof typeof WorkerSessionEventDelivery];
+export const CostsScopeKind = {
+  ALL_FACTORY_SESSIONS: "ALL_FACTORY_SESSIONS",
+  FACTORY_SESSION: "FACTORY_SESSION",
+} as const;
+export type CostsScopeKind =
+  (typeof CostsScopeKind)[keyof typeof CostsScopeKind];
+export const CostsLineItemStatus = {
+  PRICED: "PRICED",
+  UNPRICED: "UNPRICED",
+} as const;
+export type CostsLineItemStatus =
+  (typeof CostsLineItemStatus)[keyof typeof CostsLineItemStatus];
+export const CostsRollupStatus = {
+  PRICED: "PRICED",
+  PARTIAL: "PARTIAL",
+  UNPRICED: "UNPRICED",
+  NO_USAGE: "NO_USAGE",
+} as const;
+export type CostsRollupStatus =
+  (typeof CostsRollupStatus)[keyof typeof CostsRollupStatus];
+export const CostsProviderModelRollupStatus = {
+  PRICED: "PRICED",
+  PARTIAL: "PARTIAL",
+  UNPRICED: "UNPRICED",
+  NO_USAGE: "NO_USAGE",
+} as const;
+export type CostsProviderModelRollupStatus =
+  (typeof CostsProviderModelRollupStatus)[keyof typeof CostsProviderModelRollupStatus];
+export const CostsReportCurrency = {
+  USD: "USD",
+} as const;
+export type CostsReportCurrency =
+  (typeof CostsReportCurrency)[keyof typeof CostsReportCurrency];
+export const CostsReportStatus = {
+  PRICED: "PRICED",
+  PARTIAL: "PARTIAL",
+  UNPRICED: "UNPRICED",
+  NO_USAGE: "NO_USAGE",
+} as const;
+export type CostsReportStatus =
+  (typeof CostsReportStatus)[keyof typeof CostsReportStatus];
 export const ManagedRuntimeLifecycleState = {
   // Managed install and cache lifecycle does not apply, such as for cloud-backed runtimes.
   NOT_APPLICABLE: "NOT_APPLICABLE",
@@ -11203,6 +11433,11 @@ export const FactoryValidationSubjectLocation = {
 } as const;
 export type FactoryValidationSubjectLocation =
   (typeof FactoryValidationSubjectLocation)[keyof typeof FactoryValidationSubjectLocation];
+export const GlobalConfigPriceTableCurrency = {
+  USD: "USD",
+} as const;
+export type GlobalConfigPriceTableCurrency =
+  (typeof GlobalConfigPriceTableCurrency)[keyof typeof GlobalConfigPriceTableCurrency];
 export const GlobalConfigModelLoadPolicy = {
   ON_DEMAND: "ON_DEMAND",
 } as const;

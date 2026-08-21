@@ -504,6 +504,9 @@ func assertStructuredProviderDiagnostics(t *testing.T, result workerexecution.In
 	if result.Response.Diagnostics == nil || result.Response.Diagnostics.Command == nil || result.Response.Diagnostics.Panic == nil {
 		t.Fatalf("provider diagnostics = %#v, want command and panic facts", result.Response.Diagnostics)
 	}
+	if result.Response.Diagnostics.Provider == nil || result.Response.Diagnostics.Provider.Model != "model-1" {
+		t.Fatalf("provider diagnostics model = %#v, want resolved model-1", result.Response.Diagnostics.Provider)
+	}
 }
 
 func TestProviderExecutorClassifiesProviderFailuresAndExactContinuationOutcomes(t *testing.T) {

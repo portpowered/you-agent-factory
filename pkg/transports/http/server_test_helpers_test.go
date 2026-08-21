@@ -21,6 +21,9 @@ import (
 	"net/url"
 	"strings"
 	"testing"
+
+	costs "github.com/portpowered/infinite-you/pkg/services/costs"
+	costshttp "github.com/portpowered/infinite-you/pkg/services/costs/transports/http"
 )
 
 const defaultSessionWorkAPIPrefix = "/factory-sessions/" + factorysessions.DefaultSessionID
@@ -836,4 +839,58 @@ func TestGetProviderSessionDetails_PrefersExactCodexSessionFileWhenSupportedLayo
 
 func httpStringPtr(value string) *string {
 	return &value
+}
+
+func TestServerRoutesMetricsCostsThroughInjectedOwnerHandler(t *testing.T) {
+	t.Parallel()
+	query := costs.CostsQuery(func(_ context.Context, request costs.QueryRequest) (costs.Report, error) {
+		if request.FactorySessionID != "session-a" {
+			t.Fatalf("FactorySessionID = %q, want session-a", request.FactorySessionID)
+		}
+		return costs.Report{
+			Scope:           costs.Scope{Kind: costs.ScopeFactorySession, FactorySessionID: "session-a"},
+			Currency:        "USD",
+			Status:          costs.StatusNoUsage,
+			LineItems:       []costs.LineItem{},
+			WorkItems:       []costs.Rollup{},
+			WorkerSessions:  []costs.Rollup{},
+			ProviderModels:  []costs.ProviderModelRollup{},
+			FactorySessions: []costs.Rollup{},
+		}, nil
+	})
+	costsHandler := costshttp.NewHandler(costshttp.NewAdapter(query, "metrics", "settings"), zap.NewNop())
+	server := NewServerWithRecordingsAndCosts(nil, nil, nil, nil, nil, nil, zap.NewNop(), costsHandler)
+
+	recorder := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodGet, "/metrics/costs?session_id=session-a", nil)
+	server.Handler().ServeHTTP(recorder, request)
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body=%s", recorder.Code, recorder.Body.String())
+	}
+	var report factoryapi.CostsReport
+	if err := json.Unmarshal(recorder.Body.Bytes(), &report); err != nil {
+		t.Fatalf("decode report: %v", err)
+	}
+	if report.Scope.Kind != factoryapi.CostsScopeKind("FACTORY_SESSION") || report.Scope.FactorySessionId == nil || *report.Scope.FactorySessionId != "session-a" {
+		t.Fatalf("scope = %#v", report.Scope)
+	}
+}
+
+func TestServerReportsUnavailableCostsHandlerAsInternalError(t *testing.T) {
+	t.Parallel()
+	server := NewServer(nil, nil, nil, nil, nil, zap.NewNop())
+	recorder := httptest.NewRecorder()
+	server.Handler().ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/metrics/costs", nil))
+
+	if recorder.Code != http.StatusInternalServerError {
+		t.Fatalf("status = %d, want 500", recorder.Code)
+	}
+	var response factoryapi.ErrorResponse
+	if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil {
+		t.Fatalf("decode error: %v", err)
+	}
+	if response.Code != factoryapi.ErrorResponseCode("INTERNAL_ERROR") {
+		t.Fatalf("error response = %#v", response)
+	}
 }

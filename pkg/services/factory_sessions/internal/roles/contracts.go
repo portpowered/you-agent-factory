@@ -74,10 +74,14 @@ type OpenedApplicationRuntime struct {
 	ProviderSessions   providersessions.Service
 	WorkerSessions     workersessions.ObservationService
 	WorkerPrompts      workers.PromptTemplates
-	Logger             *zap.Logger
-	Visualization      RuntimeVisualizationServices
-	Resources          RuntimeResources
-	HistoricalReplay   *factorysessions.HistoricalReplayInspection
+	// OperatorSettingsPath is the resolved document used by the opened
+	// runtime. Transport adapters receive it as data and never resolve or read
+	// configuration themselves.
+	OperatorSettingsPath string
+	Logger               *zap.Logger
+	Visualization        RuntimeVisualizationServices
+	Resources            RuntimeResources
+	HistoricalReplay     *factorysessions.HistoricalReplayInspection
 }
 
 type OpenedProcessApplication struct {

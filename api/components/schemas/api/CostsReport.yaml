@@ -1,0 +1,58 @@
+type: object
+additionalProperties: false
+required:
+  - scope
+  - currency
+  - status
+  - coverage
+  - line_items
+  - work_items
+  - worker_sessions
+  - provider_models
+  - factory_sessions
+properties:
+  scope:
+    $ref: './CostsScope.yaml'
+  currency:
+    type: string
+    enum:
+      - USD
+    description: Currency of all configured rates and monetary amounts.
+  status:
+    type: string
+    enum:
+      - PRICED
+      - PARTIAL
+      - UNPRICED
+      - NO_USAGE
+    description: PRICED means every usage row is valued; PARTIAL means some rows are valued; UNPRICED means usage exists but none is valued; NO_USAGE means no canonical usage rows were encountered. Missing price is never represented as zero.
+  priced_subtotal:
+    type: string
+    description: Exact USD decimal subtotal for fully priced rows; absent when no row is priced.
+  coverage:
+    $ref: './CostsCoverage.yaml'
+  line_items:
+    type: array
+    description: Deterministically ordered canonical usage rows and their valuation status.
+    items:
+      $ref: './CostsLineItem.yaml'
+  work_items:
+    type: array
+    description: Rollups keyed by Work item identity.
+    items:
+      $ref: './CostsRollup.yaml'
+  worker_sessions:
+    type: array
+    description: Rollups keyed by Worker Session identity.
+    items:
+      $ref: './CostsRollup.yaml'
+  provider_models:
+    type: array
+    description: Rollups keyed by canonical provider/model pair.
+    items:
+      $ref: './CostsProviderModelRollup.yaml'
+  factory_sessions:
+    type: array
+    description: Rollups keyed by Factory Session identity.
+    items:
+      $ref: './CostsRollup.yaml'

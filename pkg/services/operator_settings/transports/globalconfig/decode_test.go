@@ -276,6 +276,10 @@ func TestEncode_EmitsCanonicalJSONBytes(t *testing.T) {
     "workerModel": "gpt-5.4",
     "workerModelProvider": "codex"
   },
+  "priceTable": {
+    "currency": "USD",
+    "models": []
+  },
   "runtime": {
     "logging": {
       "compress": false,
@@ -295,6 +299,67 @@ func TestEncode_EmitsCanonicalJSONBytes(t *testing.T) {
 `
 	if string(payload) != want {
 		t.Fatalf("Encode() bytes = %q, want %q", payload, want)
+	}
+}
+
+func TestPriceTableDecodeEncodePreservesOptionalZeroAndExactRates(t *testing.T) {
+	payload := []byte(`{
+		"priceTable": {
+			"currency": "USD",
+			"models": [{
+				"provider": " openai ",
+				"model": " gpt-5 ",
+				"inputPerMillionTokens": "1.2500",
+				"outputPerMillionTokens": "10",
+				"cachedInputPerMillionTokens": "0"
+			}]
+		}
+	}`)
+	config, err := globalconfig.Decode(payload)
+	if err != nil {
+		t.Fatalf("Decode() error = %v", err)
+	}
+	model := config.PriceTable.Models[0]
+	if config.PriceTable.Currency != "USD" || model.Provider != "CODEX" || model.Model != "gpt-5" || model.InputPerMillionTokens != "1.2500" {
+		t.Fatalf("decoded price table = %#v, want normalized exact values", config.PriceTable)
+	}
+	if model.CachedInputPerMillionTokens == nil || *model.CachedInputPerMillionTokens != "0" {
+		t.Fatalf("decoded cached rate = %#v, want explicit zero", model.CachedInputPerMillionTokens)
+	}
+	encoded, err := globalconfig.Encode(config)
+	if err != nil {
+		t.Fatalf("Encode() error = %v", err)
+	}
+	if !strings.Contains(string(encoded), `"cachedInputPerMillionTokens": "0"`) || !strings.Contains(string(encoded), `"inputPerMillionTokens": "1.2500"`) {
+		t.Fatalf("encoded price table = %s, want exact optional/base rate strings", encoded)
+	}
+	if strings.Contains(string(encoded), "reasoningOutputPerMillionTokens") {
+		t.Fatal("encoded price table materialized an omitted reasoning rate")
+	}
+}
+
+func TestPriceTableDecodeRejectsInvalidContractValues(t *testing.T) {
+	cases := []struct {
+		name    string
+		payload string
+		want    string
+	}{
+		{name: "duplicate provider model", payload: `{"priceTable":{"currency":"USD","models":[{"provider":"openai","model":"gpt-5","inputPerMillionTokens":"1","outputPerMillionTokens":"2"},{"provider":"CODEX","model":"gpt-5","inputPerMillionTokens":"3","outputPerMillionTokens":"4"}]}}`, want: "duplicates"},
+		{name: "unsupported currency", payload: `{"priceTable":{"currency":"EUR","models":[]}}`, want: "unsupported"},
+		{name: "missing currency", payload: `{"priceTable":{"models":[]}}`, want: "currency is required"},
+		{name: "negative rate", payload: `{"priceTable":{"currency":"USD","models":[{"provider":"CODEX","model":"gpt-5","inputPerMillionTokens":"-1","outputPerMillionTokens":"2"}]}}`, want: "non-negative decimal"},
+		{name: "missing base rate", payload: `{"priceTable":{"currency":"USD","models":[{"provider":"CODEX","model":"gpt-5","outputPerMillionTokens":"2"}]}}`, want: "inputPerMillionTokens"},
+		{name: "unknown field", payload: `{"priceTable":{"currency":"USD","models":[],"unexpected":"value"}}`, want: "unknown field"},
+	}
+	for _, testCase := range cases {
+		testCase := testCase
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+			_, err := globalconfig.Decode([]byte(testCase.payload))
+			if err == nil || !strings.Contains(err.Error(), testCase.want) {
+				t.Fatalf("Decode() = %v, want error containing %q", err, testCase.want)
+			}
+		})
 	}
 }
 
@@ -327,6 +392,9 @@ func TestDecode_EmptyObjectReturnsEmptyConfig(t *testing.T) {
 	}
 	if config.BackendScopeID != "" || config.Defaults != (operatorsettings.Defaults{}) || len(config.WorkerPresets) != 0 {
 		t.Fatalf("config = %#v, want empty identity, defaults, and presets", config)
+	}
+	if config.PriceTable.Currency != operatorsettings.PriceTableCurrencyUSD || config.PriceTable.Models == nil || len(config.PriceTable.Models) != 0 {
+		t.Fatalf("price table = %#v, want default-empty USD table", config.PriceTable)
 	}
 	if config.Runtime != defaultRuntimeSettings() {
 		t.Fatalf("runtime = %#v, want defaults %#v", config.Runtime, defaultRuntimeSettings())

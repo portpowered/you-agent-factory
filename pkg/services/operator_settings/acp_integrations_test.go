@@ -106,3 +106,119 @@ func TestConfigureACPIntegrationRejectsNilContext(t *testing.T) {
 		t.Fatalf("EnsurePackagedACPIntegrations(nil) = %v, want %q", err, want)
 	}
 }
+
+func TestPriceTableNormalizeRoundTripsCanonicalIdentitiesAndExplicitZero(t *testing.T) {
+	t.Parallel()
+
+	cached := "0"
+	reasoning := "1.2500"
+	table := PriceTable{
+		Currency: "USD",
+		Models: []PriceTableModel{{
+			Provider:                        " openai ",
+			Model:                           " gpt-5 ",
+			InputPerMillionTokens:           "1.25",
+			OutputPerMillionTokens:          "10",
+			CachedInputPerMillionTokens:     &cached,
+			ReasoningOutputPerMillionTokens: &reasoning,
+		}},
+	}
+
+	normalized, err := table.Normalize()
+	if err != nil {
+		t.Fatalf("PriceTable.Normalize() = %v", err)
+	}
+	if normalized.Currency != PriceTableCurrencyUSD || len(normalized.Models) != 1 {
+		t.Fatalf("normalized table = %#v, want one USD model", normalized)
+	}
+	model := normalized.Models[0]
+	if model.Provider != "CODEX" || model.Model != "gpt-5" || model.InputPerMillionTokens != "1.25" || model.OutputPerMillionTokens != "10" {
+		t.Fatalf("normalized model = %#v, want canonical identities and exact rates", model)
+	}
+	if model.CachedInputPerMillionTokens == nil || *model.CachedInputPerMillionTokens != "0" {
+		t.Fatalf("cached rate = %#v, want explicit zero", model.CachedInputPerMillionTokens)
+	}
+	if model.ReasoningOutputPerMillionTokens == nil || *model.ReasoningOutputPerMillionTokens != "1.2500" {
+		t.Fatalf("reasoning rate = %#v, want exact decimal spelling", model.ReasoningOutputPerMillionTokens)
+	}
+
+	cloned := normalized.Clone()
+	*cloned.Models[0].CachedInputPerMillionTokens = "2"
+	if *normalized.Models[0].CachedInputPerMillionTokens != "0" {
+		t.Fatal("PriceTable.Clone() aliased optional rates")
+	}
+}
+
+func TestPriceTableNormalizeRejectsInvalidEntries(t *testing.T) {
+	t.Parallel()
+
+	zero := "0"
+	valid := func() PriceTable {
+		return PriceTable{Currency: "USD", Models: []PriceTableModel{{
+			Provider: "CODEX", Model: "gpt-5", InputPerMillionTokens: "1", OutputPerMillionTokens: "2",
+		}}}
+	}
+	cases := []struct {
+		name   string
+		mutate func(*PriceTable)
+	}{
+		{name: "unsupported currency", mutate: func(table *PriceTable) { table.Currency = "EUR" }},
+		{name: "blank provider", mutate: func(table *PriceTable) { table.Models[0].Provider = " " }},
+		{name: "blank model", mutate: func(table *PriceTable) { table.Models[0].Model = " " }},
+		{name: "missing input rate", mutate: func(table *PriceTable) { table.Models[0].InputPerMillionTokens = "" }},
+		{name: "missing output rate", mutate: func(table *PriceTable) { table.Models[0].OutputPerMillionTokens = "" }},
+		{name: "negative rate", mutate: func(table *PriceTable) { table.Models[0].InputPerMillionTokens = "-1" }},
+		{name: "malformed rate", mutate: func(table *PriceTable) { table.Models[0].OutputPerMillionTokens = "1e-3" }},
+		{name: "whitespace rate", mutate: func(table *PriceTable) { table.Models[0].InputPerMillionTokens = " 1 " }},
+		{name: "malformed optional rate", mutate: func(table *PriceTable) {
+			table.Models[0].CachedInputPerMillionTokens = &zero
+			*table.Models[0].CachedInputPerMillionTokens = ".5"
+		}},
+		{name: "duplicate normalized key", mutate: func(table *PriceTable) {
+			table.Models = append(table.Models, PriceTableModel{Provider: " openai ", Model: "gpt-5", InputPerMillionTokens: "3", OutputPerMillionTokens: "4"})
+		}},
+	}
+	for _, testCase := range cases {
+		testCase := testCase
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+			table := valid()
+			testCase.mutate(&table)
+			if _, err := table.Normalize(); !errors.Is(err, ErrPriceTableInvalid) {
+				t.Fatalf("PriceTable.Normalize() = %v, want ErrPriceTableInvalid", err)
+			}
+		})
+	}
+}
+
+func TestReplacePriceTablePreservesUnrelatedSettings(t *testing.T) {
+	t.Parallel()
+
+	service := ConfigDocumentService{}
+	document := ConfigDocument{config: Config{
+		BackendScopeID: "local-scope",
+		Defaults:       Defaults{WorkerModelProvider: "CODEX", WorkerModel: "gpt-5"},
+		Runtime:        defaultRuntimeSettings(),
+		WorkerPresets:  []WorkerPreset{{ID: "build", ModelProvider: "CODEX", Model: "gpt-5"}},
+		Workers: WorkerSettings{ACP: ACPSettings{Integrations: []ACPIntegration{{
+			ID: "entry-1", Name: "cursor-acp", Transport: "stdio", Command: "cursor-agent acp",
+		}}}},
+	}}
+	replacement := PriceTable{Currency: "USD", Models: []PriceTableModel{{
+		Provider: "claude", Model: "claude-sonnet", InputPerMillionTokens: "3", OutputPerMillionTokens: "15",
+	}}}
+	updated, err := service.ReplacePriceTable(document, replacement)
+	if err != nil {
+		t.Fatalf("ReplacePriceTable() = %v", err)
+	}
+	got := updated.FileConfig()
+	if got.BackendScopeID != document.config.BackendScopeID || got.Defaults != document.config.Defaults ||
+		!reflect.DeepEqual(got.Runtime, document.config.Runtime) ||
+		!reflect.DeepEqual(got.WorkerPresets, document.config.WorkerPresets) ||
+		!reflect.DeepEqual(got.Workers, document.config.Workers) {
+		t.Fatalf("unrelated settings changed: %#v", got)
+	}
+	if got.PriceTable.Currency != PriceTableCurrencyUSD || got.PriceTable.Models[0].Provider != "CLAUDE" {
+		t.Fatalf("price table = %#v, want normalized replacement", got.PriceTable)
+	}
+}

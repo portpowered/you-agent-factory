@@ -339,6 +339,57 @@ func (s *Service) updateACPAgentProfile(
 	return updated.Workers.ACP.AgentProfile.Clone(), nil
 }
 
+// UpdatePriceTable validates the complete candidate before any persistence
+// side effect, then atomically replaces the table while preserving all other
+// operator settings.
+func (s *Service) UpdatePriceTable(
+	ctx context.Context,
+	path string,
+	table operatorsettings.PriceTable,
+) (operatorsettings.PriceTable, error) {
+	if s == nil || s.document == nil {
+		return operatorsettings.PriceTable{}, fmt.Errorf("operator settings document service is required")
+	}
+	s.logger.Info("operator_settings.update_price_table.started")
+	normalized, err := table.Normalize()
+	if err != nil {
+		s.logger.Warn("operator_settings.update_price_table.failed", "reason", classifyPriceTableFailure(err))
+		return operatorsettings.PriceTable{}, err
+	}
+	updated, err := s.mutateDocument(ctx, path, func(document operatorsettings.Document) (operatorsettings.Document, error) {
+		config := documentConfig(document)
+		config.PriceTable = normalized.Clone()
+		return normalizedDocument(config)
+	})
+	if err != nil {
+		s.logger.Warn("operator_settings.update_price_table.failed", "reason", classifyPriceTableFailure(err))
+		return operatorsettings.PriceTable{}, err
+	}
+	result := updated.PriceTable.Clone()
+	s.logger.Info(
+		"operator_settings.update_price_table.finished",
+		"currency", result.Currency,
+		"model_count", len(result.Models),
+	)
+	return result, nil
+}
+
+func classifyPriceTableFailure(err error) string {
+	switch {
+	case errors.Is(err, context.Canceled):
+		return "context_canceled"
+	case errors.Is(err, context.DeadlineExceeded):
+		return "context_deadline_exceeded"
+	case errors.Is(err, operatorsettings.ErrPriceTableInvalid):
+		return "price_table_invalid"
+	}
+	var documentFailure operatorsettings.DocumentFailure
+	if errors.As(err, &documentFailure) {
+		return "document_" + string(documentFailure.Kind)
+	}
+	return "operation_failed"
+}
+
 // classifyACPAgentProfileFailure reports a safe, actionable failure category
 // for operation logs without leaking the config path, profile contents, or
 // allowlist values that may appear inside the underlying error message.
@@ -395,6 +446,8 @@ func documentConfig(document operatorsettings.Document) operatorsettings.Config 
 			WorkerModelProvider: document.Defaults.WorkerModelProvider,
 			WorkerModel:         document.Defaults.WorkerModel,
 		},
+		PriceTable: document.PriceTable.Clone(),
+		Models:     cloneModelConfigs(document.Models),
 		Runtime: operatorsettings.RuntimeSettings{
 			Logging: operatorsettings.RuntimeArtifactSettings(document.Runtime.Logging),
 			Metrics: operatorsettings.RuntimeArtifactSettings(document.Runtime.Metrics),
@@ -431,6 +484,17 @@ func workerPresetsFromDocument(presets []operatorsettings.DocumentWorkerPreset) 
 	return converted
 }
 
+func cloneModelConfigs(values map[string]operatorsettings.ModelConfig) map[string]operatorsettings.ModelConfig {
+	if values == nil {
+		return nil
+	}
+	cloned := make(map[string]operatorsettings.ModelConfig, len(values))
+	for name, config := range values {
+		cloned[name] = config.Clone()
+	}
+	return cloned
+}
+
 func normalizedDocument(config operatorsettings.Config) (operatorsettings.Document, error) {
 	normalized, err := config.Normalize()
 	if err != nil {
@@ -442,6 +506,8 @@ func normalizedDocument(config operatorsettings.Config) (operatorsettings.Docume
 			WorkerModelProvider: normalized.Defaults.WorkerModelProvider,
 			WorkerModel:         normalized.Defaults.WorkerModel,
 		},
+		PriceTable: normalized.PriceTable.Clone(),
+		Models:     cloneModelConfigs(normalized.Models),
 		Runtime: operatorsettings.DocumentRuntimeSettings{
 			Logging: operatorsettings.DocumentRuntimeArtifactSettings(normalized.Runtime.Logging),
 			Metrics: operatorsettings.DocumentRuntimeArtifactSettings(normalized.Runtime.Metrics),

@@ -6,6 +6,7 @@ import (
 
 	initializerapplication "github.com/portpowered/infinite-you/pkg/initializer/application"
 	"github.com/portpowered/infinite-you/pkg/services/automations"
+	costs "github.com/portpowered/infinite-you/pkg/services/costs"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factoryvisualization "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
@@ -80,6 +81,54 @@ func TestBuildProcessComposesRuntimeMetricsQuery(t *testing.T) {
 	if len(result.Workstations) != 0 || len(result.WorkerTypes) != 0 || len(result.Providers) != 0 {
 		t.Fatalf("RuntimeMetricsQueryFromProcess empty result groups = (%d, %d, %d), want empty",
 			len(result.Workstations), len(result.WorkerTypes), len(result.Providers))
+	}
+	if query := CostsQueryFromProcess(process); query == nil {
+		t.Fatal("CostsQueryFromProcess(composed process) returned nil")
+	}
+}
+
+func TestCostsQueryFromProcessResolvesTypedCapability(t *testing.T) {
+	t.Parallel()
+
+	if query := CostsQueryFromProcess(nil); query != nil {
+		t.Fatalf("CostsQueryFromProcess(nil) = %#v, want nil", query)
+	}
+	withoutCosts, err := initializerapplication.NewProcessWithRuntimeCostsAndExecution(
+		nil, nil, rootWorkerProcessRegistry{}, rootWorkerProcessLifecycle{}, nil, nil, nil, nil, nil, nil,
+	)
+	if err != nil {
+		t.Fatalf("NewProcessWithRuntimeCostsAndExecution(without costs) error = %v", err)
+	}
+	if query := CostsQueryFromProcess(withoutCosts); query != nil {
+		t.Fatalf("CostsQueryFromProcess(without costs) = %#v, want nil", query)
+	}
+	want := costs.CostsQuery(func(context.Context, costs.QueryRequest) (costs.Report, error) {
+		return costs.Report{Status: costs.StatusNoUsage}, nil
+	})
+	process, err := initializerapplication.NewProcessWithRuntimeCostsAndExecution(
+		nil, nil, rootWorkerProcessRegistry{}, rootWorkerProcessLifecycle{}, nil, nil, nil, nil, nil,
+		rootRuntimeCostsQueryCapabilityProbe{query: want},
+	)
+	if err != nil {
+		t.Fatalf("NewProcessWithRuntimeCostsAndExecution() error = %v", err)
+	}
+	got := CostsQueryFromProcess(process)
+	if got == nil {
+		t.Fatal("CostsQueryFromProcess() returned nil query")
+	}
+	if result, err := got.Query(context.Background(), costs.QueryRequest{}); err != nil || result.Status != costs.StatusNoUsage {
+		t.Fatalf("CostsQueryFromProcess() result = %#v, error = %v", result, err)
+	}
+
+	wrongType, err := initializerapplication.NewProcessWithRuntimeCostsAndExecution(
+		nil, nil, rootWorkerProcessRegistry{}, rootWorkerProcessLifecycle{}, nil, nil, nil, nil, nil,
+		rootRuntimeCostsQueryCapabilityProbe{query: struct{}{}},
+	)
+	if err != nil {
+		t.Fatalf("NewProcessWithRuntimeCostsAndExecution(wrong type) error = %v", err)
+	}
+	if got := CostsQueryFromProcess(wrongType); got != nil {
+		t.Fatalf("CostsQueryFromProcess(wrong type) = %#v, want nil", got)
 	}
 }
 
@@ -224,6 +273,14 @@ func (probe rootExecutionRuntimeOpeningCapabilityProbe) ExecutionRuntimeOpening(
 
 type rootRuntimeMetricsQueryCapabilityProbe struct {
 	query any
+}
+
+type rootRuntimeCostsQueryCapabilityProbe struct {
+	query any
+}
+
+func (probe rootRuntimeCostsQueryCapabilityProbe) RuntimeCostsQuery() any {
+	return probe.query
 }
 
 func (probe rootRuntimeMetricsQueryCapabilityProbe) RuntimeMetricsQuery() any {

@@ -349,6 +349,14 @@ func (fake *servicePeerFake) UpdateACPAgentProfile(
 	return operatorsettings.ACPAgentProfile{}, errors.New("characterization fake does not implement ACP Agent profile")
 }
 
+func (fake *servicePeerFake) UpdatePriceTable(
+	context.Context,
+	string,
+	operatorsettings.PriceTable,
+) (operatorsettings.PriceTable, error) {
+	return operatorsettings.PriceTable{}, errors.New("characterization fake does not implement price table")
+}
+
 func TestService_Characterization_FakeImplementsSingularSeam(t *testing.T) {
 	t.Parallel()
 

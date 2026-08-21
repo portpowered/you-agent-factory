@@ -18,6 +18,7 @@ var AdditionalCurrentRoots = []string{
 	"pkg/services/operator_settings",
 	"pkg/services/system_initialization",
 	"pkg/services/factory_visualization",
+	"pkg/services/costs",
 	"pkg/services/webhooks",
 	ProcessEdgesPackagePath,
 }

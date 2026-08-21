@@ -42,7 +42,8 @@ func TestRuntimeMetricsSinkOwnsVocabularyAndCorrelationProjection(t *testing.T) 
 	}
 	fields := Fields{
 		DispatchID: "dispatch-1", WorkID: "work-1", TraceID: "trace-1",
-		Workstation: "review", WorkerType: "agent", Provider: "codex",
+		Workstation: "review", WorkerType: "agent", WorkerSessionID: "worker-session-1",
+		Provider: "codex", Model: "model-1",
 		Outcome: "complete", Reason: "ok",
 	}
 	if err := sink.Sample(context.Background(), RuntimeDispatchDuration, 42.5, "ms", fields); err != nil {
@@ -61,7 +62,8 @@ func TestRuntimeMetricsSinkOwnsVocabularyAndCorrelationProjection(t *testing.T) 
 		SessionID: "~default", RuntimeInstanceID: "runtime-1",
 		FolderPath: "/factory/folder", FactoryDir: "/factory",
 		DispatchID: "dispatch-1", WorkID: "work-1", TraceID: "trace-1",
-		Workstation: "review", WorkerType: "agent", Provider: "codex",
+		Workstation: "review", WorkerType: "agent", WorkerSessionID: "worker-session-1",
+		Provider: "codex", Model: "model-1",
 		Outcome: "complete", Reason: "ok",
 	}
 	if !reflect.DeepEqual(record, want) {

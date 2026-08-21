@@ -193,6 +193,66 @@ func TestRootACPConfigurationAddsDeletesAndMaterializesDefaults(t *testing.T) {
 	}
 }
 
+func TestRootUpdatePriceTablePersistsAndPreservesUnrelatedSettings(t *testing.T) {
+	t.Parallel()
+
+	root := newFilesystemRoot(t, testCreateTemporaryFile)
+	path := filepath.Join(t.TempDir(), "config.json")
+	initial := `{
+  "backendScopeID": "local-11111111-1111-4111-8111-111111111111",
+  "defaults": {"workerModelProvider": "CODEX", "workerModel": "gpt-5"},
+  "models": {"llm": {"source": "hf://custom/gemma"}},
+  "runtime": {"logging": {"maxSizeMB": 11}, "metrics": {"maxSizeMB": 12}},
+  "workers": {"acp": {"integrations": [{"id":"entry-1","name":"cursor-acp","transport":"stdio","command":"cursor-agent acp"}]}},
+  "workerPresets": [{"id":"build","modelProvider":"CODEX","model":"gpt-5"}]
+}`
+	if err := os.WriteFile(path, []byte(initial), 0o600); err != nil {
+		t.Fatalf("WriteFile() = %v", err)
+	}
+
+	cached := "0"
+	updated, err := root.UpdatePriceTable(context.Background(), path, operatorsettings.PriceTable{
+		Currency: "USD",
+		Models: []operatorsettings.PriceTableModel{{
+			Provider: " openai ", Model: " gpt-5 ", InputPerMillionTokens: "1.25", OutputPerMillionTokens: "10",
+			CachedInputPerMillionTokens: &cached,
+		}},
+	})
+	if err != nil {
+		t.Fatalf("UpdatePriceTable() = %v", err)
+	}
+	if updated.Currency != operatorsettings.PriceTableCurrencyUSD {
+		t.Fatalf("updated price table currency = %q, want USD", updated.Currency)
+	}
+	if len(updated.Models) != 1 || updated.Models[0].Provider != "CODEX" {
+		t.Fatalf("updated price table = %#v, want normalized replacement", updated)
+	}
+
+	loaded, err := root.LoadDocument(operatorsettings.LoadDocumentRequest{Path: path})
+	if err != nil {
+		t.Fatalf("LoadDocument() = %v", err)
+	}
+	assertPreservedPriceTableSettings(t, loaded.Document)
+}
+
+func assertPreservedPriceTableSettings(t *testing.T, document operatorsettings.Document) {
+	t.Helper()
+	if document.BackendScopeID != "local-11111111-1111-4111-8111-111111111111" || document.Defaults.WorkerModel != "gpt-5" {
+		t.Fatalf("identity/defaults changed after update: %#v", document)
+	}
+	model := document.Models["llm"]
+	if model.Source == nil || *model.Source != "hf://custom/gemma" {
+		t.Fatalf("model overlay changed after update: %#v", document.Models)
+	}
+	if document.Runtime.Logging.MaxSizeMB != 11 || len(document.WorkerPresets) != 1 || len(document.Workers.ACP.Integrations) != 1 {
+		t.Fatalf("unrelated settings changed after update: %#v", document)
+	}
+	price := document.PriceTable.Models[0]
+	if price.InputPerMillionTokens != "1.25" || price.CachedInputPerMillionTokens == nil || *price.CachedInputPerMillionTokens != "0" {
+		t.Fatalf("persisted price table = %#v, want exact rates", document.PriceTable)
+	}
+}
+
 // newFilesystemRoot constructs a real-filesystem Operator Settings root Service
 // with the default codec, so tests can exercise persistence without
 // duplicating construction. See newFilesystemRootWithOptions for injecting

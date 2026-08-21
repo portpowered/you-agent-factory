@@ -14248,7 +14248,7 @@
           },
           "description": {
             "id": "you.metrics.description",
-            "canonicalEnglish": "Inspect recorded Factory Runtime metrics grouped by workstation, worker, or provider. Use --session to scope one Factory Session and --json for deterministic machine-readable output. Token and dispatch counts are reported with failure reasons and percentile latency; cost is reported as unavailable until a pricing source is configured."
+            "canonicalEnglish": "Inspect recorded Factory Runtime metrics grouped by workstation, worker, or provider. Use --session to scope one Factory Session and --json for deterministic machine-readable output. Use `you metrics costs` to query exact operator-configured runtime cost rollups from a running Factory API."
           }
         },
         "examples": [
@@ -14518,6 +14518,269 @@
       },
       "handler": {
         "id": "you.metrics.handler"
+      }
+    },
+    "you.metrics.costs": {
+      "id": "you.metrics.costs",
+      "name": "costs",
+      "path": "you metrics costs",
+      "aliases": [],
+      "completeness": "authoritative",
+      "documentation": {
+        "formatVersion": "1.0.0",
+        "itemId": "you.metrics.costs",
+        "documentation": {
+          "title": {
+            "id": "you.metrics.costs.title",
+            "canonicalEnglish": "Inspect runtime cost rollups"
+          },
+          "description": {
+            "id": "you.metrics.costs.description",
+            "canonicalEnglish": "Query exact operator-configured runtime cost rollups from the running Factory API. Use --session to select one Factory Session and --json for the API-shaped report. Missing prices remain visible as UNPRICED usage; this command does not fetch live vendor pricing or enforce billing."
+          }
+        },
+        "examples": [
+          "you metrics costs",
+          "you metrics costs --session session-123",
+          "you metrics costs --json"
+        ],
+        "visibility": "public",
+        "sourceHash": "0000000000000000000000000000000000000000000000000000000000000000"
+      },
+      "lifecycle": {
+        "formatVersion": "1.0.0",
+        "itemId": "you.metrics.costs",
+        "state": "active",
+        "since": "1.0.0"
+      },
+      "visibility": "visible",
+      "runnable": true,
+      "placement": "remote-only",
+      "usage": {
+        "line": "metrics costs",
+        "example": "  # Inspect exact cost rollups from the running Factory API.\n  you metrics costs\n\n  # Scope the report to one Factory Session.\n  you metrics costs --session session-123\n\n  # Emit the API-shaped report for automation.\n  you metrics costs --json"
+      },
+      "flags": {
+        "you.metrics.costs.flag.debug": {
+          "id": "you.metrics.costs.flag.debug",
+          "long": "debug",
+          "shorthand": "d",
+          "aliases": [],
+          "scope": "inherited",
+          "inheritedFromInputId": "you.flag.debug",
+          "valueType": "bool",
+          "required": false,
+          "default": "false",
+          "changedDefault": false,
+          "noOptionDefault": "true",
+          "repeatable": false,
+          "normalization": "",
+          "completion": "none",
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.metrics.costs.flag.debug",
+            "state": "active",
+            "since": "1.0.0"
+          }
+        },
+        "you.metrics.costs.flag.json": {
+          "id": "you.metrics.costs.flag.json",
+          "long": "json",
+          "shorthand": "",
+          "aliases": [],
+          "scope": "inherited",
+          "inheritedFromInputId": "you.flag.json",
+          "valueType": "bool",
+          "required": false,
+          "default": "false",
+          "changedDefault": false,
+          "noOptionDefault": "true",
+          "repeatable": false,
+          "normalization": "",
+          "completion": "none",
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.metrics.costs.flag.json",
+            "state": "active",
+            "since": "1.0.0"
+          }
+        },
+        "you.metrics.costs.flag.remote": {
+          "id": "you.metrics.costs.flag.remote",
+          "long": "remote",
+          "shorthand": "",
+          "aliases": [],
+          "scope": "inherited",
+          "inheritedFromInputId": "you.flag.remote",
+          "valueType": "bool",
+          "required": false,
+          "default": "false",
+          "changedDefault": false,
+          "noOptionDefault": "true",
+          "repeatable": false,
+          "normalization": "",
+          "completion": "none",
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.metrics.costs.flag.remote",
+            "state": "active",
+            "since": "1.0.0"
+          }
+        },
+        "you.metrics.costs.flag.server": {
+          "id": "you.metrics.costs.flag.server",
+          "long": "server",
+          "shorthand": "",
+          "aliases": [],
+          "scope": "inherited",
+          "inheritedFromInputId": "you.flag.server",
+          "valueType": "string",
+          "required": false,
+          "default": "http://localhost:7437",
+          "changedDefault": false,
+          "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "",
+          "completion": "none",
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.metrics.costs.flag.server",
+            "state": "active",
+            "since": "1.0.0"
+          }
+        },
+        "you.metrics.costs.flag.session": {
+          "id": "you.metrics.costs.flag.session",
+          "long": "session",
+          "usage": "limit costs to one Factory Session",
+          "shorthand": "",
+          "aliases": [],
+          "scope": "local",
+          "valueType": "string",
+          "required": false,
+          "default": "",
+          "changedDefault": false,
+          "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "trim",
+          "completion": "none",
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.metrics.costs.flag.session",
+            "state": "active",
+            "since": "1.0.0"
+          }
+        },
+        "you.metrics.costs.flag.verbose": {
+          "id": "you.metrics.costs.flag.verbose",
+          "long": "verbose",
+          "shorthand": "v",
+          "aliases": [],
+          "scope": "inherited",
+          "inheritedFromInputId": "you.flag.verbose",
+          "valueType": "bool",
+          "required": false,
+          "default": "false",
+          "changedDefault": false,
+          "noOptionDefault": "true",
+          "repeatable": false,
+          "normalization": "",
+          "completion": "none",
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.metrics.costs.flag.verbose",
+            "state": "active",
+            "since": "1.0.0"
+          }
+        }
+      },
+      "precedence": {
+        "order": [
+          "cli",
+          "stdin",
+          "environment",
+          "operator-config",
+          "manifest-default",
+          "factory-signature-default"
+        ],
+        "withinTier": {
+          "scalar": "last",
+          "repeated": "append"
+        },
+        "acrossTiers": "replace",
+        "multipleBindings": "reject"
+      },
+      "channels": {
+        "input": [
+          "cli",
+          "env",
+          "config",
+          "stdin"
+        ],
+        "output": [
+          "stdout",
+          "stderr"
+        ]
+      },
+      "outputs": {
+        "you.metrics.costs.output.human": {
+          "id": "you.metrics.costs.output.human",
+          "channel": "stdout",
+          "format": "text"
+        },
+        "you.metrics.costs.output.json": {
+          "id": "you.metrics.costs.output.json",
+          "channel": "stdout",
+          "format": "json"
+        }
+      },
+      "exits": {
+        "you.metrics.costs.exit.success": {
+          "id": "you.metrics.costs.exit.success",
+          "code": 0,
+          "kind": "success"
+        },
+        "you.metrics.costs.exit.failure": {
+          "id": "you.metrics.costs.exit.failure",
+          "code": 1,
+          "kind": "failure"
+        },
+        "you.metrics.costs.exit.usage": {
+          "id": "you.metrics.costs.exit.usage",
+          "code": 1,
+          "kind": "usage"
+        }
+      },
+      "sideEffects": {
+        "you.metrics.costs.side-effect.network": {
+          "id": "you.metrics.costs.side-effect.network",
+          "kind": "network"
+        }
+      },
+      "constraints": {
+        "runtime": [
+          "local"
+        ],
+        "platforms": [
+          "linux",
+          "darwin",
+          "windows"
+        ]
+      },
+      "handler": {
+        "id": "you.metrics.costs.handler"
       }
     },
     "you.providers": {

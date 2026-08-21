@@ -53,6 +53,7 @@ func requireEOF(decoder *json.Decoder) error {
 func mapConfig(generated factoryapi.GlobalConfig) (operatorsettings.Config, error) {
 	config := operatorsettings.Config{
 		BackendScopeID: optionalString(generated.BackendScopeID),
+		PriceTable:     operatorsettings.PriceTable{Currency: operatorsettings.PriceTableCurrencyUSD, Models: []operatorsettings.PriceTableModel{}},
 		Runtime:        defaultRuntimeSettings(),
 	}
 	if generated.Defaults != nil {
@@ -82,6 +83,13 @@ func mapConfig(generated factoryapi.GlobalConfig) (operatorsettings.Config, erro
 		if err != nil {
 			return operatorsettings.Config{}, err
 		}
+	}
+	if generated.PriceTable != nil {
+		priceTable, err := mapPriceTable(*generated.PriceTable)
+		if err != nil {
+			return operatorsettings.Config{}, err
+		}
+		config.PriceTable = priceTable
 	}
 	if generated.Workers != nil && generated.Workers.Acp != nil && generated.Workers.Acp.Integrations != nil {
 		config.Workers.ACP.Integrations = make([]operatorsettings.ACPIntegration, len(*generated.Workers.Acp.Integrations))
@@ -127,6 +135,33 @@ func mapConfig(generated factoryapi.GlobalConfig) (operatorsettings.Config, erro
 		}
 	}
 	return config, nil
+}
+
+func mapPriceTable(generated factoryapi.GlobalConfigPriceTable) (operatorsettings.PriceTable, error) {
+	if string(generated.Currency) == "" {
+		return operatorsettings.PriceTable{}, fmt.Errorf("priceTable.currency is required and must be USD")
+	}
+	if generated.Models == nil {
+		return operatorsettings.PriceTable{}, fmt.Errorf(
+			"priceTable.models is required; use an empty array when no prices are configured",
+		)
+	}
+	models := make([]operatorsettings.PriceTableModel, len(generated.Models))
+	for index, model := range generated.Models {
+		models[index] = operatorsettings.PriceTableModel{
+			Provider:                        model.Provider,
+			Model:                           model.Model,
+			InputPerMillionTokens:           model.InputPerMillionTokens,
+			OutputPerMillionTokens:          model.OutputPerMillionTokens,
+			CachedInputPerMillionTokens:     model.CachedInputPerMillionTokens,
+			ReasoningOutputPerMillionTokens: model.ReasoningOutputPerMillionTokens,
+		}
+	}
+	table, err := (operatorsettings.PriceTable{Currency: string(generated.Currency), Models: models}).Normalize()
+	if err != nil {
+		return operatorsettings.PriceTable{}, err
+	}
+	return table, nil
 }
 
 func defaultRuntimeSettings() operatorsettings.RuntimeSettings {
@@ -184,72 +219,114 @@ func Encode(config operatorsettings.Config) ([]byte, error) {
 	if err != nil {
 		return nil, fmt.Errorf("encode generated global config: %w", err)
 	}
-	config = normalized
-	generated := factoryapi.GlobalConfig{}
-	if scopeID := strings.TrimSpace(config.BackendScopeID); scopeID != "" {
-		generated.BackendScopeID = &scopeID
-	}
-	if config.Defaults != (operatorsettings.Defaults{}) {
-		generated.Defaults = &factoryapi.GlobalConfigDefaults{
-			WorkerModelProvider: optionalStringPointer(config.Defaults.WorkerModelProvider),
-			WorkerModel:         optionalStringPointer(config.Defaults.WorkerModel),
-		}
-	}
-	if config.Models != nil {
-		models := modelsToGenerated(config.Models)
-		generated.Models = &models
-	}
-	generated.Runtime = &factoryapi.GlobalConfigRuntime{
-		Logging: mapRuntimeArtifactSettingsToAPI(config.Runtime.Logging),
-		Metrics: mapRuntimeArtifactSettingsToAPI(config.Runtime.Metrics),
-	}
-	if config.Workers.ACP.Integrations != nil || config.Workers.ACP.AgentProfile != nil {
-		acp := &factoryapi.GlobalConfigACPSettings{}
-		if config.Workers.ACP.Integrations != nil {
-			integrations := make([]factoryapi.GlobalConfigACPIntegration, len(config.Workers.ACP.Integrations))
-			for index, integration := range config.Workers.ACP.Integrations {
-				integrations[index] = factoryapi.GlobalConfigACPIntegration{
-					Id: integration.ID, Name: integration.Name, Command: integration.Command,
-					Transport: factoryapi.GlobalConfigACPIntegrationTransport(integration.Transport),
-				}
-			}
-			acp.Integrations = &integrations
-		}
-		if config.Workers.ACP.AgentProfile != nil {
-			acp.AgentProfile = &factoryapi.GlobalConfigACPAgentProfile{
-				DefaultTarget: config.Workers.ACP.AgentProfile.DefaultTarget,
-			}
-			// Omit allowedTargets entirely for an unrestricted profile, so the
-			// encoded document round-trips back to unrestricted rather than to
-			// an empty array the schema would reject.
-			if !config.Workers.ACP.AgentProfile.IsUnrestricted() {
-				allowed := append([]string(nil), config.Workers.ACP.AgentProfile.AllowedTargets...)
-				acp.AgentProfile.AllowedTargets = &allowed
-			}
-		}
-		generated.Workers = &factoryapi.GlobalConfigWorkers{Acp: acp}
-	}
-	if config.WorkerPresets != nil {
-		presets := make([]factoryapi.GlobalConfigWorkerPreset, len(config.WorkerPresets))
-		for i, preset := range config.WorkerPresets {
-			presets[i] = factoryapi.GlobalConfigWorkerPreset{
-				Id:            preset.ID,
-				ModelProvider: factoryapi.GlobalConfigWorkerPresetModelProvider(preset.ModelProvider),
-				Model:         optionalStringPointer(preset.Model),
-			}
-			if preset.ReasoningEffort != "" {
-				effort := factoryapi.GlobalConfigWorkerPresetReasoningEffort(preset.ReasoningEffort)
-				presets[i].ReasoningEffort = &effort
-			}
-		}
-		generated.WorkerPresets = &presets
-	}
+	generated := encodeConfig(normalized)
 
 	payload, err := json.MarshalIndent(generated, "", "  ")
 	if err != nil {
 		return nil, fmt.Errorf("encode generated global config: %w", err)
 	}
 	return append(payload, '\n'), nil
+}
+
+func encodeConfig(config operatorsettings.Config) factoryapi.GlobalConfig {
+	generated := factoryapi.GlobalConfig{
+		PriceTable: encodePriceTable(config.PriceTable),
+		Runtime: &factoryapi.GlobalConfigRuntime{
+			Logging: mapRuntimeArtifactSettingsToAPI(config.Runtime.Logging),
+			Metrics: mapRuntimeArtifactSettingsToAPI(config.Runtime.Metrics),
+		},
+	}
+	generated.BackendScopeID = optionalStringPointer(strings.TrimSpace(config.BackendScopeID))
+	generated.Defaults = encodeDefaults(config.Defaults)
+	generated.Models = encodeModels(config.Models)
+	generated.Workers = encodeWorkers(config.Workers)
+	generated.WorkerPresets = encodeWorkerPresets(config.WorkerPresets)
+	return generated
+}
+
+func encodePriceTable(table operatorsettings.PriceTable) *factoryapi.GlobalConfigPriceTable {
+	models := make([]factoryapi.GlobalConfigPriceTableModel, len(table.Models))
+	for index, model := range table.Models {
+		models[index] = factoryapi.GlobalConfigPriceTableModel{
+			Provider:                        model.Provider,
+			Model:                           model.Model,
+			InputPerMillionTokens:           model.InputPerMillionTokens,
+			OutputPerMillionTokens:          model.OutputPerMillionTokens,
+			CachedInputPerMillionTokens:     model.CachedInputPerMillionTokens,
+			ReasoningOutputPerMillionTokens: model.ReasoningOutputPerMillionTokens,
+		}
+	}
+	return &factoryapi.GlobalConfigPriceTable{
+		Currency: factoryapi.GlobalConfigPriceTableCurrency(table.Currency),
+		Models:   models,
+	}
+}
+
+func encodeDefaults(defaults operatorsettings.Defaults) *factoryapi.GlobalConfigDefaults {
+	if defaults == (operatorsettings.Defaults{}) {
+		return nil
+	}
+	return &factoryapi.GlobalConfigDefaults{
+		WorkerModelProvider: optionalStringPointer(defaults.WorkerModelProvider),
+		WorkerModel:         optionalStringPointer(defaults.WorkerModel),
+	}
+}
+
+func encodeModels(models map[string]operatorsettings.ModelConfig) *factoryapi.GlobalConfigModels {
+	if models == nil {
+		return nil
+	}
+	generated := modelsToGenerated(models)
+	return &generated
+}
+
+func encodeWorkers(settings operatorsettings.WorkerSettings) *factoryapi.GlobalConfigWorkers {
+	if settings.ACP.Integrations == nil && settings.ACP.AgentProfile == nil {
+		return nil
+	}
+	acp := &factoryapi.GlobalConfigACPSettings{}
+	if settings.ACP.Integrations != nil {
+		integrations := make([]factoryapi.GlobalConfigACPIntegration, len(settings.ACP.Integrations))
+		for index, integration := range settings.ACP.Integrations {
+			integrations[index] = factoryapi.GlobalConfigACPIntegration{
+				Id: integration.ID, Name: integration.Name, Command: integration.Command,
+				Transport: factoryapi.GlobalConfigACPIntegrationTransport(integration.Transport),
+			}
+		}
+		acp.Integrations = &integrations
+	}
+	if settings.ACP.AgentProfile != nil {
+		acp.AgentProfile = encodeAgentProfile(*settings.ACP.AgentProfile)
+	}
+	return &factoryapi.GlobalConfigWorkers{Acp: acp}
+}
+
+func encodeAgentProfile(profile operatorsettings.ACPAgentProfile) *factoryapi.GlobalConfigACPAgentProfile {
+	encoded := &factoryapi.GlobalConfigACPAgentProfile{DefaultTarget: profile.DefaultTarget}
+	if !profile.IsUnrestricted() {
+		allowed := append([]string(nil), profile.AllowedTargets...)
+		encoded.AllowedTargets = &allowed
+	}
+	return encoded
+}
+
+func encodeWorkerPresets(values []operatorsettings.WorkerPreset) *[]factoryapi.GlobalConfigWorkerPreset {
+	if values == nil {
+		return nil
+	}
+	presets := make([]factoryapi.GlobalConfigWorkerPreset, len(values))
+	for index, preset := range values {
+		presets[index] = factoryapi.GlobalConfigWorkerPreset{
+			Id:            preset.ID,
+			ModelProvider: factoryapi.GlobalConfigWorkerPresetModelProvider(preset.ModelProvider),
+			Model:         optionalStringPointer(preset.Model),
+		}
+		if preset.ReasoningEffort != "" {
+			effort := factoryapi.GlobalConfigWorkerPresetReasoningEffort(preset.ReasoningEffort)
+			presets[index].ReasoningEffort = &effort
+		}
+	}
+	return &presets
 }
 
 func mapModels(generated factoryapi.GlobalConfigModels) map[string]operatorsettings.ModelConfig {

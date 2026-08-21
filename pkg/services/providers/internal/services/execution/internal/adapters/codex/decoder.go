@@ -52,10 +52,10 @@ type errorRecord struct {
 }
 
 type usageRecord struct {
-	InputTokens           int64 `json:"input_tokens"`
-	CachedInputTokens     int64 `json:"cached_input_tokens"`
-	OutputTokens          int64 `json:"output_tokens"`
-	ReasoningOutputTokens int64 `json:"reasoning_output_tokens"`
+	InputTokens           int64  `json:"input_tokens"`
+	CachedInputTokens     *int64 `json:"cached_input_tokens,omitempty"`
+	OutputTokens          int64  `json:"output_tokens"`
+	ReasoningOutputTokens *int64 `json:"reasoning_output_tokens,omitempty"`
 }
 
 type itemEnvelope struct {
@@ -213,6 +213,12 @@ func (decoder *decoder) diagnostics() *providers.ExecuteDiagnostics {
 	if decoder.usage != nil {
 		metadata[usageInputTokensMetadata] = strconv.FormatInt(decoder.usage.InputTokens, 10)
 		metadata[usageOutputTokensMetadata] = strconv.FormatInt(decoder.usage.OutputTokens, 10)
+		if decoder.usage.CachedInputTokens != nil {
+			metadata[usageCachedInputTokensMetadata] = strconv.FormatInt(*decoder.usage.CachedInputTokens, 10)
+		}
+		if decoder.usage.ReasoningOutputTokens != nil {
+			metadata[usageReasoningOutputTokensMetadata] = strconv.FormatInt(*decoder.usage.ReasoningOutputTokens, 10)
+		}
 	}
 	if decoder.transcriptFull {
 		metadata[inspectionTranscriptTruncatedMetadata] = "true"

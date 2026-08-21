@@ -25,9 +25,36 @@ tags:
     description: Worker Session observations correlated with Factory Work.
   - name: Models
     description: Model discovery and capability inspection for the current runtime.
+  - name: Metrics
+    description: Canonical runtime usage and exact operator-configured cost reports.
   - name: Workflows
     description: Stored workflow inspection.
 paths:
+  /metrics/costs:
+    get:
+      tags:
+        - Metrics
+      operationId: getMetricsCosts
+      summary: Get exact runtime cost rollups
+      description: Values canonical Factory Runtime usage with the operator's explicit price table. The default scope covers all Factory Sessions. Supplying an unknown-but-valid Factory Session ID returns a successful no-usage report for that scope rather than unrelated usage. Missing prices are returned as UNPRICED rows and are never treated as zero.
+      parameters:
+        - name: session_id
+          in: query
+          required: false
+          description: Optional Factory Session identity to scope the report.
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Exact cost report with priced and unpriced coverage.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CostsReport'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalError'
   /worker-sessions:
     get:
       tags:
@@ -3838,6 +3865,249 @@ components:
         streamGenerationId:
           type: string
           description: Durable Factory event-stream generation that issued the position.
+    CostsScope:
+      type: object
+      additionalProperties: false
+      required:
+        - kind
+      properties:
+        kind:
+          type: string
+          enum:
+            - ALL_FACTORY_SESSIONS
+            - FACTORY_SESSION
+          description: Selection scope used to produce the report.
+        factory_session_id:
+          type: string
+          description: Selected Factory Session identity when kind is FACTORY_SESSION.
+    CostsCoverage:
+      type: object
+      additionalProperties: false
+      required:
+        - encountered_rows
+        - priced_rows
+        - unpriced_rows
+        - encountered_provider_models
+        - priced_provider_models
+        - unpriced_provider_models
+      properties:
+        encountered_rows:
+          type: integer
+          minimum: 0
+          description: Number of canonical usage rows encountered in the selection.
+        priced_rows:
+          type: integer
+          minimum: 0
+          description: Number of usage rows that have a complete configured valuation.
+        unpriced_rows:
+          type: integer
+          minimum: 0
+          description: Number of usage rows returned as UNPRICED.
+        encountered_provider_models:
+          type: integer
+          minimum: 0
+          description: Distinct provider/model pairs encountered in the selection.
+        priced_provider_models:
+          type: integer
+          minimum: 0
+          description: Distinct provider/model pairs whose encountered rows are all priced.
+        unpriced_provider_models:
+          type: integer
+          minimum: 0
+          description: Distinct provider/model pairs with one or more unpriced rows.
+    CostsLineItem:
+      type: object
+      additionalProperties: false
+      required:
+        - status
+      properties:
+        factory_session_id:
+          type: string
+        work_id:
+          type: string
+        dispatch_id:
+          type: string
+        worker_session_id:
+          type: string
+        provider:
+          type: string
+        model:
+          type: string
+        input_tokens:
+          type: integer
+          format: int64
+          minimum: 0
+        output_tokens:
+          type: integer
+          format: int64
+          minimum: 0
+        cached_input_tokens:
+          type: integer
+          format: int64
+          minimum: 0
+        reasoning_output_tokens:
+          type: integer
+          format: int64
+          minimum: 0
+        status:
+          type: string
+          enum:
+            - PRICED
+            - UNPRICED
+          description: PRICED means every measured token class has a configured rate; UNPRICED means the row is retained with its tokens but cannot be fully valued.
+        priced_amount:
+          type: string
+          description: Exact USD decimal amount; absent for UNPRICED rows and present as "0" for explicitly free usage.
+        reason:
+          type: string
+          description: Actionable reason when status is UNPRICED.
+    CostsRollup:
+      type: object
+      additionalProperties: false
+      required:
+        - key
+        - status
+        - coverage
+      properties:
+        key:
+          type: string
+          description: Stable dimension key for this rollup.
+        input_tokens:
+          type: integer
+          format: int64
+          minimum: 0
+        output_tokens:
+          type: integer
+          format: int64
+          minimum: 0
+        cached_input_tokens:
+          type: integer
+          format: int64
+          minimum: 0
+        reasoning_output_tokens:
+          type: integer
+          format: int64
+          minimum: 0
+        status:
+          type: string
+          enum:
+            - PRICED
+            - PARTIAL
+            - UNPRICED
+            - NO_USAGE
+          description: PRICED means all usage rows in the rollup are valued; PARTIAL means some are valued; UNPRICED means usage exists but none is valued; NO_USAGE means no canonical usage rows were encountered.
+        priced_subtotal:
+          type: string
+          description: Exact USD decimal subtotal; absent when no usage is priced.
+        coverage:
+          $ref: '#/components/schemas/CostsCoverage'
+    CostsProviderModelRollup:
+      type: object
+      additionalProperties: false
+      required:
+        - provider
+        - model
+        - key
+        - status
+        - coverage
+      properties:
+        provider:
+          type: string
+          description: Canonical provider identity, when known.
+        model:
+          type: string
+          description: Exact resolved model identity, when known.
+        key:
+          type: string
+          description: Stable public provider/model pair key in the form provider/model.
+        input_tokens:
+          type: integer
+          format: int64
+          minimum: 0
+        output_tokens:
+          type: integer
+          format: int64
+          minimum: 0
+        cached_input_tokens:
+          type: integer
+          format: int64
+          minimum: 0
+        reasoning_output_tokens:
+          type: integer
+          format: int64
+          minimum: 0
+        status:
+          type: string
+          enum:
+            - PRICED
+            - PARTIAL
+            - UNPRICED
+            - NO_USAGE
+          description: PRICED means all usage rows for this provider/model are valued; PARTIAL means some are valued; UNPRICED means usage exists but none is valued; NO_USAGE means this pair has no usage rows.
+        priced_subtotal:
+          type: string
+          description: Exact USD decimal subtotal; absent when no usage is priced.
+        coverage:
+          $ref: '#/components/schemas/CostsCoverage'
+    CostsReport:
+      type: object
+      additionalProperties: false
+      required:
+        - scope
+        - currency
+        - status
+        - coverage
+        - line_items
+        - work_items
+        - worker_sessions
+        - provider_models
+        - factory_sessions
+      properties:
+        scope:
+          $ref: '#/components/schemas/CostsScope'
+        currency:
+          type: string
+          enum:
+            - USD
+          description: Currency of all configured rates and monetary amounts.
+        status:
+          type: string
+          enum:
+            - PRICED
+            - PARTIAL
+            - UNPRICED
+            - NO_USAGE
+          description: PRICED means every usage row is valued; PARTIAL means some rows are valued; UNPRICED means usage exists but none is valued; NO_USAGE means no canonical usage rows were encountered. Missing price is never represented as zero.
+        priced_subtotal:
+          type: string
+          description: Exact USD decimal subtotal for fully priced rows; absent when no row is priced.
+        coverage:
+          $ref: '#/components/schemas/CostsCoverage'
+        line_items:
+          type: array
+          description: Deterministically ordered canonical usage rows and their valuation status.
+          items:
+            $ref: '#/components/schemas/CostsLineItem'
+        work_items:
+          type: array
+          description: Rollups keyed by Work item identity.
+          items:
+            $ref: '#/components/schemas/CostsRollup'
+        worker_sessions:
+          type: array
+          description: Rollups keyed by Worker Session identity.
+          items:
+            $ref: '#/components/schemas/CostsRollup'
+        provider_models:
+          type: array
+          description: Rollups keyed by canonical provider/model pair.
+          items:
+            $ref: '#/components/schemas/CostsProviderModelRollup'
+        factory_sessions:
+          type: array
+          description: Rollups keyed by Factory Session identity.
+          items:
+            $ref: '#/components/schemas/CostsRollup'
     WorkerSessionProviderSessionRef:
       type: object
       additionalProperties: false
@@ -13560,6 +13830,8 @@ components:
           description: Stable identifier for the local provider-backed runtime boundary.
         defaults:
           $ref: '#/components/schemas/GlobalConfigDefaults'
+        priceTable:
+          $ref: '#/components/schemas/GlobalConfigPriceTable'
         runtime:
           $ref: '#/components/schemas/GlobalConfigRuntime'
         models:
@@ -13582,6 +13854,59 @@ components:
         workerModel:
           type: string
           description: Default worker model name.
+    GlobalConfigPriceTable:
+      type: object
+      additionalProperties: false
+      description: Operator-authored USD rates per one million tokens. Omit this property to use an empty table; no provider or model prices are supplied by default.
+      required:
+        - currency
+        - models
+      properties:
+        currency:
+          type: string
+          enum:
+            - USD
+          description: Currency used by every configured rate. This contract supports USD only.
+        models:
+          type: array
+          description: Deterministic provider/model price entries.
+          items:
+            $ref: '#/components/schemas/GlobalConfigPriceTableModel'
+    GlobalConfigPriceTableModel:
+      type: object
+      additionalProperties: false
+      description: Exact operator-authored rates for one provider and model identity.
+      required:
+        - provider
+        - model
+        - inputPerMillionTokens
+        - outputPerMillionTokens
+      properties:
+        provider:
+          type: string
+          minLength: 1
+          maxLength: 128
+          description: Canonical provider identity or a supported built-in alias; the Operator Settings decoder trims and canonicalizes this value.
+        model:
+          type: string
+          minLength: 1
+          description: Exact model identifier. It is trimmed but never guessed or aliased.
+        inputPerMillionTokens:
+          type: string
+          pattern: ^[0-9]+(?:\.[0-9]+)?$
+          description: Non-negative USD rate per one million uncached input tokens.
+        outputPerMillionTokens:
+          type: string
+          pattern: ^[0-9]+(?:\.[0-9]+)?$
+          description: Non-negative USD rate per one million non-reasoning output tokens.
+        cachedInputPerMillionTokens:
+          type: string
+          pattern: ^[0-9]+(?:\.[0-9]+)?$
+          description: Optional non-negative USD rate per one million cached input tokens.
+        reasoningOutputPerMillionTokens:
+          type: string
+          pattern: ^[0-9]+(?:\.[0-9]+)?$
+          description: Optional non-negative USD rate per one million reasoning output tokens.
     GlobalConfigRuntime:
       type: object
       additionalProperties: false

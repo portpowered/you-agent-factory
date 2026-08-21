@@ -13,7 +13,8 @@ func documentFromConfig(config operatorsettings.Config) operatorsettings.Documen
 			WorkerModelProvider: config.Defaults.WorkerModelProvider,
 			WorkerModel:         config.Defaults.WorkerModel,
 		},
-		Runtime: documentRuntimeFromConfig(config.Runtime),
+		PriceTable: config.PriceTable.Clone(),
+		Runtime:    documentRuntimeFromConfig(config.Runtime),
 		Workers: operatorsettings.DocumentWorkerSettings{ACP: operatorsettings.DocumentACPSettings{
 			Integrations: append([]operatorsettings.ACPIntegration(nil), config.Workers.ACP.Integrations...),
 			AgentProfile: cloneACPAgentProfilePointer(config.Workers.ACP.AgentProfile),
@@ -58,6 +59,7 @@ func configFromDocument(document operatorsettings.Document) operatorsettings.Con
 			WorkerModelProvider: document.Defaults.WorkerModelProvider,
 			WorkerModel:         document.Defaults.WorkerModel,
 		},
+		PriceTable: document.PriceTable.Clone(),
 		Runtime: operatorsettings.RuntimeSettings{
 			Logging: operatorsettings.RuntimeArtifactSettings(document.Runtime.Logging),
 			Metrics: operatorsettings.RuntimeArtifactSettings(document.Runtime.Metrics),

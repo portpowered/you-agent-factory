@@ -14,6 +14,7 @@ import (
 	platformbrowser "github.com/portpowered/infinite-you/pkg/platform/browser"
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
+	costscli "github.com/portpowered/infinite-you/pkg/services/costs/transports/cli"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorydefinitionscli "github.com/portpowered/infinite-you/pkg/services/factory_definitions/transports/cli"
 	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/transports/cli/cobracompletion"
@@ -182,6 +183,7 @@ type CommandOperations struct {
 	ACP                               acpcli.Operations
 	ACPServer                         acp.Server
 	RuntimeMetricsQuery               factoryvisualization.RuntimeMetricsQuery
+	CostsCLI                          costscli.Operation
 }
 
 // CommandFactory constructs a fresh Cobra tree for each invocation from
@@ -256,6 +258,7 @@ type CommandFactory struct {
 	acp                        acpcli.Operations
 	acpServer                  acp.Server
 	runtimeMetricsQuery        factoryvisualization.RuntimeMetricsQuery
+	costsCLI                   costscli.Operation
 }
 
 // NewCommandFactory copies the Wire-built graph without installing defaults.
@@ -326,6 +329,7 @@ func NewCommandFactory(operations CommandOperations) CommandFactory {
 		acp:                               operations.ACP,
 		acpServer:                         operations.ACPServer,
 		runtimeMetricsQuery:               operations.RuntimeMetricsQuery,
+		costsCLI:                          operations.CostsCLI,
 	}
 }
 

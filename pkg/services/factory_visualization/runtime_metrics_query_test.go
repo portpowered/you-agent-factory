@@ -486,6 +486,130 @@ func TestRuntimeMetricsQueryValidatesReaderAndRoot(t *testing.T) {
 	}
 }
 
+func TestRuntimeMetricsQueryBuildsDeterministicCorrelatedUsageRows(t *testing.T) {
+	t.Parallel()
+
+	reader := &runtimeMetricsReaderStub{records: []factoryvisualization.RuntimeMetricRecord{
+		usageMetricRecord("provider.input_tokens", 10, "session-a", "runtime-a", "work-a", "dispatch-a", "worker-session-a", "provider-a", "model-a"),
+		usageMetricRecord("provider.output_tokens", 6, "session-a", "runtime-a", "work-a", "dispatch-a", "worker-session-a", "provider-a", "model-a"),
+		usageMetricRecord("provider.cached_input_tokens", 3, "session-a", "runtime-a", "work-a", "dispatch-a", "worker-session-a", "provider-a", "model-a"),
+		usageMetricRecord("provider.reasoning_output_tokens", 2, "session-a", "runtime-a", "work-a", "dispatch-a", "worker-session-a", "provider-a", "model-a"),
+		usageMetricRecord("provider.input_tokens", 0, "session-b", "runtime-b", "work-b", "dispatch-b", "worker-session-b", "provider-b", "model-b"),
+		usageMetricRecord("provider.output_tokens", 4, "session-b", "runtime-b", "work-b", "dispatch-b", "worker-session-b", "provider-b", "model-b"),
+		usageMetricRecord("provider.cached_input_tokens", 0, "session-b", "runtime-b", "work-b", "dispatch-b", "worker-session-b", "provider-b", "model-b"),
+		usageMetricRecord("provider.reasoning_output_tokens", 1, "session-b", "runtime-b", "work-b", "dispatch-b", "worker-session-b", "provider-b", "model-b"),
+		usageMetricRecord("provider.input_tokens", 2, "session-a", "runtime-a", "", "", "", "", ""),
+		usageMetricRecord("provider.input_tokens", 99, "session-outside", "runtime-outside", "work-outside", "dispatch-outside", "worker-outside", "provider-outside", "model-outside"),
+	}}
+	query, err := factoryvisualizationwire.NewRuntimeMetricsQuery(reader, logging.NoopLogger{})
+	if err != nil {
+		t.Fatalf("NewRuntimeMetricsQuery() error = %v", err)
+	}
+
+	all, err := query.QueryRuntimeMetrics(context.Background(), factoryvisualization.RuntimeMetricsQueryRequest{MetricsRoot: t.TempDir()})
+	if err != nil {
+		t.Fatalf("QueryRuntimeMetrics(all) error = %v", err)
+	}
+	if len(all.UsageRows) != 4 {
+		t.Fatalf("usage rows = %#v, want four correlated rows", all.UsageRows)
+	}
+	assertLegacyUsageRow(t, all.UsageRows[0])
+	assertFullUsageRow(t, all.UsageRows[1])
+	assertZeroUsageRow(t, all.UsageRows[2])
+
+	sessionA, err := query.QueryRuntimeMetrics(context.Background(), factoryvisualization.RuntimeMetricsQueryRequest{
+		MetricsRoot: t.TempDir(), SessionID: "session-a",
+	})
+	if err != nil {
+		t.Fatalf("QueryRuntimeMetrics(session-a) error = %v", err)
+	}
+	if len(sessionA.UsageRows) != 2 || sessionA.Totals.InputTokens != 12 || sessionA.Totals.OutputTokens != 6 {
+		t.Fatalf("session-a result = %#v, want isolated usage rows and totals", sessionA)
+	}
+
+	runtimeB, err := query.QueryRuntimeMetrics(context.Background(), factoryvisualization.RuntimeMetricsQueryRequest{
+		MetricsRoot: t.TempDir(), RuntimeInstanceID: "runtime-b",
+	})
+	if err != nil {
+		t.Fatalf("QueryRuntimeMetrics(runtime-b) error = %v", err)
+	}
+	if len(runtimeB.UsageRows) != 1 || runtimeB.UsageRows[0].DispatchID != "dispatch-b" {
+		t.Fatalf("runtime-b rows = %#v, want only dispatch-b", runtimeB.UsageRows)
+	}
+}
+
+func assertLegacyUsageRow(t *testing.T, row factoryvisualization.RuntimeMetricsUsageRow) {
+	t.Helper()
+	if row.FactorySessionID != "session-a" || row.InputTokens == nil || *row.InputTokens != 2 {
+		t.Fatalf("legacy usage row = %#v, want session-a input 2", row)
+	}
+	if row.WorkID != "" || row.DispatchID != "" || row.WorkerSessionID != "" || row.Provider != "" || row.Model != "" {
+		t.Fatalf("legacy usage row = %#v, want identity absence preserved", row)
+	}
+}
+
+func assertFullUsageRow(t *testing.T, row factoryvisualization.RuntimeMetricsUsageRow) {
+	t.Helper()
+	if row.FactorySessionID != "session-a" || row.WorkID != "work-a" || row.DispatchID != "dispatch-a" ||
+		row.WorkerSessionID != "worker-session-a" || row.Provider != "provider-a" || row.Model != "model-a" {
+		t.Fatalf("full usage row identity = %#v, want correlated identity", row)
+	}
+	if row.InputTokens == nil || *row.InputTokens != 10 || row.OutputTokens == nil || *row.OutputTokens != 6 {
+		t.Fatalf("full usage row totals = %#v, want input 10 and output 6", row)
+	}
+	if row.CachedInputTokens == nil || *row.CachedInputTokens != 3 || row.ReasoningOutputTokens == nil || *row.ReasoningOutputTokens != 2 {
+		t.Fatalf("full usage row subclasses = %#v, want cached 3 and reasoning 2", row)
+	}
+}
+
+func assertZeroUsageRow(t *testing.T, row factoryvisualization.RuntimeMetricsUsageRow) {
+	t.Helper()
+	if row.InputTokens == nil || *row.InputTokens != 0 || row.OutputTokens == nil || *row.OutputTokens != 4 {
+		t.Fatalf("zero usage row totals = %#v, want input zero and output 4", row)
+	}
+	if row.CachedInputTokens == nil || *row.CachedInputTokens != 0 || row.ReasoningOutputTokens == nil || *row.ReasoningOutputTokens != 1 {
+		t.Fatalf("zero usage row subclasses = %#v, want cached zero and reasoning 1", row)
+	}
+}
+
+func TestRuntimeMetricsQueryRejectsMalformedUsageSubclasses(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name    string
+		records []factoryvisualization.RuntimeMetricRecord
+	}{
+		{
+			name: "cached exceeds input",
+			records: []factoryvisualization.RuntimeMetricRecord{
+				usageMetricRecord("provider.input_tokens", 2, "session", "runtime", "work", "dispatch", "worker", "provider", "model"),
+				usageMetricRecord("provider.cached_input_tokens", 3, "session", "runtime", "work", "dispatch", "worker", "provider", "model"),
+			},
+		},
+		{
+			name: "fractional token value",
+			records: []factoryvisualization.RuntimeMetricRecord{
+				usageMetricRecord("provider.input_tokens", 1.5, "session", "runtime", "work", "dispatch", "worker", "provider", "model"),
+			},
+		},
+	}
+	for _, testCase := range cases {
+		testCase := testCase
+		t.Run(testCase.name, func(t *testing.T) {
+			reader := &runtimeMetricsReaderStub{records: testCase.records}
+			query, err := factoryvisualizationwire.NewRuntimeMetricsQuery(reader, logging.NoopLogger{})
+			if err != nil {
+				t.Fatalf("NewRuntimeMetricsQuery() error = %v", err)
+			}
+			_, err = query.QueryRuntimeMetrics(context.Background(), factoryvisualization.RuntimeMetricsQueryRequest{MetricsRoot: t.TempDir()})
+			var queryErr *factoryvisualization.RuntimeMetricsQueryError
+			if !errors.As(err, &queryErr) || queryErr.Kind != factoryvisualization.RuntimeMetricsQueryInvalidUsage {
+				t.Fatalf("query error = %v, want typed invalid usage", err)
+			}
+		})
+	}
+}
+
 func writeRuntimeMetricsJSONL(
 	t *testing.T,
 	path string,
@@ -573,6 +697,25 @@ func metricRecord(
 		"reason":              reason,
 		"unit":                unit,
 	}
+}
+
+func usageMetricRecord(
+	name string,
+	value float64,
+	sessionID string,
+	runtimeID string,
+	workID string,
+	dispatchID string,
+	workerSessionID string,
+	provider string,
+	model string,
+) factoryvisualization.RuntimeMetricRecord {
+	record := metricRecord(name, value, sessionID, runtimeID, "", "", provider, "", "tokens")
+	record["work_id"] = workID
+	record["dispatch_id"] = dispatchID
+	record["worker_session_id"] = workerSessionID
+	record["model"] = model
+	return record
 }
 
 func assertDuration(t *testing.T, duration *factoryvisualization.RuntimeMetricsDuration, wantP50, wantP95 float64, wantSamples int, wantUnit string) {

@@ -46,6 +46,47 @@ const (
 	UNKNOWN      CheckpointResumabilityStatus = "UNKNOWN"
 )
 
+// Defines values for CostsLineItemStatus.
+const (
+	CostsLineItemStatusPRICED   CostsLineItemStatus = "PRICED"
+	CostsLineItemStatusUNPRICED CostsLineItemStatus = "UNPRICED"
+)
+
+// Defines values for CostsProviderModelRollupStatus.
+const (
+	CostsProviderModelRollupStatusNOUSAGE  CostsProviderModelRollupStatus = "NO_USAGE"
+	CostsProviderModelRollupStatusPARTIAL  CostsProviderModelRollupStatus = "PARTIAL"
+	CostsProviderModelRollupStatusPRICED   CostsProviderModelRollupStatus = "PRICED"
+	CostsProviderModelRollupStatusUNPRICED CostsProviderModelRollupStatus = "UNPRICED"
+)
+
+// Defines values for CostsReportCurrency.
+const (
+	CostsReportCurrencyUSD CostsReportCurrency = "USD"
+)
+
+// Defines values for CostsReportStatus.
+const (
+	CostsReportStatusNOUSAGE  CostsReportStatus = "NO_USAGE"
+	CostsReportStatusPARTIAL  CostsReportStatus = "PARTIAL"
+	CostsReportStatusPRICED   CostsReportStatus = "PRICED"
+	CostsReportStatusUNPRICED CostsReportStatus = "UNPRICED"
+)
+
+// Defines values for CostsRollupStatus.
+const (
+	CostsRollupStatusNOUSAGE  CostsRollupStatus = "NO_USAGE"
+	CostsRollupStatusPARTIAL  CostsRollupStatus = "PARTIAL"
+	CostsRollupStatusPRICED   CostsRollupStatus = "PRICED"
+	CostsRollupStatusUNPRICED CostsRollupStatus = "UNPRICED"
+)
+
+// Defines values for CostsScopeKind.
+const (
+	ALLFACTORYSESSIONS CostsScopeKind = "ALL_FACTORY_SESSIONS"
+	FACTORYSESSION     CostsScopeKind = "FACTORY_SESSION"
+)
+
 // Defines values for DispatchReconciliationSource.
 const (
 	DURABLESTATE      DispatchReconciliationSource = "DURABLE_STATE"
@@ -695,6 +736,11 @@ const (
 	EMBED GlobalConfigModelOperation = "EMBED"
 	OMNI  GlobalConfigModelOperation = "OMNI"
 	TTS   GlobalConfigModelOperation = "TTS"
+)
+
+// Defines values for GlobalConfigPriceTableCurrency.
+const (
+	GlobalConfigPriceTableCurrencyUSD GlobalConfigPriceTableCurrency = "USD"
 )
 
 // Defines values for GuardType.
@@ -1587,6 +1633,149 @@ type CommandDiagnostic struct {
 	TimedOut      *bool      `json:"timedOut,omitempty"`
 	WorkingDir    *string    `json:"workingDir,omitempty"`
 }
+
+// CostsCoverage defines model for CostsCoverage.
+type CostsCoverage struct {
+	// EncounteredProviderModels Distinct provider/model pairs encountered in the selection.
+	EncounteredProviderModels int `json:"encountered_provider_models"`
+
+	// EncounteredRows Number of canonical usage rows encountered in the selection.
+	EncounteredRows int `json:"encountered_rows"`
+
+	// PricedProviderModels Distinct provider/model pairs whose encountered rows are all priced.
+	PricedProviderModels int `json:"priced_provider_models"`
+
+	// PricedRows Number of usage rows that have a complete configured valuation.
+	PricedRows int `json:"priced_rows"`
+
+	// UnpricedProviderModels Distinct provider/model pairs with one or more unpriced rows.
+	UnpricedProviderModels int `json:"unpriced_provider_models"`
+
+	// UnpricedRows Number of usage rows returned as UNPRICED.
+	UnpricedRows int `json:"unpriced_rows"`
+}
+
+// CostsLineItem defines model for CostsLineItem.
+type CostsLineItem struct {
+	CachedInputTokens *int64  `json:"cached_input_tokens,omitempty"`
+	DispatchId        *string `json:"dispatch_id,omitempty"`
+	FactorySessionId  *string `json:"factory_session_id,omitempty"`
+	InputTokens       *int64  `json:"input_tokens,omitempty"`
+	Model             *string `json:"model,omitempty"`
+	OutputTokens      *int64  `json:"output_tokens,omitempty"`
+
+	// PricedAmount Exact USD decimal amount; absent for UNPRICED rows and present as "0" for explicitly free usage.
+	PricedAmount *string `json:"priced_amount,omitempty"`
+	Provider     *string `json:"provider,omitempty"`
+
+	// Reason Actionable reason when status is UNPRICED.
+	Reason                *string `json:"reason,omitempty"`
+	ReasoningOutputTokens *int64  `json:"reasoning_output_tokens,omitempty"`
+
+	// Status PRICED means every measured token class has a configured rate; UNPRICED means the row is retained with its tokens but cannot be fully valued.
+	Status          CostsLineItemStatus `json:"status"`
+	WorkId          *string             `json:"work_id,omitempty"`
+	WorkerSessionId *string             `json:"worker_session_id,omitempty"`
+}
+
+// CostsLineItemStatus PRICED means every measured token class has a configured rate; UNPRICED means the row is retained with its tokens but cannot be fully valued.
+type CostsLineItemStatus string
+
+// CostsProviderModelRollup defines model for CostsProviderModelRollup.
+type CostsProviderModelRollup struct {
+	CachedInputTokens *int64        `json:"cached_input_tokens,omitempty"`
+	Coverage          CostsCoverage `json:"coverage"`
+	InputTokens       *int64        `json:"input_tokens,omitempty"`
+
+	// Key Stable public provider/model pair key in the form provider/model.
+	Key string `json:"key"`
+
+	// Model Exact resolved model identity, when known.
+	Model        string `json:"model"`
+	OutputTokens *int64 `json:"output_tokens,omitempty"`
+
+	// PricedSubtotal Exact USD decimal subtotal; absent when no usage is priced.
+	PricedSubtotal *string `json:"priced_subtotal,omitempty"`
+
+	// Provider Canonical provider identity, when known.
+	Provider              string `json:"provider"`
+	ReasoningOutputTokens *int64 `json:"reasoning_output_tokens,omitempty"`
+
+	// Status PRICED means all usage rows for this provider/model are valued; PARTIAL means some are valued; UNPRICED means usage exists but none is valued; NO_USAGE means this pair has no usage rows.
+	Status CostsProviderModelRollupStatus `json:"status"`
+}
+
+// CostsProviderModelRollupStatus PRICED means all usage rows for this provider/model are valued; PARTIAL means some are valued; UNPRICED means usage exists but none is valued; NO_USAGE means this pair has no usage rows.
+type CostsProviderModelRollupStatus string
+
+// CostsReport defines model for CostsReport.
+type CostsReport struct {
+	Coverage CostsCoverage `json:"coverage"`
+
+	// Currency Currency of all configured rates and monetary amounts.
+	Currency CostsReportCurrency `json:"currency"`
+
+	// FactorySessions Rollups keyed by Factory Session identity.
+	FactorySessions []CostsRollup `json:"factory_sessions"`
+
+	// LineItems Deterministically ordered canonical usage rows and their valuation status.
+	LineItems []CostsLineItem `json:"line_items"`
+
+	// PricedSubtotal Exact USD decimal subtotal for fully priced rows; absent when no row is priced.
+	PricedSubtotal *string `json:"priced_subtotal,omitempty"`
+
+	// ProviderModels Rollups keyed by canonical provider/model pair.
+	ProviderModels []CostsProviderModelRollup `json:"provider_models"`
+	Scope          CostsScope                 `json:"scope"`
+
+	// Status PRICED means every usage row is valued; PARTIAL means some rows are valued; UNPRICED means usage exists but none is valued; NO_USAGE means no canonical usage rows were encountered. Missing price is never represented as zero.
+	Status CostsReportStatus `json:"status"`
+
+	// WorkItems Rollups keyed by Work item identity.
+	WorkItems []CostsRollup `json:"work_items"`
+
+	// WorkerSessions Rollups keyed by Worker Session identity.
+	WorkerSessions []CostsRollup `json:"worker_sessions"`
+}
+
+// CostsReportCurrency Currency of all configured rates and monetary amounts.
+type CostsReportCurrency string
+
+// CostsReportStatus PRICED means every usage row is valued; PARTIAL means some rows are valued; UNPRICED means usage exists but none is valued; NO_USAGE means no canonical usage rows were encountered. Missing price is never represented as zero.
+type CostsReportStatus string
+
+// CostsRollup defines model for CostsRollup.
+type CostsRollup struct {
+	CachedInputTokens *int64        `json:"cached_input_tokens,omitempty"`
+	Coverage          CostsCoverage `json:"coverage"`
+	InputTokens       *int64        `json:"input_tokens,omitempty"`
+
+	// Key Stable dimension key for this rollup.
+	Key          string `json:"key"`
+	OutputTokens *int64 `json:"output_tokens,omitempty"`
+
+	// PricedSubtotal Exact USD decimal subtotal; absent when no usage is priced.
+	PricedSubtotal        *string `json:"priced_subtotal,omitempty"`
+	ReasoningOutputTokens *int64  `json:"reasoning_output_tokens,omitempty"`
+
+	// Status PRICED means all usage rows in the rollup are valued; PARTIAL means some are valued; UNPRICED means usage exists but none is valued; NO_USAGE means no canonical usage rows were encountered.
+	Status CostsRollupStatus `json:"status"`
+}
+
+// CostsRollupStatus PRICED means all usage rows in the rollup are valued; PARTIAL means some are valued; UNPRICED means usage exists but none is valued; NO_USAGE means no canonical usage rows were encountered.
+type CostsRollupStatus string
+
+// CostsScope defines model for CostsScope.
+type CostsScope struct {
+	// FactorySessionId Selected Factory Session identity when kind is FACTORY_SESSION.
+	FactorySessionId *string `json:"factory_session_id,omitempty"`
+
+	// Kind Selection scope used to produce the report.
+	Kind CostsScopeKind `json:"kind"`
+}
+
+// CostsScopeKind Selection scope used to produce the report.
+type CostsScopeKind string
 
 // Diagnostics defines model for Diagnostics.
 type Diagnostics struct {
@@ -4970,6 +5159,9 @@ type GlobalConfig struct {
 	// Models Optional operator model overlays keyed by model name. A model entry may override one or more built-in fields or fully describe a new model name.
 	Models *GlobalConfigModels `json:"models,omitempty"`
 
+	// PriceTable Operator-authored USD rates per one million tokens. Omit this property to use an empty table; no provider or model prices are supplied by default.
+	PriceTable *GlobalConfigPriceTable `json:"priceTable,omitempty"`
+
 	// Runtime Runtime observability settings loaded from operator configuration before command-line overrides.
 	Runtime *GlobalConfigRuntime `json:"runtime,omitempty"`
 
@@ -5045,6 +5237,39 @@ type GlobalConfigModelOperation string
 
 // GlobalConfigModels Optional operator model overlays keyed by model name. A model entry may override one or more built-in fields or fully describe a new model name.
 type GlobalConfigModels map[string]GlobalConfigModel
+
+// GlobalConfigPriceTable Operator-authored USD rates per one million tokens. Omit this property to use an empty table; no provider or model prices are supplied by default.
+type GlobalConfigPriceTable struct {
+	// Currency Currency used by every configured rate. This contract supports USD only.
+	Currency GlobalConfigPriceTableCurrency `json:"currency"`
+
+	// Models Deterministic provider/model price entries.
+	Models []GlobalConfigPriceTableModel `json:"models"`
+}
+
+// GlobalConfigPriceTableCurrency Currency used by every configured rate. This contract supports USD only.
+type GlobalConfigPriceTableCurrency string
+
+// GlobalConfigPriceTableModel Exact operator-authored rates for one provider and model identity.
+type GlobalConfigPriceTableModel struct {
+	// CachedInputPerMillionTokens Optional non-negative USD rate per one million cached input tokens.
+	CachedInputPerMillionTokens *string `json:"cachedInputPerMillionTokens,omitempty"`
+
+	// InputPerMillionTokens Non-negative USD rate per one million uncached input tokens.
+	InputPerMillionTokens string `json:"inputPerMillionTokens"`
+
+	// Model Exact model identifier. It is trimmed but never guessed or aliased.
+	Model string `json:"model"`
+
+	// OutputPerMillionTokens Non-negative USD rate per one million non-reasoning output tokens.
+	OutputPerMillionTokens string `json:"outputPerMillionTokens"`
+
+	// Provider Canonical provider identity or a supported built-in alias; the Operator Settings decoder trims and canonicalizes this value.
+	Provider string `json:"provider"`
+
+	// ReasoningOutputPerMillionTokens Optional non-negative USD rate per one million reasoning output tokens.
+	ReasoningOutputPerMillionTokens *string `json:"reasoningOutputPerMillionTokens,omitempty"`
+}
 
 // GlobalConfigRuntime Runtime observability settings loaded from operator configuration before command-line overrides.
 type GlobalConfigRuntime struct {
@@ -9138,6 +9363,12 @@ type StreamWorkerSessionEventsByWorkerSessionIdParams struct {
 	StreamGenerationId *WorkerSessionStreamGenerationID `form:"stream_generation_id,omitempty" json:"stream_generation_id,omitempty"`
 }
 
+// GetMetricsCostsParams defines parameters for GetMetricsCosts.
+type GetMetricsCostsParams struct {
+	// SessionId Optional Factory Session identity to scope the report.
+	SessionId *string `form:"session_id,omitempty" json:"session_id,omitempty"`
+}
+
 // Getter for additional properties for FactorySessionEffectivePolicy. Returns the specified
 // element and whether it was found
 func (a FactorySessionEffectivePolicy) Get(fieldName string) (value interface{}, found bool) {
@@ -12542,6 +12773,9 @@ type ClientInterface interface {
 	// StreamWorkerSessionEventsByWorkerSessionId request
 	StreamWorkerSessionEventsByWorkerSessionId(ctx context.Context, sessionId SessionID, workerSessionId WorkerSessionID, params *StreamWorkerSessionEventsByWorkerSessionIdParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// GetMetricsCosts request
+	GetMetricsCosts(ctx context.Context, params *GetMetricsCostsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// GetStatus request
 	GetStatus(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
 
@@ -12578,6 +12812,18 @@ func (c *Client) GetFactoryResponseEventsBySessionId(ctx context.Context, sessio
 
 func (c *Client) StreamWorkerSessionEventsByWorkerSessionId(ctx context.Context, sessionId SessionID, workerSessionId WorkerSessionID, params *StreamWorkerSessionEventsByWorkerSessionIdParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewStreamWorkerSessionEventsByWorkerSessionIdRequest(c.Server, sessionId, workerSessionId, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) GetMetricsCosts(ctx context.Context, params *GetMetricsCostsParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetMetricsCostsRequest(c.Server, params)
 	if err != nil {
 		return nil, err
 	}
@@ -12895,6 +13141,55 @@ func NewStreamWorkerSessionEventsByWorkerSessionIdRequest(server string, session
 	return req, nil
 }
 
+// NewGetMetricsCostsRequest generates requests for GetMetricsCosts
+func NewGetMetricsCostsRequest(server string, params *GetMetricsCostsParams) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/metrics/costs")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		queryValues := queryURL.Query()
+
+		if params.SessionId != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "session_id", runtime.ParamLocationQuery, *params.SessionId); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		queryURL.RawQuery = queryValues.Encode()
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 // NewGetStatusRequest generates requests for GetStatus
 func NewGetStatusRequest(server string) (*http.Request, error) {
 	var err error
@@ -13042,6 +13337,9 @@ type ClientWithResponsesInterface interface {
 	// StreamWorkerSessionEventsByWorkerSessionIdWithResponse request
 	StreamWorkerSessionEventsByWorkerSessionIdWithResponse(ctx context.Context, sessionId SessionID, workerSessionId WorkerSessionID, params *StreamWorkerSessionEventsByWorkerSessionIdParams, reqEditors ...RequestEditorFn) (*StreamWorkerSessionEventsByWorkerSessionIdClientResponse, error)
 
+	// GetMetricsCostsWithResponse request
+	GetMetricsCostsWithResponse(ctx context.Context, params *GetMetricsCostsParams, reqEditors ...RequestEditorFn) (*GetMetricsCostsClientResponse, error)
+
 	// GetStatusWithResponse request
 	GetStatusWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetStatusClientResponse, error)
 
@@ -13121,6 +13419,30 @@ func (r StreamWorkerSessionEventsByWorkerSessionIdClientResponse) Status() strin
 
 // StatusCode returns HTTPResponse.StatusCode
 func (r StreamWorkerSessionEventsByWorkerSessionIdClientResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type GetMetricsCostsClientResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *CostsReport
+	JSON400      *BadRequest
+	JSON500      *InternalError
+}
+
+// Status returns HTTPResponse.Status
+func (r GetMetricsCostsClientResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetMetricsCostsClientResponse) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
@@ -13226,6 +13548,15 @@ func (c *ClientWithResponses) StreamWorkerSessionEventsByWorkerSessionIdWithResp
 		return nil, err
 	}
 	return ParseStreamWorkerSessionEventsByWorkerSessionIdClientResponse(rsp)
+}
+
+// GetMetricsCostsWithResponse request returning *GetMetricsCostsClientResponse
+func (c *ClientWithResponses) GetMetricsCostsWithResponse(ctx context.Context, params *GetMetricsCostsParams, reqEditors ...RequestEditorFn) (*GetMetricsCostsClientResponse, error) {
+	rsp, err := c.GetMetricsCosts(ctx, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetMetricsCostsClientResponse(rsp)
 }
 
 // GetStatusWithResponse request returning *GetStatusClientResponse
@@ -13393,6 +13724,46 @@ func ParseStreamWorkerSessionEventsByWorkerSessionIdClientResponse(rsp *http.Res
 			return nil, err
 		}
 		response.JSON503 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetMetricsCostsClientResponse parses an HTTP response from a GetMetricsCostsWithResponse call
+func ParseGetMetricsCostsClientResponse(rsp *http.Response) (*GetMetricsCostsClientResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetMetricsCostsClientResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest CostsReport
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest BadRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 500:
+		var dest InternalError
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON500 = &dest
 
 	}
 

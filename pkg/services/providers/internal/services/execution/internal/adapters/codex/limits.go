@@ -32,7 +32,9 @@ const (
 	inspectionRetainedTextTruncatedMetadata = "inspection_retained_text_truncated"
 	inspectionRecordsSkippedMetadata        = "inspection_records_skipped"
 	usageInputTokensMetadata                = "input_tokens"
+	usageCachedInputTokensMetadata          = "cached_input_tokens"
 	usageOutputTokensMetadata               = "output_tokens"
+	usageReasoningOutputTokensMetadata      = "reasoning_output_tokens"
 )
 
 type streamLimit struct {

@@ -25,9 +25,41 @@ tags:
     description: Worker Session observations correlated with Factory Work.
   - name: Models
     description: Model discovery and capability inspection for the current runtime.
+  - name: Metrics
+    description: Canonical runtime usage and exact operator-configured cost reports.
   - name: Workflows
     description: Stored workflow inspection.
 paths:
+  /metrics/costs:
+    get:
+      tags:
+        - Metrics
+      operationId: getMetricsCosts
+      summary: Get exact runtime cost rollups
+      description: >-
+        Values canonical Factory Runtime usage with the operator's explicit
+        price table. The default scope covers all Factory Sessions. Supplying
+        an unknown-but-valid Factory Session ID returns a successful no-usage
+        report for that scope rather than unrelated usage. Missing prices are
+        returned as UNPRICED rows and are never treated as zero.
+      parameters:
+        - name: session_id
+          in: query
+          required: false
+          description: Optional Factory Session identity to scope the report.
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Exact cost report with priced and unpriced coverage.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CostsReport'
+        '400':
+          $ref: './components/responses/BadRequest.yaml'
+        '500':
+          $ref: './components/responses/InternalError.yaml'
   /worker-sessions:
     get:
       tags:
@@ -2489,6 +2521,18 @@ components:
       $ref: './components/schemas/api/WorkerSessionEventRecord.yaml'
     WorkerSessionEventCursor:
       $ref: './components/schemas/api/WorkerSessionEventCursor.yaml'
+    CostsScope:
+      $ref: './components/schemas/api/CostsScope.yaml'
+    CostsCoverage:
+      $ref: './components/schemas/api/CostsCoverage.yaml'
+    CostsLineItem:
+      $ref: './components/schemas/api/CostsLineItem.yaml'
+    CostsRollup:
+      $ref: './components/schemas/api/CostsRollup.yaml'
+    CostsProviderModelRollup:
+      $ref: './components/schemas/api/CostsProviderModelRollup.yaml'
+    CostsReport:
+      $ref: './components/schemas/api/CostsReport.yaml'
     WorkerSessionProviderSessionRef:
       $ref: './components/schemas/api/WorkerSessionProviderSessionRef.yaml'
     WorkerSessionFailure:
@@ -3339,6 +3383,10 @@ components:
       $ref: './components/schemas/api/GlobalConfig.yaml'
     GlobalConfigDefaults:
       $ref: './components/schemas/api/GlobalConfigDefaults.yaml'
+    GlobalConfigPriceTable:
+      $ref: './components/schemas/api/GlobalConfigPriceTable.yaml'
+    GlobalConfigPriceTableModel:
+      $ref: './components/schemas/api/GlobalConfigPriceTableModel.yaml'
     GlobalConfigRuntime:
       $ref: './components/schemas/api/GlobalConfigRuntime.yaml'
     GlobalConfigRuntimeArtifactSettings:

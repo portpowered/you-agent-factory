@@ -29,7 +29,9 @@ type RuntimeMetricRecord struct {
 	TraceID           string  `json:"trace_id,omitempty"`
 	Workstation       string  `json:"workstation,omitempty"`
 	WorkerType        string  `json:"worker_type,omitempty"`
+	WorkerSessionID   string  `json:"worker_session_id,omitempty"`
 	Provider          string  `json:"provider,omitempty"`
+	Model             string  `json:"model,omitempty"`
 	Outcome           string  `json:"outcome,omitempty"`
 	Reason            string  `json:"reason,omitempty"`
 }
@@ -156,7 +158,9 @@ func (s *projectedRuntimeMetricsSink) emit(
 		TraceID:           fields.TraceID,
 		Workstation:       fields.Workstation,
 		WorkerType:        fields.WorkerType,
+		WorkerSessionID:   fields.WorkerSessionID,
 		Provider:          fields.Provider,
+		Model:             fields.Model,
 		Outcome:           fields.Outcome,
 		Reason:            fields.Reason,
 	})

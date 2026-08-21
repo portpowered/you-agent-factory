@@ -33,7 +33,7 @@ concept owners below when you need the complete customer-facing contract.
 | `operations` | Real-pipeline lifetime, finite-drain classification, and same-name restart recovery | [Operations](operations.md) |
 | `work` | Submitted work: session-scoped work routes, tags, and batch cross-links | [Submitted work](work.md) |
 | `sessions` | Session list, session show, pause and resume, factory query, status API, dashboard, and run modes | [Sessions](sessions.md) |
-| `metrics` | Factory Runtime token, dispatch, failure, and latency metrics with deterministic grouping and Factory Session scope | [Metrics](metrics.md) |
+| `metrics` | Factory Runtime metrics and exact operator-configured cost rollups with deterministic grouping, coverage, and Factory Session scope | [Metrics](metrics.md) |
 | `orchestrators` | Factory orchestrator identity, FactorySession runtime nouns, dispatch/artifact/event aliases | [Orchestrators](orchestrators.md) |
 | `javascript-workflows` | Supported JavaScript authoring, equivalent CLI/API/MCP execution, worker presets, host boundaries, and runnable examples | [JavaScript workflows](javascript-workflows.md) |
 | `mcp` | `you mcp serve` host setup, backing modes, first-use smoke, and troubleshooting | [MCP host setup](mcp.md) |

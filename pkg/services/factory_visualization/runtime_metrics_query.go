@@ -86,6 +86,23 @@ type RuntimeMetricsBreakdown struct {
 	Aggregate RuntimeMetricsAggregate `json:"aggregate"`
 }
 
+// RuntimeMetricsUsageRow is one correlated, priceable provider usage record.
+// Token pointers preserve a reported zero separately from a measurement that
+// was not present in the source artifact. Empty identity fields are retained
+// as empty values for legacy artifacts that predate that correlation fact.
+type RuntimeMetricsUsageRow struct {
+	FactorySessionID      string `json:"factory_session_id,omitempty"`
+	WorkID                string `json:"work_id,omitempty"`
+	DispatchID            string `json:"dispatch_id,omitempty"`
+	WorkerSessionID       string `json:"worker_session_id,omitempty"`
+	Provider              string `json:"provider,omitempty"`
+	Model                 string `json:"model,omitempty"`
+	InputTokens           *int64 `json:"input_tokens,omitempty"`
+	OutputTokens          *int64 `json:"output_tokens,omitempty"`
+	CachedInputTokens     *int64 `json:"cached_input_tokens,omitempty"`
+	ReasoningOutputTokens *int64 `json:"reasoning_output_tokens,omitempty"`
+}
+
 // RuntimeMetricsQueryResult is deterministic: each breakdown is sorted by
 // Key, and each failure map is populated from the same filtered record set.
 type RuntimeMetricsQueryResult struct {
@@ -94,6 +111,7 @@ type RuntimeMetricsQueryResult struct {
 	Workstations []RuntimeMetricsBreakdown `json:"workstations,omitempty"`
 	WorkerTypes  []RuntimeMetricsBreakdown `json:"worker_types,omitempty"`
 	Providers    []RuntimeMetricsBreakdown `json:"providers,omitempty"`
+	UsageRows    []RuntimeMetricsUsageRow  `json:"usage_rows,omitempty"`
 }
 
 // RuntimeMetricsQueryErrorKind classifies query boundary failures.
@@ -102,6 +120,7 @@ type RuntimeMetricsQueryErrorKind string
 const (
 	RuntimeMetricsQueryInvalidInput RuntimeMetricsQueryErrorKind = "INVALID_INPUT"
 	RuntimeMetricsQueryReadFailed   RuntimeMetricsQueryErrorKind = "READ_FAILED"
+	RuntimeMetricsQueryInvalidUsage RuntimeMetricsQueryErrorKind = "INVALID_USAGE"
 )
 
 // RuntimeMetricsQueryError preserves a safe operation-level message and the

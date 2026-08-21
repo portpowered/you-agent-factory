@@ -532,7 +532,15 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	handler := http.NewHandler(httpAdapter, logger)
 	contentPreparation := work.NewContentPreparation()
 	requestPreparation := provideFactorySessionHTTPRequestPreparation(v69)
-	wireHttpRuntimeBinding, err := provideHTTPRuntimeBinding(factoryStatusProjector, handler, contentPreparation, v71, invocationWorkTypeService, requestPreparation)
+	runtimeMetricsQuery, err := provideFactoryVisualizationMetricsQuery(loggingLogger)
+	if err != nil {
+		return nil, err
+	}
+	costsQuery, err := provideCostsQuery(operatorsettingsService, runtimeMetricsQuery, loggingLogger)
+	if err != nil {
+		return nil, err
+	}
+	wireHttpRuntimeBinding, err := provideHTTPRuntimeBinding(factoryStatusProjector, handler, contentPreparation, v71, invocationWorkTypeService, requestPreparation, costsQuery)
 	if err != nil {
 		return nil, err
 	}
@@ -592,10 +600,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 		return nil, err
 	}
 	server := provideACPServer(loggingLogger, chatsessionsService, factoryTargetCatalogService, targetExecutionService, eventsService, wireAcpServerResolveHomeDir, responseBridge, v92)
-	runtimeMetricsQuery, err := provideFactoryVisualizationMetricsQuery(loggingLogger)
-	if err != nil {
-		return nil, err
-	}
+	operation := provideCostsCLI()
 	commandOperations := cli.CommandOperations{
 		ObserveCLI:                        cliObserver,
 		NamedFactoryCatalog:               v,
@@ -662,6 +667,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 		ACP:                               operations,
 		ACPServer:                         server,
 		RuntimeMetricsQuery:               runtimeMetricsQuery,
+		CostsCLI:                          operation,
 	}
 	commandFactory := provideCLICommandFactory(commandOperations)
 	stdioRunnerBuilder, err := application.NewStdioRunnerBuilder(managedRunnerFactory)
@@ -719,7 +725,11 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	if err != nil {
 		return nil, err
 	}
-	process, err := application.NewProcess(commandFactory, initializer, providerRegistry, processLifecycle, server, workerRecordingReader, processDetachedOperationsCapability, processRuntimeMetricsQueryCapability, processExecutionRuntimeOpeningCapability)
+	processRuntimeCostsQueryCapability, err := provideCostsQueryCapability(costsQuery)
+	if err != nil {
+		return nil, err
+	}
+	process, err := application.NewProcessWithRuntimeCostsAndExecution(commandFactory, initializer, providerRegistry, processLifecycle, server, workerRecordingReader, processDetachedOperationsCapability, processRuntimeMetricsQueryCapability, processExecutionRuntimeOpeningCapability, processRuntimeCostsQueryCapability)
 	if err != nil {
 		return nil, err
 	}
@@ -905,6 +915,8 @@ var servicesSet = wire5.NewSet(
 	provideFactoryVisualizationMetricsQuery,
 	provideRuntimeMetricsQueryCapability,
 	provideFactorySessionExecutionRuntimeOpening,
+	provideCostsQuery,
+	provideCostsQueryCapability,
 	provideFactorySessionsRuntimeAssembly,
 	provideFactoryWebhooksService,
 	providePortableRecordingWriter,
@@ -1070,6 +1082,7 @@ var cliCommandOperationsSet = wire5.NewSet(
 	provideSubmitPayloadReader,
 	provideOperatorDefaultsResolver,
 	provideStandardCLIHTTPProtocol,
+	provideCostsCLI,
 	provideRemoteInvocationOperation,
 	provideExtendedCLIHTTPProtocol,
 	provideWatchCLIHTTPProtocol,
@@ -1149,5 +1162,5 @@ var BundleSet = wire5.NewSet(
 	provideDirectJavaScriptHostAdapter, wire.NewDirectJavaScriptRunOperation, application.NewInitializer, wire.NewExecutionServiceBuilder, provideCLIExecutionServiceBuilder,
 	provideRunInvocationOperation,
 	provideModelsCLIInvocationOperation,
-	provideCLICommandFactory, application.NewProcess, wire5.Bind(new(process.Initializer), new(*application.Initializer)), wire5.Bind(new(process.CommandFactory), new(cli.CommandFactory)),
+	provideCLICommandFactory, application.NewProcessWithRuntimeCostsAndExecution, wire5.Bind(new(process.Initializer), new(*application.Initializer)), wire5.Bind(new(process.CommandFactory), new(cli.CommandFactory)),
 )

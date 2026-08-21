@@ -125,6 +125,7 @@ transports as callers or adapters.
 | `worker_sessions` | Worker Session identity, attempt supervision, lifecycle classification, dispatch association, and publication of source-native Worker observations to Events. Worker Sessions does not own Worker execution policy or Factory replay history. |
 | `operator_settings` | Operator configuration documents, defaults, input inventory, and effective settings resolution. |
 | `factory_visualization` | Factory runtime presentation, live-view projections, and response-event presentation. |
+| `costs` | Exact monetary valuation, pricing coverage, unpriced usage classification, and deterministic cost rollups over the public Factory Visualization metrics query. Costs does not read metrics artifacts or operator files directly. |
 | `system_initialization` | System bootstrap and rollback operations. |
 | `edges` | Aggregation of replaceable external-effect ports accepted at the root construction boundary. It is not a general service locator. |
 

@@ -7,6 +7,7 @@ import (
 
 	"github.com/portpowered/infinite-you/internal/cliversion"
 	startupcli "github.com/portpowered/infinite-you/pkg/initializer/process"
+	costscli "github.com/portpowered/infinite-you/pkg/services/costs/transports/cli"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/transports/cli/cobracompletion"
 	visualizationcli "github.com/portpowered/infinite-you/pkg/services/factory_visualization/transports/cli"
@@ -73,6 +74,11 @@ func newRootCommandWithGeneratedRepresentativeFamily(options CommandFactory) *co
 	metricsCmd := visualizationcli.NewMetricsCommand(visualizationcli.MetricsCommandConfig{
 		Query: options.runtimeMetricsQuery, HomeDir: options.homeDir,
 		JSON: func() bool { return globals != nil && globals.json },
+		Costs: costscli.NewCostsCommand(costscli.CostsCommandConfig{
+			Operation: options.costsCLI,
+			Server:    func() string { return globals.server },
+			JSON:      func() bool { return globals != nil && globals.json },
+		}),
 	})
 	b12, err := newB12ProductionFamilies(globals, diagnostics, operatorDefaults, options)
 	if err != nil {

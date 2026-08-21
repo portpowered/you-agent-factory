@@ -22,6 +22,8 @@ const (
 	RuntimeProviderDuration               = factory.RuntimeProviderDuration
 	RuntimeProviderInputTokens            = factory.RuntimeProviderInputTokens
 	RuntimeProviderOutputTokens           = factory.RuntimeProviderOutputTokens
+	RuntimeProviderCachedInputTokens      = factory.RuntimeProviderCachedInputTokens
+	RuntimeProviderReasoningOutputTokens  = factory.RuntimeProviderReasoningOutputTokens
 	RuntimeProviderCost                   = factory.RuntimeProviderCost
 	RuntimeScriptStarted                  = factory.RuntimeScriptStarted
 	RuntimeScriptComplete                 = factory.RuntimeScriptComplete

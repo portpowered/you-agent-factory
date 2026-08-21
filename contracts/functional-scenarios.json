@@ -187,6 +187,21 @@
       "reviewedReason": "Focused CLI behavior is covered by package tests, but no qualifying repository-owned functional test currently invokes and observes this component through its customer boundary."
     },
     {
+      "stableId": "cli/you.metrics.costs",
+      "name": "you metrics costs",
+      "interface": "cli",
+      "classification": "runnable",
+      "status": "covered",
+      "lane": "short",
+      "executionClass": "deterministic",
+      "evidence": [
+        {
+          "test": "tests/functional/factory/visualization/runtime_metrics/costs_cli_test.go::TestMetricsCostsCLITraversesProductionHTTPRoute",
+          "boundary": "cli"
+        }
+      ]
+    },
+    {
       "stableId": "cli/you.models",
       "name": "you models",
       "interface": "cli",
@@ -1099,6 +1114,16 @@
     {
       "stableId": "rest/getHumanApprovalBySessionId",
       "name": "getHumanApprovalBySessionId",
+      "interface": "rest",
+      "classification": "operation",
+      "status": "missing",
+      "lane": "short",
+      "executionClass": "deterministic",
+      "reviewedReason": "No qualifying repository-owned functional test currently invokes and observes this component through its customer boundary."
+    },
+    {
+      "stableId": "rest/getMetricsCosts",
+      "name": "getMetricsCosts",
       "interface": "rest",
       "classification": "operation",
       "status": "missing",

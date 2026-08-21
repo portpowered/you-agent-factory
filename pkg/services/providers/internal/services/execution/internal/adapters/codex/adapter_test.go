@@ -157,10 +157,21 @@ func assertCodexSuccessResult(
 		result.Diagnostics.Metadata["output_tokens"] != "5" {
 		t.Fatalf("usage metadata = %#v, want decimal input/output counters", result.Diagnostics.Metadata)
 	}
+	assertCodexUsageSubclassMetadata(t, result.Diagnostics.Metadata)
 	if result.Diagnostics.Metadata["api_token"] != "<redacted>" {
 		t.Fatalf("api_token = %q, want redacted", result.Diagnostics.Metadata["api_token"])
 	}
 	assertProgress(t, result.Diagnostics.Progress)
+}
+
+func assertCodexUsageSubclassMetadata(t *testing.T, metadata map[string]string) {
+	t.Helper()
+	if metadata["cached_input_tokens"] != "2" {
+		t.Fatalf("cached input metadata = %q, want 2", metadata["cached_input_tokens"])
+	}
+	if metadata["reasoning_output_tokens"] != "1" {
+		t.Fatalf("reasoning output metadata = %q, want 1", metadata["reasoning_output_tokens"])
+	}
 }
 
 func assertRepeatedCodexResultDetached(

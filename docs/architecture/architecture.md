@@ -170,6 +170,7 @@ roots must not be recreated.
 | Worker Sessions | `pkg/services/worker_sessions` | Own stable Worker Session identity, attempt supervision, lifecycle classification, and publication of source-native Worker observations to that Worker Session's Events topic. It does not own Worker execution policy or Factory replay history. |
 | Operator settings | `pkg/services/operator_settings` | Own operator configuration documents, defaults, input inventory, and effective settings resolution. |
 | Factory visualization | `pkg/services/factory_visualization` | Own runtime presentation, live-view projections, and response-event presentation. |
+| Runtime cost valuation | `pkg/services/costs` | Own exact monetary valuation, pricing coverage, unpriced usage classification, and deterministic cost rollups over the public Factory Visualization metrics query. It does not read metrics artifacts or operator files directly. |
 | System initialization | `pkg/services/system_initialization` | Own system bootstrap and rollback operations. |
 
 

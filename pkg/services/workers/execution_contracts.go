@@ -518,10 +518,12 @@ type ProviderDiagnostic struct {
 // Provider response metadata keys are shared across provider normalization and
 // runtime metrics so core factory packages do not depend on provider adapters.
 const (
-	ProviderResponseMetadataDurationMS    = "duration_ms"
-	ProviderResponseMetadataDurationAPIMS = "duration_api_ms"
-	ProviderResponseMetadataInputTokens   = "input_tokens"
-	ProviderResponseMetadataOutputTokens  = "output_tokens"
+	ProviderResponseMetadataDurationMS            = "duration_ms"
+	ProviderResponseMetadataDurationAPIMS         = "duration_api_ms"
+	ProviderResponseMetadataInputTokens           = "input_tokens"
+	ProviderResponseMetadataOutputTokens          = "output_tokens"
+	ProviderResponseMetadataCachedInputTokens     = "cached_input_tokens"
+	ProviderResponseMetadataReasoningOutputTokens = "reasoning_output_tokens"
 	// ProviderResponseMetadataFailure* are bounded, closed-vocabulary failure
 	// facts. They are safe to carry across the worker and terminal-event
 	// boundaries; raw provider errors and rollout payloads are not.

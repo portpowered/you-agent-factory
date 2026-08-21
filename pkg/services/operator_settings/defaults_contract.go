@@ -13,7 +13,17 @@ import (
 
 var acpProviderIdentityPattern = regexp.MustCompile(`^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*$`)
 
+var priceTableDecimalPattern = regexp.MustCompile(`^[0-9]+(?:\.[0-9]+)?$`)
+
+// ErrPriceTableInvalid reports an authored price table that cannot be safely
+// used for valuation.
+var ErrPriceTableInvalid = errors.New("operator price table is invalid")
+
 const (
+	// PriceTableCurrencyUSD is the only currency supported by the operator
+	// price table. Rates and calculated amounts are expressed in USD.
+	PriceTableCurrencyUSD = "USD"
+
 	// EnvDefaultWorkerModelProvider is the environment variable for the default
 	// worker model provider override.
 	EnvDefaultWorkerModelProvider = "YOU_DEFAULT_WORKER_MODEL_PROVIDER"
@@ -57,10 +67,151 @@ type WorkerPreset struct {
 type Config struct {
 	BackendScopeID string
 	Defaults       Defaults
+	PriceTable     PriceTable
 	Runtime        RuntimeSettings
 	Workers        WorkerSettings
 	WorkerPresets  []WorkerPreset
 	Models         map[string]ModelConfig
+}
+
+// PriceTable is the operator-owned, exact-rate table used by the Costs
+// service. A zero value is normalized to an empty USD table.
+type PriceTable struct {
+	Currency string
+	Models   []PriceTableModel
+}
+
+// PriceTableModel is one exact provider/model price entry. Optional subclass
+// rates use pointers so an explicit "0" remains distinct from an omitted
+// rate.
+type PriceTableModel struct {
+	Provider                        string
+	Model                           string
+	InputPerMillionTokens           string
+	OutputPerMillionTokens          string
+	CachedInputPerMillionTokens     *string
+	ReasoningOutputPerMillionTokens *string
+}
+
+func defaultPriceTable() PriceTable {
+	return PriceTable{Currency: PriceTableCurrencyUSD, Models: []PriceTableModel{}}
+}
+
+// Clone returns a detached price table whose model slice and optional rates do
+// not alias the receiver.
+func (table PriceTable) Clone() PriceTable {
+	cloned := table
+	if table.Models == nil {
+		return cloned
+	}
+	cloned.Models = make([]PriceTableModel, len(table.Models))
+	for index, model := range table.Models {
+		cloned.Models[index] = model.Clone()
+	}
+	return cloned
+}
+
+// Clone returns a detached model-price entry.
+func (model PriceTableModel) Clone() PriceTableModel {
+	cloned := model
+	cloned.CachedInputPerMillionTokens = cloneOptionalString(model.CachedInputPerMillionTokens)
+	cloned.ReasoningOutputPerMillionTokens = cloneOptionalString(model.ReasoningOutputPerMillionTokens)
+	return cloned
+}
+
+// Normalize trims identities, canonicalizes provider aliases, validates exact
+// non-negative decimal rates, and rejects duplicate provider/model keys.
+func (table PriceTable) Normalize() (PriceTable, error) {
+	currency := table.Currency
+	if currency == "" {
+		currency = PriceTableCurrencyUSD
+	}
+	if currency != PriceTableCurrencyUSD {
+		return PriceTable{}, fmt.Errorf("%w: currency %q is unsupported; only %s is accepted", ErrPriceTableInvalid, table.Currency, PriceTableCurrencyUSD)
+	}
+
+	normalized := PriceTable{Currency: currency}
+	if table.Models == nil {
+		normalized.Models = []PriceTableModel{}
+	} else {
+		normalized.Models = make([]PriceTableModel, len(table.Models))
+	}
+	seen := make(map[string]struct{}, len(table.Models))
+	for index, model := range table.Models {
+		normalizedModel, err := normalizePriceTableModel(index, model)
+		if err != nil {
+			return PriceTable{}, err
+		}
+		key := normalizedModel.Provider + "\x00" + normalizedModel.Model
+		if _, exists := seen[key]; exists {
+			return PriceTable{}, fmt.Errorf("%w: priceTable.models[%d] duplicates provider/model %q/%q", ErrPriceTableInvalid, index, normalizedModel.Provider, normalizedModel.Model)
+		}
+		seen[key] = struct{}{}
+		normalized.Models[index] = normalizedModel
+	}
+	return normalized, nil
+}
+
+func normalizePriceTableModel(index int, model PriceTableModel) (PriceTableModel, error) {
+	providerInput := strings.TrimSpace(model.Provider)
+	provider, ok := interfaces.CanonicalizeOperatorWorkerModelProviderInput(providerInput)
+	if providerInput == "" || !ok || interfaces.IsSymbolicWorkerModelProviderDefault(provider) {
+		return PriceTableModel{}, fmt.Errorf("%w: priceTable.models[%d].provider %q must be a concrete canonical provider identity", ErrPriceTableInvalid, index, model.Provider)
+	}
+	modelName := strings.TrimSpace(model.Model)
+	if modelName == "" {
+		return PriceTableModel{}, fmt.Errorf("%w: priceTable.models[%d].model must be non-empty", ErrPriceTableInvalid, index)
+	}
+	inputRate, err := normalizePriceRate(fmt.Sprintf("priceTable.models[%d].inputPerMillionTokens", index), model.InputPerMillionTokens, true)
+	if err != nil {
+		return PriceTableModel{}, err
+	}
+	outputRate, err := normalizePriceRate(fmt.Sprintf("priceTable.models[%d].outputPerMillionTokens", index), model.OutputPerMillionTokens, true)
+	if err != nil {
+		return PriceTableModel{}, err
+	}
+	normalized := PriceTableModel{
+		Provider:               provider,
+		Model:                  modelName,
+		InputPerMillionTokens:  inputRate,
+		OutputPerMillionTokens: outputRate,
+	}
+	if model.CachedInputPerMillionTokens != nil {
+		rate, err := normalizePriceRate(fmt.Sprintf("priceTable.models[%d].cachedInputPerMillionTokens", index), *model.CachedInputPerMillionTokens, false)
+		if err != nil {
+			return PriceTableModel{}, err
+		}
+		normalized.CachedInputPerMillionTokens = &rate
+	}
+	if model.ReasoningOutputPerMillionTokens != nil {
+		rate, err := normalizePriceRate(fmt.Sprintf("priceTable.models[%d].reasoningOutputPerMillionTokens", index), *model.ReasoningOutputPerMillionTokens, false)
+		if err != nil {
+			return PriceTableModel{}, err
+		}
+		normalized.ReasoningOutputPerMillionTokens = &rate
+	}
+	return normalized, nil
+}
+
+func normalizePriceRate(fieldPath, value string, required bool) (string, error) {
+	if value == "" {
+		if required {
+			return "", fmt.Errorf("%w: %s is required", ErrPriceTableInvalid, fieldPath)
+		}
+		return "", fmt.Errorf("%w: %s must be a non-negative decimal string when supplied", ErrPriceTableInvalid, fieldPath)
+	}
+	if !priceTableDecimalPattern.MatchString(value) {
+		return "", fmt.Errorf("%w: %s %q must be a non-negative decimal string", ErrPriceTableInvalid, fieldPath, value)
+	}
+	return value, nil
+}
+
+func cloneOptionalString(value *string) *string {
+	if value == nil {
+		return nil
+	}
+	cloned := *value
+	return &cloned
 }
 
 type WorkerSettings struct {
@@ -148,6 +299,10 @@ func (cfg Config) Normalize() (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
+	priceTable, err := cfg.PriceTable.Normalize()
+	if err != nil {
+		return Config{}, err
+	}
 	runtime, err := cfg.Runtime.normalize()
 	if err != nil {
 		return Config{}, err
@@ -158,6 +313,7 @@ func (cfg Config) Normalize() (Config, error) {
 	}
 	return Config{
 		BackendScopeID: strings.TrimSpace(cfg.BackendScopeID),
+		PriceTable:     priceTable,
 		Defaults: Defaults{
 			WorkerModelProvider: strings.TrimSpace(cfg.Defaults.WorkerModelProvider),
 			WorkerModel:         strings.TrimSpace(cfg.Defaults.WorkerModel),
@@ -397,6 +553,7 @@ func (cfg Config) Clone() Config {
 		copy(cloned.Workers.ACP.Integrations, cfg.Workers.ACP.Integrations)
 	}
 	cloned.Workers.ACP.AgentProfile = cloneACPAgentProfilePointer(cfg.Workers.ACP.AgentProfile)
+	cloned.PriceTable = cfg.PriceTable.Clone()
 	cloned.Models = cloneModelConfigs(cfg.Models)
 	return cloned
 }

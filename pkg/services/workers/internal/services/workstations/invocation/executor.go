@@ -110,14 +110,14 @@ func (e *Executor) Execute(
 	}
 	result, err := e.executeRequest(ctx, input.Request, request)
 	if err != nil {
-		normalized := normalizeProvidersFailure(err)
+		normalized := normalizeProvidersFailure(err, input.Request.Model)
 		return failedInvocationResult(attempt, normalized), normalized
 	}
 	response := workers.InferenceResponse{
 		Content:      result.Content,
 		Outcome:      workers.WorkOutcome(result.Outcome),
 		Continuation: continuationFromSessionRef(result.SessionRef),
-		Diagnostics:  workersDiagnostics(result.Diagnostics, result.SessionRef),
+		Diagnostics:  workersDiagnostics(result.Diagnostics, result.SessionRef, input.Request.Model),
 	}
 	return workers.InvocationResult{
 		Response:     response,
@@ -274,7 +274,7 @@ func providerModelOperationBindings(values []workers.ResolvedModelOperationBindi
 	return converted
 }
 
-func normalizeProvidersFailure(err error) error {
+func normalizeProvidersFailure(err error, model string) error {
 	var continuation providers.ContinuationFailure
 	if errors.As(err, &continuation) {
 		normalized := workers.NewProviderError(
@@ -296,7 +296,7 @@ func normalizeProvidersFailure(err error) error {
 		err,
 	)
 	normalized.Continuation = continuationFromSessionRef(failure.SessionRef)
-	normalized.Diagnostics = workersDiagnostics(failure.Diagnostics, failure.SessionRef)
+	normalized.Diagnostics = workersDiagnostics(failure.Diagnostics, failure.SessionRef, model)
 	return normalized
 }
 
@@ -339,8 +339,8 @@ func continuationFromSessionRef(reference *providers.SessionRef) *workers.Provid
 	return &continuation
 }
 
-func workersDiagnostics(diagnostics *providers.ExecuteDiagnostics, reference *providers.SessionRef) *workers.WorkDiagnostics {
-	if diagnostics == nil && reference == nil {
+func workersDiagnostics(diagnostics *providers.ExecuteDiagnostics, reference *providers.SessionRef, model string) *workers.WorkDiagnostics {
+	if diagnostics == nil && reference == nil && strings.TrimSpace(model) == "" {
 		return nil
 	}
 	metadata := map[string]string(nil)
@@ -354,6 +354,7 @@ func workersDiagnostics(diagnostics *providers.ExecuteDiagnostics, reference *pr
 	result := &workers.WorkDiagnostics{
 		Provider: &workers.ProviderDiagnostic{
 			Provider:         provider,
+			Model:            strings.TrimSpace(model),
 			ResponseMetadata: metadata,
 		},
 		Metadata: metadata,

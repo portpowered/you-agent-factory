@@ -25,6 +25,7 @@ type (
 	RuntimeMetricsBreakdown    = factoryvisualization.RuntimeMetricsBreakdown
 	RuntimeMetricsDuration     = factoryvisualization.RuntimeMetricsDuration
 	RuntimeMetricsCost         = factoryvisualization.RuntimeMetricsCost
+	RuntimeMetricsUsageRow     = factoryvisualization.RuntimeMetricsUsageRow
 
 	ActivateMode       = factoryvisualization.ActivateMode
 	LifecycleState     = factoryvisualization.LifecycleState
@@ -75,6 +76,7 @@ const (
 	RuntimeMetricsCostUnavailable          = factoryvisualization.RuntimeMetricsCostUnavailable
 	RuntimeMetricsQueryInvalidInput        = factoryvisualization.RuntimeMetricsQueryInvalidInput
 	RuntimeMetricsQueryReadFailed          = factoryvisualization.RuntimeMetricsQueryReadFailed
+	RuntimeMetricsQueryInvalidUsage        = factoryvisualization.RuntimeMetricsQueryInvalidUsage
 	PresentationDeliveryBestEffort         = factoryvisualization.PresentationDeliveryBestEffort
 	PresentationDeliveryLossless           = factoryvisualization.PresentationDeliveryLossless
 	PresentationErrorInvalidInput          = factoryvisualization.PresentationErrorInvalidInput
