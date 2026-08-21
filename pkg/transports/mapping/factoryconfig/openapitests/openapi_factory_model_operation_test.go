@@ -67,6 +67,14 @@ func TestFactoryConfigFromOpenAPIJSON_MapsModelInvokeOperation(t *testing.T) {
 func TestFactoryConfigModelOperationSlotsPreserveVideoAndGenericMetadata(t *testing.T) {
 	t.Parallel()
 
+	cfg := parseGenericFactoryConfig(t)
+	assertGenericImageSlot(t, cfg)
+	assertGenericVideoSlot(t, cfg)
+	assertGenericVideoRoundTrip(t, cfg)
+}
+
+func parseGenericFactoryConfig(t *testing.T) *interfaces.FactoryConfig {
+	t.Helper()
 	cfgJSON := []byte(`{
 		"name":"generic-factory",
 		"workTypes": [{"name":"task","states":[{"name":"init","type":"INITIAL"},{"name":"complete","type":"TERMINAL"}]}],
@@ -89,22 +97,61 @@ func TestFactoryConfigModelOperationSlotsPreserveVideoAndGenericMetadata(t *test
 	if err != nil {
 		t.Fatalf("FactoryConfigFromOpenAPIJSON: %v", err)
 	}
+	return cfg
+}
+
+func assertGenericImageSlot(t *testing.T, cfg *interfaces.FactoryConfig) {
+	t.Helper()
 	slots := cfg.Workers[0].Operations[0]
-	if len(slots.Inputs) != 2 || slots.Inputs[1].Modality != interfaces.ModelOperationContentTypeImage {
-		t.Fatalf("mapped inputs = %#v, want IMAGE metadata", slots.Inputs)
+	if len(slots.Inputs) != 2 {
+		t.Fatalf("mapped inputs = %#v, want prompt and image", slots.Inputs)
 	}
 	image := slots.Inputs[1]
-	if image.Repeatable == nil || !*image.Repeatable || len(image.MediaTypes) != 1 || image.MediaTypes[0] != "image/*" {
-		t.Fatalf("mapped image slot = %#v, want repeatable image metadata", image)
+	if image.Modality != interfaces.ModelOperationContentTypeImage {
+		t.Fatalf("mapped image modality = %q, want IMAGE", image.Modality)
 	}
-	video := slots.Outputs[0]
-	if len(video.ContentTypes) != 1 || video.ContentTypes[0] != interfaces.ModelOperationContentTypeVideo || video.Modality != interfaces.ModelOperationContentTypeVideo {
-		t.Fatalf("mapped video slot = %#v, want VIDEO content and modality", video)
+	if image.Repeatable == nil {
+		t.Fatalf("mapped image repeatable = nil, want true")
 	}
-	if video.Repeatable == nil || *video.Repeatable || len(video.MediaTypes) != 1 || video.MediaTypes[0] != "video/*" {
-		t.Fatalf("mapped video slot = %#v, want explicit non-repeatable metadata", video)
+	if !*image.Repeatable {
+		t.Fatalf("mapped image repeatable = false, want true")
 	}
+	if len(image.MediaTypes) != 1 {
+		t.Fatalf("mapped image media types = %#v, want image/*", image.MediaTypes)
+	}
+	if image.MediaTypes[0] != "image/*" {
+		t.Fatalf("mapped image media type = %q, want image/*", image.MediaTypes[0])
+	}
+}
 
+func assertGenericVideoSlot(t *testing.T, cfg *interfaces.FactoryConfig) {
+	t.Helper()
+	video := cfg.Workers[0].Operations[0].Outputs[0]
+	if len(video.ContentTypes) != 1 {
+		t.Fatalf("mapped video content types = %#v, want VIDEO", video.ContentTypes)
+	}
+	if video.ContentTypes[0] != interfaces.ModelOperationContentTypeVideo {
+		t.Fatalf("mapped video content type = %q, want VIDEO", video.ContentTypes[0])
+	}
+	if video.Modality != interfaces.ModelOperationContentTypeVideo {
+		t.Fatalf("mapped video modality = %q, want VIDEO", video.Modality)
+	}
+	if video.Repeatable == nil {
+		t.Fatalf("mapped video repeatable = nil, want explicit false")
+	}
+	if *video.Repeatable {
+		t.Fatalf("mapped video repeatable = true, want false")
+	}
+	if len(video.MediaTypes) != 1 {
+		t.Fatalf("mapped video media types = %#v, want video/*", video.MediaTypes)
+	}
+	if video.MediaTypes[0] != "video/*" {
+		t.Fatalf("mapped video media type = %q, want video/*", video.MediaTypes[0])
+	}
+}
+
+func assertGenericVideoRoundTrip(t *testing.T, cfg *interfaces.FactoryConfig) {
+	t.Helper()
 	encoded, err := MarshalCanonicalFactoryConfig(cfg)
 	if err != nil {
 		t.Fatalf("MarshalCanonicalFactoryConfig: %v", err)
@@ -114,8 +161,20 @@ func TestFactoryConfigModelOperationSlotsPreserveVideoAndGenericMetadata(t *test
 		t.Fatalf("FactoryConfigFromOpenAPIJSON(round trip): %v", err)
 	}
 	roundTrippedVideo := roundTripped.Workers[0].Operations[0].Outputs[0]
-	if roundTrippedVideo.Modality != interfaces.ModelOperationContentTypeVideo || roundTrippedVideo.Repeatable == nil || *roundTrippedVideo.Repeatable || roundTrippedVideo.MediaTypes[0] != "video/*" {
-		t.Fatalf("round-tripped video slot = %#v, want VIDEO metadata preserved", roundTrippedVideo)
+	if roundTrippedVideo.Modality != interfaces.ModelOperationContentTypeVideo {
+		t.Fatalf("round-tripped video modality = %q, want VIDEO", roundTrippedVideo.Modality)
+	}
+	if roundTrippedVideo.Repeatable == nil {
+		t.Fatalf("round-tripped video repeatable = nil, want explicit false")
+	}
+	if *roundTrippedVideo.Repeatable {
+		t.Fatalf("round-tripped video repeatable = true, want false")
+	}
+	if len(roundTrippedVideo.MediaTypes) != 1 {
+		t.Fatalf("round-tripped video media types = %#v, want video/*", roundTrippedVideo.MediaTypes)
+	}
+	if roundTrippedVideo.MediaTypes[0] != "video/*" {
+		t.Fatalf("round-tripped video media type = %q, want video/*", roundTrippedVideo.MediaTypes[0])
 	}
 }
 

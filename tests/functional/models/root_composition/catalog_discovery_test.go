@@ -19,7 +19,14 @@ func TestGenericModelContractsRemainDetachedAtApplicationRoot(t *testing.T) {
 	if err := process.Execute(help.Input); err != nil {
 		t.Fatalf("Process.Execute(session show help) error = %v", err)
 	}
+	assertGenericOperationCatalog(t)
+	assertBuiltInModelCatalog(t)
+	assertGenericInvocationContracts(t)
+	assertGenericRuntimeFailures(t)
+}
 
+func assertGenericOperationCatalog(t *testing.T) {
+	t.Helper()
 	operationCatalog := modelprovider.GenericOperationCatalog{}
 	contracts := operationCatalog.GenericOperationContracts()
 	wantNames := []string{
@@ -50,7 +57,10 @@ func TestGenericModelContractsRemainDetachedAtApplicationRoot(t *testing.T) {
 	if !ok || freshOMNI.Inputs[1].MediaTypes[0] != "image/*" {
 		t.Fatalf("generic operation retained caller mutation: %#v", freshOMNI)
 	}
+}
 
+func assertBuiltInModelCatalog(t *testing.T) {
+	t.Helper()
 	builtIns := modelprovider.BuiltInCatalog{}
 	definitions := builtIns.ModelDefinitions()
 	if len(definitions) != 4 || definitions[0].Name != modelprovider.BuiltInModelNameLLM ||
@@ -66,7 +76,10 @@ func TestGenericModelContractsRemainDetachedAtApplicationRoot(t *testing.T) {
 	if !ok || freshDefinition.Operations[0].Inputs[0].Name != "prompt" {
 		t.Fatalf("built-in catalog retained caller mutation: %#v", freshDefinition)
 	}
+}
 
+func assertGenericInvocationContracts(t *testing.T) {
+	t.Helper()
 	scope, err := (modelprovider.RuntimeScopeRef{}).Parse("scope-functional-models")
 	if err != nil {
 		t.Fatalf("parse model scope: %v", err)
@@ -109,7 +122,10 @@ func TestGenericModelContractsRemainDetachedAtApplicationRoot(t *testing.T) {
 	if result.Outputs[1].Artifact.Properties["format"] != "json" {
 		t.Fatal("generic result clone shared artifact properties")
 	}
+}
 
+func assertGenericRuntimeFailures(t *testing.T) {
+	t.Helper()
 	ready := modelprovider.Runtime{ReadinessState: modelprovider.ReadinessStateReady}
 	if err := ready.InvocationError(); err != nil {
 		t.Fatalf("ready runtime invocation error = %v, want nil", err)
