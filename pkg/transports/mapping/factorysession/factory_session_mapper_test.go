@@ -853,21 +853,6 @@ func mustFixtureMap(t *testing.T, value any) map[string]any {
 	return out
 }
 
-func fixtureDispatchRows(dispatches []factoryapi.FactorySessionDispatchSummary) []any {
-	rows := make([]any, 0, len(dispatches))
-	for _, dispatch := range dispatches {
-		raw, err := json.Marshal(dispatch)
-		if err != nil {
-			continue
-		}
-		var row map[string]any
-		if err := json.Unmarshal(raw, &row); err == nil {
-			rows = append(rows, row)
-		}
-	}
-	return rows
-}
-
 func normalizeJSONValue(value any) any {
 	switch typed := value.(type) {
 	case map[string]any:

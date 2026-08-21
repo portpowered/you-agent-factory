@@ -229,11 +229,6 @@ func layoutGeometrySubjectID(path string) string {
 	return trimmed
 }
 
-// IsLayoutTargetCode reports whether code identifies a recoverable layout defect.
-func IsLayoutTargetCode(code string) bool {
-	return strings.HasPrefix(code, "factory.layout.")
-}
-
 // LayoutSaveOutcomes prunes stale layout references for save, then merges
 // recoverable validation warnings (such as unsupported schemaVersion) that
 // pruning does not report. Prune outcomes take precedence when both phases

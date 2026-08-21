@@ -135,15 +135,8 @@ func IsInferenceWorkerType(value string) bool { return StrictWorkerType(value) =
 
 func ProjectWorkerBehaviorClass(value string) string { return StrictWorkerType(value) }
 
-func IsInferenceRunWorkstationType(value string) bool {
-	return StrictWorkstationType(value) == WorkstationTypeInference
-}
-
 func IsHumanApprovalWorkstationType(value string) bool {
 	return StrictWorkstationType(value) == WorkstationTypeHumanApproval
-}
-func IsAgentRunWorkstationType(value string) bool {
-	return StrictWorkstationType(value) == WorkstationTypeAgent
 }
 func IsScriptRunWorkstationType(value string) bool {
 	return StrictWorkstationType(value) == WorkstationTypeScript

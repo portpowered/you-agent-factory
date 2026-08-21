@@ -14,6 +14,10 @@ import (
 	settingswire "github.com/portpowered/infinite-you/pkg/services/operator_settings/wire"
 )
 
+func testIDGenerator() operatorsettings.IDGenerator {
+	return func() string { return "00000000-0000-4000-8000-000000000001" }
+}
+
 func TestNewServiceFromHomePortsRequiresFilesystem(t *testing.T) {
 	t.Parallel()
 

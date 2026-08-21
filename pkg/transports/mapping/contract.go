@@ -55,15 +55,6 @@ type LiveSessionAPI interface {
 	SubscribeFactoryResponseEventsForSession(ctx context.Context, request factorysessions.ResponseEventSubscriptionRequest) (FactoryResponseEventSubscription, error)
 }
 
-// SessionAPI retains the historical aggregate contract for compatibility
-// facades. New transports should request RuntimeAPI, LiveSessionAPI, and WorkAPI
-// independently.
-type SessionAPI interface {
-	RuntimeAPI
-	LiveSessionAPI
-	WorkAPI
-}
-
 // WorkAPI is the session-scoped work submission, operator move, and runtime observability seam.
 type WorkAPI interface {
 	SubmitWorkRequestForSession(ctx context.Context, sessionID string, request work.WorkRequest) (work.WorkRequestSubmitResult, error)
@@ -100,8 +91,8 @@ type DurableSessionLifecycleAPI interface {
 }
 
 // DurableSessionExecutionAPI is the shared durable factory-session execution start
-// seam for async and sync dynamic workflow sessions. Live-session open and
-// invocation remain on SessionAPI and InvocationAPI.
+// seam for async and sync dynamic workflow sessions. Live-session open remains on
+// LiveSessionAPI and invocation remains on InvocationAPI.
 type DurableSessionExecutionAPI interface {
 	StartDurableFactorySessionAsync(ctx context.Context, request factorysessions.StartRequest) (factoryapi.FactorySessionExecutionResponse, error)
 	StartDurableFactorySessionSync(ctx context.Context, request factorysessions.StartRequest) (factoryapi.FactorySessionSyncExecutionResponse, error)
@@ -180,15 +171,6 @@ func InvocationResponseFromResult(result FactoryInvocationResult) factoryapi.Inv
 		response.Decisions = &decisions
 	}
 	return response
-}
-
-func firstNonEmpty(values ...string) string {
-	for _, value := range values {
-		if trimmed := strings.TrimSpace(value); trimmed != "" {
-			return trimmed
-		}
-	}
-	return ""
 }
 
 // RequestValidationError reports a stable client-side validation failure that

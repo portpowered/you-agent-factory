@@ -221,11 +221,6 @@ func parseAgentsFrontmatterMap(frontmatter []byte) (map[string]any, error) {
 	return raw, nil
 }
 
-func frontmatterMap(raw any) map[string]any {
-	typed, _ := raw.(map[string]any)
-	return typed
-}
-
 func normalizeAgentsRuntimeResources(container map[string]any) {
 	resources, ok := container["resources"]
 	if !ok {
@@ -520,18 +515,6 @@ func AuthoredFactoryConfigForExpandedLayout(
 	cfg *factorydefinitions.FactoryConfig,
 ) (*factorydefinitions.FactoryConfig, error) {
 	return authoredFactoryConfigForExpandedLayout(cfg)
-}
-
-func CloneHostedWorkerAuthConfig(
-	cfg *factorydefinitions.HostedWorkerAuthConfig,
-) *factorydefinitions.HostedWorkerAuthConfig {
-	return cloneHostedWorkerAuthConfig(cfg)
-}
-
-func CloneHostedLinearWorkerConfig(
-	cfg *factorydefinitions.HostedLinearWorkerConfig,
-) *factorydefinitions.HostedLinearWorkerConfig {
-	return cloneHostedLinearWorkerConfig(cfg)
 }
 
 func SafeFactoryLayoutSegment(kind, name string) (string, error) {

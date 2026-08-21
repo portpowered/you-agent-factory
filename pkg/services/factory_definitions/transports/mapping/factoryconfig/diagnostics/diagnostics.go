@@ -29,31 +29,6 @@ type ValidationResult struct {
 	Findings []Finding
 }
 
-func (r ValidationResult) HasErrors() bool {
-	for _, finding := range r.Findings {
-		if finding.Severity == SeverityError {
-			return true
-		}
-	}
-	return false
-}
-
-func (r ValidationResult) Errors() []Finding {
-	var errors []Finding
-	for _, finding := range r.Findings {
-		if finding.Severity == SeverityError {
-			errors = append(errors, finding)
-		}
-	}
-	return errors
-}
-
-func (r ValidationResult) Error() string {
-	return factorydefinitions.TopologyValidationResult{
-		Findings: canonicalTopologyFindings(r.Findings),
-	}.Error()
-}
-
 // TopologyFindings converts canonical topology findings to transport
 // diagnostics without applying validation policy.
 func TopologyFindings(findings []factorydefinitions.TopologyFinding) []Finding {
@@ -101,20 +76,4 @@ func BlockingFactoryLoadFindings(err error) []Finding {
 		return nil
 	}
 	return FactoryDefinitionFindings(loadErr.Targets)
-}
-
-func canonicalTopologyFindings(findings []Finding) []factorydefinitions.TopologyFinding {
-	if len(findings) == 0 {
-		return nil
-	}
-	canonical := make([]factorydefinitions.TopologyFinding, 0, len(findings))
-	for _, finding := range findings {
-		canonical = append(canonical, factorydefinitions.TopologyFinding{
-			Severity: factorydefinitions.ValidationSeverity(finding.Severity),
-			Path:     finding.Path,
-			Message:  finding.Message,
-			Rule:     finding.Rule,
-		})
-	}
-	return canonical
 }
