@@ -73,6 +73,31 @@ func TestServiceDelegatesDurableExecutionContract(t *testing.T) {
 	}
 }
 
+func TestServiceForwardsOptionalRestorableStateProbe(t *testing.T) {
+	t.Parallel()
+
+	stub := &restorableStateExecutionStub{restorable: true}
+	service, err := New(stub)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	got, err := service.HasRestorableState(context.Background(), "dur-sess-1")
+	if err != nil || !got || stub.calls != 1 {
+		t.Fatalf("HasRestorableState = (%v, %v), calls = %d", got, err, stub.calls)
+	}
+}
+
+type restorableStateExecutionStub struct {
+	durableexecution.Service
+	restorable bool
+	calls      int
+}
+
+func (s *restorableStateExecutionStub) HasRestorableState(context.Context, string) (bool, error) {
+	s.calls++
+	return s.restorable, nil
+}
+
 type executionStub struct {
 	durableexecution.Service
 	calls  int

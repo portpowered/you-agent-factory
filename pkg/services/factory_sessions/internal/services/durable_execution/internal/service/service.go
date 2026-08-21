@@ -194,6 +194,22 @@ func (s *Service) IsNonLiveReplay() bool {
 	return ok && replay.IsNonLiveReplay()
 }
 
+// HasRestorableState forwards the optional live-resume eligibility probe
+// without widening the durable execution root contract used by other
+// backends.
+func (s *Service) HasRestorableState(ctx context.Context, sessionID string) (bool, error) {
+	if s == nil || s.Service == nil {
+		return false, nil
+	}
+	probe, ok := s.Service.(interface {
+		HasRestorableState(context.Context, string) (bool, error)
+	})
+	if !ok {
+		return false, nil
+	}
+	return probe.HasRestorableState(ctx, sessionID)
+}
+
 // RecordPetriTokenMutations preserves the runtime event bridge used by the
 // Petri orchestrator while the execution engine remains behind this service.
 func (s *Service) RecordPetriTokenMutations(

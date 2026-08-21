@@ -96,6 +96,34 @@ func (s *JavaScriptRuntimeService) ResumeInterruptedSession(
 	return s.asyncStartFromState(snapshot), nil
 }
 
+// HasRestorableState checks whether the live execution owner has enough
+// durable state to accept a replay-to-live resume handoff. It deliberately
+// stops before lifecycle mutation, scheduling, or Worker invocation; the
+// subsequent Resume operation remains the only execution transition.
+func (s *JavaScriptRuntimeService) HasRestorableState(ctx context.Context, sessionID string) (bool, error) {
+	if s == nil {
+		return false, ErrSessionNotFound
+	}
+	if err := ctx.Err(); err != nil {
+		return false, err
+	}
+	id, err := NormalizeSessionID(sessionID)
+	if err != nil {
+		return false, err
+	}
+	state, err := s.loadResumeSessionState(id)
+	if errors.Is(err, ErrSessionNotFound) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	if err := s.validateResumeSessionState(id, state); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
 func (s *JavaScriptRuntimeService) loadResumeSessionState(sessionID string) (runtimeSessionState, error) {
 	s.mu.RLock()
 	if state, ok := s.sessions[sessionID]; ok {
