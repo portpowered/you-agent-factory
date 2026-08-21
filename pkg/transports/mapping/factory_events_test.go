@@ -89,3 +89,56 @@ func TestFactoryEventAssociationRoundTripPreservesDispatchAndWorkerSessionIDs(t 
 		t.Fatalf("normalized payload.workerSessionId = %q, want worker-session-actual-11", normalizedPayload.WorkerSessionID)
 	}
 }
+
+func TestFactoryEventAssociationProjectionStripsCanonicalExecutionFacts(t *testing.T) {
+	canonicalPayload := json.RawMessage(`{"workerSessionId":"worker-session-actual-11","model":"gpt-5.6-luna","reasoningEffort":"high"}`)
+	canonical := interfaces.FactoryEvent{
+		Context: interfaces.FactoryEventContext{
+			Sequence: 17,
+			Tick:     8,
+		},
+		Id:            "factory-event/dispatch-worker-session-association/dispatch-actual-7",
+		Payload:       canonicalPayload,
+		SchemaVersion: interfaces.FactoryEventSchemaVersionV1,
+		Type:          interfaces.FactoryEventTypeDispatchWorkerSessionAssoc,
+	}
+
+	public, err := FactoryEventToAPI(canonical)
+	if err != nil {
+		t.Fatalf("map association with replay facts to generated public event: %v", err)
+	}
+	publicPayload, err := json.Marshal(public.Payload)
+	if err != nil {
+		t.Fatalf("marshal generated public association payload: %v", err)
+	}
+	if got, want := string(publicPayload), `{"workerSessionId":"worker-session-actual-11"}`; got != want {
+		t.Fatalf("public association payload = %s, want %s", got, want)
+	}
+	if string(canonical.Payload) != string(canonicalPayload) {
+		t.Fatalf("canonical association payload changed to %s, want %s", canonical.Payload, canonicalPayload)
+	}
+}
+
+func TestFactoryEventAssociationProjectionRejectsMalformedPayload(t *testing.T) {
+	_, err := FactoryEventToAPI(interfaces.FactoryEvent{
+		Id:            "factory-event/dispatch-worker-session-association/malformed",
+		Payload:       json.RawMessage(`{"workerSessionId":`),
+		SchemaVersion: interfaces.FactoryEventSchemaVersionV1,
+		Type:          interfaces.FactoryEventTypeDispatchWorkerSessionAssoc,
+	})
+	if err == nil || !strings.Contains(err.Error(), "factory-event/dispatch-worker-session-association/malformed") {
+		t.Fatalf("malformed association mapping error = %v, want event identity", err)
+	}
+}
+
+func TestFactoryEventAssociationProjectionRejectsMissingWorkerSessionID(t *testing.T) {
+	_, err := FactoryEventToAPI(interfaces.FactoryEvent{
+		Id:            "factory-event/dispatch-worker-session-association/missing-worker-session",
+		Payload:       json.RawMessage(`{"model":"gpt-5.6-luna"}`),
+		SchemaVersion: interfaces.FactoryEventSchemaVersionV1,
+		Type:          interfaces.FactoryEventTypeDispatchWorkerSessionAssoc,
+	})
+	if err == nil || !strings.Contains(err.Error(), "workerSessionId is required") {
+		t.Fatalf("incomplete association mapping error = %v, want required workerSessionId", err)
+	}
+}
