@@ -58,9 +58,7 @@ func TestShowJSONUsesObservationDocumentAndExactIdentity(t *testing.T) {
 	if string(document["workerSessionId"]) != `"worker-session-1"` || string(document["attemptId"]) != `"attempt-2"` {
 		t.Fatalf("identity fields = %s/%s, want observation identity", document["workerSessionId"], document["attemptId"])
 	}
-	if string(document["model"]) != `"gpt-5.6-luna"` || string(document["reasoningEffort"]) != `"high"` {
-		t.Fatalf("execution facts = %s/%s, want gpt-5.6-luna/high", document["model"], document["reasoningEffort"])
-	}
+	assertShowExecutionFacts(t, document)
 	if !strings.Contains(string(document["tokenUsage"]), `"totalTokens":12`) || string(document["durationMillis"]) != "2500" {
 		t.Fatalf("usage/duration = %s/%s, want token and timing projection", document["tokenUsage"], document["durationMillis"])
 	}
@@ -68,6 +66,13 @@ func TestShowJSONUsesObservationDocumentAndExactIdentity(t *testing.T) {
 		if _, ok := document[key]; !ok {
 			t.Fatalf("show JSON missing stable field %q: %s", key, output.String())
 		}
+	}
+}
+
+func assertShowExecutionFacts(t *testing.T, document map[string]json.RawMessage) {
+	t.Helper()
+	if string(document["model"]) != `"gpt-5.6-luna"` || string(document["reasoningEffort"]) != `"high"` {
+		t.Fatalf("execution facts = %s/%s, want gpt-5.6-luna/high", document["model"], document["reasoningEffort"])
 	}
 }
 

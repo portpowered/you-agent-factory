@@ -13,6 +13,22 @@ import (
 	"go.uber.org/zap"
 )
 
+func assertListObservationExecutionFacts(t *testing.T, observation factoryapi.WorkerSessionObservation) {
+	t.Helper()
+	if observation.Model == nil || *observation.Model != "gpt-5.6-luna" ||
+		observation.ReasoningEffort == nil || *observation.ReasoningEffort != "high" {
+		t.Fatalf("execution facts = model:%#v reasoningEffort:%#v, want gpt-5.6-luna/high", observation.Model, observation.ReasoningEffort)
+	}
+}
+
+func assertFailureObservationExecutionFacts(t *testing.T, response factoryapi.WorkerSessionObservation) {
+	t.Helper()
+	if response.Model == nil || *response.Model != "gpt-5.6-luna" ||
+		response.ReasoningEffort == nil || *response.ReasoningEffort != "medium" {
+		t.Fatalf("execution facts = model:%#v reasoningEffort:%#v, want gpt-5.6-luna/medium", response.Model, response.ReasoningEffort)
+	}
+}
+
 const workerSessionStartMappingJSON = `{
 	"requestId":"request-1",
 	"workerSessionId":"worker-1",
