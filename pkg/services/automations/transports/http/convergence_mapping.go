@@ -90,7 +90,7 @@ type GeneratedWorkRequestOutcomeResponse struct {
 
 // ReconcileResponse is the adapter-owned HTTP success shape for reconcile.
 type ReconcileResponse struct {
-	Outcomes              []ConvergenceOutcomeResponse            `json:"outcomes"`
+	Outcomes              []ConvergenceOutcomeResponse          `json:"outcomes"`
 	GeneratedWorkRequests []GeneratedWorkRequestOutcomeResponse `json:"generatedWorkRequests,omitempty"`
 }
 

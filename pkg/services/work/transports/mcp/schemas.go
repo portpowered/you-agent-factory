@@ -254,10 +254,10 @@ func listResultSchema() map[string]any {
 
 func operatorMoveResultSchema() map[string]any {
 	return objectSchema(map[string]any{
-		"WorkID":      stringProperty("Moved Work identifier."),
-		"WorkTypeID":  stringProperty("Configured work type name for the moved item."),
-		"FromState":   stringProperty("State name before the move."),
-		"ToState":     stringProperty("State name after the move."),
-		"TokenID":     stringProperty("Internal token identifier for the moved work item."),
+		"WorkID":     stringProperty("Moved Work identifier."),
+		"WorkTypeID": stringProperty("Configured work type name for the moved item."),
+		"FromState":  stringProperty("State name before the move."),
+		"ToState":    stringProperty("State name after the move."),
+		"TokenID":    stringProperty("Internal token identifier for the moved work item."),
 	})
 }

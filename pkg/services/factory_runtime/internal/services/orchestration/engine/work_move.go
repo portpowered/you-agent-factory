@@ -55,11 +55,11 @@ func (e *FactoryEngine) MoveWork(ctx context.Context, workID string, stateName s
 	}
 	if fromPlaceID == toPlaceID {
 		return work.OperatorMoveResult{
-			WorkID:      workID,
-			WorkTypeID:  token.Color.WorkTypeID,
-			FromState:   fromState,
-			ToState:     stateName,
-			TokenID:     token.ID,
+			WorkID:     workID,
+			WorkTypeID: token.Color.WorkTypeID,
+			FromState:  fromState,
+			ToState:    stateName,
+			TokenID:    token.ID,
 		}, nil
 	}
 
@@ -81,11 +81,11 @@ func (e *FactoryEngine) MoveWork(ctx context.Context, workID string, stateName s
 	e.wakeForOperatorControl()
 
 	return work.OperatorMoveResult{
-		WorkID:      workID,
-		WorkTypeID:  token.Color.WorkTypeID,
-		FromState:   fromState,
-		ToState:     stateName,
-		TokenID:     token.ID,
+		WorkID:     workID,
+		WorkTypeID: token.Color.WorkTypeID,
+		FromState:  fromState,
+		ToState:    stateName,
+		TokenID:    token.ID,
 	}, nil
 }
 

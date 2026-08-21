@@ -7,9 +7,9 @@ import (
 	"time"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	"github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/testing/recordingsstub"
 	activationlifecycle "github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/services/activation_lifecycle"
 	lifecycleservice "github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/services/activation_lifecycle/internal/service"
+	"github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/testing/recordingsstub"
 )
 
 func TestActivationLifecycleOwnerBacksRootLifecycleSlice(t *testing.T) {
@@ -115,6 +115,7 @@ func newClosableLifecycleEventStream() (*factorydefinitions.FactoryEventStream, 
 		Events: events,
 	}, events
 }
+
 type fixedLifecycleClock struct{ now time.Time }
 
 func (c fixedLifecycleClock) Now() time.Time { return c.now }

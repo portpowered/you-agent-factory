@@ -9,26 +9,26 @@ import (
 )
 
 const (
-	errorCodeBadRequest         = "BAD_REQUEST"
-	errorCodeServiceUnavailable = "recording.service.unavailable"
-	errorCodeMissingTarget      = "recording.target.missing"
-	errorCodeInvalidAppend      = "recording.append.invalid"
-	errorCodeReplayNotFound     = "recording.replay.not_found"
-	errorCodeReplayNotFinalized = "recording.replay.not_finalized"
+	errorCodeBadRequest          = "BAD_REQUEST"
+	errorCodeServiceUnavailable  = "recording.service.unavailable"
+	errorCodeMissingTarget       = "recording.target.missing"
+	errorCodeInvalidAppend       = "recording.append.invalid"
+	errorCodeReplayNotFound      = "recording.replay.not_found"
+	errorCodeReplayNotFinalized  = "recording.replay.not_finalized"
 	errorCodeArtifactUnavailable = "recording.artifact.unavailable"
 	errorCodeArtifactInvalid     = "recording.artifact.invalid"
-	errorCodeArtifactForeign       = "recording.artifact.foreign"
-	errorCodeInternalExecution  = "recording.execution.internal"
+	errorCodeArtifactForeign     = "recording.artifact.foreign"
+	errorCodeInternalExecution   = "recording.execution.internal"
 
-	errorMessageServiceUnavailable   = "recordings service is unavailable"
-	errorMessageMissingTarget        = "recording target not found"
-	errorMessageInvalidAppend        = "invalid canonical event append"
-	errorMessageReplayNotFound       = "replay recording not found"
-	errorMessageReplayNotFinalized   = "replay recording is not finalized"
-	errorMessageArtifactUnavailable  = "portable recording artifact unavailable"
-	errorMessageArtifactInvalid      = "invalid portable recording artifact"
-	errorMessageArtifactForeign      = "foreign portable recording artifact handle"
-	errorMessageInternalExecution    = "recording execution failed"
+	errorMessageServiceUnavailable  = "recordings service is unavailable"
+	errorMessageMissingTarget       = "recording target not found"
+	errorMessageInvalidAppend       = "invalid canonical event append"
+	errorMessageReplayNotFound      = "replay recording not found"
+	errorMessageReplayNotFinalized  = "replay recording is not finalized"
+	errorMessageArtifactUnavailable = "portable recording artifact unavailable"
+	errorMessageArtifactInvalid     = "invalid portable recording artifact"
+	errorMessageArtifactForeign     = "foreign portable recording artifact handle"
+	errorMessageInternalExecution   = "recording execution failed"
 )
 
 func requestContextErrorResponse[T any](ctx context.Context) (ToolResponse[T], bool) {
@@ -105,7 +105,7 @@ func appendEventErrorEnvelope(event recordings.CanonicalEvent, err error) ToolEr
 			Message:   errorMessageInvalidAppend,
 			Retryable: false,
 			Details: map[string]any{
-				"reason": err.Error(),
+				"reason":  err.Error(),
 				"eventId": string(event.ID),
 			},
 		}

@@ -5,7 +5,7 @@ import recordings "github.com/portpowered/infinite-you/pkg/services/recordings"
 // Portable recording vocabulary is owned by this subservice. Peers import
 // these types from pkg/services/recordings rather than this private package.
 type (
-	PortableRecording                  = recordings.PortableRecording
+	PortableRecording                    = recordings.PortableRecording
 	PortableRecordingArtifactSummary     = recordings.PortableRecordingArtifactSummary
 	PortableRecordingAvailability        = recordings.PortableRecordingAvailability
 	PortableRecordingCanonicalArtifact   = recordings.PortableRecordingCanonicalArtifact

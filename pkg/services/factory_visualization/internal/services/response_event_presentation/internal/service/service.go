@@ -330,4 +330,3 @@ func waitOutput(wg *sync.WaitGroup, timeout time.Duration) bool {
 		return false
 	}
 }
-

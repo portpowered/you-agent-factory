@@ -12,7 +12,6 @@ import (
 	"sync"
 	"testing"
 	"time"
-
 )
 
 func TestNormalizeRuntimeMetricsConfig(t *testing.T) {

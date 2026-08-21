@@ -84,4 +84,3 @@ func (a *Adapter) writeListDecodeError(w http.ResponseWriter, err error) {
 	}
 	a.writeError(w, http.StatusBadRequest, "invalid list-work request", "BAD_REQUEST")
 }
-

@@ -19,10 +19,10 @@ import (
 type blockingVisualizationRootFake struct {
 	mu sync.Mutex
 
-	observeInvoked bool
+	observeInvoked  bool
 	activateInvoked bool
 
-	observe func(context.Context, factoryvisualization.ObserveRequest) (factoryvisualization.ObserveResult, error)
+	observe  func(context.Context, factoryvisualization.ObserveRequest) (factoryvisualization.ObserveResult, error)
 	activate func(context.Context, factoryvisualization.ActivateRequest) (factoryvisualization.ActivateResult, error)
 }
 

@@ -10,9 +10,9 @@ import (
 )
 
 type config struct {
-	root           string
-	ledgerPath     string
-	checklistPath  string
+	root          string
+	ledgerPath    string
+	checklistPath string
 }
 
 func main() {

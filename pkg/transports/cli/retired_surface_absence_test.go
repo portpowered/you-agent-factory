@@ -6,8 +6,8 @@ import (
 	"testing"
 
 	"github.com/portpowered/infinite-you/internal/retiredsurfaceguard"
-	"github.com/portpowered/infinite-you/pkg/transports/cli/commandidentity"
 	configcli "github.com/portpowered/infinite-you/pkg/services/factory_definitions/transports/cli/config"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/commandidentity"
 	docscli "github.com/portpowered/infinite-you/pkg/transports/cli/docs"
 	factorycli "github.com/portpowered/infinite-you/pkg/transports/cli/factory"
 )

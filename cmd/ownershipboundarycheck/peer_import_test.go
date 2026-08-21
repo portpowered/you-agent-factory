@@ -8,8 +8,8 @@ import (
 
 func TestCrossOwnerPeerRuleRejectsPeerImplementationImport(t *testing.T) {
 	root := fixtureRepository(t, map[string]string{
-		"pkg/services/factory_sessions/doc.go": "package factory_sessions\n",
-		"pkg/services/factory_runtime/doc.go":  "package factory_runtime\n",
+		"pkg/services/factory_sessions/doc.go":                "package factory_sessions\n",
+		"pkg/services/factory_runtime/doc.go":                 "package factory_runtime\n",
 		"pkg/services/factory_runtime/internal/engine/doc.go": "package engine\n",
 		"pkg/services/factory_sessions/consume_peer_impl.go": `package factory_sessions
 import engine "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/engine"
@@ -48,8 +48,8 @@ func TestCrossOwnerPeerRuleRejectsPreviouslyUnlistedPeerImplementationPath(t *te
 	// catalog. Owner-derived classification alone must reject the peer import.
 	const unlistedPeerPath = "/pkg/services/factory_definitions/brand_new_adapter"
 	root := fixtureRepository(t, map[string]string{
-		"pkg/services/factory_sessions/doc.go":    "package factory_sessions\n",
-		"pkg/services/factory_definitions/doc.go": "package factory_definitions\n",
+		"pkg/services/factory_sessions/doc.go":                      "package factory_sessions\n",
+		"pkg/services/factory_definitions/doc.go":                   "package factory_definitions\n",
 		"pkg/services/factory_definitions/brand_new_adapter/doc.go": "package brand_new_adapter\n",
 		"pkg/services/factory_sessions/consume_unlisted.go": `package factory_sessions
 import novelty "github.com/portpowered/infinite-you/pkg/services/factory_definitions/brand_new_adapter"
@@ -119,9 +119,9 @@ var _ = novelty.Adapter{}`
 
 	t.Run("active recorded peer debt passes without relocating packages", func(t *testing.T) {
 		root := fixtureRepository(t, map[string]string{
-			"pkg/services/factory_sessions/doc.go":                          "package factory_sessions\n",
-			"pkg/services/factory_runtime/doc.go":                           "package factory_runtime\n",
-			"pkg/services/factory_runtime/brand_new_adapter/doc.go":         "package brand_new_adapter\n",
+			"pkg/services/factory_sessions/doc.go":                  "package factory_sessions\n",
+			"pkg/services/factory_runtime/doc.go":                   "package factory_runtime\n",
+			"pkg/services/factory_runtime/brand_new_adapter/doc.go": "package brand_new_adapter\n",
 			importerPath: violatingSource,
 		})
 		writeBaseline(t, root, baselineEntryFor(rulePeerServiceImplementation, importerPath, target))
@@ -169,8 +169,8 @@ var _ = novelty.Adapter{}`
 
 func TestCrossOwnerPeerRuleRejectsPeerNestedSubserviceImport(t *testing.T) {
 	root := fixtureRepository(t, map[string]string{
-		"pkg/services/factory_sessions/doc.go": "package factory_sessions\n",
-		"pkg/services/workers/doc.go":          "package workers\n",
+		"pkg/services/factory_sessions/doc.go":              "package factory_sessions\n",
+		"pkg/services/workers/doc.go":                       "package workers\n",
 		"pkg/services/workers/services/hosted_logic/doc.go": "package hosted_logic\n",
 		"pkg/services/factory_sessions/consume_nested.go": `package factory_sessions
 import hosted "github.com/portpowered/infinite-you/pkg/services/workers/services/hosted_logic"
@@ -206,8 +206,8 @@ var _ = hosted.Service{}`,
 
 func TestCrossOwnerPeerRuleKeepsExactLeafEffectPortExceptions(t *testing.T) {
 	root := fixtureRepository(t, map[string]string{
-		"pkg/services/edges/doc.go":    "package edges\n",
-		"pkg/services/workers/doc.go":  "package workers\n",
+		"pkg/services/edges/doc.go":   "package edges\n",
+		"pkg/services/workers/doc.go": "package workers\n",
 		"pkg/services/providers/internal/services/execution/internal/adapters/agy/agypty/doc.go": "package agypty\n",
 		"pkg/services/edges/leaf.go": `package edges
 import agypty "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/agy/agypty"
@@ -224,8 +224,8 @@ var _ = agypty.Service{}`,
 
 func TestPeerViolationMessageAppearsInRunOutput(t *testing.T) {
 	root := fixtureRepository(t, map[string]string{
-		"pkg/services/factory_sessions/doc.go": "package factory_sessions\n",
-		"pkg/services/factory_runtime/doc.go":  "package factory_runtime\n",
+		"pkg/services/factory_sessions/doc.go":                "package factory_sessions\n",
+		"pkg/services/factory_runtime/doc.go":                 "package factory_runtime\n",
 		"pkg/services/factory_runtime/internal/engine/doc.go": "package engine\n",
 		"pkg/services/factory_sessions/consume_peer_impl.go": `package factory_sessions
 import engine "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/engine"
@@ -345,4 +345,3 @@ func TestCrossOwnerPeerImportDecisionAllowsPeerRootAndSameOwner(t *testing.T) {
 		})
 	}
 }
-

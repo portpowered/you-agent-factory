@@ -10,8 +10,8 @@ import (
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorydefinitionscli "github.com/portpowered/infinite-you/pkg/services/factory_definitions/transports/cli"
 	configcli "github.com/portpowered/infinite-you/pkg/services/factory_definitions/transports/cli/config"
-	factorycli "github.com/portpowered/infinite-you/pkg/transports/cli/factory"
 	"github.com/portpowered/infinite-you/pkg/services/operator_settings/transports/cli/initsetup"
+	factorycli "github.com/portpowered/infinite-you/pkg/transports/cli/factory"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/resolvedinput"
 	"github.com/spf13/cobra"
 )
@@ -64,20 +64,20 @@ type FactoryConfigInitHandler interface {
 // FactoryConfigInitServices carries the injected effects used by the family
 // adapter. Public spellings and Cobra storage deliberately stay out of it.
 type FactoryConfigInitServices struct {
-	QueryFactory          func(factorycli.QueryConfig) error
-	ListFactories         func(factorycli.ListConfig) error
-	CreateFactoryFromFile func(factorycli.CreateFromFileConfig) error
-	UpdateFactoryFromFile func(factorycli.UpdateFromFileConfig) error
-	DeleteFactory         func(factorycli.DeleteConfig) error
-	ReplaceFactoryCurrent func(factorycli.ReplaceCurrentConfig) error
-	ValidateFactory       func(factorycli.ValidateConfig) error
-	FlattenFactoryConfig  func(configcli.FactoryConfigFlattenConfig) error
-	ExpandFactoryConfig   func(configcli.FactoryConfigExpandConfig) error
-	ConfigureInit         func(initsetup.Config) error
+	QueryFactory           func(factorycli.QueryConfig) error
+	ListFactories          func(factorycli.ListConfig) error
+	CreateFactoryFromFile  func(factorycli.CreateFromFileConfig) error
+	UpdateFactoryFromFile  func(factorycli.UpdateFromFileConfig) error
+	DeleteFactory          func(factorycli.DeleteConfig) error
+	ReplaceFactoryCurrent  func(factorycli.ReplaceCurrentConfig) error
+	ValidateFactory        func(factorycli.ValidateConfig) error
+	FlattenFactoryConfig   func(configcli.FactoryConfigFlattenConfig) error
+	ExpandFactoryConfig    func(configcli.FactoryConfigExpandConfig) error
+	ConfigureInit          func(initsetup.Config) error
 	InstallPackagedFactory func(factorydefinitionscli.InstallPackagedFactoryConfig) error
-	HomeDir               func() (string, error)
-	ResolveFactoryRoots   func(string, string) (factorydefinitions.NamedFactoryRoots, error)
-	DiagnosticsWriter     func(*cobra.Command) io.Writer
+	HomeDir                func() (string, error)
+	ResolveFactoryRoots    func(string, string) (factorydefinitions.NamedFactoryRoots, error)
+	DiagnosticsWriter      func(*cobra.Command) io.Writer
 }
 
 // FactoryConfigInitCommandHandler translates resolved manifest inputs into the

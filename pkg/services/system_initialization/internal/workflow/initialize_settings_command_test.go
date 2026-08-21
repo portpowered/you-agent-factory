@@ -66,11 +66,11 @@ func TestInitializeSettingsCommandConstructionThroughRootCollaborator(t *testing
 		wantSettingsCalls settingsCommandExpectation
 	}{
 		{
-			name: "create path ensures then loads through root collaborator",
-			settings: &settingsCommandRecorder{},
+			name:        "create path ensures then loads through root collaborator",
+			settings:    &settingsCommandRecorder{},
 			wantOutcome: systeminitialization.SystemConfigCreated,
 			wantSettingsCalls: settingsCommandExpectation{
-				wantEnsure: []string{"<config>"},
+				wantEnsure:    []string{"<config>"},
 				wantLoadCalls: []string{"<config>"},
 			},
 		},

@@ -18,17 +18,19 @@ import (
 
 func withTestLimits(t *testing.T, mutate func()) {
 	t.Helper()
-	t.Cleanup(func() { testLimitOverrides = struct {
-		storeWalkEntries   int
-		storeCandidates    int
-		queriedRows        int
-		blobBytes          int
-		inspectionBytes    int
-		protobufNesting    int
-		protobufDecodeWork int
-		transcriptFacts    int
-		parseDiagnostics   int
-	}{} })
+	t.Cleanup(func() {
+		testLimitOverrides = struct {
+			storeWalkEntries   int
+			storeCandidates    int
+			queriedRows        int
+			blobBytes          int
+			inspectionBytes    int
+			protobufNesting    int
+			protobufDecodeWork int
+			transcriptFacts    int
+			parseDiagnostics   int
+		}{}
+	})
 	mutate()
 }
 

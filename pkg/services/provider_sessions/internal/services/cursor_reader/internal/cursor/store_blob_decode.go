@@ -175,11 +175,11 @@ func decodeBlobEntryValue(ins *inspection, blob BlobEntry, index int, sessionID 
 									LogInfo("Blob %d parsed as text message format (user message): bubbleId='%s', text='%s', chatId='%s'", index+1, bubble.BubbleID, bubble.Text, bubble.ChatID)
 									return nil, nil, false
 								}
-							(*jsonParseFailures)++
-							if ins != nil {
-								ins.recordMalformedBlob(index + 1)
-							}
-							return nil, nil, false
+								(*jsonParseFailures)++
+								if ins != nil {
+									ins.recordMalformedBlob(index + 1)
+								}
+								return nil, nil, false
 							}
 						} else {
 							// Protobuf decoded but no readable strings found
