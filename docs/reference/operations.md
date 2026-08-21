@@ -427,9 +427,9 @@ hot-reload check.
 
 The live Factory Session queue is process-local and in memory, but its admitted
 Work and dispatch lifecycle are represented in the Factory Event recording.
-Restarting the process loses the running queue and provider process; it does
-not make recorded Work unrecoverable. A retained recording can reconstruct the
-recorded Factory state in a new live Factory Session with
+Restarting the process loses the running queue and provider process.
+It does not make recorded Work unrecoverable. A retained recording can
+reconstruct the recorded Factory state in a new live Factory Session with
 `you run --resume <recording>`. Resume reads the source without overwriting it
 and writes a successor recording by default. Use `--record <successor-path>` to
 choose that path.
@@ -438,13 +438,13 @@ Resume re-admits recorded non-terminal Work, including Work that was queued or
 in flight at the stop boundary. Terminal Work represented by the recording is
 not dispatched again, and a completed dispatch remains one completed dispatch
 in the successor. A dispatch without a recorded completion can run again after
-resume. This is not an exactly-once provider-effect guarantee: a provider may
-have performed an effect before the process stopped, so make provider-side
-operations idempotent when duplicate attempts matter.
+resume. This is not an exactly-once provider-effect guarantee.
+A provider may have performed an effect before the process stopped.
+Make provider-side operations idempotent when duplicate attempts matter.
 
 Work that never reached a durable Factory Event is not recoverable from that
 recording. Portable JavaScript recordings remain replay and inspection
-artifacts; they do not contain a JavaScript VM or provider process and cannot be
+artifacts. They do not contain a JavaScript VM or provider process and cannot be
 passed to `--resume`. Unfinalized recordings with a valid complete event prefix
 are supported. A truncated final event-stream block can be skipped after
 earlier complete events. Mid-stream corruption and recordings without a valid
@@ -458,23 +458,21 @@ Use this recovery sequence:
    `you run --resume <recording> --record <successor-path>` and inspect both
    recording paths. Confirm that recorded terminal Work was not dispatched
    again and that recorded non-terminal Work was re-admitted.
-3. If the intended Work was never admitted into the recording, start a new
-   Factory Session with the continuous server shape above and resubmit it
-   through the normal Work ingress, preserving its authored `name`. Do not
-   invent a new name just because the old process stopped.
-   This same-name resubmit fallback applies only to Work absent from the
-   recoverable recording.
-4. For resubmitted Work, let the workstation's worktree template render from
-   that same name. For a template such as
-   `.claude/worktrees/{{ (index .Inputs 0).Name }}`, the new dispatch targets
-   the existing named artifact directory when the runtime's worktree rules
-   allow it.
+3. If Work was never admitted into the recording, start a new Factory Session.
+   Use the continuous server shape above.
+   Resubmit the Work through the normal Work ingress with its authored `name`.
+   Do not invent a new name because the old process stopped.
+   This is the same-name resubmit fallback. It applies only to Work absent from
+   the recoverable recording.
+4. Use the same name in the Workstation worktree template.
+   For `.claude/worktrees/{{ (index .Inputs 0).Name }}`, runtime rules can
+   target the existing named artifact directory.
 5. Verify resumed or resubmitted Work reaches an explicit terminal or failed
    state. A successful recovery proves only that this recovery worked for that
-   Work; provider-side exactly-once effects still require idempotency.
+   Work. Provider-side exactly-once effects still require idempotency.
 
 The six production recoveries recorded on 2026-08-08/09 remain historical
-operational evidence for the same-name fallback; they are not a durability
+operational evidence for the same-name fallback. They are not a durability
 guarantee or a substitute for inspecting the source and successor recordings.
 
 For a copyable record → kill → resume journey with a fresh binary and isolated

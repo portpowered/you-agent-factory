@@ -163,9 +163,10 @@ The current canonical operator story is intentionally bounded:
 - Durable JavaScript execution inspection belongs to `FactorySession`,
   `Dispatch`, `FactoryArtifact`, and `FactoryEvent` reads across CLI, API,
   dashboard, and MCP-compatible docs.
-- Replay-resume expansion, broader live-provider bridge parity, and broader MCP
-  host parity remain explicit follow-up scope, not implied capabilities of the
-  current shipped session model.
+- Portable JavaScript recording resume is not supported. See `you docs
+  record-replay` for the supported Factory Event resume path and portable
+  recording limits. Broader live-provider bridge parity and broader MCP host
+  parity remain follow-up scope for the current shipped session model.
 
 ## Related Topics
 

@@ -394,7 +394,7 @@ listening server.
 Live runs record a replay-compatible artifact by default. Use `--no-record`,
 `--record <path>`, `--replay <path>`, or `--resume <recording>` when you need to
 override capture, playback, or continuation. Resume writes a successor
-recording by default; `--record <path>` selects its path. Run `you docs
+recording by default. Use `--record <path>` to select its path. Run `you docs
 record-replay` for generated paths, incompatible flag combinations, sensitivity
 warnings, and copy-pasteable record, replay, and resume examples.
 

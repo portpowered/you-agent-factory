@@ -55,9 +55,9 @@ recording.
 last valid Factory world state, and opens a new live Factory Session from that
 state. Pass `--resume <path>`. Recorded non-terminal Work is seeded back into
 the live scheduler, including Work that was queued or in flight when the
-source process stopped. Resume writes a separate successor recording; it does
-not preserve the original process-local queue or provider process as a live
-object.
+source process stopped. Resume writes a separate successor recording.
+It does not preserve the original process-local queue or provider process as a
+live object.
 
 ## Run Controls
 
@@ -79,7 +79,7 @@ These flag pairs are rejected for the same invocation:
 - `--resume` with `--no-record`
 
 `--resume` and `--replay` are mutually exclusive. Replay is historical and
-read-only; resume opens live Factory execution.
+read-only. Resume opens live Factory execution.
 
 `--resume` with `--record` is allowed. The explicit path names the new
 successor recording. A flag validation failure happens before a new Factory
@@ -112,12 +112,11 @@ Resume restores the recorded Work state with these boundaries:
   a recorded completion is reconciled as interrupted and may run again in the
   successor.
 
-The completed-dispatch rule is an exactly-once expectation for the recorded
-Factory dispatch lineage, not an exactly-once provider-effect guarantee. A
-provider may have performed a side effect before the process stopped without
-publishing a completion event; resuming the interrupted dispatch can therefore
-repeat that provider attempt. Make provider-side operations idempotent when
-duplicate attempts would matter.
+The completed-dispatch rule is an exactly-once expectation for recorded Factory
+dispatch lineage. It is not an exactly-once provider-effect guarantee.
+A provider may perform a side effect before the process stops without
+publishing a completion event. Resume may repeat that provider attempt.
+Make provider-side operations idempotent when duplicate attempts matter.
 
 ### Process-kill recovery boundary
 
@@ -149,12 +148,13 @@ JavaScript continuation.
 ## Verify record, kill, and resume from a fresh binary
 
 The following PowerShell procedure is a self-contained smoke journey for the
-Factory Event resume path. It builds a fresh binary, creates an isolated
-temporary Factory and recording directory, and uses no `--with-server` or
-`--listen` flag, so it does not bind port `7437` (or any other port). It needs
-Go and Python 3 on `PATH`. The script mock emits the Codex JSON protocol because
-the authored workers use the Codex provider parser; plain text from a script
-would not be a provider completion.
+Factory Event resume path. It builds a fresh binary and creates an isolated
+temporary Factory and recording directory. It uses no `--with-server` or
+`--listen` flag, so it does not bind port `7437` or any other port.
+It requires Go and Python 3 on `PATH`. The script mock emits the Codex JSON
+protocol. The authored workers use the Codex provider parser.
+
+Plain text from a script does not create a provider completion.
 
 Run these setup commands from the repository root:
 
@@ -172,13 +172,21 @@ $originalHome = $env:HOME
 $originalUserProfile = $env:USERPROFILE
 $env:HOME = $proofHome
 $env:USERPROFILE = $proofHome
+
+function Write-Utf8NoBom([string] $path, [string] $content) {
+    [System.IO.File]::WriteAllText(
+        (Join-Path $proofRoot $path),
+        $content,
+        [System.Text.UTF8Encoding]::new($false)
+    )
+}
 ```
 
 Create the minimal two-stage Factory, one Work item, and deterministic worker
 helper:
 
 ```powershell
-@'
+Write-Utf8NoBom .\factory\factory.json @'
 {
   "name": "rsm8-resume",
   "workTypes": [
@@ -215,9 +223,9 @@ helper:
     }
   ]
 }
-'@ | Set-Content -Encoding utf8 .\factory\factory.json
+'@
 
-@'
+Write-Utf8NoBom .\factory\workers\first\AGENTS.md @'
 ---
 type: MODEL_WORKER
 model: gpt-5-codex
@@ -225,10 +233,10 @@ modelProvider: CODEX
 stopToken: COMPLETE
 ---
 Execute the task.
-'@ | Set-Content -Encoding utf8 .\factory\workers\first\AGENTS.md
+'@
 Copy-Item .\factory\workers\first\AGENTS.md .\factory\workers\second\AGENTS.md
 
-@'
+Write-Utf8NoBom .\work.json @'
 {
   "requestId": "rsm8-cli-proof",
   "type": "FACTORY_REQUEST_BATCH",
@@ -241,9 +249,9 @@ Copy-Item .\factory\workers\first\AGENTS.md .\factory\workers\second\AGENTS.md
     }
   ]
 }
-'@ | Set-Content -Encoding utf8 .\work.json
+'@
 
-@'
+Write-Utf8NoBom .\worker.py @'
 import json
 from pathlib import Path
 import time
@@ -277,9 +285,9 @@ elif not release.exists():
     time.sleep(300)
 else:
     complete()
-'@ | Set-Content -Encoding utf8 .\worker.py
+'@
 
-@'
+Write-Utf8NoBom .\mock-workers.json @'
 {
   "mockWorkers": [
     {
@@ -293,7 +301,7 @@ else:
     }
   ]
 }
-'@ | Set-Content -Encoding utf8 .\mock-workers.json
+'@
 ```
 
 Start the source run and wait until the first dispatch is durably recorded and
@@ -383,10 +391,10 @@ successor replay exit=0
 ```
 
 The source is an unfinalized but valid prefix. The successor carries the
-completed `step-one` response forward, adds one resumed `step-two` dispatch,
-and reaches terminal `complete` Work. A portable JavaScript recording is a
-different artifact class; confirm its `--resume` rejection rather than using it
-for this journey.
+completed `step-one` response forward. It adds one resumed `step-two` dispatch
+and reaches terminal `complete` Work. A portable JavaScript recording has a
+different artifact class. Confirm its `--resume` rejection before using this
+journey.
 
 ## JavaScript Recording Overview
 
