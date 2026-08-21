@@ -173,6 +173,36 @@
       ]
     },
     {
+      "name": "@you/fix",
+      "project": "builtin-fix",
+      "slug": "fix",
+      "json": {
+        "locator": "generated/factories/fix/factory.json",
+        "sha256": "e9ec7c3b169dab0dd3dac7dd68850b4c2238a0c60457996bd63ac5023bf782e8"
+      },
+      "yaml": {
+        "locator": "generated/factories/fix/factory.yaml",
+        "sha256": "d9af38c13a043493745df2a365307fcae783b35224d7ebcca4458c6afa42154e"
+      },
+      "description": {
+        "type": "LOCALIZABLE_ASSET",
+        "value": "Plans and iterates a requested fix in an isolated named worktree, then repeats independent review until approval or bounded failure."
+      },
+      "examples": [
+        {
+          "name": "plan-fix-review",
+          "description": {
+            "type": "LOCALIZABLE_ASSET",
+            "value": "Plan, implement, and independently review a fix in a named worktree."
+          },
+          "args": {
+            "request": "Fix and verify the requested change",
+            "worktreeName": "fix-request"
+          }
+        }
+      ]
+    },
+    {
       "name": "@you/full-flow",
       "project": "builtin-full-flow",
       "slug": "full-flow",
