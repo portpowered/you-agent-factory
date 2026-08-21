@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/portpowered/infinite-you/internal/testutil/recordingfixtures"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 
@@ -14,6 +15,7 @@ import (
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	factoryhost "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/host"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/orchestrators/petri"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/scheduler"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/state"
@@ -363,6 +365,226 @@ func TestNew_WithRestoredHumanApprovalDispatchDoesNotRestoreWorkPlacement(t *tes
 	if tokens := snapshot.Marking.PlaceTokens["task:done"]; len(tokens) != 0 {
 		t.Fatalf("restored pending approval Work token IDs = %#v, want no ordinary Work token", tokens)
 	}
+}
+
+func TestNew_ReconcilesRestoredActiveDispatchExactlyOnceAndLeavesWorkEligible(t *testing.T) {
+	base := time.Date(2026, time.April, 10, 12, 0, 0, 0, time.UTC)
+	restored := &interfaces.FactoryWorldState{
+		Tick: 12,
+		WorkItemsByID: map[string]work.FactoryWorkItem{
+			"work-processing": {
+				ID: "work-processing", WorkTypeID: "task", State: "init", PlaceID: "task:init",
+			},
+		},
+		ActiveWorkItemsByID: map[string]work.FactoryWorkItem{
+			"work-processing": {
+				ID: "work-processing", WorkTypeID: "task", State: "init", PlaceID: "task:init",
+			},
+		},
+		ActiveDispatches: map[string]interfaces.FactoryWorldDispatch{
+			"dispatch-processing": {
+				DispatchID:  "dispatch-processing",
+				StartedTick: 11,
+				WorkItemIDs: []string{"work-processing"},
+				Inputs: []interfaces.WorkstationInput{{
+					TokenID:  "work-processing",
+					PlaceID:  "task:init",
+					WorkItem: &work.FactoryWorkItem{ID: "work-processing", WorkTypeID: "task", State: "init"},
+				}},
+			},
+		},
+	}
+	ledger := &recordingfixtures.ScriptedRuntimeLedger{}
+	newRuntime := func() factoryhost.Engine {
+		runtime, err := newTestFactory(
+			withNet(buildSimpleNet()),
+			withClock(platformclock.NewDeterministic(base, time.Second)),
+			withRestoredWorldState(restored),
+			withFactoryEventHistory(ledger),
+		)
+		if err != nil {
+			t.Fatalf("New: %v", err)
+		}
+		return runtime
+	}
+
+	first := newRuntime()
+	snapshot, err := first.GetEngineStateSnapshot(context.Background())
+	if err != nil {
+		t.Fatalf("GetEngineStateSnapshot: %v", err)
+	}
+	if len(snapshot.Dispatches) != 0 {
+		t.Fatalf("restored runtime dispatches = %#v, want no pre-restart live dispatch", snapshot.Dispatches)
+	}
+	if !markingContainsWorkAtPlace(&snapshot.Marking, "work-processing", "task:init") {
+		t.Fatalf("restored Work is not re-armed at task:init: %#v", snapshot.Marking.PlaceTokens)
+	}
+
+	interrupted := make([]interfaces.FactoryEvent, 0, 1)
+	for _, event := range ledger.CanonicalEvents() {
+		if event.Type == interfaces.FactoryEventTypeDispatchInterrupted {
+			interrupted = append(interrupted, event)
+		}
+	}
+	if len(interrupted) != 1 {
+		t.Fatalf("interruption events after first restore = %d, want one", len(interrupted))
+	}
+	if got := stringPointerValue(interrupted[0].Context.DispatchID); got != "dispatch-processing" {
+		t.Fatalf("interrupted dispatch ID = %q, want dispatch-processing", got)
+	}
+	var payload interfaces.DispatchInterruptedEventPayload
+	if err := interrupted[0].DecodePayload(&payload); err != nil {
+		t.Fatalf("decode interruption payload: %v", err)
+	}
+	if payload.Reason != daemonRestartDispatchInterruptionReason || !payload.RetryPlanned {
+		t.Fatalf("interruption payload = %#v, want restart reason and retry planned", payload)
+	}
+
+	_ = newRuntime()
+	interrupted = interrupted[:0]
+	for _, event := range ledger.CanonicalEvents() {
+		if event.Type == interfaces.FactoryEventTypeDispatchInterrupted {
+			interrupted = append(interrupted, event)
+		}
+	}
+	if len(interrupted) != 1 {
+		t.Fatalf("interruption events after repeated restore = %d, want one", len(interrupted))
+	}
+}
+
+func TestNew_ReconcilesRestoredDispatchLeavesNoAttemptTerminalAndBlockedWorkUnchanged(t *testing.T) {
+	base := time.Date(2026, time.April, 10, 12, 0, 0, 0, time.UTC)
+	countInterruptions := func(ledger *recordingfixtures.ScriptedRuntimeLedger) int {
+		count := 0
+		for _, event := range ledger.CanonicalEvents() {
+			if event.Type == interfaces.FactoryEventTypeDispatchInterrupted {
+				count++
+			}
+		}
+		return count
+	}
+
+	t.Run("no attempt", func(t *testing.T) {
+		ledger := &recordingfixtures.ScriptedRuntimeLedger{}
+		item := work.FactoryWorkItem{ID: "work-no-attempt", WorkTypeID: "task", State: "init", PlaceID: "task:init"}
+		f, err := newTestFactory(
+			withNet(buildSimpleNet()),
+			withClock(platformclock.NewDeterministic(base, time.Second)),
+			withFactoryEventHistory(ledger),
+			withRestoredWorldState(&interfaces.FactoryWorldState{
+				WorkItemsByID:       map[string]work.FactoryWorkItem{item.ID: item},
+				ActiveWorkItemsByID: map[string]work.FactoryWorkItem{item.ID: item},
+				PlaceOccupancyByID:  map[string]interfaces.FactoryPlaceOccupancy{"task:init": {PlaceID: "task:init", WorkItemIDs: []string{item.ID}}},
+			}),
+		)
+		if err != nil {
+			t.Fatalf("New: %v", err)
+		}
+		snapshot, err := f.GetEngineStateSnapshot(context.Background())
+		if err != nil {
+			t.Fatalf("GetEngineStateSnapshot: %v", err)
+		}
+		if !markingContainsWorkAtPlace(&snapshot.Marking, item.ID, item.PlaceID) {
+			t.Fatalf("restored no-attempt Work marking = %#v, want %s", snapshot.Marking.PlaceTokens, item.PlaceID)
+		}
+		if got := countInterruptions(ledger); got != 0 {
+			t.Fatalf("no-attempt interruption count = %d, want zero", got)
+		}
+	})
+
+	t.Run("terminal work", func(t *testing.T) {
+		ledger := &recordingfixtures.ScriptedRuntimeLedger{}
+		item := work.FactoryWorkItem{ID: "work-terminal", WorkTypeID: "task", State: "done", PlaceID: "task:done"}
+		f, err := newTestFactory(
+			withNet(buildSimpleNet()),
+			withClock(platformclock.NewDeterministic(base, time.Second)),
+			withFactoryEventHistory(ledger),
+			withRestoredWorldState(&interfaces.FactoryWorldState{
+				WorkItemsByID: map[string]work.FactoryWorkItem{item.ID: item},
+				TerminalWorkByID: map[string]interfaces.FactoryTerminalWork{
+					item.ID: {WorkItem: item, Status: "TERMINAL"},
+				},
+				PlaceOccupancyByID: map[string]interfaces.FactoryPlaceOccupancy{"task:done": {PlaceID: "task:done", WorkItemIDs: []string{item.ID}}},
+			}),
+		)
+		if err != nil {
+			t.Fatalf("New: %v", err)
+		}
+		snapshot, err := f.GetEngineStateSnapshot(context.Background())
+		if err != nil {
+			t.Fatalf("GetEngineStateSnapshot: %v", err)
+		}
+		if !markingContainsWorkAtPlace(&snapshot.Marking, item.ID, item.PlaceID) {
+			t.Fatalf("restored terminal Work marking = %#v, want %s", snapshot.Marking.PlaceTokens, item.PlaceID)
+		}
+		if got := countInterruptions(ledger); got != 0 {
+			t.Fatalf("terminal interruption count = %d, want zero", got)
+		}
+	})
+
+	t.Run("dependency blocked", func(t *testing.T) {
+		ledger := &recordingfixtures.ScriptedRuntimeLedger{}
+		net := buildSimpleNet()
+		net.WorkTypes["task"].States = []state.StateDefinition{
+			{Value: "init", Category: state.StateCategoryInitial},
+			{Value: "processing", Category: state.StateCategoryProcessing},
+			{Value: "done", Category: state.StateCategoryTerminal},
+			{Value: "failed", Category: state.StateCategoryFailed},
+		}
+		net.Places = make(map[string]*petri.Place)
+		for _, place := range net.WorkTypes["task"].GeneratePlaces() {
+			net.Places[place.ID] = place
+		}
+		net.Transitions["t-process"].InputArcs[0].Guard = &petri.DependencyGuard{}
+		dependent := work.FactoryWorkItem{ID: "work-dependent", WorkTypeID: "task", State: "init", PlaceID: "task:init"}
+		dependency := work.FactoryWorkItem{ID: "work-dependency", WorkTypeID: "task", State: "processing", PlaceID: "task:processing"}
+		f, err := newTestFactory(
+			withNet(net),
+			withClock(platformclock.NewDeterministic(base, time.Second)),
+			withFactoryEventHistory(ledger),
+			withRestoredWorldState(&interfaces.FactoryWorldState{
+				WorkItemsByID: map[string]work.FactoryWorkItem{
+					dependent.ID: dependent, dependency.ID: dependency,
+				},
+				ActiveWorkItemsByID: map[string]work.FactoryWorkItem{
+					dependent.ID: dependent, dependency.ID: dependency,
+				},
+				RelationsByWorkID: map[string][]work.FactoryRelation{
+					dependent.ID: {{Type: string(work.WorkRelationDependsOn), TargetWorkID: dependency.ID, RequiredState: "done"}},
+				},
+				PlaceOccupancyByID: map[string]interfaces.FactoryPlaceOccupancy{
+					"task:processing": {PlaceID: "task:processing", WorkItemIDs: []string{dependency.ID}},
+				},
+				ActiveDispatches: map[string]interfaces.FactoryWorldDispatch{
+					"dispatch-dependent": {
+						DispatchID:  "dispatch-dependent",
+						StartedTick: 1,
+						WorkItemIDs: []string{dependent.ID},
+						Inputs: []interfaces.WorkstationInput{{
+							TokenID: dependent.ID, PlaceID: dependent.PlaceID,
+							WorkItem: &dependent,
+						}},
+					},
+				},
+			}),
+		)
+		if err != nil {
+			t.Fatalf("New: %v", err)
+		}
+		snapshot, err := f.GetEngineStateSnapshot(context.Background())
+		if err != nil {
+			t.Fatalf("GetEngineStateSnapshot: %v", err)
+		}
+		if !markingContainsWorkAtPlace(&snapshot.Marking, dependent.ID, dependent.PlaceID) {
+			t.Fatalf("re-armed dependency-blocked Work marking = %#v, want %s", snapshot.Marking.PlaceTokens, dependent.PlaceID)
+		}
+		if len(snapshot.EnabledTransitions) != 0 {
+			t.Fatalf("dependency-blocked enabled transitions = %#v, want none", snapshot.EnabledTransitions)
+		}
+		if got := countInterruptions(ledger); got != 1 {
+			t.Fatalf("dependency-blocked interruption count = %d, want one", got)
+		}
+	})
 }
 
 func TestNew_WithIncompatibleRestoredWorldStateFailsClosed(t *testing.T) {

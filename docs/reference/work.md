@@ -1,6 +1,6 @@
 ---
 author: Agent Factory Team
-last-modified: 2026-08-09
+last-modified: 2026-08-21
 doc-id: agent-factory/work
 ---
 
@@ -59,6 +59,19 @@ dispatch to workers, and route outcomes based on worker results:
 Each accepted submission references a `workTypeName` that must exist in
 `factory.json`. Workstation routing details are owned by
 `you docs config` and `you docs workstations`.
+
+## After a daemon restart
+
+When the addressed Factory Session has a retained current-board Recording,
+startup restores Work before list/show reads or normal scheduling begin. A
+process-bound attempt that was active at stop is recorded as interrupted, and
+its associated non-terminal Work returns to the last durable logical state.
+The Work remains subject to its normal guards, dependencies, retry policy, and
+capacity; the old attempt is never presented as a live `RUNNING` process.
+Use `you work list` or `you work show <work-id>` with the same session target
+to inspect the restored identity, payload, lineage, relations, and state. See
+`you docs operations` for the restart recovery runbook and the fallback when
+no current-board Recording is configured.
 
 ## Work State Names And Lifecycle Categories
 

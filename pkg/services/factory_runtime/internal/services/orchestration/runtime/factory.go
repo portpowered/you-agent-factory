@@ -4,8 +4,10 @@ package runtime
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -241,6 +243,9 @@ func New(
 	sharedTransformer, subs := buildRuntimeSubsystems(cfg, sched, effectiveLogger, newID, seededRestoredWorkIDs)
 	resultBuffer := buffers.NewTypedBuffer[workerexecution.WorkResult](defaultRuntimeBufferSize)
 	effectiveEventHistory := ensureEventHistory(cfg)
+	if err := reconcileRestoredDispatches(cfg, effectiveEventHistory); err != nil {
+		return nil, fmt.Errorf("reconcile restored Factory Runtime dispatches: %w", err)
+	}
 	dispatchResultHook, dispatchPlan, err := configureRuntimeDispatch(
 		cfg, resultBuffer, effectiveEventHistory,
 	)
@@ -412,6 +417,193 @@ func ensureEventHistory(cfg *runtimeConfig) recordings.RuntimeLedger {
 	eventHistory.RecordInitialStructure()
 	recordSessionStartedFromFactoryConfig(cfg, eventHistory)
 	return eventHistory
+}
+
+const daemonRestartDispatchInterruptionReason = "daemon restart interrupted process-bound attempt"
+
+// reconcileRestoredDispatches closes the process-owned side of every durable
+// dispatch that was active when the previous daemon stopped. The restored
+// Work marking is intentionally built separately: it places each input at its
+// last logical place, while this event makes the old dispatch terminal in the
+// public Factory/Worker Session projections. A canonical event is used so the
+// recovery is visible to historical inspection and is persisted by the normal
+// Recordings recorder.
+func reconcileRestoredDispatches(cfg *runtimeConfig, eventHistory recordings.RuntimeLedger) error {
+	if cfg == nil || cfg.restoredWorldState == nil || eventHistory == nil {
+		return nil
+	}
+	if len(cfg.restoredWorldState.ActiveDispatches) == 0 {
+		return nil
+	}
+
+	activeDispatchIDs := make([]string, 0, len(cfg.restoredWorldState.ActiveDispatches))
+	for dispatchID := range cfg.restoredWorldState.ActiveDispatches {
+		if strings.TrimSpace(dispatchID) != "" {
+			activeDispatchIDs = append(activeDispatchIDs, dispatchID)
+		}
+	}
+	sort.Strings(activeDispatchIDs)
+
+	existingEvents := eventHistory.CanonicalEvents()
+	for _, dispatchID := range activeDispatchIDs {
+		if restoredDispatchHasTerminalEvent(existingEvents, dispatchID) {
+			continue
+		}
+		if !restoredDispatchHasAssociation(existingEvents, dispatchID) {
+			association, err := restoredDispatchAssociationEvent(cfg, cfg.restoredWorldState.ActiveDispatches[dispatchID])
+			if err != nil {
+				return err
+			}
+			eventHistory.AppendRecordedEvent(association)
+			existingEvents = append(existingEvents, association)
+		}
+		event, err := restoredDispatchInterruptionEvent(cfg, cfg.restoredWorldState.ActiveDispatches[dispatchID])
+		if err != nil {
+			return err
+		}
+		eventHistory.AppendRecordedEvent(event)
+		existingEvents = append(existingEvents, event)
+	}
+	return nil
+}
+
+func restoredDispatchHasTerminalEvent(events []interfaces.FactoryEvent, dispatchID string) bool {
+	for _, event := range events {
+		if stringPointerValue(event.Context.DispatchID) != dispatchID {
+			continue
+		}
+		switch event.Type {
+		case interfaces.FactoryEventTypeDispatchInterrupted,
+			interfaces.FactoryEventTypeDispatchReconciled,
+			interfaces.FactoryEventTypeDispatchResponse:
+			return true
+		}
+	}
+	return false
+}
+
+func restoredDispatchHasAssociation(events []interfaces.FactoryEvent, dispatchID string) bool {
+	for _, event := range events {
+		if event.Type == interfaces.FactoryEventTypeDispatchWorkerSessionAssoc &&
+			stringPointerValue(event.Context.DispatchID) == dispatchID {
+			return true
+		}
+	}
+	return false
+}
+
+func restoredDispatchAssociationEvent(
+	cfg *runtimeConfig,
+	dispatch interfaces.FactoryWorldDispatch,
+) (interfaces.FactoryEvent, error) {
+	dispatchID := strings.TrimSpace(dispatch.DispatchID)
+	if dispatchID == "" {
+		return interfaces.FactoryEvent{}, fmt.Errorf("restored active dispatch has no dispatch ID")
+	}
+	workerSessionID := dispatchID
+	payload, err := json.Marshal(interfaces.DispatchWorkerSessionAssociationEventPayload{
+		WorkerSessionID: workerSessionID,
+	})
+	if err != nil {
+		return interfaces.FactoryEvent{}, fmt.Errorf("encode Worker Session association for dispatch %q: %w", dispatchID, err)
+	}
+	now := cfg.clock.Now().UTC()
+	startedAt := dispatch.StartedAt.UTC()
+	if dispatch.StartedAt.IsZero() {
+		startedAt = now
+	}
+	sessionID := sessionIDFromFactoryConfig(cfg)
+	source := "daemon-restart"
+	return interfaces.FactoryEvent{
+		Context: interfaces.FactoryEventContext{
+			DispatchID: &dispatchID,
+			EventTime:  startedAt,
+			SessionID:  &sessionID,
+			Source:     &source,
+			Tick:       maxInt(cfg.restoredWorldState.Tick, dispatch.StartedTick),
+		},
+		Id:            "factory-event/dispatch-worker-session-association/daemon-restart/" + dispatchID,
+		Payload:       payload,
+		SchemaVersion: interfaces.FactoryEventSchemaVersionV1,
+		Type:          interfaces.FactoryEventTypeDispatchWorkerSessionAssoc,
+	}, nil
+}
+
+func restoredDispatchInterruptionEvent(
+	cfg *runtimeConfig,
+	dispatch interfaces.FactoryWorldDispatch,
+) (interfaces.FactoryEvent, error) {
+	dispatchID := strings.TrimSpace(dispatch.DispatchID)
+	if dispatchID == "" {
+		return interfaces.FactoryEvent{}, fmt.Errorf("restored active dispatch has no dispatch ID")
+	}
+	workIDs := append([]string(nil), dispatch.WorkItemIDs...)
+	if len(workIDs) == 0 {
+		for _, input := range dispatch.Inputs {
+			if input.WorkItem != nil && strings.TrimSpace(input.WorkItem.ID) != "" {
+				workIDs = append(workIDs, input.WorkItem.ID)
+			}
+		}
+	}
+	workIDs = uniqueNonEmptyStrings(workIDs)
+	now := cfg.clock.Now().UTC()
+	payload, err := json.Marshal(interfaces.DispatchInterruptedEventPayload{
+		InterruptedAt:  now,
+		ObservedStatus: interfaces.FactoryDispatchStatusRunning,
+		Reason:         daemonRestartDispatchInterruptionReason,
+		RetryPlanned:   true,
+	})
+	if err != nil {
+		return interfaces.FactoryEvent{}, fmt.Errorf("encode interruption for dispatch %q: %w", dispatchID, err)
+	}
+	sessionID := sessionIDFromFactoryConfig(cfg)
+	source := "daemon-restart"
+	return interfaces.FactoryEvent{
+		Context: interfaces.FactoryEventContext{
+			DispatchID: &dispatchID,
+			EventTime:  now,
+			SessionID:  &sessionID,
+			Source:     &source,
+			Tick:       maxInt(cfg.restoredWorldState.Tick, dispatch.StartedTick),
+			WorkIDs:    stringSlicePointer(workIDs),
+		},
+		Id:            "factory-event/dispatch-interrupted/daemon-restart/" + dispatchID,
+		Payload:       payload,
+		SchemaVersion: interfaces.FactoryEventSchemaVersionV1,
+		Type:          interfaces.FactoryEventTypeDispatchInterrupted,
+	}, nil
+}
+
+func maxInt(first, second int) int {
+	if second > first {
+		return second
+	}
+	return first
+}
+
+func stringSlicePointer(values []string) *[]string {
+	if len(values) == 0 {
+		return nil
+	}
+	cloned := append([]string(nil), values...)
+	return &cloned
+}
+
+func uniqueNonEmptyStrings(values []string) []string {
+	seen := make(map[string]struct{}, len(values))
+	result := make([]string, 0, len(values))
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value == "" {
+			continue
+		}
+		if _, ok := seen[value]; ok {
+			continue
+		}
+		seen[value] = struct{}{}
+		result = append(result, value)
+	}
+	return result
 }
 
 func sessionIDFromFactoryConfig(cfg *runtimeConfig) string {

@@ -1,6 +1,6 @@
 ---
 author: Agent Factory Team
-last-modified: 2026-07-30
+last-modified: 2026-08-21
 doc-id: agent-factory/guides/sessions
 ---
 
@@ -21,6 +21,14 @@ Each live session owns its own runtime state. The service coordinates and
 routes requests between sessions, but runtime state such as loaded factory,
 event history, current work, and relative execution-path resolution is scoped
 to the addressed session id.
+
+When a session has a configured retained current-board Recording, a clean
+daemon restart restores that session's Work board before the session is ready.
+Process-bound dispatches that were active at stop are recorded as interrupted,
+their old Worker Sessions are not exposed as live `RUNNING`, and associated
+non-terminal Work is re-armed at its saved logical state for normal guards and
+scheduling. Work and session inspection therefore keep the original
+identities and interruption history without requiring an explicit resume.
 
 For the end-to-end agent playbook (read order, submission ingress, operator
 loop), see `you docs agents`. For submitted-work contracts
