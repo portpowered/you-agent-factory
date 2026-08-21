@@ -7,7 +7,6 @@ import (
 	models "github.com/portpowered/infinite-you/pkg/services/models"
 	modelseffects "github.com/portpowered/infinite-you/pkg/services/models/internal/effects"
 	localmodels "github.com/portpowered/infinite-you/pkg/services/models/internal/local"
-	modelresolution "github.com/portpowered/infinite-you/pkg/services/models/internal/resolution"
 	scopedassets "github.com/portpowered/infinite-you/pkg/services/models/internal/services/assets"
 )
 
@@ -92,22 +91,6 @@ func supervisedIdentityForModel(runtimeCfg *models.RuntimeConfig, modelName stri
 	if resource := modelScopedResource(runtimeCfg, modelName); resource != nil {
 		identity.Backend = strings.TrimSpace(resource.Backend)
 		identity.LoadPolicy = strings.ToUpper(strings.TrimSpace(resource.LoadPolicy))
-	}
-	if resolved, err := modelresolution.Resolve(
-		runtimeCfg,
-		models.ModelReference{NameOrURI: modelName},
-		"",
-	); err == nil {
-		if resolved.Provenance != models.ModelResolutionBuiltIn {
-			identity.Backend = resolved.Backend
-			identity.LoadPolicy = string(resolved.LoadPolicy)
-		} else if identity.Backend == "" {
-			identity.Backend = resolved.Backend
-		}
-		if identity.LoadPolicy == "" {
-			identity.LoadPolicy = string(resolved.LoadPolicy)
-		}
-		identity.Revision = strings.TrimSpace(resolved.Source.Revision)
 	}
 	return supervisedIdentity{
 		Name:       identity.Name,

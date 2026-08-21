@@ -259,8 +259,11 @@ func validateOverlay(name string, overlay models.ModelOverlay, builtIn bool) err
 	if overlay.Backend != nil && strings.TrimSpace(*overlay.Backend) == "" {
 		return configurationFailure(name, "backend", "must be omitted or non-empty")
 	}
-	if overlay.LoadPolicy != nil && strings.ToUpper(strings.TrimSpace(string(*overlay.LoadPolicy))) != string(models.LoadPolicyOnDemand) {
-		return configurationFailure(name, "loadPolicy", "must be ON_DEMAND")
+	if overlay.LoadPolicy != nil {
+		loadPolicy := strings.ToUpper(strings.TrimSpace(string(*overlay.LoadPolicy)))
+		if loadPolicy != string(models.LoadPolicyOnDemand) && loadPolicy != string(models.LoadPolicyKeepWarm) {
+			return configurationFailure(name, "loadPolicy", "must be ON_DEMAND or KEEP_WARM")
+		}
 	}
 	if overlay.Operations != nil && len(overlay.Operations) == 0 {
 		return configurationFailure(name, "operations", "must contain at least one operation")
