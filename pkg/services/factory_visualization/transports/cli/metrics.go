@@ -24,6 +24,7 @@ type MetricsCommandConfig struct {
 	Query   factoryvisualization.RuntimeMetricsQuery
 	HomeDir func() (string, error)
 	JSON    func() bool
+	Costs   *cobra.Command
 }
 
 // MetricsConfig contains the resolved inputs for one metrics query and output
@@ -65,6 +66,9 @@ func NewMetricsCommand(config MetricsCommandConfig) *cobra.Command {
 		"group metrics by workstation, worker, or provider")
 	command.Flags().StringVar(&sessionID, "session", "",
 		"limit metrics to one Factory Session")
+	if config.Costs != nil {
+		command.AddCommand(config.Costs)
+	}
 	return command
 }
 

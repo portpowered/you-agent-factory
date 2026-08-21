@@ -16,9 +16,11 @@ import (
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	"github.com/portpowered/infinite-you/pkg/platform/runtimeartifact"
 	platformstdio "github.com/portpowered/infinite-you/pkg/platform/stdio"
+	costscli "github.com/portpowered/infinite-you/pkg/services/costs/transports/cli"
 	events "github.com/portpowered/infinite-you/pkg/services/events"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/transports/cli/cobracompletion"
+	configcli "github.com/portpowered/infinite-you/pkg/services/factory_definitions/transports/cli/config"
 	factorydefinitionswire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
@@ -44,10 +46,10 @@ import (
 	"github.com/portpowered/infinite-you/pkg/transports/cli"
 	acpcli "github.com/portpowered/infinite-you/pkg/transports/cli/acp"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/clihttp"
-	configcli "github.com/portpowered/infinite-you/pkg/services/factory_definitions/transports/cli/config"
 	factorycli "github.com/portpowered/infinite-you/pkg/transports/cli/factory"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/generated"
 	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
+	generatedhttpclient "github.com/portpowered/infinite-you/pkg/transports/http/client"
 	factorymapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig"
 )
 
@@ -78,6 +80,15 @@ func provideStandardCLIHTTPProtocol() (standardCLIHTTPProtocol, error) {
 		return standardCLIHTTPProtocol{}, fmt.Errorf("build standard CLI HTTP protocol: %w", err)
 	}
 	return standardCLIHTTPProtocol{Protocol: protocol, timeout: standardCLIHTTPTimeout}, nil
+}
+
+func provideCostsCLI() costscli.Operation {
+	return costscli.NewOperation(func(server string) (costscli.Client, error) {
+		return generatedhttpclient.NewClientWithResponses(
+			server,
+			generatedhttpclient.WithHTTPClient(&http.Client{Timeout: standardCLIHTTPTimeout}),
+		)
+	})
 }
 
 func provideRemoteInvocationOperation(

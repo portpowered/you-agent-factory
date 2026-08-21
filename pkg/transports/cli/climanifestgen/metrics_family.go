@@ -9,6 +9,7 @@ import (
 // runtime-metrics inspection family.
 var MetricsFamilyCommandIDs = []string{
 	"you.metrics",
+	"you.metrics.costs",
 }
 
 // IsMetricsFamilyCommandID reports whether id belongs to the metrics family.
