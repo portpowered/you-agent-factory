@@ -672,6 +672,10 @@
       "minimum": 57.89
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution/runtimepersist",
+      "minimum": 65.30
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/executionopening",
       "minimum": 53.84
     },
