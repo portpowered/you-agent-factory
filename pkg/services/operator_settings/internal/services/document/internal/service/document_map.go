@@ -18,6 +18,7 @@ func documentFromConfig(config operatorsettings.Config) operatorsettings.Documen
 			Integrations: append([]operatorsettings.ACPIntegration(nil), config.Workers.ACP.Integrations...),
 			AgentProfile: cloneACPAgentProfilePointer(config.Workers.ACP.AgentProfile),
 		}},
+		Models: cloneModelConfigs(config.Models),
 	}
 	if config.WorkerPresets != nil {
 		document.WorkerPresets = make([]operatorsettings.DocumentWorkerPreset, len(config.WorkerPresets))
@@ -65,6 +66,7 @@ func configFromDocument(document operatorsettings.Document) operatorsettings.Con
 			Integrations: append([]operatorsettings.ACPIntegration(nil), document.Workers.ACP.Integrations...),
 			AgentProfile: cloneACPAgentProfilePointer(document.Workers.ACP.AgentProfile),
 		}},
+		Models: cloneModelConfigs(document.Models),
 	}
 	if document.WorkerPresets != nil {
 		config.WorkerPresets = make([]operatorsettings.WorkerPreset, len(document.WorkerPresets))
@@ -78,4 +80,15 @@ func configFromDocument(document operatorsettings.Document) operatorsettings.Con
 		}
 	}
 	return config
+}
+
+func cloneModelConfigs(values map[string]operatorsettings.ModelConfig) map[string]operatorsettings.ModelConfig {
+	if values == nil {
+		return nil
+	}
+	cloned := make(map[string]operatorsettings.ModelConfig, len(values))
+	for name, config := range values {
+		cloned[name] = config.Clone()
+	}
+	return cloned
 }

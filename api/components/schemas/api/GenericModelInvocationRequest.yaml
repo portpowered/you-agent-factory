@@ -1,0 +1,36 @@
+type: object
+additionalProperties: false
+required:
+  - scope
+  - holder
+  - model
+  - operation
+description: Provider-neutral generic model invocation request. Inputs and parameters retain authored order.
+properties:
+  scope:
+    type: string
+    minLength: 1
+    description: Opaque Models runtime-scope reference.
+  holder:
+    type: string
+    minLength: 1
+    description: Non-empty caller identity used by the eventual capacity owner.
+  model:
+    $ref: '../data-models/ModelReference.yaml'
+  operation:
+    $ref: '../data-models/ModelOperationName.yaml'
+  inputs:
+    type: array
+    description: Ordered input values. Repeated slot names remain separate entries in this order.
+    items:
+      $ref: './ModelInvocationInput.yaml'
+  parameters:
+    type: array
+    description: Ordered named JSON parameters for the selected operation.
+    items:
+      $ref: './ModelInvocationParameter.yaml'
+  outputMode:
+    $ref: './ModelInvocationOutputMode.yaml'
+  offline:
+    type: boolean
+    description: Whether resolution and preparation must remain cache-only.

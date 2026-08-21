@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"reflect"
 	"testing"
 	"time"
 
@@ -28,7 +29,7 @@ func TestRootDelegatesInferenceThroughInjectedOwner(t *testing.T) {
 	if !errors.Is(err, models.ErrUnsupportedOperation) {
 		t.Fatalf("InvokeModelWithLease error = %v, want ErrUnsupportedOperation", err)
 	}
-	if privateInference.invokeRequest != request {
+	if !reflect.DeepEqual(privateInference.invokeRequest, request) {
 		t.Fatalf("InvokeModelWithLease request = %#v, want %#v", privateInference.invokeRequest, request)
 	}
 

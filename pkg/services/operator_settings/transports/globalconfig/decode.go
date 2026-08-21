@@ -61,6 +61,9 @@ func mapConfig(generated factoryapi.GlobalConfig) (operatorsettings.Config, erro
 			WorkerModel:         optionalString(generated.Defaults.WorkerModel),
 		}
 	}
+	if generated.Models != nil {
+		config.Models = mapModels(*generated.Models)
+	}
 	if generated.Runtime != nil {
 		var err error
 		config.Runtime.Logging, err = mapRuntimeArtifactSettings(
@@ -192,6 +195,10 @@ func Encode(config operatorsettings.Config) ([]byte, error) {
 			WorkerModel:         optionalStringPointer(config.Defaults.WorkerModel),
 		}
 	}
+	if config.Models != nil {
+		models := modelsToGenerated(config.Models)
+		generated.Models = &models
+	}
 	generated.Runtime = &factoryapi.GlobalConfigRuntime{
 		Logging: mapRuntimeArtifactSettingsToAPI(config.Runtime.Logging),
 		Metrics: mapRuntimeArtifactSettingsToAPI(config.Runtime.Metrics),
@@ -243,6 +250,62 @@ func Encode(config operatorsettings.Config) ([]byte, error) {
 		return nil, fmt.Errorf("encode generated global config: %w", err)
 	}
 	return append(payload, '\n'), nil
+}
+
+func mapModels(generated factoryapi.GlobalConfigModels) map[string]operatorsettings.ModelConfig {
+	models := make(map[string]operatorsettings.ModelConfig, len(generated))
+	for name, model := range generated {
+		entry := operatorsettings.ModelConfig{}
+		if model.Source != nil {
+			source := *model.Source
+			entry.Source = &source
+		}
+		if model.Backend != nil {
+			backend := *model.Backend
+			entry.Backend = &backend
+		}
+		if model.LoadPolicy != nil {
+			policy := operatorsettings.ModelLoadPolicy(*model.LoadPolicy)
+			entry.LoadPolicy = &policy
+		}
+		if model.Operations != nil {
+			operations := make([]string, len(*model.Operations))
+			for index, operation := range *model.Operations {
+				operations[index] = string(operation)
+			}
+			entry.Operations = operations
+		}
+		models[name] = entry
+	}
+	return models
+}
+
+func modelsToGenerated(values map[string]operatorsettings.ModelConfig) factoryapi.GlobalConfigModels {
+	models := make(factoryapi.GlobalConfigModels, len(values))
+	for name, config := range values {
+		entry := factoryapi.GlobalConfigModel{}
+		if config.Source != nil {
+			source := *config.Source
+			entry.Source = &source
+		}
+		if config.Backend != nil {
+			backend := *config.Backend
+			entry.Backend = &backend
+		}
+		if config.LoadPolicy != nil {
+			policy := factoryapi.GlobalConfigModelLoadPolicy(*config.LoadPolicy)
+			entry.LoadPolicy = &policy
+		}
+		if config.Operations != nil {
+			operations := make([]factoryapi.GlobalConfigModelOperation, len(config.Operations))
+			for index, operation := range config.Operations {
+				operations[index] = factoryapi.GlobalConfigModelOperation(operation)
+			}
+			entry.Operations = &operations
+		}
+		models[name] = entry
+	}
+	return models
 }
 
 func mapRuntimeArtifactSettingsToAPI(

@@ -1,0 +1,23 @@
+type: object
+additionalProperties: false
+required:
+  - artifactRef
+properties:
+  artifactRef:
+    type: string
+    minLength: 1
+    description: Opaque Models-owned artifact reference; cache paths and storage handles are never exposed.
+  name:
+    type: string
+    description: Customer-visible artifact name, when available.
+  mediaType:
+    type: string
+    description: MIME type of the materialized artifact, when known.
+  sizeBytes:
+    type: integer
+    format: int64
+    minimum: 0
+    description: Artifact size in bytes, when known.
+  properties:
+    $ref: '../shared/StringMap.yaml'
+    description: Safe provider-neutral artifact metadata.

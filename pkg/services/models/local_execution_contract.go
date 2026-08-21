@@ -59,6 +59,43 @@ const (
 	ResponseModeAudioStream ResponseMode = "AUDIO_STREAM"
 )
 
+// ModelReference identifies a model by a configured name or a source URI.
+// The reference is intentionally opaque to the Models root contract; source
+// resolution belongs to a later invocation stage.
+type ModelReference struct {
+	NameOrURI string
+}
+
+// IsZero reports whether no model name or URI was supplied.
+func (reference ModelReference) IsZero() bool {
+	return strings.TrimSpace(reference.NameOrURI) == ""
+}
+
+// OutputMode selects the provider-neutral representation requested for a
+// generic invocation result. An empty value is equivalent to AUTO.
+type OutputMode string
+
+const (
+	OutputModeAuto     OutputMode = "AUTO"
+	OutputModeInline   OutputMode = "INLINE"
+	OutputModeJSON     OutputMode = "JSON"
+	OutputModeArtifact OutputMode = "ARTIFACT"
+)
+
+// OperationParameter carries one ordered, named JSON parameter for a generic
+// operation. The value intentionally uses native JSON-compatible Go values so
+// transports do not need to agree on a backend-specific parameter type.
+type OperationParameter struct {
+	Name  string
+	Value any
+}
+
+// Clone returns a detached operation parameter.
+func (parameter OperationParameter) Clone() OperationParameter {
+	parameter.Value = cloneInvocationJSONValue(parameter.Value)
+	return parameter
+}
+
 // Options carries optional direct-invocation response behavior.
 type Options struct {
 	ResponseMode ResponseMode
@@ -136,14 +173,49 @@ func (ref InferenceArtifactRef) IsZero() bool {
 
 // InferenceInput is detached Models-owned invocation input.
 type InferenceInput struct {
+	// Name is the operation slot that receives this value. It is empty only for
+	// the legacy prepared primitive, whose single input predates named slots.
+	Name string
+	// Modality is the provider-neutral content category for this value.
+	Modality    Modality
 	ContentType string
-	Content     string
+	// MediaType preserves the concrete media metadata supplied by the caller,
+	// such as image/png or audio/wav.
+	MediaType string
+	Content   string
+	// Artifact is an opaque Models-owned input artifact reference. It is
+	// optional when content is carried inline.
+	Artifact *InferenceArtifactRef
 }
 
 // InferenceContent is detached Models-owned invocation output.
 type InferenceContent struct {
+	// Name is the output slot name when the provider returned named output.
+	Name        string
+	Modality    Modality
 	ContentType string
+	MediaType   string
 	Content     string
+}
+
+// InferenceOutput is one ordered, slot-named generic invocation output. An
+// output may carry inline content, an opaque artifact, or both metadata forms.
+type InferenceOutput struct {
+	Name        string
+	Modality    Modality
+	ContentType string
+	MediaType   string
+	Content     string
+	Artifact    *InferenceArtifact
+}
+
+// Clone returns a detached generic invocation output.
+func (output InferenceOutput) Clone() InferenceOutput {
+	if output.Artifact != nil {
+		artifact := output.Artifact.Clone()
+		output.Artifact = &artifact
+	}
+	return output
 }
 
 // InferenceArtifact contains peer-required output metadata without paths,
@@ -160,6 +232,29 @@ type InferenceArtifact struct {
 func (artifact InferenceArtifact) Clone() InferenceArtifact {
 	artifact.Properties = cloneStringMap(artifact.Properties)
 	return artifact
+}
+
+func cloneInvocationJSONValue(value any) any {
+	switch typed := value.(type) {
+	case []any:
+		cloned := make([]any, len(typed))
+		for index, item := range typed {
+			cloned[index] = cloneInvocationJSONValue(item)
+		}
+		return cloned
+	case map[string]any:
+		cloned := make(map[string]any, len(typed))
+		for key, item := range typed {
+			cloned[key] = cloneInvocationJSONValue(item)
+		}
+		return cloned
+	case []string:
+		return append([]string(nil), typed...)
+	case []byte:
+		return append([]byte(nil), typed...)
+	default:
+		return value
+	}
 }
 
 // ModelInvocationStatus is the observable lifecycle of an invocation.
@@ -184,17 +279,28 @@ const (
 
 // InvokeModelRequest asks Models to run one operation under an issued lease.
 type InvokeModelRequest struct {
-	Scope        RuntimeScopeRef
-	Lease        ModelLeaseRef
-	Holder       string
-	ModelName    string
+	Scope     RuntimeScopeRef
+	Lease     ModelLeaseRef
+	Holder    string
+	ModelName string
+	// Model, Inputs, Parameters, OutputMode, and Offline are the additive
+	// generic invocation vocabulary. Lease/ModelName/Input/ResponseMode remain
+	// available for the prepared primitive and existing TTS callers.
+	Model        ModelReference
 	Operation    string
 	ResponseMode ResponseMode
 	Input        InferenceInput
+	Inputs       []InferenceInput
+	Parameters   []OperationParameter
+	OutputMode   OutputMode
+	Offline      bool
 }
 
 // Validate checks the peer-controlled invocation identity and capacity input.
 func (request InvokeModelRequest) Validate() error {
+	if request.usesGenericInvocationShape() {
+		return request.ValidateGeneric()
+	}
 	if request.Scope.IsZero() {
 		return ErrRuntimeScopeInvalid
 	}
@@ -213,16 +319,83 @@ func (request InvokeModelRequest) Validate() error {
 	return nil
 }
 
+// ValidateGeneric checks the detached request shape without resolving a model,
+// downloading assets, starting a backend, or acquiring a lease.
+func (request InvokeModelRequest) ValidateGeneric() error {
+	if request.Scope.IsZero() {
+		return ErrRuntimeScopeInvalid
+	}
+	if strings.TrimSpace(request.Holder) == "" {
+		return ErrHostInvalidHolder
+	}
+	if request.Model.IsZero() {
+		return newInvocationFailure(
+			InvocationFailureClassInvalidModelReference,
+			"model name or URI is required",
+		)
+	}
+	if strings.TrimSpace(request.Operation) == "" {
+		return newInvocationFailure(
+			InvocationFailureClassInvalidOperation,
+			"operation is required",
+		)
+	}
+	for _, input := range request.Inputs {
+		if strings.TrimSpace(input.Name) == "" {
+			return newInvocationFailure(
+				InvocationFailureClassInvalidSlot,
+				"input slot name is required",
+			)
+		}
+	}
+	for _, parameter := range request.Parameters {
+		if strings.TrimSpace(parameter.Name) == "" {
+			return newInvocationFailure(
+				InvocationFailureClassInvalidParameter,
+				"parameter name is required",
+			)
+		}
+	}
+	if !validOutputMode(request.OutputMode) {
+		return newInvocationFailure(
+			InvocationFailureClassInvalidParameter,
+			fmt.Sprintf("unsupported output mode %q", request.OutputMode),
+		)
+	}
+	return nil
+}
+
+func (request InvokeModelRequest) usesGenericInvocationShape() bool {
+	return !request.Model.IsZero() || request.Inputs != nil || request.Parameters != nil || request.OutputMode != "" || request.Offline
+}
+
+func validOutputMode(mode OutputMode) bool {
+	switch mode {
+	case "", OutputModeAuto, OutputModeInline, OutputModeJSON, OutputModeArtifact:
+		return true
+	default:
+		return false
+	}
+}
+
+// GenericInvocationRequest is the descriptive name for the additive generic
+// request. It aliases the existing request carrier so prepared primitive
+// callers and generic callers cannot drift into separate request vocabularies.
+type GenericInvocationRequest = InvokeModelRequest
+
 // InvokeModelResult contains detached inference and lease-lifecycle facts.
 type InvokeModelResult struct {
-	Invocation       ModelInvocationRef
-	Scope            RuntimeScopeRef
-	Lease            ModelLeaseRef
-	ModelName        string
-	Operation        string
-	Status           ModelInvocationStatus
-	Content          []InferenceContent
-	Artifacts        []InferenceArtifact
+	Invocation ModelInvocationRef
+	Scope      RuntimeScopeRef
+	Lease      ModelLeaseRef
+	ModelName  string
+	Operation  string
+	Status     ModelInvocationStatus
+	Content    []InferenceContent
+	Artifacts  []InferenceArtifact
+	// Outputs is the additive generic result projection. Content and Artifacts
+	// remain populated by the prepared primitive for legacy compatibility.
+	Outputs          []InferenceOutput
 	LeaseDisposition InvocationLeaseDisposition
 	// CancellationOutcome is populated when context cancellation ends an
 	// accepted invocation, matching explicit CancelInvocation vocabulary.
@@ -237,8 +410,17 @@ func (result InvokeModelResult) Clone() InvokeModelResult {
 	for i := range artifacts {
 		result.Artifacts[i] = artifacts[i].Clone()
 	}
+	outputs := result.Outputs
+	result.Outputs = make([]InferenceOutput, len(outputs))
+	for i := range outputs {
+		result.Outputs[i] = outputs[i].Clone()
+	}
 	return result
 }
+
+// GenericInvocationResult is the descriptive name for the additive generic
+// result carrier.
+type GenericInvocationResult = InvokeModelResult
 
 // CancelInvocationRequest identifies one invocation within its issuing scope.
 type CancelInvocationRequest struct {

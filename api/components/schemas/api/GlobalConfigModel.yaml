@@ -1,0 +1,22 @@
+type: object
+additionalProperties: false
+description: >-
+  Optional operator overlay for one model. Omitted fields preserve a built-in
+  definition; new model names must provide every field.
+properties:
+  source:
+    type: string
+    minLength: 1
+    description: Model source path or provider-neutral source URI.
+  backend:
+    type: string
+    minLength: 1
+    description: Provider-neutral backend identity selected for this model.
+  loadPolicy:
+    $ref: './GlobalConfigModelLoadPolicy.yaml'
+  operations:
+    type: array
+    minItems: 1
+    description: Ordered generic operation names supported by this model.
+    items:
+      $ref: './GlobalConfigModelOperation.yaml'

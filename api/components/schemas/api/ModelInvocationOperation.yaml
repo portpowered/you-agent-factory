@@ -1,0 +1,18 @@
+type: object
+additionalProperties: false
+required:
+  - name
+description: One provider-neutral operation exposed by a managed model runtime.
+properties:
+  name:
+    $ref: '../data-models/ModelOperationName.yaml'
+  inputs:
+    type: array
+    description: Named generic invocation input slots this model can consume.
+    items:
+      $ref: './ModelInvocationSlot.yaml'
+  outputs:
+    type: array
+    description: Named generic invocation output slots this model can produce.
+    items:
+      $ref: './ModelInvocationSlot.yaml'

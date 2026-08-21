@@ -1,6 +1,7 @@
 package globalconfig_test
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -394,6 +395,97 @@ func TestEncode_OmitsAbsentOptionalValues(t *testing.T) {
 	}
 	if _, err := globalconfig.Decode(payload); err != nil {
 		t.Fatalf("Decode(Encode()) error = %v", err)
+	}
+}
+
+func TestDecodeAndEncode_RoundTripsPartialAndCompleteModelEntries(t *testing.T) {
+	config, err := globalconfig.Decode([]byte(`{
+		"defaults":{"workerModelProvider":"codex","workerModel":"gpt-5.4"},
+		"models":{
+			" llm ":{"source":" hf://custom/gemma "},
+			"studio-whisper":{
+				"source":" hf://ggerganov/whisper.cpp/ggml-base.en.bin ",
+				"backend":" localai-whisper ",
+				"loadPolicy":"on_demand",
+				"operations":[" asr "]
+			}
+		}
+	}`))
+	if err != nil {
+		t.Fatalf("Decode() error = %v", err)
+	}
+	assertPartialModelConfig(t, config)
+	assertCompleteModelConfig(t, config)
+
+	payload, err := globalconfig.Encode(config)
+	if err != nil {
+		t.Fatalf("Encode() error = %v", err)
+	}
+	roundTrip, err := globalconfig.Decode(payload)
+	if err != nil {
+		t.Fatalf("Decode(Encode()) error = %v", err)
+	}
+	if !reflect.DeepEqual(roundTrip, config) {
+		t.Fatalf("round-trip config = %#v, want %#v", roundTrip, config)
+	}
+	assertModelConfigCloneIsDetached(t, config)
+}
+
+func assertPartialModelConfig(t *testing.T, config operatorsettings.Config) {
+	t.Helper()
+	partial := config.Models["llm"]
+	if partial.Source == nil || *partial.Source != "hf://custom/gemma" || partial.Backend != nil || partial.LoadPolicy != nil || partial.Operations != nil {
+		t.Fatalf("partial model = %#v, want one detached source override", partial)
+	}
+}
+
+func assertCompleteModelConfig(t *testing.T, config operatorsettings.Config) {
+	t.Helper()
+	complete := config.Models["studio-whisper"]
+	if complete.Source == nil || *complete.Source != "hf://ggerganov/whisper.cpp/ggml-base.en.bin" || complete.Backend == nil || *complete.Backend != "localai-whisper" {
+		t.Fatalf("complete model = %#v, want normalized source/backend", complete)
+	}
+	if complete.LoadPolicy == nil || *complete.LoadPolicy != operatorsettings.ModelLoadPolicyOnDemand || len(complete.Operations) != 1 || complete.Operations[0] != operatorsettings.ModelOperationASR {
+		t.Fatalf("complete model policy/operations = %#v, want ON_DEMAND and ASR", complete)
+	}
+}
+
+func assertModelConfigCloneIsDetached(t *testing.T, config operatorsettings.Config) {
+	t.Helper()
+	clone := config.Clone()
+	clonedEntry := clone.Models["studio-whisper"]
+	*clonedEntry.Source = "changed"
+	clonedEntry.Operations[0] = operatorsettings.ModelOperationTTS
+	clone.Models["studio-whisper"] = clonedEntry
+	if *config.Models["studio-whisper"].Source != "hf://ggerganov/whisper.cpp/ggml-base.en.bin" || config.Models["studio-whisper"].Operations[0] != operatorsettings.ModelOperationASR {
+		t.Fatalf("config model entry changed through clone = %#v", config.Models["studio-whisper"])
+	}
+}
+
+func TestDecode_RejectsInvalidModelConfigurationWithTypedFailure(t *testing.T) {
+	tests := []struct {
+		name    string
+		payload string
+		field   string
+	}{
+		{name: "empty explicit source", payload: `{"models":{"llm":{"source":" "}}}`, field: "models[\"llm\"].source"},
+		{name: "unsupported policy", payload: `{"models":{"new-model":{"source":"hf://source","backend":"backend","loadPolicy":"EAGER","operations":["OMNI"]}}}`, field: "models[\"new-model\"].loadPolicy"},
+		{name: "unsupported operation", payload: `{"models":{"new-model":{"source":"hf://source","backend":"backend","loadPolicy":"ON_DEMAND","operations":["UNKNOWN"]}}}`, field: "models[\"new-model\"].operations"},
+		{name: "incomplete new model", payload: `{"models":{"new-model":{"source":"hf://source"}}}`, field: "models[\"new-model\"].backend"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			_, err := globalconfig.Decode([]byte(test.payload))
+			if err == nil {
+				t.Fatal("Decode() error = nil, want rejection")
+			}
+			if !errors.Is(err, operatorsettings.ErrConfigurationInvalid) {
+				t.Fatalf("Decode() error = %v, want ErrConfigurationInvalid", err)
+			}
+			if !strings.Contains(err.Error(), test.field) {
+				t.Fatalf("Decode() error = %q, want field path %q", err, test.field)
+			}
+		})
 	}
 }
 

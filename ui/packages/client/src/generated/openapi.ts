@@ -1884,7 +1884,7 @@ export interface components {
       lifecycleState: components["schemas"]["ManagedRuntimeLifecycleState"];
       locality: components["schemas"]["WorkerModelLocality"];
       /** @description Provider-agnostic operations supported by this managed runtime. */
-      supportedOperations: components["schemas"]["ModelOperation"][];
+      supportedOperations: components["schemas"]["ModelInvocationOperation"][];
       /** @description Concise managed-runtime diagnostics in customer-relevant terms. */
       diagnostics?: components["schemas"]["StringMap"];
     };
@@ -1934,9 +1934,9 @@ export interface components {
       status: components["schemas"]["ModelStatus"];
       loadState: components["schemas"]["ModelLoadState"];
       /** @description Provider-agnostic operations supported by the managed runtime. Mirrors `managedRuntime.supportedOperations` for compatibility with earlier discovery fields. */
-      operations: components["schemas"]["ModelOperation"][];
+      operations: components["schemas"]["ModelInvocationOperation"][];
       /** @description Uppercase content modalities observed across the model's declared operation inputs and outputs. */
-      modalities: components["schemas"]["ModelOperationContentType"][];
+      modalities: components["schemas"]["ModelInvocationContentType"][];
       /** @description Factory resource summaries associated with this model's workers or explicit model metadata. */
       resources: components["schemas"]["ModelResourceSummary"][];
     };
@@ -1949,14 +1949,147 @@ export interface components {
       status: components["schemas"]["ModelStatus"];
       loadState: components["schemas"]["ModelLoadState"];
       /** @description Union of provider-agnostic operations supported by workers for this managed runtime. Mirrors `managedRuntime.supportedOperations` for compatibility with earlier inspect fields. */
-      operations: components["schemas"]["ModelOperation"][];
+      operations: components["schemas"]["ModelInvocationOperation"][];
       /** @description Uppercase content modalities observed across all declared operation inputs and outputs. */
-      modalities: components["schemas"]["ModelOperationContentType"][];
+      modalities: components["schemas"]["ModelInvocationContentType"][];
       /** @description Factory resource summaries associated with this model's workers or explicit model metadata. */
       resources: components["schemas"]["ModelResourceSummary"][];
       /** @description Worker-scoped capability declarations that contribute to this discovered model. */
       capabilities: components["schemas"]["ModelCapability"][];
       diagnostics: components["schemas"]["StringMap"];
+    };
+    /** @description Opaque model name or source URI accepted by the provider-neutral invocation contract. */
+    ModelReference: {
+      /** @description Configured model name or source URI. Resolution is owned by Models. */
+      nameOrUri: string;
+    };
+    /** @description One ordered value supplied to a named model-operation input slot. */
+    ModelInvocationInput: {
+      /** @description Input slot name declared by the selected operation. */
+      name: string;
+      /** @description Provider-neutral modality of the supplied value. */
+      modality: components["schemas"]["ModelInvocationContentType"];
+      /** @description Logical content type retained for compatibility with prepared invocation inputs. */
+      contentType?: string;
+      /** @description Concrete MIME type for media or file-backed content, when known. */
+      mediaType?: string;
+      /** @description Inline content. JSON values are carried as their canonical JSON text. */
+      content?: string;
+      /** @description Opaque Models-owned input artifact reference when content is not inline. */
+      artifactRef?: string;
+    };
+    /** @description One ordered, slot-named output of a generic model invocation. */
+    ModelInvocationOutput: {
+      /** @description Output slot name declared by the selected operation. */
+      name: string;
+      /** @description Provider-neutral modality of the output. */
+      modality: components["schemas"]["ModelInvocationContentType"];
+      /** @description Logical content type retained for compatibility with prepared invocation outputs. */
+      contentType?: string;
+      /** @description Concrete MIME type for media or file-backed output, when known. */
+      mediaType?: string;
+      /** @description Inline output content. JSON values are carried as their canonical JSON text. */
+      content?: string;
+      /** @description Optional opaque artifact metadata for materialized output. */
+      artifact?: components["schemas"]["ModelInvocationArtifact"];
+    };
+    /**
+     * @description Uppercase provider-neutral content modality used by generic model invocation contracts.
+     * @enum {string}
+     */
+    ModelInvocationContentType: ModelInvocationContentType;
+    /** @description One named provider-neutral slot in a generic model invocation operation. */
+    ModelInvocationSlot: {
+      /** @description Stable slot name used by generic invocation inputs, outputs, and diagnostics. */
+      name: string;
+      /** @description Uppercase content types accepted or produced by this generic slot. */
+      contentTypes: components["schemas"]["ModelInvocationContentType"][];
+      /** @description Provider-neutral modality of values accepted or produced by this slot. */
+      modality?: components["schemas"]["ModelInvocationContentType"];
+      /** @description Whether this slot is required by the selected operation. */
+      required?: boolean;
+      /** @description Whether the slot accepts or produces multiple ordered values. */
+      repeatable?: boolean;
+      /** @description Accepted or produced MIME-type patterns for this slot. */
+      mediaTypes?: string[];
+    };
+    /** @description One provider-neutral operation exposed by a managed model runtime. */
+    ModelInvocationOperation: {
+      name: components["schemas"]["ModelOperationName"];
+      /** @description Named generic invocation input slots this model can consume. */
+      inputs?: components["schemas"]["ModelInvocationSlot"][];
+      /** @description Named generic invocation output slots this model can produce. */
+      outputs?: components["schemas"]["ModelInvocationSlot"][];
+    };
+    ModelInvocationArtifact: {
+      /** @description Opaque Models-owned artifact reference; cache paths and storage handles are never exposed. */
+      artifactRef: string;
+      /** @description Customer-visible artifact name, when available. */
+      name?: string;
+      /** @description MIME type of the materialized artifact, when known. */
+      mediaType?: string;
+      /**
+       * Format: int64
+       * @description Artifact size in bytes, when known.
+       */
+      sizeBytes?: number;
+      /** @description Safe provider-neutral artifact metadata. */
+      properties?: components["schemas"]["StringMap"];
+    };
+    /** @description One ordered named JSON parameter supplied to a model operation. */
+    ModelInvocationParameter: {
+      /** @description Operation parameter name. */
+      name: string;
+      /** @description JSON-compatible parameter value preserved without backend-specific typing. */
+      value: unknown;
+    };
+    /**
+     * @description Provider-neutral representation requested for a generic model invocation result.
+     * @enum {string}
+     */
+    ModelInvocationOutputMode: ModelInvocationOutputMode;
+    /**
+     * @description Stable provider-neutral failure identity for generic model invocation.
+     * @enum {string}
+     */
+    ModelInvocationFailureClass: ModelInvocationFailureClass;
+    /** @description Customer-safe typed failure for a generic model invocation. */
+    ModelInvocationFailure: {
+      class: components["schemas"]["ModelInvocationFailureClass"];
+      /** @description Actionable failure explanation without cache paths, backend addresses, credentials, or protocol payloads. */
+      message: string;
+      model?: components["schemas"]["ModelReference"];
+      /** @description Operation associated with the failure, when known. */
+      operation?: string;
+      /** @description Input or output slot associated with the failure, when known. */
+      slot?: string;
+      /** @description Parameter associated with the failure, when known. */
+      parameter?: string;
+      /** @description Public request field associated with the failure, when known. */
+      field?: string;
+    };
+    /** @description Provider-neutral generic model invocation request. Inputs and parameters retain authored order. */
+    GenericModelInvocationRequest: {
+      /** @description Opaque Models runtime-scope reference. */
+      scope: string;
+      /** @description Non-empty caller identity used by the eventual capacity owner. */
+      holder: string;
+      model: components["schemas"]["ModelReference"];
+      operation: components["schemas"]["ModelOperationName"];
+      /** @description Ordered input values. Repeated slot names remain separate entries in this order. */
+      inputs?: components["schemas"]["ModelInvocationInput"][];
+      /** @description Ordered named JSON parameters for the selected operation. */
+      parameters?: components["schemas"]["ModelInvocationParameter"][];
+      outputMode?: components["schemas"]["ModelInvocationOutputMode"];
+      /** @description Whether resolution and preparation must remain cache-only. */
+      offline?: boolean;
+    };
+    /** @description Provider-neutral generic model invocation result with ordered slot-named outputs. */
+    GenericModelInvocationResponse: {
+      /** @description Ordered outputs. Distinct slots such as ASR transcript and segments remain separate entries. */
+      outputs: components["schemas"]["ModelInvocationOutput"][];
+      /** @description Optional typed failure when a transport chooses an envelope rather than an error response. */
+      failure?: components["schemas"]["ModelInvocationFailure"];
     };
     ModelInvocationRequest: {
       /** @description Uppercase provider-agnostic operation to invoke, such as `TTS`. */
@@ -2036,7 +2169,7 @@ export interface components {
       modelProvider?: components["schemas"]["WorkerModelProvider"];
       providerLocality: components["schemas"]["WorkerModelLocality"];
       /** @description Operations declared by this worker for the selected model. */
-      operations: components["schemas"]["ModelOperation"][];
+      operations: components["schemas"]["ModelInvocationOperation"][];
       /** @description Factory resource names referenced by the worker declaration. */
       resourceNames: string[];
     };
@@ -6451,6 +6584,7 @@ export interface components {
       backendScopeID?: string;
       defaults?: components["schemas"]["GlobalConfigDefaults"];
       runtime?: components["schemas"]["GlobalConfigRuntime"];
+      models?: components["schemas"]["GlobalConfigModels"];
       workers?: components["schemas"]["GlobalConfigWorkers"];
       /** @description Named worker model presets loaded from the shared configuration file. */
       workerPresets?: components["schemas"]["GlobalConfigWorkerPreset"][];
@@ -6494,6 +6628,30 @@ export interface components {
        */
       compress: boolean;
     };
+    /** @description Optional operator model overlays keyed by model name. A model entry may override one or more built-in fields or fully describe a new model name. */
+    GlobalConfigModels: {
+      [key: string]: components["schemas"]["GlobalConfigModel"];
+    };
+    /** @description Optional operator overlay for one model. Omitted fields preserve a built-in definition; new model names must provide every field. */
+    GlobalConfigModel: {
+      /** @description Model source path or provider-neutral source URI. */
+      source?: string;
+      /** @description Provider-neutral backend identity selected for this model. */
+      backend?: string;
+      loadPolicy?: components["schemas"]["GlobalConfigModelLoadPolicy"];
+      /** @description Ordered generic operation names supported by this model. */
+      operations?: components["schemas"]["GlobalConfigModelOperation"][];
+    };
+    /**
+     * @description Operator model load policy. Runtime activation is owned by Models.
+     * @enum {string}
+     */
+    GlobalConfigModelLoadPolicy: GlobalConfigModelLoadPolicy;
+    /**
+     * @description Generic provider-neutral operation contract name.
+     * @enum {string}
+     */
+    GlobalConfigModelOperation: GlobalConfigModelOperation;
     /** @description Named worker model selection available to Factory Session runtime opening. */
     GlobalConfigWorkerPreset: {
       /** @description Non-empty preset identifier after surrounding whitespace is trimmed. */
@@ -9600,6 +9758,42 @@ export const ManagedRuntimeReadinessState = {
 } as const;
 export type ManagedRuntimeReadinessState =
   (typeof ManagedRuntimeReadinessState)[keyof typeof ManagedRuntimeReadinessState];
+export const ModelInvocationContentType = {
+  TEXT: "TEXT",
+  IMAGE: "IMAGE",
+  AUDIO: "AUDIO",
+  VIDEO: "VIDEO",
+  JSON: "JSON",
+  BINARY: "BINARY",
+} as const;
+export type ModelInvocationContentType =
+  (typeof ModelInvocationContentType)[keyof typeof ModelInvocationContentType];
+export const ModelInvocationOutputMode = {
+  AUTO: "AUTO",
+  INLINE: "INLINE",
+  JSON: "JSON",
+  ARTIFACT: "ARTIFACT",
+} as const;
+export type ModelInvocationOutputMode =
+  (typeof ModelInvocationOutputMode)[keyof typeof ModelInvocationOutputMode];
+export const ModelInvocationFailureClass = {
+  INVALID_MODEL_REFERENCE: "INVALID_MODEL_REFERENCE",
+  INVALID_OPERATION: "INVALID_OPERATION",
+  INVALID_SLOT: "INVALID_SLOT",
+  SLOT_ARITY: "SLOT_ARITY",
+  INVALID_PARAMETER: "INVALID_PARAMETER",
+  MEDIA_CAPABILITY: "MEDIA_CAPABILITY",
+  CONFIGURATION: "CONFIGURATION",
+  OFFLINE_CACHE: "OFFLINE_CACHE",
+  ARTIFACT: "ARTIFACT",
+  BACKEND_READINESS: "BACKEND_READINESS",
+  BACKEND_PROTOCOL: "BACKEND_PROTOCOL",
+  CANCELLATION: "CANCELLATION",
+  TIMEOUT: "TIMEOUT",
+  MALFORMED_RESPONSE: "MALFORMED_RESPONSE",
+} as const;
+export type ModelInvocationFailureClass =
+  (typeof ModelInvocationFailureClass)[keyof typeof ModelInvocationFailureClass];
 export const ModelInvocationResponseMode = {
   METADATA: "METADATA",
   AUDIO_STREAM: "AUDIO_STREAM",
@@ -10985,6 +11179,19 @@ export const FactoryValidationSubjectLocation = {
 } as const;
 export type FactoryValidationSubjectLocation =
   (typeof FactoryValidationSubjectLocation)[keyof typeof FactoryValidationSubjectLocation];
+export const GlobalConfigModelLoadPolicy = {
+  ON_DEMAND: "ON_DEMAND",
+} as const;
+export type GlobalConfigModelLoadPolicy =
+  (typeof GlobalConfigModelLoadPolicy)[keyof typeof GlobalConfigModelLoadPolicy];
+export const GlobalConfigModelOperation = {
+  OMNI: "OMNI",
+  EMBED: "EMBED",
+  TTS: "TTS",
+  ASR: "ASR",
+} as const;
+export type GlobalConfigModelOperation =
+  (typeof GlobalConfigModelOperation)[keyof typeof GlobalConfigModelOperation];
 export const WorkRequestType = {
   // Normalized request containing one or more work items and their relationships.
   WorkRequestTypeFactoryRequestBatch: "FACTORY_REQUEST_BATCH",

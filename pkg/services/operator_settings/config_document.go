@@ -94,15 +94,7 @@ func (service ConfigDocumentService) Parse(data []byte) (ConfigDocument, error) 
 
 // FileConfig returns the validated semantic view of the document.
 func (document ConfigDocument) FileConfig() Config {
-	config := document.config
-	if document.config.WorkerPresets != nil {
-		config.WorkerPresets = append([]WorkerPreset{}, document.config.WorkerPresets...)
-	}
-	if document.config.Workers.ACP.Integrations != nil {
-		config.Workers.ACP.Integrations = append([]ACPIntegration{}, document.config.Workers.ACP.Integrations...)
-	}
-	config.Workers.ACP.AgentProfile = cloneACPAgentProfilePointer(document.config.Workers.ACP.AgentProfile)
-	return config
+	return document.config.Clone()
 }
 
 // cloneACPAgentProfilePointer returns a detached copy of an optional ACP
@@ -288,6 +280,7 @@ func configFromDocument(document Document) Config {
 			Integrations: append([]ACPIntegration(nil), document.Workers.ACP.Integrations...),
 			AgentProfile: cloneACPAgentProfilePointer(document.Workers.ACP.AgentProfile),
 		}},
+		Models: cloneModelConfigs(document.Models),
 	}
 	if document.WorkerPresets != nil {
 		config.WorkerPresets = make([]WorkerPreset, len(document.WorkerPresets))
@@ -312,6 +305,7 @@ func documentFromConfig(config Config) Document {
 			Logging: DocumentRuntimeArtifactSettings(config.Runtime.Logging),
 			Metrics: DocumentRuntimeArtifactSettings(config.Runtime.Metrics),
 		},
+		Models: cloneModelConfigs(config.Models),
 		Workers: DocumentWorkerSettings{ACP: DocumentACPSettings{
 			Integrations: append([]ACPIntegration(nil), config.Workers.ACP.Integrations...),
 			AgentProfile: cloneACPAgentProfilePointer(config.Workers.ACP.AgentProfile),

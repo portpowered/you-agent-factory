@@ -4078,7 +4078,7 @@ components:
           type: array
           description: Provider-agnostic operations supported by this managed runtime.
           items:
-            $ref: '#/components/schemas/ModelOperation'
+            $ref: '#/components/schemas/ModelInvocationOperation'
         diagnostics:
           $ref: '#/components/schemas/StringMap'
           description: Concise managed-runtime diagnostics in customer-relevant terms.
@@ -4209,12 +4209,12 @@ components:
           description: |
             Provider-agnostic operations supported by the managed runtime. Mirrors `managedRuntime.supportedOperations` for compatibility with earlier discovery fields.
           items:
-            $ref: '#/components/schemas/ModelOperation'
+            $ref: '#/components/schemas/ModelInvocationOperation'
         modalities:
           type: array
           description: Uppercase content modalities observed across the model's declared operation inputs and outputs.
           items:
-            $ref: '#/components/schemas/ModelOperationContentType'
+            $ref: '#/components/schemas/ModelInvocationContentType'
         resources:
           type: array
           description: Factory resource summaries associated with this model's workers or explicit model metadata.
@@ -4253,12 +4253,12 @@ components:
           description: |
             Union of provider-agnostic operations supported by workers for this managed runtime. Mirrors `managedRuntime.supportedOperations` for compatibility with earlier inspect fields.
           items:
-            $ref: '#/components/schemas/ModelOperation'
+            $ref: '#/components/schemas/ModelInvocationOperation'
         modalities:
           type: array
           description: Uppercase content modalities observed across all declared operation inputs and outputs.
           items:
-            $ref: '#/components/schemas/ModelOperationContentType'
+            $ref: '#/components/schemas/ModelInvocationContentType'
         resources:
           type: array
           description: Factory resource summaries associated with this model's workers or explicit model metadata.
@@ -4271,6 +4271,276 @@ components:
             $ref: '#/components/schemas/ModelCapability'
         diagnostics:
           $ref: '#/components/schemas/StringMap'
+    ModelReference:
+      type: object
+      additionalProperties: false
+      required:
+        - nameOrUri
+      description: Opaque model name or source URI accepted by the provider-neutral invocation contract.
+      properties:
+        nameOrUri:
+          type: string
+          minLength: 1
+          description: Configured model name or source URI. Resolution is owned by Models.
+    ModelInvocationInput:
+      type: object
+      additionalProperties: false
+      required:
+        - name
+        - modality
+      description: One ordered value supplied to a named model-operation input slot.
+      properties:
+        name:
+          type: string
+          minLength: 1
+          description: Input slot name declared by the selected operation.
+        modality:
+          $ref: '#/components/schemas/ModelInvocationContentType'
+          description: Provider-neutral modality of the supplied value.
+        contentType:
+          type: string
+          description: Logical content type retained for compatibility with prepared invocation inputs.
+        mediaType:
+          type: string
+          description: Concrete MIME type for media or file-backed content, when known.
+        content:
+          type: string
+          description: Inline content. JSON values are carried as their canonical JSON text.
+        artifactRef:
+          type: string
+          minLength: 1
+          description: Opaque Models-owned input artifact reference when content is not inline.
+    ModelInvocationOutput:
+      type: object
+      additionalProperties: false
+      required:
+        - name
+        - modality
+      description: One ordered, slot-named output of a generic model invocation.
+      properties:
+        name:
+          type: string
+          minLength: 1
+          description: Output slot name declared by the selected operation.
+        modality:
+          $ref: '#/components/schemas/ModelInvocationContentType'
+          description: Provider-neutral modality of the output.
+        contentType:
+          type: string
+          description: Logical content type retained for compatibility with prepared invocation outputs.
+        mediaType:
+          type: string
+          description: Concrete MIME type for media or file-backed output, when known.
+        content:
+          type: string
+          description: Inline output content. JSON values are carried as their canonical JSON text.
+        artifact:
+          $ref: '#/components/schemas/ModelInvocationArtifact'
+          description: Optional opaque artifact metadata for materialized output.
+    ModelInvocationContentType:
+      type: string
+      description: Uppercase provider-neutral content modality used by generic model invocation contracts.
+      enum:
+        - TEXT
+        - IMAGE
+        - AUDIO
+        - VIDEO
+        - JSON
+        - BINARY
+    ModelInvocationSlot:
+      type: object
+      additionalProperties: false
+      required:
+        - name
+        - contentTypes
+      description: One named provider-neutral slot in a generic model invocation operation.
+      properties:
+        name:
+          type: string
+          description: Stable slot name used by generic invocation inputs, outputs, and diagnostics.
+        contentTypes:
+          type: array
+          minItems: 1
+          description: Uppercase content types accepted or produced by this generic slot.
+          items:
+            $ref: '#/components/schemas/ModelInvocationContentType'
+        modality:
+          $ref: '#/components/schemas/ModelInvocationContentType'
+          description: Provider-neutral modality of values accepted or produced by this slot.
+        required:
+          type: boolean
+          description: Whether this slot is required by the selected operation.
+        repeatable:
+          type: boolean
+          description: Whether the slot accepts or produces multiple ordered values.
+        mediaTypes:
+          type: array
+          description: Accepted or produced MIME-type patterns for this slot.
+          items:
+            type: string
+    ModelInvocationOperation:
+      type: object
+      additionalProperties: false
+      required:
+        - name
+      description: One provider-neutral operation exposed by a managed model runtime.
+      properties:
+        name:
+          $ref: '#/components/schemas/ModelOperationName'
+        inputs:
+          type: array
+          description: Named generic invocation input slots this model can consume.
+          items:
+            $ref: '#/components/schemas/ModelInvocationSlot'
+        outputs:
+          type: array
+          description: Named generic invocation output slots this model can produce.
+          items:
+            $ref: '#/components/schemas/ModelInvocationSlot'
+    ModelInvocationArtifact:
+      type: object
+      additionalProperties: false
+      required:
+        - artifactRef
+      properties:
+        artifactRef:
+          type: string
+          minLength: 1
+          description: Opaque Models-owned artifact reference; cache paths and storage handles are never exposed.
+        name:
+          type: string
+          description: Customer-visible artifact name, when available.
+        mediaType:
+          type: string
+          description: MIME type of the materialized artifact, when known.
+        sizeBytes:
+          type: integer
+          format: int64
+          minimum: 0
+          description: Artifact size in bytes, when known.
+        properties:
+          $ref: '#/components/schemas/StringMap'
+          description: Safe provider-neutral artifact metadata.
+    ModelInvocationParameter:
+      type: object
+      additionalProperties: false
+      required:
+        - name
+        - value
+      description: One ordered named JSON parameter supplied to a model operation.
+      properties:
+        name:
+          type: string
+          minLength: 1
+          description: Operation parameter name.
+        value:
+          description: JSON-compatible parameter value preserved without backend-specific typing.
+    ModelInvocationOutputMode:
+      type: string
+      description: Provider-neutral representation requested for a generic model invocation result.
+      enum:
+        - AUTO
+        - INLINE
+        - JSON
+        - ARTIFACT
+    ModelInvocationFailureClass:
+      type: string
+      description: Stable provider-neutral failure identity for generic model invocation.
+      enum:
+        - INVALID_MODEL_REFERENCE
+        - INVALID_OPERATION
+        - INVALID_SLOT
+        - SLOT_ARITY
+        - INVALID_PARAMETER
+        - MEDIA_CAPABILITY
+        - CONFIGURATION
+        - OFFLINE_CACHE
+        - ARTIFACT
+        - BACKEND_READINESS
+        - BACKEND_PROTOCOL
+        - CANCELLATION
+        - TIMEOUT
+        - MALFORMED_RESPONSE
+    ModelInvocationFailure:
+      type: object
+      additionalProperties: false
+      required:
+        - class
+        - message
+      description: Customer-safe typed failure for a generic model invocation.
+      properties:
+        class:
+          $ref: '#/components/schemas/ModelInvocationFailureClass'
+        message:
+          type: string
+          minLength: 1
+          description: Actionable failure explanation without cache paths, backend addresses, credentials, or protocol payloads.
+        model:
+          $ref: '#/components/schemas/ModelReference'
+        operation:
+          type: string
+          description: Operation associated with the failure, when known.
+        slot:
+          type: string
+          description: Input or output slot associated with the failure, when known.
+        parameter:
+          type: string
+          description: Parameter associated with the failure, when known.
+        field:
+          type: string
+          description: Public request field associated with the failure, when known.
+    GenericModelInvocationRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - scope
+        - holder
+        - model
+        - operation
+      description: Provider-neutral generic model invocation request. Inputs and parameters retain authored order.
+      properties:
+        scope:
+          type: string
+          minLength: 1
+          description: Opaque Models runtime-scope reference.
+        holder:
+          type: string
+          minLength: 1
+          description: Non-empty caller identity used by the eventual capacity owner.
+        model:
+          $ref: '#/components/schemas/ModelReference'
+        operation:
+          $ref: '#/components/schemas/ModelOperationName'
+        inputs:
+          type: array
+          description: Ordered input values. Repeated slot names remain separate entries in this order.
+          items:
+            $ref: '#/components/schemas/ModelInvocationInput'
+        parameters:
+          type: array
+          description: Ordered named JSON parameters for the selected operation.
+          items:
+            $ref: '#/components/schemas/ModelInvocationParameter'
+        outputMode:
+          $ref: '#/components/schemas/ModelInvocationOutputMode'
+        offline:
+          type: boolean
+          description: Whether resolution and preparation must remain cache-only.
+    GenericModelInvocationResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - outputs
+      description: Provider-neutral generic model invocation result with ordered slot-named outputs.
+      properties:
+        outputs:
+          type: array
+          description: Ordered outputs. Distinct slots such as ASR transcript and segments remain separate entries.
+          items:
+            $ref: '#/components/schemas/ModelInvocationOutput'
+        failure:
+          $ref: '#/components/schemas/ModelInvocationFailure'
+          description: Optional typed failure when a transport chooses an envelope rather than an error response.
     ModelInvocationRequest:
       type: object
       additionalProperties: false
@@ -4434,7 +4704,7 @@ components:
           type: array
           description: Operations declared by this worker for the selected model.
           items:
-            $ref: '#/components/schemas/ModelOperation'
+            $ref: '#/components/schemas/ModelInvocationOperation'
         resourceNames:
           type: array
           description: Factory resource names referenced by the worker declaration.
@@ -13274,6 +13544,8 @@ components:
           $ref: '#/components/schemas/GlobalConfigDefaults'
         runtime:
           $ref: '#/components/schemas/GlobalConfigRuntime'
+        models:
+          $ref: '#/components/schemas/GlobalConfigModels'
         workers:
           $ref: '#/components/schemas/GlobalConfigWorkers'
         workerPresets:
@@ -13333,6 +13605,45 @@ components:
           type: boolean
           default: false
           description: Whether rotated artifact files are gzip-compressed.
+    GlobalConfigModels:
+      type: object
+      description: Optional operator model overlays keyed by model name. A model entry may override one or more built-in fields or fully describe a new model name.
+      additionalProperties:
+        $ref: '#/components/schemas/GlobalConfigModel'
+    GlobalConfigModel:
+      type: object
+      additionalProperties: false
+      description: Optional operator overlay for one model. Omitted fields preserve a built-in definition; new model names must provide every field.
+      properties:
+        source:
+          type: string
+          minLength: 1
+          description: Model source path or provider-neutral source URI.
+        backend:
+          type: string
+          minLength: 1
+          description: Provider-neutral backend identity selected for this model.
+        loadPolicy:
+          $ref: '#/components/schemas/GlobalConfigModelLoadPolicy'
+        operations:
+          type: array
+          minItems: 1
+          description: Ordered generic operation names supported by this model.
+          items:
+            $ref: '#/components/schemas/GlobalConfigModelOperation'
+    GlobalConfigModelLoadPolicy:
+      type: string
+      description: Operator model load policy. Runtime activation is owned by Models.
+      enum:
+        - ON_DEMAND
+    GlobalConfigModelOperation:
+      type: string
+      description: Generic provider-neutral operation contract name.
+      enum:
+        - OMNI
+        - EMBED
+        - TTS
+        - ASR
     GlobalConfigWorkerPreset:
       type: object
       additionalProperties: false

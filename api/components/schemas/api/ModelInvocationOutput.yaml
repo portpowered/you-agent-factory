@@ -1,0 +1,26 @@
+type: object
+additionalProperties: false
+required:
+  - name
+  - modality
+description: One ordered, slot-named output of a generic model invocation.
+properties:
+  name:
+    type: string
+    minLength: 1
+    description: Output slot name declared by the selected operation.
+  modality:
+    $ref: './ModelInvocationContentType.yaml'
+    description: Provider-neutral modality of the output.
+  contentType:
+    type: string
+    description: Logical content type retained for compatibility with prepared invocation outputs.
+  mediaType:
+    type: string
+    description: Concrete MIME type for media or file-backed output, when known.
+  content:
+    type: string
+    description: Inline output content. JSON values are carried as their canonical JSON text.
+  artifact:
+    $ref: './ModelInvocationArtifact.yaml'
+    description: Optional opaque artifact metadata for materialized output.
