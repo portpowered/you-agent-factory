@@ -22,7 +22,9 @@ export {
   FACTORY_RECORDING_SCHEMA_VERSION,
   type FactoryRecording,
   FactoryRecordingValidationError,
+  isRecordingValidationCompatibilityIssueCode,
   parseFactoryRecording,
+  type RecordingValidationCompatibilityIssueCode,
   type RecordingValidationIssue,
   type RecordingValidationIssueCode,
   type SafeParseFactoryRecordingResult,
@@ -36,6 +38,12 @@ export {
   type SafeParseFactoryEventReplayTextResult,
   safeParseFactoryEventReplayText,
 } from "./replay.js";
+export {
+  type CanonicalSchemaCompatibilityIssueCode,
+  type CanonicalSchemaIssue,
+  type CanonicalSchemaIssueCode,
+  isCanonicalSchemaCompatibilityIssueCode,
+} from "./schema-validation.js";
 export {
   type FactoryVisualizationLayoutCanonicalNodeContext,
   parseFactoryVisualizationLayout,

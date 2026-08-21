@@ -21,7 +21,13 @@ machine-readable issue codes and input paths. Use `safeParseFactoryRecording`
 for a discriminated result that never throws for invalid customer input. Both
 recording and replay parsing enforce the generated canonical Factory and
 discriminated Factory-event JSON Schemas, including formats, numeric limits,
-required payload fields, and additional-property rules.
+required payload fields, and reporting additional-property findings.
+
+Successful safe parses include `diagnostics` for additive fields, future event
+types, and future canonical enum values. These compatibility diagnostics retain
+the exact input path and raw enum value when applicable, but never include an
+unknown field's payload value. Blocking schema and semantic issues remain in
+`issues`, and throwing parse helpers throw only for those blocking issues.
 
 The packaged
 [`customer-support.factory-recording.v1.json`](examples/customer-support.factory-recording.v1.json)

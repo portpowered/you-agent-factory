@@ -141,6 +141,7 @@ describe("Factory event SSE replay text", () => {
           message: "Expected SSE data to contain valid Factory event JSON.",
         },
       ],
+      diagnostics: [],
     });
     expect(() =>
       parseFactoryEventReplayText("data: {broken}\n\n"),
@@ -209,12 +210,57 @@ describe("Factory event SSE replay text", () => {
             code: "missing_required_field",
             path: ["frames", 0, "data", "payload", "type"],
           }),
+        ]),
+      );
+      expect(result.diagnostics).toEqual(
+        expect.arrayContaining([
           expect.objectContaining({
             code: "unsupported_field",
             path: ["frames", 0, "data", "unexpected"],
           }),
+          expect.objectContaining({
+            code: "unsupported_field",
+            path: ["frames", 0, "data", "context", "unexpected"],
+          }),
         ]),
       );
     }
+  });
+});
+
+describe("Factory event compatibility diagnostics", () => {
+  it("retains future event types and extra fields with non-blocking diagnostics", () => {
+    const future = event("future", 0, 1) as unknown as Record<string, unknown>;
+    future.type = "FUTURE_EVENT_TYPE";
+    future.futureMetadata = "secret-metadata";
+    (future.context as Record<string, unknown>).futureContext =
+      "secret-context";
+
+    const result = safeParseFactoryEventReplayText(
+      `data: ${JSON.stringify(future)}\n\n`,
+    );
+
+    expect(result.success).toBe(true);
+    if (!result.success) return;
+    expect(result.data[0]?.type).toBe("FUTURE_EVENT_TYPE");
+    expect(result.diagnostics).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: "unsupported_event_type",
+          path: ["frames", 0, "data", "type"],
+        }),
+        expect.objectContaining({
+          code: "unsupported_field",
+          path: ["frames", 0, "data", "futureMetadata"],
+        }),
+        expect.objectContaining({
+          code: "unsupported_field",
+          path: ["frames", 0, "data", "context", "futureContext"],
+        }),
+      ]),
+    );
+    expect(
+      result.diagnostics.every(({ message }) => !message.includes("secret")),
+    ).toBe(true);
   });
 });

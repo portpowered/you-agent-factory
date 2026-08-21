@@ -143,6 +143,8 @@ describe("RecordingFactoryEventSink", () => {
       unexpected?: boolean;
     };
     invalid.unexpected = true;
+    (invalid.context as unknown as Record<string, unknown>).sequence =
+      "not-a-number";
 
     await expectSinkError(sink.write([invalid]), "invalid_recording");
     await expectSinkError(
