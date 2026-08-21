@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"io/fs"
@@ -71,6 +72,10 @@ func SubmitBatch(prepare work.FactoryRequestBatchPreparation, cfg BatchConfig) e
 
 	prepared, err := prepare.PrepareFactoryRequestBatch(cfg.Context, resolved.data)
 	if err != nil {
+		var payloadSizeErr *work.PayloadSizeError
+		if errors.As(err, &payloadSizeErr) {
+			return newBatchPayloadSizeError(resolved.label, payloadSizeErr, err)
+		}
 		return fmt.Errorf("parse %s: %w", resolved.label, err)
 	}
 	req := prepared.Request

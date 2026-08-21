@@ -3,10 +3,13 @@ package batch_contract_test
 import (
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
+	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 	"github.com/portpowered/infinite-you/tests/internal/functionalevidence"
 )
@@ -115,6 +118,168 @@ func TestCLISubmitBatchDuplicateNameDiagnosticIsActionableAndAtomic(t *testing.T
 	}
 	if stdout != "" {
 		t.Fatalf("duplicate-name dry-run emitted stdout: %q", stdout)
+	}
+}
+
+// TestCLISubmitBatchOversizedPayloadDiagnosticAcrossInputModes proves every
+// public batch input path preserves the Work-owned size diagnostic, including
+// the local dry-run path. A rejected batch emits no success acknowledgement and
+// does not admit partial Work into the Factory Session.
+func TestCLISubmitBatchOversizedPayloadDiagnosticAcrossInputModes(t *testing.T) {
+	factoryDir := support.ScaffoldFactory(t, batchAdmissionFactoryConfig())
+	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir:                factoryDir,
+		WaitForServiceModeRuntime: true,
+	})
+	defer server.Stop(t)
+
+	process := buildBatchContractProcess(t, serviceedges.Edges{})
+	support.CleanupProcess(t, process)
+
+	for _, test := range []struct {
+		name   string
+		input  string
+		json   bool
+		dryRun bool
+	}{
+		{name: "file-human", input: "file"},
+		{name: "stdin-json", input: "stdin", json: true},
+		{name: "inline-human", input: "inline"},
+		{name: "dry-run-json", input: "file", json: true, dryRun: true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			requestID := "batch-payload-limit-" + test.name
+			workName := "oversized-" + test.name
+			batch := oversizedBatchJSON(requestID, workName)
+			args := []string{"you"}
+			if test.dryRun {
+				args = append(args, "--server", "http://127.0.0.1:1")
+			} else {
+				args = append(args, "--server", server.URL())
+			}
+			if test.json {
+				args = append(args, "--json")
+			}
+			args = append(args, "submit", "batch")
+
+			stdin := ""
+			stdinIsTTY := true
+			switch test.input {
+			case "file":
+				path := writeBatchContractInputFile(t, batch)
+				args = append(args, path)
+			case "stdin":
+				stdin = batch
+				stdinIsTTY = false
+			case "inline":
+				args = append(args, batch)
+			default:
+				t.Fatalf("unsupported test input %q", test.input)
+			}
+			if test.dryRun {
+				// Keep dry-run distinct from the live file case while still using
+				// the real file acquisition path.
+				if len(args) == 0 || !strings.HasSuffix(args[len(args)-1], ".json") {
+					t.Fatalf("dry-run args did not receive a batch file: %#v", args)
+				}
+				args = append(args[:len(args)-1], "--dry-run", args[len(args)-1])
+			}
+
+			stdout, stderr, err := executeSubmitBatchCLIExpectErrorWithInput(
+				t, process, args, stdin, stdinIsTTY,
+			)
+			if err == nil {
+				t.Fatal("oversized batch submission succeeded")
+			}
+			diagnostic := err.Error() + "\n" + stderr
+			for _, marker := range []string{
+				`Work "` + workName + `"`,
+				"payloadBytes=65537",
+				"payloadLimitBytes=65536",
+			} {
+				if !strings.Contains(diagnostic, marker) {
+					t.Fatalf("diagnostic missing %q:\n%s", marker, diagnostic)
+				}
+			}
+			if stdout != "" {
+				t.Fatalf("oversized submission emitted success stdout: %q", stdout)
+			}
+			for _, marker := range []string{"requestId:", "traceId:", "work count:", "Submitted:"} {
+				if strings.Contains(stdout+stderr, marker) {
+					t.Fatalf("oversized submission emitted success marker %q:\nstdout:\n%s\nstderr:\n%s", marker, stdout, stderr)
+				}
+			}
+		})
+	}
+
+	listed := support.ListDefaultSessionWork(t, server.URL())
+	if len(listed.Results) != 0 {
+		t.Fatalf("oversized batch submissions admitted Work: %#v", listed.Results)
+	}
+}
+
+// TestCLISubmitBatchAtAndBelowLimitDispatchThroughProviderCommandRunner
+// proves the inclusive boundary still reaches the injected provider edge.
+// The Codex adapter receives the rendered prompt on stdin, leaving the
+// composed host command line comfortably below its Windows loader budget.
+func TestCLISubmitBatchAtAndBelowLimitDispatchThroughProviderCommandRunner(t *testing.T) {
+	factoryDir := support.ScaffoldFactory(t, providerSubmitBatchFactoryConfig())
+	support.WriteAgentConfig(t, factoryDir, "provider-worker", support.BuildModelWorkerConfig(
+		modelprovider.ProviderCodex,
+		"gpt-5-codex",
+	))
+	support.WriteWorkstationConfig(t, factoryDir, "process-task", "---\ntype: MODEL_WORKSTATION\n---\n{{ (index .Inputs 0).Payload }}\n")
+	runner := support.NewShapedProviderCommandRunner(platformprocess.CommandResult{
+		Stdout: []byte("boundary dispatch COMPLETE"),
+	})
+	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir:                factoryDir,
+		WaitForServiceModeRuntime: true,
+		Edges:                     serviceedges.Edges{ProviderCommandRunner: runner},
+	})
+	defer server.Stop(t)
+
+	process := buildBatchContractProcess(t, serviceedges.Edges{})
+	support.CleanupProcess(t, process)
+
+	for index, test := range []struct {
+		name        string
+		payloadSize int
+	}{
+		{name: "below-limit", payloadSize: work.MaxWorkPayloadBytes - 1},
+		{name: "at-limit", payloadSize: work.MaxWorkPayloadBytes},
+	} {
+		requestID := "batch-payload-boundary-" + test.name
+		workName := "boundary-" + test.name
+		marker := "boundary-prompt-marker-" + test.name
+		path := writeBatchContractInputFile(t, boundaryBatchJSON(
+			requestID, workName, test.payloadSize, marker,
+		))
+		stdout := executeSubmitBatchCLI(t, process, []string{
+			"you", "--server", server.URL(), "submit", "batch", path,
+		})
+		if !strings.Contains(stdout, "work count: 1") {
+			t.Fatalf("%s submission output missing work count:\n%s", test.name, stdout)
+		}
+
+		wantCalls := index + 1
+		if _, err := support.WaitForObservation(
+			15*time.Second,
+			func() (int, error) { return runner.CallCount(), nil },
+			func(callCount int) bool { return callCount >= wantCalls },
+		); err != nil {
+			t.Fatalf("waiting for %s provider dispatch: %v", test.name, err)
+		}
+		request := runner.LastRequest()
+		if !strings.Contains(string(request.Stdin), marker) {
+			t.Fatalf("%s provider stdin omitted rendered payload marker %q", test.name, marker)
+		}
+		if len(request.Stdin) < test.payloadSize {
+			t.Fatalf("%s provider stdin = %d bytes, want the complete rendered payload", test.name, len(request.Stdin))
+		}
+		if got := platformprocess.ComposedCommandLineLength(request.Command, request.Args); got >= platformprocess.WindowsCommandLineLimit {
+			t.Fatalf("%s composed command line = %d, want below Windows limit %d", test.name, got, platformprocess.WindowsCommandLineLimit)
+		}
 	}
 }
 
