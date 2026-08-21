@@ -454,68 +454,82 @@ func TestCircuitBreaker_VisitCountReplayPreservesLogicalAndLegacyDecisions(t *te
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			net := buildTestNet()
-			net.Transitions["review-exhausted"] = &petri.Transition{
-				ID:   "review-exhausted",
-				Type: petri.TransitionExhaustion,
-				InputArcs: []petri.Arc{{
-					ID:          "exhaustion-input",
-					Name:        "work",
-					PlaceID:     "task:init",
-					Guard:       test.guard,
-					Cardinality: petri.ArcCardinality{Mode: petri.CardinalityOne},
-				}},
-				OutputArcs: []petri.Arc{{ID: "exhaustion-output", PlaceID: "task:failed"}},
-			}
-
-			marking := petri.NewMarking("visit-count-replay")
-			token := makeToken("visit-count-replay-token", "task:init", time.Now())
-			token.History.TotalVisits["process"] = test.processVisits
-			token.History.TotalVisits["review"] = test.reviewVisits
-			marking.AddToken(token)
-			liveSnapshot := marking.Snapshot()
-
-			liveDecision := test.guard.Decision(*liveSnapshot.Tokens[token.ID])
-			if liveDecision.RawVisits != test.wantRaw || liveDecision.LogicalVisits != test.wantLogical || liveDecision.Limit != test.wantLimit {
-				t.Fatalf("live decision = %#v, want raw=%d logical=%d limit=%q", liveDecision, test.wantRaw, test.wantLogical, test.wantLimit)
-			}
-
-			live := executeCircuitBreakerSnapshot(t, net, liveSnapshot)
-			repeated := executeCircuitBreakerSnapshot(t, net, liveSnapshot)
-			if !reflect.DeepEqual(live.Mutations, repeated.Mutations) {
-				t.Fatalf("repeated live evaluation mutations = %#v, want %#v", repeated.Mutations, live.Mutations)
-			}
-
-			encoded, err := json.Marshal(liveSnapshot)
-			if err != nil {
-				t.Fatalf("json.Marshal(marking snapshot) error = %v", err)
-			}
-			var replaySnapshot petri.MarkingSnapshot
-			if err := json.Unmarshal(encoded, &replaySnapshot); err != nil {
-				t.Fatalf("json.Unmarshal(marking snapshot) error = %v", err)
-			}
-			replayDecision := test.guard.Decision(*replaySnapshot.Tokens[token.ID])
-			if !reflect.DeepEqual(liveDecision, replayDecision) {
-				t.Fatalf("replayed decision = %#v, want %#v", replayDecision, liveDecision)
-			}
-
-			replay := executeCircuitBreakerSnapshot(t, net, replaySnapshot)
-			if !reflect.DeepEqual(live.Mutations, replay.Mutations) {
-				t.Fatalf("replayed mutations = %#v, want %#v", replay.Mutations, live.Mutations)
-			}
-			if len(replay.Mutations) != 1 {
-				t.Fatalf("replayed mutations = %#v, want one terminal move", replay.Mutations)
-			}
-			if replay.Mutations[0].ToPlace != "task:failed" {
-				t.Fatalf("replayed terminal destination = %q, want task:failed", replay.Mutations[0].ToPlace)
-			}
-			if replay.Mutations[0].Reason != test.wantReason {
-				t.Fatalf("replayed terminal reason = %q, want %q", replay.Mutations[0].Reason, test.wantReason)
-			}
-			if replaySnapshot.Tokens[token.ID].History.TotalVisits["process"] != test.processVisits || replaySnapshot.Tokens[token.ID].History.TotalVisits["review"] != test.reviewVisits {
-				t.Fatalf("replayed visit history = %#v, want process=%d review=%d", replaySnapshot.Tokens[token.ID].History.TotalVisits, test.processVisits, test.reviewVisits)
-			}
+			assertCircuitBreakerVisitCountReplay(t, test)
 		})
+	}
+}
+
+func assertCircuitBreakerVisitCountReplay(t *testing.T, test struct {
+	name          string
+	guard         *petri.VisitCountGuard
+	processVisits int
+	reviewVisits  int
+	wantRaw       int
+	wantLogical   int
+	wantLimit     petri.VisitCountLimit
+	wantReason    string
+}) {
+	t.Helper()
+	net := buildTestNet()
+	net.Transitions["review-exhausted"] = &petri.Transition{
+		ID:   "review-exhausted",
+		Type: petri.TransitionExhaustion,
+		InputArcs: []petri.Arc{{
+			ID:          "exhaustion-input",
+			Name:        "work",
+			PlaceID:     "task:init",
+			Guard:       test.guard,
+			Cardinality: petri.ArcCardinality{Mode: petri.CardinalityOne},
+		}},
+		OutputArcs: []petri.Arc{{ID: "exhaustion-output", PlaceID: "task:failed"}},
+	}
+
+	marking := petri.NewMarking("visit-count-replay")
+	token := makeToken("visit-count-replay-token", "task:init", time.Now())
+	token.History.TotalVisits["process"] = test.processVisits
+	token.History.TotalVisits["review"] = test.reviewVisits
+	marking.AddToken(token)
+	liveSnapshot := marking.Snapshot()
+
+	liveDecision := test.guard.Decision(*liveSnapshot.Tokens[token.ID])
+	if liveDecision.RawVisits != test.wantRaw || liveDecision.LogicalVisits != test.wantLogical || liveDecision.Limit != test.wantLimit {
+		t.Fatalf("live decision = %#v, want raw=%d logical=%d limit=%q", liveDecision, test.wantRaw, test.wantLogical, test.wantLimit)
+	}
+
+	live := executeCircuitBreakerSnapshot(t, net, liveSnapshot)
+	repeated := executeCircuitBreakerSnapshot(t, net, liveSnapshot)
+	if !reflect.DeepEqual(live.Mutations, repeated.Mutations) {
+		t.Fatalf("repeated live evaluation mutations = %#v, want %#v", repeated.Mutations, live.Mutations)
+	}
+
+	encoded, err := json.Marshal(liveSnapshot)
+	if err != nil {
+		t.Fatalf("json.Marshal(marking snapshot) error = %v", err)
+	}
+	var replaySnapshot petri.MarkingSnapshot
+	if err := json.Unmarshal(encoded, &replaySnapshot); err != nil {
+		t.Fatalf("json.Unmarshal(marking snapshot) error = %v", err)
+	}
+	replayDecision := test.guard.Decision(*replaySnapshot.Tokens[token.ID])
+	if !reflect.DeepEqual(liveDecision, replayDecision) {
+		t.Fatalf("replayed decision = %#v, want %#v", replayDecision, liveDecision)
+	}
+
+	replay := executeCircuitBreakerSnapshot(t, net, replaySnapshot)
+	if !reflect.DeepEqual(live.Mutations, replay.Mutations) {
+		t.Fatalf("replayed mutations = %#v, want %#v", replay.Mutations, live.Mutations)
+	}
+	if len(replay.Mutations) != 1 {
+		t.Fatalf("replayed mutations = %#v, want one terminal move", replay.Mutations)
+	}
+	if replay.Mutations[0].ToPlace != "task:failed" {
+		t.Fatalf("replayed terminal destination = %q, want task:failed", replay.Mutations[0].ToPlace)
+	}
+	if replay.Mutations[0].Reason != test.wantReason {
+		t.Fatalf("replayed terminal reason = %q, want %q", replay.Mutations[0].Reason, test.wantReason)
+	}
+	if replaySnapshot.Tokens[token.ID].History.TotalVisits["process"] != test.processVisits || replaySnapshot.Tokens[token.ID].History.TotalVisits["review"] != test.reviewVisits {
+		t.Fatalf("replayed visit history = %#v, want process=%d review=%d", replaySnapshot.Tokens[token.ID].History.TotalVisits, test.processVisits, test.reviewVisits)
 	}
 }
 
