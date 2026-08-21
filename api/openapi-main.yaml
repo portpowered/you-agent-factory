@@ -1271,6 +1271,32 @@ paths:
                 $ref: '#/components/schemas/ListModelsResponse'
         '500':
           $ref: '#/components/responses/InternalError'
+  /models/invocations:
+    post:
+      tags:
+        - Models
+      operationId: invokeGenericModel
+      summary: Invoke a model through the generic contract
+      description: Invokes a configured model or supported source reference through the provider-neutral Models contract. Ordered inputs and named outputs remain detached from backend and cache details.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GenericModelInvocationRequest'
+      responses:
+        '200':
+          description: Successful generic model invocation result.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GenericModelInvocationResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
   /models/{model_name}:
     get:
       tags:

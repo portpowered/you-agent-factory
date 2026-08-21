@@ -90,6 +90,32 @@ func (h *Handler) InvokeModel(w http.ResponseWriter, r *http.Request, modelName 
 	h.writeJSON(w, http.StatusOK, modelInvocationResponseFromResult(result))
 }
 
+// InvokeGenericModel serves the customer-facing provider-neutral invocation
+// contract. The response remains an ordered named-output list; no backend,
+// cache, process, or filesystem detail is exposed at this boundary.
+func (h *Handler) InvokeGenericModel(w http.ResponseWriter, r *http.Request) {
+	request, err := decodeGenericModelInvocationRequestFromHTTP(r.Body)
+	if err != nil {
+		message := "invalid request payload"
+		var validationErr requestValidationError
+		if errors.As(err, &validationErr) {
+			message = validationErr.message
+		}
+		h.writeError(w, http.StatusBadRequest, message, "BAD_REQUEST")
+		return
+	}
+	if h.guardModelsRequestContext(w, r) {
+		return
+	}
+
+	result, err := h.adapter.InvokeGenericModel(r.Context(), request)
+	if err != nil {
+		h.writeRootOrInternalError(w, modelsHTTPOperationGenericInvoke, err, invokeFailedMessage)
+		return
+	}
+	h.writeJSON(w, http.StatusOK, GenericInvocationResponseToGenerated(result))
+}
+
 func (h *Handler) writeInvocationError(w http.ResponseWriter, err error) {
 	h.writeRootOrInternalError(w, modelsHTTPOperationInvoke, err, invokeFailedMessage)
 }

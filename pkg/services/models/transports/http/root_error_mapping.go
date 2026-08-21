@@ -15,6 +15,7 @@ const (
 	modelsHTTPOperationCatalog modelsHTTPOperation = iota
 	modelsHTTPOperationPull
 	modelsHTTPOperationInvoke
+	modelsHTTPOperationGenericInvoke
 )
 
 const (
@@ -33,13 +34,38 @@ func RootErrorResponse(err error, operation modelsHTTPOperation) (int, factoryap
 	if err == nil {
 		return 0, factoryapi.ErrorResponse{}, false
 	}
-
-	if operation == modelsHTTPOperationInvoke {
+	if operation == modelsHTTPOperationInvoke || operation == modelsHTTPOperationGenericInvoke {
 		if status, response, ok := classifiedInferenceErrorResponse(err); ok {
 			return status, response, ok
 		}
+		if status, response, ok := invocationFailureErrorResponse(err); ok {
+			return status, response, ok
+		}
 	}
+	return rootSentinelErrorResponse(err, operation)
+}
 
+func rootSentinelErrorResponse(err error, operation modelsHTTPOperation) (int, factoryapi.ErrorResponse, bool) {
+	if operation == modelsHTTPOperationGenericInvoke {
+		if status, response, ok := genericSentinelErrorResponse(err); ok {
+			return status, response, ok
+		}
+	}
+	return commonSentinelErrorResponse(err, operation)
+}
+
+func genericSentinelErrorResponse(err error) (int, factoryapi.ErrorResponse, bool) {
+	switch {
+	case errors.Is(err, models.ErrRuntimeScopeInvalid), errors.Is(err, models.ErrHostInvalidHolder):
+		return badRequestErrorResponse(strings.TrimSpace(err.Error()))
+	case errors.Is(err, models.ErrRuntimeScopeStale), errors.Is(err, models.ErrRuntimeScopeClosed), errors.Is(err, models.ErrRuntimeScopeForeign):
+		return conflictErrorResponse(strings.TrimSpace(err.Error()), "MODEL_RUNTIME_SCOPE_UNAVAILABLE")
+	default:
+		return 0, factoryapi.ErrorResponse{}, false
+	}
+}
+
+func commonSentinelErrorResponse(err error, operation modelsHTTPOperation) (int, factoryapi.ErrorResponse, bool) {
 	switch {
 	case errors.Is(err, models.ErrNotFound):
 		return notFoundErrorResponse(catalogNotFoundMessage)
@@ -59,6 +85,48 @@ func RootErrorResponse(err error, operation modelsHTTPOperation) (int, factoryap
 		return badRequestErrorResponse(strings.TrimSpace(err.Error()))
 	default:
 		return 0, factoryapi.ErrorResponse{}, false
+	}
+}
+
+func invocationFailureErrorResponse(err error) (int, factoryapi.ErrorResponse, bool) {
+	var failure *models.InvocationFailure
+	if !errors.As(err, &failure) || failure == nil {
+		return 0, factoryapi.ErrorResponse{}, false
+	}
+	status, code := invocationFailureHTTPStatusAndCode(failure.Class)
+	return status, factoryapi.ErrorResponse{
+		Message: failure.Error(),
+		Family:  errorFamilyForStatus(status),
+		Code:    factoryapi.ErrorResponseCode(code),
+	}, true
+}
+
+func invocationFailureHTTPStatusAndCode(class models.InvocationFailureClass) (int, string) {
+	switch class {
+	case models.InvocationFailureClassInvalidModelReference,
+		models.InvocationFailureClassRevisionResolution:
+		return http.StatusNotFound, "MODEL_NOT_AVAILABLE"
+	case models.InvocationFailureClassInvalidOperation,
+		models.InvocationFailureClassInvalidSlot,
+		models.InvocationFailureClassSlotArity,
+		models.InvocationFailureClassInvalidParameter,
+		models.InvocationFailureClassMediaCapability,
+		models.InvocationFailureClassArtifact:
+		return http.StatusBadRequest, "BAD_REQUEST"
+	case models.InvocationFailureClassOfflineCache:
+		return http.StatusConflict, "MODEL_OFFLINE_CACHE_UNAVAILABLE"
+	case models.InvocationFailureClassBackendReadiness:
+		return http.StatusServiceUnavailable, "MODEL_BACKEND_NOT_READY"
+	case models.InvocationFailureClassBackendProtocol,
+		models.InvocationFailureClassMalformedResponse:
+		return http.StatusBadGateway, "MODEL_BACKEND_FAILURE"
+	case models.InvocationFailureClassCancellation,
+		models.InvocationFailureClassTimeout:
+		return http.StatusRequestTimeout, "MODEL_INFERENCE_TIMEOUT"
+	case models.InvocationFailureClassConfiguration:
+		return http.StatusInternalServerError, "MODEL_CONFIGURATION_FAILURE"
+	default:
+		return http.StatusInternalServerError, "MODEL_INFERENCE_RUNTIME_FAILURE"
 	}
 }
 

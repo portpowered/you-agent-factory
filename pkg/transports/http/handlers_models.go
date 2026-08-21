@@ -18,6 +18,10 @@ func (s *Server) InvokeModel(w http.ResponseWriter, r *http.Request, modelName s
 	s.modelsHTTP.InvokeModel(w, r, modelName)
 }
 
+func (s *Server) InvokeGenericModel(w http.ResponseWriter, r *http.Request) {
+	s.modelsHTTP.InvokeGenericModel(w, r)
+}
+
 func (s *Server) PullModel(w http.ResponseWriter, r *http.Request, modelName string) {
 	s.modelsHTTP.PullModel(w, r, modelName)
 }

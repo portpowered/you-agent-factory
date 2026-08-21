@@ -3,7 +3,10 @@ package cli_test
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
+	"fmt"
+	"io"
 	"net/http"
 	"strings"
 	"testing"
@@ -12,6 +15,7 @@ import (
 	modelinference "github.com/portpowered/infinite-you/pkg/services/models"
 	modelscli "github.com/portpowered/infinite-you/pkg/services/models/transports/cli"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/clihttp"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
 type compositionHTTPClock struct{}
@@ -548,4 +552,125 @@ func TestNewInvokesThroughCompositionProviderOwnedPath(t *testing.T) {
 	if !strings.Contains(out.String(), "owned") {
 		t.Fatalf("Invoke() output = %q, want owned inference content", out.String())
 	}
+}
+
+func TestRootAdapter_InvokeGenericSingleOutputWritesOnlyPayload(t *testing.T) {
+	t.Parallel()
+
+	scope := testRuntimeScope(t)
+	var out bytes.Buffer
+	service := modelscli.NewService(modelscli.Config{
+		Models: stubModelsRoot{
+			getCatalogModel: func(_ context.Context, request modelinference.GetModelRequest) (modelinference.GetModelResult, error) {
+				return genericCLIModel(request.Name, "EMBED", modelinference.OperationSlot{
+					Name: "embedding", Modality: modelinference.ModalityText,
+				}), nil
+			},
+			invokeModel: func(_ context.Context, request modelinference.InvokeModelRequest) (modelinference.InvokeModelResult, error) {
+				if request.Operation != "EMBED" || len(request.Inputs) != 1 {
+					return modelinference.InvokeModelResult{}, fmt.Errorf("unexpected generic request: %#v", request)
+				}
+				return modelinference.InvokeModelResult{Outputs: []modelinference.InferenceOutput{{
+					Name: "embedding", Modality: modelinference.ModalityText, Content: "[1,2]",
+				}}}, nil
+			},
+		},
+		OpenInvokeScope: func(context.Context, modelscli.InvokeConfig) (modelscli.InvokeRuntimeScope, error) {
+			return modelscli.InvokeRuntimeScope{Scope: scope}, nil
+		},
+	})
+
+	if err := service.Invoke(modelscli.InvokeConfig{
+		Context: context.Background(), ModelName: "embed", Operation: "EMBED", Text: "hello", Output: &out,
+	}); err != nil {
+		t.Fatalf("Invoke() error = %v", err)
+	}
+	if out.String() != "[1,2]" {
+		t.Fatalf("generic stdout = %q, want canonical payload only", out.String())
+	}
+}
+
+func TestRootAdapter_InvokeGenericMultipleOutputsRejectsBeforeRoot(t *testing.T) {
+	t.Parallel()
+
+	scope := testRuntimeScope(t)
+	called := false
+	service := modelscli.NewService(modelscli.Config{
+		Models: stubModelsRoot{
+			getCatalogModel: func(context.Context, modelinference.GetModelRequest) (modelinference.GetModelResult, error) {
+				return genericCLIModel("omni", modelinference.OperationOMNI,
+					modelinference.OperationSlot{Name: "text", Modality: modelinference.ModalityText},
+					modelinference.OperationSlot{Name: "usage", Modality: modelinference.ModalityJSON}), nil
+			},
+			invokeModel: func(context.Context, modelinference.InvokeModelRequest) (modelinference.InvokeModelResult, error) {
+				called = true
+				return modelinference.InvokeModelResult{}, nil
+			},
+		},
+		OpenInvokeScope: func(context.Context, modelscli.InvokeConfig) (modelscli.InvokeRuntimeScope, error) {
+			return modelscli.InvokeRuntimeScope{Scope: scope}, nil
+		},
+	})
+
+	err := service.Invoke(modelscli.InvokeConfig{
+		Context: context.Background(), ModelName: "omni", Operation: modelinference.OperationOMNI,
+		Text: "hello", Output: io.Discard,
+	})
+	if err == nil || !strings.Contains(err.Error(), "text, usage") {
+		t.Fatalf("Invoke() error = %v, want named multi-output preflight failure", err)
+	}
+	if called {
+		t.Fatal("generic root was called after multi-output preflight rejection")
+	}
+}
+
+func TestRootAdapter_InvokeGenericJSONPreservesAllNamedOutputs(t *testing.T) {
+	t.Parallel()
+
+	scope := testRuntimeScope(t)
+	artifact := testArtifactRef(t, "artifact:usage")
+	service := modelscli.NewService(modelscli.Config{
+		Models: stubModelsRoot{
+			getCatalogModel: func(context.Context, modelinference.GetModelRequest) (modelinference.GetModelResult, error) {
+				return genericCLIModel("omni", modelinference.OperationOMNI,
+					modelinference.OperationSlot{Name: "text", Modality: modelinference.ModalityText},
+					modelinference.OperationSlot{Name: "usage", Modality: modelinference.ModalityJSON}), nil
+			},
+			invokeModel: func(context.Context, modelinference.InvokeModelRequest) (modelinference.InvokeModelResult, error) {
+				return modelinference.InvokeModelResult{Outputs: []modelinference.InferenceOutput{
+					{Name: "text", Modality: modelinference.ModalityText, Content: "answer"},
+					{Name: "usage", Modality: modelinference.ModalityJSON, Artifact: &modelinference.InferenceArtifact{
+						Artifact: artifact, MediaType: "application/json", SizeBytes: 7,
+					}},
+				}}, nil
+			},
+		},
+		OpenInvokeScope: func(context.Context, modelscli.InvokeConfig) (modelscli.InvokeRuntimeScope, error) {
+			return modelscli.InvokeRuntimeScope{Scope: scope}, nil
+		},
+	})
+
+	var out bytes.Buffer
+	if err := service.Invoke(modelscli.InvokeConfig{
+		Context: context.Background(), ModelName: "omni", Operation: modelinference.OperationOMNI,
+		Text: "hello", JSON: true, Output: &out,
+	}); err != nil {
+		t.Fatalf("Invoke() error = %v", err)
+	}
+	var response factoryapi.GenericModelInvocationResponse
+	if err := json.Unmarshal(out.Bytes(), &response); err != nil {
+		t.Fatalf("decode generic JSON: %v\n%s", err, out.String())
+	}
+	if len(response.Outputs) != 2 || response.Outputs[0].Name != "text" || response.Outputs[1].Name != "usage" {
+		t.Fatalf("generic outputs = %#v, want all named outputs", response.Outputs)
+	}
+	if response.Outputs[1].Artifact == nil || response.Outputs[1].Artifact.ArtifactRef != "artifact:usage" || response.Outputs[1].Artifact.SizeBytes == nil || *response.Outputs[1].Artifact.SizeBytes != 7 {
+		t.Fatalf("generic artifact = %#v, want preserved metadata", response.Outputs[1].Artifact)
+	}
+}
+
+func genericCLIModel(name, operation string, outputs ...modelinference.OperationSlot) modelinference.GetModelResult {
+	return modelinference.GetModelResult{Model: modelinference.Detail{
+		Summary: modelinference.Summary{Name: name, Operations: []modelinference.Operation{{Name: operation, Outputs: outputs}}},
+	}}
 }

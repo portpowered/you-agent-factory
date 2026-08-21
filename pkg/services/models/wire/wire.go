@@ -29,6 +29,7 @@ import (
 	inferencewire "github.com/portpowered/infinite-you/pkg/services/models/internal/services/inference/wire"
 	runtimehost "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_host"
 	runtimehostwire "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_host/wire"
+	runtimescopes "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_scopes"
 	runtimescopeswire "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_scopes/wire"
 	"go.uber.org/zap"
 )
@@ -274,50 +275,12 @@ func composeModelsService(
 	launcher, clock, createTempFile := adaptConstructionPorts(
 		processLauncher, hostClock, runtimeTempFile,
 	)
-	issuerID, err := runtimeScopeIssuerID(issuerEntropy)
-	if err != nil {
-		return nil, fmt.Errorf("construct Models Runtime Scopes issuer identity: %w", err)
-	}
-	runtimeScopes, err := runtimescopeswire.NewService(func() string { return issuerID })
-	if err != nil {
-		return nil, err
-	}
-	assetService, err := assetswire.NewService(
-		runtimeScopes, assetPlatform, assetHTTP, resolvedEndpoints,
-		assetMkdirAll, assetStat, assetHome, assetWriteFile, assetRename,
-		assetRemove, assetReadFile, assetReadDir, assetCreate, assetOpen,
-		scopedassets.ConstructionOptions{
-			ResolveEnvironment: resolveEnvironment,
-			ResolveRevision:    firstRevisionResolver(revisionResolvers),
-		},
-	)
-	if err != nil {
-		return nil, err
-	}
-	catalogService, err := catalogwire.NewService(
-		runtimeScopes,
-		newCatalogReadinessQuery(assetService),
-	)
-	if err != nil {
-		return nil, err
-	}
-	runtimeHost, err := runtimehostwire.NewService(
-		runtimeScopes, assetService, processLauncher, hostHTTP, hostClock,
-		hostLogger, hostMetrics,
-		runtimehost.Options{
-			Platform:             assetPlatform,
-			ProtocolNegotiator:   protocolNegotiator,
-			CompatibilityChecker: compatibilityChecker,
-		},
-	)
-	if err != nil {
-		return nil, err
-	}
-	inferenceService, err := inferencewire.NewService(
-		runtimeScopes, assetService, catalogService, runtimeHost,
-		inference.InputEchoInvocationRuntime{},
-		inference.InertArtifactFileSystem{},
-		now,
+	components, err := buildModelsServiceComponents(
+		assetPlatform, assetHTTP, resolvedEndpoints, assetMkdirAll, assetStat,
+		assetHome, assetWriteFile, assetRename, assetRemove, assetReadFile,
+		assetReadDir, assetCreate, assetOpen, processLauncher, hostHTTP, hostClock,
+		hostLogger, hostMetrics, resolveEnvironment, protocolNegotiator,
+		compatibilityChecker, now, issuerEntropy, firstRevisionResolver(revisionResolvers),
 	)
 	if err != nil {
 		return nil, err
@@ -326,7 +289,7 @@ func composeModelsService(
 		launcher, hostHTTP, clock,
 		runtimeRunner, runtimeHTTP, localmodels.InspectFile(runtimeInspect),
 		localmodels.TempDirectory(runtimeTempDir), createTempFile,
-		runtimeScopes, catalogService, assetService, runtimeHost, inferenceService,
+		components.runtimeScopes, components.catalog, components.assets, components.runtimeHost, components.inference,
 		modelseffects.ProcessDependencies{
 			Logger: logger, Clock: now, PullMetrics: pullMetrics,
 			HostLogger: hostLogger, HostMetrics: hostMetrics, LocalHooks: localHooks,
@@ -335,6 +298,84 @@ func composeModelsService(
 			BackendArtifactPlatform:    assetPlatform,
 		},
 	)
+}
+
+type modelsServiceComponents struct {
+	runtimeScopes runtimescopes.Service
+	assets        scopedassets.Service
+	catalog       catalog.Service
+	runtimeHost   runtimehost.Service
+	inference     inference.Service
+}
+
+func buildModelsServiceComponents(
+	assetPlatform models.AssetHostPlatform,
+	assetHTTP AssetHTTPDoer,
+	assetEndpoints models.RuntimeAssetEndpoints,
+	assetMkdirAll AssetMakeDirectories,
+	assetStat AssetInspectPath,
+	assetHome AssetResolveHomeDirectory,
+	assetWriteFile AssetWriteFile,
+	assetRename AssetRenamePath,
+	assetRemove AssetRemovePath,
+	assetReadFile AssetReadFile,
+	assetReadDir AssetReadDirectory,
+	assetCreate AssetCreateFile,
+	assetOpen AssetOpenFile,
+	processLauncher HostProcessLauncher,
+	hostHTTP HostHTTPDoer,
+	hostClock HostClock,
+	hostLogger HostDiagnosticLogger,
+	hostMetrics HostMetricsRecorder,
+	resolveEnvironment AssetResolveEnvironment,
+	protocolNegotiator HostProtocolNegotiator,
+	compatibilityChecker HostCompatibilityChecker,
+	now func() time.Time,
+	issuerEntropy platformrandom.Source,
+	revisionResolver func(context.Context, string) (string, error),
+) (modelsServiceComponents, error) {
+	issuerID, err := runtimeScopeIssuerID(issuerEntropy)
+	if err != nil {
+		return modelsServiceComponents{}, fmt.Errorf("construct Models Runtime Scopes issuer identity: %w", err)
+	}
+	runtimeScopes, err := runtimescopeswire.NewService(func() string { return issuerID })
+	if err != nil {
+		return modelsServiceComponents{}, err
+	}
+	assetService, err := assetswire.NewService(
+		runtimeScopes, assetPlatform, assetHTTP, assetEndpoints,
+		assetMkdirAll, assetStat, assetHome, assetWriteFile, assetRename,
+		assetRemove, assetReadFile, assetReadDir, assetCreate, assetOpen,
+		scopedassets.ConstructionOptions{ResolveEnvironment: resolveEnvironment, ResolveRevision: revisionResolver},
+	)
+	if err != nil {
+		return modelsServiceComponents{}, err
+	}
+	catalogService, err := catalogwire.NewService(runtimeScopes, newCatalogReadinessQuery(assetService))
+	if err != nil {
+		return modelsServiceComponents{}, err
+	}
+	runtimeHost, err := runtimehostwire.NewService(
+		runtimeScopes, assetService, processLauncher, hostHTTP, hostClock, hostLogger, hostMetrics,
+		runtimehost.Options{
+			Platform: assetPlatform, ProtocolNegotiator: protocolNegotiator,
+			CompatibilityChecker: compatibilityChecker,
+		},
+	)
+	if err != nil {
+		return modelsServiceComponents{}, err
+	}
+	inferenceService, err := inferencewire.NewService(
+		runtimeScopes, assetService, catalogService, runtimeHost,
+		inference.InputEchoInvocationRuntime{}, inference.InertArtifactFileSystem{}, now,
+	)
+	if err != nil {
+		return modelsServiceComponents{}, err
+	}
+	return modelsServiceComponents{
+		runtimeScopes: runtimeScopes, assets: assetService, catalog: catalogService,
+		runtimeHost: runtimeHost, inference: inferenceService,
+	}, nil
 }
 
 func firstRevisionResolver(

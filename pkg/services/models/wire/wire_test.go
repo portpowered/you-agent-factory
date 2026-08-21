@@ -344,11 +344,6 @@ func TestNewServiceConstructsInertRoot(t *testing.T) {
 	if service == nil {
 		t.Fatal("NewService() returned nil service")
 	}
-	var peer models.Service = service
-	if peer == nil {
-		t.Fatal("constructed value is not assignable to models.Service")
-	}
-
 	assertInertConstruction(t, "asset HTTP", assetHTTP.calls)
 	assertInertConstruction(t, "host HTTP", hostHTTP.calls)
 	assertInertConstruction(t, "runtime HTTP", runtimeHTTP.calls)

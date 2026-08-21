@@ -32,9 +32,6 @@ func (service *rootService) Invoke(cfg InvokeConfig) error {
 	if text == "" {
 		return fmt.Errorf("--text is required")
 	}
-	if !cfg.JSON && strings.TrimSpace(cfg.OutputPath) == "" {
-		return fmt.Errorf("--output is required unless --json is set")
-	}
 	if strings.TrimSpace(cfg.Server) != "" {
 		return fmt.Errorf("remote models invoke requires the composition-stable HTTP service")
 	}
@@ -50,17 +47,39 @@ func (service *rootService) Invoke(cfg InvokeConfig) error {
 			_ = scope.Close(cfg.Context)
 		}()
 	}
+	return service.invokeInScope(cfg, scope.Scope, modelName, operation, text)
+}
+
+func (service *rootService) invokeInScope(
+	cfg InvokeConfig,
+	scope modelinference.RuntimeScopeRef,
+	modelName string,
+	operation string,
+	text string,
+) error {
 	catalogResult, err := service.models.GetCatalogModel(cfg.Context, modelinference.GetModelRequest{
-		Scope: scope.Scope, Name: modelName, Operation: operation,
+		Scope: scope, Name: modelName, Operation: operation,
 	})
 	if err != nil {
+		if !cfg.JSON && strings.TrimSpace(cfg.OutputPath) == "" && errors.Is(err, modelinference.ErrUnsupportedOperation) {
+			return fmt.Errorf("--output is required unless --json is set")
+		}
 		return mapModelsRootError(err)
 	}
-	if cfg.JSON {
+	if err := validateCLIOutputShape(cfg, catalogResult.Model, operation); err != nil {
+		return err
+	}
+	if cfg.JSON || genericCLIInlineOutput(cfg, catalogResult.Model, operation) {
 		joinedResult, joinedErr := service.models.InvokeModel(cfg.Context, joinedCLIInvocationRequest(
-			scope.Scope, modelName, operation, text, catalogResult.Model,
+			scope, modelName, operation, text, catalogResult.Model,
 		))
 		if joinedErr == nil {
+			if genericCLIJSONResult(cfg, catalogResult.Model, operation, joinedResult) {
+				return json.NewEncoder(cfg.Output).Encode(genericInvocationResponseFromInferenceResult(joinedResult))
+			}
+			if genericCLIInlineOutput(cfg, catalogResult.Model, operation) {
+				return writeGenericCLIOutput(cfg.Output, joinedResult)
+			}
 			response := modelInvocationResponseFromInferenceResult(joinedResult, catalogResult.Model, text)
 			return json.NewEncoder(cfg.Output).Encode(response)
 		}
@@ -69,19 +88,105 @@ func (service *rootService) Invoke(cfg InvokeConfig) error {
 			return mapModelsRootError(joinedErr)
 		}
 	}
-	if runtime := catalogResult.Model.ManagedRuntime; strings.TrimSpace(runtime.Identity) != "" {
+	return service.invokePreparedLease(cfg, scope, modelName, operation, text, catalogResult.Model)
+}
+
+func validateCLIOutputShape(
+	cfg InvokeConfig,
+	catalog modelinference.Detail,
+	operation string,
+) error {
+	if cfg.JSON {
+		return nil
+	}
+	selected, ok := catalogOperationForName(catalog, operation)
+	if ok && len(selected.Outputs) > 1 {
+		return fmt.Errorf(
+			"multiple model outputs require --json or explicit output mappings: %s",
+			genericOutputSlotNames(selected.Outputs),
+		)
+	}
+	if strings.TrimSpace(cfg.OutputPath) != "" {
+		return nil
+	}
+	if !ok || len(selected.Outputs) != 1 || !genericCLIInlineModality(selected.Outputs[0].Modality) {
+		return fmt.Errorf("--output is required unless --json is set")
+	}
+	return nil
+}
+
+func genericCLIInlineOutput(cfg InvokeConfig, catalog modelinference.Detail, operation string) bool {
+	if strings.TrimSpace(cfg.OutputPath) != "" {
+		return false
+	}
+	selected, ok := catalogOperationForName(catalog, operation)
+	return ok && len(selected.Outputs) == 1 && genericCLIInlineModality(selected.Outputs[0].Modality)
+}
+
+func genericCLIInlineModality(modality modelinference.Modality) bool {
+	return modality == modelinference.ModalityText || modality == modelinference.ModalityJSON
+}
+
+func genericOutputSlotNames(outputs []modelinference.OperationSlot) string {
+	names := make([]string, 0, len(outputs))
+	for _, output := range outputs {
+		name := strings.TrimSpace(output.Name)
+		if name != "" {
+			names = append(names, name)
+		}
+	}
+	return strings.Join(names, ", ")
+}
+
+func genericCLIJSONResult(
+	cfg InvokeConfig,
+	catalog modelinference.Detail,
+	operation string,
+	result modelinference.InvokeModelResult,
+) bool {
+	if !cfg.JSON || len(result.Outputs) == 0 {
+		return false
+	}
+	if len(result.Outputs) > 1 {
+		return true
+	}
+	selected, ok := catalogOperationForName(catalog, operation)
+	return ok && len(selected.Outputs) == 1 && genericCLIInlineModality(selected.Outputs[0].Modality)
+}
+
+func writeGenericCLIOutput(output interface{ Write([]byte) (int, error) }, result modelinference.InvokeModelResult) error {
+	if len(result.Outputs) != 1 {
+		return fmt.Errorf("multiple model outputs require --json or explicit output mappings")
+	}
+	value := result.Outputs[0].Content
+	if value == "" {
+		return fmt.Errorf("model invocation returned no inline output")
+	}
+	_, err := output.Write([]byte(value))
+	return err
+}
+
+func (service *rootService) invokePreparedLease(
+	cfg InvokeConfig,
+	scope modelinference.RuntimeScopeRef,
+	modelName string,
+	operation string,
+	text string,
+	catalog modelinference.Detail,
+) error {
+	if runtime := catalog.ManagedRuntime; strings.TrimSpace(runtime.Identity) != "" {
 		if err := runtime.InvocationError(); err != nil {
 			return mapModelsRootError(err)
 		}
 	}
 	leaseResult, err := service.models.AcquireModelLease(cfg.Context, modelinference.AcquireModelLeaseRequest{
-		Scope: scope.Scope, Name: modelName, Holder: modelsCLIInvokeHolder,
+		Scope: scope, Name: modelName, Holder: modelsCLIInvokeHolder,
 	})
 	if err != nil {
 		return mapModelsRootError(err)
 	}
 	request := modelinference.InvokeModelRequest{
-		Scope:     scope.Scope,
+		Scope:     scope,
 		Lease:     leaseResult.Lease.Lease,
 		Holder:    modelsCLIInvokeHolder,
 		ModelName: modelName,
@@ -100,7 +205,7 @@ func (service *rootService) Invoke(cfg InvokeConfig) error {
 		return mapModelsRootError(err)
 	}
 	if cfg.JSON {
-		response := modelInvocationResponseFromInferenceResult(result, catalogResult.Model, text)
+		response := modelInvocationResponseFromInferenceResult(result, catalog, text)
 		return json.NewEncoder(cfg.Output).Encode(response)
 	}
 	outputPath := strings.TrimSpace(cfg.OutputPath)
@@ -162,6 +267,48 @@ func modelInvocationResponseFromInferenceResult(
 		Content:          derefGeneratedWorkContent(content),
 		Bindings:         generatedResolvedModelInvocationBindings(bindings),
 	}
+}
+
+func genericInvocationResponseFromInferenceResult(
+	result modelinference.InvokeModelResult,
+) factoryapi.GenericModelInvocationResponse {
+	outputs := make([]factoryapi.ModelInvocationOutput, len(result.Outputs))
+	for index, output := range result.Outputs {
+		projected := factoryapi.ModelInvocationOutput{
+			Name:     output.Name,
+			Modality: factoryapi.ModelInvocationContentType(output.Modality),
+		}
+		projected.ContentType = genericCLIStringPointer(output.ContentType)
+		projected.MediaType = genericCLIStringPointer(output.MediaType)
+		projected.Content = genericCLIStringPointer(output.Content)
+		if output.Artifact != nil && !output.Artifact.Artifact.IsZero() {
+			artifact := factoryapi.ModelInvocationArtifact{ArtifactRef: output.Artifact.Artifact.String()}
+			artifact.Name = genericCLIStringPointer(output.Artifact.Name)
+			artifact.MediaType = genericCLIStringPointer(output.Artifact.MediaType)
+			if output.Artifact.SizeBytes >= 0 {
+				size := output.Artifact.SizeBytes
+				artifact.SizeBytes = &size
+			}
+			if len(output.Artifact.Properties) > 0 {
+				properties := make(factoryapi.StringMap, len(output.Artifact.Properties))
+				for key, value := range output.Artifact.Properties {
+					properties[key] = value
+				}
+				artifact.Properties = &properties
+			}
+			projected.Artifact = &artifact
+		}
+		outputs[index] = projected
+	}
+	return factoryapi.GenericModelInvocationResponse{Outputs: outputs}
+}
+
+func genericCLIStringPointer(value string) *string {
+	if strings.TrimSpace(value) == "" {
+		return nil
+	}
+	copy := value
+	return &copy
 }
 
 func catalogPresentationForOperation(catalog modelinference.Detail, operation string) (string, string) {

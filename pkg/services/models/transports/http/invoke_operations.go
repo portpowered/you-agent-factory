@@ -45,6 +45,29 @@ func decodeModelInvocationRequestFromHTTP(body io.Reader) (factoryapi.ModelInvoc
 	return request, nil
 }
 
+// decodeGenericModelInvocationRequestFromHTTP decodes the generic collection
+// endpoint with strict JSON fields so a misspelled slot or output control is
+// rejected before the Models root can perform any side effect.
+func decodeGenericModelInvocationRequestFromHTTP(body io.Reader) (factoryapi.GenericModelInvocationRequest, error) {
+	if body == nil {
+		return factoryapi.GenericModelInvocationRequest{}, requestValidationError{message: "request body is required"}
+	}
+	decoder := json.NewDecoder(body)
+	decoder.DisallowUnknownFields()
+	var request factoryapi.GenericModelInvocationRequest
+	if err := decoder.Decode(&request); err != nil {
+		return factoryapi.GenericModelInvocationRequest{}, err
+	}
+	var trailing any
+	if err := decoder.Decode(&trailing); err != io.EOF {
+		if err == nil {
+			return factoryapi.GenericModelInvocationRequest{}, requestValidationError{message: "request body must contain one JSON value"}
+		}
+		return factoryapi.GenericModelInvocationRequest{}, err
+	}
+	return request, nil
+}
+
 func validateModelInvocationOperation(request factoryapi.ModelInvocationRequest) error {
 	if strings.TrimSpace(request.Operation) == "" {
 		return requestValidationError{message: "operation is required"}

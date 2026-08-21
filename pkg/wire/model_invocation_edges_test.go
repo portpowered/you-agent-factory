@@ -274,13 +274,23 @@ func TestModelsCompositionRejectsTypedNilHostEdges(t *testing.T) {
 func TestModelsCompositionAdaptsProtocolAndCompatibilityPorts(t *testing.T) {
 	t.Parallel()
 
-	request := modelswire.HostProtocolNegotiationRequest{
-		ProtocolVersion: "model-host.v1",
-		Backend:         "localai-vibevoice",
-		ModelName:       "tts",
-		Revision:        "revision-1",
-		Platform:        models.AssetHostPlatform{OperatingSystem: "test-os", Architecture: "test-arch"},
+	request := modelEdgeProtocolRequest()
+	assertAdaptedProtocolNegotiation(t, request)
+	assertAdaptedCompatibility(t, request)
+	assertAdaptedGRPCConnection(t, request)
+	assertAdaptedOptionalPorts(t)
+}
+
+func modelEdgeProtocolRequest() modelswire.HostProtocolNegotiationRequest {
+	return modelswire.HostProtocolNegotiationRequest{
+		ProtocolVersion: "model-host.v1", Backend: "localai-vibevoice", ModelName: "tts",
+		Revision: "revision-1",
+		Platform: models.AssetHostPlatform{OperatingSystem: "test-os", Architecture: "test-arch"},
 	}
+}
+
+func assertAdaptedProtocolNegotiation(t *testing.T, request modelswire.HostProtocolNegotiationRequest) {
+	t.Helper()
 	protocol := &modelEdgeProtocolNegotiator{}
 	adaptedProtocol := adaptModelHostProtocolNegotiator(protocol)
 	result, err := adaptedProtocol.Negotiate(context.Background(), "grpc://model-host", request)
@@ -297,7 +307,10 @@ func TestModelsCompositionAdaptsProtocolAndCompatibilityPorts(t *testing.T) {
 	}) {
 		t.Fatalf("protocol result = %#v, want ready pinned result", result)
 	}
+}
 
+func assertAdaptedCompatibility(t *testing.T, request modelswire.HostProtocolNegotiationRequest) {
+	t.Helper()
 	compatibility := &modelEdgeCompatibilityChecker{}
 	if err := adaptModelHostCompatibilityChecker(compatibility).Check(context.Background(), modelswire.HostCompatibilityRequest{
 		Backend: request.Backend, ModelName: request.ModelName, Revision: request.Revision, Platform: request.Platform,
@@ -308,7 +321,10 @@ func TestModelsCompositionAdaptsProtocolAndCompatibilityPorts(t *testing.T) {
 		compatibility.request.Revision != request.Revision || compatibility.request.Platform != request.Platform {
 		t.Fatalf("edge compatibility request = %#v, want exact projection", compatibility.request)
 	}
+}
 
+func assertAdaptedGRPCConnection(t *testing.T, request modelswire.HostProtocolNegotiationRequest) {
+	t.Helper()
 	connection := &modelEdgeGRPCConnection{}
 	dialer := modelHostGRPCDialerAdapter{next: &modelEdgeGRPCDialer{connection: connection}}
 	adaptedConnection, err := dialer.Dial(context.Background(), "grpc://model-host")
@@ -324,7 +340,10 @@ func TestModelsCompositionAdaptsProtocolAndCompatibilityPorts(t *testing.T) {
 	if connection.request.Backend != request.Backend || !connection.closed {
 		t.Fatalf("dialed connection state = %#v, want request and close", connection)
 	}
+}
 
+func assertAdaptedOptionalPorts(t *testing.T) {
+	t.Helper()
 	if adaptModelHostProtocolNegotiator(nil) != nil {
 		t.Fatal("nil protocol negotiator should stay nil")
 	}

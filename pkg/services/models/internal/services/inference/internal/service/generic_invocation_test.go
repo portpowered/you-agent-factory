@@ -1,6 +1,7 @@
 package service_test
 
 import (
+	"context"
 	"errors"
 	"strings"
 	"testing"
@@ -217,6 +218,67 @@ func TestNormalizeGenericInvocationOutputsRejectsMalformedAndOversizedResponsesA
 			}
 		})
 	}
+}
+
+func TestInferenceUsesCapabilityOperationAndMapsScopeFailures(t *testing.T) {
+	t.Parallel()
+
+	scopes, scope := openInferenceScope(t, "inference-capability", "scoped-model", "unused")
+	lease := mustLeaseRef(t, "capability-lease")
+	host := &recordingInferenceHost{leases: map[string]models.ModelLease{
+		lease.String(): activeLease(scope, lease, "scoped-model", "worker-1"),
+	}}
+	operation := models.Operation{Name: "CAPABILITY", Outputs: []models.OperationSlot{{Name: "text", Modality: models.ModalityText}}}
+	service := newInferenceServiceWithHost(
+		t, scopes,
+		capabilityCatalog{detail: models.Detail{
+			Summary:      models.Summary{Name: "scoped-model"},
+			Capabilities: []models.Capability{{Operations: []models.Operation{operation}}},
+		}},
+		host,
+		&recordingInvocationRuntime{content: []models.InferenceContent{{Name: "text", Modality: models.ModalityText, Content: "ok"}}},
+		fixedClock(),
+		nil,
+	)
+	result, err := service.InvokeModelWithLease(context.Background(), invokeRequest(scope, lease, "worker-1", "scoped-model", "CAPABILITY"))
+	if err != nil || result.Status != models.ModelInvocationStatusCompleted || host.releaseCalls != 1 {
+		t.Fatalf("capability invocation = %#v, release calls = %d, error = %v", result, host.releaseCalls, err)
+	}
+
+	unknownInvocation := mustInvocationRef(t, "models-inference:unknown-scope")
+	_, foreign := openInferenceScope(t, "foreign-authority", "scoped-model", "unused")
+	if _, err := service.CancelInvocation(context.Background(), models.CancelInvocationRequest{Scope: foreign, Invocation: unknownInvocation}); !errors.Is(err, models.ErrRuntimeScopeForeign) {
+		t.Fatalf("foreign cancellation scope = %v, want ErrRuntimeScopeForeign", err)
+	}
+	stale := mustScopeRef(t, "inference-capability:missing")
+	if _, err := service.CancelInvocation(context.Background(), models.CancelInvocationRequest{Scope: stale, Invocation: unknownInvocation}); !errors.Is(err, models.ErrRuntimeScopeStale) {
+		t.Fatalf("stale cancellation scope = %v, want ErrRuntimeScopeStale", err)
+	}
+}
+
+type capabilityCatalog struct {
+	detail models.Detail
+}
+
+func (catalog capabilityCatalog) ListCatalog(context.Context, models.ListModelsRequest) (models.ListModelsResult, error) {
+	return models.ListModelsResult{Models: []models.Summary{catalog.detail.Summary}}, nil
+}
+
+func (catalog capabilityCatalog) GetCatalogModel(context.Context, models.GetModelRequest) (models.GetModelResult, error) {
+	return models.GetModelResult{Model: catalog.detail.Clone()}, nil
+}
+
+func (catalog capabilityCatalog) GetModelReadiness(context.Context, models.GetModelReadinessRequest) (models.GetModelReadinessResult, error) {
+	return models.GetModelReadinessResult{ModelName: catalog.detail.Name}, nil
+}
+
+func mustInvocationRef(t *testing.T, value string) models.ModelInvocationRef {
+	t.Helper()
+	ref, err := (models.ModelInvocationRef{}).Parse(value)
+	if err != nil {
+		t.Fatalf("parse invocation: %v", err)
+	}
+	return ref
 }
 
 func genericOperation(name string, inputs, outputs []models.OperationSlot) models.Operation {

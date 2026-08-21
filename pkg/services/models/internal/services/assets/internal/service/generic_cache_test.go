@@ -12,6 +12,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -785,4 +786,203 @@ func genericCancellationClient(
 func sha256Hex(value []byte) string {
 	digest := sha256.Sum256(value)
 	return hex.EncodeToString(digest[:])
+}
+
+func TestGenericPrivatePlanningAndCachePreservation(t *testing.T) {
+	t.Parallel()
+
+	scopes := newScopes(t, "generic-private-planning")
+	service := newGenericService(t, scopes, httpDoerFunc(func(*http.Request) (*http.Response, error) {
+		return nil, errors.New("private planning test must not use HTTP")
+	}), func(string) string { return "" })
+
+	assertGenericLocalRequirements(t, service)
+	assertGenericOverlayPlanning(t)
+	assertGenericCachePreservation(t, service)
+}
+
+func assertGenericLocalRequirements(t *testing.T, service *service) {
+	t.Helper()
+
+	localRoot := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(localRoot, "nested"), 0o755); err != nil {
+		t.Fatalf("create local fixture: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(localRoot, "root.bin"), []byte("root"), 0o644); err != nil {
+		t.Fatalf("write root fixture: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(localRoot, "nested", "child.bin"), []byte("child"), 0o644); err != nil {
+		t.Fatalf("write nested fixture: %v", err)
+	}
+	requirements, err := service.localRequirements(localRoot)
+	if err != nil || len(requirements) != 2 || requirements[0].Name != "nested/child.bin" || requirements[1].Name != "root.bin" {
+		t.Fatalf("localRequirements = %#v, %v, want sorted recursive files", requirements, err)
+	}
+	if _, err := service.localRequirements(filepath.Join(localRoot, "missing")); !errors.Is(err, models.ErrAssetSourceMissing) {
+		t.Fatalf("missing localRequirements error = %v, want ErrAssetSourceMissing", err)
+	}
+}
+
+func assertGenericOverlayPlanning(t *testing.T) {
+	t.Helper()
+
+	sourceText := "hf://owner/repo@" + genericTestRevision
+	overlays := map[string]models.ModelOverlay{
+		"Alias":  {Source: &sourceText},
+		"alias ": {Source: func() *string { value := "hf://owner/other@" + genericTestRevision; return &value }()},
+	}
+	name, overlay, ok := genericOverlay(overlays, "alias")
+	if !ok || name != "Alias" || overlay.Source == nil {
+		t.Fatalf("genericOverlay = %q, %#v, %v", name, overlay, ok)
+	}
+	*overlay.Source = "mutated"
+	if *overlays["Alias"].Source != sourceText {
+		t.Fatal("genericOverlay returned a mutable source pointer")
+	}
+	safe := genericHFSafeReference(genericSource{owner: "owner", repository: "repo", file: "weights.bin", revision: genericTestRevision})
+	if safe != "hf://owner/repo/weights.bin@"+genericTestRevision {
+		t.Fatalf("genericHFSafeReference = %q", safe)
+	}
+	var revisionFailure *models.InvocationFailure
+	if !errors.As(genericRevisionFailure(), &revisionFailure) || revisionFailure.Class != models.InvocationFailureClassRevisionResolution {
+		t.Fatalf("genericRevisionFailure = %#v", genericRevisionFailure())
+	}
+}
+
+func assertGenericCachePreservation(t *testing.T, service *service) {
+	t.Helper()
+
+	cachedPath := filepath.Join(t.TempDir(), "cached.bin")
+	if err := os.WriteFile(cachedPath, []byte("cached"), 0o644); err != nil {
+		t.Fatalf("write cached fixture: %v", err)
+	}
+	stagePath := t.TempDir()
+	artifact := genericCachePath{
+		artifact: models.AssetArtifact{Name: "nested/cached.bin", Bytes: int64(len("cached"))},
+		path:     cachedPath,
+	}
+	if err := service.preserveGenericArtifact(context.Background(), artifact, artifact.artifact.Name, stagePath); err != nil {
+		t.Fatalf("preserveGenericArtifact: %v", err)
+	}
+	preserved, err := os.ReadFile(filepath.Join(stagePath, "nested", "cached.bin"))
+	if err != nil || string(preserved) != "cached" {
+		t.Fatalf("preserved cached artifact = %q, %v", preserved, err)
+	}
+}
+
+func TestGenericSnapshotDiscoveryAndSourcePlanning(t *testing.T) {
+	t.Parallel()
+
+	scopes := newScopes(t, "generic-snapshot-planning")
+	service := newGenericService(t, scopes, httpDoerFunc(func(*http.Request) (*http.Response, error) {
+		return nil, errors.New("source planning test must not use HTTP")
+	}), func(string) string { return "" })
+	assertGenericSnapshotDiscovery(t, service)
+	assertGenericCacheRoots(t, service)
+	assertGenericSourceResolution(t, service)
+	assertGenericPreparationSelection(t)
+	assertGenericPreparationErrors(t)
+}
+
+func assertGenericSnapshotDiscovery(t *testing.T, service *service) {
+	t.Helper()
+	snapshotRoot := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(snapshotRoot, "nested"), 0o755); err != nil {
+		t.Fatalf("create snapshot fixture: %v", err)
+	}
+	for name, body := range map[string]string{
+		"root.bin":            "root",
+		"nested/child.bin":    "child",
+		".hidden/ignored.bin": "ignored",
+	} {
+		path := filepath.Join(snapshotRoot, filepath.FromSlash(name))
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatalf("create snapshot parent: %v", err)
+		}
+		if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+			t.Fatalf("write snapshot file: %v", err)
+		}
+	}
+	requirements := service.discoverSnapshotRequirements(snapshotRoot)
+	if len(requirements) != 2 || requirements[0].Name != "nested/child.bin" || requirements[1].Name != "root.bin" {
+		t.Fatalf("discoverSnapshotRequirements = %#v, want visible sorted files", requirements)
+	}
+	if got := service.discoverSnapshotRequirements(filepath.Join(snapshotRoot, "missing")); got != nil {
+		t.Fatalf("missing snapshot requirements = %#v, want nil", got)
+	}
+}
+
+func assertGenericCacheRoots(t *testing.T, service *service) {
+	t.Helper()
+	scopeConfig := models.RuntimeScopeConfig{CacheDirectory: t.TempDir()}
+	modelRoots, err := service.genericCacheRoots(scopeConfig, models.AssetArtifactKindModel)
+	if err != nil || len(modelRoots) == 0 || modelRoots[len(modelRoots)-1] != scopeConfig.CacheDirectory {
+		t.Fatalf("model genericCacheRoots = %#v, %v", modelRoots, err)
+	}
+	backendRoots, err := service.genericCacheRoots(scopeConfig, models.AssetArtifactKindBackend)
+	if err != nil || len(backendRoots) != 1 || !strings.HasSuffix(filepath.ToSlash(backendRoots[0]), "/backend-artifacts") {
+		t.Fatalf("backend genericCacheRoots = %#v, %v", backendRoots, err)
+	}
+}
+
+func assertGenericSourceResolution(t *testing.T, service *service) {
+	t.Helper()
+	scopeConfig := models.RuntimeScopeConfig{CacheDirectory: t.TempDir()}
+	service.resolveRevision = func(context.Context, string) (string, error) { return genericTestRevision, nil }
+	resolved, err := service.resolveGenericSource(context.Background(), scopeConfig, "hf://owner/repo")
+	if err != nil || resolved.revision != genericTestRevision || resolved.safe != "hf://owner/repo@"+genericTestRevision {
+		t.Fatalf("resolved generic source = %#v, %v", resolved, err)
+	}
+	service.resolveRevision = func(context.Context, string) (string, error) { return "not-a-commit", nil }
+	if _, err := service.resolveGenericSource(context.Background(), scopeConfig, "hf://owner/repo"); !errors.Is(err, models.ErrModelRevisionUnresolved) {
+		t.Fatalf("unresolved revision error = %v, want ErrModelRevisionUnresolved", err)
+	}
+	if _, err := parseGenericReleaseSource("https://example.com/releases/download/v1/backend.tar"); !errors.Is(err, models.ErrModelReferenceInvalid) {
+		t.Fatalf("invalid release source error = %v, want ErrModelReferenceInvalid", err)
+	}
+	release, err := parseGenericReleaseSource("https://github.com/owner/repo/releases/download/v1/backend.tar")
+	if err != nil || release.kind != genericSourceRelease || release.artifactURL == "" {
+		t.Fatalf("valid release source = %#v, %v", release, err)
+	}
+}
+
+func assertGenericPreparationSelection(t *testing.T) {
+	t.Helper()
+	for _, request := range []models.PrepareModelAssetsRequest{
+		{Reference: models.ModelReference{NameOrURI: "hf://owner/repo@" + genericTestRevision}},
+		{Offline: true},
+		{Artifacts: []models.AssetRequirement{}},
+		{Backend: "backend-v1"},
+		{Name: "llm"},
+		{Name: "./local/model"},
+	} {
+		if !shouldPrepareGenericAssets(request) {
+			t.Fatalf("shouldPrepareGenericAssets(%#v) = false, want true", request)
+		}
+	}
+	if shouldPrepareGenericAssets(models.PrepareModelAssetsRequest{Name: "unknown-symbol"}) {
+		t.Fatal("unknown symbolic name should not select generic preparation")
+	}
+}
+
+func assertGenericPreparationErrors(t *testing.T) {
+	t.Helper()
+	if genericPreparationError(nil, nil) != nil {
+		t.Fatal("genericPreparationError(nil, nil) should be nil")
+	}
+	modelErr := errors.New("model failure")
+	if !errors.Is(genericPreparationError(modelErr, nil), modelErr) || !errors.Is(genericPreparationError(nil, modelErr), modelErr) {
+		t.Fatal("genericPreparationError should retain the non-offline failure")
+	}
+	combined := combinedOfflineError(
+		&models.AssetOfflineError{Missing: []string{"z.bin", "a.bin"}},
+		&models.AssetOfflineError{Missing: []string{"a.bin"}},
+	)
+	if combined == nil || !reflect.DeepEqual(combined.Missing, []string{"a.bin", "z.bin"}) {
+		t.Fatalf("combinedOfflineError = %#v, want sorted unique names", combined)
+	}
+	interrupted := interruptedAssetError("publish", modelErr)
+	if !errors.Is(interrupted, models.ErrAssetPreparationInterrupted) || !strings.Contains(interrupted.Error(), "publish") {
+		t.Fatalf("interrupted asset error = %v, want safe operation and cause", interrupted)
+	}
 }

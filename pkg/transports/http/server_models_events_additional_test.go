@@ -269,10 +269,11 @@ func TestDashboardRoutesServeEmbeddedShellAssetsAndFallback(t *testing.T) {
 
 type strictModelsServiceFake struct {
 	modelinference.Service
-	list   func(context.Context) (modelinference.List, error)
-	get    func(context.Context, string) (modelinference.Detail, error)
-	invoke func(context.Context, string, modelinference.Request) (modelinference.Result, error)
-	pull   func(context.Context, string) (modelinference.PullResult, error)
+	list          func(context.Context) (modelinference.List, error)
+	get           func(context.Context, string) (modelinference.Detail, error)
+	invoke        func(context.Context, string, modelinference.Request) (modelinference.Result, error)
+	genericInvoke func(context.Context, modelinference.InvokeModelRequest) (modelinference.InvokeModelResult, error)
+	pull          func(context.Context, string) (modelinference.PullResult, error)
 }
 
 func (fake strictModelsServiceFake) ListCatalog(ctx context.Context, _ modelinference.ListModelsRequest) (modelinference.ListModelsResult, error) {
@@ -291,7 +292,10 @@ func (fake strictModelsServiceFake) GetCatalogModel(ctx context.Context, request
 	return modelinference.GetModelResult{Model: detail}, err
 }
 
-func (fake strictModelsServiceFake) InvokeModel(_ context.Context, _ modelinference.InvokeModelRequest) (modelinference.InvokeModelResult, error) {
+func (fake strictModelsServiceFake) InvokeModel(ctx context.Context, request modelinference.InvokeModelRequest) (modelinference.InvokeModelResult, error) {
+	if fake.genericInvoke != nil {
+		return fake.genericInvoke(ctx, request)
+	}
 	return modelinference.InvokeModelResult{}, modelinference.ErrUnsupportedOperation
 }
 
@@ -322,6 +326,42 @@ func newStrictModelTestServer(models strictModelsServiceFake) *Server {
 		nil, httpFactoryValidator{}, nil,
 		nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, logger,
 	)
+}
+
+func TestGenericModelInvocationRouteUsesRegisteredModelsHandler(t *testing.T) {
+	t.Parallel()
+
+	var captured modelinference.InvokeModelRequest
+	srv := newStrictModelTestServer(strictModelsServiceFake{
+		genericInvoke: func(_ context.Context, request modelinference.InvokeModelRequest) (modelinference.InvokeModelResult, error) {
+			captured = request
+			return modelinference.InvokeModelResult{Outputs: []modelinference.InferenceOutput{
+				{Name: "transcript", Modality: modelinference.ModalityText, ContentType: "text/plain", Content: "hello"},
+				{Name: "segments", Modality: modelinference.ModalityJSON, ContentType: "application/json", Content: "[]"},
+			}}, nil
+		},
+	})
+	recorder := httptest.NewRecorder()
+	body := fmt.Sprintf(`{"scope":%q,"holder":"http-test","model":{"nameOrUri":"asr"},"operation":"ASR","inputs":[{"name":"audio","modality":"AUDIO","content":"fixture"}]}`, modelHTTPTestScope().String())
+
+	srv.Handler().ServeHTTP(
+		recorder,
+		httptest.NewRequest(http.MethodPost, "/models/invocations", strings.NewReader(body)),
+	)
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("generic route status = %d body = %s, want 200", recorder.Code, recorder.Body.String())
+	}
+	if captured.Model.NameOrURI != "asr" || captured.Operation != "ASR" || len(captured.Inputs) != 1 {
+		t.Fatalf("generic root request = %#v, want mapped request", captured)
+	}
+	var response factoryapi.GenericModelInvocationResponse
+	if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil {
+		t.Fatalf("decode generic route response: %v", err)
+	}
+	if len(response.Outputs) != 2 || response.Outputs[0].Name != "transcript" || response.Outputs[1].Name != "segments" {
+		t.Fatalf("generic route outputs = %#v, want ordered named outputs", response.Outputs)
+	}
 }
 
 func modelHTTPTestScope() modelinference.RuntimeScopeRef {
