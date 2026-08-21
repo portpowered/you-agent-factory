@@ -512,7 +512,19 @@ func TestProductionMetricsCommandResolvesGlobalJSONAndSessionScope(t *testing.T)
 	}
 }
 
+type productionMetricsFailureCase struct {
+	name        string
+	args        []string
+	home        func() (string, error)
+	queryError  error
+	wantCode    string
+	wantMessage string
+	wantCalls   int
+	wantCause   error
+}
+
 func TestProductionMetricsCommandExecuteCommandPreservesCodedFailures(t *testing.T) {
+	t.Parallel()
 	queryCause := errors.New("metrics path=/private/credential=do-not-leak")
 	queryError := &factoryvisualization.RuntimeMetricsQueryError{
 		Kind:    factoryvisualization.RuntimeMetricsQueryReadFailed,
@@ -520,16 +532,7 @@ func TestProductionMetricsCommandExecuteCommandPreservesCodedFailures(t *testing
 		Cause:   queryCause,
 	}
 	resolverCause := errors.New("home resolver credential=do-not-leak")
-	tests := []struct {
-		name        string
-		args        []string
-		home        func() (string, error)
-		queryError  error
-		wantCode    string
-		wantMessage string
-		wantCalls   int
-		wantCause   error
-	}{
+	tests := []productionMetricsFailureCase{
 		{
 			name:        "invalid group",
 			args:        []string{"metrics", "--group-by", "region"},
@@ -573,46 +576,51 @@ func TestProductionMetricsCommandExecuteCommandPreservesCodedFailures(t *testing
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			queryCalls := 0
-			factory := withTestInjectedPlatformRoles(CommandFactory{
-				runtimeMetricsQuery: func(context.Context, factoryvisualization.RuntimeMetricsQueryRequest) (factoryvisualization.RuntimeMetricsQueryResult, error) {
-					queryCalls++
-					return factoryvisualization.RuntimeMetricsQueryResult{}, test.queryError
-				},
-			})
-			var stdout, stderr bytes.Buffer
-			err := factory.ExecuteCommand(startupcli.CommandInvocation{
-				Arguments: test.args,
-				Stdin:     strings.NewReader(""),
-				Stdout:    &stdout,
-				Stderr:    &stderr,
-				Context:   context.Background(),
-				HomeDir:   test.home,
-				LookupEnv: func(string) (string, bool) { return "", false },
-			})
-			if err == nil {
-				t.Fatal("ExecuteCommand() error = nil, want metrics failure")
-			}
-			if stdout.Len() != 0 {
-				t.Fatalf("stdout = %q, want empty failure output", stdout.String())
-			}
-			assertSingleMetricsDiagnostic(t, stderr.String(), test.wantCode, test.wantMessage)
-			if queryCalls != test.wantCalls {
-				t.Fatalf("metrics query calls = %d, want %d", queryCalls, test.wantCalls)
-			}
-			if test.wantCause != nil && !errors.Is(err, test.wantCause) {
-				t.Fatalf("ExecuteCommand() error = %v, want to preserve cause", err)
-			}
-			if test.queryError != nil {
-				var gotQueryError *factoryvisualization.RuntimeMetricsQueryError
-				if !errors.As(err, &gotQueryError) {
-					t.Fatalf("ExecuteCommand() error = %v, want query error classification preserved", err)
-				}
-			}
-			if strings.Contains(stderr.String(), "do-not-leak") {
-				t.Fatalf("central diagnostic exposed an underlying payload: %q", stderr.String())
-			}
+			runProductionMetricsFailureCase(t, test)
 		})
+	}
+}
+
+func runProductionMetricsFailureCase(t *testing.T, test productionMetricsFailureCase) {
+	t.Helper()
+	queryCalls := 0
+	factory := withTestInjectedPlatformRoles(CommandFactory{
+		runtimeMetricsQuery: func(context.Context, factoryvisualization.RuntimeMetricsQueryRequest) (factoryvisualization.RuntimeMetricsQueryResult, error) {
+			queryCalls++
+			return factoryvisualization.RuntimeMetricsQueryResult{}, test.queryError
+		},
+	})
+	var stdout, stderr bytes.Buffer
+	err := factory.ExecuteCommand(startupcli.CommandInvocation{
+		Arguments: test.args,
+		Stdin:     strings.NewReader(""),
+		Stdout:    &stdout,
+		Stderr:    &stderr,
+		Context:   context.Background(),
+		HomeDir:   test.home,
+		LookupEnv: func(string) (string, bool) { return "", false },
+	})
+	if err == nil {
+		t.Fatal("ExecuteCommand() error = nil, want metrics failure")
+	}
+	if stdout.Len() != 0 {
+		t.Fatalf("stdout = %q, want empty failure output", stdout.String())
+	}
+	assertSingleMetricsDiagnostic(t, stderr.String(), test.wantCode, test.wantMessage)
+	if queryCalls != test.wantCalls {
+		t.Fatalf("metrics query calls = %d, want %d", queryCalls, test.wantCalls)
+	}
+	if test.wantCause != nil && !errors.Is(err, test.wantCause) {
+		t.Fatalf("ExecuteCommand() error = %v, want to preserve cause", err)
+	}
+	if test.queryError != nil {
+		var gotQueryError *factoryvisualization.RuntimeMetricsQueryError
+		if !errors.As(err, &gotQueryError) {
+			t.Fatalf("ExecuteCommand() error = %v, want query error classification preserved", err)
+		}
+	}
+	if strings.Contains(stderr.String(), "do-not-leak") {
+		t.Fatalf("central diagnostic exposed an underlying payload: %q", stderr.String())
 	}
 }
 
