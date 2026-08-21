@@ -15,6 +15,20 @@ import (
 
 var _ recordings.RecordingLifecycle = (*combinedService)(nil)
 
+// LoadResumeInput keeps explicit resume classification on the Recordings root
+// while retaining the narrow pre-ledger compatibility seam used by the
+// Factory Sessions opener. Resume is a separate operation even when the
+// current path-backed adapter can reuse the same detached input parser.
+func (service *combinedService) LoadResumeInput(
+	request recordings.LoadResumeInputRequest,
+) (recordings.LoadResumeInputResult, error) {
+	input, err := service.LoadReplayInput(recordings.LoadReplayInputRequest{Path: request.Path})
+	if err != nil {
+		return recordings.LoadResumeInputResult{}, err
+	}
+	return recordings.LoadResumeInputResult{Input: input}, nil
+}
+
 // Begin implements recordings.RecordingLifecycle by adapting the existing
 // StartRecording lifecycle operation to the root-owned lifecycle vocabulary.
 func (service *combinedService) Begin(

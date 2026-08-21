@@ -430,7 +430,7 @@ func TestRuntimeOpeningRequestFactoryMapsSelectionsIntoOwnerRequests(t *testing.
 		HomeDir: "home", WorkFile: "work.json", BindHost: "127.0.0.1",
 		Port: 8080, AutoPort: true,
 		Continuously: true, Verbose: true, RecordPath: "record.json",
-		ReplayPath: "replay.json", Workflow: "flow", ModelCacheDir: "models",
+		ReplayPath: "replay.json", ResumePath: "source.recording.json", Workflow: "flow", ModelCacheDir: "models",
 		WorkerReasoningEffort:             "xhigh",
 		InvocationSkipPermissionsOverride: &skip,
 	}, mocks)
@@ -458,7 +458,8 @@ func TestRuntimeOpeningRequestFactoryMapsSelectionsIntoOwnerRequests(t *testing.
 		request.Workers.MockWorkers != mocks || request.Workers.InvocationSkipPermissionsOverride != &skip {
 		t.Fatalf("Workers request = %#v", request.Workers)
 	}
-	if request.Recordings.RecordPath != "record.json" || request.Recordings.ReplayPath != "replay.json" || request.Recordings.WorkflowID != "flow" {
+	if request.Recordings.RecordPath != "record.json" || request.Recordings.ReplayPath != "replay.json" ||
+		request.Recordings.ResumePath != "source.recording.json" || request.Recordings.WorkflowID != "flow" {
 		t.Fatalf("Recordings request = %#v", request.Recordings)
 	}
 	if request.ModelCacheDirectory != "models" {

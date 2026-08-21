@@ -100,6 +100,7 @@ func (a *Assembly) Assemble(
 	loadedFactory factorydefinitions.MutableLoadedFactorySource,
 	runtimeInstanceID string,
 	replayArtifact *factorydefinitions.ReplayArtifact,
+	resumeInput *recordings.LoadResumeInputResult,
 	automationService automations.Service,
 	serviceMode bool,
 ) (
@@ -193,9 +194,17 @@ func (a *Assembly) Assemble(
 		return nil, nil, factoryruntime.SessionBuildSpec{}, nil, nil, err
 	}
 	spec.ReplayEvents = cloneReplayArtifactEvents(replayArtifact)
+	// Resume is a live continuation, not deterministic replay: use the
+	// Recordings-selected event history only to reconstruct the successor's
+	// starting world state. The normal RecordPath remains the live successor
+	// recording destination on the runtime build.
+	restoredEvents, err := restoredEventsForOpening(spec.ReplayEvents, resumeInput)
+	if err != nil {
+		return nil, nil, factoryruntime.SessionBuildSpec{}, nil, nil, err
+	}
 	spec.RestoredWorldState, err = reconstructRestoredWorldState(
 		recordingsRuntime,
-		spec.ReplayEvents,
+		restoredEvents,
 	)
 	if err != nil {
 		return nil, nil, factoryruntime.SessionBuildSpec{}, nil, nil, err
@@ -231,6 +240,23 @@ func cloneReplayArtifactEvents(artifact *factorydefinitions.ReplayArtifact) []fa
 		events[index] = event.Clone()
 	}
 	return events
+}
+
+func restoredEventsForOpening(
+	replayEvents []factorydefinitions.FactoryEvent,
+	resumeInput *recordings.LoadResumeInputResult,
+) ([]factorydefinitions.FactoryEvent, error) {
+	if resumeInput == nil {
+		return replayEvents, nil
+	}
+	if resumeInput.Input.Legacy == nil {
+		return nil, fmt.Errorf("resume recording does not contain Factory event history")
+	}
+	events := cloneReplayArtifactEvents(resumeInput.Input.Legacy)
+	if len(events) == 0 {
+		return nil, fmt.Errorf("resume recording contains no Factory events")
+	}
+	return events, nil
 }
 
 func reconstructRestoredWorldState(

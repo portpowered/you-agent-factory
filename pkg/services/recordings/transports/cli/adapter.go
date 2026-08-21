@@ -15,10 +15,12 @@ import (
 const DefaultReportedFactorySessionID = "~default"
 
 // InvocationRequest captures Recordings-relevant CLI inputs for record-path
-// policy resolution.
+// policy resolution. ResumePath identifies a historical recording to continue
+// and is intentionally separate from ReplayPath, which remains read-only.
 type InvocationRequest struct {
 	RecordPath              string
 	ReplayPath              string
+	ResumePath              string
 	DisableDefaultRecording bool
 	HomeDir                 string
 	RecordingTargetPlanner  recordings.LiveRecordingTargetPlanner
@@ -58,6 +60,7 @@ func (defaultAdapter) ResolveRecordPathWithContext(
 	if err := ValidateInvocationFlags(request); err != nil {
 		return ResolvedRecordPath{}, err
 	}
+	resumePath := strings.TrimSpace(request.ResumePath)
 	if strings.TrimSpace(request.RecordPath) != "" {
 		return ResolvedRecordPath{ServicePath: request.RecordPath}, nil
 	}
@@ -79,10 +82,19 @@ func (defaultAdapter) ResolveRecordPathWithContext(
 		ReportedSessionID: reportedSessionID,
 	})
 	if err != nil {
+		if resumePath != "" {
+			return ResolvedRecordPath{}, fmt.Errorf("resolve resume successor recording path: %w", err)
+		}
 		return ResolvedRecordPath{}, fmt.Errorf("resolve default replay record path: %w", err)
 	}
 	if err := ctx.Err(); err != nil {
 		return ResolvedRecordPath{}, err
+	}
+	if strings.TrimSpace(target.ServicePath) == "" {
+		if resumePath != "" {
+			return ResolvedRecordPath{}, fmt.Errorf("resolve resume successor recording path: planner returned an empty service path")
+		}
+		return ResolvedRecordPath{}, fmt.Errorf("resolve default replay record path: planner returned an empty service path")
 	}
 	return ResolvedRecordPath{
 		ServicePath:   target.ServicePath,
@@ -114,6 +126,12 @@ func (defaultAdapter) RecordingDiagnosticsLabel(resolved ResolvedRecordPath, rep
 // ValidateInvocationFlags rejects incompatible Recordings CLI flag combinations
 // before runtime opening begins.
 func ValidateInvocationFlags(request InvocationRequest) error {
+	if strings.TrimSpace(request.ResumePath) != "" && strings.TrimSpace(request.ReplayPath) != "" {
+		return fmt.Errorf("--resume cannot be used with --replay")
+	}
+	if strings.TrimSpace(request.ResumePath) != "" && request.DisableDefaultRecording {
+		return fmt.Errorf("--resume cannot be used with --no-record")
+	}
 	if request.DisableDefaultRecording && strings.TrimSpace(request.RecordPath) != "" {
 		return fmt.Errorf("--no-record cannot be used with --record")
 	}

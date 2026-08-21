@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	recordingscli "github.com/portpowered/infinite-you/pkg/services/recordings/transports/cli"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
+	recordingscli "github.com/portpowered/infinite-you/pkg/services/recordings/transports/cli"
 )
 
 func TestAdapterResolveRecordPathModes(t *testing.T) {
@@ -42,6 +42,25 @@ func TestAdapterResolveRecordPathModes(t *testing.T) {
 			wantService:   plannedPath,
 			wantReported:  plannedPath,
 			wantGenerated: true,
+		},
+		{
+			name: "resume plans live successor recording",
+			request: recordingscli.InvocationRequest{
+				ResumePath:             "existing.recording.json",
+				HomeDir:                homeDir,
+				RecordingTargetPlanner: planner,
+			},
+			wantService:   plannedPath,
+			wantReported:  plannedPath,
+			wantGenerated: true,
+		},
+		{
+			name: "resume with explicit successor recording",
+			request: recordingscli.InvocationRequest{
+				ResumePath: "existing.recording.json",
+				RecordPath: "successor.recording.json",
+			},
+			wantService: "successor.recording.json",
 		},
 		{
 			name: "explicit record path",
@@ -111,6 +130,22 @@ func TestAdapterResolveRecordPathRejectsIncompatibleFlags(t *testing.T) {
 			},
 			wantErr: "--record and --replay cannot be used together",
 		},
+		{
+			name: "resume with replay",
+			request: recordingscli.InvocationRequest{
+				ResumePath: "existing.recording.json",
+				ReplayPath: "existing.replay.json",
+			},
+			wantErr: "--resume cannot be used with --replay",
+		},
+		{
+			name: "resume with no-record",
+			request: recordingscli.InvocationRequest{
+				ResumePath:              "existing.recording.json",
+				DisableDefaultRecording: true,
+			},
+			wantErr: "--resume cannot be used with --no-record",
+		},
 	}
 
 	for _, test := range tests {
@@ -154,5 +189,42 @@ func TestAdapterResolveRecordPathPropagatesPlannerFailure(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "resolve default replay record path") {
 		t.Fatalf("error = %v, want planner failure wrapper", err)
+	}
+}
+
+func TestAdapterResolveResumeRecordPathPropagatesPlannerFailure(t *testing.T) {
+	t.Parallel()
+
+	_, err := recordingscli.New().ResolveRecordPath(recordingscli.InvocationRequest{
+		ResumePath: "existing.recording.json",
+		HomeDir:    t.TempDir(),
+		RecordingTargetPlanner: recordings.LiveRecordingTargetPlannerFunc(
+			func(recordings.LiveRecordingTargetRequest) (recordings.LiveRecordingTarget, error) {
+				return recordings.LiveRecordingTarget{}, errors.New("target planning failed")
+			},
+		),
+	})
+	if err == nil {
+		t.Fatal("expected resume successor record path resolution to fail")
+	}
+	if !strings.Contains(err.Error(), "resolve resume successor recording path") {
+		t.Fatalf("error = %v, want resume planner failure wrapper", err)
+	}
+}
+
+func TestAdapterResolveResumeRecordPathRequiresNonEmptyPlannedServicePath(t *testing.T) {
+	t.Parallel()
+
+	_, err := recordingscli.New().ResolveRecordPath(recordingscli.InvocationRequest{
+		ResumePath: "existing.recording.json",
+		HomeDir:    t.TempDir(),
+		RecordingTargetPlanner: recordings.LiveRecordingTargetPlannerFunc(
+			func(recordings.LiveRecordingTargetRequest) (recordings.LiveRecordingTarget, error) {
+				return recordings.LiveRecordingTarget{}, nil
+			},
+		),
+	})
+	if err == nil || !strings.Contains(err.Error(), "planner returned an empty service path") {
+		t.Fatalf("error = %v, want empty planned service path failure", err)
 	}
 }

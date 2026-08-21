@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"reflect"
+	"strings"
 
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	"github.com/portpowered/infinite-you/pkg/services/automations"
@@ -639,6 +640,18 @@ func (f *Factory) openForRequest(
 			return f.openRuntimeWithReplayInput(ctx, request, f.baseLogger, &input)
 		}
 		return f.openActivatedRuntimeWithReplayInput(ctx, request, &input)
+	}
+	if request != nil && strings.TrimSpace(request.Recordings.ResumePath) != "" {
+		if f.recordingsRuntime == nil {
+			return runtimeProducts{}, fmt.Errorf("open Factory Runtime: Recordings resume input capability is required")
+		}
+		input, err := f.recordingsRuntime.LoadResumeInput(recordings.LoadResumeInputRequest{
+			Path: request.Recordings.ResumePath,
+		})
+		if err != nil {
+			return runtimeProducts{}, fmt.Errorf("open Factory Runtime: load resume input: %w", err)
+		}
+		return f.openActivatedRuntimeWithResumeInput(ctx, request, &input)
 	}
 	return f.openActivatedRuntime(ctx, request)
 }

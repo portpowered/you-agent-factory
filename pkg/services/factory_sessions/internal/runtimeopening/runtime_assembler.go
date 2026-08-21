@@ -64,6 +64,7 @@ type FactoryRuntimeAssembler interface {
 		factorydefinitions.MutableLoadedFactorySource,
 		string,
 		*factorydefinitions.ReplayArtifact,
+		*recordings.LoadResumeInputResult,
 		automations.Service,
 		bool,
 	) (

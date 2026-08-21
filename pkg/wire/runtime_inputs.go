@@ -263,6 +263,7 @@ func provideRuntimeOpeningRequestFactory() runcli.RuntimeOpeningRequestFactory {
 			Recordings: recordings.RuntimeOpeningRequest{
 				RecordPath: cfg.RecordPath,
 				ReplayPath: cfg.ReplayPath,
+				ResumePath: cfg.ResumePath,
 				WorkflowID: cfg.Workflow,
 			},
 			ModelCacheDirectory: cfg.ModelCacheDir,

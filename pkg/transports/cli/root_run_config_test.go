@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
+	recordingscli "github.com/portpowered/infinite-you/pkg/services/recordings/transports/cli"
 	workcli "github.com/portpowered/infinite-you/pkg/services/work/transports/cli/work"
 	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
 )
@@ -267,6 +268,74 @@ func TestRunCommand_RecordAndNoRecordFlagsCanBePassedTogetherForDeterministicVal
 	}
 	if !got.DisableDefaultRecording {
 		t.Fatal("expected --no-record to map into RunConfig for downstream validation")
+	}
+}
+
+func TestRunCommand_ResumeFlagMapsDistinctSourceAndSuccessorPath(t *testing.T) {
+	originalRunCLI := runCLI
+	defer func() {
+		runCLI = originalRunCLI
+	}()
+
+	var got runcli.RunConfig
+	runCLI = func(_ context.Context, cfg runcli.RunConfig) error {
+		got = cfg
+		return nil
+	}
+
+	root := newLegacyTestRootCommand()
+	root.SetOut(io.Discard)
+	root.SetErr(io.Discard)
+	root.SetArgs([]string{
+		"run",
+		"--resume", "source.recording.json",
+		"--record", "successor.recording.json",
+	})
+
+	if err := root.Execute(); err != nil {
+		t.Fatalf("execute run --resume with explicit successor: %v", err)
+	}
+	if got.ResumePath != "source.recording.json" {
+		t.Fatalf("resume path = %q, want source.recording.json", got.ResumePath)
+	}
+	if got.RecordPath != "successor.recording.json" {
+		t.Fatalf("record path = %q, want successor.recording.json", got.RecordPath)
+	}
+	if got.ReplayPath != "" {
+		t.Fatalf("replay path = %q, want empty for resume", got.ReplayPath)
+	}
+}
+
+func TestRunCommand_ResumeConflictsBeforeRunService(t *testing.T) {
+	originalRunCLI := runCLI
+	defer func() {
+		runCLI = originalRunCLI
+	}()
+
+	root := newLegacyTestRootCommand()
+	root.SetOut(io.Discard)
+	root.SetErr(io.Discard)
+	root.SetArgs([]string{"run", "--resume", "source.recording.json", "--replay", "history.replay.json"})
+
+	runCLI = func(_ context.Context, cfg runcli.RunConfig) error {
+		_, err := recordingscli.New().ResolveRecordPath(recordingscli.InvocationRequest{
+			RecordPath:              cfg.RecordPath,
+			ReplayPath:              cfg.ReplayPath,
+			ResumePath:              cfg.ResumePath,
+			DisableDefaultRecording: cfg.DisableDefaultRecording,
+		})
+		return err
+	}
+	if err := root.Execute(); err == nil || !strings.Contains(err.Error(), "--resume cannot be used with --replay") {
+		t.Fatalf("resume/replay error = %v, want clear flag conflict", err)
+	}
+
+	root = newLegacyTestRootCommand()
+	root.SetOut(io.Discard)
+	root.SetErr(io.Discard)
+	root.SetArgs([]string{"run", "--resume", "source.recording.json", "--no-record"})
+	if err := root.Execute(); err == nil || !strings.Contains(err.Error(), "--resume cannot be used with --no-record") {
+		t.Fatalf("resume/no-record error = %v, want clear flag conflict", err)
 	}
 }
 

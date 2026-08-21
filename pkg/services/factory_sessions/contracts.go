@@ -55,6 +55,7 @@ type InvocationTarget struct {
 	Verbose                          bool
 	RecordPath                       string
 	ReplayPath                       string
+	ResumePath                       string
 	RuntimeLogDir                    string
 	RuntimeLogConfig                 factoryruntime.RuntimeLogStorageConfig
 	RuntimeMetricsDir                string

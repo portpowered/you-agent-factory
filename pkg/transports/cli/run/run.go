@@ -632,6 +632,7 @@ func resolveRecordPathForRun(cfg RunConfig) (resolvedRunRecordPath, error) {
 	resolved, err := cfg.RecordingsCLI.ResolveRecordPath(recordingscli.InvocationRequest{
 		RecordPath:              cfg.RecordPath,
 		ReplayPath:              cfg.ReplayPath,
+		ResumePath:              cfg.ResumePath,
 		DisableDefaultRecording: cfg.DisableDefaultRecording,
 		HomeDir:                 cfg.HomeDir,
 		RecordingTargetPlanner:  cfg.RecordingTargetPlanner,

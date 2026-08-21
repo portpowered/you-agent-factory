@@ -13,7 +13,8 @@ provider			override the worker modelProvider for this run (for example cursor-ac
 quiet		false	suppress dashboard output for quiet or CI-oriented runs
 record			path to write a replay artifact for this run; replay artifacts are sensitive, and default live runs record automatically unless --no-record is used
 remote		false	execute a supported operation through a running You server; does not wait, follow, continue, or start a listener
-replay			path to replay an existing sensitive replay artifact
+replay			recording to replay deterministically or inspect read-only; replay does not write a new recording
+resume			recording to continue live Factory execution from; writes a successor recording by default; use --record to choose its path
 runtime-log-compress		false	compress rotated runtime log files
 runtime-log-dir			root directory for structured runtime log files grouped by UTC start date (default: ~/.you-agent-factory/logs)
 runtime-log-max-age-days		30	maximum days to retain rotated runtime log files

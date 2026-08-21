@@ -4,18 +4,20 @@ import (
 	"time"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	"github.com/portpowered/infinite-you/pkg/services/recordings"
 )
 
 // RuntimeActivationInputs are the remaining value selections needed by the
 // Factory Sessions opener after Definitions has resolved a RuntimeSnapshot.
 // The type deliberately duplicates no service or implementation contract: it
-// carries only paths, policy strings, limits, and mock-worker configuration
-// values.
+// carries only paths, policy strings, limits, mock-worker configuration
+// values, and detached resume facts selected by the Recordings root.
 type RuntimeActivationInputs struct {
 	Definition          RuntimeActivationDefinitionInputs
 	Session             RuntimeActivationSessionInputs
 	Workers             RuntimeActivationWorkerInputs
 	Recordings          RuntimeActivationRecordingInputs
+	ResumeInput         recordings.LoadResumeInputResult
 	ModelCacheDirectory string
 	OperatorDefaults    RuntimeActivationOperatorDefaults
 }
@@ -97,6 +99,7 @@ type RuntimeActivationMockReject struct {
 type RuntimeActivationRecordingInputs struct {
 	RecordPath    string
 	ReplayPath    string
+	ResumePath    string
 	WorkflowID    string
 	FlushInterval time.Duration
 }

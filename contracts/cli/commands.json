@@ -15310,7 +15310,7 @@
         "you.run.flag.replay": {
           "id": "you.run.flag.replay",
           "long": "replay",
-          "usage": "path to replay an existing sensitive replay artifact",
+          "usage": "recording to replay deterministically or inspect read-only; replay does not write a new recording",
           "shorthand": "",
           "aliases": [],
           "scope": "local",
@@ -15327,6 +15327,30 @@
           "lifecycle": {
             "formatVersion": "1.0.0",
             "itemId": "you.run.flag.replay",
+            "state": "active",
+            "since": "1.0.0"
+          }
+        },
+        "you.run.flag.resume": {
+          "id": "you.run.flag.resume",
+          "long": "resume",
+          "usage": "recording to continue live Factory execution from; writes a successor recording by default; use --record to choose its path",
+          "shorthand": "",
+          "aliases": [],
+          "scope": "local",
+          "valueType": "string",
+          "required": false,
+          "default": "",
+          "changedDefault": false,
+          "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "",
+          "completion": "none",
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.run.flag.resume",
             "state": "active",
             "since": "1.0.0"
           }
