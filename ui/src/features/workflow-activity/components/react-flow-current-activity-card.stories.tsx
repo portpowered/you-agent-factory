@@ -1121,6 +1121,18 @@ export const StatePositionOneActive = {
     expect(
       article.querySelectorAll("[data-state-work-progress-dot]"),
     ).toHaveLength(1);
+    const activeMarker = article.querySelector<HTMLElement>(
+      '[data-state-work-progress="dots"]',
+    );
+    expect(activeMarker?.getAttribute("data-work-progress-state")).toBe(
+      "active",
+    );
+    for (const dot of article.querySelectorAll(
+      "[data-state-work-progress-dot]",
+    )) {
+      expect(dot.className).toContain("bg-on-surface");
+      expect(dot.getAttribute("data-work-progress-dot-state")).toBe("active");
+    }
     expectNoImplementationLabels(canvasElement);
   },
 };
@@ -1168,6 +1180,23 @@ export const StatePositionFourActive = {
     await expect(
       article.querySelector("[data-state-work-progress='numeric']"),
     ).toBeVisible();
+    const numericMarker = article.querySelector<HTMLElement>(
+      '[data-state-work-progress="numeric"]',
+    );
+    if (!(numericMarker instanceof HTMLElement)) {
+      throw new Error("Expected the numeric work-progress marker to render");
+    }
+    expect(numericMarker?.className).toContain("min-h-6");
+    expect(numericMarker?.className).toContain("text-base");
+    expect(numericMarker?.className).toContain("text-on-surface");
+    expect(numericMarker.getBoundingClientRect().height).toBeGreaterThanOrEqual(
+      24,
+    );
+    expect(Number.parseFloat(getComputedStyle(numericMarker).fontSize)).toBe(
+      16,
+    );
+    expect(numericMarker?.className).not.toContain("bg-success-container");
+    expect(numericMarker?.className).not.toContain("border-af-success-border");
     expect(
       article.querySelector("[data-state-work-progress='dots']"),
     ).toBeNull();
@@ -1259,7 +1288,12 @@ export const StatePositionLongLabels = {
 
 export const StatePositionTerminalAndFailed = {
   render: () => (
-    <CurrentActivityStory snapshot={semanticWorkflowDashboardSnapshot} />
+    <CurrentActivityStory
+      snapshot={snapshotWithStateCounts({
+        "story:blocked": 2,
+        "story:complete": 2,
+      })}
+    />
   ),
   play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
     const canvas = within(canvasElement);
@@ -1282,6 +1316,19 @@ export const StatePositionTerminalAndFailed = {
     await expect(within(failedArticle).getByText("blocked")).toBeVisible();
     expect(terminalArticle.textContent).not.toContain("Terminal");
     expect(failedArticle.textContent).not.toContain("Failed");
+    for (const article of [terminalArticle, failedArticle]) {
+      const marker = article.querySelector<HTMLElement>(
+        '[data-state-work-progress="dots"]',
+      );
+      expect(marker?.getAttribute("data-work-progress-state")).toBe("idle");
+      for (const dot of article.querySelectorAll(
+        "[data-state-work-progress-dot]",
+      )) {
+        expect(dot.className).toContain("bg-surface");
+        expect(dot.className).toContain("border-outline-variant");
+        expect(dot.getAttribute("data-work-progress-dot-state")).toBe("idle");
+      }
+    }
     const legend = await expandGraphLegend(canvasElement);
     await expect(
       within(legend).getByRole("img", {

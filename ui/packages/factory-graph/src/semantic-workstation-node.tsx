@@ -12,7 +12,7 @@ import {
   factoryGraphNodeSurfaceClassName,
   factoryGraphNodeWrappedTextClassName,
 } from "./semantic-node-style.js";
-import { FactoryGraphWorkProgressMarker } from "./semantic-place-nodes.js";
+import { FactoryGraphWorkProgressMarker } from "./semantic-work-progress-marker.js";
 import {
   factoryGraphActiveItemsLabel as activeItemsLabel,
   factoryGraphClassNames as classNames,
@@ -453,7 +453,7 @@ function Overflow({
   return (
     <FactoryGraphWorkProgressMarker
       ariaLabel={activeItemsLabel(total, locale)}
-      className="mt-1 flex min-h-7 w-full rounded-lg px-3 py-1 text-base"
+      className="mt-1 flex min-h-7 w-full px-3 py-1"
       count={total}
       data-workstation-work-progress="numeric"
       kind="numeric"

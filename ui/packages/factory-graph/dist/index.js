@@ -9,8 +9,9 @@ export { GRAPH_SEMANTIC_ICON_KINDS, GraphSemanticIcon, graphSemanticIconLabel, }
 export { FactoryGraphNodeShell, factoryGraphHandleToneFromId, } from "./semantic-node-shell.js";
 export { factoryGraphNodeHoverClassName, factoryGraphNodeSurfaceClassName, factoryGraphNodeTitleClassName, factoryGraphNodeVisualIconClassName, factoryGraphNodeVisualNestedAccentClassName, factoryGraphNodeVisualStateClassName, factoryGraphNodeVisualStatusSurfaceClassName, factoryGraphNodeWrappedTextClassName, } from "./semantic-node-style.js";
 export { FACTORY_GRAPH_NODE_TYPES, } from "./semantic-nodes.js";
-export { FactoryGraphConstraintNodeView, FactoryGraphStatePositionNodeView, FactoryGraphWorkProgressMarker, } from "./semantic-place-nodes.js";
+export { FactoryGraphConstraintNodeView, FactoryGraphStatePositionNodeView, } from "./semantic-place-nodes.js";
 export { FactoryGraphNodeBadge, FactoryGraphResourceNodeView, FactoryGraphWorkerNodeView, FactoryGraphWorkTypeNodeView, } from "./semantic-support-nodes.js";
+export { FactoryGraphWorkProgressMarker, } from "./semantic-work-progress-marker.js";
 export { FactoryGraphWorkstationGuardedControlCard, FactoryGraphWorkstationNodeView, } from "./semantic-workstation-node.js";
 export { factoryGraphWorkstationControlRoleLabel, factoryGraphWorkstationGuardLimitLabel, factoryGraphWorkstationGuardLimitValue, factoryGraphWorkstationGuardTargetLabel, factoryGraphWorkstationPresentation, } from "./semantic-workstation-presentation.js";
 export { createFactoryGraphSource, isFactoryGraphSource, } from "./source.js";

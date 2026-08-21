@@ -2,7 +2,7 @@ import { jsx as _jsx, jsxs as _jsxs, Fragment as _Fragment } from "react/jsx-run
 import { GraphNodeButton } from "@you-agent-factory/components/graphs";
 import { FactoryGraphNodeShell, } from "./semantic-node-shell.js";
 import { factoryGraphNodeHoverClassName, factoryGraphNodeSurfaceClassName, factoryGraphNodeWrappedTextClassName, } from "./semantic-node-style.js";
-import { FactoryGraphWorkProgressMarker } from "./semantic-place-nodes.js";
+import { FactoryGraphWorkProgressMarker } from "./semantic-work-progress-marker.js";
 import { factoryGraphActiveItemsLabel as activeItemsLabel, factoryGraphClassNames as classNames, factoryGraphDurationText as durationText, factoryGraphGraphDuration as graphDuration, factoryGraphSelectWorkstationLabel as selectWorkstationLabel, factoryGraphWorkItemLabel as workItemLabel, factoryGraphWorkItemLabelClassName as workItemLabelClassName, factoryGraphWorkstationPresentation as workstationPresentation, factoryGraphWorkstationTitleClassName as workstationTitleClassName, } from "./semantic-workstation-presentation.js";
 import { resolveFactoryGraphVisualState } from "./visual-state.js";
 import { factoryGraphWorkProgressMode } from "./work-progress-presentation.js";
@@ -85,5 +85,5 @@ export function FactoryGraphWorkstationGuardedControlCard({ locale, presentation
 function Overflow({ locale, total, visible, }) {
     if (total <= visible)
         return null;
-    return (_jsx(FactoryGraphWorkProgressMarker, { ariaLabel: activeItemsLabel(total, locale), className: "mt-1 flex min-h-7 w-full rounded-lg px-3 py-1 text-base", count: total, "data-workstation-work-progress": "numeric", kind: "numeric" }));
+    return (_jsx(FactoryGraphWorkProgressMarker, { ariaLabel: activeItemsLabel(total, locale), className: "mt-1 flex min-h-7 w-full px-3 py-1", count: total, "data-workstation-work-progress": "numeric", kind: "numeric" }));
 }

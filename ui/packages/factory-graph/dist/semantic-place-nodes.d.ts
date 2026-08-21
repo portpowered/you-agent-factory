@@ -1,5 +1,4 @@
 import type { Node, NodeProps } from "@xyflow/react";
-import type { ComponentPropsWithoutRef, ReactNode } from "react";
 import type { FactoryGraphNodeInteractionOverlay } from "./node-interaction-overlay.js";
 import type { FactoryGraphNodeResizeControlsProps } from "./node-resize-controls.js";
 import { type FactoryGraphNodeHandle } from "./semantic-node-shell.js";
@@ -37,17 +36,3 @@ export type FactoryGraphConstraintNode = Node<FactoryGraphConstraintNodeData, "c
 export type FactoryGraphPlaceNode = FactoryGraphConstraintNode | FactoryGraphStatePositionNode;
 export declare function FactoryGraphStatePositionNodeView(props: NodeProps<FactoryGraphStatePositionNode>): import("react/jsx-runtime").JSX.Element;
 export declare function FactoryGraphConstraintNodeView(props: NodeProps<FactoryGraphConstraintNode>): import("react/jsx-runtime").JSX.Element;
-export declare function FactoryGraphWorkProgressMarker(props: ({
-    ariaLabel: string;
-    className?: string;
-    count: number;
-    kind: "numeric";
-} & ComponentPropsWithoutRef<"span">) | ({
-    ariaLabel: string;
-    className?: string;
-    dotClassName?: string;
-    dotCount: number;
-    dotDataAttribute: string;
-    kind: "dots";
-    suffix?: ReactNode;
-} & ComponentPropsWithoutRef<"span">)): import("react/jsx-runtime").JSX.Element;

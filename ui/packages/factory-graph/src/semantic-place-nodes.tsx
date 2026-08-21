@@ -1,6 +1,6 @@
 import type { Node, NodeProps } from "@xyflow/react";
 import { GraphNodeButton } from "@you-agent-factory/components/graphs";
-import type { ComponentPropsWithoutRef, ReactNode } from "react";
+import type { ReactNode } from "react";
 import type { FactoryGraphNodeInteractionOverlay } from "./node-interaction-overlay.js";
 import type { FactoryGraphNodeResizeControlsProps } from "./node-resize-controls.js";
 import {
@@ -21,6 +21,7 @@ import {
 } from "./semantic-place-content.js";
 import { FactoryGraphPlaceTokenCount } from "./semantic-place-token-count.js";
 import type { FactoryGraphPlaceRef } from "./semantic-support-nodes.js";
+import { FactoryGraphWorkProgressMarker } from "./semantic-work-progress-marker.js";
 import { resolveFactoryGraphVisualState } from "./visual-state.js";
 import { factoryGraphWorkProgressMode } from "./work-progress-presentation.js";
 import {
@@ -229,7 +230,7 @@ function FactoryGraphStatePositionContent({
         data-state-marker-zone
         title={label}
       >
-        {stateMarkers(tokenCount, locale) ?? (
+        {stateMarkers(tokenCount, locale, visualState) ?? (
           <span className="sr-only">
             {activeItemCountLabel(tokenCount, locale)}
           </span>
@@ -319,13 +320,17 @@ function FactoryGraphStaticPlaceContent({
   );
 }
 
-function stateMarkers(count: number, locale?: string): ReactNode {
+function stateMarkers(
+  count: number,
+  locale: string | undefined,
+  visualState: ReturnType<typeof resolveFactoryGraphVisualState>,
+): ReactNode {
   const mode = factoryGraphWorkProgressMode(count);
   if (mode === "empty") return null;
   return mode === "total" ? (
     <FactoryGraphWorkProgressMarker
       ariaLabel={activeItemCountLabel(count, locale)}
-      className="inline-flex min-h-5 min-w-8 rounded-full px-2 text-sm"
+      className="min-w-8 px-2"
       count={count}
       data-state-work-progress="numeric"
       kind="numeric"
@@ -337,78 +342,9 @@ function stateMarkers(count: number, locale?: string): ReactNode {
       data-state-work-progress="dots"
       dotCount={count}
       dotDataAttribute="data-state-work-progress-dot"
+      active={visualState.surface === "active"}
       kind="dots"
     />
-  );
-}
-
-export function FactoryGraphWorkProgressMarker(
-  props:
-    | ({
-        ariaLabel: string;
-        className?: string;
-        count: number;
-        kind: "numeric";
-      } & ComponentPropsWithoutRef<"span">)
-    | ({
-        ariaLabel: string;
-        className?: string;
-        dotClassName?: string;
-        dotCount: number;
-        dotDataAttribute: string;
-        kind: "dots";
-        suffix?: ReactNode;
-      } & ComponentPropsWithoutRef<"span">),
-) {
-  if (props.kind === "numeric") {
-    const { ariaLabel, className, count, kind: _kind, ...rest } = props;
-    return (
-      <span
-        aria-label={ariaLabel}
-        className={classNames(
-          "items-center justify-center border border-af-success-border bg-success-container font-mono font-bold leading-none text-success",
-          className,
-        )}
-        role="status"
-        {...rest}
-      >
-        {count}
-      </span>
-    );
-  }
-  const {
-    ariaLabel,
-    className,
-    dotClassName = "h-2 w-2",
-    dotCount,
-    dotDataAttribute,
-    kind: _kind,
-    suffix,
-    ...rest
-  } = props;
-  return (
-    <span
-      aria-label={ariaLabel}
-      className={classNames(
-        "items-center justify-center border border-af-success-border bg-success-container",
-        className,
-      )}
-      role="status"
-      {...rest}
-    >
-      {Array.from({ length: dotCount }, (_, index) => `dot-${index}`).map(
-        (key, index) => (
-          <span
-            key={key}
-            aria-hidden="true"
-            className={classNames("rounded-full bg-success", dotClassName)}
-            data-current-activity-work-progress-dot={String(index)}
-            {...{ [dotDataAttribute]: String(index) }}
-          />
-        ),
-      )}
-      {suffix}
-    </span>
   );
 }
 

@@ -4,6 +4,7 @@ import { FactoryGraphNodeShell, } from "./semantic-node-shell.js";
 import { factoryGraphNodeHoverClassName, factoryGraphNodeSurfaceClassName, factoryGraphNodeWrappedTextClassName, } from "./semantic-node-style.js";
 import { FactoryGraphPlaceLabelText, FactoryGraphPlaceSemanticIcon, factoryGraphPlaceKindLabel, factoryGraphPlaceLabel, } from "./semantic-place-content.js";
 import { FactoryGraphPlaceTokenCount } from "./semantic-place-token-count.js";
+import { FactoryGraphWorkProgressMarker } from "./semantic-work-progress-marker.js";
 import { resolveFactoryGraphVisualState } from "./visual-state.js";
 import { factoryGraphWorkProgressMode } from "./work-progress-presentation.js";
 import { workStatePhaseSurfaceClassName, } from "./work-state-presentation.js";
@@ -61,7 +62,7 @@ function FactoryGraphPlaceNodeView({ data, selected: reactFlowSelected, }) {
 }
 function FactoryGraphStatePositionContent({ locale, place, tokenCount, visualState, }) {
     const label = factoryGraphPlaceLabel(place);
-    return (_jsxs(_Fragment, { children: [_jsxs("span", { className: "grid min-h-6 min-w-0 grid-cols-[auto_minmax(0,1fr)] items-start gap-1.5 overflow-hidden", "data-state-label-zone": true, children: [_jsx(FactoryGraphPlaceSemanticIcon, { locale: locale, place: place, visualState: visualState }), _jsx(FactoryGraphPlaceLabelText, { dataPrefix: "state", place: place })] }), _jsx("span", { className: "flex min-h-5 w-full shrink-0 items-center justify-center overflow-hidden", "data-state-marker-zone": true, title: label, children: stateMarkers(tokenCount, locale) ?? (_jsx("span", { className: "sr-only", children: activeItemCountLabel(tokenCount, locale) })) })] }));
+    return (_jsxs(_Fragment, { children: [_jsxs("span", { className: "grid min-h-6 min-w-0 grid-cols-[auto_minmax(0,1fr)] items-start gap-1.5 overflow-hidden", "data-state-label-zone": true, children: [_jsx(FactoryGraphPlaceSemanticIcon, { locale: locale, place: place, visualState: visualState }), _jsx(FactoryGraphPlaceLabelText, { dataPrefix: "state", place: place })] }), _jsx("span", { className: "flex min-h-5 w-full shrink-0 items-center justify-center overflow-hidden", "data-state-marker-zone": true, title: label, children: stateMarkers(tokenCount, locale, visualState) ?? (_jsx("span", { className: "sr-only", children: activeItemCountLabel(tokenCount, locale) })) })] }));
 }
 function FactoryGraphStaticPlaceContent({ locale, place, tokenCount, visualState, }) {
     const label = factoryGraphPlaceLabel(place);
@@ -69,19 +70,11 @@ function FactoryGraphStaticPlaceContent({ locale, place, tokenCount, visualState
         return (_jsxs("div", { className: "grid min-w-0 gap-0.5 overflow-hidden", "data-place-label-container": true, children: [_jsxs("span", { className: "flex min-w-0 items-center gap-1.5 overflow-hidden", "data-place-label-zone": true, title: label, children: [_jsx(FactoryGraphPlaceSemanticIcon, { locale: locale, place: place, visualState: visualState }), _jsx("strong", { className: factoryGraphNodeWrappedTextClassName("block font-mono text-[0.86rem] font-bold leading-tight"), children: label })] }), _jsx("span", { className: "flex min-h-4 w-full shrink-0 items-center justify-start overflow-hidden", "data-place-marker-zone": true, title: label, children: _jsx(FactoryGraphPlaceTokenCount, { ariaLabel: tokenCountLabel(place, tokenCount, locale), count: tokenCount }) })] }));
     return (_jsxs("div", { className: "flex min-w-0 w-full flex-col overflow-hidden", "data-place-label-container": true, children: [_jsxs("span", { "aria-label": label, className: "grid min-h-6 min-w-0 grid-cols-[auto_minmax(0,1fr)] items-start gap-1.5 overflow-hidden", "data-place-label-zone": true, role: "img", children: [_jsx(FactoryGraphPlaceSemanticIcon, { locale: locale, place: place, visualState: visualState }), _jsx(FactoryGraphPlaceLabelText, { dataPrefix: "place", place: place })] }), _jsx("span", { className: "flex min-h-5 w-full shrink-0 items-center justify-start overflow-hidden", "data-place-marker-zone": true, title: label, children: _jsx(FactoryGraphPlaceTokenCount, { ariaLabel: tokenCountLabel(place, tokenCount, locale), count: tokenCount }) })] }));
 }
-function stateMarkers(count, locale) {
+function stateMarkers(count, locale, visualState) {
     const mode = factoryGraphWorkProgressMode(count);
     if (mode === "empty")
         return null;
-    return mode === "total" ? (_jsx(FactoryGraphWorkProgressMarker, { ariaLabel: activeItemCountLabel(count, locale), className: "inline-flex min-h-5 min-w-8 rounded-full px-2 text-sm", count: count, "data-state-work-progress": "numeric", kind: "numeric" })) : (_jsx(FactoryGraphWorkProgressMarker, { ariaLabel: activeItemCountLabel(count, locale), className: "inline-grid grid-cols-[repeat(5,0.5rem)] justify-center gap-1", "data-state-work-progress": "dots", dotCount: count, dotDataAttribute: "data-state-work-progress-dot", kind: "dots" }));
-}
-export function FactoryGraphWorkProgressMarker(props) {
-    if (props.kind === "numeric") {
-        const { ariaLabel, className, count, kind: _kind, ...rest } = props;
-        return (_jsx("span", { "aria-label": ariaLabel, className: classNames("items-center justify-center border border-af-success-border bg-success-container font-mono font-bold leading-none text-success", className), role: "status", ...rest, children: count }));
-    }
-    const { ariaLabel, className, dotClassName = "h-2 w-2", dotCount, dotDataAttribute, kind: _kind, suffix, ...rest } = props;
-    return (_jsxs("span", { "aria-label": ariaLabel, className: classNames("items-center justify-center border border-af-success-border bg-success-container", className), role: "status", ...rest, children: [Array.from({ length: dotCount }, (_, index) => `dot-${index}`).map((key, index) => (_jsx("span", { "aria-hidden": "true", className: classNames("rounded-full bg-success", dotClassName), "data-current-activity-work-progress-dot": String(index), [dotDataAttribute]: String(index) }, key))), suffix] }));
+    return mode === "total" ? (_jsx(FactoryGraphWorkProgressMarker, { ariaLabel: activeItemCountLabel(count, locale), className: "min-w-8 px-2", count: count, "data-state-work-progress": "numeric", kind: "numeric" })) : (_jsx(FactoryGraphWorkProgressMarker, { ariaLabel: activeItemCountLabel(count, locale), className: "inline-grid grid-cols-[repeat(5,0.5rem)] justify-center gap-1", "data-state-work-progress": "dots", dotCount: count, dotDataAttribute: "data-state-work-progress-dot", active: visualState.surface === "active", kind: "dots" }));
 }
 function placeNodeClassName(place) {
     return place.kind === "work_state"
