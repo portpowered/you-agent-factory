@@ -487,42 +487,26 @@ func TestSessionResolvedInspectionPreservesLiveAndPersistedListing(t *testing.T)
 	}
 }
 
-func TestSessionResolvedInspectionPreservesShowAndDispatches(t *testing.T) {
-	var dispatchQuery string
+func TestSessionResolvedInspectionPreservesShow(t *testing.T) {
 	protocol := newSessionTestHTTPProtocol(t, func(request *http.Request) (*http.Response, error) {
-		switch request.URL.Path {
-		case "/factory-sessions/session-alpha":
-			return sessionTestResponse(http.StatusOK, `{
-				"id": "session-alpha",
-				"project": "alpha",
-				"factoryDir": "/workspace/fleet/alpha",
-				"folderPath": "/workspace/fleet",
-				"isDefault": false,
-				"target": {"kind": "named", "name": "alpha"},
-				"runtime": {"orchestratorKind": "PETRI", "status": "IDLE", "lifecycle": {
-					"startedAt": "2026-07-27T00:00:00Z",
-					"updatedAt": "2026-07-27T00:00:00Z"
-				}}
-			}`), nil
-		case "/factory-sessions/dur-sess-review-001/dispatches":
-			dispatchQuery = request.URL.RawQuery
-			return sessionTestResponse(http.StatusOK, `{
-				"sessionId": "dur-sess-review-001",
-				"dispatches": [{
-					"id": "dispatch-review",
-					"status": "COMPLETED",
-					"dispatchKind": "JAVASCRIPT_AGENT",
-					"phase": "review"
-				}]
-			}`), nil
-		default:
-			t.Fatalf("unexpected request path %q", request.URL.Path)
-			return nil, nil
+		if request.URL.Path != "/factory-sessions/session-alpha" {
+			t.Fatalf("request path = %q", request.URL.Path)
 		}
+		return sessionTestResponse(http.StatusOK, `{
+			"id": "session-alpha",
+			"project": "alpha",
+			"factoryDir": "/workspace/fleet/alpha",
+			"folderPath": "/workspace/fleet",
+			"isDefault": false,
+			"target": {"kind": "named", "name": "alpha"},
+			"runtime": {"orchestratorKind": "PETRI", "status": "IDLE", "lifecycle": {
+				"startedAt": "2026-07-27T00:00:00Z",
+				"updatedAt": "2026-07-27T00:00:00Z"
+			}}
+		}`), nil
 	})
 	services := commandregistry.SessionResolvedServicesFromOps(sessioncli.Operations{
-		Show:           sessioncli.NewShow(protocol),
-		ListDispatches: sessioncli.NewDispatches(protocol),
+		Show: sessioncli.NewShow(protocol),
 	}, nil, func(cmd *cobra.Command) io.Writer {
 		return cmd.ErrOrStderr()
 	})
@@ -535,32 +519,10 @@ func TestSessionResolvedInspectionPreservesShowAndDispatches(t *testing.T) {
 	}
 	var shown factoryapi.FactorySession
 	if err := json.Unmarshal([]byte(stdout), &shown); err != nil {
-		t.Fatalf("decode show JSON: %v\n%s", err, stdout)
+		t.Fatalf("decode show JSON: %v", err)
 	}
 	if shown.Id != "session-alpha" || !strings.Contains(stderr, "session show request") {
 		t.Fatalf("show result = %#v, stderr = %q", shown, stderr)
-	}
-
-	stdout, _, err = executeResolvedSessionWithOutput(
-		t, services, "session", "dispatches", "dur-sess-review-001",
-		"--phase", "review", "--status", "COMPLETED",
-	)
-	if err != nil {
-		t.Fatalf("dispatches Execute() error = %v", err)
-	}
-	if !strings.Contains(stdout, "dispatch-review") ||
-		dispatchQuery != "phase=review&status=COMPLETED" {
-		t.Fatalf("dispatches output = %q, query = %q", stdout, dispatchQuery)
-	}
-
-	stdout, _, err = executeResolvedSessionWithOutput(
-		t, services, "session", "dispatches", "session-alpha",
-	)
-	if err == nil || !strings.Contains(err.Error(), "not a durable Factory Session id") {
-		t.Fatalf("live dispatches error = %v", err)
-	}
-	if stdout != "" {
-		t.Fatalf("live dispatches stdout = %q, want empty", stdout)
 	}
 }
 
@@ -597,7 +559,7 @@ func TestSessionResolvedShowPreservesDurableProjection(t *testing.T) {
 }
 
 func TestSessionResolvedInspectionRejectsInvalidInputsBeforeSideEffects(t *testing.T) {
-	var listCalls, showCalls, dispatchCalls int
+	var listCalls, showCalls int
 	services := commandregistry.SessionResolvedServices{
 		PrepareList: func(context.Context, *sessioncli.ListConfig) error {
 			return errors.New("scope must be live, persisted, or all")
@@ -614,10 +576,6 @@ func TestSessionResolvedInspectionRejectsInvalidInputsBeforeSideEffects(t *testi
 				}
 				return errors.New("default session unavailable")
 			},
-			ListDispatches: func(sessioncli.DispatchesConfig) error {
-				dispatchCalls++
-				return nil
-			},
 		}),
 	}
 	stdout, _, err := executeResolvedSessionWithOutput(t, services, "session", "show")
@@ -628,8 +586,6 @@ func TestSessionResolvedInspectionRejectsInvalidInputsBeforeSideEffects(t *testi
 	for _, args := range [][]string{
 		{"session", "list", "--scope", "workspace"},
 		{"session", "show", "one", "two"},
-		{"session", "dispatches"},
-		{"session", "dispatches", "one", "two"},
 	} {
 		stdout, _, err := executeResolvedSessionWithOutput(t, services, args...)
 		if err == nil {
@@ -639,22 +595,20 @@ func TestSessionResolvedInspectionRejectsInvalidInputsBeforeSideEffects(t *testi
 			t.Fatalf("Execute(%v) stdout = %q, want empty", args, stdout)
 		}
 	}
-	if listCalls != 0 || showCalls != 0 || dispatchCalls != 0 {
-		t.Fatalf("operation calls = list:%d show:%d dispatches:%d", listCalls, showCalls, dispatchCalls)
+	if listCalls != 0 || showCalls != 0 {
+		t.Fatalf("operation calls = list:%d show:%d", listCalls, showCalls)
 	}
 }
 
 func TestSessionResolvedHandlersRejectDeprecatedPortBeforeSideEffects(t *testing.T) {
 	var operationCalls int
 	services := commandregistry.SessionResolvedServicesFromOps(sessioncli.Operations{
-		Show:           func(sessioncli.ShowConfig) error { operationCalls++; return nil },
-		ListDispatches: func(sessioncli.DispatchesConfig) error { operationCalls++; return nil },
-		Pause:          func(sessioncli.LifecycleControlConfig) error { operationCalls++; return nil },
-		Resume:         func(sessioncli.LifecycleControlConfig) error { operationCalls++; return nil },
+		Show:   func(sessioncli.ShowConfig) error { operationCalls++; return nil },
+		Pause:  func(sessioncli.LifecycleControlConfig) error { operationCalls++; return nil },
+		Resume: func(sessioncli.LifecycleControlConfig) error { operationCalls++; return nil },
 	}, nil, nil)
 	for _, args := range [][]string{
 		{"session", "show", "session-alpha", "--port", "7444"},
-		{"session", "dispatches", "dur-sess-review-001", "--port", "7444"},
 		{"session", "pause", "--port", "7444"},
 		{"session", "resume", "--port", "7444"},
 	} {
@@ -692,13 +646,6 @@ func TestSessionResolvedInspectionPreservesFailuresAndCancellation(t *testing.T)
 				Show: func(sessioncli.ShowConfig) error { return context.Canceled },
 			}, nil, nil),
 			want: context.Canceled,
-		},
-		{
-			name: "dispatch failure", args: []string{"session", "dispatches", "dur-sess-review-001"},
-			services: commandregistry.SessionResolvedServicesFromOps(sessioncli.Operations{
-				ListDispatches: func(sessioncli.DispatchesConfig) error { return operationFailure },
-			}, nil, nil),
-			want: operationFailure,
 		},
 	}
 	for _, test := range tests {

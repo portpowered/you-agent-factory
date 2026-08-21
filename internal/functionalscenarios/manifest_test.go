@@ -29,8 +29,8 @@ func TestBuildReviewedManifestPublishesTruthfulCoverageAndSSEPolicy(t *testing.T
 	if got := byID["cli/you.work.watch"]; got.Status != StatusCovered || got.Lane != LaneLong || len(got.Evidence) != 1 {
 		t.Fatalf("covered Work watch CLI scenario = %#v", got)
 	}
-	if got := byID["cli/you.session.dispatches"]; got.Status != StatusMissing || len(got.Evidence) != 0 {
-		t.Fatalf("CLI dispatches scenario = %#v, want truthful missing status", got)
+	if _, found := byID["cli/you.session.dispatches"]; found {
+		t.Fatal("retired CLI dispatches scenario must be absent from the reviewed manifest")
 	}
 	assertSSEPolicy(t, byID[sessionEventsStableID], true, SSERequired, StatusPartial)
 	assertSSEPolicy(t, byID[responseEventsStableID], false, SSECurrentlyDeferred, StatusNotApplicable)

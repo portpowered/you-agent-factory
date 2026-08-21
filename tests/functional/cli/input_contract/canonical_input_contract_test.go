@@ -278,14 +278,6 @@ func TestGenericSessionProjectionCoversProductionCommandShapes(t *testing.T) {
 			path: "you session list",
 		},
 		{
-			name: "dispatch filters",
-			args: []string{
-				"you", "session", "dispatches", "missing-session",
-				"--phase", "queued", "--status", "active",
-			},
-			path: "you session dispatches",
-		},
-		{
 			name: "delete required id",
 			args: []string{"you", "session", "delete", "missing-session"},
 			path: "you session delete",

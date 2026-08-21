@@ -84,7 +84,7 @@ func TestCLIResumeSmoke_DurableResumeContinuityPreservesCompletedChildDispatches
 	beforeShow := readDurableSessionViaCLI(t, harness, sessionID)
 	assertDurableProgressCounts(t, beforeShow.Progress, 1, 2, 0)
 
-	beforeDispatches := readDispatchesViaCLI(t, harness, sessionID)
+	beforeDispatches := readDispatchesViaHTTP(t, harness, sessionID)
 	dispatchOneBefore := requireDispatchSummary(t, beforeDispatches, "dispatch-1", factoryapi.FactoryDispatchStatusCOMPLETED)
 	dispatchTwoBefore := requireDispatchSummary(t, beforeDispatches, "dispatch-2", factoryapi.FactoryDispatchStatusINTERRUPTED, factoryapi.FactoryDispatchStatusRUNNING)
 	if len(beforeDispatches.Dispatches) != 2 {
@@ -118,7 +118,7 @@ func TestCLIResumeSmoke_DurableResumeContinuityPreservesCompletedChildDispatches
 		)
 	}
 
-	afterDispatches := readDispatchesViaCLI(t, harness, sessionID)
+	afterDispatches := readDispatchesViaHTTP(t, harness, sessionID)
 	if len(afterDispatches.Dispatches) != 2 {
 		t.Fatalf("post-resume dispatch count = %d, want 2 (no replayed child dispatches)", len(afterDispatches.Dispatches))
 	}
@@ -250,21 +250,17 @@ func intValueOrZero(value *int) int {
 	return *value
 }
 
-func readDispatchesViaCLI(
+func readDispatchesViaHTTP(
 	t *testing.T,
 	harness *cliResumeSmokeHarness,
 	sessionID string,
 ) factoryapi.ListFactorySessionDispatchesResponse {
 	t.Helper()
 
-	out, err := harness.executeCLI(t, "session", "dispatches", sessionID)
-	if err != nil {
-		t.Fatalf("session dispatches: %v", err)
-	}
-
+	body := getCLIResumeJSON(t, harness.serverURL+"/factory-sessions/"+sessionID+"/dispatches")
 	var listed factoryapi.ListFactorySessionDispatchesResponse
-	if err := json.Unmarshal(bytes.TrimSpace(out.Bytes()), &listed); err != nil {
-		t.Fatalf("decode session dispatches JSON: %v\n%s", err, out.String())
+	if err := json.Unmarshal(bytes.TrimSpace(body), &listed); err != nil {
+		t.Fatalf("decode REST dispatches JSON: %v\n%s", err, body)
 	}
 	if listed.SessionId != sessionID {
 		t.Fatalf("dispatch sessionId = %q, want %q", listed.SessionId, sessionID)
@@ -502,6 +498,23 @@ func postCLIResumeJSON(t *testing.T, endpoint string, request any) []byte {
 	return body
 }
 
+func getCLIResumeJSON(t *testing.T, endpoint string) []byte {
+	t.Helper()
+	response, err := http.Get(endpoint)
+	if err != nil {
+		t.Fatalf("GET %s: %v", endpoint, err)
+	}
+	defer response.Body.Close()
+	body, err := io.ReadAll(response.Body)
+	if err != nil {
+		t.Fatalf("read GET %s response: %v", endpoint, err)
+	}
+	if response.StatusCode < http.StatusOK || response.StatusCode >= http.StatusMultipleChoices {
+		t.Fatalf("GET %s status = %d\n%s", endpoint, response.StatusCode, body)
+	}
+	return body
+}
+
 func strPtr(value string) *string {
 	return &value
 }
@@ -714,7 +727,7 @@ func waitForCLIResumeSmokeDispatchStatus(
 	deadline := time.Now().Add(timeout)
 	var last factoryapi.ListFactorySessionDispatchesResponse
 	for time.Now().Before(deadline) {
-		listed := readDispatchesViaCLI(t, harness, sessionID)
+		listed := readDispatchesViaHTTP(t, harness, sessionID)
 		last = listed
 		for _, dispatch := range listed.Dispatches {
 			if dispatch.Id != dispatchID {

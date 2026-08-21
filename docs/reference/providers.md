@@ -407,10 +407,14 @@ Run it from the project directory whose files the agent should inspect:
 you run --factory ./test.workflow.js --skip-permissions
 ```
 
-JavaScript receives the structured child result. Use `you session show`,
-`you session dispatches`, and the printed Factory Session links when deeper
-inspection is needed. See `you docs javascript-workflows` for the complete host
-API and lifecycle contract.
+JavaScript receives the structured child result. Use `you session show` for
+Factory Session status and summary. Use `you metrics --session SESSION_ID --group-by provider`
+for provider aggregates. Use the REST
+`GET /factory-sessions/SESSION_ID/dispatches` or MCP
+`you.factory_session.list_dispatches` read for exact dispatch records. Use
+`you worker-sessions list --work-id WORK_ID` only for Work-specific drill-down.
+See `you docs javascript-workflows` for the complete host API and lifecycle
+contract.
 
 ## Remove a custom integration
 

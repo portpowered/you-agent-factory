@@ -60,13 +60,12 @@ var listSessions = sessioncli.NewList(rootTestHTTPProtocol(), rootRequestPrepara
 var showSession = sessioncli.NewShow(rootTestHTTPProtocol())
 var pauseSession = sessioncli.NewPause(rootTestHTTPProtocol())
 var resumeSession = sessioncli.NewResume(rootTestHTTPProtocol())
-var listSessionDispatches = sessioncli.NewDispatches(rootTestHTTPProtocol())
 var createSession = sessioncli.NewCreate(rootTestHTTPProtocol())
 var deleteSession = sessioncli.NewDelete(rootTestHTTPProtocol())
 var rootTestSessionsCLI = func() sessioncli.Service {
 	return sessioncli.Bind(sessioncli.Operations{
 		List: listSessions, Show: showSession, Pause: pauseSession, Resume: resumeSession,
-		ListDispatches: listSessionDispatches, Create: createSession, Delete: deleteSession,
+		Create: createSession, Delete: deleteSession,
 	})
 }
 var queryFactory = factorycli.NewQuery(rootTestHTTPProtocol())

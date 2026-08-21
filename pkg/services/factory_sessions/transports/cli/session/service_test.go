@@ -66,9 +66,6 @@ func TestConstructedService_RequiresCallerOwnedOutput(t *testing.T) {
 	tests := map[string]func() error{
 		"create": func() error { return service.Create(CreateConfig{Dir: "."}) },
 		"delete": func() error { return service.Delete(DeleteConfig{SessionID: "session-1"}) },
-		"dispatches": func() error {
-			return service.ListDispatches(DispatchesConfig{Context: context.Background()})
-		},
 		"pause": func() error {
 			return service.Pause(LifecycleControlConfig{Context: context.Background()})
 		},

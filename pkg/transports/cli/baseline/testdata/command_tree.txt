@@ -32,7 +32,6 @@ you session	session	you
 you session cancel	cancel [session-id]	you session
 you session create	create [arg0...]	you session
 you session delete	delete <session-id>	you session
-you session dispatches	dispatches <session-id>	you session
 you session list	list [arg0...]	you session
 you session pause	pause [session-id]	you session
 you session resource	resource	you session
