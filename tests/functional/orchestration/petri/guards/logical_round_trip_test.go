@@ -126,6 +126,9 @@ func TestLogicalRoundTripFactoryBoundaryStopsUnbalancedRoute(t *testing.T) {
 	}
 }
 
+// TestLogicalRoundTripFactoryBoundaryRecordReplayPreservesTerminalProjection proves
+// a recorded logical round trip across the Factory boundary preserves its
+// terminal projection through replay.
 func TestLogicalRoundTripFactoryBoundaryRecordReplayPreservesTerminalProjection(t *testing.T) {
 	dir := support.ScaffoldFactory(t, logicalRoundTripFactoryConfig(3, 6))
 	support.WriteAgentConfig(t, dir, "executor", support.BuildModelWorkerConfig(modelprovider.ProviderCodex, "gpt-5-codex"))
