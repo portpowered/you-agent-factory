@@ -21,7 +21,9 @@ import (
 const (
 	functionalDiscoveryParallelThreshold = 8
 	functionalDiscoveryMaxJobs           = 4
+	functionalDiscoveryMetadataMaxJobs   = 8
 	functionalGoListErrorFlag            = "-e"
+	functionalGoListIdentityJSONFields   = "-json=Dir,ImportPath"
 	functionalGoListJSONFields           = "-json=Dir,ImportPath,TestGoFiles,XTestGoFiles"
 )
 
@@ -127,28 +129,42 @@ func listFunctionalTestPackageMetadata(patterns []string, repoRoot string) ([]fu
 		return nil, errors.New("resolve go coverage lane: no packages matched")
 	}
 
-	// Ask go list for the current tree without loading dependencies. Ordinary
-	// package results include the build-selected TestGoFiles/XTestGoFiles that
-	// own the functional inventory, including external test files.
-	listedPackages, err := listFunctionalTestPackageBatchWithFieldsAndFlags(
+	// Resolve package identities separately from test-file metadata. A wildcard
+	// metadata query makes one go list process inspect every test file before it
+	// returns. The identity query stays cheap; concrete metadata batches retain
+	// go list's build-selected TestGoFiles/XTestGoFiles authority while allowing
+	// independent package groups to be inspected concurrently.
+	identityPackages, err := listFunctionalTestPackageBatchWithFieldsAndFlags(
 		patterns,
-		functionalGoListJSONFields,
+		functionalGoListIdentityJSONFields,
 		[]string{"-find"},
 		repoRoot,
 	)
 	if err != nil {
 		return nil, err
 	}
-	functionalPackages := make([]functionalGoListPackage, 0, len(listedPackages))
-	for _, pkg := range listedPackages {
+	functionalPaths := make([]string, 0, len(identityPackages))
+	for _, pkg := range identityPackages {
 		if isFunctionalTestPackage(pkg.ImportPath) {
-			functionalPackages = append(functionalPackages, pkg)
+			functionalPaths = append(functionalPaths, pkg.ImportPath)
 		}
 	}
-	if len(functionalPackages) == 0 {
+	functionalPaths = sortedUniqueStrings(functionalPaths)
+	if len(functionalPaths) == 0 {
 		return nil, errors.New("resolve go coverage lane: no packages matched")
 	}
-	return mergeFunctionalGoListPackages(functionalPackages)
+
+	listedPackages, err := listFunctionalTestPackagesWithMaxJobs(
+		functionalPaths,
+		functionalPaths,
+		functionalDiscoveryMetadataMaxJobs,
+		functionalDiscoveryMetadataMaxJobs,
+		repoRoot,
+	)
+	if err != nil {
+		return nil, err
+	}
+	return selectFunctionalPackageSet(functionalPaths, listedPackages)
 }
 
 func resolveFunctionalTestPackagesWithMetadata(cfg config, repoRoot string) ([]string, []functionalGoListPackage, error) {
@@ -169,8 +185,12 @@ func resolveFunctionalTestPackagesWithMetadata(cfg config, repoRoot string) ([]s
 }
 
 func listFunctionalTestPackages(listPatterns, requestedPackages []string, jobs int, repoRoot string) ([]functionalGoListPackage, error) {
+	return listFunctionalTestPackagesWithMaxJobs(listPatterns, requestedPackages, jobs, functionalDiscoveryMaxJobs, repoRoot)
+}
+
+func listFunctionalTestPackagesWithMaxJobs(listPatterns, requestedPackages []string, jobs, maxJobs int, repoRoot string) ([]functionalGoListPackage, error) {
 	patterns := sortedUniqueStrings(listPatterns)
-	batches := functionalDiscoveryListBatches(patterns, requestedPackages, jobs)
+	batches := functionalDiscoveryListBatchesWithMaxJobs(patterns, requestedPackages, jobs, maxJobs)
 	if len(batches) == 1 {
 		listed, err := listFunctionalTestPackageBatch(batches[0], repoRoot)
 		if err != nil {
@@ -207,12 +227,19 @@ type functionalGoListBatchResult struct {
 }
 
 func functionalDiscoveryListBatches(listPatterns, requestedPackages []string, jobs int) [][]string {
+	return functionalDiscoveryListBatchesWithMaxJobs(listPatterns, requestedPackages, jobs, functionalDiscoveryMaxJobs)
+}
+
+func functionalDiscoveryListBatchesWithMaxJobs(listPatterns, requestedPackages []string, jobs, maxJobs int) [][]string {
 	if len(requestedPackages) < functionalDiscoveryParallelThreshold || !slices.Equal(listPatterns, requestedPackages) {
 		return [][]string{listPatterns}
 	}
 	parallelism := maxFunctionalDiscoveryJobs(jobs)
-	if parallelism > functionalDiscoveryMaxJobs {
-		parallelism = functionalDiscoveryMaxJobs
+	if maxJobs < 1 {
+		maxJobs = 1
+	}
+	if parallelism > maxJobs {
+		parallelism = maxJobs
 	}
 	if parallelism > len(requestedPackages) {
 		parallelism = len(requestedPackages)
