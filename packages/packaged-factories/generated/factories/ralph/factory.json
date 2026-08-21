@@ -1,0 +1,243 @@
+{
+  "description": {
+    "type": "LOCALIZABLE_ASSET",
+    "value": "Plans a request, iterates through every incomplete plan story, and returns only after the durable plan is complete."
+  },
+  "examples": [
+    {
+      "args": {
+        "request": "Implement and verify the requested change"
+      },
+      "description": {
+        "type": "LOCALIZABLE_ASSET",
+        "value": "Plan and complete a multi-step request."
+      },
+      "name": "plan-and-iterate"
+    }
+  ],
+  "id": "builtin-ralph",
+  "invocationReturn": {
+    "policy": "EXPLICIT",
+    "terminalState": "complete",
+    "workTypeName": "ralph"
+  },
+  "invocationSignature": {
+    "parameters": [
+      {
+        "bindings": [
+          {
+            "kind": "POSITIONAL",
+            "position": 1
+          },
+          {
+            "kind": "STDIN"
+          },
+          {
+            "kind": "NAMED"
+          }
+        ],
+        "description": "Request that Ralph plans and works to completion.",
+        "externalName": "to",
+        "name": "request",
+        "required": true
+      },
+      {
+        "bindings": [
+          {
+            "kind": "NAMED"
+          }
+        ],
+        "defaultValues": [
+          ""
+        ],
+        "description": "Optional model provider override for the planner; omitted values use operator defaults.",
+        "externalName": "planner-provider",
+        "name": "plannerProvider"
+      },
+      {
+        "bindings": [
+          {
+            "kind": "NAMED"
+          }
+        ],
+        "defaultValues": [
+          ""
+        ],
+        "description": "Optional model override for the planner; omitted values use operator defaults.",
+        "externalName": "planner-model",
+        "name": "plannerModel"
+      },
+      {
+        "bindings": [
+          {
+            "kind": "NAMED"
+          }
+        ],
+        "defaultValues": [
+          ""
+        ],
+        "description": "Optional model provider override for the iterator; omitted values use operator defaults.",
+        "externalName": "iterator-provider",
+        "name": "iteratorProvider"
+      },
+      {
+        "bindings": [
+          {
+            "kind": "NAMED"
+          }
+        ],
+        "defaultValues": [
+          ""
+        ],
+        "description": "Optional model override for the iterator; omitted values use operator defaults.",
+        "externalName": "iterator-model",
+        "name": "iteratorModel"
+      }
+    ]
+  },
+  "name": "ralph",
+  "workTypes": [
+    {
+      "handlingBehavior": [
+        "DEFAULT"
+      ],
+      "name": "ralph",
+      "states": [
+        {
+          "name": "init",
+          "type": "INITIAL"
+        },
+        {
+          "name": "execute",
+          "type": "PROCESSING"
+        },
+        {
+          "name": "complete",
+          "type": "TERMINAL"
+        },
+        {
+          "name": "failed",
+          "type": "FAILED"
+        }
+      ]
+    }
+  ],
+  "workers": [
+    {
+      "model": "${plannerModel}",
+      "modelProvider": "${plannerProvider}",
+      "name": "ralph-planner",
+      "skipPermissions": true,
+      "stopToken": "\u003cCOMPLETE\u003e",
+      "type": "AGENT_WORKER"
+    },
+    {
+      "model": "${iteratorModel}",
+      "modelProvider": "${iteratorProvider}",
+      "name": "ralph-iterator",
+      "skipPermissions": true,
+      "stopToken": "\u003cCOMPLETE\u003e",
+      "type": "AGENT_WORKER"
+    }
+  ],
+  "workstations": [
+    {
+      "body": "You are the planning stage of @you/ralph. Start from zero repository context and turn the submitted request into a durable, executable plan. Do not implement the request during this stage.\n\nOriginal request:\n${request}\n\nCurrent Work name:\n{{ (index .Inputs 0).Name }}\n\nInspect the repository instructions, relevant source, tests, and current working tree before planning. Preserve unrelated user changes. Create both files below, using the Work name exactly:\n\n- `tasks/todo/{{ (index .Inputs 0).Name }}.md`\n- `tasks/todo/{{ (index .Inputs 0).Name }}.json`\n\nThe Markdown file is the readable plan. The JSON file is the authoritative durable plan and must contain `project`, `description`, `context`, `acceptanceCriteria`, and an ordered `stories` array. Every story must have a stable `id`, numeric `priority`, a standalone description, behavioral acceptance criteria, explicit tests, `passes: false`, and an empty `notes` value. Do not mark any story passed during planning. Include the original request, observable success and failure behavior, exact affected boundaries, and verification commands. Do not put implementation progress only in the response; the JSON plan on disk is the state later iterations must update.\n\nRead both files back and verify that the JSON parses before returning. End the response with the exact raw token below as its final non-empty line. Do not wrap it in backticks or add content after it:\n\n\u003cCOMPLETE\u003e\n",
+      "inputs": [
+        {
+          "state": "init",
+          "workType": "ralph"
+        }
+      ],
+      "name": "plan-ralph",
+      "onFailure": [
+        {
+          "state": "failed",
+          "workType": "ralph"
+        }
+      ],
+      "onRejection": [
+        {
+          "state": "failed",
+          "workType": "ralph"
+        }
+      ],
+      "outputs": [
+        {
+          "state": "execute",
+          "workType": "ralph"
+        }
+      ],
+      "promptFile": "prompts/planner.md",
+      "type": "AGENT_RUN",
+      "workPropagation": {
+        "mode": "OUTPUT_AS_PAYLOAD"
+      },
+      "worker": "ralph-planner"
+    },
+    {
+      "behavior": "REPEATER",
+      "body": "You are the iterative execution stage of @you/ralph. Work from the durable plan on disk, not from hidden conversation state.\n\nOriginal request:\n${request}\n\nCurrent Work name:\n{{ (index .Inputs 0).Name }}\n\nThe authoritative plan is:\n\n- `tasks/todo/{{ (index .Inputs 0).Name }}.json`\n- `tasks/todo/{{ (index .Inputs 0).Name }}.md`\n\nThe latest upstream plan or prior iteration output is below. It is context only; reload the durable JSON plan before acting:\n\n{{ printf \"%s\" (index .Inputs 0).Payload }}\n\nRead the repository instructions and current working tree, then execute the next incomplete story in priority order. Preserve unrelated changes. Exercise the story's acceptance and failure cases, record concise verification evidence in that story's `notes`, and set `passes` to true only after the behavior is actually implemented and verified. Keep the original request unchanged and do not replace the durable plan with a narrower task. If useful work remains, leave incomplete stories marked `passes: false` and return the progress summary followed by the exact raw token `\u003cCONTINUE\u003e` as the final non-empty line. On the next visit, continue from the on-disk plan and the previous output.\n\nReturn `\u003cCOMPLETE\u003e` as the final non-empty line only after every story in the durable JSON plan has `passes: true`, all required quality gates have been exercised, and the completed result is ready to report. A missing, malformed, contradictory, or unverified plan is a failure: explain the blocker and do not emit either control token so the Factory can route the work to its failed state.\n",
+      "inputs": [
+        {
+          "state": "execute",
+          "workType": "ralph"
+        }
+      ],
+      "name": "iterate-ralph",
+      "onContinue": [
+        {
+          "state": "execute",
+          "workType": "ralph"
+        }
+      ],
+      "onFailure": [
+        {
+          "state": "failed",
+          "workType": "ralph"
+        }
+      ],
+      "onRejection": [
+        {
+          "state": "failed",
+          "workType": "ralph"
+        }
+      ],
+      "outputs": [
+        {
+          "state": "complete",
+          "workType": "ralph"
+        }
+      ],
+      "promptFile": "prompts/iterator.md",
+      "type": "AGENT_RUN",
+      "workPropagation": {
+        "mode": "OUTPUT_AS_PAYLOAD"
+      },
+      "worker": "ralph-iterator"
+    },
+    {
+      "guards": [
+        {
+          "maxVisits": 12,
+          "type": "VISIT_COUNT",
+          "workstation": "iterate-ralph"
+        }
+      ],
+      "inputs": [
+        {
+          "state": "execute",
+          "workType": "ralph"
+        }
+      ],
+      "name": "iterate-ralph-loop-breaker",
+      "outputs": [
+        {
+          "state": "failed",
+          "workType": "ralph"
+        }
+      ],
+      "type": "LOGICAL_MOVE"
+    }
+  ]
+}
