@@ -109,7 +109,10 @@ jobs:
           set -euo pipefail
           export HOMEBREW_NO_AUTO_UPDATE=1
           formula="https://raw.githubusercontent.com/Homebrew/homebrew-core/${{ needs.validate-inputs.outputs.macos_make_formula_commit }}/Formula/m/make.rb"
-          brew install "$formula"
+          formula_path="$RUNNER_TEMP/pinned-make.rb"
+          curl --fail --silent --show-error --location "$formula" --output "$formula_path"
+          test -s "$formula_path"
+          brew install --formula "$formula_path"
           observed="$(gmake --version | sed -n '1s/.* //p')"
           test "$observed" = "${{ needs.validate-inputs.outputs.macos_make_version }}"
           echo "/opt/homebrew/opt/make/libexec/gnubin" >> "$GITHUB_PATH"
@@ -120,7 +123,17 @@ jobs:
         with:
           msystem: MINGW64
           update: false
-          install: ${{ needs.validate-inputs.outputs.windows_msys_packages }}
+
+      - name: Install the pinned Windows build packages
+        if: runner.os == 'Windows'
+        shell: msys2 {0}
+        env:
+          WINDOWS_MSYS_PACKAGES: ${{ needs.validate-inputs.outputs.windows_msys_packages }}
+        run: |
+          set -euo pipefail
+          pacman -Sy --noconfirm
+          read -r -a packages <<< "$WINDOWS_MSYS_PACKAGES"
+          pacman -S --needed --noconfirm --overwrite '*' "${packages[@]}"
 
       - name: Install pinned Windows C++ dependencies
         if: runner.os == 'Windows'

@@ -250,6 +250,10 @@ test("the workflow uses immutable actions, package inputs, and the pinned tag gu
 	for (const revision of Object.values(config.workflowPins)) assert.match(workflow, new RegExp(`@${revision}`));
 	assert.doesNotMatch(workflow, /uses:\s+[^\n]+@(v\d|main|master|latest)\b/);
 	assert.doesNotMatch(workflow, /update:\s*true/);
+	assert.match(workflow, /curl --fail --silent --show-error --location "\$formula" --output "\$formula_path"/);
+	assert.match(workflow, /brew install --formula "\$formula_path"/);
+	assert.match(workflow, /pacman -Sy --noconfirm/);
+	assert.match(workflow, /pacman -S --needed --noconfirm --overwrite '\*'/);
 	assert.doesNotMatch(workflow, /apt-get/);
 	assert.doesNotMatch(workflow, /brew install make\b/);
 	assert.match(workflow, /windows_vcpkg_triplet/);

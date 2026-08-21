@@ -26,7 +26,7 @@
     "linux": {
       "gccVersion": "13.3.0",
       "makeVersion": "4.3",
-      "ninjaVersion": "1.11.1",
+      "ninjaVersion": "1.13.2",
       "pkgConfigVersion": "1.8.1"
     },
     "macos": {
