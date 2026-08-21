@@ -3,6 +3,7 @@ package models_test
 import (
 	"context"
 	"errors"
+	"reflect"
 	"testing"
 
 	models "github.com/portpowered/infinite-you/pkg/services/models"
@@ -403,6 +404,101 @@ func TestGenericOperationContractsAreDetached(t *testing.T) {
 	}
 	if second.Inputs[1].MediaTypes[0] != "image/*" || second.Outputs[0].ContentTypes[0] != string(models.ModalityText) {
 		t.Fatalf("GenericOperationContract retained caller mutation: %#v", second)
+	}
+}
+
+func TestBuiltInModelCatalogPublishesCanonicalDefinitions(t *testing.T) {
+	t.Parallel()
+
+	want := []struct {
+		name      string
+		source    string
+		backend   string
+		operation string
+	}{
+		{
+			name:      "llm",
+			source:    "hf://unsloth/gemma-4-E4B-it-GGUF/gemma-4-E4B-it-Q4_K_M.gguf@bfc15c382204943c3a8fff0c750b94ae2364d7a3",
+			backend:   "localai-llamacpp",
+			operation: models.OperationOMNI,
+		},
+		{
+			name:      "asr",
+			source:    "hf://ggerganov/whisper.cpp/ggml-base.en.bin",
+			backend:   "localai-whisper",
+			operation: models.OperationASR,
+		},
+		{
+			name:      "tts",
+			source:    "hf://vibevoice/VibeVoice-7B",
+			backend:   "localai-vibevoice",
+			operation: models.OperationTTS,
+		},
+		{
+			name:      "embed",
+			source:    "hf://Qwen/Qwen3-Embedding-0.6B",
+			backend:   "localai-llamacpp",
+			operation: models.OperationEMBED,
+		},
+	}
+
+	definitions := models.BuiltInModelDefinitions()
+	if len(definitions) != len(want) {
+		t.Fatalf("BuiltInModelDefinitions length = %d, want %d", len(definitions), len(want))
+	}
+	for index, expected := range want {
+		definition := definitions[index]
+		if definition.Name != expected.name || definition.Source != expected.source ||
+			definition.Backend != expected.backend || definition.LoadPolicy != models.LoadPolicyOnDemand {
+			t.Fatalf("definition[%d] = %#v, want name=%q source=%q backend=%q loadPolicy=%q", index, definition, expected.name, expected.source, expected.backend, models.LoadPolicyOnDemand)
+		}
+		if len(definition.Operations) != 1 || definition.Operations[0].Name != expected.operation {
+			t.Fatalf("definition[%d].Operations = %#v, want one %s operation", index, definition.Operations, expected.operation)
+		}
+		canonical, ok := models.GenericOperationContract(expected.operation)
+		if !ok || !reflect.DeepEqual(definition.Operations[0], canonical) {
+			t.Fatalf("definition[%d].Operations[0] = %#v, want canonical %s contract %#v", index, definition.Operations[0], expected.operation, canonical)
+		}
+	}
+
+	catalog := models.BuiltInModelCatalog()
+	if len(catalog) != len(want) {
+		t.Fatalf("BuiltInModelCatalog length = %d, want %d", len(catalog), len(want))
+	}
+	for _, expected := range want {
+		definition, ok := catalog[expected.name]
+		if !ok || definition.Name != expected.name {
+			t.Fatalf("BuiltInModelCatalog[%q] = %#v, present = %t", expected.name, definition, ok)
+		}
+	}
+}
+
+func TestBuiltInModelCatalogReturnsDetachedDefinitions(t *testing.T) {
+	t.Parallel()
+
+	first := models.BuiltInModelCatalog()
+	first["llm"].Operations[0].Inputs[0].Name = "mutated"
+	delete(first, "asr")
+
+	second := models.BuiltInModelCatalog()
+	if len(second) != 4 {
+		t.Fatalf("second catalog length = %d, want 4", len(second))
+	}
+	if second["llm"].Operations[0].Inputs[0].Name != "prompt" {
+		t.Fatalf("second catalog retained nested mutation: %#v", second["llm"])
+	}
+	if _, ok := second["asr"]; !ok {
+		t.Fatal("second catalog retained map mutation")
+	}
+
+	definition, ok := models.BuiltInModelDefinitionFor(" LLM ")
+	if !ok {
+		t.Fatal("BuiltInModelDefinitionFor(LLM) did not find the built-in")
+	}
+	definition.Operations[0].Outputs[0].Name = "mutated"
+	fresh, ok := models.BuiltInModelDefinitionFor("llm")
+	if !ok || fresh.Operations[0].Outputs[0].Name != "text" {
+		t.Fatalf("BuiltInModelDefinitionFor retained nested mutation: %#v", fresh)
 	}
 }
 

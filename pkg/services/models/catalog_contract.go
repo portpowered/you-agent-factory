@@ -138,6 +138,94 @@ type Detail struct {
 	Diagnostics  map[string]string
 }
 
+// LoadPolicy describes when a managed model backend may be loaded.
+type LoadPolicy string
+
+const (
+	// LoadPolicyOnDemand keeps the model unloaded until an invocation needs it.
+	LoadPolicyOnDemand LoadPolicy = "ON_DEMAND"
+)
+
+const (
+	BuiltInModelNameLLM   = "llm"
+	BuiltInModelNameASR   = "asr"
+	BuiltInModelNameTTS   = "tts"
+	BuiltInModelNameEmbed = "embed"
+)
+
+const (
+	builtInLLMSource   = "hf://unsloth/gemma-4-E4B-it-GGUF/gemma-4-E4B-it-Q4_K_M.gguf@bfc15c382204943c3a8fff0c750b94ae2364d7a3"
+	builtInASRSource   = "hf://ggerganov/whisper.cpp/ggml-base.en.bin"
+	builtInTTSSource   = "hf://vibevoice/VibeVoice-7B"
+	builtInEmbedSource = "hf://Qwen/Qwen3-Embedding-0.6B"
+)
+
+// ModelDefinition describes one configured model name without resolving its
+// source, inspecting a cache, or starting a backend. Operations are the
+// canonical provider-neutral contracts exposed by the Models root.
+type ModelDefinition struct {
+	Name       string
+	Source     string
+	Backend    string
+	LoadPolicy LoadPolicy
+	Operations []Operation
+}
+
+// BuiltInModelDefinition is the descriptive alias used by catalog consumers.
+type BuiltInModelDefinition = ModelDefinition
+
+// Clone returns a detached model definition.
+func (definition ModelDefinition) Clone() ModelDefinition {
+	definition.Operations = cloneOperations(definition.Operations)
+	return definition
+}
+
+// BuiltInModelDefinitions returns the canonical built-in model definitions in
+// stable order. Every call returns detached values so callers cannot mutate
+// shared catalog state.
+func BuiltInModelDefinitions() []ModelDefinition {
+	return []ModelDefinition{
+		builtInModelDefinition(BuiltInModelNameLLM, builtInLLMSource, "localai-llamacpp", OperationOMNI),
+		builtInModelDefinition(BuiltInModelNameASR, builtInASRSource, "localai-whisper", OperationASR),
+		builtInModelDefinition(BuiltInModelNameTTS, builtInTTSSource, "localai-vibevoice", OperationTTS),
+		builtInModelDefinition(BuiltInModelNameEmbed, builtInEmbedSource, "localai-llamacpp", OperationEMBED),
+	}
+}
+
+// BuiltInModelCatalog returns the built-in definitions keyed by their public
+// model names. The returned map and every nested definition are detached.
+func BuiltInModelCatalog() map[string]ModelDefinition {
+	definitions := BuiltInModelDefinitions()
+	catalog := make(map[string]ModelDefinition, len(definitions))
+	for _, definition := range definitions {
+		catalog[definition.Name] = definition.Clone()
+	}
+	return catalog
+}
+
+// BuiltInModelDefinitionFor returns one detached built-in definition by name.
+// Names are case-insensitive at this value-only lookup boundary.
+func BuiltInModelDefinitionFor(name string) (ModelDefinition, bool) {
+	canonicalName := strings.ToLower(strings.TrimSpace(name))
+	for _, definition := range BuiltInModelDefinitions() {
+		if definition.Name == canonicalName {
+			return definition.Clone(), true
+		}
+	}
+	return ModelDefinition{}, false
+}
+
+func builtInModelDefinition(name, source, backend, operationName string) ModelDefinition {
+	operation, _ := GenericOperationContract(operationName)
+	return ModelDefinition{
+		Name:       name,
+		Source:     source,
+		Backend:    backend,
+		LoadPolicy: LoadPolicyOnDemand,
+		Operations: []Operation{operation},
+	}
+}
+
 // Clone returns a detached catalog detail.
 func (detail Detail) Clone() Detail {
 	detail.Summary = detail.Summary.Clone()
