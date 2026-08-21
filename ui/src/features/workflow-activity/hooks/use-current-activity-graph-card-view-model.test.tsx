@@ -249,7 +249,7 @@ describe("useCurrentActivityGraphCardViewModel node resize actions", () => {
 
   it("forwards authored node sizes as expanded presentation state", () => {
     const graphController = graphControllerFixture();
-    graphController.layoutControls.currentLayout = {
+    graphController.graphProjection.renderedLayout = {
       nodes: [
         {
           id: "place:story:queued",

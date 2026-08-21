@@ -212,9 +212,11 @@ function renderGraphViewModelWithLayout(
       currentGraphLayout,
       currentSnapshot,
       currentExpandedNodeIds,
+      currentRenderedLayout,
     }: {
       currentGraphLayout: GraphLayout;
       currentExpandedNodeIds?: ReadonlySet<string>;
+      currentRenderedLayout?: FactoryLayout;
       currentSnapshot?: DashboardSnapshot;
     }) =>
       useCurrentActivityGraphViewModel({
@@ -228,6 +230,10 @@ function renderGraphViewModelWithLayout(
             ...editor.graphProjection,
             graphLayout: currentGraphLayout,
             positionedGraphLayout: currentGraphLayout,
+            renderedLayout:
+              currentRenderedLayout ??
+              options.renderedLayout ??
+              ({ schemaVersion: 1 } as FactoryLayout),
           },
         } as Parameters<typeof useCurrentActivityGraphViewModel>[0]["editor"],
         now: 0,
@@ -1630,7 +1636,7 @@ describe("current activity graph host-controlled resize", () => {
       },
       { height: 220, width: 240 },
     );
-    expect(expanded()).toBe(false);
+    expect(expanded()).toBe(true);
 
     rerender({
       currentExpandedNodeIds: new Set([placeNodeId]),
@@ -1638,6 +1644,60 @@ describe("current activity graph host-controlled resize", () => {
     });
 
     expect(expanded()).toBe(true);
+  });
+
+  it("drops the local resize projection after the host undoes the authored size", () => {
+    const placeNodeId = "place:story:queued";
+    const hostResizeController = {
+      enabled: true,
+      onResizeEnd: vi.fn(),
+    };
+    const { rerender, result } = renderGraphViewModelWithLayout(
+      semanticNodeResizeLayout(),
+      {
+        editor: { nodeResizeControls: hostResizeController },
+      },
+    );
+    const expanded = () =>
+      (
+        result.current.nodes.find((node) => node.id === placeNodeId)?.data as
+          | { expanded?: boolean }
+          | undefined
+      )?.expanded;
+
+    act(() => {
+      nodeResizeControls(result, placeNodeId)?.onResizeEnd?.({
+        height: 220,
+        width: 240,
+      });
+    });
+    expect(expanded()).toBe(true);
+
+    rerender({
+      currentExpandedNodeIds: new Set([placeNodeId]),
+      currentGraphLayout: semanticNodeResizeLayout(),
+      currentRenderedLayout: {
+        nodes: [
+          {
+            id: placeNodeId,
+            position: { x: 120, y: 300 },
+            size: { height: 220, width: 240 },
+          },
+        ],
+        schemaVersion: 1,
+      },
+    });
+    expect(expanded()).toBe(true);
+
+    rerender({
+      currentExpandedNodeIds: new Set(),
+      currentGraphLayout: semanticNodeResizeLayout(),
+      currentRenderedLayout: {
+        nodes: [{ id: placeNodeId, position: { x: 120, y: 300 } }],
+        schemaVersion: 1,
+      },
+    });
+    expect(expanded()).toBe(false);
   });
 });
 // Component lane: requires DOM APIs.

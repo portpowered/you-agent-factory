@@ -10,7 +10,7 @@ import {
   type FactoryGraphNodeDimensions,
   resolveFactoryGraphNodeResizeDimensions,
 } from "@you-agent-factory/factory-graph";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
   DashboardActiveExecution,
   DashboardSnapshot,
@@ -205,6 +205,7 @@ function useCurrentActivityBaseNodes({
 }
 
 function useCurrentActivityNodeResizeState(input: {
+  committedDimensionsByNodeId: ReadonlyMap<string, FactoryGraphNodeDimensions>;
   editor: CurrentActivityGraphViewModelEditorInput;
   graphKey: string;
   locale?: string;
@@ -216,6 +217,9 @@ function useCurrentActivityNodeResizeState(input: {
     dimensions: FactoryGraphNodeDimensions;
     nodeId: string;
   } | null>(null);
+  const previousCommittedDimensionsRef = useRef(
+    input.committedDimensionsByNodeId,
+  );
 
   const previewDimensions = useCallback(
     (
@@ -273,9 +277,10 @@ function useCurrentActivityNodeResizeState(input: {
         // Dropping the preview and committing in the same handler keeps both
         // updates in one render, so the node never flashes its old size.
         setLiveResize(null);
-        if (!hostController) {
-          updateDimensions(target, dimensions);
-        }
+        // Keep the committed presentation projection even when a host also
+        // persists the authored layout. The host callback owns canonical
+        // state; this local map owns the expanded rendering contract.
+        updateDimensions(target, dimensions);
         hostController?.onResizeEnd(target, dimensions);
       },
     }),
@@ -293,6 +298,36 @@ function useCurrentActivityNodeResizeState(input: {
     setLiveResize(null);
   }, [input.graphKey, controller.enabled]);
 
+  useEffect(() => {
+    const previousDimensions = previousCommittedDimensionsRef.current;
+    const committedDimensions = input.committedDimensionsByNodeId;
+    previousCommittedDimensionsRef.current = committedDimensions;
+
+    if (hostController === undefined) {
+      return;
+    }
+
+    setDimensionsByNodeId((currentDimensions) => {
+      let nextDimensions: Map<string, FactoryGraphNodeDimensions> | null = null;
+
+      for (const [nodeId] of currentDimensions) {
+        const previous = previousDimensions.get(nodeId);
+        const committed = committedDimensions.get(nodeId);
+        if (
+          previous?.height === committed?.height &&
+          previous?.width === committed?.width
+        ) {
+          continue;
+        }
+
+        nextDimensions ??= new Map(currentDimensions);
+        nextDimensions.delete(nodeId);
+      }
+
+      return nextDimensions ?? currentDimensions;
+    });
+  }, [hostController, input.committedDimensionsByNodeId]);
+
   // The live map stays separate from the committed one so an in-progress drag
   // paints the new geometry without also flipping the node into its expanded
   // content variant and back when the drag settles.
@@ -306,9 +341,7 @@ function useCurrentActivityNodeResizeState(input: {
 
   return {
     controller,
-    dimensionsByNodeId: hostController
-      ? EMPTY_RESIZE_DIMENSIONS
-      : dimensionsByNodeId,
+    dimensionsByNodeId,
     liveDimensionsByNodeId,
   };
 }
@@ -620,6 +653,19 @@ export function useCurrentActivityGraphViewModel({
     renderedLayout,
     visibleGraphEdges,
   } = editor.graphProjection;
+  const committedDimensionsByNodeId = useMemo(() => {
+    const dimensionsByNodeId = new Map<string, FactoryGraphNodeDimensions>();
+    for (const node of renderedLayout.nodes ?? []) {
+      if (node.size === undefined) {
+        continue;
+      }
+      dimensionsByNodeId.set(node.id, {
+        height: node.size.height,
+        width: node.size.width,
+      });
+    }
+    return dimensionsByNodeId;
+  }, [renderedLayout]);
   const graphKey = useMemo(
     () => currentActivityGraphKey(graphLayout),
     [graphLayout],
@@ -673,6 +719,7 @@ export function useCurrentActivityGraphViewModel({
   const graphSelectionEnabled =
     !editor.editorMode || editor.activeTool !== "delete";
   const nodeResizeState = useCurrentActivityNodeResizeState({
+    committedDimensionsByNodeId,
     editor,
     graphKey,
     locale,

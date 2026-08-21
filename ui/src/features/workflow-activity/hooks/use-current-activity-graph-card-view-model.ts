@@ -45,11 +45,11 @@ export function useCurrentActivityGraphCardViewModel(
   const expandedNodeIds = useMemo(
     () =>
       new Set(
-        (publicEditor.layoutControls.currentLayout.nodes ?? [])
+        (graphProjection.renderedLayout.nodes ?? [])
           .filter((node) => node.size !== undefined)
           .map((node) => node.id),
       ),
-    [publicEditor.layoutControls.currentLayout],
+    [graphProjection.renderedLayout],
   );
   const resizeLayoutNode = publicEditor.layoutControls.resizeNode;
   const nodeResizeControls = useMemo<CurrentActivityNodeResizeController>(
