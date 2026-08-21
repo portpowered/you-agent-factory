@@ -23,8 +23,6 @@ var OperatorSettingsThinRootContractFiles = []string{
 	"doc.go",
 	"document_contract.go",
 	"input_inventory_contract.go",
-	"model_config_contract.go",
-	"model_config_contract_test.go",
 	"resolution_contract.go",
 	"root_wire_behavioral_boundary_test.go",
 	"service_contract.go",

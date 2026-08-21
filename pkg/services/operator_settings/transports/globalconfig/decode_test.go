@@ -414,17 +414,8 @@ func TestDecodeAndEncode_RoundTripsPartialAndCompleteModelEntries(t *testing.T) 
 	if err != nil {
 		t.Fatalf("Decode() error = %v", err)
 	}
-	partial := config.Models["llm"]
-	if partial.Source == nil || *partial.Source != "hf://custom/gemma" || partial.Backend != nil || partial.LoadPolicy != nil || partial.Operations != nil {
-		t.Fatalf("partial model = %#v, want one detached source override", partial)
-	}
-	complete := config.Models["studio-whisper"]
-	if complete.Source == nil || *complete.Source != "hf://ggerganov/whisper.cpp/ggml-base.en.bin" || complete.Backend == nil || *complete.Backend != "localai-whisper" {
-		t.Fatalf("complete model = %#v, want normalized source/backend", complete)
-	}
-	if complete.LoadPolicy == nil || *complete.LoadPolicy != operatorsettings.ModelLoadPolicyOnDemand || len(complete.Operations) != 1 || complete.Operations[0] != operatorsettings.ModelOperationASR {
-		t.Fatalf("complete model policy/operations = %#v, want ON_DEMAND and ASR", complete)
-	}
+	assertPartialModelConfig(t, config)
+	assertCompleteModelConfig(t, config)
 
 	payload, err := globalconfig.Encode(config)
 	if err != nil {
@@ -437,6 +428,30 @@ func TestDecodeAndEncode_RoundTripsPartialAndCompleteModelEntries(t *testing.T) 
 	if !reflect.DeepEqual(roundTrip, config) {
 		t.Fatalf("round-trip config = %#v, want %#v", roundTrip, config)
 	}
+	assertModelConfigCloneIsDetached(t, config)
+}
+
+func assertPartialModelConfig(t *testing.T, config operatorsettings.Config) {
+	t.Helper()
+	partial := config.Models["llm"]
+	if partial.Source == nil || *partial.Source != "hf://custom/gemma" || partial.Backend != nil || partial.LoadPolicy != nil || partial.Operations != nil {
+		t.Fatalf("partial model = %#v, want one detached source override", partial)
+	}
+}
+
+func assertCompleteModelConfig(t *testing.T, config operatorsettings.Config) {
+	t.Helper()
+	complete := config.Models["studio-whisper"]
+	if complete.Source == nil || *complete.Source != "hf://ggerganov/whisper.cpp/ggml-base.en.bin" || complete.Backend == nil || *complete.Backend != "localai-whisper" {
+		t.Fatalf("complete model = %#v, want normalized source/backend", complete)
+	}
+	if complete.LoadPolicy == nil || *complete.LoadPolicy != operatorsettings.ModelLoadPolicyOnDemand || len(complete.Operations) != 1 || complete.Operations[0] != operatorsettings.ModelOperationASR {
+		t.Fatalf("complete model policy/operations = %#v, want ON_DEMAND and ASR", complete)
+	}
+}
+
+func assertModelConfigCloneIsDetached(t *testing.T, config operatorsettings.Config) {
+	t.Helper()
 	clone := config.Clone()
 	clonedEntry := clone.Models["studio-whisper"]
 	*clonedEntry.Source = "changed"

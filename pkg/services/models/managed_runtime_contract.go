@@ -117,10 +117,14 @@ func (operation Operation) Clone() Operation {
 	return operation
 }
 
+// GenericOperationCatalog is the stateless Models-root value that publishes
+// canonical provider-neutral operation contracts.
+type GenericOperationCatalog struct{}
+
 // GenericOperationContracts returns the canonical provider-neutral operation
 // shapes in stable order. Each call returns fresh slices so callers cannot
 // mutate the shared contract definitions.
-func GenericOperationContracts() []Operation {
+func (GenericOperationCatalog) GenericOperationContracts() []Operation {
 	return []Operation{
 		genericOMNIOperation(),
 		genericEMBEDOperation(),
@@ -132,9 +136,9 @@ func GenericOperationContracts() []Operation {
 // GenericOperationContract returns one detached canonical operation shape by
 // identifier. Identifiers are case-insensitive at this value-only lookup
 // boundary; returned contracts remain uppercase.
-func GenericOperationContract(name string) (Operation, bool) {
+func (catalog GenericOperationCatalog) GenericOperationContract(name string) (Operation, bool) {
 	name = strings.ToUpper(strings.TrimSpace(name))
-	for _, operation := range GenericOperationContracts() {
+	for _, operation := range catalog.GenericOperationContracts() {
 		if operation.Name == name {
 			return operation, true
 		}

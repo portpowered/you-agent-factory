@@ -12,6 +12,7 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/services/models"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
+	generatedclient "github.com/portpowered/infinite-you/pkg/transports/http/client"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"go.uber.org/zap"
 )
@@ -167,3 +168,239 @@ func TestAdapter_InvokeModelServesStreamFileResponse(t *testing.T) {
 }
 
 var _ workers.ModelInvoker = invokeInvokerFake{}
+
+func TestGenericInvocationMappingPreservesRepeatedOMNIInputsAndJSONOrder(t *testing.T) {
+	t.Parallel()
+
+	generated := genericOMNIRequestForTest()
+
+	mapped, err := GenericInvocationRequestFromGenerated(generated)
+	if err != nil {
+		t.Fatalf("GenericInvocationRequestFromGenerated() error = %v", err)
+	}
+	assertGenericInvocationMapping(t, mapped)
+	assertGenericInvocationRequestJSON(t, generated)
+}
+
+func genericOMNIRequestForTest() factoryapi.GenericModelInvocationRequest {
+	outputMode := factoryapi.ModelInvocationOutputModeJSON
+	offline := true
+	inputs := []factoryapi.ModelInvocationInput{
+		{Name: "prompt", Modality: factoryapi.ModelOperationContentTypeText, Content: stringPointer("compare")},
+		{Name: "image", Modality: factoryapi.ModelOperationContentTypeImage, MediaType: stringPointer("image/png"), Content: stringPointer("first")},
+		{Name: "image", Modality: factoryapi.ModelOperationContentTypeImage, MediaType: stringPointer("image/jpeg"), Content: stringPointer("second")},
+	}
+	parameters := []factoryapi.ModelInvocationParameter{{Name: "temperature", Value: map[string]any{"value": 0.2}}}
+	return factoryapi.GenericModelInvocationRequest{
+		Scope:      "scope-http-001",
+		Holder:     "http",
+		Model:      factoryapi.ModelReference{NameOrUri: "llm"},
+		Operation:  models.OperationOMNI,
+		Inputs:     &inputs,
+		Parameters: &parameters,
+		OutputMode: &outputMode,
+		Offline:    &offline,
+	}
+}
+
+func assertGenericInvocationMapping(t *testing.T, mapped models.GenericInvocationRequest) {
+	t.Helper()
+	if err := mapped.Validate(); err != nil {
+		t.Fatalf("mapped request Validate() error = %v", err)
+	}
+	if mapped.Model.NameOrURI != "llm" {
+		t.Fatalf("mapped model = %#v", mapped.Model)
+	}
+	if len(mapped.Inputs) != 3 || mapped.Inputs[1].Name != "image" || mapped.Inputs[2].Content != "second" {
+		t.Fatalf("mapped inputs = %#v", mapped.Inputs)
+	}
+	if mapped.OutputMode != models.OutputModeJSON {
+		t.Fatalf("mapped output mode = %q", mapped.OutputMode)
+	}
+	if !mapped.Offline || mapped.Parameters[0].Name != "temperature" {
+		t.Fatalf("mapped controls = %#v", mapped)
+	}
+}
+
+func assertGenericInvocationRequestJSON(t *testing.T, generated factoryapi.GenericModelInvocationRequest) {
+	t.Helper()
+	encoded, err := json.Marshal(generated)
+	if err != nil {
+		t.Fatalf("marshal generated request: %v", err)
+	}
+	var decoded factoryapi.GenericModelInvocationRequest
+	if err := json.Unmarshal(encoded, &decoded); err != nil {
+		t.Fatalf("unmarshal generated request: %v", err)
+	}
+	if decoded.Inputs == nil || len(*decoded.Inputs) != 3 || (*decoded.Inputs)[1].Name != "image" || (*decoded.Inputs)[2].MediaType == nil || *(*decoded.Inputs)[2].MediaType != "image/jpeg" {
+		t.Fatalf("serialized inputs = %#v", decoded.Inputs)
+	}
+}
+
+func TestGenericInvocationResponseMappingPreservesASROutputsAndFailureIdentity(t *testing.T) {
+	t.Parallel()
+
+	artifact, err := (models.InferenceArtifactRef{}).Parse("artifact:segments")
+	if err != nil {
+		t.Fatalf("parse artifact: %v", err)
+	}
+	result := models.GenericInvocationResult{Outputs: []models.InferenceOutput{
+		{Name: "transcript", Modality: models.ModalityText, ContentType: "text/plain", MediaType: "text/plain", Content: "hello"},
+		{Name: "segments", Modality: models.ModalityJSON, ContentType: "application/json", MediaType: "application/json", Artifact: &models.InferenceArtifact{
+			Artifact: artifact, Name: "segments.json", MediaType: "application/json", SizeBytes: 12,
+		}},
+	}}
+	projected := GenericInvocationResponseToGenerated(result)
+	assertASRResponseMapping(t, projected)
+	assertASRResponseJSON(t, projected)
+
+	failure := &models.InvocationFailure{
+		Class:     models.InvocationFailureClassBackendProtocol,
+		Message:   "backend protocol is incompatible",
+		Model:     models.ModelReference{NameOrURI: "asr"},
+		Operation: models.OperationASR,
+		Slot:      "segments",
+	}
+	projectedFailure := GenericInvocationFailureToGenerated(failure)
+	assertASRFailureMapping(t, projectedFailure, failure)
+}
+
+func assertASRResponseMapping(t *testing.T, projected factoryapi.GenericModelInvocationResponse) {
+	t.Helper()
+	if len(projected.Outputs) != 2 || projected.Outputs[0].Name != "transcript" || projected.Outputs[1].Name != "segments" {
+		t.Fatalf("projected outputs = %#v", projected.Outputs)
+	}
+	if projected.Outputs[1].Artifact == nil || projected.Outputs[1].Artifact.ArtifactRef != "artifact:segments" {
+		t.Fatalf("projected artifact = %#v", projected.Outputs[1].Artifact)
+	}
+}
+
+func assertASRResponseJSON(t *testing.T, projected factoryapi.GenericModelInvocationResponse) {
+	t.Helper()
+	encoded, err := json.Marshal(projected)
+	if err != nil {
+		t.Fatalf("marshal generated response: %v", err)
+	}
+	var decoded factoryapi.GenericModelInvocationResponse
+	if err := json.Unmarshal(encoded, &decoded); err != nil {
+		t.Fatalf("unmarshal generated response: %v", err)
+	}
+	if len(decoded.Outputs) != 2 || decoded.Outputs[0].Name != "transcript" {
+		t.Fatalf("serialized outputs = %#v", decoded.Outputs)
+	}
+	if decoded.Outputs[1].Artifact == nil || decoded.Outputs[1].Artifact.ArtifactRef != "artifact:segments" {
+		t.Fatalf("serialized artifact = %#v", decoded.Outputs[1].Artifact)
+	}
+}
+
+func assertASRFailureMapping(t *testing.T, projected *factoryapi.ModelInvocationFailure, failure *models.InvocationFailure) {
+	t.Helper()
+	if projected == nil || projected.Class != factoryapi.ModelInvocationFailureClassBackendProtocol {
+		t.Fatalf("projected failure = %#v", projected)
+	}
+	if projected.Model == nil || projected.Model.NameOrUri != "asr" {
+		t.Fatalf("projected failure model = %#v", projected.Model)
+	}
+	if projected.Slot == nil || *projected.Slot != "segments" {
+		t.Fatalf("projected failure slot = %#v", projected.Slot)
+	}
+	if projected.Message != failure.Message {
+		t.Fatalf("projected failure message = %q, want %q", projected.Message, failure.Message)
+	}
+}
+
+func TestGenericInvocationRequestMappingRejectsInvalidArtifactAsTypedFailure(t *testing.T) {
+	t.Parallel()
+
+	inputs := []factoryapi.ModelInvocationInput{{
+		Name:        "image",
+		Modality:    factoryapi.ModelOperationContentTypeImage,
+		ArtifactRef: stringPointer(" "),
+	}}
+	_, err := GenericInvocationRequestFromGenerated(factoryapi.GenericModelInvocationRequest{
+		Scope:     "scope-http-002",
+		Holder:    "http",
+		Model:     factoryapi.ModelReference{NameOrUri: "llm"},
+		Operation: models.OperationOMNI,
+		Inputs:    &inputs,
+	})
+	var failure *models.InvocationFailure
+	if err == nil || !asInvocationFailure(err, &failure) || failure.Class != models.InvocationFailureClassArtifact {
+		t.Fatalf("error = %v, failure = %#v, want typed artifact failure", err, failure)
+	}
+}
+
+func TestGeneratedClientGenericContractsPreserveOrderedValuesAndModelConfig(t *testing.T) {
+	t.Parallel()
+	assertGeneratedClientRequestRoundTrip(t)
+	assertGeneratedClientModelConfigRoundTrip(t)
+}
+
+func assertGeneratedClientRequestRoundTrip(t *testing.T) {
+	t.Helper()
+	outputMode := generatedclient.ModelInvocationOutputModeJSON
+	offline := true
+	inputs := []generatedclient.ModelInvocationInput{
+		{Name: "prompt", Modality: generatedclient.ModelOperationContentTypeText, Content: stringPointer("compare")},
+		{Name: "image", Modality: generatedclient.ModelOperationContentTypeImage, MediaType: stringPointer("image/png"), Content: stringPointer("first")},
+		{Name: "image", Modality: generatedclient.ModelOperationContentTypeImage, MediaType: stringPointer("image/jpeg"), Content: stringPointer("second")},
+	}
+	request := generatedclient.GenericModelInvocationRequest{
+		Scope:      "scope-client-001",
+		Holder:     "generated-client",
+		Model:      generatedclient.ModelReference{NameOrUri: "llm"},
+		Operation:  "OMNI",
+		Inputs:     &inputs,
+		OutputMode: &outputMode,
+		Offline:    &offline,
+	}
+
+	encoded, err := json.Marshal(request)
+	if err != nil {
+		t.Fatalf("marshal generated client request: %v", err)
+	}
+	var decoded generatedclient.GenericModelInvocationRequest
+	if err := json.Unmarshal(encoded, &decoded); err != nil {
+		t.Fatalf("unmarshal generated client request: %v", err)
+	}
+	if decoded.Inputs == nil || len(*decoded.Inputs) != 3 || (*decoded.Inputs)[1].Name != "image" || (*decoded.Inputs)[2].MediaType == nil || *(*decoded.Inputs)[2].MediaType != "image/jpeg" {
+		t.Fatalf("generated client inputs = %#v", decoded.Inputs)
+	}
+	if decoded.OutputMode == nil || *decoded.OutputMode != generatedclient.ModelInvocationOutputModeJSON || decoded.Offline == nil || !*decoded.Offline {
+		t.Fatalf("generated client controls = %#v", decoded)
+	}
+}
+
+func assertGeneratedClientModelConfigRoundTrip(t *testing.T) {
+	t.Helper()
+	operations := []generatedclient.GlobalConfigModelOperation{"OMNI"}
+	backend := "localai-llamacpp"
+	models := generatedclient.GlobalConfigModels{
+		"llm":    {Backend: &backend, Operations: &operations},
+		"custom": {Source: stringPointer("hf://example/custom.gguf"), Backend: &backend, Operations: &operations},
+	}
+	config := generatedclient.GlobalConfig{Models: &models}
+	configJSON, err := json.Marshal(config)
+	if err != nil {
+		t.Fatalf("marshal generated client model config: %v", err)
+	}
+	var decodedConfig generatedclient.GlobalConfig
+	if err := json.Unmarshal(configJSON, &decodedConfig); err != nil {
+		t.Fatalf("unmarshal generated client model config: %v", err)
+	}
+	if decodedConfig.Models == nil || (*decodedConfig.Models)["llm"].Backend == nil || *(*decodedConfig.Models)["llm"].Backend != backend || len(*(*decodedConfig.Models)["custom"].Operations) != 1 {
+		t.Fatalf("generated client model config = %#v", decodedConfig.Models)
+	}
+}
+
+func asInvocationFailure(err error, target **models.InvocationFailure) bool {
+	if typed, ok := err.(*models.InvocationFailure); ok {
+		*target = typed
+		return true
+	}
+	return false
+}
+
+func stringPointer(value string) *string {
+	return &value
+}

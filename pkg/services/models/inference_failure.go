@@ -108,13 +108,6 @@ func newInvocationFailure(class InvocationFailureClass, message string) *Invocat
 	return &InvocationFailure{Class: class, Message: message}
 }
 
-// NewInvocationFailure constructs a typed, customer-safe generic invocation
-// failure. Callers may fill the optional public coordinates after construction;
-// implementation causes remain private to the Models boundary.
-func NewInvocationFailure(class InvocationFailureClass, message string) *InvocationFailure {
-	return newInvocationFailure(class, message)
-}
-
 func (e *InvocationFailure) Error() string {
 	if e == nil {
 		return ""

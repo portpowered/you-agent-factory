@@ -180,10 +180,14 @@ func (definition ModelDefinition) Clone() ModelDefinition {
 	return definition
 }
 
-// BuiltInModelDefinitions returns the canonical built-in model definitions in
-// stable order. Every call returns detached values so callers cannot mutate
-// shared catalog state.
-func BuiltInModelDefinitions() []ModelDefinition {
+// BuiltInCatalog is the stateless Models-root value that publishes the
+// canonical built-in model definitions.
+type BuiltInCatalog struct{}
+
+// ModelDefinitions returns the canonical built-in model definitions in stable
+// order. Every call returns detached values so callers cannot mutate shared
+// catalog state.
+func (BuiltInCatalog) ModelDefinitions() []ModelDefinition {
 	return []ModelDefinition{
 		builtInModelDefinition(BuiltInModelNameLLM, builtInLLMSource, "localai-llamacpp", OperationOMNI),
 		builtInModelDefinition(BuiltInModelNameASR, builtInASRSource, "localai-whisper", OperationASR),
@@ -192,22 +196,22 @@ func BuiltInModelDefinitions() []ModelDefinition {
 	}
 }
 
-// BuiltInModelCatalog returns the built-in definitions keyed by their public
-// model names. The returned map and every nested definition are detached.
-func BuiltInModelCatalog() map[string]ModelDefinition {
-	definitions := BuiltInModelDefinitions()
-	catalog := make(map[string]ModelDefinition, len(definitions))
+// ModelCatalog returns the built-in definitions keyed by their public model
+// names. The returned map and every nested definition are detached.
+func (catalog BuiltInCatalog) ModelCatalog() map[string]ModelDefinition {
+	definitions := catalog.ModelDefinitions()
+	models := make(map[string]ModelDefinition, len(definitions))
 	for _, definition := range definitions {
-		catalog[definition.Name] = definition.Clone()
+		models[definition.Name] = definition.Clone()
 	}
-	return catalog
+	return models
 }
 
-// BuiltInModelDefinitionFor returns one detached built-in definition by name.
-// Names are case-insensitive at this value-only lookup boundary.
-func BuiltInModelDefinitionFor(name string) (ModelDefinition, bool) {
+// ModelDefinitionFor returns one detached built-in definition by name. Names
+// are case-insensitive at this value-only lookup boundary.
+func (catalog BuiltInCatalog) ModelDefinitionFor(name string) (ModelDefinition, bool) {
 	canonicalName := strings.ToLower(strings.TrimSpace(name))
-	for _, definition := range BuiltInModelDefinitions() {
+	for _, definition := range catalog.ModelDefinitions() {
 		if definition.Name == canonicalName {
 			return definition.Clone(), true
 		}
@@ -216,7 +220,7 @@ func BuiltInModelDefinitionFor(name string) (ModelDefinition, bool) {
 }
 
 func builtInModelDefinition(name, source, backend, operationName string) ModelDefinition {
-	operation, _ := GenericOperationContract(operationName)
+	operation, _ := (GenericOperationCatalog{}).GenericOperationContract(operationName)
 	return ModelDefinition{
 		Name:       name,
 		Source:     source,

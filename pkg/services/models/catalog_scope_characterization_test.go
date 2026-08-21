@@ -301,7 +301,8 @@ func assertCatalogGetErrorIs(
 func TestGenericOperationContractsDescribeExactSlotShapes(t *testing.T) {
 	t.Parallel()
 
-	contracts := models.GenericOperationContracts()
+	operationCatalog := models.GenericOperationCatalog{}
+	contracts := operationCatalog.GenericOperationContracts()
 	wantNames := []string{models.OperationOMNI, models.OperationEMBED, models.OperationTTS, models.OperationASR}
 	if len(contracts) != len(wantNames) {
 		t.Fatalf("GenericOperationContracts length = %d, want %d", len(contracts), len(wantNames))
@@ -391,14 +392,15 @@ func assertOperationSlotList(
 func TestGenericOperationContractsAreDetached(t *testing.T) {
 	t.Parallel()
 
-	first, ok := models.GenericOperationContract(" omni ")
+	operationCatalog := models.GenericOperationCatalog{}
+	first, ok := operationCatalog.GenericOperationContract(" omni ")
 	if !ok {
 		t.Fatal("GenericOperationContract(omni) did not find OMNI")
 	}
 	first.Inputs[1].MediaTypes[0] = "mutated"
 	first.Outputs[0].ContentTypes[0] = "mutated"
 
-	second, ok := models.GenericOperationContract(models.OperationOMNI)
+	second, ok := operationCatalog.GenericOperationContract(models.OperationOMNI)
 	if !ok {
 		t.Fatal("GenericOperationContract(OMNI) did not find OMNI")
 	}
@@ -409,6 +411,9 @@ func TestGenericOperationContractsAreDetached(t *testing.T) {
 
 func TestBuiltInModelCatalogPublishesCanonicalDefinitions(t *testing.T) {
 	t.Parallel()
+
+	builtIns := models.BuiltInCatalog{}
+	operationCatalog := models.GenericOperationCatalog{}
 
 	want := []struct {
 		name      string
@@ -442,7 +447,7 @@ func TestBuiltInModelCatalogPublishesCanonicalDefinitions(t *testing.T) {
 		},
 	}
 
-	definitions := models.BuiltInModelDefinitions()
+	definitions := builtIns.ModelDefinitions()
 	if len(definitions) != len(want) {
 		t.Fatalf("BuiltInModelDefinitions length = %d, want %d", len(definitions), len(want))
 	}
@@ -455,13 +460,13 @@ func TestBuiltInModelCatalogPublishesCanonicalDefinitions(t *testing.T) {
 		if len(definition.Operations) != 1 || definition.Operations[0].Name != expected.operation {
 			t.Fatalf("definition[%d].Operations = %#v, want one %s operation", index, definition.Operations, expected.operation)
 		}
-		canonical, ok := models.GenericOperationContract(expected.operation)
+		canonical, ok := operationCatalog.GenericOperationContract(expected.operation)
 		if !ok || !reflect.DeepEqual(definition.Operations[0], canonical) {
 			t.Fatalf("definition[%d].Operations[0] = %#v, want canonical %s contract %#v", index, definition.Operations[0], expected.operation, canonical)
 		}
 	}
 
-	catalog := models.BuiltInModelCatalog()
+	catalog := builtIns.ModelCatalog()
 	if len(catalog) != len(want) {
 		t.Fatalf("BuiltInModelCatalog length = %d, want %d", len(catalog), len(want))
 	}
@@ -476,11 +481,13 @@ func TestBuiltInModelCatalogPublishesCanonicalDefinitions(t *testing.T) {
 func TestBuiltInModelCatalogReturnsDetachedDefinitions(t *testing.T) {
 	t.Parallel()
 
-	first := models.BuiltInModelCatalog()
+	builtIns := models.BuiltInCatalog{}
+
+	first := builtIns.ModelCatalog()
 	first["llm"].Operations[0].Inputs[0].Name = "mutated"
 	delete(first, "asr")
 
-	second := models.BuiltInModelCatalog()
+	second := builtIns.ModelCatalog()
 	if len(second) != 4 {
 		t.Fatalf("second catalog length = %d, want 4", len(second))
 	}
@@ -491,12 +498,12 @@ func TestBuiltInModelCatalogReturnsDetachedDefinitions(t *testing.T) {
 		t.Fatal("second catalog retained map mutation")
 	}
 
-	definition, ok := models.BuiltInModelDefinitionFor(" LLM ")
+	definition, ok := builtIns.ModelDefinitionFor(" LLM ")
 	if !ok {
 		t.Fatal("BuiltInModelDefinitionFor(LLM) did not find the built-in")
 	}
 	definition.Operations[0].Outputs[0].Name = "mutated"
-	fresh, ok := models.BuiltInModelDefinitionFor("llm")
+	fresh, ok := builtIns.ModelDefinitionFor("llm")
 	if !ok || fresh.Operations[0].Outputs[0].Name != "text" {
 		t.Fatalf("BuiltInModelDefinitionFor retained nested mutation: %#v", fresh)
 	}
