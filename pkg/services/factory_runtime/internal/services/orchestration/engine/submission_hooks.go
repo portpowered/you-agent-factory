@@ -96,7 +96,11 @@ func consumedTokenIDs(tokens []factorytoken.Token) []string {
 	return ids
 }
 
-func (e *FactoryEngine) processGeneratedSubmissionBatches(batches []workdomain.GeneratedSubmissionBatch, defaultSource string) (int, error) {
+func (e *FactoryEngine) processGeneratedSubmissionBatches(
+	batches []workdomain.GeneratedSubmissionBatch,
+	defaultSource string,
+	dedupeSeededReplay bool,
+) (int, error) {
 	total := 0
 	for i := range batches {
 		batch := batches[i]
@@ -108,6 +112,7 @@ func (e *FactoryEngine) processGeneratedSubmissionBatches(batches []workdomain.G
 		if e.skipGeneratedSubmissionRequest(requestID, source) {
 			continue
 		}
+		normalized = e.dedupeSeededReplaySubmissions(normalized, dedupeSeededReplay)
 		tokens, err := e.tokensFromGeneratedSubmissions(normalized)
 		if err != nil {
 			return total, err
@@ -120,6 +125,37 @@ func (e *FactoryEngine) processGeneratedSubmissionBatches(batches []workdomain.G
 		total += len(tokens)
 	}
 	return total, nil
+}
+
+// dedupeSeededReplaySubmissions removes only replay-generated Work already
+// represented by the restored marking. The replay hook keeps its recorded
+// source metadata, so hook identity—not source text—selects this rule.
+func (e *FactoryEngine) dedupeSeededReplaySubmissions(
+	normalized []workdomain.SubmitRequest,
+	dedupeSeededReplay bool,
+) []workdomain.SubmitRequest {
+	if !dedupeSeededReplay || len(e.seededRestoredWorkIDs) == 0 || len(normalized) == 0 {
+		return normalized
+	}
+	kept := normalized[:0]
+	for _, request := range normalized {
+		if _, seeded := e.seededRestoredWorkIDs[request.WorkID]; seeded {
+			continue
+		}
+		kept = append(kept, request)
+	}
+	return kept
+}
+
+func cloneWorkIDSet(source map[string]struct{}) map[string]struct{} {
+	if len(source) == 0 {
+		return nil
+	}
+	cloned := make(map[string]struct{}, len(source))
+	for workID := range source {
+		cloned[workID] = struct{}{}
+	}
+	return cloned
 }
 
 func generatedSubmissionSource(batch workdomain.GeneratedSubmissionBatch, defaultSource string) string {
@@ -167,7 +203,7 @@ func (e *FactoryEngine) tokensFromGeneratedSubmissions(normalized []workdomain.S
 
 func (e *FactoryEngine) recordGeneratedSubmissionRequest(requestID, source string, batch workdomain.GeneratedSubmissionBatch, normalized []workdomain.SubmitRequest) {
 	e.workRequests[requestID] = workdomain.WorkRequestSubmitResultFromNormalized(requestID, normalized, true)
-	if e.recordWorkRequest == nil {
+	if e.recordWorkRequest == nil || len(normalized) == 0 {
 		return
 	}
 	record := workdomain.WorkRequestRecordFromSubmitRequests(requestID, source, normalized)

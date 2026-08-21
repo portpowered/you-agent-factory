@@ -164,9 +164,10 @@ func seedRestoredWork(
 	restored *interfaces.FactoryWorldState,
 	now time.Time,
 	resourcePlaceIDs map[string]struct{},
-) {
+) map[string]struct{} {
+	seededWorkIDs := make(map[string]struct{})
 	if marking == nil || net == nil || restored == nil {
-		return
+		return seededWorkIDs
 	}
 	items := restoredWorkItems(restored)
 	placements := restoredWorkPlacements(restored, items)
@@ -194,12 +195,14 @@ func seedRestoredWork(
 			continue
 		}
 		marking.AddToken(token)
+		seededWorkIDs[token.Color.WorkID] = struct{}{}
 		registerRestoredWorkParent(marking, token, parentIDs)
 	}
 
 	for _, parentID := range sortedStringKeys(parentIDs) {
 		marking.CompleteParentChildRegistration(parentID)
 	}
+	return seededWorkIDs
 }
 
 func restoredWorkItems(restored *interfaces.FactoryWorldState) map[string]work.FactoryWorkItem {

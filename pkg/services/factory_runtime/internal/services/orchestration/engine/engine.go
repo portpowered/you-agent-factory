@@ -36,6 +36,7 @@ type FactoryEngine struct {
 	submitSignal          chan struct{}
 	submissionHook        *queuedSubmissionHook
 	submissionHooks       []factory.SubmissionHook
+	seededRestoredWorkIDs map[string]struct{}
 	submissionState       map[string]map[string]string
 	workRequests          map[string]workdomain.WorkRequestSubmitResult
 	projectionWaiters     map[string]chan struct{}
@@ -95,6 +96,7 @@ func NewFactoryEngine(
 	recordPetriMutations func([]interfaces.TokenMutationRecord) error,
 	automaticTicksPaused func() bool,
 	onResultBufferDrained func(int),
+	seededRestoredWorkIDs map[string]struct{},
 ) (*FactoryEngine, error) {
 	if clock == nil {
 		return nil, fmt.Errorf("Factory Runtime engine clock is required")
@@ -130,6 +132,7 @@ func NewFactoryEngine(
 		submitSignal:          make(chan struct{}, 1),
 		submissionHook:        newQueuedSubmissionHook(),
 		submissionHooks:       append([]factory.SubmissionHook(nil), submissionHooks...),
+		seededRestoredWorkIDs: cloneWorkIDSet(seededRestoredWorkIDs),
 		submissionState:       make(map[string]map[string]string),
 		workRequests:          make(map[string]workdomain.WorkRequestSubmitResult),
 		projectionWaiters:     make(map[string]chan struct{}),
@@ -688,7 +691,7 @@ func (e *FactoryEngine) applySubsystemResult(ctx context.Context, tickGroup subs
 		mutated = true
 	}
 	if len(result.GeneratedBatches) > 0 {
-		if _, err := e.processGeneratedSubmissionBatches(result.GeneratedBatches, "tick-result"); err != nil {
+		if _, err := e.processGeneratedSubmissionBatches(result.GeneratedBatches, "tick-result", false); err != nil {
 			return snapshot, mutated, fmt.Errorf("processing generated batches from tick-group %d: %w", tickGroup, err)
 		}
 		snapshot = e.runtimeState.Snapshot()
@@ -854,7 +857,11 @@ func (e *FactoryEngine) invokeSubmissionHooks(ctx context.Context) (int, bool, e
 					generated[i].Metadata.Source = hookName
 				}
 			}
-			count, err := e.processGeneratedSubmissionBatches(generated, hookName)
+			count, err := e.processGeneratedSubmissionBatches(
+				generated,
+				hookName,
+				hookName == factory.ReplaySubmissionHookName,
+			)
 			if err != nil {
 				return 0, false, fmt.Errorf("submission hook %q generated batches: %w", hookName, err)
 			}

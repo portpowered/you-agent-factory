@@ -233,7 +233,7 @@ func New(
 	sched := buildRuntimeScheduler(cfg)
 	effectiveLogger := logging.EnsureLogger(cfg.logger)
 	sharedTransformer, subs := buildRuntimeSubsystems(cfg, sched, effectiveLogger, newID)
-	marking := buildRuntimeMarking(cfg)
+	marking, seededRestoredWorkIDs := buildRuntimeMarking(cfg)
 	resultBuffer := buffers.NewTypedBuffer[workerexecution.WorkResult](defaultRuntimeBufferSize)
 	effectiveEventHistory := ensureEventHistory(cfg)
 	dispatchResultHook, dispatchPlan, err := configureRuntimeDispatch(
@@ -293,6 +293,7 @@ func New(
 		recordPetriMutations,
 		impl.automaticTicksPaused,
 		impl.observePostResumeBufferedDrain,
+		seededRestoredWorkIDs,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("create Factory Runtime engine: %w", err)
@@ -363,8 +364,12 @@ func firstDecisionEnvelopeService(
 	return services[0]
 }
 
-func buildRuntimeMarking(cfg *runtimeConfig) *petri.Marking {
+// buildRuntimeMarking returns both the fresh marking and the exact restored
+// Work identities that were inserted into it. Invalid or unoccupied historical
+// Work is deliberately absent from the returned set.
+func buildRuntimeMarking(cfg *runtimeConfig) (*petri.Marking, map[string]struct{}) {
 	marking := petri.NewMarking(cfg.net.ID)
+	seededRestoredWorkIDs := make(map[string]struct{})
 	resourcePlaceIDs := make(map[string]struct{}, len(cfg.net.Resources))
 	var constructionNow time.Time
 	hasConstructionNow := false
@@ -384,9 +389,9 @@ func buildRuntimeMarking(cfg *runtimeConfig) *petri.Marking {
 		if !hasConstructionNow {
 			constructionNow = cfg.clock.Now()
 		}
-		seedRestoredWork(marking, cfg.net, cfg.restoredWorldState, constructionNow, resourcePlaceIDs)
+		seededRestoredWorkIDs = seedRestoredWork(marking, cfg.net, cfg.restoredWorldState, constructionNow, resourcePlaceIDs)
 	}
-	return marking
+	return marking, seededRestoredWorkIDs
 }
 
 func ensureEventHistory(cfg *runtimeConfig) recordings.RuntimeLedger {

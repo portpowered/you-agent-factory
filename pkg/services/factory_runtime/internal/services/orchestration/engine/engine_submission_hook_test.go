@@ -6,6 +6,7 @@ import (
 	"time"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/orchestrators/petri"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/state"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/subsystems"
@@ -383,6 +384,102 @@ func TestSubmissionHook_AppliesMarkingMutationsAndRecordsSubmissionID(t *testing
 	if tokens := markingSnap.TokensInPlace("task:init"); len(tokens) != 2 {
 		t.Fatalf("task:init tokens = %d, want relocated seed + generated submission", len(tokens))
 	}
+}
+
+func TestSubmissionHook_DeduplicatesOnlySeededReplayWork(t *testing.T) {
+	newReplayBatch := func(requestID string, workIDs ...string) work.GeneratedSubmissionBatch {
+		works := make([]work.Work, 0, len(workIDs))
+		for _, workID := range workIDs {
+			works = append(works, work.Work{
+				Name:       workID,
+				WorkID:     workID,
+				WorkTypeID: "task",
+			})
+		}
+		return work.GeneratedSubmissionBatch{
+			Request: work.WorkRequest{
+				RequestID: requestID,
+				Type:      work.WorkRequestTypeFactoryRequestBatch,
+				Works:     works,
+			},
+			Metadata: work.GeneratedSubmissionBatchMetadata{Source: "external-submit"},
+		}
+	}
+
+	t.Run("seeded work is acknowledged while new replay work is materialized", func(t *testing.T) {
+		n := buildTestNet()
+		marking := petri.NewMarking("test-wf")
+		marking.AddToken(newMoveTestToken("token-seeded", "work-seeded", "task:init"))
+		hook := &testSubmissionHook{
+			name:     factoryruntime.ReplaySubmissionHookName,
+			priority: -100,
+			onTick: func(_ context.Context, _ interfaces.SubmissionHookContext[submissionSnapshot]) (interfaces.SubmissionHookResult, error) {
+				return interfaces.SubmissionHookResult{
+					GeneratedBatches: []work.GeneratedSubmissionBatch{
+						newReplayBatch("replay-request", "work-seeded", "work-replayed"),
+					},
+				}, nil
+			},
+		}
+		var inputWorkIDs []string
+		eng := newTestFactoryEngine(n, marking, nil,
+			WithSeededRestoredWorkIDs("work-seeded"),
+			WithSubmissionHook(hook),
+			WithWorkInputRecorder(func(_ int, request work.SubmitRequest, _ factorytoken.Token) {
+				inputWorkIDs = append(inputWorkIDs, request.WorkID)
+			}),
+		)
+
+		if err := eng.Tick(context.Background()); err != nil {
+			t.Fatalf("Tick() error: %v", err)
+		}
+		markingSnapshot := eng.GetMarking()
+		assertMarkingTokenIDs(t, markingSnapshot.TokensInPlace("task:init"), []string{"work-seeded", "work-replayed"}, "seeded replay marking")
+		assertStringSequence(t, inputWorkIDs, []string{"work-replayed"}, "seeded replay work inputs")
+	})
+
+	t.Run("replay without seeded work keeps materializing", func(t *testing.T) {
+		n := buildTestNet()
+		eng := newTestFactoryEngine(n, petri.NewMarking("test-wf"), nil,
+			WithSubmissionHook(&testSubmissionHook{
+				name:     factoryruntime.ReplaySubmissionHookName,
+				priority: -100,
+				onTick: func(_ context.Context, _ interfaces.SubmissionHookContext[submissionSnapshot]) (interfaces.SubmissionHookResult, error) {
+					return interfaces.SubmissionHookResult{GeneratedBatches: []work.GeneratedSubmissionBatch{
+						newReplayBatch("replay-request", "work-replayed"),
+					}}, nil
+				},
+			}),
+		)
+		if err := eng.Tick(context.Background()); err != nil {
+			t.Fatalf("Tick() error: %v", err)
+		}
+		markingSnapshot := eng.GetMarking()
+		assertMarkingTokenIDs(t, markingSnapshot.TokensInPlace("task:init"), []string{"work-replayed"}, "unseeded replay marking")
+	})
+
+	t.Run("other generated hooks are not deduplicated by Work ID", func(t *testing.T) {
+		n := buildTestNet()
+		marking := petri.NewMarking("test-wf")
+		marking.AddToken(newMoveTestToken("token-seeded", "work-seeded", "task:init"))
+		eng := newTestFactoryEngine(n, marking, nil,
+			WithSeededRestoredWorkIDs("work-seeded"),
+			WithSubmissionHook(&testSubmissionHook{
+				name:     "ordinary-generator",
+				priority: 1,
+				onTick: func(_ context.Context, _ interfaces.SubmissionHookContext[submissionSnapshot]) (interfaces.SubmissionHookResult, error) {
+					return interfaces.SubmissionHookResult{GeneratedBatches: []work.GeneratedSubmissionBatch{
+						newReplayBatch("ordinary-request", "work-seeded"),
+					}}, nil
+				},
+			}),
+		)
+		if err := eng.Tick(context.Background()); err != nil {
+			t.Fatalf("Tick() error: %v", err)
+		}
+		markingSnapshot := eng.GetMarking()
+		assertMarkingTokenIDs(t, markingSnapshot.TokensInPlace("task:init"), []string{"work-seeded", "work-seeded"}, "ordinary generated marking")
+	})
 }
 
 func assertStringSequence(t *testing.T, got, want []string, label string) {
