@@ -99,7 +99,7 @@ export interface FactoryEmulatorScenarioIssue {
 }
 
 export function isFactoryEmulatorScenarioCompatibilityIssueCode(
-  code: FactoryEmulatorScenarioIssueCode,
+  code: string,
 ): code is FactoryEmulatorScenarioCompatibilityIssueCode {
   return code === "unsupported_field";
 }

@@ -111,7 +111,7 @@ export interface FactoryVisualizationLayoutIssue {
 }
 
 export function isFactoryVisualizationLayoutCompatibilityIssueCode(
-  code: FactoryVisualizationLayoutIssueCode,
+  code: string,
 ): code is FactoryVisualizationLayoutCompatibilityIssueCode {
   return code === "unsupported_field";
 }
