@@ -10,23 +10,15 @@ import (
 )
 
 // NewService constructs the private replay owner from the lifecycle and
-// projection-query capabilities selected by the Recordings root.
+// projection-query capabilities and resume source selected by the Recordings
+// root.
 func NewService(
-	lifecycle recordinglifecycle.Service,
-	projection recordings.ProjectionService,
-) recordingsreplay.Service {
-	return replayservice.New(lifecycle, projection)
-}
-
-// NewServiceWithResumeSource constructs replay with the exact read-side
-// source and Factory snapshot decoder selected by the owning Recordings wire.
-func NewServiceWithResumeSource(
 	lifecycle recordinglifecycle.Service,
 	projection recordings.ProjectionService,
 	readFile recordings.RecordingReadFile,
 	decodeFactorySnapshot factorydefinitions.FactorySnapshotJSONDecoder,
 ) recordingsreplay.Service {
-	return replayservice.NewWithResumeSource(
+	return replayservice.New(
 		lifecycle,
 		projection,
 		readFile,

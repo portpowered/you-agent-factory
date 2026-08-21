@@ -393,7 +393,7 @@ func newServiceWithLifecycleEffects(
 		ProjectionService: projection,
 		Service:           lifecycle,
 		artifactsExport:   artifactsexportwire.NewService(lifecycle, publication),
-		replayService:     replaywire.NewServiceWithResumeSource(lifecycle, projection, readFile, decodeFactorySnapshot),
+		replayService:     replaywire.NewService(lifecycle, projection, readFile, decodeFactorySnapshot),
 		canonicalLedger:   canonicalledgerwire.NewService(ledger),
 		historicalQuery:   historicalQuery,
 		replayByKey:       make(map[string]*recordings.ReplayArtifact),

@@ -38,18 +38,9 @@ type Service struct {
 
 var _ recordingsreplay.Service = (*Service)(nil)
 
-// New constructs the private replay owner.
+// New constructs the private replay owner with the exact read-side source and
+// Factory snapshot decoder selected by the owning Recordings wire.
 func New(
-	lifecycle recordinglifecycle.Service,
-	projection recordings.ProjectionService,
-) *Service {
-	return NewWithResumeSource(lifecycle, projection, nil, nil)
-}
-
-// NewWithResumeSource constructs the private replay owner with the optional
-// read-side source used by explicit resume intent. Neutral replay remains
-// independent of this source and retains its finalized-only contract.
-func NewWithResumeSource(
 	lifecycle recordinglifecycle.Service,
 	projection recordings.ProjectionService,
 	readFile recordings.RecordingReadFile,

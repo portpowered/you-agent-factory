@@ -18,7 +18,7 @@ func TestReplayLoadPropagatesLifecycleFailures(t *testing.T) {
 
 	sentinel := errors.New("lifecycle unavailable")
 	lifecycle := snapshotLifecycleStub{err: sentinel}
-	replay := replayservice.New(lifecycle, projectionquerywire.NewService())
+	replay := replayservice.New(lifecycle, projectionquerywire.NewService(), nil, nil)
 
 	if _, err := replay.LoadReplayRecording(recordings.LoadReplayRecordingRequest{
 		RecordingID: "recording-lifecycle-failure",
@@ -43,7 +43,7 @@ func TestReplayResumeRejectsMissingArtifactSource(t *testing.T) {
 			},
 		},
 	}
-	replay := replayservice.NewWithResumeSource(
+	replay := replayservice.New(
 		lifecycle,
 		projectionquerywire.NewService(),
 		func(string) ([]byte, error) {
@@ -71,7 +71,7 @@ func TestReplayResumeRejectsCanonicalScopeMismatchAndUnsupportedKind(t *testing.
 	}
 
 	t.Run("scope mismatch", func(t *testing.T) {
-		replay := replayservice.NewWithResumeSource(
+		replay := replayservice.New(
 			lifecycle,
 			projectionquerywire.NewService(),
 			func(string) ([]byte, error) {
@@ -95,7 +95,7 @@ func TestReplayResumeRejectsCanonicalScopeMismatchAndUnsupportedKind(t *testing.
 			`"type":"UNSUPPORTED_REPLAY_KIND"`,
 			1,
 		)
-		replay := replayservice.NewWithResumeSource(
+		replay := replayservice.New(
 			lifecycle,
 			projectionquerywire.NewService(),
 			func(string) ([]byte, error) { return []byte(stream), nil },
@@ -119,7 +119,7 @@ func TestReplayObservePropagatesProjectionFailures(t *testing.T) {
 	}
 	replay := replayservice.New(lifecycle, failingProjectionStub{
 		err: errors.New("projection unavailable"),
-	})
+	}, nil, nil)
 	planned, err := replay.CreateReplayPlan(recordings.CreateReplayPlanRequest{
 		SchemaVersion: recordings.ReplayPlanSchemaV1,
 		Timing:        recordings.ReplayTimingOrderOnly,

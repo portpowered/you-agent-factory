@@ -120,7 +120,7 @@ func TestLoadReplayRecordingForResumeRecoversTruncatedEventStreamTail(t *testing
 	decodeFactorySnapshot := func(data []byte) (*factorydefinitions.FactorySnapshot, error) {
 		return factorydefinitions.NewFactorySnapshot(json.RawMessage(data))
 	}
-	replay := replayservice.NewWithResumeSource(
+	replay := replayservice.New(
 		lifecycle,
 		projectionquerywire.NewService(),
 		recordings.RecordingReadFile(readFile),
@@ -155,7 +155,7 @@ func TestLoadReplayRecordingForResumeRecoversTruncatedEventStreamTail(t *testing
 	}
 
 	completePrefix := strings.TrimSuffix(string(stream), "data: {\"id\":\"truncated\"\n")
-	strictReplay := replayservice.NewWithResumeSource(
+	strictReplay := replayservice.New(
 		lifecycle,
 		projectionquerywire.NewService(),
 		func(string) ([]byte, error) {
@@ -174,7 +174,7 @@ func TestLoadReplayRecordingForResumePreservesStreamReadFailures(t *testing.T) {
 	t.Parallel()
 
 	_, lifecycle, recordingID, _ := newReplayHarness(t)
-	replay := replayservice.NewWithResumeSource(
+	replay := replayservice.New(
 		lifecycle,
 		projectionquerywire.NewService(),
 		func(string) ([]byte, error) { return nil, errors.New("recording source unavailable") },
@@ -713,7 +713,7 @@ func newReplayHarness(t *testing.T) (
 	)
 	lifecycle := recordinglifecyclewire.NewService(planner, nil, nil)
 	projection := projectionquerywire.NewService()
-	replay := replayservice.New(lifecycle, projection)
+	replay := replayservice.New(lifecycle, projection, nil, nil)
 	scope := recordings.CanonicalEventScope{FactorySessionID: "session-replay-load-plan"}
 	bound, err := lifecycle.BindRecording(recordings.BindRecordingRequest{
 		RecordingID: "recording-replay-load-plan",
