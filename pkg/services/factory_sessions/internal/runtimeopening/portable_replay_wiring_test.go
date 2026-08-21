@@ -97,6 +97,93 @@ func TestCheckpointPortableReplayWiresPublicDurableExecutionHandoff(t *testing.T
 		}
 	})
 
+	t.Run("dispatch reads follow historical and live ownership", func(t *testing.T) {
+		sessionID := "session-js-checkpoint-001"
+		owner := &portableReplayRuntimeOwner{
+			restorable: true,
+			resumeResult: factorysessions.LifecycleControlResult{
+				SessionID: sessionID,
+				Outcome:   "RESUMED",
+			},
+			listResult: factorysessions.ListDispatchesResult{
+				SessionID: sessionID,
+				Dispatches: []factorysessions.DispatchSummary{{
+					ID:     "restored-dispatch",
+					Status: factorysessions.DispatchStatus("RUNNING"),
+				}},
+			},
+			queryResult: factorysessions.ListDispatchesResult{
+				SessionID: sessionID,
+				Dispatches: []factorysessions.DispatchSummary{{
+					ID:     "filtered-restored-dispatch",
+					Status: factorysessions.DispatchStatus("COMPLETED"),
+				}},
+			},
+		}
+		factory := newPortableCheckpointRuntimeOpeningFactory(t, owner)
+		opened, err := factory.OpenExecutionRuntime(t.Context(), portableCheckpointRuntimeOpeningRequest(t))
+		if err != nil {
+			t.Fatalf("OpenExecutionRuntime() error = %v", err)
+		}
+		var execution factorysessions.DurableExecutionService = opened.Execution
+
+		historical, err := execution.ListDispatches(t.Context(), sessionID)
+		if err != nil {
+			t.Fatalf("historical ListDispatches() error = %v", err)
+		}
+		if historical.SessionID != sessionID || historical.Dispatches == nil || len(historical.Dispatches) != 0 {
+			t.Fatalf("historical ListDispatches() = %#v, want a non-nil empty result", historical)
+		}
+
+		filteredHistorical, err := execution.QueryDispatches(t.Context(), factorysessions.DispatchQueryRequest{
+			SessionID: sessionID,
+			Filters: factorysessions.DispatchFilters{
+				Phase:  "omitted-phase",
+				Status: factorysessions.DispatchStatus("COMPLETED"),
+			},
+		})
+		if err != nil {
+			t.Fatalf("historical QueryDispatches() error = %v", err)
+		}
+		if filteredHistorical.SessionID != sessionID || filteredHistorical.Dispatches == nil || len(filteredHistorical.Dispatches) != 0 {
+			t.Fatalf("historical QueryDispatches() = %#v, want a non-nil empty result", filteredHistorical)
+		}
+		if owner.listCalls != 0 || owner.queryCalls != 0 {
+			t.Fatalf("historical dispatch reads reached live owner: list=%d query=%d", owner.listCalls, owner.queryCalls)
+		}
+
+		if _, err := execution.ListDispatches(t.Context(), "missing-session"); !errors.Is(err, factorysessions.ErrDurableSessionNotFound) {
+			t.Fatalf("unknown ListDispatches() error = %v, want ErrDurableSessionNotFound", err)
+		}
+		if _, err := execution.QueryDispatches(t.Context(), factorysessions.DispatchQueryRequest{SessionID: "missing-session"}); !errors.Is(err, factorysessions.ErrDurableSessionNotFound) {
+			t.Fatalf("unknown QueryDispatches() error = %v, want ErrDurableSessionNotFound", err)
+		}
+
+		if _, err := execution.Resume(t.Context(), sessionID, factorysessions.ControlRequest{RequestID: "resume-dispatches"}); err != nil {
+			t.Fatalf("Resume() error = %v", err)
+		}
+
+		live, err := execution.ListDispatches(t.Context(), sessionID)
+		if err != nil {
+			t.Fatalf("live ListDispatches() error = %v", err)
+		}
+		if !reflect.DeepEqual(live, owner.listResult) || owner.listCalls != 1 {
+			t.Fatalf("live ListDispatches() = %#v, calls = %d, want %#v and one live call", live, owner.listCalls, owner.listResult)
+		}
+
+		queryRequest := factorysessions.DispatchQueryRequest{
+			SessionID: sessionID,
+			Filters:   factorysessions.DispatchFilters{Status: factorysessions.DispatchStatus("COMPLETED")},
+		}
+		liveFiltered, err := execution.QueryDispatches(t.Context(), queryRequest)
+		if err != nil {
+			t.Fatalf("live QueryDispatches() error = %v", err)
+		}
+		if !reflect.DeepEqual(liveFiltered, owner.queryResult) || owner.queryCalls != 1 || !reflect.DeepEqual(owner.queryRequest, queryRequest) {
+			t.Fatalf("live QueryDispatches() = %#v, calls = %d, request = %#v; want %#v, one call, and %#v", liveFiltered, owner.queryCalls, owner.queryRequest, owner.queryResult, queryRequest)
+		}
+	})
+
 	t.Run("typed restoration failure is forwarded", func(t *testing.T) {
 		want := &factorysessions.DurableResumeError{
 			Outcome:   factorysessions.DurableResumeOutcomeCorruptedPersistence,
@@ -227,11 +314,16 @@ type portableReplayRuntimeOwner struct {
 	resumeErr               error
 	pauseResult             factorysessions.LifecycleControlResult
 	pauseErr                error
+	listResult              factorysessions.ListDispatchesResult
+	queryResult             factorysessions.ListDispatchesResult
+	queryRequest            factorysessions.DispatchQueryRequest
 
 	probeCalls             int
 	resumeInterruptedCalls int
 	resumeCalls            int
 	pauseCalls             int
+	listCalls              int
+	queryCalls             int
 }
 
 func (owner *portableReplayRuntimeOwner) HasRestorableState(context.Context, string) (bool, error) {
@@ -264,6 +356,23 @@ func (owner *portableReplayRuntimeOwner) Pause(
 ) (factorysessions.LifecycleControlResult, error) {
 	owner.pauseCalls++
 	return owner.pauseResult, owner.pauseErr
+}
+
+func (owner *portableReplayRuntimeOwner) ListDispatches(
+	context.Context,
+	string,
+) (factorysessions.ListDispatchesResult, error) {
+	owner.listCalls++
+	return owner.listResult, nil
+}
+
+func (owner *portableReplayRuntimeOwner) QueryDispatches(
+	_ context.Context,
+	request factorysessions.DispatchQueryRequest,
+) (factorysessions.ListDispatchesResult, error) {
+	owner.queryCalls++
+	owner.queryRequest = request
+	return owner.queryResult, nil
 }
 
 var _ durableexecution.Service = (*portableReplayRuntimeOwner)(nil)
