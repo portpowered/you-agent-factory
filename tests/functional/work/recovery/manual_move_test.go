@@ -51,6 +51,7 @@ func TestFailedCascadeCanBeRecoveredByPublicWorkMove(t *testing.T) {
 
 	requiredState := "complete"
 	workTypeName := "task"
+	targetWorkName := "parent"
 	support.UpsertDefaultSessionWorkRequest(t, server.URL(), factoryapi.WorkRequest{
 		RequestId: requestID,
 		Type:      factoryapi.WorkRequestTypeFactoryRequestBatch,
@@ -70,10 +71,10 @@ func TestFailedCascadeCanBeRecoveredByPublicWorkMove(t *testing.T) {
 				Payload:      map[string]string{"role": "child"},
 			},
 		},
-		Relations: &[]factoryapi.Relation{{
+		Relations: &[]factoryapi.WorkRequestRelation{{
 			Type:           factoryapi.RelationTypeDependsOn,
 			SourceWorkName: "child",
-			TargetWorkName: "parent",
+			TargetWorkName: &targetWorkName,
 			RequiredState:  &requiredState,
 		}},
 	})

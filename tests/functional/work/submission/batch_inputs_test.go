@@ -384,6 +384,7 @@ func TestWorkBatchDependencyOrderingNormalizesRuntimeWork(t *testing.T) {
 	)
 	requiredState := "complete"
 	workTypeName := batchInputsWorkType
+	targetWorkName := "first"
 	request := factoryapi.WorkRequest{
 		RequestId: "request-batch-dependency",
 		Type:      factoryapi.WorkRequestTypeFactoryRequestBatch,
@@ -401,10 +402,10 @@ func TestWorkBatchDependencyOrderingNormalizesRuntimeWork(t *testing.T) {
 				Payload:      map[string]string{"step": "second"},
 			},
 		},
-		Relations: &[]factoryapi.Relation{{
+		Relations: &[]factoryapi.WorkRequestRelation{{
 			Type:           factoryapi.RelationTypeDependsOn,
 			SourceWorkName: "second",
-			TargetWorkName: "first",
+			TargetWorkName: &targetWorkName,
 			RequiredState:  &requiredState,
 		}},
 	}

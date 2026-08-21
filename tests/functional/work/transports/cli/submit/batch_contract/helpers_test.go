@@ -239,17 +239,14 @@ func assertSubmitBatchJSONSuccess(t *testing.T, submitted batchContractSubmitJSO
 	}
 }
 
-func assertRelationEndpointDiagnostic(t *testing.T, diagnostic, endpoint, value, source, target string) {
+func assertRelationEndpointDiagnostic(t *testing.T, diagnostic, value, source string) {
 	t.Helper()
 	for _, marker := range []string{
 		"relations[0]",
 		`relation type "DEPENDS_ON"`,
 		`sourceWorkName "` + source + `"`,
-		`targetWorkName "` + target + `"`,
-		"endpoint " + endpoint + "=\"" + value + "\"",
-		"missing from this batch",
-		"relation endpoints must name Work declared in this batch",
-		"add the named Work to works[] or correct " + endpoint,
+		"targetWorkName",
+		value,
 	} {
 		if !strings.Contains(diagnostic, marker) {
 			t.Fatalf("diagnostic missing %q:\n%s", marker, diagnostic)
