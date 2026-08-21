@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	"github.com/portpowered/infinite-you/pkg/services/work/transports/cli/climanifest"
 )
 
 func TestValidateAcceptsDecodedExplicitJSONYAMLAndYMLSources(t *testing.T) {
@@ -268,6 +269,133 @@ func TestValidate_JSONIncludesTaxonomySummary(t *testing.T) {
 	if len(payload.Targets) == 0 || payload.Targets[0].Code != "workstation-worker-behavior-compatibility" {
 		t.Fatalf("targets = %#v, want taxonomy compatibility target", payload.Targets)
 	}
+}
+
+func TestValidate_RejectsReservedInvocationFlagWithActionableCompositionTarget(t *testing.T) {
+	path, loadSource := validateFixture(reservedInvocationFlagFactoryJSON("model"))
+
+	var out strings.Builder
+	err := ValidateWithServices(
+		ValidateConfig{
+			Context:     context.Background(),
+			Path:        path,
+			Output:      &out,
+			RunManifest: reservedInvocationManifest(),
+		},
+		testTopologyFactoryDefinitionValidator(factorydefinitions.ValidationResult{}),
+		loadSource,
+	)
+	if err == nil {
+		t.Fatal("expected reserved invocation flag to fail validation")
+	}
+	for _, want := range []string{
+		"Factory validation failed.",
+		"cli.composition.long-name-collision",
+		"model",
+		"you.run.flag.model",
+		"child-model",
+		"worker-provider",
+		"research-model",
+	} {
+		if !strings.Contains(out.String(), want) && !strings.Contains(err.Error(), want) {
+			t.Fatalf("validation diagnostic missing %q:\noutput=%s\nerror=%v", want, out.String(), err)
+		}
+	}
+}
+
+func TestValidate_JSONReportsReservedInvocationFlagIdentityAndPath(t *testing.T) {
+	path, loadSource := validateFixture(reservedInvocationFlagFactoryJSON("model"))
+
+	var out bytes.Buffer
+	err := ValidateWithServices(
+		ValidateConfig{
+			Context:     context.Background(),
+			Path:        path,
+			JSON:        true,
+			Output:      &out,
+			RunManifest: reservedInvocationManifest(),
+		},
+		testTopologyFactoryDefinitionValidator(factorydefinitions.ValidationResult{}),
+		loadSource,
+	)
+	if err == nil {
+		t.Fatal("expected reserved invocation flag to fail JSON validation")
+	}
+
+	var payload struct {
+		Valid   bool `json:"valid"`
+		Targets []struct {
+			Code    string  `json:"code"`
+			Message string  `json:"message"`
+			Path    *string `json:"path"`
+			Subject struct {
+				ID string `json:"id"`
+			} `json:"subject"`
+		} `json:"targets"`
+	}
+	if err := json.Unmarshal(out.Bytes(), &payload); err != nil {
+		t.Fatalf("Unmarshal validation JSON: %v\n%s", err, out.String())
+	}
+	if payload.Valid || len(payload.Targets) != 1 {
+		t.Fatalf("validation payload = %#v, want one blocking target", payload)
+	}
+	target := payload.Targets[0]
+	if target.Code != "cli.composition.long-name-collision" {
+		t.Fatalf("target code = %q, want stable composition code", target.Code)
+	}
+	if target.Path == nil || *target.Path != "/invocationSignature/parameters/0/externalName" {
+		t.Fatalf("target path = %#v, want invocation externalName path", target.Path)
+	}
+	if target.Subject.ID != "model" || !strings.Contains(target.Message, "you.run.flag.model") {
+		t.Fatalf("target identity = %#v, want Factory parameter model and reserved owner", target)
+	}
+}
+
+func TestValidate_AcceptsPrefixedInvocationFlag(t *testing.T) {
+	path, loadSource := validateFixture(reservedInvocationFlagFactoryJSON("child-model"))
+
+	var out strings.Builder
+	if err := ValidateWithServices(
+		ValidateConfig{
+			Context:     context.Background(),
+			Path:        path,
+			Output:      &out,
+			RunManifest: reservedInvocationManifest(),
+		},
+		testTopologyFactoryDefinitionValidator(factorydefinitions.ValidationResult{}),
+		loadSource,
+	); err != nil {
+		t.Fatalf("prefixed invocation flag validation: %v\noutput=%s", err, out.String())
+	}
+	if !strings.Contains(out.String(), "Factory validation passed.") {
+		t.Fatalf("validation output = %q, want success", out.String())
+	}
+}
+
+func reservedInvocationFlagFactoryJSON(externalName string) string {
+	return fmt.Sprintf(`{
+  "name": "reserved-invocation-flag",
+  "invocationSignature": {
+    "parameters": [{
+      "name": "model",
+      "externalName": %q,
+      "bindings": [{"kind": "NAMED"}]
+    }]
+  }
+}`, externalName)
+}
+
+func reservedInvocationManifest() climanifest.Manifest {
+	return climanifest.Manifest{Commands: map[string]climanifest.Command{
+		"you": {ID: "you", Name: "you"},
+		"you.run": {
+			ID:   "you.run",
+			Name: "run",
+			Flags: map[string]climanifest.Flag{
+				"model": {ID: "you.run.flag.model", Long: "model"},
+			},
+		},
+	}}
 }
 
 func validateFixture(

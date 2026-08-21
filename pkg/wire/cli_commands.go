@@ -727,10 +727,17 @@ func provideSelectedFactorySignatureCompletionOperation(
 func provideValidateFactoryOperation(
 	validator factorydefinitions.SubmittedDefinitionValidationOperation,
 	loadSource factorydefinitions.AuthoredFactorySourceLoader,
-) cli.ValidateFactoryOperation {
-	return func(config factorycli.ValidateConfig) error {
-		return factorycli.ValidateWithServices(config, validator, loadSource)
+) (cli.ValidateFactoryOperation, error) {
+	manifest, err := generated.RunSubmitFamilyManifest()
+	if err != nil {
+		return nil, fmt.Errorf("load run CLI manifest for Factory validation: %w", err)
 	}
+	return func(config factorycli.ValidateConfig) error {
+		if len(config.RunManifest.Commands) == 0 {
+			config.RunManifest = manifest
+		}
+		return factorycli.ValidateWithServices(config, validator, loadSource)
+	}, nil
 }
 
 func provideCreateFactoryFromFileOperation(

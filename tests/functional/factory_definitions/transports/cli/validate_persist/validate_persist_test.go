@@ -24,6 +24,33 @@ const (
 	persistThenRunPrimaryResult = "persist-from-file run COMPLETE"
 )
 
+const reservedInvocationFlagFactory = `{
+  "name": "reserved-invocation-flag",
+  "workTypes": [{
+    "name": "task",
+    "states": [
+      {"name": "init", "type": "INITIAL"},
+      {"name": "complete", "type": "TERMINAL"},
+      {"name": "failed", "type": "FAILED"}
+    ]
+  }],
+  "invocationSignature": {
+    "parameters": [{
+      "name": "model",
+      "externalName": "model",
+      "bindings": [{"kind": "NAMED"}]
+    }]
+  },
+  "workers": [{"name": "mock-worker"}],
+  "workstations": [{
+    "name": "process-task",
+    "worker": "mock-worker",
+    "inputs": [{"workType": "task", "state": "init"}],
+    "outputs": [{"workType": "task", "state": "complete"}],
+    "onFailure": [{"workType": "task", "state": "failed"}]
+  }]
+}`
+
 const invalidFactoryWithDanglingWorker = `{
 	"name":"invalid-validate-persist",
 	"workTypes":[{
@@ -171,6 +198,73 @@ func TestFactoryValidateAcceptsSupportedTwoInputJoinArity(t *testing.T) {
 	}
 	if !strings.Contains(inputs.Stdout(), "Factory validation passed.") {
 		t.Fatalf("factory validation output = %q", inputs.Stdout())
+	}
+}
+
+// TestFactoryValidateRejectsReservedInvocationFlag proves the public CLI
+// validation path uses the generated run manifest composition and gives a
+// Factory author a concrete correction before runtime startup.
+func TestFactoryValidateRejectsReservedInvocationFlag(t *testing.T) {
+	tests := []struct {
+		name       string
+		external   string
+		wantErr    bool
+		wantOutput []string
+	}{
+		{
+			name:     "reserved model",
+			external: "model",
+			wantErr:  true,
+			wantOutput: []string{
+				"Factory validation failed.",
+				"cli.composition.long-name-collision",
+				"you.run.flag.model",
+				"child-model",
+			},
+		},
+		{
+			name:     "prefixed model",
+			external: "child-model",
+			wantOutput: []string{
+				"Factory validation passed.",
+			},
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			source := strings.Replace(
+				reservedInvocationFlagFactory,
+				`"externalName": "model"`,
+				`"externalName": "`+test.external+`"`,
+				1,
+			)
+			sourcePath := writeFactoryFile(t, source)
+			inputs := support.FakeInputs(t.Context(), []string{
+				"you", "factory", "config", "validate", sourcePath,
+			})
+			inputs.Input.WorkingDirectory = filepath.Dir(sourcePath)
+			err := support.BuildProcess(t, serviceedges.Edges{}).Execute(inputs.Input)
+			if test.wantErr && err == nil {
+				t.Fatal("Process.Execute(factory config validate) error = nil, want rejection")
+			}
+			if !test.wantErr && err != nil {
+				t.Fatalf(
+					"Process.Execute(factory config validate) error = %v\nstdout:\n%s\nstderr:\n%s",
+					err,
+					inputs.Stdout(),
+					inputs.Stderr(),
+				)
+			}
+			diagnostic := inputs.Stdout() + "\n" + inputs.Stderr()
+			if err != nil {
+				diagnostic += "\n" + err.Error()
+			}
+			for _, want := range test.wantOutput {
+				if !strings.Contains(diagnostic, want) {
+					t.Fatalf("validation diagnostic missing %q:\n%s", want, diagnostic)
+				}
+			}
+		})
 	}
 }
 

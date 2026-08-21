@@ -472,7 +472,10 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	v70 := provideCurrentFactoryPointerReader(namedPathResolver)
 	listFactoriesOperation := provideListFactoriesOperation(v3, v70)
 	v71 := provideSubmittedDefinitionValidationOperation(validationOperations)
-	validateFactoryOperation := provideValidateFactoryOperation(v71, authoredFactorySourceLoader)
+	validateFactoryOperation, err := provideValidateFactoryOperation(v71, authoredFactorySourceLoader)
+	if err != nil {
+		return nil, err
+	}
 	v72 := provideNamedFactoryPersistenceOperation(v35)
 	createFactoryFromFileOperation := provideCreateFactoryFromFileOperation(v72, authoredFactorySourceLoader)
 	replaceFactoryCurrentOperation := provideReplaceFactoryCurrentOperation(wireStandardCLIHTTPProtocol)

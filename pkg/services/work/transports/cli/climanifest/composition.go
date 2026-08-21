@@ -441,9 +441,17 @@ func collisionCode(kind string) string {
 
 func newCompositionDiagnostic(code, path, value, staticOwner, factoryOwner string) CompositionDiagnostic {
 	return CompositionDiagnostic{
-		Code:         code,
-		Path:         path,
-		Message:      fmt.Sprintf("Factory input %q collides with reserved static owner %q on %q", factoryOwner, staticOwner, value),
+		Code: code,
+		Path: path,
+		Message: fmt.Sprintf(
+			"Factory input %q collides with reserved static owner %q on %q; use a prefixed Factory name such as %q, %q, or %q",
+			factoryOwner,
+			staticOwner,
+			value,
+			"child-model",
+			"worker-provider",
+			"research-model",
+		),
 		StaticOwner:  staticOwner,
 		FactoryOwner: factoryOwner,
 	}
