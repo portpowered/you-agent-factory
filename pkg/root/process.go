@@ -65,6 +65,43 @@ func RuntimeMetricsQueryFromProcess(process any) factoryvisualization.RuntimeMet
 	return query
 }
 
+// ExecutionRuntimeOpening is the root-owned, narrow durable-execution opening
+// view carried by a canonical application process.
+type ExecutionRuntimeOpening interface {
+	OpenExecutionRuntime(context.Context, factorysessions.ExecutionRuntimeOpeningRequest) (factorysessions.OpenedExecutionRuntime, error)
+}
+
+type executionRuntimeOpeningAdapter struct {
+	opening factorysessions.ExecutionRuntimeOpeningFunc
+}
+
+func (adapter executionRuntimeOpeningAdapter) OpenExecutionRuntime(
+	ctx context.Context,
+	request factorysessions.ExecutionRuntimeOpeningRequest,
+) (factorysessions.OpenedExecutionRuntime, error) {
+	return adapter.opening(ctx, request)
+}
+
+// ExecutionRuntimeOpeningFromProcess returns the canonical Factory Sessions
+// durable-execution opening composed for a root process. The process remains
+// opaque to callers; only the narrow service-owned opening contract crosses
+// this root boundary.
+func ExecutionRuntimeOpeningFromProcess(process any) ExecutionRuntimeOpening {
+	applicationProcess, ok := process.(*initializerapplication.Process)
+	if !ok || applicationProcess == nil {
+		return nil
+	}
+	capability := applicationProcess.ExecutionRuntimeOpening()
+	if capability == nil {
+		return nil
+	}
+	opening, _ := capability.ExecutionRuntimeOpening().(factorysessions.ExecutionRuntimeOpeningFunc)
+	if opening == nil {
+		return nil
+	}
+	return executionRuntimeOpeningAdapter{opening: opening}
+}
+
 // BuildStatelessWorkers constructs the standalone Workers Execute root. It
 // intentionally does not construct or open a Factory Runtime or Factory
 // Session, so callers can submit one detached attempt directly.

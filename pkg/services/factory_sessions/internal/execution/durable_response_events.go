@@ -34,6 +34,8 @@ func (s *JavaScriptRuntimeService) ensureSessionResponseEvents(sessionID string,
 	if s == nil || state == nil {
 		return errors.New("durable response-event store is unavailable")
 	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	if state.responseEvents != nil {
 		return nil
 	}

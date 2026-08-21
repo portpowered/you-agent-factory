@@ -375,12 +375,13 @@ func (s *JavaScriptRuntimeService) StartAsync(ctx context.Context, req StartRequ
 	reserved.state.startRequest = cloneStartRequest(normalized)
 	reserved.state.resolvedSource = resolved
 	reserved.state.sourceContent = sourceContent
+	s.mu.Unlock()
 	if err := s.ensureSessionResponseEventsIfNeeded(reserved.state); err != nil {
-		s.mu.Unlock()
 		return AsyncStartResult{}, err
 	}
+	s.mu.RLock()
 	startState := cloneRuntimeSessionState(reserved.state)
-	s.mu.Unlock()
+	s.mu.RUnlock()
 	go s.runAsyncSession(runCtx, reserved.state.session.SessionID, normalized, resolved, sourceContent, policyResolution, startedAt)
 
 	result := s.asyncStartFromState(startState)
@@ -437,12 +438,9 @@ func (s *JavaScriptRuntimeService) startSync(
 	}
 	stopObservingFactoryEvents := s.observeFactoryEvents(reserved.state, normalized.EventConsumer)
 	defer stopObservingFactoryEvents()
-	s.mu.Lock()
 	if err := s.ensureSessionResponseEventsIfNeeded(reserved.state); err != nil {
-		s.mu.Unlock()
 		return SyncStartResult{}, err
 	}
-	s.mu.Unlock()
 
 	if hasSyncWait {
 		return s.startWaitingSyncSession(

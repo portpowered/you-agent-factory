@@ -34,6 +34,7 @@ type Process struct {
 	workerReader   processcontract.WorkerRecordingReader
 	detachedOps    processcontract.DetachedOperationsCapability
 	runtimeMetrics processcontract.RuntimeMetricsQueryCapability
+	executionOpen  processcontract.ExecutionRuntimeOpeningCapability
 }
 
 func NewProcess(
@@ -45,6 +46,7 @@ func NewProcess(
 	workerReader processcontract.WorkerRecordingReader,
 	detachedOps processcontract.DetachedOperationsCapability,
 	runtimeMetrics processcontract.RuntimeMetricsQueryCapability,
+	executionOpen processcontract.ExecutionRuntimeOpeningCapability,
 ) (*Process, error) {
 	if providers == nil {
 		return nil, fmt.Errorf("construct application process: provider registry is required")
@@ -61,6 +63,7 @@ func NewProcess(
 		workerReader:   workerReader,
 		detachedOps:    detachedOps,
 		runtimeMetrics: runtimeMetrics,
+		executionOpen:  executionOpen,
 	}, nil
 }
 
@@ -120,6 +123,15 @@ func (p *Process) RuntimeMetricsQuery() processcontract.RuntimeMetricsQueryCapab
 		return nil
 	}
 	return p.runtimeMetrics
+}
+
+// ExecutionRuntimeOpening returns the canonical Factory Sessions durable
+// execution opening capability composed for this process.
+func (p *Process) ExecutionRuntimeOpening() processcontract.ExecutionRuntimeOpeningCapability {
+	if p == nil {
+		return nil
+	}
+	return p.executionOpen
 }
 
 // Execute constructs and runs one fresh command tree using invocation-local

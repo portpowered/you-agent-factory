@@ -225,7 +225,7 @@ func newProcessForTest(
 	initializer startupcli.Initializer,
 ) *Process {
 	t.Helper()
-	process, err := NewProcess(factory, initializer, processTestProviderRegistry{}, processTestLifecycle{}, processTestACPServer{}, nil, nil, nil)
+	process, err := NewProcess(factory, initializer, processTestProviderRegistry{}, processTestLifecycle{}, processTestACPServer{}, nil, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("NewProcess() error = %v", err)
 	}
@@ -235,7 +235,7 @@ func newProcessForTest(
 func TestProcessRequiresAndExposesProviderRegistry(t *testing.T) {
 	t.Parallel()
 
-	if process, err := NewProcess(nil, nil, nil, nil, nil, nil, nil, nil); err == nil || process != nil {
+	if process, err := NewProcess(nil, nil, nil, nil, nil, nil, nil, nil, nil); err == nil || process != nil {
 		t.Fatalf("NewProcess(nil registry) = (%#v, %v), want construction failure", process, err)
 	}
 	if registry := (*Process)(nil).ProviderRegistry(); registry != nil {
@@ -243,7 +243,7 @@ func TestProcessRequiresAndExposesProviderRegistry(t *testing.T) {
 	}
 
 	want := processTestProviderRegistry{}
-	process, err := NewProcess(nil, nil, want, processTestLifecycle{}, nil, nil, nil, nil)
+	process, err := NewProcess(nil, nil, want, processTestLifecycle{}, nil, nil, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("NewProcess() error = %v", err)
 	}
@@ -260,7 +260,7 @@ func TestProcessExposesACPServer(t *testing.T) {
 	}
 
 	want := processTestACPServer{}
-	process, err := NewProcess(nil, nil, processTestProviderRegistry{}, processTestLifecycle{}, want, nil, nil, nil)
+	process, err := NewProcess(nil, nil, processTestProviderRegistry{}, processTestLifecycle{}, want, nil, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("NewProcess() error = %v", err)
 	}
@@ -277,7 +277,7 @@ func TestProcessExposesWorkerRecordingReader(t *testing.T) {
 	}
 
 	want := processTestWorkerRecordingReader{}
-	process, err := NewProcess(nil, nil, processTestProviderRegistry{}, processTestLifecycle{}, nil, want, nil, nil)
+	process, err := NewProcess(nil, nil, processTestProviderRegistry{}, processTestLifecycle{}, nil, want, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("NewProcess() error = %v", err)
 	}
@@ -294,7 +294,7 @@ func TestProcessExposesRuntimeMetricsQuery(t *testing.T) {
 	}
 
 	want := processTestRuntimeMetricsQueryCapability{}
-	process, err := NewProcess(nil, nil, processTestProviderRegistry{}, processTestLifecycle{}, nil, nil, nil, want)
+	process, err := NewProcess(nil, nil, processTestProviderRegistry{}, processTestLifecycle{}, nil, nil, nil, want, nil)
 	if err != nil {
 		t.Fatalf("NewProcess() error = %v", err)
 	}
@@ -311,7 +311,7 @@ func TestProcessExposesDetachedOperations(t *testing.T) {
 	}
 
 	want := processTestDetachedOperationsCapability{}
-	process, err := NewProcess(nil, nil, processTestProviderRegistry{}, processTestLifecycle{}, nil, nil, want, nil)
+	process, err := NewProcess(nil, nil, processTestProviderRegistry{}, processTestLifecycle{}, nil, nil, want, nil, nil)
 	if err != nil {
 		t.Fatalf("NewProcess() error = %v", err)
 	}
@@ -326,7 +326,7 @@ func TestProcessCloseUsesInjectedLifecycle(t *testing.T) {
 	if err := (*Process)(nil).Close(context.Background()); err != nil {
 		t.Fatalf("nil Process.Close() error = %v, want nil", err)
 	}
-	process, err := NewProcess(nil, nil, processTestProviderRegistry{}, processTestLifecycle{}, nil, nil, nil, nil)
+	process, err := NewProcess(nil, nil, processTestProviderRegistry{}, processTestLifecycle{}, nil, nil, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("NewProcess() error = %v", err)
 	}

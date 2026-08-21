@@ -5,7 +5,13 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
+	"net/http"
+	"net/url"
 	"os"
+	"path/filepath"
+	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -16,6 +22,7 @@ import (
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -32,6 +39,225 @@ func TestPortableReplayInspectionExecutesThroughRootProcess(t *testing.T) {
 
 	output := functionalExecutePortableReplay(t, process)
 	functionalAssertPortableReplayInspection(t, output, calls)
+}
+
+// TestPortableReplayResumeProbeUsesRootExecutionOpening proves the
+// checkpoint-bearing replay reaches the canonical Factory Sessions durable
+// owner through the root-composed opening. A public checkpoint summary alone
+// must still produce the non-live replay rejection when no durable snapshot is
+// restorable.
+func TestPortableReplayResumeProbeUsesRootExecutionOpening(t *testing.T) {
+	sessionID := "dur-sess-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+	payload := functionalPortableReplayPayloadForSession(t, sessionID)
+	calls := &functionalReplayLiveConstructionCalls{}
+	home := t.TempDir()
+	projectRoot := t.TempDir()
+	process := support.BuildProcess(t, functionalPortableReplayEdges(t, payload, calls))
+	opening := root.ExecutionRuntimeOpeningFromProcess(process)
+	if opening == nil {
+		t.Fatal("ExecutionRuntimeOpeningFromProcess() returned nil")
+	}
+	opened, err := opening.OpenExecutionRuntime(t.Context(), factorysessions.ExecutionRuntimeOpeningRequest{
+		ProjectRoot:       projectRoot,
+		SystemConfigHome:  home,
+		FactorySessionID:  sessionID,
+		ReplayPath:        "recording.json",
+		PersistencePolicy: factorysessions.PersistencePolicyDisabled,
+	})
+	if err != nil {
+		t.Fatalf("OpenExecutionRuntime() error = %v", err)
+	}
+	if opened.Close == nil {
+		t.Fatal("OpenExecutionRuntime() close hook = nil")
+	}
+	t.Cleanup(func() {
+		if err := opened.Close(); err != nil {
+			t.Errorf("close replay execution runtime: %v", err)
+		}
+	})
+	if opened.Execution == nil {
+		t.Fatal("OpenExecutionRuntime() execution owner = nil")
+	}
+	if _, err := opened.Execution.ResumeInterruptedSession(
+		t.Context(),
+		sessionID,
+		factorysessions.ResumeSessionRequest{RequestID: "resume-summary-only"},
+	); err == nil {
+		t.Fatal("ResumeInterruptedSession() error = nil, want non-live replay rejection")
+	}
+}
+
+// TestPortableReplayResumeHandoffUsesRootExecutionOpening proves a real
+// interrupted durable snapshot makes the portable replay owner assemble and
+// delegate to the live execution owner. The resumed owner then answers the
+// dispatch read, which keeps the handoff observable at the public durable
+// boundary.
+func TestPortableReplayResumeHandoffUsesRootExecutionOpening(t *testing.T) {
+	const workflowName = "resumable-two-step-fake-children"
+	projectRoot, home, sessionID := functionalInterruptPortableReplay(t, workflowName)
+	functionalResumePortableReplay(t, projectRoot, home, sessionID, workflowName)
+}
+
+func functionalInterruptPortableReplay(t *testing.T, workflowName string) (string, string, string) {
+	projectRoot := functionalWriteResumableWorkflowFixture(t, workflowName)
+	commandRunner := newFunctionalReplayHandoffCommandRunner()
+	home := t.TempDir()
+	env := append(os.Environ(), "HOME="+home, "USERPROFILE="+home)
+	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir: projectRoot,
+		Env:        env,
+		Edges:      serviceedges.Edges{ProviderCommandRunner: commandRunner},
+	})
+	started := functionalPostJSON[factoryapi.FactorySessionExecutionResponse](
+		t,
+		strings.TrimSuffix(server.URL(), "/")+"/factory-sessions/async",
+		factoryapi.FactorySessionExecutionRequest{
+			RequestId: "portable-replay-handoff-start",
+			Source: factoryapi.FactorySessionExecutionSource{
+				Kind:         factoryapi.FactorySessionExecutionSourceKindWorkflowName,
+				WorkflowName: functionalStringPointer(workflowName),
+			},
+			Args: &map[string]any{"subject": "workflows"},
+		},
+	)
+	if started.SessionId == "" {
+		t.Fatal("started session id is empty")
+	}
+	responseStream := support.OpenFactoryResponseEventStreamAt(
+		t,
+		support.SessionResponseEventsURL(server.URL(), started.SessionId),
+	)
+	commandRunner.waitForSecondCall(t)
+	reason := "portable replay handoff interrupt"
+	functionalPostJSON[factoryapi.FactorySessionLifecycleControlResponse](
+		t,
+		strings.TrimSuffix(server.URL(), "/")+"/factory-sessions/"+url.PathEscape(started.SessionId)+"/interrupt-dispatch",
+		factoryapi.FactorySessionInterruptDispatchRequest{DispatchId: "dispatch-2", Reason: &reason},
+	)
+	commandRunner.waitForSecondRelease(t)
+	functionalWaitForInitialResponseTerminal(t, responseStream)
+	responseStream.Close()
+	factoryEvents := support.GetFactoryEventsForSessionAt(t, server.URL(), started.SessionId)
+	interruptedEvent := false
+	for _, event := range factoryEvents {
+		if event.Type == factoryapi.FactoryEventTypeDispatchInterrupted &&
+			event.Context.DispatchId != nil && *event.Context.DispatchId == "dispatch-2" {
+			interruptedEvent = true
+			break
+		}
+	}
+	if !interruptedEvent {
+		t.Fatalf("canonical Factory Events = %#v, want DISPATCH_INTERRUPTED for dispatch-2", factoryEvents)
+	}
+	server.Stop(t)
+	server.Close(t)
+	return projectRoot, home, started.SessionId
+}
+
+func functionalResumePortableReplay(
+	t *testing.T,
+	projectRoot, home, sessionID, workflowName string,
+) {
+	payload := functionalPortableReplayPayloadForSessionSource(t, sessionID, workflowName+".js")
+	edges := functionalPortableReplayEdges(t, payload, &functionalReplayLiveConstructionCalls{})
+	edges.ProviderCommandRunner = support.NewShapedProviderCommandRunner(
+		platformprocess.CommandResult{Stdout: []byte("resumed step")},
+	)
+	process := support.BuildProcess(t, edges)
+	opening := root.ExecutionRuntimeOpeningFromProcess(process)
+	if opening == nil {
+		t.Fatal("ExecutionRuntimeOpeningFromProcess() returned nil")
+	}
+	opened, err := opening.OpenExecutionRuntime(t.Context(), factorysessions.ExecutionRuntimeOpeningRequest{
+		ProjectRoot:       projectRoot,
+		SystemConfigHome:  home,
+		FactorySessionID:  sessionID,
+		ReplayPath:        "recording.json",
+		PersistencePolicy: factorysessions.PersistencePolicyEnabled,
+	})
+	if err != nil {
+		t.Fatalf("OpenExecutionRuntime(restorable replay) error = %v", err)
+	}
+	if opened.Close == nil || opened.Execution == nil {
+		t.Fatalf("opened restorable runtime = execution:%#v close:%v, want both", opened.Execution, opened.Close != nil)
+	}
+	t.Cleanup(func() {
+		if err := opened.Close(); err != nil {
+			t.Errorf("close restorable replay execution runtime: %v", err)
+		}
+	})
+	resumed, err := opened.Execution.ResumeInterruptedSession(
+		t.Context(),
+		sessionID,
+		factorysessions.ResumeSessionRequest{RequestID: "portable-replay-handoff-resume"},
+	)
+	if err != nil {
+		t.Fatalf("ResumeInterruptedSession(restorable replay) error = %v", err)
+	}
+	if resumed.SessionID != sessionID {
+		t.Fatalf("resumed session id = %q, want %q", resumed.SessionID, sessionID)
+	}
+	responseSubscriber, ok := opened.Execution.(interface {
+		SubscribeResponseEvents(context.Context, string, factorysessions.ResponseEventSubscriptionRequest) (*factorysessions.ResponseEventCursor, error)
+	})
+	if !ok {
+		t.Fatal("resumed execution does not expose response-event subscription")
+	}
+	responseCursor, err := responseSubscriber.SubscribeResponseEvents(
+		t.Context(),
+		sessionID,
+		factorysessions.ResponseEventSubscriptionRequest{SessionID: sessionID},
+	)
+	if err != nil {
+		t.Fatalf("SubscribeResponseEvents(after handoff) error = %v", err)
+	}
+	functionalWaitForResponseTerminal(t, responseCursor)
+	listed, err := opened.Execution.ListDispatches(t.Context(), sessionID)
+	if err != nil {
+		t.Fatalf("ListDispatches(after handoff) error = %v", err)
+	}
+	if len(listed.Dispatches) != 2 {
+		t.Fatalf("ListDispatches(after handoff) count = %d, want two restored dispatches", len(listed.Dispatches))
+	}
+	if err := opened.Close(); err != nil {
+		t.Fatalf("close restorable replay execution runtime: %v", err)
+	}
+}
+
+func functionalWriteResumableWorkflowFixture(t *testing.T, workflowName string) string {
+	t.Helper()
+	scaffoldRoot := support.ScaffoldSingleStepFactory(t, "portable-replay-handoff")
+	projectRoot, err := os.MkdirTemp("", "portable-replay-handoff-")
+	if err != nil {
+		t.Fatalf("create portable replay project root: %v", err)
+	}
+	t.Cleanup(func() {
+		if err := os.RemoveAll(projectRoot); err != nil {
+			t.Errorf("remove portable replay project root: %v", err)
+		}
+	})
+	factoryConfig, err := os.ReadFile(filepath.Join(scaffoldRoot, "factory.json"))
+	if err != nil {
+		t.Fatalf("read portable replay factory scaffold: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(projectRoot, "factory.json"), factoryConfig, 0o600); err != nil {
+		t.Fatalf("copy portable replay factory scaffold: %v", err)
+	}
+	workflowPath := testpath.MustRepoPathFromCaller(
+		t, 0, "tests", "fixtures", "javascript_runtime", workflowName+".workflow.js",
+	)
+	workflowBody, err := os.ReadFile(workflowPath)
+	if err != nil {
+		t.Fatalf("read resumable workflow fixture: %v", err)
+	}
+	workflowDir := filepath.Join(projectRoot, ".claude", "workflows")
+	if err := os.MkdirAll(workflowDir, 0o755); err != nil {
+		t.Fatalf("create workflow directory: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(workflowDir, workflowName+".js"), workflowBody, 0o600); err != nil {
+		t.Fatalf("write resumable workflow: %v", err)
+	}
+	return projectRoot
 }
 
 // TestWSRFT016RecordingCompatibilityThroughCustomerFacingReplayPath proves
@@ -190,14 +416,22 @@ func functionalAssertPortableReplayInspection(
 }
 
 func functionalPortableReplayPayload(t *testing.T) []byte {
+	return functionalPortableReplayPayloadForSession(t, "session-js-001")
+}
+
+func functionalPortableReplayPayloadForSession(t *testing.T, sessionID string) []byte {
+	return functionalPortableReplayPayloadForSessionSource(t, sessionID, "workflow/example.js")
+}
+
+func functionalPortableReplayPayloadForSessionSource(t *testing.T, sessionID, sourceRef string) []byte {
 	t.Helper()
 
 	checkpointAt := time.Date(2026, time.July, 12, 12, 0, 1, 0, time.UTC)
 	recording, err := recordings.BuildPortableRecording(recordings.PortableRecordingCanonicalFacts{
-		SessionID:        "session-js-001",
+		SessionID:        sessionID,
 		Status:           "SUCCEEDED",
 		OrchestratorKind: "JAVASCRIPT",
-		SourceRef:        "workflow/example.js",
+		SourceRef:        sourceRef,
 		SourceHash:       functionalReplayDigest('1'),
 		PolicyHash:       functionalReplayDigest('3'),
 		Artifacts: []recordings.PortableRecordingCanonicalArtifact{{
@@ -230,6 +464,133 @@ func functionalPortableReplayPayload(t *testing.T) []byte {
 func functionalReplayDigest(character byte) string {
 	return "sha256:" + string(bytes.Repeat([]byte{character}, 64))
 }
+
+func functionalPostJSON[T any](t testing.TB, endpoint string, request any) T {
+	t.Helper()
+	payload, err := json.Marshal(request)
+	if err != nil {
+		t.Fatalf("marshal POST %s: %v", endpoint, err)
+	}
+	response, err := http.Post(endpoint, "application/json", bytes.NewReader(payload))
+	if err != nil {
+		t.Fatalf("POST %s: %v", endpoint, err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode < http.StatusOK || response.StatusCode >= http.StatusMultipleChoices {
+		body, _ := io.ReadAll(response.Body)
+		t.Fatalf("POST %s status = %d: %s", endpoint, response.StatusCode, strings.TrimSpace(string(body)))
+	}
+	var result T
+	if err := json.NewDecoder(response.Body).Decode(&result); err != nil {
+		t.Fatalf("decode POST %s: %v", endpoint, err)
+	}
+	return result
+}
+
+func functionalStringPointer(value string) *string {
+	return &value
+}
+
+func functionalWaitForResponseTerminal(t testing.TB, cursor *factorysessions.ResponseEventCursor) {
+	t.Helper()
+	if cursor == nil {
+		t.Fatal("response-event cursor is nil")
+	}
+	defer cursor.Detach()
+	// Cursor.Next blocks on retained/live publication. The bounded context is
+	// only a failure guard for a malformed or stalled response stream, not a
+	// polling interval.
+	waitContext, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+	defer cancel()
+	for {
+		events, err := cursor.Next(waitContext)
+		if err != nil {
+			t.Fatalf("read resumed response events: %v", err)
+		}
+		for _, event := range events {
+			if event.Kind == factorysessions.ResponseEventKindRun &&
+				event.Phase == factorysessions.ResponseEventPhaseCompleted {
+				return
+			}
+		}
+	}
+}
+
+func functionalWaitForInitialResponseTerminal(
+	t testing.TB,
+	stream *support.FactoryResponseEventStream,
+) {
+	t.Helper()
+	for {
+		// The public response stream closes only after the runtime has persisted
+		// its terminal candidate. Each frame wait is a failure guard, not polling.
+		event := stream.NextFrame(10 * time.Second).Event
+		if event.Kind == factoryapi.FactoryResponseEventKindRun &&
+			(event.Phase == factoryapi.FactoryResponseEventPhaseCompleted ||
+				event.Phase == factoryapi.FactoryResponseEventPhaseFailed ||
+				event.Phase == factoryapi.FactoryResponseEventPhaseCanceled) {
+			return
+		}
+		if event.Kind == factoryapi.FactoryResponseEventKindError &&
+			(event.Phase == factoryapi.FactoryResponseEventPhaseFailed ||
+				event.Phase == factoryapi.FactoryResponseEventPhaseCanceled) {
+			return
+		}
+	}
+}
+
+type functionalReplayHandoffCommandRunner struct {
+	secondStarted     chan struct{}
+	secondReleased    chan struct{}
+	secondOnce        sync.Once
+	secondReleaseOnce sync.Once
+	calls             atomic.Int32
+}
+
+func newFunctionalReplayHandoffCommandRunner() *functionalReplayHandoffCommandRunner {
+	return &functionalReplayHandoffCommandRunner{
+		secondStarted:  make(chan struct{}),
+		secondReleased: make(chan struct{}),
+	}
+}
+
+func (runner *functionalReplayHandoffCommandRunner) Run(
+	ctx context.Context,
+	_ platformprocess.CommandRequest,
+) (platformprocess.CommandResult, error) {
+	call := runner.calls.Add(1)
+	if call == 2 {
+		runner.secondOnce.Do(func() { close(runner.secondStarted) })
+		<-ctx.Done()
+		runner.secondReleaseOnce.Do(func() { close(runner.secondReleased) })
+		return platformprocess.CommandResult{}, ctx.Err()
+	}
+	return platformprocess.CommandResult{Stdout: support.CodexSuccessStdout("first child")}, nil
+}
+
+func (runner *functionalReplayHandoffCommandRunner) waitForSecondCall(t testing.TB) {
+	t.Helper()
+	// The command edge owns this admission signal; the timeout only guards a
+	// broken workflow that never reaches the second child.
+	select {
+	case <-runner.secondStarted:
+	case <-time.After(10 * time.Second):
+		t.Fatal("timed out waiting for second child command")
+	}
+}
+
+func (runner *functionalReplayHandoffCommandRunner) waitForSecondRelease(t testing.TB) {
+	t.Helper()
+	// Interrupt cancellation is the release signal. The timeout is only a
+	// failure guard if the control request does not cancel the child context.
+	select {
+	case <-runner.secondReleased:
+	case <-time.After(10 * time.Second):
+		t.Fatal("timed out waiting for interrupt to release second child command")
+	}
+}
+
+var _ platformprocess.CommandRunner = (*functionalReplayHandoffCommandRunner)(nil)
 
 type functionalReplayCommandRunner struct {
 	calls *atomic.Int32

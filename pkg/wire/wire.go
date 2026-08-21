@@ -147,6 +147,7 @@ var servicesSet = wire.NewSet(
 	provideFactorySessionDetachedOperations,
 	provideFactoryVisualizationMetricsQuery,
 	provideRuntimeMetricsQueryCapability,
+	provideFactorySessionExecutionRuntimeOpening,
 	provideFactorySessionsRuntimeAssembly,
 	provideFactoryWebhooksService,
 	providePortableRecordingWriter,

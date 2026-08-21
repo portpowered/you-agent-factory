@@ -10,6 +10,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution/recordingreplay"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimeports"
+	durableexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/durable_execution"
 	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
@@ -43,16 +44,30 @@ type workerSessionsObservationForSessionProvider interface {
 func historicalReplayRuntimeProducts(
 	logger *zap.Logger,
 	projection recordingreplay.RecordingReplayProjection,
+	liveOwner durableexecution.Service,
+	closeResources func() error,
 ) runtimeProducts {
-	inspection := recordingreplay.NewService(projection).Inspection()
+	if closeResources == nil {
+		closeResources = func() error { return nil }
+	}
+	replay := recordingreplay.NewService(projection, liveOwner)
+	inspection := replay.Inspection()
 	return runtimeProducts{
 		application: roles.OpenedApplicationRuntime{
 			Process:          historicalReplayProcessRuntime{},
 			HistoricalReplay: &inspection,
 			Resources: roles.RuntimeResources{
 				Logger: logger,
-				Close:  func() error { return nil },
+				Close:  closeResources,
 			},
+		},
+		invocation: roles.OpenedInvocationRuntime{
+			Execution:      replay,
+			CloseArtifacts: closeResources,
+		},
+		execution: roles.OpenedExecutionRuntime{
+			Execution: replay,
+			Resources: roles.RuntimeResources{Logger: logger, Close: closeResources},
 		},
 	}
 }

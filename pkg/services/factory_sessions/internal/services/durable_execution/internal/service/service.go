@@ -194,6 +194,54 @@ func (s *Service) IsNonLiveReplay() bool {
 	return ok && replay.IsNonLiveReplay()
 }
 
+// HasRestorableState forwards the optional live-resume eligibility probe
+// without widening the durable execution root contract used by other
+// backends.
+func (s *Service) HasRestorableState(ctx context.Context, sessionID string) (bool, error) {
+	if s == nil || s.Service == nil {
+		return false, nil
+	}
+	probe, ok := s.Service.(interface {
+		HasRestorableState(context.Context, string) (bool, error)
+	})
+	if !ok {
+		return false, nil
+	}
+	return probe.HasRestorableState(ctx, sessionID)
+}
+
+// Resume preserves the ordinary lifecycle-control path for running and paused
+// sessions. Interrupted sessions use the same read-only eligibility probe as
+// restart-resume before the underlying control operation can mutate state.
+func (s *Service) Resume(
+	ctx context.Context,
+	sessionID string,
+	request factorysessions.ControlRequest,
+) (factorysessions.LifecycleControlResult, error) {
+	if s == nil || s.Service == nil {
+		return factorysessions.LifecycleControlResult{}, factorysessions.ErrExecutionServiceNotConfigured
+	}
+	if _, ok := s.Service.(interface {
+		HasRestorableState(context.Context, string) (bool, error)
+	}); !ok {
+		return s.Service.Resume(ctx, sessionID, request)
+	}
+	read, err := s.Service.GetSession(ctx, sessionID)
+	if err != nil {
+		return factorysessions.LifecycleControlResult{}, err
+	}
+	if read.Status == factorysessions.LifecycleStatusInterrupted {
+		available, err := s.HasRestorableState(ctx, sessionID)
+		if err != nil {
+			return factorysessions.LifecycleControlResult{}, err
+		}
+		if !available {
+			return factorysessions.LifecycleControlResult{}, factorysessions.ErrDurableSessionNotFound
+		}
+	}
+	return s.Service.Resume(ctx, sessionID, request)
+}
+
 // RecordPetriTokenMutations preserves the runtime event bridge used by the
 // Petri orchestrator while the execution engine remains behind this service.
 func (s *Service) RecordPetriTokenMutations(

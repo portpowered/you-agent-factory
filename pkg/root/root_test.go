@@ -172,7 +172,7 @@ func TestWorkerRecordingReaderFromProcessUsesComposedReader(t *testing.T) {
 		nil,
 		rootWorkerProcessRegistry{},
 		rootWorkerProcessLifecycle{},
-		nil,
+		nil, nil,
 		nil,
 		nil,
 		nil,
@@ -231,9 +231,9 @@ func TestDetachedOperationsFromProcessResolvesTypedCapability(t *testing.T) {
 		nil,
 		rootWorkerProcessRegistry{},
 		rootWorkerProcessLifecycle{},
-		nil,
-		nil,
+		nil, nil,
 		rootDetachedOperationsCapabilityProbe{operations: want},
+		nil,
 		nil,
 	)
 	if err != nil {
@@ -248,9 +248,9 @@ func TestDetachedOperationsFromProcessResolvesTypedCapability(t *testing.T) {
 		nil,
 		rootWorkerProcessRegistry{},
 		rootWorkerProcessLifecycle{},
-		nil,
-		nil,
+		nil, nil,
 		rootDetachedOperationsCapabilityProbe{operations: struct{}{}},
+		nil,
 		nil,
 	)
 	if err != nil {
@@ -272,6 +272,7 @@ func TestWorkerRecordingReaderFromProcessPropagatesReaderError(t *testing.T) {
 		rootWorkerProcessLifecycle{},
 		nil,
 		rootWorkerProcessReader{err: wantErr},
+		nil,
 		nil,
 		nil,
 	)
@@ -298,6 +299,7 @@ func TestWorkerRecordingReaderFromProcessRejectsMalformedSnapshot(t *testing.T) 
 		rootWorkerProcessLifecycle{},
 		nil,
 		rootWorkerProcessReader{payload: json.RawMessage(`{"recordingId":`)},
+		nil,
 		nil,
 		nil,
 	)
