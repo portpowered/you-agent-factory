@@ -110,10 +110,11 @@ func TestFunctionalCoverageCommandSmoke_SeparatesDiscoveryAndInstrumentedJobs(t 
 			})
 			args := []string{
 				"FUNCTIONAL_DEFAULT_JOBS=4",
+				// Make exports command-line variables through MAKEFLAGS. Passing an
+				// explicit empty value keeps this local-default case isolated when
+				// the functional suite itself runs under the CI override.
+				"FUNCTIONAL_TEST_JOBS=" + tc.testJobs,
 				"GO=" + goStub,
-			}
-			if tc.testJobs != "" {
-				args = append(args, "FUNCTIONAL_TEST_JOBS="+tc.testJobs)
 			}
 			output, err := runMakefileTargetWithArgs(repoRoot, makefilePath, "test-functional-coverage", args...)
 			if err != nil {
