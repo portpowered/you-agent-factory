@@ -276,6 +276,17 @@ func openRuntime(
 		input := configured.Recordings.ResumeInput
 		resumeInput = &input
 	}
+	var restoredWorldState *factorydefinitions.FactoryWorldState
+	if load.ReplayArtifact == nil {
+		restoredWorldState, err = restoreCurrentBoardState(
+			recordingsService,
+			configured.Recordings.RecordPath,
+			sessionID,
+		)
+		if err != nil {
+			return runtimeProducts{}, err
+		}
+	}
 	runtimebuildService, startupRuntime, startupSpec, runtimeLifecycle, runtimeSidecars, err :=
 		factoryRuntimeAssembler.Assemble(
 			ctx,
@@ -327,6 +338,7 @@ func openRuntime(
 			configured.Runtime.RuntimeInstanceID,
 			load.ReplayArtifact,
 			resumeInput,
+			restoredWorldState,
 			service2,
 			configured.Runtime.Mode == factorydefinitions.RuntimeModeService,
 		)

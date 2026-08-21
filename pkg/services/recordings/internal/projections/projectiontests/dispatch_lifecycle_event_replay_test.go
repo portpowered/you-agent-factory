@@ -123,7 +123,7 @@ func TestReconstructFactoryWorldState_PetriDispatchRequestResponseRemainsReprese
 
 func TestReconstructFactoryWorldState_PetriDispatchInterruptionRearmsLastLogicalInput(t *testing.T) {
 	t0 := time.Date(2026, 6, 9, 14, 16, 0, 0, time.UTC)
-	workItem := work.FactoryWorkItem{ID: "work-restarted", WorkTypeID: "task", DisplayName: "draft", TraceID: "trace-1", PlaceID: "task:init"}
+	workItem := work.FactoryWorkItem{ID: "work-restarted", WorkTypeID: "task", DisplayName: "draft", TraceID: "trace-1"}
 	dispatchID := "dispatch-restarted"
 	events := []factoryapi.FactoryEvent{
 		initialStructureEvent(t0),

@@ -101,6 +101,7 @@ func (a *Assembly) Assemble(
 	runtimeInstanceID string,
 	replayArtifact *factorydefinitions.ReplayArtifact,
 	resumeInput *recordings.LoadResumeInputResult,
+	restoredWorldState *factorydefinitions.FactoryWorldState,
 	automationService automations.Service,
 	serviceMode bool,
 ) (
@@ -194,26 +195,30 @@ func (a *Assembly) Assemble(
 		return nil, nil, factoryruntime.SessionBuildSpec{}, nil, nil, err
 	}
 	spec.ReplayEvents = cloneReplayArtifactEvents(replayArtifact)
-	// Resume is a live continuation, not deterministic replay: use the
-	// Recordings-selected event history only to reconstruct the successor's
-	// starting world state. The normal RecordPath remains the live successor
-	// recording destination on the runtime build.
-	restoredEvents, err := restoredEventsForOpening(spec.ReplayEvents, resumeInput)
-	if err != nil {
-		return nil, nil, factoryruntime.SessionBuildSpec{}, nil, nil, err
-	}
-	if resumeInput != nil {
-		// The resumed ledger must expose the recorded prefix before the live
-		// successor starts emitting events; otherwise public reconnect cursors
-		// cannot cross the process boundary.
-		spec.ResumeCanonicalEvents = cloneFactoryEvents(restoredEvents)
-	}
-	spec.RestoredWorldState, err = reconstructRestoredWorldState(
-		recordingsRuntime,
-		restoredEvents,
-	)
-	if err != nil {
-		return nil, nil, factoryruntime.SessionBuildSpec{}, nil, nil, err
+	if restoredWorldState != nil {
+		spec.RestoredWorldState = restoredWorldState
+	} else {
+		// Resume is a live continuation, not deterministic replay: use the
+		// Recordings-selected event history only to reconstruct the successor's
+		// starting world state. The normal RecordPath remains the live successor
+		// recording destination on the runtime build.
+		restoredEvents, err := restoredEventsForOpening(spec.ReplayEvents, resumeInput)
+		if err != nil {
+			return nil, nil, factoryruntime.SessionBuildSpec{}, nil, nil, err
+		}
+		if resumeInput != nil {
+			// The resumed ledger must expose the recorded prefix before the live
+			// successor starts emitting events; otherwise public reconnect cursors
+			// cannot cross the process boundary.
+			spec.ResumeCanonicalEvents = cloneFactoryEvents(restoredEvents)
+		}
+		spec.RestoredWorldState, err = reconstructRestoredWorldState(
+			recordingsRuntime,
+			restoredEvents,
+		)
+		if err != nil {
+			return nil, nil, factoryruntime.SessionBuildSpec{}, nil, nil, err
+		}
 	}
 	instance, err := builder.Build(ctx, spec)
 	if err != nil {
