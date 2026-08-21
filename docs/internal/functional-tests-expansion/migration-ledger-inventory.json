@@ -3415,6 +3415,26 @@
       "deletion_only_batch": "n/a"
     },
     {
+      "source_path": "tests/functional/factory/visualization/runtime_metrics/runtime_metrics_query_test.go",
+      "package": "you-agent-factory/tests/functional/factory/visualization/runtime_metrics",
+      "scenario": "TestRuntimeMetricsQueryReadsDurableArtifactsThroughCanonicalProcess",
+      "lane": "short",
+      "destination": "tests/functional/factory/visualization/runtime_metrics/runtime_metrics_query_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/factory/visualization/runtime_metrics/runtime_metrics_query_test.go",
+      "package": "you-agent-factory/tests/functional/factory/visualization/runtime_metrics",
+      "scenario": "TestRuntimeMetricsQueryReportsArtifactFailuresThroughCanonicalProcess",
+      "lane": "short",
+      "destination": "tests/functional/factory/visualization/runtime_metrics/runtime_metrics_query_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
       "source_path": "tests/functional/guards_batch/concurrency_limit_long_test.go",
       "package": "you-agent-factory/tests/functional/guards_batch",
       "scenario": "TestConcurrencyLimit_BlocksExcessDispatches",
@@ -7410,6 +7430,16 @@
       "scenario": "TestAPIResultAndResultsExposeTerminalInvocationData",
       "lane": "short",
       "destination": "tests/functional/sessions/execution/results_dispatches_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/sessions/execution/dispatch_usage_test.go",
+      "package": "you-agent-factory/tests/functional/sessions/execution",
+      "scenario": "TestAPIPetriDispatchUsageReachesDispatchList",
+      "lane": "short",
+      "destination": "tests/functional/sessions/execution/dispatch_usage_test.go",
       "catch_all": "none",
       "specialty_targets": "none",
       "deletion_only_batch": "n/a"
@@ -11880,7 +11910,7 @@
     "by_catch_all": {
       "bootstrap_portability": 19,
       "guards_batch": 15,
-      "none": 1016,
+      "none": 1019,
       "replay_contracts": 16,
       "runtime_api": 55,
       "smoke": 11,
@@ -11893,7 +11923,7 @@
       "chat_sessions": 25,
       "cli": 59,
       "events": 16,
-      "factory": 122,
+      "factory": 124,
       "factory_definitions": 11,
       "factory_runtime": 12,
       "factory_visualization": 4,
@@ -11910,7 +11940,7 @@
       "replay_contracts": 16,
       "runtime_api": 65,
       "sessionparity": 13,
-      "sessions": 59,
+      "sessions": 60,
       "smoke": 11,
       "transport": 142,
       "work": 84,
@@ -11918,9 +11948,9 @@
       "workflow": 6,
       "workstations": 41
     },
-    "customer_top_level_Test_scenarios": 1138,
+    "customer_top_level_Test_scenarios": 1141,
     "lane_functionallong": 84,
-    "lane_short": 1054,
+    "lane_short": 1057,
     "by_full_package": {
       "you-agent-factory/tests/functional/acceptance": 12,
       "you-agent-factory/tests/functional/automations": 13,
@@ -11943,6 +11973,7 @@
       "you-agent-factory/tests/functional/factory_runtime/orchestrators/petri/routing": 3,
       "you-agent-factory/tests/functional/factory_runtime/root_composition": 6,
       "you-agent-factory/tests/functional/factory_visualization": 4,
+      "you-agent-factory/tests/functional/factory/visualization/runtime_metrics": 2,
       "you-agent-factory/tests/functional/factory/batch": 2,
       "you-agent-factory/tests/functional/factory/current": 16,
       "you-agent-factory/tests/functional/factory/definition_activation": 3,
@@ -12006,7 +12037,7 @@
       "you-agent-factory/tests/functional/sessions": 2,
       "you-agent-factory/tests/functional/sessions/cli": 2,
       "you-agent-factory/tests/functional/sessions/controls": 7,
-      "you-agent-factory/tests/functional/sessions/execution": 8,
+    "you-agent-factory/tests/functional/sessions/execution": 9,
       "you-agent-factory/tests/functional/sessions/lifecycle": 11,
       "you-agent-factory/tests/functional/sessions/mcp": 7,
       "you-agent-factory/tests/functional/sessions/restart": 3,
@@ -12061,12 +12092,12 @@
       "you-agent-factory/tests/functional/workstations/repeater": 13,
       "you-agent-factory/tests/functional/workstations/watcher": 9
     },
-    "files_with_customer_Test": 407,
-    "functional_test_go_files": 478,
+    "files_with_customer_Test": 409,
+    "functional_test_go_files": 480,
     "helper_only_non_customer_files": 71,
     "internal_harness_Test_functions": 73,
     "internal_harness_test_files": 22,
-    "ledger_rows": 1138
+    "ledger_rows": 1141
   },
   "schema_note": "Machine-readable companion to migration-ledger.md Inventory. Required row fields match the ledger schema. Non-catch-all rows mapped by FND-007-006; catch-all rows mapped by FND-007-003…005.",
   "runtime_api_mapping": {
@@ -12134,19 +12165,19 @@
   "completeness_audit": {
     "audited_at_utc": "2026-07-28T15:23:02Z",
     "story": "mig-workflow-ready-deletion-batches-009",
-    "live_customer_scenarios": 1138,
-    "ledger_rows": 1138,
+    "live_customer_scenarios": 1141,
+    "ledger_rows": 1141,
     "unmapped_scenarios": 0,
-    "checklist_destinations": 358,
+    "checklist_destinations": 360,
     "wrong_layer_destinations": 24,
     "invalid_destinations": 0,
-    "lane_short": 1054,
+    "lane_short": 1057,
     "lane_functionallong": 84,
     "specialty_targets_documented": 7,
     "deletion_only_batches": 19,
     "validator": "go run ./cmd/migrationledgercheck",
-    "row_count": 1138,
-    "short_lane_rows": 1054,
+    "row_count": 1141,
+    "short_lane_rows": 1057,
     "functionallong_lane_rows": 84,
     "ready_workflow_catchall_drain": {
       "released_batches": [

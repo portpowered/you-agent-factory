@@ -782,6 +782,9 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestAPIDispatchListAndDetailExposePublicCorrelation`.
   - `TestAPIPartialResultIsAvailableBeforeTerminalCompletion`.
 
+- [x] `tests/functional/sessions/execution/dispatch_usage_test.go`
+  - `TestAPIPetriDispatchUsageReachesDispatchList`.
+
 - [x] `tests/functional/sessions/execution/visibility_test.go`
   - `TestCLIInvocationIsVisibleThroughAPISessionAndWorkReads`.
   - `TestAPIInvocationResultMatchesCLICompatibleFacts`.
@@ -920,6 +923,10 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
 
 - [x] `tests/functional/factory_visualization/response_presentation_test.go`
   - `TestVisualizationResponsePresentationThroughPublicRootAfterLifecycle`.
+
+- [x] `tests/functional/factory/visualization/runtime_metrics/runtime_metrics_query_test.go`
+  - `TestRuntimeMetricsQueryReadsDurableArtifactsThroughCanonicalProcess`.
+  - `TestRuntimeMetricsQueryReportsArtifactFailuresThroughCanonicalProcess`.
 
 ### Factory runtime (service-mirrored Petri depth)
 
