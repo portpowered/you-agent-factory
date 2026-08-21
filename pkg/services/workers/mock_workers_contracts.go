@@ -128,8 +128,13 @@ func (diagnostics MockWorkersConfigDecodeDiagnostics) Paths() []string {
 // used by customer-facing callers that need to warn about ignored fields.
 type MockWorkersConfigDiagnosticsLoader func(string) (*MockWorkersConfig, MockWorkersConfigDecodeDiagnostics, error)
 
+// MockWorkersConfigCodec owns the Workers mock-worker configuration codecs.
+// Methods keep construction and diagnostics behavior behind the service
+// contract without adding more package-level root functions.
+type MockWorkersConfigCodec struct{}
+
 func NewMockWorkersConfigLoader(files MockWorkersConfigFileSystem) (MockWorkersConfigLoader, error) {
-	load, err := NewMockWorkersConfigDiagnosticsLoader(files)
+	load, err := (MockWorkersConfigCodec{}).NewDiagnosticsLoader(files)
 	if err != nil {
 		return nil, err
 	}
@@ -139,9 +144,9 @@ func NewMockWorkersConfigLoader(files MockWorkersConfigFileSystem) (MockWorkersC
 	}, nil
 }
 
-// NewMockWorkersConfigDiagnosticsLoader constructs the Workers-owned loader
-// that retains safe ignored-field paths for an operational caller.
-func NewMockWorkersConfigDiagnosticsLoader(
+// NewDiagnosticsLoader constructs the Workers-owned loader that retains safe
+// ignored-field paths for an operational caller.
+func (MockWorkersConfigCodec) NewDiagnosticsLoader(
 	files MockWorkersConfigFileSystem,
 ) (MockWorkersConfigDiagnosticsLoader, error) {
 	if files == nil {
@@ -155,7 +160,7 @@ func NewMockWorkersConfigDiagnosticsLoader(
 		if err != nil {
 			return nil, MockWorkersConfigDecodeDiagnostics{}, fmt.Errorf("read mock workers config %s: %w", path, err)
 		}
-		config, diagnostics, err := ParseMockWorkersConfigWithDiagnostics(data)
+		config, diagnostics, err := (MockWorkersConfigCodec{}).ParseWithDiagnostics(data)
 		if err != nil {
 			return nil, MockWorkersConfigDecodeDiagnostics{}, fmt.Errorf("parse mock workers config %s: %w", path, err)
 		}
@@ -165,17 +170,16 @@ func NewMockWorkersConfigDiagnosticsLoader(
 
 // ParseMockWorkersConfig validates raw JSON into the normalized runtime
 // mock-worker configuration. Unknown object fields are ignored; callers that
-// need safe paths for warnings should use ParseMockWorkersConfigWithDiagnostics.
+// need safe paths for warnings should use MockWorkersConfigCodec.ParseWithDiagnostics.
 func ParseMockWorkersConfig(data []byte) (*MockWorkersConfig, error) {
-	config, _, err := ParseMockWorkersConfigWithDiagnostics(data)
+	config, _, err := (MockWorkersConfigCodec{}).ParseWithDiagnostics(data)
 	return config, err
 }
 
-// ParseMockWorkersConfigWithDiagnostics validates one mock-worker JSON
-// document and reports sorted unique paths for unknown object fields. Known
-// field types, run-type validation, and exactly-one-document enforcement stay
-// strict.
-func ParseMockWorkersConfigWithDiagnostics(
+// ParseWithDiagnostics validates one mock-worker JSON document and reports
+// sorted unique paths for unknown object fields. Known field types, run-type
+// validation, and exactly-one-document enforcement stay strict.
+func (MockWorkersConfigCodec) ParseWithDiagnostics(
 	data []byte,
 ) (*MockWorkersConfig, MockWorkersConfigDecodeDiagnostics, error) {
 	decoder := json.NewDecoder(bytes.NewReader(data))

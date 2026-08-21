@@ -93,7 +93,7 @@ var servicesSet = wire.NewSet(
 	work.NewFactoryRequestBatchPreparation,
 	work.NewInvocationInputPreparation,
 	provideWorkersMockWorkersConfigFileSystem,
-	workers.NewMockWorkersConfigDiagnosticsLoader,
+	provideWorkersMockWorkersConfigDiagnosticsLoader,
 	provideRuntimeArtifactClock,
 	provideRuntimeArtifactIDGenerator,
 	provideRuntimeArtifactPathReserver,

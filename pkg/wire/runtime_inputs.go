@@ -48,6 +48,12 @@ func provideWorkersMockWorkersConfigFileSystem(
 	return platformfilesystem.Local{}
 }
 
+func provideWorkersMockWorkersConfigDiagnosticsLoader(
+	files workers.MockWorkersConfigFileSystem,
+) (workers.MockWorkersConfigDiagnosticsLoader, error) {
+	return (workers.MockWorkersConfigCodec{}).NewDiagnosticsLoader(files)
+}
+
 type runtimeArtifactClock func() time.Time
 type runtimeArtifactIDGenerator func() string
 

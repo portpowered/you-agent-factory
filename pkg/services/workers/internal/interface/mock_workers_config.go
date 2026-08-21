@@ -42,7 +42,7 @@ func NewMockWorkersConfigLoader(
 func NewMockWorkersConfigDiagnosticsLoader(
 	fileSystem MockWorkersConfigFileSystem,
 ) (MockWorkersConfigDiagnosticsLoader, error) {
-	return workers.NewMockWorkersConfigDiagnosticsLoader(fileSystem)
+	return (workers.MockWorkersConfigCodec{}).NewDiagnosticsLoader(fileSystem)
 }
 
 func ParseMockWorkersConfig(data []byte) (*MockWorkersConfig, error) {
@@ -52,5 +52,5 @@ func ParseMockWorkersConfig(data []byte) (*MockWorkersConfig, error) {
 func ParseMockWorkersConfigWithDiagnostics(
 	data []byte,
 ) (*MockWorkersConfig, MockWorkersConfigDecodeDiagnostics, error) {
-	return workers.ParseMockWorkersConfigWithDiagnostics(data)
+	return (workers.MockWorkersConfigCodec{}).ParseWithDiagnostics(data)
 }

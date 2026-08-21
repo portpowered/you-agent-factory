@@ -289,16 +289,16 @@ func provideOperatorSettingsService(
 ) (operatorsettings.Service, error) {
 	return settingswire.NewServiceFromConfigDocument(
 		operatorsettings.ConfigDocumentService{
-			Files:      files,
-			CreateTemp: createTemp,
-			Providers:  providerCatalog,
-			Decoder:    decode,
-			Encoder:    encode,
+			Files:             files,
+			CreateTemp:        createTemp,
+			Providers:         providerCatalog,
+			Decoder:           decode,
+			DiagnosticDecoder: diagnosticDecode,
+			Encoder:           encode,
 		},
 		providersRoot,
 		idGenerator,
 		logger,
-		diagnosticDecode,
 	)
 }
 
@@ -806,27 +806,6 @@ func provideStdioApplicationOpener(
 
 func provideLifecycleRunnerFactory() lifecycle.RunnerFactory {
 	return lifecycle.NewRunner
-}
-
-func provideRunOpener(
-	prepareWorkTarget work.SingleWorkTargetPreparation,
-	loadMockWorkers workers.MockWorkersConfigDiagnosticsLoader,
-	buildRuntimeRequest runcli.RuntimeOpeningRequestFactory,
-	presentations factorysessions.OpeningPresentationOwner,
-	visualizations factoryvisualization.RuntimeSinkOwner,
-) runcli.Opener {
-	return func(
-		ctx context.Context,
-		cfg runcli.RunConfig,
-		buildRunner runcli.RuntimeRunnerBuilder,
-		invocation runcli.InvocationOperation,
-		presentation factoryvisualization.ResponsePresentation,
-	) (*runcli.Operation, error) {
-		return runcli.OpenWithVisualizationOwnerAndDiagnostics(
-			ctx, cfg, buildRunner, invocation, presentation,
-			prepareWorkTarget, nil, loadMockWorkers, buildRuntimeRequest, presentations, visualizations,
-		)
-	}
 }
 
 func provideRunInvocationOperation(

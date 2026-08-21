@@ -14,7 +14,7 @@ import (
 func TestParseMockWorkersConfigWithDiagnosticsPreservesKnownBehavior(t *testing.T) {
 	t.Parallel()
 
-	config, diagnostics, err := ParseMockWorkersConfigWithDiagnostics([]byte(`{
+	config, diagnostics, err := (MockWorkersConfigCodec{}).ParseWithDiagnostics([]byte(`{
 		"mockWorkers": [{
 			"id": "reviewer",
 			"runType": "accept",
@@ -23,7 +23,7 @@ func TestParseMockWorkersConfigWithDiagnosticsPreservesKnownBehavior(t *testing.
 		"futureTopLevel": true
 	}`))
 	if err != nil {
-		t.Fatalf("ParseMockWorkersConfigWithDiagnostics() error = %v", err)
+		t.Fatalf("ParseWithDiagnostics() error = %v", err)
 	}
 	if config == nil || len(config.MockWorkers) != 1 || config.MockWorkers[0].ID != "reviewer" {
 		t.Fatalf("config = %#v, want known mock-worker fields preserved", config)
@@ -47,8 +47,8 @@ func TestParseMockWorkersConfigWithDiagnosticsRemainsStrictForKnownAndTrailingIn
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			if _, _, err := ParseMockWorkersConfigWithDiagnostics([]byte(payload)); err == nil {
-				t.Fatal("ParseMockWorkersConfigWithDiagnostics() error = nil, want reject")
+			if _, _, err := (MockWorkersConfigCodec{}).ParseWithDiagnostics([]byte(payload)); err == nil {
+				t.Fatal("ParseWithDiagnostics() error = nil, want reject")
 			}
 		})
 	}
@@ -149,9 +149,9 @@ func assertMockWorkersConfigLoaderResults(t *testing.T, loader MockWorkersConfig
 			}
 		})
 	}
-	config, diagnostics, err := ParseMockWorkersConfigWithDiagnostics([]byte(`{"unexpected":true}`))
+	config, diagnostics, err := (MockWorkersConfigCodec{}).ParseWithDiagnostics([]byte(`{"unexpected":true}`))
 	if err != nil || config == nil {
-		t.Fatalf("ParseMockWorkersConfigWithDiagnostics(unknown field) = %#v, %v, want accepted config", config, err)
+		t.Fatalf("ParseWithDiagnostics(unknown field) = %#v, %v, want accepted config", config, err)
 	}
 	if got := diagnostics.Paths(); len(got) != 1 || got[0] != "$.unexpected" {
 		t.Fatalf("unknown field paths = %#v, want [$.unexpected]", got)
