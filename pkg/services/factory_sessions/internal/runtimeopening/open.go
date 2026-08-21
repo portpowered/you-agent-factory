@@ -14,6 +14,7 @@ import (
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimeports"
+	durableexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/durable_execution"
 	"github.com/portpowered/infinite-you/pkg/services/models"
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
@@ -144,7 +145,26 @@ func openRuntime(
 		}
 	}
 	if load.HistoricalReplay != nil {
-		return historicalReplayRuntimeProducts(logger, *load.HistoricalReplay), nil
+		var liveOwner durableexecution.Service
+		if load.HistoricalReplay.Checkpoint != nil {
+			liveOwner, err = openPortableReplayDurableOwner(
+				configured,
+				root,
+				clockEdge,
+				providerOverride,
+				providerCommandRunner,
+				workersMockCommandRunnerFactory,
+				providerFromCommandRunnerFactory,
+				durableExecutionFactory,
+				factorySessionExecutionFactory,
+				providerIdentities,
+				resolveClock,
+			)
+			if err != nil {
+				return runtimeProducts{}, err
+			}
+		}
+		return historicalReplayRuntimeProducts(logger, *load.HistoricalReplay, liveOwner), nil
 	}
 	if clock == nil {
 		return runtimeProducts{}, fmt.Errorf("construct runtime scope: Factory Runtime clock is required")

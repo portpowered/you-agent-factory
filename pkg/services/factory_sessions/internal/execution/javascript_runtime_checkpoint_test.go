@@ -426,6 +426,13 @@ func TestJavaScriptRuntimeService_ResumeInterruptedSession_PackageLocalCoverage(
 		Persistence: store,
 		Workflows:   workflows,
 	})
+	available, err := resumedService.HasRestorableState(context.Background(), sessionID)
+	if err != nil || !available {
+		t.Fatalf("HasRestorableState() = %t, %v, want true without mutation", available, err)
+	}
+	if read, err := resumedService.GetSession(context.Background(), sessionID); err != nil || read.Status != LifecycleStatusInterrupted {
+		t.Fatalf("session after HasRestorableState() = %#v, %v, want INTERRUPTED", read, err)
+	}
 
 	resumed, err := resumedService.ResumeInterruptedSession(context.Background(), sessionID, ResumeSessionRequest{
 		RequestID: "req-package-resume-resume-001",
