@@ -101,6 +101,33 @@ func TestOpenAPIContract_ResponseEventStreamIsBundledWithTypedOutcomes(t *testin
 	}
 }
 
+func TestOpenAPIContract_WorkPayloadLimitIsDocumented(t *testing.T) {
+	t.Parallel()
+
+	doc := loadBundledOpenAPIDocument(t)
+	schemas := componentSchemas(t, doc)
+	for _, schemaName := range []string{"Work", "SubmitWorkRequest"} {
+		properties := schemaProperties(t, schemaObject(t, schemas, schemaName), schemaName)
+		payload, ok := properties["payload"].(map[string]any)
+		if !ok {
+			t.Fatalf("%s.properties.payload = %#v, want payload schema", schemaName, properties["payload"])
+		}
+		description, ok := payload["description"].(string)
+		if !ok {
+			t.Fatalf("%s.properties.payload.description = %#v, want string", schemaName, payload["description"])
+		}
+		for _, marker := range []string{"65,536", "compact UTF-8 JSON", "exactly 65,536 bytes", "payloadBytes"} {
+			if !strings.Contains(description, marker) {
+				t.Fatalf("%s payload description = %q, want marker %q", schemaName, description, marker)
+			}
+		}
+	}
+
+	paths := objectField(t, doc, "paths")
+	operation := pathOperation(t, paths, "/factory-sessions/{session_id}/work-requests/{request_id}", "put")
+	assertResponseRef(t, operation, "400", "#/components/responses/BadRequest")
+}
+
 func TestOpenAPIContract_WorkerSessionTurnUsageIsOptionalAndDocumented(t *testing.T) {
 	doc := loadBundledOpenAPIDocument(t)
 	schemas := componentSchemas(t, doc)
@@ -273,6 +300,15 @@ func TestOpenAPIAuthoring_APISchemasUseDedicatedFragments(t *testing.T) {
 		"ManagedRuntimeSourceDiagnostics":     "./components/schemas/api/ManagedRuntimeSourceDiagnostics.yaml",
 		"ModelSummary":                        "./components/schemas/api/ModelSummary.yaml",
 		"ModelDetail":                         "./components/schemas/api/ModelDetail.yaml",
+		"ModelInvocationInput":                "./components/schemas/api/ModelInvocationInput.yaml",
+		"ModelInvocationOutput":               "./components/schemas/api/ModelInvocationOutput.yaml",
+		"ModelInvocationArtifact":             "./components/schemas/api/ModelInvocationArtifact.yaml",
+		"ModelInvocationParameter":            "./components/schemas/api/ModelInvocationParameter.yaml",
+		"ModelInvocationOutputMode":           "./components/schemas/api/ModelInvocationOutputMode.yaml",
+		"ModelInvocationFailureClass":         "./components/schemas/api/ModelInvocationFailureClass.yaml",
+		"ModelInvocationFailure":              "./components/schemas/api/ModelInvocationFailure.yaml",
+		"GenericModelInvocationRequest":       "./components/schemas/api/GenericModelInvocationRequest.yaml",
+		"GenericModelInvocationResponse":      "./components/schemas/api/GenericModelInvocationResponse.yaml",
 		"ModelInvocationRequest":              "./components/schemas/api/ModelInvocationRequest.yaml",
 		"ModelInvocationOptions":              "./components/schemas/api/ModelInvocationOptions.yaml",
 		"ModelInvocationResponseMode":         "./components/schemas/api/ModelInvocationResponseMode.yaml",
@@ -329,6 +365,7 @@ func TestOpenAPIAuthoring_DataModelSchemasUseDedicatedFragments(t *testing.T) {
 		"Work":                   "./components/schemas/data-models/Work.yaml",
 		"Relation":               "./components/schemas/data-models/Relation.yaml",
 		"RelationType":           "./components/schemas/data-models/RelationType.yaml",
+		"ModelReference":         "./components/schemas/data-models/ModelReference.yaml",
 	}
 	for schemaName, wantRef := range expectedRefs {
 		assertSchemaRef(t, schemas, schemaName, wantRef)

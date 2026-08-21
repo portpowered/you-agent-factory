@@ -139,6 +139,8 @@ var ErrUnsupportedReplayBinding = errors.New("unsupported replay binding input")
 type RuntimeOpeningRequest struct {
 	RecordPath    string
 	ReplayPath    string
+	ResumePath    string
+	ResumeInput   LoadResumeInputResult
 	WorkflowID    string
 	FlushInterval time.Duration
 }
@@ -181,6 +183,22 @@ type LoadReplayInputResult struct {
 	Legacy   *ReplayArtifact
 }
 
+// LoadResumeInputRequest selects one explicit resume source by filesystem
+// path before a runtime recording scope exists. It is intentionally distinct
+// from LoadReplayInputRequest so a live continuation cannot be routed through
+// the read-only replay intent by accident.
+type LoadResumeInputRequest struct {
+	Path string
+}
+
+// LoadResumeInputResult contains the detached input facts selected for a live
+// continuation. Factory Runtime consumes the legacy Factory-event family to
+// seed the live successor's initial world state; portable inspection inputs
+// remain a separate, read-only product.
+type LoadResumeInputResult struct {
+	Input LoadReplayInputResult
+}
+
 // RuntimeOpening is the Recordings-owned capability used by Factory Runtime
 // and Factory Sessions while opening a runtime. It keeps replay construction,
 // projection selection, and live scope acquisition on the one process root.
@@ -192,6 +210,7 @@ type RuntimeOpening interface {
 	// reduction remains Recordings-owned; callers receive only the public value
 	// contract and never the reducer or projection implementation.
 	ReconstructCanonicalFactoryWorldState([]FactoryEvent, int) (FactoryWorldState, error)
+	LoadResumeInput(LoadResumeInputRequest) (LoadResumeInputResult, error)
 	Projection() ProjectionService
 	ReplayClock(*ReplayArtifact) Clock
 	ReplayExecution(*ReplayArtifact) (

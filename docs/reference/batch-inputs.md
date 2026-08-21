@@ -540,6 +540,32 @@ Independent items in the same batch may dispatch in parallel, subject to the
 workflow topology, resource limits, worker capacity, and normal scheduler
 rules.
 
+## Work payload size limit
+
+Each submitted Work `payload` value is limited to 65,536 bytes. The limit uses
+the compact UTF-8 JSON encoding of that value, not the character count in the
+source document. Exactly 65,536 bytes is allowed. A payload of 65,537 bytes or
+more rejects the whole Work Request before any Work is accepted, an acceptance
+event is emitted, or dispatch starts.
+
+The diagnostic names the offending Work and reports numeric size metadata
+without including the payload content:
+
+```text
+work_request: Work "story-auth" payload exceeds byte limit: payloadBytes=65537 payloadLimitBytes=65536
+```
+
+`payloadBytes` is a byte count, not a character count. A multibyte UTF-8
+character can use several bytes, so a payload's character count does not prove
+that it fits the limit. `you submit batch` applies this rule to file, stdin,
+inline JSON, and `--dry-run` input.
+
+This is a per-Work admission limit for the opaque `payload` value. It does not
+measure structured `works[].content` or staged-file attachments. It is also
+separate from any aggregate request-body or transport limit. Provider-backed
+dispatch uses stdin for large rendered prompt values, so this public bound is
+not a provider command-line argument limit.
+
 ## Choose The Relation Type
 
 Use the relation that matches the behavior you need:

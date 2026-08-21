@@ -182,12 +182,19 @@ func projectionWorkItem(id, displayName, traceID, placeID, text string) workdoma
 		WorkTypeID:  "task",
 		DisplayName: displayName,
 		TraceID:     traceID,
-		PlaceID:     placeID,
+		State:       projectionWorkItemState(placeID),
 		Content: []workdomain.WorkContentPart{{
 			Type: workdomain.WorkContentPartTypeText,
 			Text: text,
 		}},
 	}
+}
+
+func projectionWorkItemState(placeID string) string {
+	if index := strings.LastIndexByte(placeID, ':'); index >= 0 {
+		return placeID[index+1:]
+	}
+	return placeID
 }
 
 func lineageWorkRequestEvent(t *testing.T, t0 time.Time, tick int, id, requestID string, traceIDs, workIDs []string, item workdomain.FactoryWorkItem) factoryapi.FactoryEvent {
@@ -217,7 +224,7 @@ func lineageWorkstationRequestEvent(tick int, t0 time.Time, dispatchID, transiti
 		Workstation:  interfaces.FactoryWorkstationRef{ID: transitionID, Name: workstationName},
 		Inputs: []interfaces.WorkstationInput{{
 			TokenID:  tokenID,
-			PlaceID:  item.PlaceID,
+			PlaceID:  item.WorkTypeID + ":" + item.State,
 			WorkItem: &item,
 		}},
 	})

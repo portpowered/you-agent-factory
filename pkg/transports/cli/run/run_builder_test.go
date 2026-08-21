@@ -62,6 +62,7 @@ type testRuntimeSelections struct {
 	WorkFile                                string
 	RecordPath                              string
 	ReplayPath                              string
+	ResumePath                              string
 	WorkflowID                              string
 	MockWorkersConfig                       *workers.MockWorkersConfig
 	InvocationSkipPermissionsOverride       *bool
@@ -115,7 +116,7 @@ func testRuntimeOpeningRequestFactory(
 			InvocationSkipPermissionsOverride: cfg.InvocationSkipPermissionsOverride,
 		},
 		Recordings: recordings.RuntimeOpeningRequest{
-			RecordPath: cfg.RecordPath, ReplayPath: cfg.ReplayPath, WorkflowID: cfg.Workflow,
+			RecordPath: cfg.RecordPath, ReplayPath: cfg.ReplayPath, ResumePath: cfg.ResumePath, WorkflowID: cfg.Workflow,
 		},
 		ModelCacheDirectory: cfg.ModelCacheDir,
 		OperatorDefaults:    cfg.OperatorDefaults,
@@ -145,7 +146,7 @@ func flattenTestRuntimeRequest(request *factorysessions.RuntimeOpeningRequest) *
 			MaxAge: request.FactoryRuntime.MetricsConfig.MaxAge, Compress: request.FactoryRuntime.MetricsConfig.Compress,
 		},
 		WorkFile: request.FactorySession.WorkFile, RecordPath: request.Recordings.RecordPath,
-		ReplayPath: request.Recordings.ReplayPath, WorkflowID: request.Recordings.WorkflowID,
+		ReplayPath: request.Recordings.ReplayPath, ResumePath: request.Recordings.ResumePath, WorkflowID: request.Recordings.WorkflowID,
 		MockWorkersConfig:                       request.Workers.MockWorkers,
 		InvocationSkipPermissionsOverride:       request.Workers.InvocationSkipPermissionsOverride,
 		RecordFlushInterval:                     request.Recordings.FlushInterval,

@@ -1,0 +1,27 @@
+type: object
+additionalProperties: false
+required:
+  - name
+  - modality
+description: One ordered value supplied to a named model-operation input slot.
+properties:
+  name:
+    type: string
+    minLength: 1
+    description: Input slot name declared by the selected operation.
+  modality:
+    $ref: './ModelInvocationContentType.yaml'
+    description: Provider-neutral modality of the supplied value.
+  contentType:
+    type: string
+    description: Logical content type retained for compatibility with prepared invocation inputs.
+  mediaType:
+    type: string
+    description: Concrete MIME type for media or file-backed content, when known.
+  content:
+    type: string
+    description: Inline content. JSON values are carried as their canonical JSON text.
+  artifactRef:
+    type: string
+    minLength: 1
+    description: Opaque Models-owned input artifact reference when content is not inline.

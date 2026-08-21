@@ -266,6 +266,11 @@ func openRuntime(
 	if factoryRuntimeAssembler == nil {
 		return runtimeProducts{}, fmt.Errorf("construct runtime scope: Factory Runtime assembler is required")
 	}
+	var resumeInput *recordings.LoadResumeInputResult
+	if strings.TrimSpace(configured.Recordings.ResumePath) != "" {
+		input := configured.Recordings.ResumeInput
+		resumeInput = &input
+	}
 	runtimebuildService, startupRuntime, startupSpec, runtimeLifecycle, runtimeSidecars, err :=
 		factoryRuntimeAssembler.Assemble(
 			ctx,
@@ -316,6 +321,7 @@ func openRuntime(
 			load.LoadedFactoryCfg,
 			configured.Runtime.RuntimeInstanceID,
 			load.ReplayArtifact,
+			resumeInput,
 			service2,
 			configured.Runtime.Mode == factorydefinitions.RuntimeModeService,
 		)

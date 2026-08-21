@@ -1,0 +1,9 @@
+type: string
+description: Uppercase provider-neutral content modality used by generic model invocation contracts.
+enum:
+  - TEXT
+  - IMAGE
+  - AUDIO
+  - VIDEO
+  - JSON
+  - BINARY

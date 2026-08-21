@@ -12,6 +12,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factorytoken "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/token"
 )
 
 func hashLabel(path, text string) string {
@@ -413,6 +414,7 @@ func (WorkArtifactProjection) Project(input WorkArtifactProjectionInput) []work.
 	if input.Token == nil {
 		return nil
 	}
+	runtimeToken := factorytoken.FromWorker(*input.Token)
 	workTypeDeclarations := workTypeArtifactDeclarations(input.Topology, input.Token.Color.WorkTypeID)
 	if dispatch, ok := activeArtifactDispatch(input.Token, input.Dispatches); ok {
 		return projectWorkExpectedArtifacts(
@@ -434,7 +436,7 @@ func (WorkArtifactProjection) Project(input WorkArtifactProjectionInput) []work.
 	}
 	return work.ExpectedArtifactReadModelProjector{}.Project(
 		workTypeDeclarations,
-		workstationArtifactDeclarationsForPlace(input.Topology, input.Token.PlaceID),
+		workstationArtifactDeclarationsForPlace(input.Topology, runtimeToken.PlaceID),
 		[]work.ExpectedArtifactInput{expectedArtifactInput(*input.Token)},
 		work.ExpectedArtifactObservation{},
 	)

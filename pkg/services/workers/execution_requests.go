@@ -345,8 +345,14 @@ func CloneSubprocessExecutionRequest(request SubprocessExecutionRequest) Subproc
 	clone.Env = append([]string(nil), request.Env...)
 	clone.PreviousChainingTraceIDs = append([]string(nil), request.PreviousChainingTraceIDs...)
 	clone.Execution = work.CloneExecutionMetadata(request.Execution)
-	clone.InputTokens = cloneAnySlice(request.InputTokens)
-	clone.InputBindings = cloneStringSliceMap(request.InputBindings)
+	if len(request.Inputs) > 0 {
+		clone.Inputs = make([]WorkInput, len(request.Inputs))
+		for index, input := range request.Inputs {
+			clone.Inputs[index] = input.Clone()
+		}
+	} else {
+		clone.Inputs = nil
+	}
 	return clone
 }
 
@@ -632,6 +638,11 @@ func (input *ModelRuntimeInput) Clone() *ModelRuntimeInput {
 }
 
 type WorkInput struct {
+	// Kind distinguishes a Work input from a capacity/resource input without
+	// exposing the runtime representation that supplied it.
+	Kind         string
+	State        string
+	InputNames   []string
 	WorkID       string
 	Name         string
 	WorkTypeID   string
@@ -847,6 +858,7 @@ func (input ExecutionInput) Clone() ExecutionInput {
 
 func (input WorkInput) Clone() WorkInput {
 	clone := input
+	clone.InputNames = append([]string(nil), input.InputNames...)
 	clone.Content = work.CloneWorkContentParts(input.Content)
 	clone.Tags = cloneStringMap(input.Tags)
 	clone.Relations = append([]work.Relation(nil), input.Relations...)

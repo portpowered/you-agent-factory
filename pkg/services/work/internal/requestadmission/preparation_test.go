@@ -330,18 +330,16 @@ func mustRequestPreparationService(t *testing.T) RequestPreparationService {
 	return service
 }
 
-// oversizedWorkPayloadSize is comfortably past the size at which an inlined
-// prompt used to make the plan-stage worker spawn impossible. Admission
-// enforces no size bound because the rendered prompt no longer travels on the
-// provider command line, so a payload this large must be admitted rather than
-// rejected at the boundary or admitted and then killed one transition later.
-const oversizedWorkPayloadSize = 50_000
+// belowLimitWorkPayloadSize leaves room for the surrounding JSON value while
+// exercising a payload that is large enough to cover the previous command-line
+// failure without crossing the Work admission boundary.
+const belowLimitWorkPayloadSize = MaxWorkPayloadBytes - 2_048
 
-func TestPrepareWorkRequestAdmitsAnOversizedPayloadWithoutASizeLimit(t *testing.T) {
+func TestPrepareWorkRequestAdmitsPayloadBelowLimit(t *testing.T) {
 	t.Parallel()
 
 	service := mustRequestPreparationService(t)
-	text := strings.Repeat("u", oversizedWorkPayloadSize)
+	text := strings.Repeat("u", belowLimitWorkPayloadSize)
 
 	prepared, err := service.PrepareWorkRequest(context.Background(), WorkRequestPreparation{
 		Request: Request{
@@ -362,11 +360,11 @@ func TestPrepareWorkRequestAdmitsAnOversizedPayloadWithoutASizeLimit(t *testing.
 	}
 }
 
-func TestPrepareWorkRequestAdmitsAnOversizedLegacyPayloadField(t *testing.T) {
+func TestPrepareWorkRequestAdmitsLegacyPayloadBelowLimit(t *testing.T) {
 	t.Parallel()
 
 	service := mustRequestPreparationService(t)
-	text := strings.Repeat("p", oversizedWorkPayloadSize)
+	text := strings.Repeat("p", belowLimitWorkPayloadSize)
 
 	prepared, err := service.PrepareWorkRequest(context.Background(), WorkRequestPreparation{
 		Request: Request{

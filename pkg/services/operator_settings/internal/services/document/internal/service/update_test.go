@@ -2,6 +2,8 @@ package service_test
 
 import (
 	"errors"
+	"os"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
@@ -48,6 +50,43 @@ func TestApplyDocumentUpdate_ModelOnlyUpdatePreservesProviderAndReturnsValidated
 	}
 	if reloaded.Document.Defaults.WorkerModel != nextModel {
 		t.Fatalf("reloaded WorkerModel = %q, want %q", reloaded.Document.Defaults.WorkerModel, nextModel)
+	}
+}
+
+func TestApplyDocumentUpdate_PreservesModelsOverlayAndUnrelatedSettings(t *testing.T) {
+	t.Parallel()
+
+	path := filepath.Join(t.TempDir(), "config.json")
+	if err := os.WriteFile(path, []byte(`{
+		"defaults":{"workerModelProvider":"claude","workerModel":"claude-sonnet"},
+		"models":{"llm":{"source":"hf://custom/gemma"}}
+	}`), 0o600); err != nil {
+		t.Fatalf("WriteFile() = %v", err)
+	}
+	service := newDocumentUpdateService(t)
+
+	model := "claude-opus"
+	updated, err := service.ApplyDocumentUpdate(operatorsettings.ApplyDocumentUpdateRequest{
+		Path:          path,
+		ProviderModel: operatorsettings.DocumentProviderModelUpdate{Model: &model},
+	})
+	if err != nil {
+		t.Fatalf("ApplyDocumentUpdate() = %v", err)
+	}
+	if updated.Document.Defaults.WorkerModel != model || updated.Document.Defaults.WorkerModelProvider != "claude" {
+		t.Fatalf("updated defaults = %#v, want model update and preserved provider", updated.Document.Defaults)
+	}
+	entry := updated.Document.Models["llm"]
+	if entry.Source == nil || *entry.Source != "hf://custom/gemma" {
+		t.Fatalf("updated models = %#v, want preserved overlay", updated.Document.Models)
+	}
+
+	reloaded, err := service.LoadDocument(operatorsettings.LoadDocumentRequest{Path: path})
+	if err != nil {
+		t.Fatalf("LoadDocument() after update = %v", err)
+	}
+	if reloaded.Document.Defaults.WorkerModel != model || reloaded.Document.Models["llm"].Source == nil || *reloaded.Document.Models["llm"].Source != "hf://custom/gemma" {
+		t.Fatalf("reloaded document = %#v, want model overlay and defaults preserved", reloaded.Document)
 	}
 }
 

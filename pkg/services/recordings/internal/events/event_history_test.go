@@ -780,8 +780,8 @@ func TestFactoryEventHistory_RecordDispatchCompletion_PreservesOutputWorkStateFr
 		OutputMutations: []interfaces.TokenMutationRecord{{
 			Type: interfaces.MutationMove,
 			Token: &workerexecution.Token{
-				ID:      "token-terminal",
-				PlaceID: "task:complete",
+				ID:    "token-terminal",
+				State: "complete",
 				Color: workerexecution.Color{
 					WorkID:     "work-1",
 					WorkTypeID: "task",

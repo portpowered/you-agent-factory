@@ -19,8 +19,6 @@ func TestFactoryEventHistory_RecordWorkStateChange_OperatorMoveShape(t *testing.
 		WorkTypeID:    "task",
 		FromState:     "failed",
 		ToState:       "in-progress",
-		FromPlaceID:   "task:failed",
-		ToPlaceID:     "task:in-progress",
 		Source:        work.WorkStateChangeSourceCLI,
 		RequestID:     "move-request-1",
 		TriggerWorkID: "work-parent",
@@ -103,13 +101,11 @@ func TestFactoryEventHistory_RecordWorkStateChange_NormalizesEventTimeToUTC(t *t
 	history := newTestFactoryEventHistory(eventHistoryProjectionNet(), func() time.Time { return time.Unix(0, 0).UTC() })
 
 	history.RecordWorkStateChange(4, work.WorkStateChangeRecord{
-		WorkID:      "work-utc",
-		WorkTypeID:  "task",
-		FromState:   "init",
-		ToState:     "done",
-		FromPlaceID: "task:init",
-		ToPlaceID:   "task:done",
-		Source:      work.WorkStateChangeSourceAPI,
+		WorkID:     "work-utc",
+		WorkTypeID: "task",
+		FromState:  "init",
+		ToState:    "done",
+		Source:     work.WorkStateChangeSourceAPI,
 	}, eventTime)
 
 	events := generatedHistoryEvents(t, history)
@@ -131,13 +127,11 @@ func TestFactoryEventHistory_RecordWorkStateChange_MatchesRecordWorkRequestEvent
 		WorkItems: []work.FactoryWorkItem{{ID: "work-utc", WorkTypeID: "task"}},
 	}, eventTime)
 	history.RecordWorkStateChange(4, work.WorkStateChangeRecord{
-		WorkID:      "work-utc",
-		WorkTypeID:  "task",
-		FromState:   "init",
-		ToState:     "done",
-		FromPlaceID: "task:init",
-		ToPlaceID:   "task:done",
-		Source:      work.WorkStateChangeSourceCLI,
+		WorkID:     "work-utc",
+		WorkTypeID: "task",
+		FromState:  "init",
+		ToState:    "done",
+		Source:     work.WorkStateChangeSourceCLI,
 	}, eventTime)
 
 	events := generatedHistoryEvents(t, history)

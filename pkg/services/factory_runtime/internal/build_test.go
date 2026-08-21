@@ -464,6 +464,10 @@ func (*testRuntimeOpeningStub) LoadReplayInput(recordings.LoadReplayInputRequest
 	return recordings.LoadReplayInputResult{}, nil
 }
 
+func (*testRuntimeOpeningStub) LoadResumeInput(recordings.LoadResumeInputRequest) (recordings.LoadResumeInputResult, error) {
+	return recordings.LoadResumeInputResult{}, nil
+}
+
 var _ recordings.RuntimeOpening = (*testRuntimeOpeningStub)(nil)
 
 func testRuntimeLoggerFactory(*zap.Logger, bool) factory.Logger { return factory.NoopLogger{} }

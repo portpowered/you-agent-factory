@@ -230,7 +230,7 @@ func (d *DispatcherSubsystem) buildWorkDispatch(snapshot *interfaces.EngineState
 		CurrentChainingTraceID:   factorytoken.CurrentChainingTraceID(inputTokens, interfaces.SystemTimeWorkTypeID),
 		PreviousChainingTraceIDs: factorytoken.PreviousChainingTraceIDs(inputTokens),
 		Execution:                executionMetadataForDispatch(decision.TransitionID, snapshot.TickCount, inputTokens),
-		InputTokens:              workers.InputTokens(inputTokens...),
+		InputTokens:              workers.InputTokens(factorytoken.ToWorkerSlice(inputTokens)...),
 		InputBindings:            cloneDispatchInputBindings(decision.InputBindings),
 		WorkstationName:          tr.Name,
 	}

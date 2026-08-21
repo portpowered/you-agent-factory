@@ -15,6 +15,7 @@ import (
 	workflowpolicy "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/orchestratorcontract"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/state"
 	factorytoken "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/token"
+	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
 func TestResourceCapacityDecisionMatrix(t *testing.T) {
@@ -266,10 +267,10 @@ func TestResourceCapacityAccountingSkipsUnrelatedAndDuplicateTokens(t *testing.T
 	eng.runtimeState.Marking.Tokens[duplicate.ID] = &duplicate
 	eng.runtimeState.Dispatches["nil-dispatch"] = nil
 	eng.runtimeState.Dispatches["related-dispatch"] = &interfaces.DispatchEntry{
-		ConsumedTokens: []factorytoken.Token{
-			duplicate,
-			{ID: "dispatch-token", PlaceID: "gpu-slot:held", Color: factorytoken.Color{DataType: factorytoken.DataTypeResource, WorkTypeID: "gpu-slot"}},
-			{ID: "unrelated-dispatch-token", PlaceID: "other:held", Color: factorytoken.Color{DataType: factorytoken.DataTypeResource, WorkTypeID: "other"}},
+		ConsumedTokens: []workerexecution.Token{
+			factorytoken.ToWorker(duplicate),
+			{ID: "dispatch-token", State: "held", Color: workerexecution.Color{DataType: workerexecution.DataTypeResource, WorkTypeID: "gpu-slot"}},
+			{ID: "unrelated-dispatch-token", State: "held", Color: workerexecution.Color{DataType: workerexecution.DataTypeResource, WorkTypeID: "other"}},
 		},
 	}
 	inUse := resourceInUseCountLocked(eng.runtimeState, "gpu-slot")
@@ -773,5 +774,5 @@ func markResourceUnitsInUse(eng *FactoryEngine, count int) {
 		token.PlaceID = "gpu-slot:held"
 		consumed = append(consumed, token)
 	}
-	eng.runtimeState.Dispatches["dispatch-resource"] = &interfaces.DispatchEntry{ConsumedTokens: consumed}
+	eng.runtimeState.Dispatches["dispatch-resource"] = &interfaces.DispatchEntry{ConsumedTokens: factorytoken.ToWorkerSlice(consumed)}
 }

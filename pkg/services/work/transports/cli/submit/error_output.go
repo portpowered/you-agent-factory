@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/portpowered/infinite-you/pkg/services/work"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
@@ -21,6 +22,16 @@ type SubmissionHTTPError struct {
 	Family     factoryapi.ErrorFamily
 	Message    string
 	operation  string
+}
+
+// CLIErrorFamily returns the safe public response family when the server
+// supplied one. The central CLI renderer uses it only for the public envelope;
+// arbitrary response fields remain filtered by submissionFailureError.
+func (e *SubmissionHTTPError) CLIErrorFamily() factoryapi.ErrorFamily {
+	if e == nil {
+		return ""
+	}
+	return e.Family
 }
 
 func (e *SubmissionHTTPError) CLIErrorCode() string {
@@ -56,6 +67,61 @@ func (e *SubmissionHTTPError) Error() string {
 		return fmt.Sprintf("%s failed (%d)", operation, e.StatusCode)
 	}
 	return fmt.Sprintf("%s failed (%d): %s", operation, e.StatusCode, strings.Join(details, " "))
+}
+
+// batchPayloadSizeError preserves the Work-owned size diagnostic for local
+// --dry-run validation. It exposes only the safe Work identity and measured
+// limit, while retaining the original error for callers that need its type.
+type batchPayloadSizeError struct {
+	label      string
+	diagnostic string
+	cause      error
+}
+
+func newBatchPayloadSizeError(label string, cause *work.PayloadSizeError, wrapped error) error {
+	if cause == nil {
+		return wrapped
+	}
+	return &batchPayloadSizeError{
+		label:      label,
+		diagnostic: cause.Error(),
+		cause:      wrapped,
+	}
+}
+
+func (e *batchPayloadSizeError) Error() string {
+	if e == nil {
+		return ""
+	}
+	return fmt.Sprintf("parse %s: %s", e.label, e.diagnostic)
+}
+
+func (e *batchPayloadSizeError) Unwrap() error {
+	if e == nil {
+		return nil
+	}
+	return e.cause
+}
+
+func (e *batchPayloadSizeError) CLIErrorCode() string {
+	if e == nil {
+		return ""
+	}
+	return string(factoryapi.ErrorResponseCodeBADREQUEST)
+}
+
+func (e *batchPayloadSizeError) CLIErrorMessage() string {
+	if e == nil {
+		return ""
+	}
+	return e.diagnostic
+}
+
+func (e *batchPayloadSizeError) CLIErrorFamily() factoryapi.ErrorFamily {
+	if e == nil {
+		return ""
+	}
+	return factoryapi.ErrorFamilyBadRequest
 }
 
 func submitFailureError(statusCode int, body []byte) error {

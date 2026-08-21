@@ -8,13 +8,12 @@ import (
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/legacysnapshot"
-	factorytoken "github.com/portpowered/infinite-you/pkg/services/workers"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
 type stopSummaryWork struct {
 	id, name, workType, state string
-	token                     *factorytoken.Token
+	token                     *workerexecution.Token
 }
 
 type stopSummaryRecovery struct{ resultSummary, surface, action string }
@@ -52,7 +51,7 @@ func ProjectFactorySessionStopSummary(sessionID string, snapshot *legacysnapshot
 
 // ProjectWorkStopSummary derives the canonical stopped-state inspect summary
 // for one Work read when that Work explains the current stop condition.
-func ProjectWorkStopSummary(sessionID string, snapshot *legacysnapshot.Snapshot, token *factorytoken.Token, sessionStopSummary *StopSummary) *StopSummary {
+func ProjectWorkStopSummary(sessionID string, snapshot *legacysnapshot.Snapshot, token *workerexecution.Token, sessionStopSummary *StopSummary) *StopSummary {
 	sessionID = strings.TrimSpace(sessionID)
 	if sessionID == "" || token == nil {
 		return nil
@@ -296,24 +295,11 @@ func workByID(materialized factory.PublicWorkTokens, workID string) *stopSummary
 	return nil
 }
 
-func workFromToken(token *factorytoken.Token, topology *factory.Net) stopSummaryWork {
+func workFromToken(token *workerexecution.Token, _ *factory.Net) stopSummaryWork {
 	if token == nil {
 		return stopSummaryWork{}
 	}
-	workType, stateName := factory.SplitPlaceID(token.PlaceID)
-	if token.Color.WorkTypeID != "" {
-		workType = token.Color.WorkTypeID
-	}
-	if topology != nil {
-		if place := topology.Places[token.PlaceID]; place != nil {
-			if strings.TrimSpace(place.TypeID) != "" {
-				workType = strings.TrimSpace(place.TypeID)
-			}
-			if strings.TrimSpace(place.State) != "" {
-				stateName = strings.TrimSpace(place.State)
-			}
-		}
-	}
+	workType, stateName := token.Color.WorkTypeID, token.State
 	return stopSummaryWork{id: strings.TrimSpace(token.Color.WorkID), name: strings.TrimSpace(firstNonEmpty(token.Color.Name, token.Color.WorkID, token.ID)), workType: strings.TrimSpace(workType), state: strings.TrimSpace(stateName), token: token}
 }
 
@@ -338,7 +324,7 @@ func snapshotTopology(snapshot *legacysnapshot.Snapshot) *factory.Net {
 	return snapshot.Topology
 }
 
-func dispatchTouchesWork(tokens []factorytoken.Token, workID string) bool {
+func dispatchTouchesWork(tokens []workerexecution.Token, workID string) bool {
 	for _, token := range tokens {
 		if strings.TrimSpace(token.Color.WorkID) == workID {
 			return true
@@ -432,7 +418,7 @@ func failureMessageFromWork(work stopSummaryWork) string {
 	return firstNonEmpty(work.token.History.LastError, latestFailureLogMessage(work.token.History))
 }
 
-func latestFailureLogMessage(history factorytoken.History) string {
+func latestFailureLogMessage(history workerexecution.History) string {
 	if len(history.FailureLog) == 0 {
 		return ""
 	}

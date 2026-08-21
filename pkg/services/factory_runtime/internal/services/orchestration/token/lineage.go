@@ -5,7 +5,11 @@ import workerexecution "github.com/portpowered/infinite-you/pkg/services/workers
 // PreviousChainingTraceIDs returns canonical predecessor trace IDs from work
 // tokens while ignoring resource tokens.
 func PreviousChainingTraceIDs(tokens []Token) []string {
-	return workerexecution.PreviousChainingTraceIDs(tokens)
+	colors := make([]Color, len(tokens))
+	for index := range tokens {
+		colors[index] = tokens[index].Color
+	}
+	return workerexecution.PreviousChainingTraceIDsFromColors(colors)
 }
 
 // PreviousChainingTraceIDsFromColors returns canonical predecessor trace IDs
@@ -17,7 +21,11 @@ func PreviousChainingTraceIDsFromColors(colors []Color) []string {
 // CurrentChainingTraceID returns the first customer work trace, falling back
 // to any non-resource trace. ignoredWorkTypeIDs identify system-owned inputs.
 func CurrentChainingTraceID(tokens []Token, ignoredWorkTypeIDs ...string) string {
-	return workerexecution.CurrentChainingTraceID(tokens, ignoredWorkTypeIDs...)
+	colors := make([]Color, len(tokens))
+	for index := range tokens {
+		colors[index] = tokens[index].Color
+	}
+	return workerexecution.CurrentChainingTraceIDFromColors(colors, ignoredWorkTypeIDs...)
 }
 
 // CurrentChainingTraceIDFromColors returns the first customer work trace,

@@ -16,7 +16,7 @@ properties:
     type: array
     description: Operations declared by this worker for the selected model.
     items:
-      $ref: '../data-models/ModelOperation.yaml'
+      $ref: './ModelInvocationOperation.yaml'
   resourceNames:
     type: array
     description: Factory resource names referenced by the worker declaration.

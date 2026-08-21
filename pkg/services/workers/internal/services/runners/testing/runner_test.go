@@ -8,11 +8,10 @@ import (
 	"runtime"
 	"strings"
 	"testing"
-	"time"
 
 	runtimefixtures "github.com/portpowered/infinite-you/internal/testutil/runtimefixtures"
 	workerconfig "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	work "github.com/portpowered/infinite-you/pkg/services/work"
 	workers "github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
@@ -213,19 +212,14 @@ func TestMockWorkerCommandRunner_SelectsByWorkerWorkstationAndInput(t *testing.T
 	result, err := runner.Run(context.Background(), workers.CommandRequest{
 		WorkerType:      "worker",
 		WorkstationName: "process",
-		InputBindings: map[string][]string{
-			"work": {"token-1"},
-		},
-		InputTokens: inputTokens(factoryruntime.RuntimeToken{
-			ID:      "token-1",
-			PlaceID: "task:init",
-			Color: factoryruntime.RuntimeTokenColor{
-				DataType:   factoryruntime.RuntimeTokenDataTypeWork,
-				WorkID:     "work-1",
-				WorkTypeID: "task",
-				TraceID:    "trace-1",
-			},
-		}),
+		Inputs: []workers.WorkInput{{
+			Kind:       string(workers.DataTypeWork),
+			State:      "init",
+			InputNames: []string{"work"},
+			WorkID:     "work-1",
+			WorkTypeID: "task",
+			Lineage:    workers.WorkLineage{TraceID: "trace-1"},
+		}},
 	})
 	if err != nil {
 		t.Fatalf("Run returned error: %v", err)
@@ -399,40 +393,103 @@ func TestRejectResultNilConfigDefaultsToExitCodeOne(t *testing.T) {
 	}
 }
 
-func TestCommandRequestInputTokensDecodesStructuredAndSkipsInvalid(t *testing.T) {
-	timestamp := time.Unix(1700000000, 0).UTC()
+func TestCommandRequestInputsProjectToMockInputTokens(t *testing.T) {
+	if tokens := commandRequestInputTokens(workers.CommandRequest{}); tokens != nil {
+		t.Fatalf("empty projected tokens = %#v, want nil", tokens)
+	}
+
 	tokens := commandRequestInputTokens(workers.CommandRequest{
-		InputTokens: []any{
-			factoryruntime.RuntimeToken{
-				ID:      "token-direct",
-				PlaceID: "task:init",
-				Color: factoryruntime.RuntimeTokenColor{
-					DataType:   factoryruntime.RuntimeTokenDataTypeWork,
-					WorkID:     "work-1",
-					WorkTypeID: "task",
-				},
-			},
-			map[string]any{
-				"id":         "token-map",
-				"place_id":   "task:ready",
-				"created_at": timestamp.Format(time.RFC3339Nano),
-				"entered_at": timestamp.Format(time.RFC3339Nano),
-				"color": map[string]any{
-					"data_type":    string(factoryruntime.RuntimeTokenDataTypeWork),
-					"work_id":      "work-2",
-					"work_type_id": "task",
-				},
-				"history": map[string]any{},
-			},
-			make(chan int),
+		Inputs: []workers.WorkInput{
+			{Kind: string(workers.DataTypeWork), State: "init", WorkID: "work-1", WorkTypeID: "task"},
+			{Kind: string(workers.DataTypeWork), State: "ready", WorkID: "work-2", WorkTypeID: "task"},
 		},
 	})
 
 	if len(tokens) != 2 {
-		t.Fatalf("decoded token count = %d, want 2", len(tokens))
+		t.Fatalf("projected token count = %d, want 2", len(tokens))
 	}
-	if tokens[0].ID != "token-direct" || tokens[1].ID != "token-map" {
-		t.Fatalf("decoded tokens = %#v, want direct and JSON-decoded tokens", tokens)
+	if tokens[0].ID != "input-0" || tokens[0].State != "init" || tokens[1].State != "ready" {
+		t.Fatalf("projected tokens = %#v, want ordered state facts", tokens)
+	}
+}
+
+func TestMockWorkInputSelectorMatchesPublicInputsAndSerializedTokens(t *testing.T) {
+	payload := []byte("payload")
+	sum := sha256.Sum256(payload)
+	input := workers.WorkInput{
+		Kind:       string(workers.DataTypeWork),
+		State:      "ready",
+		InputNames: []string{"work"},
+		WorkID:     "work-1",
+		WorkTypeID: "task",
+		Content:    []work.WorkContentPart{{Type: work.WorkContentPartTypeText, Text: string(payload)}},
+		Tags:       map[string]string{"channel": "chat"},
+		Lineage:    workers.WorkLineage{TraceID: "trace-1"},
+	}
+	selector := MockWorkInputSelector{
+		WorkID:      "work-1",
+		WorkType:    "task",
+		State:       "ready",
+		InputName:   "work",
+		TraceID:     "trace-1",
+		Channel:     "chat",
+		PayloadHash: "sha256:" + hex.EncodeToString(sum[:]),
+	}
+
+	if !mockWorkInputSelectorMatches(selector, []workers.WorkInput{
+		{Kind: string(workers.DataTypeResource)},
+		input,
+	}, nil) {
+		t.Fatal("selector should match the public work input after skipping a resource")
+	}
+	if mockWorkInputSelectorMatches(selector, []workers.WorkInput{{Kind: string(workers.DataTypeResource)}}, nil) {
+		t.Fatal("selector matched a resource-only input list")
+	}
+
+	mismatches := []MockWorkInputSelector{
+		{WorkID: "other"},
+		{WorkType: "other"},
+		{State: "other"},
+		{InputName: "other"},
+		{TraceID: "other"},
+		{Channel: "other"},
+		{PayloadHash: "sha256:other"},
+	}
+	for _, mismatch := range mismatches {
+		if mockWorkInputSelectorMatches(mismatch, []workers.WorkInput{input}, nil) {
+			t.Fatalf("selector %#v unexpectedly matched public work input", mismatch)
+		}
+	}
+
+	rawTokens := []map[string]any{{
+		"id":    "token-1",
+		"state": "ready",
+		"color": map[string]any{
+			"work_id":      "work-1",
+			"work_type_id": "task",
+			"data_type":    string(workers.DataTypeWork),
+			"trace_id":     "trace-1",
+			"tags":         map[string]string{"channel": "chat"},
+			"payload":      payload,
+		},
+	}}
+	if !mockWorkInputSelectorMatches(selector, rawTokens, map[string][]string{"work": {"token-1"}}) {
+		t.Fatal("selector should match serialized token input")
+	}
+	if mockWorkInputSelectorMatches(selector, func() {}, nil) {
+		t.Fatal("selector matched an unencodable token input")
+	}
+}
+
+func TestDecodeTokenRejectsMalformedBoundaryValues(t *testing.T) {
+	if _, ok := decodeToken(func() {}); ok {
+		t.Fatal("decodeToken accepted an unencodable value")
+	}
+	if _, ok := decodeToken("not a token"); ok {
+		t.Fatal("decodeToken accepted a non-object JSON value")
+	}
+	if got := tokenState("not a token"); got != "" {
+		t.Fatalf("tokenState = %q, want empty state for malformed token", got)
 	}
 }
 
@@ -448,22 +505,32 @@ func TestMockWorkInputSelectorMatchesSkipsResourcesAndChecksAllFields(t *testing
 		Channel:     "chat",
 		PayloadHash: "sha256:" + hex.EncodeToString(sum[:]),
 	}
-	tokens := []factoryruntime.RuntimeToken{
+	tokens := []mockInputToken{
 		{
-			ID:      "resource-1",
-			PlaceID: "resource:ready",
-			Color:   factoryruntime.RuntimeTokenColor{DataType: factoryruntime.RuntimeTokenDataTypeResource},
+			ID:    "resource-1",
+			State: "ready",
+			Color: struct {
+				WorkID     string            `json:"work_id"`
+				WorkTypeID string            `json:"work_type_id"`
+				DataType   string            `json:"data_type"`
+				TraceID    string            `json:"trace_id"`
+				Tags       map[string]string `json:"tags"`
+				Payload    []byte            `json:"payload"`
+			}{DataType: string(workers.DataTypeResource)},
 		},
 		{
-			ID:      "token-1",
-			PlaceID: "task:ready",
-			Color: factoryruntime.RuntimeTokenColor{
-				DataType:   factoryruntime.RuntimeTokenDataTypeWork,
-				WorkID:     "work-1",
-				WorkTypeID: "task",
-				TraceID:    "trace-1",
-				Tags:       map[string]string{"channel": "chat"},
-				Payload:    payload,
+			ID:    "token-1",
+			State: "ready",
+			Color: struct {
+				WorkID     string            `json:"work_id"`
+				WorkTypeID string            `json:"work_type_id"`
+				DataType   string            `json:"data_type"`
+				TraceID    string            `json:"trace_id"`
+				Tags       map[string]string `json:"tags"`
+				Payload    []byte            `json:"payload"`
+			}{
+				DataType: string(workers.DataTypeWork), WorkID: "work-1", WorkTypeID: "task",
+				TraceID: "trace-1", Tags: map[string]string{"channel": "chat"}, Payload: payload,
 			},
 		},
 	}
@@ -477,16 +544,18 @@ func TestMockWorkInputSelectorMatchesSkipsResourcesAndChecksAllFields(t *testing
 }
 
 func TestSelectorHelpersCoverMismatchBranches(t *testing.T) {
-	token := factoryruntime.RuntimeToken{
-		ID:      "token-1",
-		PlaceID: "task:ready",
-		Color: factoryruntime.RuntimeTokenColor{
-			DataType:   factoryruntime.RuntimeTokenDataTypeWork,
-			WorkID:     "work-1",
-			WorkTypeID: "task",
-			TraceID:    "trace-1",
-			Tags:       map[string]string{"channel": "chat"},
-			Payload:    []byte("payload"),
+	token := mockInputToken{
+		ID: "token-1", State: "ready",
+		Color: struct {
+			WorkID     string            `json:"work_id"`
+			WorkTypeID string            `json:"work_type_id"`
+			DataType   string            `json:"data_type"`
+			TraceID    string            `json:"trace_id"`
+			Tags       map[string]string `json:"tags"`
+			Payload    []byte            `json:"payload"`
+		}{
+			DataType: string(workers.DataTypeWork), WorkID: "work-1", WorkTypeID: "task",
+			TraceID: "trace-1", Tags: map[string]string{"channel": "chat"}, Payload: []byte("payload"),
 		},
 	}
 
@@ -523,8 +592,8 @@ func TestHelperFunctions(t *testing.T) {
 	if bindingContainsToken(map[string][]string{"work": {"other"}}, "work", "token-1") {
 		t.Fatal("bindingContainsToken matched missing token")
 	}
-	if tokenState(factoryruntime.RuntimeToken{PlaceID: "no-prefix", Color: factoryruntime.RuntimeTokenColor{WorkTypeID: "task"}}) != "" {
-		t.Fatal("tokenState returned non-empty state for unrelated place")
+	if tokenState(mockInputToken{State: ""}) != "" {
+		t.Fatal("tokenState returned non-empty state for empty state fact")
 	}
 	if payloadHash(nil) != "" {
 		t.Fatal("payloadHash returned non-empty hash for empty payload")
@@ -561,12 +630,4 @@ func (r *inspectingCommandRunner) Run(ctx context.Context, req workers.CommandRe
 	r.req = req
 	_, r.hasDeadline = ctx.Deadline()
 	return workers.CommandResult{}, nil
-}
-
-func inputTokens(tokens ...factoryruntime.RuntimeToken) []any {
-	out := make([]any, 0, len(tokens))
-	for _, token := range tokens {
-		out = append(out, token)
-	}
-	return out
 }

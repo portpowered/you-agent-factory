@@ -59,8 +59,6 @@ func (e *FactoryEngine) MoveWork(ctx context.Context, workID string, stateName s
 			WorkTypeID:  token.Color.WorkTypeID,
 			FromState:   fromState,
 			ToState:     stateName,
-			FromPlaceID: fromPlaceID,
-			ToPlaceID:   toPlaceID,
 			TokenID:     token.ID,
 		}, nil
 	}
@@ -87,8 +85,6 @@ func (e *FactoryEngine) MoveWork(ctx context.Context, workID string, stateName s
 		WorkTypeID:  token.Color.WorkTypeID,
 		FromState:   fromState,
 		ToState:     stateName,
-		FromPlaceID: fromPlaceID,
-		ToPlaceID:   toPlaceID,
 		TokenID:     token.ID,
 	}, nil
 }

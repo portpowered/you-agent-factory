@@ -256,7 +256,7 @@ func TestTransitioner_WorkerEmittedFactoryRequestBatchReleasesConsumedResources(
 	transitioner := NewTransitioner(net, nil, func() time.Time { return now }, testTokenTransformer(net), nil, nil, nil, testWorkPropagationPolicy())
 	output := `{"request":{"type":"FACTORY_REQUEST_BATCH","works":[{"name":"follow-up","workTypeName":"child"}]}}`
 	snapshot := workerBatchSnapshot(output)
-	snapshot.Dispatches["dispatch-1"].ConsumedTokens = append(snapshot.Dispatches["dispatch-1"].ConsumedTokens, factorytoken.Token{
+	snapshot.Dispatches["dispatch-1"].ConsumedTokens = append(snapshot.Dispatches["dispatch-1"].ConsumedTokens, factorytoken.ToWorker(factorytoken.Token{
 		ID:        "agent-slot:resource:0",
 		PlaceID:   "agent-slot:available",
 		CreatedAt: now.Add(-time.Hour),
@@ -266,7 +266,7 @@ func TestTransitioner_WorkerEmittedFactoryRequestBatchReleasesConsumedResources(
 			WorkTypeID: "agent-slot",
 			DataType:   factorytoken.DataTypeResource,
 		},
-	})
+	}))
 
 	result, err := transitioner.Execute(context.Background(), snapshot)
 	if err != nil {
@@ -277,7 +277,7 @@ func TestTransitioner_WorkerEmittedFactoryRequestBatchReleasesConsumedResources(
 	}
 
 	var generatedWork int
-	var releasedResource *factorytoken.Token
+	var releasedResource *workerexecution.Token
 	for i := range result.Mutations {
 		mutation := result.Mutations[i]
 		if mutation.NewToken == nil {
@@ -333,7 +333,7 @@ func TestTransitioner_AcceptedTransitionReleasesAllConsumedResourceUnitsForCardi
 	transitioner := NewTransitioner(net, nil, func() time.Time { return now }, testTokenTransformer(net), nil, nil, nil, testWorkPropagationPolicy())
 	snapshot := workerBatchSnapshot("accepted")
 	snapshot.Dispatches["dispatch-1"].ConsumedTokens = append(snapshot.Dispatches["dispatch-1"].ConsumedTokens,
-		factorytoken.Token{
+		factorytoken.ToWorker(factorytoken.Token{
 			ID:        "agent-slot:resource:0",
 			PlaceID:   "agent-slot:available",
 			CreatedAt: now.Add(-time.Hour),
@@ -343,8 +343,8 @@ func TestTransitioner_AcceptedTransitionReleasesAllConsumedResourceUnitsForCardi
 				WorkTypeID: "agent-slot",
 				DataType:   factorytoken.DataTypeResource,
 			},
-		},
-		factorytoken.Token{
+		}),
+		factorytoken.ToWorker(factorytoken.Token{
 			ID:        "agent-slot:resource:1",
 			PlaceID:   "agent-slot:available",
 			CreatedAt: now.Add(-time.Hour),
@@ -354,7 +354,7 @@ func TestTransitioner_AcceptedTransitionReleasesAllConsumedResourceUnitsForCardi
 				WorkTypeID: "agent-slot",
 				DataType:   factorytoken.DataTypeResource,
 			},
-		},
+		}),
 	)
 
 	result, err := transitioner.Execute(context.Background(), snapshot)

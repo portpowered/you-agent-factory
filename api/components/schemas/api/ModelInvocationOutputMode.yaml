@@ -1,0 +1,7 @@
+type: string
+description: Provider-neutral representation requested for a generic model invocation result.
+enum:
+  - AUTO
+  - INLINE
+  - JSON
+  - ARTIFACT

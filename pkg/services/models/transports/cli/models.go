@@ -665,7 +665,7 @@ func managedRuntimeDiagnosticsMap(model factoryapi.ModelDetail) factoryapi.Strin
 	return model.Diagnostics
 }
 
-func modelOperationNames(operations []factoryapi.ModelOperation) string {
+func modelOperationNames(operations []factoryapi.ModelInvocationOperation) string {
 	names := make([]string, 0, len(operations))
 	for _, operation := range operations {
 		names = append(names, operation.Name)
@@ -674,7 +674,7 @@ func modelOperationNames(operations []factoryapi.ModelOperation) string {
 	return strings.Join(names, ",")
 }
 
-func modelModalities(modalities []factoryapi.ModelOperationContentType) string {
+func modelModalities(modalities []factoryapi.ModelInvocationContentType) string {
 	values := make([]string, 0, len(modalities))
 	for _, modality := range modalities {
 		values = append(values, string(modality))

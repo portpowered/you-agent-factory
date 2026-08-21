@@ -141,6 +141,39 @@ func TestRootErrorResponse_MapsWorkRequestValidationFailures(t *testing.T) {
 	}
 }
 
+func TestRootErrorResponse_MapsPayloadSizeFailureWithoutPayloadContent(t *testing.T) {
+	t.Parallel()
+
+	payloadSize := &work.PayloadSizeError{
+		WorkName:          "oversized-work",
+		PayloadBytes:      work.MaxWorkPayloadBytes + 1,
+		PayloadLimitBytes: work.MaxWorkPayloadBytes,
+	}
+	err := &work.RequestPreparationError{Message: payloadSize.Error(), Cause: payloadSize}
+
+	status, response, ok := RootErrorResponse(err)
+	if !ok || status != http.StatusBadRequest {
+		t.Fatalf("RootErrorResponse(%v) = %d %#v %v, want bad request", err, status, response, ok)
+	}
+	if response.Family != factoryapi.ErrorFamilyBadRequest ||
+		response.Code != factoryapi.ErrorResponseCodeBADREQUEST {
+		t.Fatalf("response = %#v, want BAD_REQUEST family and code", response)
+	}
+	for _, marker := range []string{
+		"work_request:",
+		`Work "oversized-work"`,
+		"payloadBytes=65537",
+		"payloadLimitBytes=65536",
+	} {
+		if !strings.Contains(response.Message, marker) {
+			t.Fatalf("response message = %q, want marker %q", response.Message, marker)
+		}
+	}
+	if strings.Contains(response.Message, "payload content") {
+		t.Fatalf("response message = %q, must not expose payload content", response.Message)
+	}
+}
+
 func TestRootErrorResponse_ReturnsFalseForNilAndUnmappedFailures(t *testing.T) {
 	t.Parallel()
 

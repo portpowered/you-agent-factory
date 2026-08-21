@@ -661,6 +661,7 @@ func (o *operation) runtimeConfig(target roles.InvocationTarget) factorysessions
 	config.Workers.SkipBuiltInPrerequisiteValidation = target.SkipRunnerPrerequisiteValidation
 	config.Recordings.RecordPath = target.RecordPath
 	config.Recordings.ReplayPath = target.ReplayPath
+	config.Recordings.ResumePath = target.ResumePath
 	config.Recordings.WorkflowID = target.WorkflowID
 	config.ModelCacheDirectory = target.ModelCacheDir
 	return config

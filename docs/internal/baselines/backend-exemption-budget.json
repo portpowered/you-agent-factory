@@ -3,12 +3,6 @@
   "entries": [
     {
       "rule": "backendsizecheck:ignore-file",
-      "target": "cmd/pkgboundarycheck/main.go",
-      "owner": "backend-maintainers",
-      "removalReason": "service-ownership migration preserves this consolidated surface until a dedicated responsibility split removes the exemption."
-    },
-    {
-      "rule": "backendsizecheck:ignore-file",
       "target": "cmd/pkgboundarycheck/main_test.go",
       "owner": "backend-maintainers",
       "removalReason": "service-ownership migration preserves this consolidated surface until a dedicated responsibility split removes the exemption."
@@ -184,12 +178,6 @@
     {
       "rule": "backendsizecheck:ignore-file",
       "target": "pkg/transports/acp/internal/stdio/session_prompt.go",
-      "owner": "backend-maintainers",
-      "removalReason": "pre-existing baseline debt recorded 2026-08-08; split this oversized code into focused units and remove this exemption."
-    },
-    {
-      "rule": "backendsizecheck:ignore-file",
-      "target": "pkg/transports/cli/root.go",
       "owner": "backend-maintainers",
       "removalReason": "pre-existing baseline debt recorded 2026-08-08; split this oversized code into focused units and remove this exemption."
     },
@@ -2446,12 +2434,6 @@
     {
       "rule": "pkgmaintcheck:ignore-file-lines",
       "target": "pkg/transports/acp/internal/stdio/session_prompt.go",
-      "owner": "backend-maintainers",
-      "removalReason": "pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption."
-    },
-    {
-      "rule": "pkgmaintcheck:ignore-file-lines",
-      "target": "pkg/transports/cli/root.go",
       "owner": "backend-maintainers",
       "removalReason": "pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption."
     },

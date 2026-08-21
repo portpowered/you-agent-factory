@@ -5,23 +5,23 @@ import (
 	"testing"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	factorytoken "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/token"
+	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
 func TestFIFOScheduler_TwoTransitionsCompetingForSameToken(t *testing.T) {
 	sched := NewFIFOScheduler()
 
-	token := factorytoken.Token{ID: "tok-1", PlaceID: "p1"}
+	token := workerexecution.Token{ID: "tok-1"}
 	enabled := []interfaces.EnabledTransition{
 		{
 			TransitionID: "tr-1",
 			WorkerType:   "worker-a",
-			Bindings:     map[string][]factorytoken.Token{"input": {token}},
+			Bindings:     map[string][]workerexecution.Token{"input": {token}},
 		},
 		{
 			TransitionID: "tr-2",
 			WorkerType:   "worker-b",
-			Bindings:     map[string][]factorytoken.Token{"input": {token}},
+			Bindings:     map[string][]workerexecution.Token{"input": {token}},
 		},
 	}
 
@@ -44,18 +44,18 @@ func TestFIFOScheduler_TwoTransitionsCompetingForSameToken(t *testing.T) {
 func TestFIFOScheduler_TwoTransitionsIndependentTokens(t *testing.T) {
 	sched := NewFIFOScheduler()
 
-	tok1 := factorytoken.Token{ID: "tok-1", PlaceID: "p1"}
-	tok2 := factorytoken.Token{ID: "tok-2", PlaceID: "p2"}
+	tok1 := workerexecution.Token{ID: "tok-1"}
+	tok2 := workerexecution.Token{ID: "tok-2"}
 	enabled := []interfaces.EnabledTransition{
 		{
 			TransitionID: "tr-1",
 			WorkerType:   "worker-a",
-			Bindings:     map[string][]factorytoken.Token{"input": {tok1}},
+			Bindings:     map[string][]workerexecution.Token{"input": {tok1}},
 		},
 		{
 			TransitionID: "tr-2",
 			WorkerType:   "worker-b",
-			Bindings:     map[string][]factorytoken.Token{"input": {tok2}},
+			Bindings:     map[string][]workerexecution.Token{"input": {tok2}},
 		},
 	}
 
@@ -83,15 +83,15 @@ func TestFIFOScheduler_EmptyEnabled(t *testing.T) {
 func TestFIFOScheduler_MultipleBindingsPartialConflict(t *testing.T) {
 	sched := NewFIFOScheduler()
 
-	sharedTok := factorytoken.Token{ID: "shared", PlaceID: "p1"}
-	uniqueTok := factorytoken.Token{ID: "unique", PlaceID: "p2"}
-	otherTok := factorytoken.Token{ID: "other", PlaceID: "p3"}
+	sharedTok := workerexecution.Token{ID: "shared"}
+	uniqueTok := workerexecution.Token{ID: "unique"}
+	otherTok := workerexecution.Token{ID: "other"}
 
 	enabled := []interfaces.EnabledTransition{
 		{
 			TransitionID: "tr-1",
 			WorkerType:   "worker-a",
-			Bindings: map[string][]factorytoken.Token{
+			Bindings: map[string][]workerexecution.Token{
 				"code":   {sharedTok},
 				"review": {uniqueTok},
 			},
@@ -99,14 +99,14 @@ func TestFIFOScheduler_MultipleBindingsPartialConflict(t *testing.T) {
 		{
 			TransitionID: "tr-2",
 			WorkerType:   "worker-b",
-			Bindings: map[string][]factorytoken.Token{
+			Bindings: map[string][]workerexecution.Token{
 				"input": {sharedTok}, // conflicts with tr-1's "code" binding
 			},
 		},
 		{
 			TransitionID: "tr-3",
 			WorkerType:   "worker-c",
-			Bindings: map[string][]factorytoken.Token{
+			Bindings: map[string][]workerexecution.Token{
 				"input": {otherTok}, // no conflict
 			},
 		},
@@ -128,25 +128,25 @@ func TestFIFOScheduler_MultipleBindingsPartialConflict(t *testing.T) {
 func TestFIFOScheduler_CardinalityAllMultipleTokens(t *testing.T) {
 	sched := NewFIFOScheduler()
 
-	tok1 := factorytoken.Token{ID: "tok-1", PlaceID: "p1"}
-	tok2 := factorytoken.Token{ID: "tok-2", PlaceID: "p1"}
-	tok3 := factorytoken.Token{ID: "tok-3", PlaceID: "p2"}
+	tok1 := workerexecution.Token{ID: "tok-1"}
+	tok2 := workerexecution.Token{ID: "tok-2"}
+	tok3 := workerexecution.Token{ID: "tok-3"}
 
 	enabled := []interfaces.EnabledTransition{
 		{
 			TransitionID: "tr-1",
 			WorkerType:   "worker-a",
-			Bindings:     map[string][]factorytoken.Token{"all-items": {tok1, tok2}},
+			Bindings:     map[string][]workerexecution.Token{"all-items": {tok1, tok2}},
 		},
 		{
 			TransitionID: "tr-2",
 			WorkerType:   "worker-b",
-			Bindings:     map[string][]factorytoken.Token{"single": {tok1}}, // tok-1 already claimed
+			Bindings:     map[string][]workerexecution.Token{"single": {tok1}}, // tok-1 already claimed
 		},
 		{
 			TransitionID: "tr-3",
 			WorkerType:   "worker-c",
-			Bindings:     map[string][]factorytoken.Token{"other": {tok3}}, // no conflict
+			Bindings:     map[string][]workerexecution.Token{"other": {tok3}}, // no conflict
 		},
 	}
 
@@ -162,14 +162,14 @@ func TestFIFOScheduler_CardinalityAllMultipleTokens(t *testing.T) {
 
 func TestFIFOScheduler_IncludesObservedBindingsWithoutConsumingThem(t *testing.T) {
 	sched := NewFIFOScheduler()
-	parent := factorytoken.Token{ID: "parent", PlaceID: "parent:waiting"}
-	childA := factorytoken.Token{ID: "child-a", PlaceID: "child:complete"}
-	childB := factorytoken.Token{ID: "child-b", PlaceID: "child:complete"}
+	parent := workerexecution.Token{ID: "parent", State: "waiting"}
+	childA := workerexecution.Token{ID: "child-a", State: "complete"}
+	childB := workerexecution.Token{ID: "child-b", State: "complete"}
 
 	decisions := sched.Select([]interfaces.EnabledTransition{{
 		TransitionID: "merge",
 		WorkerType:   "merger",
-		Bindings: map[string][]factorytoken.Token{
+		Bindings: map[string][]workerexecution.Token{
 			"parent":   {parent},
 			"children": {childA, childB},
 		},

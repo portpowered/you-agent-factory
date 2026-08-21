@@ -305,7 +305,7 @@ func (t *TransitionerSubsystem) buildCompletedDispatch(
 		FailureMetadata:             failureMetadata,
 		ProviderSession:             (result.Continuation).SessionMetadata(),
 		EndTime:                     endTime,
-		ConsumedTokens:              factorytoken.CloneSlice(consumedTokens),
+		ConsumedTokens:              factorytoken.ToWorkerSlice(consumedTokens),
 		OutputMutations: mutationRecordsForDispatch(
 			result.DispatchID,
 			result.TransitionID,
@@ -431,13 +431,13 @@ func mutationRecordsForDispatch(
 			Reason:       mutation.Reason,
 		}
 		if mutation.NewToken != nil {
-			tokenCopy := factorytoken.Clone(*mutation.NewToken)
-			record.Token = &tokenCopy
+		runtimeToken := factorytoken.FromWorker(*mutation.NewToken)
+		record.Token = workerTokenPointer(&runtimeToken)
 			if record.TokenID == "" {
 				record.TokenID = mutation.NewToken.ID
 			}
 			if record.ToPlace == "" {
-				record.ToPlace = mutation.NewToken.PlaceID
+				record.ToPlace = runtimeToken.PlaceID
 			}
 		}
 		records = append(records, record)
@@ -741,7 +741,7 @@ func (t *TransitionerSubsystem) createFanoutGuardToken(inputColors []factorytoke
 			mutations = append(mutations, interfaces.MarkingMutation{
 				Type:     interfaces.MutationCreate,
 				ToPlace:  countPlaceID,
-				NewToken: countToken,
+				NewToken: workerTokenPointer(countToken),
 				Reason:   fmt.Sprintf("fanout count token for transition %s (expected %d children)", transitionID, expectedCount),
 			})
 		}
@@ -809,7 +809,7 @@ func calculateMutations(in mutationCalculationInput) ([]interfaces.MarkingMutati
 			mutations = append(mutations, interfaces.MarkingMutation{
 				Type:     interfaces.MutationCreate,
 				ToPlace:  arc.PlaceID,
-				NewToken: newToken,
+				NewToken: workerTokenPointer(newToken),
 				Reason:   fmt.Sprintf("transitioner: %s from transition %s", in.result.outcome, in.transition.ID),
 			})
 		}
@@ -904,7 +904,7 @@ func (t *TransitionerSubsystem) buildIntermittentFailureRequeueMutations(
 		mutations = append(mutations, interfaces.MarkingMutation{
 			Type:     interfaces.MutationCreate,
 			ToPlace:  consumed.PlaceID,
-			NewToken: &requeued,
+			NewToken: workerTokenPointer(&requeued),
 			Reason:   fmt.Sprintf("transitioner: requeue intermittent failure from transition %s", result.transitionID),
 		})
 	}
@@ -952,11 +952,19 @@ func (t *TransitionerSubsystem) releaseResourceTokens(consumedTokens []factoryto
 		mutations = append(mutations, interfaces.MarkingMutation{
 			Type:     interfaces.MutationCreate,
 			ToPlace:  consumed.PlaceID,
-			NewToken: resourceToken,
+			NewToken: workerTokenPointer(resourceToken),
 			Reason:   fmt.Sprintf("release resource %s for transition %s", consumed.PlaceID, transitionID),
 		})
 	}
 	return mutations
+}
+
+func workerTokenPointer(value *factorytoken.Token) *workerexecution.Token {
+	if value == nil {
+		return nil
+	}
+	projected := factorytoken.ToWorker(*value)
+	return &projected
 }
 
 func tokenColorsFromTokens(tokens []factorytoken.Token) []factorytoken.Color {

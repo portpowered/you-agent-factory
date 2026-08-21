@@ -479,8 +479,8 @@ func TestWorkRuntimeAdapterProjectsDetachedPublicWorkIdentityStateAndRelations(t
 	tags := map[string]string{"owner": "docs"}
 	previous := []string{"chain-a"}
 	token := &workers.Token{
-		ID:      "tok-review",
-		PlaceID: "story:review",
+		ID:    "tok-review",
+		State: "review",
 		Color: workers.Color{
 			WorkID: "work-review", WorkTypeID: "story", Name: "Review PRD",
 			TraceID: "trace-1", PreviousChainingTraceIDs: previous, Tags: tags,
@@ -498,7 +498,7 @@ func TestWorkRuntimeAdapterProjectsDetachedPublicWorkIdentityStateAndRelations(t
 		dispatchHistory: []factory.CompletedDispatch{{
 			DispatchID: "dispatch-context", Outcome: workers.OutcomeAccepted,
 			ExpectedArtifactContext: &work.ExpectedArtifactTemplateContext{Project: "project-7", SessionID: "session-9"},
-			ConsumedTokens:          []workers.Token{*token},
+			ConsumedTokens:          []workers.Token{{ID: token.ID, State: "review", Color: token.Color}},
 		}},
 	})
 	if got.CursorID != "tok-review" || got.WorkID != "work-review" || got.State == nil || got.State.Name != "review" || got.State.Type != work.StateTypeProcessing {
@@ -519,7 +519,7 @@ func TestWorkRuntimeAdapterProjectsDetachedPublicWorkIdentityStateAndRelations(t
 }
 
 func TestWorkRuntimeAdapterProjectsDispatchOnlyWorkAsProcessing(t *testing.T) {
-	token := &workers.Token{ID: "tok-dispatch", PlaceID: "story:review", Color: workers.Color{WorkID: "work-dispatch", WorkTypeID: "story"}}
+	token := &workers.Token{ID: "tok-dispatch", State: "review", Color: workers.Color{WorkID: "work-dispatch", WorkTypeID: "story"}}
 	got := runtimeWorkItem(token, &factory.Net{}, true, nil)
 	if got.State == nil || got.State.Name != "review" || got.State.Type != work.StateTypeProcessing {
 		t.Fatalf("dispatch-only Work state = %#v", got.State)

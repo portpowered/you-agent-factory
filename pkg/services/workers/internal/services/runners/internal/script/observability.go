@@ -38,6 +38,7 @@ func commandDiagnostics(
 	request workers.CommandRequest,
 	result workers.CommandResult,
 	duration time.Duration,
+	transitionID string,
 ) *workers.WorkDiagnostics {
 	env := workers.ProjectCommandEnvForDiagnostics(request.Env)
 	return &workers.WorkDiagnostics{
@@ -51,17 +52,18 @@ func commandDiagnostics(
 			Duration:   duration,
 			WorkingDir: request.WorkDir,
 		},
-		Metadata: commandMetadata(request, env),
+		Metadata: commandMetadata(request, env, transitionID),
 	}
 }
 
 func commandMetadata(
 	request workers.CommandRequest,
 	env workers.CommandEnvDiagnosticProjection,
+	transitionID string,
 ) map[string]string {
 	return map[string]string{
 		"dispatch_id":                 request.DispatchID,
-		"transition_id":               request.TransitionID,
+		"transition_id":               transitionID,
 		"current_chaining_trace_id":   request.CurrentChainingTraceID,
 		"previous_chaining_trace_ids": strings.Join(request.PreviousChainingTraceIDs, ","),
 		"request_id":                  request.Execution.RequestID,
@@ -81,6 +83,7 @@ func scriptRequestEvent(
 	request workers.CommandRequest,
 	requestID string,
 	eventTime time.Time,
+	transitionID string,
 ) workers.ScriptEvent {
 	return scriptEvent(request, eventTime, &workers.ScriptRequestEventPayload{
 		Args:            append([]string(nil), request.Args...),
@@ -88,7 +91,7 @@ func scriptRequestEvent(
 		Command:         request.Command,
 		DispatchID:      request.DispatchID,
 		ScriptRequestID: requestID,
-		TransitionID:    request.TransitionID,
+		TransitionID:    transitionID,
 	}, nil)
 }
 
@@ -98,6 +101,7 @@ func scriptSuccessEvent(
 	result workers.CommandResult,
 	duration time.Duration,
 	eventTime time.Time,
+	transitionID string,
 ) workers.ScriptEvent {
 	exitCode := result.ExitCode
 	return scriptEvent(request, eventTime, nil, &workers.ScriptResponseEventPayload{
@@ -109,7 +113,7 @@ func scriptSuccessEvent(
 		ScriptRequestID: requestID,
 		Stderr:          string(result.Stderr),
 		Stdout:          string(result.Stdout),
-		TransitionID:    request.TransitionID,
+		TransitionID:    transitionID,
 	})
 }
 
@@ -121,6 +125,7 @@ func scriptFailureEvent(
 	outcome workers.ScriptExecutionOutcome,
 	failureType workers.ScriptFailureType,
 	eventTime time.Time,
+	transitionID string,
 ) workers.ScriptEvent {
 	var exitCode *int
 	if outcome == workers.ScriptExecutionOutcomeFailedExitCode {
@@ -141,7 +146,7 @@ func scriptFailureEvent(
 		ScriptRequestID: requestID,
 		Stderr:          string(result.Stderr),
 		Stdout:          string(result.Stdout),
-		TransitionID:    request.TransitionID,
+		TransitionID:    transitionID,
 	})
 }
 

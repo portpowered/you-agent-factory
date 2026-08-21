@@ -159,7 +159,6 @@ type InvocationWorkStateChange struct {
 	WorkID       string
 	WorkTypeName string
 	ToState      string
-	ToPlaceID    string
 	RequestID    string
 }
 
@@ -441,7 +440,6 @@ type FactoryWorkItem struct {
 	TraceID                  string            `json:"traceId,omitempty"`
 	Content                  []WorkContentPart `json:"content,omitempty"`
 	ParentID                 string            `json:"parentId,omitempty"`
-	PlaceID                  string            `json:"placeId,omitempty"`
 	StructuredResult         any               `json:"structuredResult,omitempty"`
 	Tags                     map[string]string `json:"tags,omitempty"`
 	// StructuredResultPresent preserves an explicitly stored JSON null without
@@ -529,7 +527,6 @@ const (
 type WorkStateChangeRecord struct {
 	WorkID, WorkTypeID, WorkTypeName string
 	FromState, ToState               string
-	FromPlaceID, ToPlaceID           string
 	Source                           WorkStateChangeSource
 	RequestID, TriggerWorkID, Reason string
 	SessionID                        string
@@ -541,7 +538,6 @@ type WorkStateChangeRecord struct {
 type OperatorMoveResult struct {
 	WorkID, WorkTypeID     string
 	FromState, ToState     string
-	FromPlaceID, ToPlaceID string
 	TokenID                string
 }
 

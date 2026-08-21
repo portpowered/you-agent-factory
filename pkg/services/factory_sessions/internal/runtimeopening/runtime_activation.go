@@ -176,6 +176,8 @@ func recordingsRuntimeOpeningRequest(request factoryruntime.RuntimeActivationReq
 	return recordings.RuntimeOpeningRequest{
 		RecordPath:    request.Inputs.Recordings.RecordPath,
 		ReplayPath:    request.Inputs.Recordings.ReplayPath,
+		ResumePath:    request.Inputs.Recordings.ResumePath,
+		ResumeInput:   request.Inputs.ResumeInput,
 		WorkflowID:    request.Inputs.Recordings.WorkflowID,
 		FlushInterval: request.Inputs.Recordings.FlushInterval,
 	}
@@ -242,7 +244,7 @@ func (f *Factory) openActivatedRuntime(
 	ctx context.Context,
 	request *factorysessions.RuntimeOpeningRequest,
 ) (runtimeProducts, error) {
-	return f.openActivatedRuntimeWithReplayInput(ctx, request, nil)
+	return f.openActivatedRuntimeWithInputs(ctx, request, nil, nil)
 }
 
 func (f *Factory) openActivatedRuntimeWithReplayInput(
@@ -250,10 +252,27 @@ func (f *Factory) openActivatedRuntimeWithReplayInput(
 	request *factorysessions.RuntimeOpeningRequest,
 	preloadedReplayInput *recordings.LoadReplayInputResult,
 ) (runtimeProducts, error) {
+	return f.openActivatedRuntimeWithInputs(ctx, request, preloadedReplayInput, nil)
+}
+
+func (f *Factory) openActivatedRuntimeWithResumeInput(
+	ctx context.Context,
+	request *factorysessions.RuntimeOpeningRequest,
+	resumeInput *recordings.LoadResumeInputResult,
+) (runtimeProducts, error) {
+	return f.openActivatedRuntimeWithInputs(ctx, request, nil, resumeInput)
+}
+
+func (f *Factory) openActivatedRuntimeWithInputs(
+	ctx context.Context,
+	request *factorysessions.RuntimeOpeningRequest,
+	preloadedReplayInput *recordings.LoadReplayInputResult,
+	resumeInput *recordings.LoadResumeInputResult,
+) (runtimeProducts, error) {
 	if f == nil || f.runtimeRoot == nil {
 		return runtimeProducts{}, fmt.Errorf("open Factory Runtime: Runtime root is required")
 	}
-	activationRequest, err := f.activationRequestWithReplayInput(ctx, request, preloadedReplayInput)
+	activationRequest, err := f.activationRequestWithInputs(ctx, request, preloadedReplayInput, resumeInput)
 	if err != nil {
 		return runtimeProducts{}, err
 	}
@@ -332,7 +351,7 @@ func (f *Factory) activationRequest(
 	ctx context.Context,
 	request *factorysessions.RuntimeOpeningRequest,
 ) (factoryruntime.RuntimeActivationRequest, error) {
-	return f.activationRequestWithReplayInput(ctx, request, nil)
+	return f.activationRequestWithInputs(ctx, request, nil, nil)
 }
 
 func (f *Factory) activationRequestWithReplayInput(
@@ -340,12 +359,27 @@ func (f *Factory) activationRequestWithReplayInput(
 	request *factorysessions.RuntimeOpeningRequest,
 	preloadedReplayInput *recordings.LoadReplayInputResult,
 ) (factoryruntime.RuntimeActivationRequest, error) {
+	return f.activationRequestWithInputs(ctx, request, preloadedReplayInput, nil)
+}
+
+func (f *Factory) activationRequestWithInputs(
+	ctx context.Context,
+	request *factorysessions.RuntimeOpeningRequest,
+	preloadedReplayInput *recordings.LoadReplayInputResult,
+	resumeInput *recordings.LoadResumeInputResult,
+) (factoryruntime.RuntimeActivationRequest, error) {
 	opening, runtimeID, err := f.activationOpening(request)
 	if err != nil {
 		return factoryruntime.RuntimeActivationRequest{}, err
 	}
 	sessionID := sessionIDForOpening(opening)
-	resolution, err := f.resolveActivationSnapshot(ctx, opening, preloadedReplayInput, sessionID)
+	resolution, err := f.resolveActivationSnapshot(
+		ctx,
+		opening,
+		preloadedReplayInput,
+		resumeInput,
+		sessionID,
+	)
 	if err != nil {
 		return factoryruntime.RuntimeActivationRequest{}, err
 	}
@@ -357,7 +391,7 @@ func (f *Factory) activationRequestWithReplayInput(
 		sessionID,
 		opening.Recordings.WorkflowID,
 	)
-	inputs := runtimeActivationInputs(opening)
+	inputs := runtimeActivationInputs(opening, resumeInput)
 	// Runtime root activation must receive the same resolved source identity
 	// that Definitions used. In particular, named paths and directory-backed
 	// authored files cannot be rediscovered from the caller's shorthand after
@@ -409,6 +443,7 @@ func (f *Factory) resolveActivationSnapshot(
 	ctx context.Context,
 	opening factorysessions.RuntimeOpeningRequest,
 	preloadedReplayInput *recordings.LoadReplayInputResult,
+	resumeInput *recordings.LoadResumeInputResult,
 	sessionID string,
 ) (activationSnapshotResolution, error) {
 	if replaySnapshot, ok, err := f.resolveLegacyReplaySnapshot(ctx, opening, preloadedReplayInput); err != nil {
@@ -418,6 +453,15 @@ func (f *Factory) resolveActivationSnapshot(
 			snapshot:       replaySnapshot,
 			factoryDir:     strings.TrimSpace(replaySnapshot.FactoryDir),
 			runtimeBaseDir: firstNonEmptyString(opening.FactoryDefinition.ExecutionBaseDir, replaySnapshot.RuntimeBaseDir),
+		}, nil
+	}
+	if resumeSnapshot, ok, err := f.resolveLegacyResumeSnapshot(ctx, opening, resumeInput); err != nil {
+		return activationSnapshotResolution{}, err
+	} else if ok {
+		return activationSnapshotResolution{
+			snapshot:       resumeSnapshot,
+			factoryDir:     strings.TrimSpace(resumeSnapshot.FactoryDir),
+			runtimeBaseDir: firstNonEmptyString(opening.FactoryDefinition.ExecutionBaseDir, resumeSnapshot.RuntimeBaseDir),
 		}, nil
 	}
 	factoryDir, sourcePath, err := f.resolveActivationDefinitionSource(opening)
@@ -535,13 +579,50 @@ func (f *Factory) resolveLegacyReplaySnapshot(
 	if input.Portable != nil || input.Legacy == nil || input.Legacy.Factory == nil {
 		return factorydefinitions.RuntimeSnapshot{}, false, nil
 	}
-	replayConfig, err := f.decodeLegacyReplayConfig(input.Legacy.Factory)
+	snapshot, err := f.resolveLegacyFactorySnapshot(ctx, opening, input.Legacy.Factory, "replay")
 	if err != nil {
 		return factorydefinitions.RuntimeSnapshot{}, false, err
 	}
+	return snapshot, true, nil
+}
+
+func (f *Factory) resolveLegacyResumeSnapshot(
+	ctx context.Context,
+	opening factorysessions.RuntimeOpeningRequest,
+	resumeInput *recordings.LoadResumeInputResult,
+) (factorydefinitions.RuntimeSnapshot, bool, error) {
+	if resumeInput == nil {
+		return factorydefinitions.RuntimeSnapshot{}, false, nil
+	}
+	input := resumeInput.Input
+	if input.Portable != nil || input.Legacy == nil || input.Legacy.Factory == nil {
+		return factorydefinitions.RuntimeSnapshot{}, false, fmt.Errorf(
+			"open Factory Runtime: resume recording Factory Definition is required",
+		)
+	}
+	snapshot, err := f.resolveLegacyFactorySnapshot(ctx, opening, input.Legacy.Factory, "resume")
+	if err != nil {
+		return factorydefinitions.RuntimeSnapshot{}, false, err
+	}
+	return snapshot, true, nil
+}
+
+func (f *Factory) resolveLegacyFactorySnapshot(
+	ctx context.Context,
+	opening factorysessions.RuntimeOpeningRequest,
+	factoryJSON *factorydefinitions.FactorySnapshot,
+	intent string,
+) (factorydefinitions.RuntimeSnapshot, error) {
+	if f.factoryDefinitions == nil {
+		return factorydefinitions.RuntimeSnapshot{}, runtimeSnapshotResolverUnavailable()
+	}
+	replayConfig, err := f.decodeLegacyReplayConfig(factoryJSON)
+	if err != nil {
+		return factorydefinitions.RuntimeSnapshot{}, err
+	}
 	factoryDir, runtimeBaseDir := legacyReplayPaths(opening, replayConfig)
 	resolved, err := f.factoryDefinitions.ResolveRuntimeSnapshot(ctx, factorydefinitions.ResolveRuntimeSnapshotRequest{
-		Canonical:        append([]byte(nil), []byte(*input.Legacy.Factory)...),
+		Canonical:        append([]byte(nil), []byte(*factoryJSON)...),
 		ExecutionBaseDir: runtimeBaseDir,
 		Invocation: factorydefinitions.RuntimeSnapshotInvocationContext{
 			FactorySessionID: sessionIDForOpening(opening),
@@ -549,11 +630,15 @@ func (f *Factory) resolveLegacyReplaySnapshot(
 		},
 	})
 	if err != nil {
-		return factorydefinitions.RuntimeSnapshot{}, false, err
+		return factorydefinitions.RuntimeSnapshot{}, err
 	}
 	snapshot, err := resolved.Snapshot.Clone()
 	if err != nil {
-		return factorydefinitions.RuntimeSnapshot{}, false, fmt.Errorf("open Factory Runtime: detach replay Factory Definition snapshot: %w", err)
+		return factorydefinitions.RuntimeSnapshot{}, fmt.Errorf(
+			"open Factory Runtime: detach %s Factory Definition snapshot: %w",
+			intent,
+			err,
+		)
 	}
 	if strings.TrimSpace(snapshot.FactoryDir) == "" {
 		snapshot.FactoryDir = factoryDir
@@ -561,7 +646,7 @@ func (f *Factory) resolveLegacyReplaySnapshot(
 	if strings.TrimSpace(snapshot.RuntimeBaseDir) == "" {
 		snapshot.RuntimeBaseDir = runtimeBaseDir
 	}
-	return snapshot, true, nil
+	return snapshot, nil
 }
 
 func legacyReplayRequested(
@@ -681,8 +766,11 @@ func runtimeSnapshotResolverUnavailable() error {
 	}
 }
 
-func runtimeActivationInputs(request factorysessions.RuntimeOpeningRequest) factoryruntime.RuntimeActivationInputs {
-	return factoryruntime.RuntimeActivationInputs{
+func runtimeActivationInputs(
+	request factorysessions.RuntimeOpeningRequest,
+	resumeInput *recordings.LoadResumeInputResult,
+) factoryruntime.RuntimeActivationInputs {
+	inputs := factoryruntime.RuntimeActivationInputs{
 		Definition: factoryruntime.RuntimeActivationDefinitionInputs{
 			Directory:        request.FactoryDefinition.Directory,
 			SourcePath:       request.FactoryDefinition.SourcePath,
@@ -715,6 +803,7 @@ func runtimeActivationInputs(request factorysessions.RuntimeOpeningRequest) fact
 		Recordings: factoryruntime.RuntimeActivationRecordingInputs{
 			RecordPath:    request.Recordings.RecordPath,
 			ReplayPath:    request.Recordings.ReplayPath,
+			ResumePath:    request.Recordings.ResumePath,
 			WorkflowID:    request.Recordings.WorkflowID,
 			FlushInterval: request.Recordings.FlushInterval,
 		},
@@ -725,6 +814,10 @@ func runtimeActivationInputs(request factorysessions.RuntimeOpeningRequest) fact
 			ConfigPath:          request.OperatorDefaults.ConfigPath,
 		},
 	}
+	if resumeInput != nil {
+		inputs.ResumeInput = *resumeInput
+	}
+	return inputs
 }
 
 func runtimeActivationMockWorkers(input *workers.MockWorkersConfig) *factoryruntime.RuntimeActivationMockWorkersConfig {

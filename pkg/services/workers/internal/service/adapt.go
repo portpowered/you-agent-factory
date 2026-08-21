@@ -1,8 +1,10 @@
 package service
 
 import (
+	"fmt"
 	"strings"
 
+	"github.com/portpowered/infinite-you/pkg/platform/jsonvalue"
 	"github.com/portpowered/infinite-you/pkg/services/models"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
@@ -39,7 +41,7 @@ func adaptRunnerRequest(
 	temporaryFiles workers.TemporaryFileSystem,
 ) workers.RunnerExecutionRequest {
 	context := adaptWorkflowContext(request)
-	inputTokens := inputTokensFromWorkInputs(request.Input.Work)
+	inputTokens := inputTokensFromWorkInputs(request.Input.Work, request.Input.Dispatch)
 	worktree := strings.TrimSpace(request.Target.Workspace.Worktree)
 
 	return workers.RunnerExecutionRequest{
@@ -281,6 +283,11 @@ func adaptDispatch(request workers.ExecuteRequest, inputTokens []workers.Token) 
 	dispatch.WorkstationName = request.Target.WorkstationName
 	dispatch.WorkerType = firstNonEmpty(request.Target.WorkerType, request.Target.WorkerName)
 	dispatch.InputTokens = workers.InputTokens(inputTokens...)
+	dispatch.InputBindings = inputBindingsFromWorkInputs(
+		dispatch.InputBindings,
+		inputTokens,
+		request.Input.Work,
+	)
 	dispatch.Execution.RequestID = request.Correlation.RequestID
 	dispatch.Execution.TraceID = request.Correlation.TraceID
 	dispatch.Execution.WorkIDs = workIDs(request.Input.Work)
@@ -307,18 +314,35 @@ func cloneContinuation(
 	return &clone
 }
 
-func inputTokensFromWorkInputs(inputs []workers.WorkInput) []workers.Token {
+func inputTokensFromWorkInputs(
+	inputs []workers.WorkInput,
+	dispatch work.WorkDispatch,
+) []workers.Token {
 	if len(inputs) == 0 {
 		return nil
 	}
+	originalTokens := workers.WorkDispatchInputTokens(dispatch)
+	usedOriginalTokens := make([]bool, len(originalTokens))
 	tokens := make([]workers.Token, 0, len(inputs))
-	for _, input := range inputs {
+	for index, input := range inputs {
+		token := workers.Token{}
+		if original, found := takeOriginalInputToken(
+			input,
+			originalTokens,
+			usedOriginalTokens,
+		); found {
+			token = cloneInputToken(original)
+		}
+		dataType := workers.DataTypeWork
+		if strings.TrimSpace(input.Kind) != "" {
+			dataType = workers.DataType(input.Kind)
+		}
 		color := workers.Color{
 			Name:       firstNonEmpty(input.Name, input.Lineage.OriginRef, input.WorkID),
 			RequestID:  input.RequestID,
 			WorkID:     input.WorkID,
 			WorkTypeID: input.WorkTypeID,
-			DataType:   workers.DataTypeWork,
+			DataType:   dataType,
 			TraceID:    input.Lineage.TraceID,
 			ParentID:   input.Lineage.ParentWorkID,
 			Tags:       cloneStringMap(input.Tags),
@@ -326,9 +350,141 @@ func inputTokensFromWorkInputs(inputs []workers.WorkInput) []workers.Token {
 			Content:    work.CloneWorkContentParts(input.Content),
 			Payload:    payloadFromContent(input.Content),
 		}
-		tokens = append(tokens, workers.Token{Color: color})
+		token.State = input.State
+		token.Color.Name = color.Name
+		token.Color.RequestID = color.RequestID
+		token.Color.WorkID = color.WorkID
+		token.Color.WorkTypeID = color.WorkTypeID
+		token.Color.DataType = color.DataType
+		token.Color.TraceID = color.TraceID
+		token.Color.ParentID = color.ParentID
+		token.Color.Tags = color.Tags
+		token.Color.Relations = color.Relations
+		token.Color.Content = color.Content
+		token.Color.Payload = color.Payload
+		applyAttemptFacts(&token, input.AttemptFacts)
+		if token.ID == "" && len(input.InputNames) > 0 {
+			token.ID = fmt.Sprintf("work-input-%d", index)
+		}
+		tokens = append(tokens, token)
 	}
 	return tokens
+}
+
+func takeOriginalInputToken(
+	input workers.WorkInput,
+	tokens []workers.Token,
+	used []bool,
+) (workers.Token, bool) {
+	for index, token := range tokens {
+		if used[index] || !inputTokenMatches(input, token, true) {
+			continue
+		}
+		used[index] = true
+		return token, true
+	}
+	for index, token := range tokens {
+		if used[index] || !inputTokenMatches(input, token, false) {
+			continue
+		}
+		used[index] = true
+		return token, true
+	}
+	return workers.Token{}, false
+}
+
+func inputTokenMatches(input workers.WorkInput, token workers.Token, strict bool) bool {
+	if input.WorkID != "" && token.Color.WorkID != input.WorkID {
+		return false
+	}
+	if input.WorkTypeID != "" && token.Color.WorkTypeID != input.WorkTypeID {
+		return false
+	}
+	if input.Kind != "" && token.Color.DataType != workers.DataType(input.Kind) {
+		return false
+	}
+	if strict && input.Name != "" && token.Color.Name != input.Name {
+		return false
+	}
+	return input.WorkID != "" || input.WorkTypeID != "" || input.Name != "" || input.Kind != ""
+}
+
+func cloneInputToken(token workers.Token) workers.Token {
+	clone := token
+	clone.Color.PreviousChainingTraceIDs = append([]string(nil), token.Color.PreviousChainingTraceIDs...)
+	clone.Color.Tags = cloneStringMap(token.Color.Tags)
+	clone.Color.Relations = append([]work.Relation(nil), token.Color.Relations...)
+	clone.Color.Content = work.CloneWorkContentParts(token.Color.Content)
+	clone.Color.Payload = append([]byte(nil), token.Color.Payload...)
+	clone.Color.StructuredResult = jsonvalue.Clone(token.Color.StructuredResult)
+	clone.Color.InvocationArguments = work.CloneInvocationArguments(token.Color.InvocationArguments)
+	clone.History.TotalVisits = cloneIntMap(token.History.TotalVisits)
+	clone.History.ConsecutiveFailures = cloneIntMap(token.History.ConsecutiveFailures)
+	clone.History.PlaceVisits = cloneIntMap(token.History.PlaceVisits)
+	clone.History.FailureLog = append([]workers.Failure(nil), token.History.FailureLog...)
+	return clone
+}
+
+func applyAttemptFacts(token *workers.Token, facts workers.AttemptFacts) {
+	if token == nil {
+		return
+	}
+	if len(token.History.TotalVisits) == 0 && facts.AttemptNumber > 1 {
+		token.History.TotalVisits = map[string]int{
+			"detached-attempt": facts.AttemptNumber - 1,
+		}
+	}
+	if token.History.LastError == "" {
+		token.History.LastError = facts.LastFailure
+	}
+}
+
+func inputBindingsFromWorkInputs(
+	bindings map[string][]string,
+	tokens []workers.Token,
+	inputs []workers.WorkInput,
+) map[string][]string {
+	if len(inputs) == 0 {
+		return bindings
+	}
+	if bindings == nil {
+		bindings = make(map[string][]string)
+	}
+	for index, input := range inputs {
+		if index >= len(tokens) || tokens[index].ID == "" {
+			continue
+		}
+		for _, name := range input.InputNames {
+			if name == "" || containsString(bindings[name], tokens[index].ID) {
+				continue
+			}
+			bindings[name] = append(bindings[name], tokens[index].ID)
+		}
+	}
+	if len(bindings) == 0 {
+		return nil
+	}
+	return bindings
+}
+
+func containsString(values []string, wanted string) bool {
+	for _, value := range values {
+		if value == wanted {
+			return true
+		}
+	}
+	return false
+}
+
+func cloneIntMap(values map[string]int) map[string]int {
+	if len(values) == 0 {
+		return nil
+	}
+	clone := make(map[string]int, len(values))
+	for key, value := range values {
+		clone[key] = value
+	}
+	return clone
 }
 
 func payloadFromContent(content []work.WorkContentPart) []byte {

@@ -215,10 +215,10 @@ func TestReadSnapshotFromFactoryWorldStateProjectsArtifactVerificationWithoutSca
 			}},
 		},
 		WorkItemsByID: map[string]work.FactoryWorkItem{
-			"pending":   {ID: "pending", WorkTypeID: "story", DisplayName: "pending", State: "review", PlaceID: "story:review"},
-			"satisfied": {ID: "satisfied", WorkTypeID: "story", DisplayName: "satisfied", State: "review", PlaceID: "story:review"},
-			"failed":    {ID: "failed", WorkTypeID: "story", DisplayName: "failed", State: "review", PlaceID: "story:review"},
-			"plain":     {ID: "plain", WorkTypeID: "plain", DisplayName: "plain", State: "review", PlaceID: "plain:review"},
+			"pending":   {ID: "pending", WorkTypeID: "story", DisplayName: "pending", State: "review"},
+			"satisfied": {ID: "satisfied", WorkTypeID: "story", DisplayName: "satisfied", State: "review"},
+			"failed":    {ID: "failed", WorkTypeID: "story", DisplayName: "failed", State: "review"},
+			"plain":     {ID: "plain", WorkTypeID: "plain", DisplayName: "plain", State: "review"},
 		},
 		ActiveDispatches: map[string]factorydefinitions.FactoryWorldDispatch{
 			"dispatch-pending": {

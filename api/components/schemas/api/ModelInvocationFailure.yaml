@@ -1,0 +1,27 @@
+type: object
+additionalProperties: false
+required:
+  - class
+  - message
+description: Customer-safe typed failure for a generic model invocation.
+properties:
+  class:
+    $ref: './ModelInvocationFailureClass.yaml'
+  message:
+    type: string
+    minLength: 1
+    description: Actionable failure explanation without cache paths, backend addresses, credentials, or protocol payloads.
+  model:
+    $ref: '../data-models/ModelReference.yaml'
+  operation:
+    type: string
+    description: Operation associated with the failure, when known.
+  slot:
+    type: string
+    description: Input or output slot associated with the failure, when known.
+  parameter:
+    type: string
+    description: Parameter associated with the failure, when known.
+  field:
+    type: string
+    description: Public request field associated with the failure, when known.

@@ -189,10 +189,10 @@ func TestDispatchResultHook_RecordsDispatchBeforeSubmittingToHook(t *testing.T) 
 							WorkIDs:   []string{"work-1"},
 							ReplayKey: "transition-1/trace-1/work-1",
 						},
-						InputTokens: workers.InputTokens(factorytoken.Token{
+						InputTokens: workers.InputTokens(factorytoken.ToWorker(factorytoken.Token{
 							ID:      "token-1",
 							PlaceID: "task:init",
-						}),
+						})),
 					},
 					Mutations: []interfaces.MarkingMutation{{
 						Type:      interfaces.MutationConsume,
@@ -259,7 +259,7 @@ func TestDispatchEntry_SubmitsRawInterfacesWorkDispatch(t *testing.T) {
 						TransitionID:    "transition-raw",
 						WorkerType:      "worker-raw",
 						WorkstationName: "station-raw",
-						InputTokens:     workers.InputTokens(inputToken),
+						InputTokens:     workers.InputTokens(factorytoken.ToWorker(inputToken)),
 						InputBindings:   map[string][]string{"work": {"token-raw"}},
 					},
 					Mutations: []interfaces.MarkingMutation{{
@@ -370,7 +370,7 @@ func TestTokenNamePopulatedOnDispatchAndCompletion(t *testing.T) {
 						DispatchID:   "d1",
 						TransitionID: "t1",
 						WorkerType:   "test-worker",
-						InputTokens: workers.InputTokens(factorytoken.Token{
+						InputTokens: workers.InputTokens(factorytoken.ToWorker(factorytoken.Token{
 							ID:      "tok-1",
 							PlaceID: "task:init",
 							Color: factorytoken.Color{
@@ -378,7 +378,7 @@ func TestTokenNamePopulatedOnDispatchAndCompletion(t *testing.T) {
 								WorkID:     "work-1",
 								WorkTypeID: "task",
 							},
-						}),
+						})),
 					},
 					Mutations: []interfaces.MarkingMutation{{
 						Type:      interfaces.MutationConsume,
@@ -484,7 +484,7 @@ func assertSingleDispatchRecord(t *testing.T, records []interfaces.FactoryDispat
 	}
 }
 
-func assertConsumedTokenName(t *testing.T, tokens []factorytoken.Token, wantName, label string) {
+func assertConsumedTokenName(t *testing.T, tokens []workerexecution.Token, wantName, label string) {
 	t.Helper()
 	if len(tokens) != 1 {
 		t.Fatalf("expected 1 consumed token on %s, got %d", label, len(tokens))

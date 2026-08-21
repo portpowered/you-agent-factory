@@ -24,7 +24,7 @@ func TestTokenMutationRecordJSON_RoundTripPreservesPetriTransitionSemantics(t *t
 		FromPlace:    "in-progress",
 		ToPlace:      "review",
 		Reason:       "transition fired",
-		Token: &factorytoken.Token{
+		Token: workerToken(&factorytoken.Token{
 			ID:      "token-work-1",
 			PlaceID: "review",
 			Color: factorytoken.Color{
@@ -32,7 +32,7 @@ func TestTokenMutationRecordJSON_RoundTripPreservesPetriTransitionSemantics(t *t
 				WorkTypeID: "story",
 				Tags:       map[string]string{"trace": "trace-1"},
 			},
-		},
+		}),
 	}
 
 	raw, err := json.Marshal(original)
@@ -130,7 +130,7 @@ func buildRuntimeStateSnapshotFixture() *RuntimeState {
 				DispatchID:   "dispatch-1",
 				TransitionID: "trans-1",
 				StartTime:    time.Now().Add(-time.Second),
-				ConsumedTokens: []factorytoken.Token{{
+				ConsumedTokens: factorytoken.ToWorkerSlice([]factorytoken.Token{{
 					ID:        "tok-1",
 					PlaceID:   "place-a",
 					CreatedAt: time.Unix(123, 0),
@@ -152,7 +152,7 @@ func buildRuntimeStateSnapshotFixture() *RuntimeState {
 							Timestamp:    time.Unix(120, 0),
 						}},
 					},
-				}},
+				}}),
 				HeldMutations: []interfaces.MarkingMutation{{
 					Type:      "CONSUME",
 					TokenID:   "tok-1",
@@ -180,7 +180,7 @@ func buildRuntimeStateSnapshotFixture() *RuntimeState {
 			StartTime: time.Now().Add(-2 * time.Second),
 			EndTime:   time.Now().Add(-time.Second),
 			Duration:  time.Second,
-			ConsumedTokens: []factorytoken.Token{{
+			ConsumedTokens: factorytoken.ToWorkerSlice([]factorytoken.Token{{
 				ID:      "tok-0",
 				PlaceID: "place-z",
 				Color: factorytoken.Color{
@@ -188,7 +188,7 @@ func buildRuntimeStateSnapshotFixture() *RuntimeState {
 					WorkTypeID: "type-0",
 					Tags:       map[string]string{"history": "original"},
 				},
-			}},
+			}}),
 			OutputMutations: []interfaces.TokenMutationRecord{{
 				DispatchID:   "dispatch-0",
 				TransitionID: "trans-0",
@@ -196,11 +196,11 @@ func buildRuntimeStateSnapshotFixture() *RuntimeState {
 				Type:         interfaces.MutationCreate,
 				TokenID:      "work-0",
 				ToPlace:      "place-complete",
-				Token: &factorytoken.Token{
+				Token: workerToken(&factorytoken.Token{
 					ID:      "work-0",
 					PlaceID: "place-complete",
 					Color:   factorytoken.Color{WorkID: "work-0", WorkTypeID: "type-0"},
-				},
+				}),
 			}},
 		}},
 		TickCount: 5,

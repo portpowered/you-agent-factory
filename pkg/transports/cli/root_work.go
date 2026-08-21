@@ -10,6 +10,9 @@ import (
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/transports/cli/cobracompletion"
 	visualizationcli "github.com/portpowered/infinite-you/pkg/services/factory_visualization/transports/cli"
+	modelscli "github.com/portpowered/infinite-you/pkg/services/models/transports/cli"
+	operatorconfig "github.com/portpowered/infinite-you/pkg/services/operator_settings"
+	providerscli "github.com/portpowered/infinite-you/pkg/services/providers/transports/cli"
 	"github.com/portpowered/infinite-you/pkg/services/work/transports/cli/climanifest"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifestcobra"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/cliserver"
@@ -19,6 +22,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/transports/cli/resolvedinput"
 	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
 	"github.com/spf13/cobra"
+	"go.uber.org/zap"
 )
 
 func newRootCommandWithGeneratedRepresentativeFamily(options CommandFactory) *cobra.Command {
@@ -473,7 +477,8 @@ func runUsesCurrentFactory(cmd *cobra.Command) bool {
 		!cmd.Flags().Changed("dir") &&
 		!cmd.Flags().Changed("factory") &&
 		!cmd.Flags().Changed("named") &&
-		!cmd.Flags().Changed("replay")
+		!cmd.Flags().Changed("replay") &&
+		!cmd.Flags().Changed("resume")
 }
 
 func selectCurrentFactoryFromWorkingDirectory(cmd *cobra.Command, cfg *runcli.RunConfig) error {
@@ -783,4 +788,50 @@ func newRepresentativeHandlerRegistry(
 			return runFactoryWithOptions(cmd, defaultcmd.OOTBRunConfig(rootOptions.runDefaults), nil, globals, operatorDefaults, policy, rootOptions, true)
 		},
 	})
+}
+
+func newProductionDocsCommand(
+	diagnostics *cliDiagnosticsOptions,
+) (*cobra.Command, error) {
+	return climanifestcobra.NewDocsCommand(commandregistry.DocsResolvedRunE(
+		commandregistry.DocsBinding{
+			BinaryName: cliBinaryName, DiagnosticsWriter: diagnostics.writer,
+			Verbose: diagnostics.verboseEnabled,
+		},
+	))
+}
+
+func newProductionModelsCommand(
+	globals *cliGlobalOptions,
+	diagnostics *cliDiagnosticsOptions,
+	operatorDefaults *cliOperatorDefaultsOptions,
+	rootOptions CommandFactory,
+) (*cobra.Command, error) {
+	if operatorDefaults == nil {
+		operatorDefaults = &cliOperatorDefaultsOptions{}
+	}
+	handler := modelscli.NewCommandHandler(
+		rootOptions.ModelsCLI,
+		diagnostics.writer,
+		rootOptions.homeDir,
+		func(cmd *cobra.Command, homeDir string) (operatorconfig.ResolvedDefaults, error) {
+			return resolveOperatorDefaults(cmd, operatorDefaults, rootOptions, homeDir)
+		},
+		func() (*zap.Logger, error) {
+			policy := diagnostics.resolvePolicy(false)
+			return policy.BuildLogger(rootOptions.buildTerminalLogger)
+		},
+	)
+	return climanifestcobra.NewModelsCommand(handler)
+}
+
+func newProductionProvidersCommand(
+	diagnostics *cliDiagnosticsOptions,
+	rootOptions CommandFactory,
+) (*cobra.Command, error) {
+	handler := providerscli.NewCommandHandler(
+		rootOptions.ProvidersCLI,
+		diagnostics.writer,
+	)
+	return climanifestcobra.NewProvidersCommand(handler.List)
 }

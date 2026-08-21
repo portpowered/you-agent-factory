@@ -347,7 +347,7 @@ func (h *WorkStateChangeHook) OnTick(ctx context.Context, input recordings.Repla
 	for h.next < len(h.changes) && h.changes[h.next].observedTick <= input.Tick {
 		recorded := h.changes[h.next]
 		h.next++
-		mutation, ok := replayWorkStateChangeMutation(input, recorded.change)
+		mutation, ok := replayWorkStateChangeMutation(input, recorded)
 		if !ok {
 			continue
 		}
@@ -365,12 +365,13 @@ func (h *WorkStateChangeHook) OnTick(ctx context.Context, input recordings.Repla
 
 func replayWorkStateChangeMutation(
 	snapshot recordings.ReplaySnapshot,
-	change work.WorkStateChangeRecord,
+	recorded replayWorkStateChange,
 ) (interfaces.MarkingMutation, bool) {
-	if change.WorkID == "" || change.FromPlaceID == "" || change.ToPlaceID == "" {
+	change := recorded.change
+	if change.WorkID == "" || recorded.fromPlaceID == "" || recorded.toPlaceID == "" {
 		return interfaces.MarkingMutation{}, false
 	}
-	if change.FromPlaceID == change.ToPlaceID {
+	if recorded.fromPlaceID == recorded.toPlaceID {
 		return interfaces.MarkingMutation{}, false
 	}
 	token, ok := snapshot.TokenByWorkID[change.WorkID]
@@ -384,8 +385,8 @@ func replayWorkStateChangeMutation(
 	return interfaces.MarkingMutation{
 		Type:      interfaces.MutationMove,
 		TokenID:   token.TokenID,
-		FromPlace: change.FromPlaceID,
-		ToPlace:   change.ToPlaceID,
+		FromPlace: recorded.fromPlaceID,
+		ToPlace:   recorded.toPlaceID,
 		Reason:    reason,
 	}, true
 }
@@ -744,9 +745,6 @@ func resourceTokenName(token workerexecution.Token) string {
 		return token.Color.Name
 	}
 	if before, _, ok := strings.Cut(token.ID, ":resource:"); ok && before != "" {
-		return before
-	}
-	if before, _, ok := strings.Cut(token.PlaceID, ":"); ok && before != "" {
 		return before
 	}
 	return token.ID

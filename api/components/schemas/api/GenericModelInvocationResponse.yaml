@@ -1,0 +1,14 @@
+type: object
+additionalProperties: false
+required:
+  - outputs
+description: Provider-neutral generic model invocation result with ordered slot-named outputs.
+properties:
+  outputs:
+    type: array
+    description: Ordered outputs. Distinct slots such as ASR transcript and segments remain separate entries.
+    items:
+      $ref: './ModelInvocationOutput.yaml'
+  failure:
+    $ref: './ModelInvocationFailure.yaml'
+    description: Optional typed failure when a transport chooses an envelope rather than an error response.

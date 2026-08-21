@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	recordingscli "github.com/portpowered/infinite-you/pkg/services/recordings/transports/cli"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
+	recordingscli "github.com/portpowered/infinite-you/pkg/services/recordings/transports/cli"
 )
 
 func TestAdapterReportRecordingPathOnShutdownPreservesAcceptedPresentation(t *testing.T) {
@@ -118,6 +118,18 @@ func TestAdapterFailurePathsPreserveExitRelevantErrors(t *testing.T) {
 			wantErr: "resolve default replay record path",
 		},
 		{
+			name: "resume planner failure",
+			request: recordingscli.InvocationRequest{
+				ResumePath: "existing.recording.json",
+				RecordingTargetPlanner: recordings.LiveRecordingTargetPlannerFunc(
+					func(recordings.LiveRecordingTargetRequest) (recordings.LiveRecordingTarget, error) {
+						return recordings.LiveRecordingTarget{}, errors.New("target planning failed")
+					},
+				),
+			},
+			wantErr: "resolve resume successor recording path",
+		},
+		{
 			name: "no-record with record",
 			request: recordingscli.InvocationRequest{
 				RecordPath:              "run.replay.json",
@@ -174,6 +186,7 @@ func TestAdapterResolveRecordPathWithContextHonorsCancellation(t *testing.T) {
 	cancel()
 
 	_, err := adapter.ResolveRecordPathWithContext(ctx, recordingscli.InvocationRequest{
+		ResumePath:             "existing.recording.json",
 		HomeDir:                t.TempDir(),
 		RecordingTargetPlanner: planner,
 	})
@@ -202,6 +215,7 @@ func TestAdapterResolveRecordPathWithContextHonorsCancellationAfterPlanner(t *te
 	)
 
 	_, err := adapter.ResolveRecordPathWithContext(ctx, recordingscli.InvocationRequest{
+		ResumePath:             "existing.recording.json",
 		HomeDir:                t.TempDir(),
 		RecordingTargetPlanner: planner,
 	})

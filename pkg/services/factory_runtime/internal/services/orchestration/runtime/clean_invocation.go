@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/portpowered/infinite-you/pkg/platform/jsonvalue"
@@ -115,14 +116,16 @@ func projectCleanInvocationSnapshot(
 		}
 		projected.Consumed = make([]factory.CleanInvocationWork, 0, len(completion.ConsumedTokens))
 		for index := range completion.ConsumedTokens {
-			projected.Consumed = append(projected.Consumed, cleanInvocationWorkFromToken(snapshot.Topology, &completion.ConsumedTokens[index]))
+			token := factorytoken.FromWorker(completion.ConsumedTokens[index])
+			projected.Consumed = append(projected.Consumed, cleanInvocationWorkFromToken(snapshot.Topology, &token))
 		}
 		projected.Outputs = make([]factory.CleanInvocationWork, 0, len(completion.OutputMutations))
 		for _, mutation := range completion.OutputMutations {
 			if mutation.Token == nil {
 				continue
 			}
-			projected.Outputs = append(projected.Outputs, cleanInvocationWorkFromToken(snapshot.Topology, mutation.Token))
+			token := factorytoken.FromWorker(*mutation.Token)
+			projected.Outputs = append(projected.Outputs, cleanInvocationWorkFromToken(snapshot.Topology, &token))
 		}
 		result.DispatchHistory = append(result.DispatchHistory, projected)
 	}
@@ -290,8 +293,8 @@ func restoredWorkPlacements(
 	}
 	if restored.PlaceOccupancyByID == nil {
 		for workID, item := range items {
-			if item.PlaceID != "" {
-				placements[workID] = item.PlaceID
+			if item.WorkTypeID != "" && item.State != "" {
+				placements[workID] = state.PlaceID(item.WorkTypeID, item.State)
 			}
 		}
 	}
@@ -333,9 +336,6 @@ func restoredWorkPlacementID(
 ) string {
 	if placeID != "" || restored.PlaceOccupancyByID != nil {
 		return placeID
-	}
-	if item.PlaceID != "" {
-		return item.PlaceID
 	}
 	if item.WorkTypeID != "" && item.State != "" {
 		return state.PlaceID(item.WorkTypeID, item.State)
@@ -476,4 +476,78 @@ func uniqueRestoredWorkTokenID(marking *petri.Marking, workID string) string {
 		}
 		candidate = base + ":" + fmt.Sprintf("%d", suffix)
 	}
+}
+
+// orderedRuntimeWorkDispatchTokens preserves the authored workstation input
+// order for detached execution. The scheduler intentionally records observed
+// child tokens before the consumed parent token; prompt templates and model
+// operation bindings, however, address inputs by the workstation's declared
+// slots. The legacy workstation executor made this ordering adjustment before
+// it built its request, so the shared Workers execution path must do the same.
+func orderedRuntimeWorkDispatchTokens(
+	cfg *runtimeConfig,
+	request workerexecution.WorkstationDispatchRequest,
+	invocation *work.InvocationArguments,
+) ([]workerexecution.Token, error) {
+	tokens := workerexecution.WorkDispatchInputTokens(request.Execution.Dispatch)
+	if len(tokens) < 2 {
+		return tokens, nil
+	}
+	lookup, ok := runtimeDefinitionLookup(cfg)
+	if !ok {
+		return tokens, nil
+	}
+	workstation, found, err := resolveRuntimeWorkstationDefinition(
+		cfg,
+		lookup,
+		request,
+		invocation,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("resolve workstation input order: %w", err)
+	}
+	if !found || workstation == nil {
+		return tokens, nil
+	}
+
+	byPlace := make(map[string][]int)
+	for index, token := range tokens {
+		byPlace[workerTokenPlaceKey(token)] = append(byPlace[workerTokenPlaceKey(token)], index)
+	}
+	ordered := make([]workerexecution.Token, 0, len(tokens))
+	used := make([]bool, len(tokens))
+	appendPlaceTokens := func(placeID string) {
+		for _, index := range byPlace[placeID] {
+			used[index] = true
+			ordered = append(ordered, tokens[index])
+		}
+	}
+	for _, input := range workstation.Inputs {
+		appendPlaceTokens(fmt.Sprintf("%s:%s", input.WorkTypeName, input.StateName))
+	}
+	for _, resource := range workstation.Resources {
+		appendPlaceTokens(fmt.Sprintf("%s:%s", resource.Name, interfaces.ResourceStateAvailable))
+	}
+	for index, token := range tokens {
+		if used[index] {
+			continue
+		}
+		ordered = append(ordered, token)
+	}
+	return ordered, nil
+}
+
+func workerTokenPlaceKey(token workerexecution.Token) string {
+	prefix := strings.TrimSpace(token.Color.WorkTypeID)
+	if prefix == "" {
+		prefix = strings.TrimSpace(token.Color.Name)
+	}
+	stateName := strings.TrimSpace(token.State)
+	if prefix == "" {
+		return stateName
+	}
+	if stateName == "" {
+		return prefix
+	}
+	return prefix + ":" + stateName
 }

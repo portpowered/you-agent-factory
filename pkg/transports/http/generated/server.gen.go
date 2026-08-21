@@ -681,6 +681,19 @@ const (
 	Stdio GlobalConfigACPIntegrationTransport = "stdio"
 )
 
+// Defines values for GlobalConfigModelLoadPolicy.
+const (
+	ONDEMAND GlobalConfigModelLoadPolicy = "ON_DEMAND"
+)
+
+// Defines values for GlobalConfigModelOperation.
+const (
+	ASR   GlobalConfigModelOperation = "ASR"
+	EMBED GlobalConfigModelOperation = "EMBED"
+	OMNI  GlobalConfigModelOperation = "OMNI"
+	TTS   GlobalConfigModelOperation = "TTS"
+)
+
 // Defines values for GuardType.
 const (
 	GuardTypeAllChildrenComplete GuardType = "ALL_CHILDREN_COMPLETE"
@@ -818,6 +831,42 @@ const (
 	ManagedRuntimeReadinessStateMISSING     ManagedRuntimeReadinessState = "MISSING"
 	ManagedRuntimeReadinessStateREADY       ManagedRuntimeReadinessState = "READY"
 	ManagedRuntimeReadinessStateUNSUPPORTED ManagedRuntimeReadinessState = "UNSUPPORTED"
+)
+
+// Defines values for ModelInvocationContentType.
+const (
+	ModelInvocationContentTypeAudio  ModelInvocationContentType = "AUDIO"
+	ModelInvocationContentTypeBinary ModelInvocationContentType = "BINARY"
+	ModelInvocationContentTypeImage  ModelInvocationContentType = "IMAGE"
+	ModelInvocationContentTypeJSON   ModelInvocationContentType = "JSON"
+	ModelInvocationContentTypeText   ModelInvocationContentType = "TEXT"
+	ModelInvocationContentTypeVideo  ModelInvocationContentType = "VIDEO"
+)
+
+// Defines values for ModelInvocationFailureClass.
+const (
+	ModelInvocationFailureClassArtifact              ModelInvocationFailureClass = "ARTIFACT"
+	ModelInvocationFailureClassBackendProtocol       ModelInvocationFailureClass = "BACKEND_PROTOCOL"
+	ModelInvocationFailureClassBackendReadiness      ModelInvocationFailureClass = "BACKEND_READINESS"
+	ModelInvocationFailureClassCancellation          ModelInvocationFailureClass = "CANCELLATION"
+	ModelInvocationFailureClassConfiguration         ModelInvocationFailureClass = "CONFIGURATION"
+	ModelInvocationFailureClassInvalidModelReference ModelInvocationFailureClass = "INVALID_MODEL_REFERENCE"
+	ModelInvocationFailureClassInvalidOperation      ModelInvocationFailureClass = "INVALID_OPERATION"
+	ModelInvocationFailureClassInvalidParameter      ModelInvocationFailureClass = "INVALID_PARAMETER"
+	ModelInvocationFailureClassInvalidSlot           ModelInvocationFailureClass = "INVALID_SLOT"
+	ModelInvocationFailureClassMalformedResponse     ModelInvocationFailureClass = "MALFORMED_RESPONSE"
+	ModelInvocationFailureClassMediaCapability       ModelInvocationFailureClass = "MEDIA_CAPABILITY"
+	ModelInvocationFailureClassOfflineCache          ModelInvocationFailureClass = "OFFLINE_CACHE"
+	ModelInvocationFailureClassSlotArity             ModelInvocationFailureClass = "SLOT_ARITY"
+	ModelInvocationFailureClassTimeout               ModelInvocationFailureClass = "TIMEOUT"
+)
+
+// Defines values for ModelInvocationOutputMode.
+const (
+	ModelInvocationOutputModeArtifact ModelInvocationOutputMode = "ARTIFACT"
+	ModelInvocationOutputModeAuto     ModelInvocationOutputMode = "AUTO"
+	ModelInvocationOutputModeInline   ModelInvocationOutputMode = "INLINE"
+	ModelInvocationOutputModeJSON     ModelInvocationOutputMode = "JSON"
 )
 
 // Defines values for ModelInvocationResponseMode.
@@ -4900,6 +4949,42 @@ type FailureDetail struct {
 	Reason WorkFailureType `json:"reason"`
 }
 
+// GenericModelInvocationRequest Provider-neutral generic model invocation request. Inputs and parameters retain authored order.
+type GenericModelInvocationRequest struct {
+	// Holder Non-empty caller identity used by the eventual capacity owner.
+	Holder string `json:"holder"`
+
+	// Inputs Ordered input values. Repeated slot names remain separate entries in this order.
+	Inputs *[]ModelInvocationInput `json:"inputs,omitempty"`
+
+	// Model Opaque model name or source URI accepted by the provider-neutral invocation contract.
+	Model ModelReference `json:"model"`
+
+	// Offline Whether resolution and preparation must remain cache-only.
+	Offline *bool `json:"offline,omitempty"`
+
+	// Operation Uppercase public operation identifier such as `TTS`, `ASR`, or `EMBED`.
+	Operation ModelOperationName `json:"operation"`
+
+	// OutputMode Provider-neutral representation requested for a generic model invocation result.
+	OutputMode *ModelInvocationOutputMode `json:"outputMode,omitempty"`
+
+	// Parameters Ordered named JSON parameters for the selected operation.
+	Parameters *[]ModelInvocationParameter `json:"parameters,omitempty"`
+
+	// Scope Opaque Models runtime-scope reference.
+	Scope string `json:"scope"`
+}
+
+// GenericModelInvocationResponse Provider-neutral generic model invocation result with ordered slot-named outputs.
+type GenericModelInvocationResponse struct {
+	// Failure Customer-safe typed failure for a generic model invocation.
+	Failure *ModelInvocationFailure `json:"failure,omitempty"`
+
+	// Outputs Ordered outputs. Distinct slots such as ASR transcript and segments remain separate entries.
+	Outputs []ModelInvocationOutput `json:"outputs"`
+}
+
 // GlobalConfig Shared operator configuration stored in .you-agent-factory/config.json.
 type GlobalConfig struct {
 	// BackendScopeID Stable identifier for the local provider-backed runtime boundary.
@@ -4907,6 +4992,9 @@ type GlobalConfig struct {
 
 	// Defaults Operator defaults that participate independently in file, environment, and flag precedence.
 	Defaults *GlobalConfigDefaults `json:"defaults,omitempty"`
+
+	// Models Optional operator model overlays keyed by model name. A model entry may override one or more built-in fields or fully describe a new model name.
+	Models *GlobalConfigModels `json:"models,omitempty"`
 
 	// Runtime Runtime observability settings loaded from operator configuration before command-line overrides.
 	Runtime *GlobalConfigRuntime `json:"runtime,omitempty"`
@@ -4959,6 +5047,30 @@ type GlobalConfigDefaults struct {
 	// WorkerModelProvider Default worker model provider, including supported aliases and symbolic DEFAULT resolution.
 	WorkerModelProvider *string `json:"workerModelProvider,omitempty"`
 }
+
+// GlobalConfigModel Optional operator overlay for one model. Omitted fields preserve a built-in definition; new model names must provide every field.
+type GlobalConfigModel struct {
+	// Backend Provider-neutral backend identity selected for this model.
+	Backend *string `json:"backend,omitempty"`
+
+	// LoadPolicy Operator model load policy. Runtime activation is owned by Models.
+	LoadPolicy *GlobalConfigModelLoadPolicy `json:"loadPolicy,omitempty"`
+
+	// Operations Ordered generic operation names supported by this model.
+	Operations *[]GlobalConfigModelOperation `json:"operations,omitempty"`
+
+	// Source Model source path or provider-neutral source URI.
+	Source *string `json:"source,omitempty"`
+}
+
+// GlobalConfigModelLoadPolicy Operator model load policy. Runtime activation is owned by Models.
+type GlobalConfigModelLoadPolicy string
+
+// GlobalConfigModelOperation Generic provider-neutral operation contract name.
+type GlobalConfigModelOperation string
+
+// GlobalConfigModels Optional operator model overlays keyed by model name. A model entry may override one or more built-in fields or fully describe a new model name.
+type GlobalConfigModels map[string]GlobalConfigModel
 
 // GlobalConfigRuntime Runtime observability settings loaded from operator configuration before command-line overrides.
 type GlobalConfigRuntime struct {
@@ -5493,7 +5605,7 @@ type ManagedRuntime struct {
 	ReadinessState ManagedRuntimeReadinessState `json:"readinessState"`
 
 	// SupportedOperations Provider-agnostic operations supported by this managed runtime.
-	SupportedOperations []ModelOperation `json:"supportedOperations"`
+	SupportedOperations []ModelInvocationOperation `json:"supportedOperations"`
 }
 
 // ManagedRuntimeLifecycleState Customer-facing lifecycle position for one managed runtime. Lifecycle state tracks install, cache, and load progression independently from short-lived readiness used by invocation surfaces.
@@ -5547,7 +5659,7 @@ type ModelCapability struct {
 	ModelProvider *WorkerModelProvider `json:"modelProvider,omitempty"`
 
 	// Operations Operations declared by this worker for the selected model.
-	Operations []ModelOperation `json:"operations"`
+	Operations []ModelInvocationOperation `json:"operations"`
 
 	// ProviderLocality Provider locality for a model worker capability declaration.
 	ProviderLocality WorkerModelLocality `json:"providerLocality"`
@@ -5570,13 +5682,13 @@ type ModelDetail struct {
 	ManagedRuntime ManagedRuntime `json:"managedRuntime"`
 
 	// Modalities Uppercase content modalities observed across all declared operation inputs and outputs.
-	Modalities []ModelOperationContentType `json:"modalities"`
+	Modalities []ModelInvocationContentType `json:"modalities"`
 
 	// Name Stable managed runtime identity such as `OMNIVOICE_Q4_K_M`. Mirrors `managedRuntime.identity` for compatibility with earlier inspect fields.
 	Name string `json:"name"`
 
 	// Operations Union of provider-agnostic operations supported by workers for this managed runtime. Mirrors `managedRuntime.supportedOperations` for compatibility with earlier inspect fields.
-	Operations []ModelOperation `json:"operations"`
+	Operations []ModelInvocationOperation `json:"operations"`
 
 	// ProviderLocality Provider locality for a model worker capability declaration.
 	ProviderLocality WorkerModelLocality `json:"providerLocality"`
@@ -5588,10 +5700,121 @@ type ModelDetail struct {
 	Status ModelStatus `json:"status"`
 }
 
+// ModelInvocationArtifact defines model for ModelInvocationArtifact.
+type ModelInvocationArtifact struct {
+	// ArtifactRef Opaque Models-owned artifact reference; cache paths and storage handles are never exposed.
+	ArtifactRef string `json:"artifactRef"`
+
+	// MediaType MIME type of the materialized artifact, when known.
+	MediaType *string `json:"mediaType,omitempty"`
+
+	// Name Customer-visible artifact name, when available.
+	Name       *string    `json:"name,omitempty"`
+	Properties *StringMap `json:"properties,omitempty"`
+
+	// SizeBytes Artifact size in bytes, when known.
+	SizeBytes *int64 `json:"sizeBytes,omitempty"`
+}
+
+// ModelInvocationContentType Uppercase provider-neutral content modality used by generic model invocation contracts.
+type ModelInvocationContentType string
+
+// ModelInvocationFailure Customer-safe typed failure for a generic model invocation.
+type ModelInvocationFailure struct {
+	// Class Stable provider-neutral failure identity for generic model invocation.
+	Class ModelInvocationFailureClass `json:"class"`
+
+	// Field Public request field associated with the failure, when known.
+	Field *string `json:"field,omitempty"`
+
+	// Message Actionable failure explanation without cache paths, backend addresses, credentials, or protocol payloads.
+	Message string `json:"message"`
+
+	// Model Opaque model name or source URI accepted by the provider-neutral invocation contract.
+	Model *ModelReference `json:"model,omitempty"`
+
+	// Operation Operation associated with the failure, when known.
+	Operation *string `json:"operation,omitempty"`
+
+	// Parameter Parameter associated with the failure, when known.
+	Parameter *string `json:"parameter,omitempty"`
+
+	// Slot Input or output slot associated with the failure, when known.
+	Slot *string `json:"slot,omitempty"`
+}
+
+// ModelInvocationFailureClass Stable provider-neutral failure identity for generic model invocation.
+type ModelInvocationFailureClass string
+
+// ModelInvocationInput One ordered value supplied to a named model-operation input slot.
+type ModelInvocationInput struct {
+	// ArtifactRef Opaque Models-owned input artifact reference when content is not inline.
+	ArtifactRef *string `json:"artifactRef,omitempty"`
+
+	// Content Inline content. JSON values are carried as their canonical JSON text.
+	Content *string `json:"content,omitempty"`
+
+	// ContentType Logical content type retained for compatibility with prepared invocation inputs.
+	ContentType *string `json:"contentType,omitempty"`
+
+	// MediaType Concrete MIME type for media or file-backed content, when known.
+	MediaType *string `json:"mediaType,omitempty"`
+
+	// Modality Uppercase provider-neutral content modality used by generic model invocation contracts.
+	Modality ModelInvocationContentType `json:"modality"`
+
+	// Name Input slot name declared by the selected operation.
+	Name string `json:"name"`
+}
+
+// ModelInvocationOperation One provider-neutral operation exposed by a managed model runtime.
+type ModelInvocationOperation struct {
+	// Inputs Named generic invocation input slots this model can consume.
+	Inputs *[]ModelInvocationSlot `json:"inputs,omitempty"`
+
+	// Name Uppercase public operation identifier such as `TTS`, `ASR`, or `EMBED`.
+	Name ModelOperationName `json:"name"`
+
+	// Outputs Named generic invocation output slots this model can produce.
+	Outputs *[]ModelInvocationSlot `json:"outputs,omitempty"`
+}
+
 // ModelInvocationOptions Optional direct-invocation controls for response shaping and transport.
 type ModelInvocationOptions struct {
 	// ResponseMode Requested direct-invocation response mode.
 	ResponseMode *ModelInvocationResponseMode `json:"responseMode,omitempty"`
+}
+
+// ModelInvocationOutput One ordered, slot-named output of a generic model invocation.
+type ModelInvocationOutput struct {
+	Artifact *ModelInvocationArtifact `json:"artifact,omitempty"`
+
+	// Content Inline output content. JSON values are carried as their canonical JSON text.
+	Content *string `json:"content,omitempty"`
+
+	// ContentType Logical content type retained for compatibility with prepared invocation outputs.
+	ContentType *string `json:"contentType,omitempty"`
+
+	// MediaType Concrete MIME type for media or file-backed output, when known.
+	MediaType *string `json:"mediaType,omitempty"`
+
+	// Modality Uppercase provider-neutral content modality used by generic model invocation contracts.
+	Modality ModelInvocationContentType `json:"modality"`
+
+	// Name Output slot name declared by the selected operation.
+	Name string `json:"name"`
+}
+
+// ModelInvocationOutputMode Provider-neutral representation requested for a generic model invocation result.
+type ModelInvocationOutputMode string
+
+// ModelInvocationParameter One ordered named JSON parameter supplied to a model operation.
+type ModelInvocationParameter struct {
+	// Name Operation parameter name.
+	Name string `json:"name"`
+
+	// Value JSON-compatible parameter value preserved without backend-specific typing.
+	Value interface{} `json:"value"`
 }
 
 // ModelInvocationRequest defines model for ModelInvocationRequest.
@@ -5632,6 +5855,27 @@ type ModelInvocationResponse struct {
 
 // ModelInvocationResponseMode Requested direct-invocation response mode.
 type ModelInvocationResponseMode string
+
+// ModelInvocationSlot One named provider-neutral slot in a generic model invocation operation.
+type ModelInvocationSlot struct {
+	// ContentTypes Uppercase content types accepted or produced by this generic slot.
+	ContentTypes []ModelInvocationContentType `json:"contentTypes"`
+
+	// MediaTypes Accepted or produced MIME-type patterns for this slot.
+	MediaTypes *[]string `json:"mediaTypes,omitempty"`
+
+	// Modality Uppercase provider-neutral content modality used by generic model invocation contracts.
+	Modality *ModelInvocationContentType `json:"modality,omitempty"`
+
+	// Name Stable slot name used by generic invocation inputs, outputs, and diagnostics.
+	Name string `json:"name"`
+
+	// Repeatable Whether the slot accepts or produces multiple ordered values.
+	Repeatable *bool `json:"repeatable,omitempty"`
+
+	// Required Whether this slot is required by the selected operation.
+	Required *bool `json:"required,omitempty"`
+}
 
 // ModelLoadState Compatibility lifecycle projection for one managed runtime. Prefer `managedRuntime.lifecycleState` for the canonical managed-runtime vocabulary. `UNLOADED` maps to managed lifecycle `NOT_INSTALLED` or `LOADED` depending on cache and load state; `NOT_APPLICABLE` maps to managed lifecycle `NOT_APPLICABLE` for cloud-backed runtimes.
 type ModelLoadState string
@@ -5701,6 +5945,12 @@ type ModelPullResponse struct {
 
 	// Revision Managed revision identifier for the installed runtime assets. Mirrors `managedRuntimePull.revision`.
 	Revision string `json:"revision"`
+}
+
+// ModelReference Opaque model name or source URI accepted by the provider-neutral invocation contract.
+type ModelReference struct {
+	// NameOrUri Configured model name or source URI. Resolution is owned by Models.
+	NameOrUri string `json:"nameOrUri"`
 }
 
 // ModelRequestEventPayload Request details captured immediately before a model-backed worker invocation enters resource, load, and execution boundaries. FactoryEvent.context owns dispatch, request, trace, and work identity, and the matching dispatch-request event owns the transition identifier.
@@ -5829,13 +6079,13 @@ type ModelSummary struct {
 	ManagedRuntime ManagedRuntime `json:"managedRuntime"`
 
 	// Modalities Uppercase content modalities observed across the model's declared operation inputs and outputs.
-	Modalities []ModelOperationContentType `json:"modalities"`
+	Modalities []ModelInvocationContentType `json:"modalities"`
 
 	// Name Stable managed runtime identity such as `OMNIVOICE_Q4_K_M`. Mirrors `managedRuntime.identity` for compatibility with earlier discovery fields.
 	Name string `json:"name"`
 
 	// Operations Provider-agnostic operations supported by the managed runtime. Mirrors `managedRuntime.supportedOperations` for compatibility with earlier discovery fields.
-	Operations []ModelOperation `json:"operations"`
+	Operations []ModelInvocationOperation `json:"operations"`
 
 	// ProviderLocality Provider locality for a model worker capability declaration.
 	ProviderLocality WorkerModelLocality `json:"providerLocality"`
@@ -7278,7 +7528,7 @@ type SubmitWorkRequest struct {
 	// Name Optional authored name for this single-work submission. When omitted, the server assigns the single-work request's canonical identity.
 	Name *string `json:"name,omitempty"`
 
-	// Payload Opaque work payload forwarded as raw JSON.
+	// Payload Opaque work payload forwarded as raw JSON. Each submitted Work payload is limited to 65,536 bytes measured from its compact UTF-8 JSON value; exactly 65,536 bytes is allowed. An oversized submission returns the operation's 400 BAD_REQUEST ErrorResponse with payloadBytes and payloadLimitBytes; those values count bytes, not characters.
 	Payload interface{} `json:"payload,omitempty"`
 
 	// Relations Optional token-level runtime relations preserved on the submitted work item.
@@ -7416,7 +7666,7 @@ type Work struct {
 	// Name A human readable name for the work, not unique
 	Name string `json:"name"`
 
-	// Payload Opaque work payload forwarded as raw JSON, or a binary data, or whatever else.
+	// Payload Opaque work payload forwarded as raw JSON. Each submitted Work payload is limited to 65,536 bytes measured from its compact UTF-8 JSON value; exactly 65,536 bytes is allowed. A batch is rejected atomically with a 400 BAD_REQUEST ErrorResponse when any Work payload exceeds this limit. The reported payloadBytes value is a byte count, not a character count.
 	Payload interface{} `json:"payload,omitempty"`
 
 	// PreviousChainingTraceIds Explicit predecessor chaining traces that directly caused this work item.
@@ -7666,7 +7916,7 @@ type WorkRequest struct {
 	// Type Kind of work request accepted by the factory.
 	Type WorkRequestType `json:"type"`
 
-	// Works A batch of work items to be submitted together.
+	// Works A batch of work items to be submitted together. Each Work payload uses the compact UTF-8 JSON byte limit documented by the Work schema; a batch is rejected atomically when any Work exceeds 65,536 bytes.
 	Works *[]Work `json:"works,omitempty"`
 }
 

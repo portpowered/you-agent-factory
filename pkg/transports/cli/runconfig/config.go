@@ -71,6 +71,7 @@ type Config struct {
 	AutoPort                      bool
 	RecordPath                    string
 	ReplayPath                    string
+	ResumePath                    string
 	DisableDefaultRecording       bool
 	RecordingTargetPlanner        recordings.LiveRecordingTargetPlanner
 	RecordingsCLI                 recordingscli.Adapter

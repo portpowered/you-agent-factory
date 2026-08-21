@@ -1,0 +1,7 @@
+type: string
+description: Generic provider-neutral operation contract name.
+enum:
+  - OMNI
+  - EMBED
+  - TTS
+  - ASR
