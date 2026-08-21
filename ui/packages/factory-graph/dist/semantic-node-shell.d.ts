@@ -20,5 +20,5 @@ export interface FactoryGraphNodeShellProps {
     zAxisIncompleteHints?: FactoryGraphZAxisIncompleteHints | null;
 }
 /** Original semantic Factory node frame, including its typed connection rails. */
-export declare function FactoryGraphNodeShell({ children, className, handles, interactionOverlay, nodeType, resizeControls, visualState: visualStateInput, zAxisIncompleteHints, }: FactoryGraphNodeShellProps): import("react").JSX.Element;
+export declare function FactoryGraphNodeShell({ children, className, handles, interactionOverlay, nodeType, resizeControls, visualState: visualStateInput, zAxisIncompleteHints, }: FactoryGraphNodeShellProps): import("react/jsx-runtime").JSX.Element;
 export declare function factoryGraphHandleToneFromId(handleId: string): NonNullable<GraphNodeHandle["tone"]>;

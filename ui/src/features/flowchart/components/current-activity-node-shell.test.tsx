@@ -1,4 +1,5 @@
 import { render, screen } from "@testing-library/react";
+import type { ReactNode } from "react";
 
 import {
   ActivityGraphNodeShell,
@@ -7,7 +8,22 @@ import {
 
 vi.mock("@xyflow/react", () => ({
   Handle: ({ id }: { id: string }) => <div data-testid={`handle-${id}`} />,
+  NodeResizeControl: ({
+    children,
+    className,
+    position,
+  }: {
+    children?: ReactNode;
+    className?: string;
+    position: string;
+  }) => (
+    <div className={className} data-testid={`resize-${position}`}>
+      {children}
+    </div>
+  ),
   Position: { Left: "left", Right: "right" },
+  ResizeControlVariant: { Handle: "handle" },
+  useUpdateNodeInternals: () => () => undefined,
 }));
 
 const Z_AXIS_HINT: ZAxisIncompleteHints = {
@@ -142,4 +158,43 @@ describe("ActivityGraphNodeShell z-axis incomplete hints", () => {
     });
     expect(labeledHints).toHaveLength(2);
   });
+});
+
+describe("ActivityGraphNodeShell resize visibility", () => {
+  const resizeControls = {
+    allowedAxes: { height: false, width: true },
+    bounds: {
+      maximum: { height: 144, width: 360 },
+      minimum: { height: 58, width: 156 },
+    },
+    nodeId: "worker:writer",
+  } as const;
+
+  it.each([
+    ["worker", true],
+    ["workstation", false],
+  ] as const)(
+    "only renders the %s resize control when the node is selected: %s",
+    (nodeType, selected) => {
+      const { container } = render(
+        <ActivityGraphNodeShell
+          handles={[]}
+          nodeType={nodeType}
+          resizeControls={resizeControls}
+          visualState={{ selected }}
+        >
+          <p>Node</p>
+        </ActivityGraphNodeShell>,
+      );
+
+      const resizeControl = container.querySelector(
+        "[data-testid^='resize-']",
+      );
+      if (selected) {
+        expect(resizeControl).toBeTruthy();
+      } else {
+        expect(resizeControl).toBeNull();
+      }
+    },
+  );
 });

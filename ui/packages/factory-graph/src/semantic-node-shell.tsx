@@ -90,6 +90,9 @@ export function FactoryGraphNodeShell({
   const nestedAccentRole = factoryGraphVisualNestedAccentRole(
     visualState.surface,
   );
+  const visibleResizeControls = resizeControls
+    ? { ...resizeControls, isVisible: visualState.selection }
+    : undefined;
 
   return (
     // `group/factory-graph-node` is the hover/focus ancestor the resize grip
@@ -136,8 +139,8 @@ export function FactoryGraphNodeShell({
         {children}
         <FactoryGraphNodeInteractionOverlayView overlay={interactionOverlay} />
       </GraphNodeShell>
-      {resizeControls ? (
-        <FactoryGraphNodeResizeControls {...resizeControls} />
+      {visibleResizeControls ? (
+        <FactoryGraphNodeResizeControls {...visibleResizeControls} />
       ) : null}
       {activeHints
         ? workstationZAxisIncompleteHintSlots().map((slot) => (

@@ -28,9 +28,7 @@ export function FactoryGraphDocNodeView({ data, selected: reactFlowSelected, }) 
             }),
         ]
             .filter(Boolean)
-            .join(" "), handles: data.handles, interactionOverlay: data.interactionOverlay, nodeType: "doc", resizeControls: data.resizeControls
-            ? { ...data.resizeControls, isVisible: selected }
-            : undefined, visualState: {
+            .join(" "), handles: data.handles, interactionOverlay: data.interactionOverlay, nodeType: "doc", resizeControls: data.resizeControls, visualState: {
             activeFlow: data.activeFlow,
             focused: data.focused,
             muted: data.muted,

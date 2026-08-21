@@ -26,9 +26,7 @@ export function FactoryGraphWorkerNodeView({ data, selected: reactFlowSelected, 
             activeFlow: data.activeFlow,
             muted: data.muted,
             selected,
-        })), handles: data.handles, interactionOverlay: data.interactionOverlay, nodeType: "worker", resizeControls: data.resizeControls
-            ? { ...data.resizeControls, isVisible: selected }
-            : undefined, visualState: {
+        })), handles: data.handles, interactionOverlay: data.interactionOverlay, nodeType: "worker", resizeControls: data.resizeControls, visualState: {
             activeFlow: data.activeFlow,
             focused: data.focused,
             muted: data.muted,
@@ -60,9 +58,7 @@ export function FactoryGraphWorkTypeNodeView({ data, selected: reactFlowSelected
             muted: data.muted,
             selected,
             validationError: data.validationError,
-        })), handles: data.handles, interactionOverlay: data.interactionOverlay, nodeType: "workType", resizeControls: data.resizeControls
-            ? { ...data.resizeControls, isVisible: selected }
-            : undefined, visualState: {
+        })), handles: data.handles, interactionOverlay: data.interactionOverlay, nodeType: "workType", resizeControls: data.resizeControls, visualState: {
             activeFlow: data.activeFlow,
             focused: data.focused,
             muted: data.muted,
@@ -92,9 +88,7 @@ export function FactoryGraphResourceNodeView({ data, selected: reactFlowSelected
             activeFlow: data.activeFlow,
             muted: data.muted,
             selected,
-        })), handles: data.handles, interactionOverlay: data.interactionOverlay, nodeType: "resource", resizeControls: data.resizeControls
-            ? { ...data.resizeControls, isVisible: selected }
-            : undefined, visualState: {
+        })), handles: data.handles, interactionOverlay: data.interactionOverlay, nodeType: "resource", resizeControls: data.resizeControls, visualState: {
             activeFlow: data.activeFlow,
             focused: data.focused,
             muted: data.muted,

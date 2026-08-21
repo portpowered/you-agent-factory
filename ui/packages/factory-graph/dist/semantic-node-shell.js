@@ -28,13 +28,16 @@ export function FactoryGraphNodeShell({ children, className = "", handles, inter
         ...visualStateInput,
     });
     const nestedAccentRole = factoryGraphVisualNestedAccentRole(visualState.surface);
+    const visibleResizeControls = resizeControls
+        ? { ...resizeControls, isVisible: visualState.selection }
+        : undefined;
     return (
     // `group/factory-graph-node` is the hover/focus ancestor the resize grip
     // reveals against; keep it on the wrapper that spans the whole card.
     _jsxs("div", { className: "group/factory-graph-node relative h-full min-w-0 w-full", children: [_jsxs(GraphNodeShell, { "aria-invalid": visualState.validation === "error" || undefined, className: classNames("shadow-none", nodeType === "workstation" &&
                     "[&>div:last-of-type]:gap-0.5 [&>div:last-of-type]:py-2", className, interactionOverlayClassName(interactionOverlay?.draftStatus), factoryGraphNodeVisualStateClassName(visualState), factoryGraphNodeVisualNestedAccentClassName(visualState)), "data-current-activity-node-type": nodeType, "data-graph-node-family": familyRole.family, "data-graph-node-shape": familyRole.shape, "data-graph-visual-active-flow": visualState.activeFlow || undefined, "data-graph-visual-border": visualState.border, "data-graph-visual-emphasis": visualState.emphasis, "data-graph-visual-fill": visualState.fill, "data-graph-visual-focus": visualState.focus, "data-graph-visual-glow": visualState.glow, "data-graph-visual-icon": visualState.icon, "data-graph-visual-lifecycle": visualState.lifecycle, "data-graph-visual-muted": visualState.muted || undefined, "data-graph-visual-nested-accent": nestedAccentRole, "data-graph-visual-selection": visualState.selection || undefined, "data-graph-visual-status": visualState.status, "data-graph-visual-surface": visualState.surface, "data-graph-visual-treatment": visualState.statusTreatment, "data-graph-visual-validation": visualState.validation, "data-graph-draft-status": interactionOverlay?.draftStatus === "none"
                     ? undefined
-                    : interactionOverlay?.draftStatus, handles: packageHandles, nodeKind: nodeType, showStateIndicator: false, children: [children, _jsx(FactoryGraphNodeInteractionOverlayView, { overlay: interactionOverlay })] }), resizeControls ? (_jsx(FactoryGraphNodeResizeControls, { ...resizeControls })) : null, activeHints
+                    : interactionOverlay?.draftStatus, handles: packageHandles, nodeKind: nodeType, showStateIndicator: false, children: [children, _jsx(FactoryGraphNodeInteractionOverlayView, { overlay: interactionOverlay })] }), visibleResizeControls ? (_jsx(FactoryGraphNodeResizeControls, { ...visibleResizeControls })) : null, activeHints
                 ? workstationZAxisIncompleteHintSlots().map((slot) => (_jsx(ZAxisIncompleteHintOrb, { accessibleLabel: activeHints.accessibleLabel, anchorId: slot.anchorId, title: activeHints.title, top: slot.top }, slot.anchorId)))
                 : null] }));
 }

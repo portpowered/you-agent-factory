@@ -182,11 +182,7 @@ export function FactoryGraphWorkerNodeView({
       handles={data.handles}
       interactionOverlay={data.interactionOverlay}
       nodeType="worker"
-      resizeControls={
-        data.resizeControls
-          ? { ...data.resizeControls, isVisible: selected }
-          : undefined
-      }
+      resizeControls={data.resizeControls}
       visualState={{
         activeFlow: data.activeFlow,
         focused: data.focused,
@@ -301,11 +297,7 @@ export function FactoryGraphWorkTypeNodeView({
       handles={data.handles}
       interactionOverlay={data.interactionOverlay}
       nodeType="workType"
-      resizeControls={
-        data.resizeControls
-          ? { ...data.resizeControls, isVisible: selected }
-          : undefined
-      }
+      resizeControls={data.resizeControls}
       visualState={{
         activeFlow: data.activeFlow,
         focused: data.focused,
@@ -376,11 +368,7 @@ export function FactoryGraphResourceNodeView({
       handles={data.handles}
       interactionOverlay={data.interactionOverlay}
       nodeType="resource"
-      resizeControls={
-        data.resizeControls
-          ? { ...data.resizeControls, isVisible: selected }
-          : undefined
-      }
+      resizeControls={data.resizeControls}
       visualState={{
         activeFlow: data.activeFlow,
         focused: data.focused,

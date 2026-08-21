@@ -29,9 +29,7 @@ export function FactoryGraphWorkstationNodeView({ data, selected: reactFlowSelec
     });
     const className = classNames(factoryGraphNodeSurfaceClassName("workstation"), "min-w-0 w-full justify-start overflow-hidden border-2", factoryGraphNodeHoverClassName({ muted: data.muted, selected }, "primary"), "border-info-border", presentation.borderClassName, data.selectedWorkID !== null &&
         "border-info-border shadow-af-info-selected");
-    return (_jsx(FactoryGraphNodeShell, { className: className, handles: data.handles, interactionOverlay: data.interactionOverlay, nodeType: "workstation", resizeControls: data.resizeControls
-            ? { ...data.resizeControls, isVisible: true }
-            : undefined, visualState: {
+    return (_jsx(FactoryGraphNodeShell, { className: className, handles: data.handles, interactionOverlay: data.interactionOverlay, nodeType: "workstation", resizeControls: data.resizeControls, visualState: {
             activeWork: data.active,
             focused: data.focused,
             lifecycle: data.active ? "PROCESSING" : undefined,

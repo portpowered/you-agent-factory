@@ -146,11 +146,7 @@ function FactoryGraphPlaceNodeView({
       handles={data.handles}
       interactionOverlay={data.interactionOverlay}
       nodeType={nodeType}
-      resizeControls={
-        data.resizeControls
-          ? { ...data.resizeControls, isVisible: selected }
-          : undefined
-      }
+      resizeControls={data.resizeControls}
       visualState={{
         activeFlow: data.activeFlow,
         activeWork: holdsWork,

@@ -72,11 +72,7 @@ export function FactoryGraphDocNodeView({
       handles={data.handles}
       interactionOverlay={data.interactionOverlay}
       nodeType="doc"
-      resizeControls={
-        data.resizeControls
-          ? { ...data.resizeControls, isVisible: selected }
-          : undefined
-      }
+      resizeControls={data.resizeControls}
       visualState={{
         activeFlow: data.activeFlow,
         focused: data.focused,

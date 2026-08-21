@@ -122,11 +122,7 @@ export function FactoryGraphWorkstationNodeView({
       handles={data.handles}
       interactionOverlay={data.interactionOverlay}
       nodeType="workstation"
-      resizeControls={
-        data.resizeControls
-          ? { ...data.resizeControls, isVisible: true }
-          : undefined
-      }
+      resizeControls={data.resizeControls}
       visualState={{
         activeWork: data.active,
         focused: data.focused,
