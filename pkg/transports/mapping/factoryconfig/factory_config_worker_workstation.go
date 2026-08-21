@@ -43,6 +43,78 @@ func workstationsAPIFromInternal(workstations []interfaces.FactoryWorkstationCon
 	return &result
 }
 
+func expectedArtifactsAPIFromInternal(
+	values []interfaces.ExpectedArtifactConfig,
+) *[]factoryapi.ExpectedArtifact {
+	if len(values) == 0 {
+		return nil
+	}
+	result := make([]factoryapi.ExpectedArtifact, len(values))
+	for index, value := range values {
+		result[index] = factoryapi.ExpectedArtifact{
+			Name:     value.Name,
+			Pattern:  value.Pattern,
+			NonEmpty: boolPtrIfTrue(value.NonEmpty),
+		}
+	}
+	return &result
+}
+
+func resourceRequirementsAPIFromInternal(resources []interfaces.ResourceConfig) *[]factoryapi.ResourceRequirement {
+	if len(resources) == 0 {
+		return nil
+	}
+	values := make([]factoryapi.ResourceRequirement, len(resources))
+	for i, resource := range resources {
+		values[i] = factoryapi.ResourceRequirement{
+			Name:     resource.Name,
+			Capacity: resource.Capacity,
+		}
+	}
+	return &values
+}
+
+func modelOperationsAPIFromInternal(operations []interfaces.ModelOperation) *[]factoryapi.ModelOperation {
+	if len(operations) == 0 {
+		return nil
+	}
+	values := make([]factoryapi.ModelOperation, len(operations))
+	for i, operation := range operations {
+		values[i] = factoryapi.ModelOperation{
+			Name:    operation.Name,
+			Inputs:  modelOperationSlotsAPIFromInternal(operation.Inputs),
+			Outputs: modelOperationSlotsAPIFromInternal(operation.Outputs),
+		}
+	}
+	return &values
+}
+
+func modelOperationSlotsAPIFromInternal(slots []interfaces.ModelOperationSlot) *[]factoryapi.ModelOperationSlot {
+	if len(slots) == 0 {
+		return nil
+	}
+	values := make([]factoryapi.ModelOperationSlot, len(slots))
+	for i, slot := range slots {
+		values[i] = factoryapi.ModelOperationSlot{
+			Name:         slot.Name,
+			ContentTypes: modelOperationContentTypesAPIFromInternal(slot.ContentTypes),
+			Required:     boolPtrIfTrue(slot.Required),
+		}
+	}
+	return &values
+}
+
+func modelOperationContentTypesAPIFromInternal(contentTypes []string) []factoryapi.ModelOperationContentType {
+	if len(contentTypes) == 0 {
+		return nil
+	}
+	values := make([]factoryapi.ModelOperationContentType, len(contentTypes))
+	for i, contentType := range contentTypes {
+		values[i] = publicFactoryModelOperationContentTypeFromInternal(contentType)
+	}
+	return values
+}
+
 func workstationAPIFromInternal(workstation interfaces.FactoryWorkstationConfig, workerType string) factoryapi.Workstation {
 	normalized := interfaces.CloneWorkstationConfig(workstation)
 	NormalizeWorkstationExecutionLimit(&normalized)
@@ -279,6 +351,14 @@ func workstationOperationBindingSelectorAPIFromInternal(selector *interfaces.Mod
 	}
 }
 
+func modelOperationContentTypePtrIfNotEmpty(value string) *factoryapi.ModelOperationContentType {
+	if strings.TrimSpace(value) == "" {
+		return nil
+	}
+	enumValue := publicFactoryModelOperationContentTypeFromInternal(value)
+	return &enumValue
+}
+
 func workstationCronAPIFromInternal(cron *interfaces.CronConfig) *factoryapi.WorkstationCron {
 	if cron == nil {
 		return nil
@@ -389,4 +469,32 @@ func workstationTypePtrIfNotEmpty(workstation interfaces.FactoryWorkstationConfi
 	}
 	enumValue := publicFactoryWorkstationTypeFromInternal(workstation, workerType)
 	return &enumValue
+}
+
+func publicFactoryWorkerModelProviderFromInternal(value string) factoryapi.WorkerModelProvider {
+	return factoryapi.WorkerModelProvider(interfaces.PublicWorkerModelProviderFromInternalRuntime(value))
+}
+
+func publicFactoryWorkerModelLocalityFromInternal(value string) factoryapi.WorkerModelLocality {
+	return factoryapi.WorkerModelLocality(interfaces.PermissivePublicFactoryWorkerModelLocality(value))
+}
+
+func publicFactoryWorkerProviderFromInternal(value string) factoryapi.WorkerProvider {
+	return factoryapi.WorkerProvider(interfaces.PublicWorkerProviderFromInternalRuntime(value))
+}
+
+func publicFactoryHostedWorkerProviderFromInternal(value string) string {
+	return interfaces.PermissivePublicFactoryHostedWorkerProvider(value)
+}
+
+func publicFactoryModelOperationContentTypeFromInternal(value string) factoryapi.ModelOperationContentType {
+	return factoryapi.ModelOperationContentType(interfaces.PermissivePublicFactoryWorkerModelOperationContentType(value))
+}
+
+func publicFactoryWorkstationKindFromInternal(kind interfaces.WorkstationKind) factoryapi.WorkstationKind {
+	return factoryapi.WorkstationKind(interfaces.CanonicalPublicWorkstationKind(kind))
+}
+
+func publicFactoryWorkstationTypeFromInternal(workstation interfaces.FactoryWorkstationConfig, workerType string) factoryapi.WorkstationType {
+	return factoryapi.WorkstationType(interfaces.PublicWorkstationTypeFromInternalRuntime(workstation.Type, workerType, workstation.Kind))
 }

@@ -3,11 +3,84 @@ package factoryconfig
 
 import (
 	"fmt"
+	"strings"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	contentcontract "github.com/portpowered/infinite-you/pkg/transports/mapping/workcontent"
 )
+
+func expectedArtifactsInternalFromAPI(
+	values *[]factoryapi.ExpectedArtifact,
+) []interfaces.ExpectedArtifactConfig {
+	if values == nil || len(*values) == 0 {
+		return nil
+	}
+	result := make([]interfaces.ExpectedArtifactConfig, len(*values))
+	for index, value := range *values {
+		result[index] = interfaces.ExpectedArtifactConfig{
+			Name:     value.Name,
+			Pattern:  value.Pattern,
+			NonEmpty: boolValue(value.NonEmpty),
+		}
+	}
+	return result
+}
+
+func modelOperationsInternalFromAPI(operations *[]factoryapi.ModelOperation) []interfaces.ModelOperation {
+	if operations == nil {
+		return nil
+	}
+	values := make([]interfaces.ModelOperation, len(*operations))
+	for i, operation := range *operations {
+		values[i] = interfaces.ModelOperation{
+			Name:    operation.Name,
+			Inputs:  modelOperationSlotsInternalFromAPI(operation.Inputs),
+			Outputs: modelOperationSlotsInternalFromAPI(operation.Outputs),
+		}
+	}
+	return values
+}
+
+func modelOperationSlotsInternalFromAPI(slots *[]factoryapi.ModelOperationSlot) []interfaces.ModelOperationSlot {
+	if slots == nil {
+		return nil
+	}
+	values := make([]interfaces.ModelOperationSlot, len(*slots))
+	for i, slot := range *slots {
+		values[i] = interfaces.ModelOperationSlot{
+			Name:         slot.Name,
+			ContentTypes: modelOperationContentTypesInternalFromAPI(slot.ContentTypes),
+			Required:     boolValue(slot.Required),
+		}
+	}
+	return values
+}
+
+func modelOperationContentTypesInternalFromAPI(contentTypes []factoryapi.ModelOperationContentType) []string {
+	if len(contentTypes) == 0 {
+		return nil
+	}
+	values := make([]string, len(contentTypes))
+	for i, contentType := range contentTypes {
+		values[i] = internalFactoryModelOperationContentTypeFromPublic(contentType)
+	}
+	return values
+}
+
+func resourceRequirementsInternalFromAPI(resources *[]factoryapi.ResourceRequirement) []interfaces.ResourceConfig {
+	if resources == nil {
+		return nil
+	}
+	values := make([]interfaces.ResourceConfig, len(*resources))
+	for i, resource := range *resources {
+		values[i] = interfaces.ResourceConfig{
+			Name:     resource.Name,
+			Capacity: resource.Capacity,
+		}
+	}
+	return values
+}
 
 func workersInternalFromAPI(workers []factoryapi.Worker) ([]interfaces.FactoryWorkerConfig, error) {
 	values := make([]interfaces.FactoryWorkerConfig, len(workers))
@@ -303,4 +376,83 @@ func workstationIOInternalFromAPI(cfg factoryapi.WorkstationIO, fieldPath string
 		StateName:    cfg.State,
 		Guard:        guard,
 	}, nil
+}
+
+func internalFactoryWorkerTypeFromPublic(value factoryapi.WorkerType) string {
+	if runtimeType := interfaces.InternalRuntimeWorkerTypeFromPublic(string(value)); runtimeType != "" {
+		return runtimeType
+	}
+	return strings.TrimSpace(string(value))
+}
+
+func internalFactoryWorkerModelProviderFromPublic(value *factoryapi.WorkerModelProvider) string {
+	if value == nil {
+		return ""
+	}
+	if internal, ok := interfaces.InternalModelProviderFromPublicWorkerModelProvider(string(*value)); ok {
+		return string(internal)
+	}
+	return strings.TrimSpace(string(*value))
+}
+
+func internalFactoryWorkerModelLocalityFromPublic(value *factoryapi.WorkerModelLocality) string {
+	if value == nil {
+		return ""
+	}
+	if canonical := interfaces.StrictPublicFactoryWorkerModelLocality(string(*value)); canonical != "" {
+		return canonical
+	}
+	return strings.TrimSpace(string(*value))
+}
+
+func internalFactoryWorkerProviderFromPublic(value *factoryapi.WorkerProvider) string {
+	if value == nil {
+		return ""
+	}
+	if canonical := interfaces.StrictPublicFactoryWorkerProvider(string(*value)); canonical != "" {
+		return strings.ToLower(canonical)
+	}
+	return strings.TrimSpace(string(*value))
+}
+
+func internalFactoryHostedWorkerProviderFromPublic(value string) string {
+	if canonical := interfaces.StrictPublicFactoryHostedWorkerProvider(value); canonical != "" {
+		return canonical
+	}
+	return strings.TrimSpace(value)
+}
+
+func internalFactoryModelOperationContentTypeFromPublic(value factoryapi.ModelOperationContentType) string {
+	if canonical := interfaces.StrictPublicFactoryWorkerModelOperationContentType(string(value)); canonical != "" {
+		return canonical
+	}
+	return strings.TrimSpace(string(value))
+}
+
+func internalFactoryWorkstationKindFromPublic(kind *factoryapi.WorkstationKind) interfaces.WorkstationKind {
+	if kind == nil {
+		return ""
+	}
+	switch interfaces.StrictPublicWorkstationKind(string(*kind)) {
+	case publicFactoryWorkstationKindStandard:
+		return interfaces.WorkstationKindStandard
+	case publicFactoryWorkstationKindRepeater:
+		return interfaces.WorkstationKindRepeater
+	case publicFactoryWorkstationKindCron:
+		return interfaces.WorkstationKindCron
+	case publicFactoryWorkstationKindPoller:
+		return interfaces.WorkstationKindPoller
+	default:
+		return interfaces.WorkstationKind(strings.TrimSpace(string(*kind)))
+	}
+}
+
+func internalFactoryWorkstationTypeFromPublic(value *factoryapi.WorkstationType) string {
+	if value == nil {
+		return ""
+	}
+	if runtimeType := interfaces.InternalRuntimeWorkstationTypeFromPublic(string(*value)); runtimeType != "" || interfaces.PermissivePublicFactoryWorkstationType(string(*value)) == interfaces.WorkstationTypePoller {
+		return runtimeType
+	}
+	return strings.TrimSpace(string(*value))
 }

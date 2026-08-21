@@ -1,4 +1,4 @@
-// Factory work-type, resource, model-operation, guard, and compatibility mapping helpers.
+// Factory work-type, resource, guard, and normalization mapping helpers.
 package factoryconfig
 
 import (
@@ -137,23 +137,6 @@ func hybridLogicalTimestampPtr(version *interfaces.FactoryVersion) *factoryapi.H
 	}
 }
 
-func expectedArtifactsAPIFromInternal(
-	values []interfaces.ExpectedArtifactConfig,
-) *[]factoryapi.ExpectedArtifact {
-	if len(values) == 0 {
-		return nil
-	}
-	result := make([]factoryapi.ExpectedArtifact, len(values))
-	for index, value := range values {
-		result[index] = factoryapi.ExpectedArtifact{
-			Name:     value.Name,
-			Pattern:  value.Pattern,
-			NonEmpty: boolPtrIfTrue(value.NonEmpty),
-		}
-	}
-	return &result
-}
-
 func resourceManifestAPIFromInternal(manifest *interfaces.PortableResourceManifestConfig) *factoryapi.ResourceManifest {
 	if manifest == nil {
 		return nil
@@ -245,48 +228,6 @@ func dropSupportedPortableBundledInlineContent(payload any) {
 	}
 }
 
-func modelOperationsAPIFromInternal(operations []interfaces.ModelOperation) *[]factoryapi.ModelOperation {
-	if len(operations) == 0 {
-		return nil
-	}
-	values := make([]factoryapi.ModelOperation, len(operations))
-	for i, operation := range operations {
-		values[i] = factoryapi.ModelOperation{
-			Name:    operation.Name,
-			Inputs:  modelOperationSlotsAPIFromInternal(operation.Inputs),
-			Outputs: modelOperationSlotsAPIFromInternal(operation.Outputs),
-		}
-	}
-	return &values
-}
-
-func modelOperationSlotsAPIFromInternal(slots []interfaces.ModelOperationSlot) *[]factoryapi.ModelOperationSlot {
-	if len(slots) == 0 {
-		return nil
-	}
-	values := make([]factoryapi.ModelOperationSlot, len(slots))
-	for i, slot := range slots {
-		values[i] = factoryapi.ModelOperationSlot{
-			Name: slot.Name,
-
-			ContentTypes: modelOperationContentTypesAPIFromInternal(slot.ContentTypes),
-			Required:     boolPtrIfTrue(slot.Required),
-		}
-	}
-	return &values
-}
-
-func modelOperationContentTypesAPIFromInternal(contentTypes []string) []factoryapi.ModelOperationContentType {
-	if len(contentTypes) == 0 {
-		return nil
-	}
-	values := make([]factoryapi.ModelOperationContentType, len(contentTypes))
-	for i, contentType := range contentTypes {
-		values[i] = publicFactoryModelOperationContentTypeFromInternal(contentType)
-	}
-	return values
-}
-
 func inputGuardAPIFromInternal(guard interfaces.InputGuardConfig) factoryapi.InputGuard {
 	apiGuard := factoryapi.InputGuard{
 		Type: publicInputGuardTypeFromInternal(guard.Type),
@@ -301,20 +242,6 @@ func inputGuardAPIFromInternal(guard interfaces.InputGuardConfig) factoryapi.Inp
 		apiGuard.SpawnedBy = stringPtr(guard.SpawnedBy)
 	}
 	return apiGuard
-}
-
-func resourceRequirementsAPIFromInternal(resources []interfaces.ResourceConfig) *[]factoryapi.ResourceRequirement {
-	if len(resources) == 0 {
-		return nil
-	}
-	values := make([]factoryapi.ResourceRequirement, len(resources))
-	for i, resource := range resources {
-		values[i] = factoryapi.ResourceRequirement{
-			Name:     resource.Name,
-			Capacity: resource.Capacity,
-		}
-	}
-	return &values
 }
 
 func resourceTypePtrIfNotEmpty(value string) *factoryapi.ResourceType {
@@ -365,14 +292,6 @@ func guardMatchConfigAPIFromInternal(matchConfig *interfaces.GuardMatchConfig) *
 	return &factoryapi.GuardMatchConfig{
 		InputKey: matchConfig.InputKey,
 	}
-}
-
-func modelOperationContentTypePtrIfNotEmpty(value string) *factoryapi.ModelOperationContentType {
-	if strings.TrimSpace(value) == "" {
-		return nil
-	}
-	enumValue := publicFactoryModelOperationContentTypeFromInternal(value)
-	return &enumValue
 }
 
 func valueOrEmpty[T ~string](value *T) T {
