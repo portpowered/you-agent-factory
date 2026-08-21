@@ -18,6 +18,8 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
+const boardPersistenceMaxEventLineBytes = 4 * 1024 * 1024
+
 func readBoardEvents(ctx context.Context, baseURL string) ([]factoryapi.FactoryEvent, error) {
 	requestContext, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
@@ -41,6 +43,7 @@ func readBoardEvents(ctx context.Context, baseURL string) ([]factoryapi.FactoryE
 	}
 	events := make([]factoryapi.FactoryEvent, 0, retainedCount)
 	scanner := bufio.NewScanner(response.Body)
+	scanner.Buffer(make([]byte, 64*1024), boardPersistenceMaxEventLineBytes)
 	for len(events) < retainedCount && scanner.Scan() {
 		line := scanner.Text()
 		if !strings.HasPrefix(line, "data:") {

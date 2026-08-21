@@ -8,6 +8,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"runtime"
 	"time"
 )
 
@@ -101,15 +102,42 @@ func (Local) Rename(oldPath, newPath string) error         { return os.Rename(ol
 // existing file, so the replacement path retries the remove-and-rename window
 // that can be held briefly by antivirus or indexing processes.
 func (local Local) RenameReplacing(oldPath, newPath string) error {
-	lastErr := local.Rename(oldPath, newPath)
+	return renameReplacing(
+		oldPath,
+		newPath,
+		runtime.GOOS == "windows",
+		local.Rename,
+		local.Remove,
+		local.Stat,
+	)
+}
+
+func renameReplacing(
+	oldPath string,
+	newPath string,
+	allowReplacement bool,
+	rename func(string, string) error,
+	remove func(string) error,
+	stat func(string) (fs.FileInfo, error),
+) error {
+	lastErr := rename(oldPath, newPath)
 	if lastErr == nil {
 		return nil
 	}
+	if !allowReplacement || !errors.Is(lastErr, os.ErrExist) {
+		return lastErr
+	}
+	if _, err := stat(oldPath); err != nil {
+		return lastErr
+	}
 	for range localReplaceAttempts {
-		if err := local.Remove(newPath); err != nil && !errors.Is(err, os.ErrNotExist) {
+		if _, err := stat(oldPath); err != nil {
+			return lastErr
+		}
+		if err := remove(newPath); err != nil && !errors.Is(err, os.ErrNotExist) {
 			lastErr = err
 		} else {
-			lastErr = local.Rename(oldPath, newPath)
+			lastErr = rename(oldPath, newPath)
 			if lastErr == nil {
 				return nil
 			}

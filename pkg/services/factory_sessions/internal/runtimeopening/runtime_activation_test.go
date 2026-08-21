@@ -76,7 +76,7 @@ func TestRestoreCurrentBoardStatePreservesDetachedMixedWorkProjection(t *testing
 		},
 	}
 
-	first, err := restoreCurrentBoardState(reader, "board.json", "~default")
+	first, err := restoreCurrentBoardState(reader, "board.json", "~default", false)
 	if err != nil {
 		t.Fatalf("first restore: %v", err)
 	}
@@ -85,7 +85,7 @@ func TestRestoreCurrentBoardStatePreservesDetachedMixedWorkProjection(t *testing
 	}
 	first.WorkItemsByID["work-init"] = work.FactoryWorkItem{ID: "mutated"}
 
-	second, err := restoreCurrentBoardState(reader, "board.json", "~default")
+	second, err := restoreCurrentBoardState(reader, "board.json", "~default", false)
 	if err != nil {
 		t.Fatalf("second restore: %v", err)
 	}
@@ -132,7 +132,7 @@ func TestRestoreCurrentBoardStateFailsClosedForCorruptHistory(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			_, err := restoreCurrentBoardState(&tc.stub, "board.json", "~default")
+			_, err := restoreCurrentBoardState(&tc.stub, "board.json", "~default", false)
 			if err == nil || !strings.Contains(err.Error(), tc.want) {
 				t.Fatalf("restore error = %v, want substring %q", err, tc.want)
 			}
@@ -145,13 +145,91 @@ func TestRestoreCurrentBoardStateTreatsMissingArtifactAsInitialOpen(t *testing.T
 
 	state, err := restoreCurrentBoardState(&historicalBoardReaderStub{err: &recordings.HistoricalRecordingQueryError{
 		Kind: recordings.HistoricalRecordingQueryErrorMissingHistory,
-	}}, "board.json", "~default")
+	}}, "board.json", "~default", true)
 	if err != nil {
 		t.Fatalf("missing history restore error = %v, want nil", err)
 	}
 	if state != nil {
 		t.Fatalf("missing history state = %#v, want nil", state)
 	}
+}
+
+func TestRestoreCurrentBoardStateRejectsMissingArtifactAfterDurableState(t *testing.T) {
+	t.Parallel()
+
+	allowMissing, err := currentBoardHistoryMayBeUninitialized(
+		context.Background(),
+		&durableSessionInventoryStub{durableCount: 1},
+	)
+	if err != nil {
+		t.Fatalf("inspect durable session inventory: %v", err)
+	}
+	if allowMissing {
+		t.Fatal("durable session inventory marked prior state as uninitialized")
+	}
+	_, err = restoreCurrentBoardState(&historicalBoardReaderStub{err: &recordings.HistoricalRecordingQueryError{
+		Kind: recordings.HistoricalRecordingQueryErrorMissingHistory,
+	}}, "board.json", "~default", allowMissing)
+	if err == nil || !strings.Contains(err.Error(), "durable state exists but recording history is missing") {
+		t.Fatalf("missing history after durable state error = %v, want fail-closed diagnostic", err)
+	}
+}
+
+func TestCurrentBoardHistoryMayBeUninitializedUsesPersistedSessionInventory(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name              string
+		durableCount      int
+		wantUninitialized bool
+	}{
+		{name: "fresh factory", durableCount: 0, wantUninitialized: true},
+		{name: "durable factory", durableCount: 1, wantUninitialized: false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			stub := durableSessionInventoryStub{durableCount: tc.durableCount}
+			got, err := currentBoardHistoryMayBeUninitialized(context.Background(), &stub)
+			if err != nil {
+				t.Fatalf("currentBoardHistoryMayBeUninitialized: %v", err)
+			}
+			if got != tc.wantUninitialized {
+				t.Fatalf("uninitialized = %t, want %t", got, tc.wantUninitialized)
+			}
+			if stub.request.Scope != factorysessions.SessionListScopePersisted {
+				t.Fatalf("inventory request = %#v, want persisted scope", stub.request)
+			}
+		})
+	}
+}
+
+func TestCurrentBoardHistoryMayBeUninitializedFailsClosedWhenInventoryUnavailable(t *testing.T) {
+	t.Parallel()
+
+	_, err := currentBoardHistoryMayBeUninitialized(context.Background(), &durableSessionInventoryStub{err: errors.New("inventory unavailable")})
+	if err == nil || !strings.Contains(err.Error(), "inspect current Factory Session board history initialization") {
+		t.Fatalf("inventory error = %v, want wrapped diagnostic", err)
+	}
+}
+
+type durableSessionInventoryStub struct {
+	durableCount int
+	err          error
+	request      factorysessions.ListSessionsRequest
+}
+
+func (stub *durableSessionInventoryStub) ListSessions(
+	_ context.Context,
+	request factorysessions.ListSessionsRequest,
+) (factorysessions.ListSessionsResult, error) {
+	stub.request = request
+	if stub.err != nil {
+		return factorysessions.ListSessionsResult{}, stub.err
+	}
+	return factorysessions.ListSessionsResult{
+		Scope:           request.Scope,
+		DurableSessions: make([]factorysessions.DurableSessionListSummary, stub.durableCount),
+	}, nil
 }
 
 type historicalBoardReaderStub struct {

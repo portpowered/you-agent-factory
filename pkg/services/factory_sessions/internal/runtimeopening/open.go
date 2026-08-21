@@ -278,10 +278,21 @@ func openRuntime(
 	}
 	var restoredWorldState *factorydefinitions.FactoryWorldState
 	if load.ReplayArtifact == nil {
+		allowMissingBoardHistory := false
+		if strings.TrimSpace(configured.Recordings.RecordPath) != "" {
+			allowMissingBoardHistory, err = currentBoardHistoryMayBeUninitialized(
+				ctx,
+				durableExecution.Service,
+			)
+			if err != nil {
+				return runtimeProducts{}, err
+			}
+		}
 		restoredWorldState, err = restoreCurrentBoardState(
 			recordingsService,
 			configured.Recordings.RecordPath,
 			sessionID,
+			allowMissingBoardHistory,
 		)
 		if err != nil {
 			return runtimeProducts{}, err
@@ -769,6 +780,30 @@ type historicalRecordingReader interface {
 	QueryHistoricalRecording(recordings.HistoricalRecordingQueryRequest) (recordings.HistoricalRecordingQueryResult, error)
 }
 
+type durableSessionInventoryReader interface {
+	ListSessions(context.Context, factorysessions.ListSessionsRequest) (factorysessions.ListSessionsResult, error)
+}
+
+// currentBoardHistoryMayBeUninitialized makes the missing-history escape hatch
+// explicit. A missing recording is only an acceptable first open when this
+// factory has no persisted durable session state; once durable state exists, a
+// missing board recording is a data-loss condition and must fail closed.
+func currentBoardHistoryMayBeUninitialized(
+	ctx context.Context,
+	service durableSessionInventoryReader,
+) (bool, error) {
+	if service == nil {
+		return false, fmt.Errorf("inspect current Factory Session board history: durable session inventory is unavailable")
+	}
+	result, err := service.ListSessions(ctx, factorysessions.ListSessionsRequest{
+		Scope: factorysessions.SessionListScopePersisted,
+	})
+	if err != nil {
+		return false, fmt.Errorf("inspect current Factory Session board history initialization: %w", err)
+	}
+	return len(result.DurableSessions) == 0, nil
+}
+
 // restoreCurrentBoardState loads a detached Factory world state through the
 // public Recordings history contract for callers that explicitly request a
 // current-board read.
@@ -776,6 +811,7 @@ func restoreCurrentBoardState(
 	service historicalRecordingReader,
 	recordPath string,
 	sessionID string,
+	allowMissingHistory bool,
 ) (*factorydefinitions.FactoryWorldState, error) {
 	recordPath = strings.TrimSpace(recordPath)
 	if recordPath == "" {
@@ -795,7 +831,14 @@ func restoreCurrentBoardState(
 	if err != nil {
 		var queryErr *recordings.HistoricalRecordingQueryError
 		if errors.As(err, &queryErr) && queryErr.Kind == recordings.HistoricalRecordingQueryErrorMissingHistory {
-			return nil, nil
+			if allowMissingHistory {
+				return nil, nil
+			}
+			return nil, fmt.Errorf(
+				"restore current Factory Session board from %q: durable state exists but recording history is missing: %w",
+				recordPath,
+				err,
+			)
 		}
 		return nil, fmt.Errorf("restore current Factory Session board from %q: %w", recordPath, err)
 	}
