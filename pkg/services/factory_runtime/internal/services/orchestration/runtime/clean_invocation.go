@@ -348,7 +348,7 @@ func restoredWorkTokenForPlacement(
 	now time.Time,
 	resourcePlaceIDs map[string]struct{},
 ) (*factorytoken.Token, bool) {
-	placeID = restoredWorkPlacementID(restored, item, placeID)
+	placeID = restoredWorkPlacementID(restored, net, item, placeID)
 	if !restoredWorkPlacementIsValid(net, placeID, resourcePlaceIDs) {
 		return nil, false
 	}
@@ -367,16 +367,54 @@ func restoredWorkTokenForPlacement(
 
 func restoredWorkPlacementID(
 	restored *interfaces.FactoryWorldState,
+	net *state.Net,
 	item work.FactoryWorkItem,
 	placeID string,
 ) string {
-	if placeID != "" || restored.PlaceOccupancyByID != nil {
+	if placeID != "" {
 		return placeID
+	}
+	if restored != nil && item.ID != "" {
+		for _, dispatch := range restored.ActiveDispatches {
+			if restoredDispatchIsHumanApproval(restored, net, dispatch) {
+				continue
+			}
+			for _, workID := range dispatch.WorkItemIDs {
+				if workID == item.ID && item.WorkTypeID != "" && item.State != "" {
+					// An active dispatch has consumed its Work token from
+					// occupancy. Keep the recorded Work placement so the
+					// interrupted dispatch can be resumed after a restart.
+					return state.PlaceID(item.WorkTypeID, item.State)
+				}
+			}
+		}
+	}
+	if restored != nil && restored.PlaceOccupancyByID != nil {
+		return ""
 	}
 	if item.WorkTypeID != "" && item.State != "" {
 		return state.PlaceID(item.WorkTypeID, item.State)
 	}
 	return ""
+}
+
+func restoredDispatchIsHumanApproval(
+	restored *interfaces.FactoryWorldState,
+	net *state.Net,
+	dispatch interfaces.FactoryWorldDispatch,
+) bool {
+	if restored != nil && dispatch.DispatchID != "" {
+		for _, approval := range restored.PendingHumanApprovalsByID {
+			if approval.DispatchID == dispatch.DispatchID {
+				return true
+			}
+		}
+	}
+	if net == nil || dispatch.TransitionID == "" {
+		return false
+	}
+	transition := net.Transitions[dispatch.TransitionID]
+	return transition != nil && transition.Type == petri.TransitionHumanApproval
 }
 
 func restoredWorkRequestIDs(restored *interfaces.FactoryWorldState) map[string]string {

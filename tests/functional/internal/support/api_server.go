@@ -340,6 +340,17 @@ func GetFactoryEventsAfterAt(
 	return readFactoryEventsFromURL(t, factoryEventsURLWithCursor(baseURL, cursor))
 }
 
+// GetFactoryEventsAfterForSessionAt reads retained Factory Event history after
+// an acknowledged reconnect cursor for one explicitly selected Factory Session.
+func GetFactoryEventsAfterForSessionAt(
+	t testing.TB,
+	baseURL, sessionID string,
+	cursor FactoryEventReadCursor,
+) []factoryapi.FactoryEvent {
+	t.Helper()
+	return readFactoryEventsFromURL(t, SessionEventsURLWithCursor(baseURL, sessionID, cursor))
+}
+
 // FactoryEventsInvalidCursorError is the typed 400 payload for an invalid
 // Factory Event reconnect cursor together with the raw response body.
 type FactoryEventsInvalidCursorError struct {

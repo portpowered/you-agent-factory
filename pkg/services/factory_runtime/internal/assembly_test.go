@@ -4,6 +4,7 @@ import (
 	"context"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/jonboulle/clockwork"
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
@@ -25,9 +26,18 @@ type stubWorkersService struct{ workers.Service }
 
 type assemblyWorldStateOpening struct {
 	recordings.RuntimeOpening
-	state  interfaces.FactoryWorldState
-	tick   int
-	events []interfaces.FactoryEvent
+	state   interfaces.FactoryWorldState
+	tick    int
+	events  []interfaces.FactoryEvent
+	request recordings.RuntimeScopeRequest
+}
+
+func (opening *assemblyWorldStateOpening) OpenRuntime(
+	_ context.Context,
+	request recordings.RuntimeScopeRequest,
+) (recordings.RuntimeScopeResult, error) {
+	opening.request = request
+	return recordings.RuntimeScopeResult{}, nil
 }
 
 func (opening *assemblyWorldStateOpening) ReconstructCanonicalFactoryWorldState(
@@ -37,6 +47,35 @@ func (opening *assemblyWorldStateOpening) ReconstructCanonicalFactoryWorldState(
 	opening.events = events
 	opening.tick = selectedTick
 	return opening.state, nil
+}
+
+func TestRuntimeOpeningWithFlushOnlySeedsResumeCanonicalEvents(t *testing.T) {
+	resumeEvents := []interfaces.FactoryEvent{{Id: "resume-event"}}
+	for name, events := range map[string][]interfaces.FactoryEvent{
+		"ordinary replay": nil,
+		"process resume":  resumeEvents,
+	} {
+		t.Run(name, func(t *testing.T) {
+			opening := &assemblyWorldStateOpening{}
+			wrapped := runtimeOpeningWithFlush{
+				RuntimeOpening:        opening,
+				flushInterval:         time.Second,
+				resumeCanonicalEvents: events,
+			}
+			if _, err := wrapped.OpenRuntime(context.Background(), recordings.RuntimeScopeRequest{}); err != nil {
+				t.Fatalf("OpenRuntime: %v", err)
+			}
+			if opening.request.FlushInterval != time.Second {
+				t.Fatalf("flush interval = %v, want 1s", opening.request.FlushInterval)
+			}
+			if len(opening.request.ReplayEvents) != len(events) {
+				t.Fatalf("seeded replay events = %d, want %d", len(opening.request.ReplayEvents), len(events))
+			}
+			if len(events) > 0 && opening.request.ReplayEvents[0].Id != events[0].Id {
+				t.Fatalf("seeded event ID = %q, want %q", opening.request.ReplayEvents[0].Id, events[0].Id)
+			}
+		})
+	}
 }
 
 func TestReconstructRestoredWorldStateUsesLatestReplayTick(t *testing.T) {

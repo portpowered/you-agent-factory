@@ -221,7 +221,8 @@ func (service runtimeWorkersServiceWithProgress) ResolveTemplateFields(
 
 type runtimeOpeningWithFlush struct {
 	recordings.RuntimeOpening
-	flushInterval time.Duration
+	flushInterval         time.Duration
+	resumeCanonicalEvents []factorydefinitions.FactoryEvent
 }
 
 func (opening runtimeOpeningWithFlush) OpenRuntime(
@@ -229,6 +230,7 @@ func (opening runtimeOpeningWithFlush) OpenRuntime(
 	request recordings.RuntimeScopeRequest,
 ) (recordings.RuntimeScopeResult, error) {
 	request.FlushInterval = opening.flushInterval
+	request.ReplayEvents = cloneFactoryEvents(opening.resumeCanonicalEvents)
 	return opening.RuntimeOpening.OpenRuntime(ctx, request)
 }
 
@@ -442,8 +444,9 @@ func buildBundle(
 		spec.PetriMutationRecorder,
 		worldStateProjector,
 		runtimeOpeningWithFlush{
-			RuntimeOpening: recordingsRuntime,
-			flushInterval:  recordFlushInterval,
+			RuntimeOpening:        recordingsRuntime,
+			flushInterval:         recordFlushInterval,
+			resumeCanonicalEvents: cloneFactoryEvents(spec.ResumeCanonicalEvents),
 		},
 		workerServiceWithProgress,
 		workerSessionsFactory,

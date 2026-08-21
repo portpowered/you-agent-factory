@@ -127,6 +127,7 @@ type FactoryEventHistory struct {
 	runRecordedAt       time.Time
 	hasRunRequest       bool
 	hasRunResponse      bool
+	hasInitialStructure bool
 	sessionStartedAt    time.Time
 	hasSessionStarted   bool
 	hasSessionCompleted bool
@@ -310,11 +311,16 @@ func (h *FactoryEventHistory) RecordInitialStructure() {
 	eventTime := interfaces.CanonicalEventTime(h.now())
 	payload := h.initialStructure
 	factory := eventsnapshot.FromInitialStructure(payload)
-	h.mu.RLock()
+	h.mu.Lock()
+	if h.hasInitialStructure {
+		h.mu.Unlock()
+		return
+	}
+	h.hasInitialStructure = true
 	if h.initialFactory != nil {
 		factory = h.initialFactory.Clone()
 	}
-	h.mu.RUnlock()
+	h.mu.Unlock()
 	h.appendEvent(domainFactoryEvent(
 		interfaces.FactoryEventTypeInitialStructureRequest,
 		eventIDInitialStructure,

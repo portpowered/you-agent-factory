@@ -537,29 +537,6 @@ func validateRuntimeOpening(
 	return nil
 }
 
-func (service *combinedService) openRuntimeLedger(
-	request recordings.RuntimeScopeRequest,
-	streamGenerationID string,
-) (recordings.RuntimeEventLedger, string, error) {
-	ledger := NewRuntimeLedger(
-		request.Topology,
-		request.Now,
-		streamGenerationID,
-		request.Definitions,
-	)
-	if ledger == nil {
-		return nil, "", fmt.Errorf("Recordings runtime ledger is unavailable")
-	}
-	routeKey := strings.TrimSpace(request.FactorySessionID)
-	if routeKey == "" {
-		routeKey = ledger.StreamGenerationID()
-	}
-	if err := service.runtimeRouter.register(routeKey, ledger); err != nil {
-		return nil, "", err
-	}
-	return ledger, routeKey, nil
-}
-
 func (service *combinedService) openRuntimeRecordingScope(
 	request recordings.RuntimeScopeRequest,
 	streamGenerationID string,
