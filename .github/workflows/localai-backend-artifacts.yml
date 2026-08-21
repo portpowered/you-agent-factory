@@ -288,9 +288,9 @@ jobs:
           set -euo pipefail
 
           resolve_tag_target() {
-            local response object_type object_sha depth
+            local response object_type object_sha _depth
             response="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$1")"
-            for depth in 1 2 3 4; do
+            for _depth in 1 2 3 4; do
               object_type="$(jq -r '.object.type // empty' <<<"$response")"
               object_sha="$(jq -r '.object.sha // empty' <<<"$response")"
               case "$object_type" in
