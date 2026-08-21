@@ -183,8 +183,9 @@ type LoadReplayInputRequest struct {
 // LoadReplayInputResult contains exactly one of Portable or Legacy, depending
 // on which replay input family the selected path contained.
 type LoadReplayInputResult struct {
-	Portable *PortableRecording
-	Legacy   *ReplayArtifact
+	Portable         *PortableRecording
+	Legacy           *ReplayArtifact
+	IgnoredJSONPaths []string
 }
 
 // LoadResumeInputRequest selects one explicit resume source by filesystem
@@ -1454,7 +1455,8 @@ type DecodePortableArtifactRequest struct {
 
 // DecodePortableArtifactResult contains the validated detached artifact.
 type DecodePortableArtifactResult struct {
-	Artifact PortableArtifact
+	Artifact         PortableArtifact
+	IgnoredJSONPaths []string
 }
 
 // SummarizePortableArtifactRequest inspects one detached artifact.
@@ -1490,7 +1492,8 @@ type ReadPortableArtifactRequest struct {
 // ReadPortableArtifactResult contains the validated detached artifact read from
 // the public destination.
 type ReadPortableArtifactResult struct {
-	Artifact PortableArtifact
+	Artifact         PortableArtifact
+	IgnoredJSONPaths []string
 }
 
 // Ledger is the legacy runtime append/subscribe composition capability.

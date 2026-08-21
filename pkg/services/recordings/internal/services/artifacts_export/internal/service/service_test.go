@@ -2,6 +2,7 @@ package service_test
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"io/fs"
 	"os"
@@ -106,6 +107,88 @@ func TestBuildPortableArtifactProducesValidatedArtifact(t *testing.T) {
 		t.Fatalf("EncodePortableArtifact = (%d bytes, %v)", len(encoded.Payload), err)
 	}
 	assertPortableArtifactRoundTrip(t, service, built.Artifact, encoded.Payload, nil)
+}
+
+func TestDecodePortableArtifactAcceptsNestedFutureFields(t *testing.T) {
+	t.Parallel()
+
+	finalizedAt := time.Unix(1_700_000_000, 0).UTC()
+	scope := recordings.CanonicalEventScope{FactorySessionID: "session-future-artifact"}
+	event := recordings.CanonicalEvent{
+		ID: "event-future-artifact", Kind: "WORK_REQUEST", Sequence: 0,
+		Scope: scope, Cursor: recordings.CanonicalEventCursor{
+			StreamGenerationID: "generation-future-artifact", Sequence: 0,
+		},
+		RecordedAt: time.Unix(1_700_000_000, 0).UTC(), Payload: "{}",
+	}
+	service := artifactsexportservice.New(snapshotSourceFake{
+		snapshot: recordinglifecycle.Snapshot{
+			Status: recordings.RecordingStatusFacts{
+				RecordingID: "recording-future-artifact",
+				Artifact:    "artifact:future-artifact",
+				Scope:       scope, State: recordings.RecordingFinalized,
+				FinalizedAt: &finalizedAt,
+			},
+			Events: []recordings.CanonicalEvent{event},
+		},
+	}, nil)
+	built, err := service.BuildPortableArtifact(recordings.BuildPortableArtifactRequest{
+		RecordingID: "recording-future-artifact",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	payload, err := json.Marshal(built.Artifact)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var document map[string]json.RawMessage
+	if err := json.Unmarshal(payload, &document); err != nil {
+		t.Fatal(err)
+	}
+	document["futureTopLevel"] = json.RawMessage(`true`)
+	var summary map[string]json.RawMessage
+	if err := json.Unmarshal(document["summary"], &summary); err != nil {
+		t.Fatal(err)
+	}
+	summary["futureSummary"] = json.RawMessage(`"ignored"`)
+	document["summary"], err = json.Marshal(summary)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var events []json.RawMessage
+	if err := json.Unmarshal(document["events"], &events); err != nil {
+		t.Fatal(err)
+	}
+	var eventDocument map[string]json.RawMessage
+	if err := json.Unmarshal(events[0], &eventDocument); err != nil {
+		t.Fatal(err)
+	}
+	eventDocument["futureEvent"] = json.RawMessage(`false`)
+	events[0], err = json.Marshal(eventDocument)
+	if err != nil {
+		t.Fatal(err)
+	}
+	document["events"], err = json.Marshal(events)
+	if err != nil {
+		t.Fatal(err)
+	}
+	payload, err = json.Marshal(document)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	decoded, err := service.DecodePortableArtifact(recordings.DecodePortableArtifactRequest{Payload: payload})
+	if err != nil {
+		t.Fatalf("DecodePortableArtifact() error = %v", err)
+	}
+	wantPaths := []string{"$.events[0].futureEvent", "$.futureTopLevel", "$.summary.futureSummary"}
+	if !reflect.DeepEqual(decoded.IgnoredJSONPaths, wantPaths) {
+		t.Fatalf("ignored paths = %#v, want %#v", decoded.IgnoredJSONPaths, wantPaths)
+	}
+	if !reflect.DeepEqual(decoded.Artifact, built.Artifact) {
+		t.Fatalf("known artifact changed after additive fields")
+	}
 }
 
 func TestBuildPortableArtifactRoundTripOmitsPrivateServiceTarget(t *testing.T) {

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"os"
+	"reflect"
 	"testing"
 
 	recordings "github.com/portpowered/infinite-you/pkg/services/recordings"
@@ -36,10 +37,7 @@ func TestQueryHistoricalRecordingReadsAndProjectsPortableArtifact(t *testing.T) 
 		t.Fatalf("portableArtifactDigest: %v", err)
 	}
 	artifact.Integrity.Digest = digest
-	payload, err := json.Marshal(artifact)
-	if err != nil {
-		t.Fatalf("marshal artifact: %v", err)
-	}
+	payload := portableArtifactWithFutureFields(t, artifact)
 
 	var readReference string
 	query := New(func(reference string) ([]byte, error) {
@@ -59,6 +57,7 @@ func TestQueryHistoricalRecordingReadsAndProjectsPortableArtifact(t *testing.T) 
 	if result.Status.State != recordings.RecordingFinalized || result.Status.AcceptedEvents != 0 {
 		t.Fatalf("status = %#v, want finalized empty history", result.Status)
 	}
+	assertIgnoredJSONPaths(t, result.IgnoredJSONPaths, []string{"$.futureTopLevel", "$.summary.futureSummary"})
 	if result.WorldState.SchemaVersion != recordings.WorldStateViewSchemaV1 {
 		t.Fatalf("world-state schema = %q, want %q", result.WorldState.SchemaVersion, recordings.WorldStateViewSchemaV1)
 	}
@@ -108,5 +107,39 @@ func assertHistoricalQueryKind(
 	}
 	if typed.Kind != want {
 		t.Fatalf("error kind = %q, want %q", typed.Kind, want)
+	}
+}
+
+func portableArtifactWithFutureFields(t *testing.T, artifact recordings.PortableArtifact) []byte {
+	t.Helper()
+	payload, err := json.Marshal(artifact)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var document map[string]json.RawMessage
+	if err := json.Unmarshal(payload, &document); err != nil {
+		t.Fatal(err)
+	}
+	document["futureTopLevel"] = json.RawMessage(`true`)
+	var summary map[string]json.RawMessage
+	if err := json.Unmarshal(document["summary"], &summary); err != nil {
+		t.Fatal(err)
+	}
+	summary["futureSummary"] = json.RawMessage(`"ignored"`)
+	document["summary"], err = json.Marshal(summary)
+	if err != nil {
+		t.Fatal(err)
+	}
+	payload, err = json.Marshal(document)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return payload
+}
+
+func assertIgnoredJSONPaths(t *testing.T, got, want []string) {
+	t.Helper()
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("ignored paths = %#v, want %#v", got, want)
 	}
 }

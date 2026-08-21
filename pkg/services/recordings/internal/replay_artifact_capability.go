@@ -86,7 +86,10 @@ func (service *combinedService) DecodeArtifact(
 	if err != nil {
 		return recordings.DecodeArtifactResult{}, translateReplayArtifactError(err)
 	}
-	return recordings.DecodeArtifactResult{Artifact: toArtifactEnvelope(result.Artifact)}, nil
+	return recordings.DecodeArtifactResult{
+		Artifact:         toArtifactEnvelope(result.Artifact),
+		IgnoredJSONPaths: append([]string(nil), result.IgnoredJSONPaths...),
+	}, nil
 }
 
 // SummarizeArtifact implements recordings.RecordingReplayArtifacts by
@@ -137,7 +140,10 @@ func (service *combinedService) ReadArtifact(
 	if err != nil {
 		return recordings.ReadArtifactResult{}, translateReplayArtifactError(err)
 	}
-	return recordings.ReadArtifactResult{Artifact: toArtifactEnvelope(result.Artifact)}, nil
+	return recordings.ReadArtifactResult{
+		Artifact:         toArtifactEnvelope(result.Artifact),
+		IgnoredJSONPaths: append([]string(nil), result.IgnoredJSONPaths...),
+	}, nil
 }
 
 // replayInputLoader is the path-based Recordings implementation Factory
@@ -221,14 +227,17 @@ func isPortableReplayInput(data []byte) bool {
 func (loader *replayInputLoader) loadPortableReplayInput(
 	data []byte,
 ) (recordings.LoadReplayInputResult, error) {
-	value, err := recordings.DecodePortableRecording(bytes.NewReader(data))
+	value, diagnostics, err := recordings.DecodePortableRecordingWithDiagnostics(bytes.NewReader(data))
 	if err != nil {
 		failure := newPortableReplayInputError(err)
 		loader.logReplayInputOutcome("validation_failure", string(failure.Diagnostic.Code), "")
 		return recordings.LoadReplayInputResult{}, failure
 	}
 	loader.logReplayInputOutcome("success", "", string(recordings.ReplayInputFamilyPortable))
-	return recordings.LoadReplayInputResult{Portable: &value}, nil
+	return recordings.LoadReplayInputResult{
+		Portable:         &value,
+		IgnoredJSONPaths: diagnostics.Paths(),
+	}, nil
 }
 
 func (loader *replayInputLoader) loadLegacyReplayInput(

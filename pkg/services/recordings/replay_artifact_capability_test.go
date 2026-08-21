@@ -2,6 +2,7 @@ package recordings_test
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
@@ -352,9 +353,9 @@ func TestRecordingReplayArtifacts_InvalidIntegrity(t *testing.T) {
 	)
 }
 
-// TestRecordingReplayArtifacts_MalformedDecode proves empty, truncated,
-// trailing-document, and unknown-field payloads all return the capability's
-// invalid classification with no partial artifact result.
+// TestRecordingReplayArtifacts_MalformedDecode proves empty and malformed
+// documents still return the capability's invalid classification with no
+// partial artifact result, while additive fields remain readable.
 func TestRecordingReplayArtifacts_MalformedDecode(t *testing.T) {
 	t.Parallel()
 	service, replayArtifacts := newTestRecordingReplayArtifacts(t)
@@ -372,7 +373,6 @@ func TestRecordingReplayArtifacts_MalformedDecode(t *testing.T) {
 		"empty":             nil,
 		"truncated":         []byte(`{"schemaVersion":"recordings.portable-artifact.v1"`),
 		"trailing document": append(append([]byte{}, encoded.Payload...), []byte(`{}`)...),
-		"unknown field":     []byte(`{"schemaVersion":"recordings.portable-artifact.v1","unexpected":true}`),
 	}
 	for name, payload := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -382,6 +382,22 @@ func TestRecordingReplayArtifacts_MalformedDecode(t *testing.T) {
 				t.Fatalf("DecodeArtifact(%s) result = %#v, want zero value on failure", name, result.Artifact)
 			}
 		})
+	}
+	var document map[string]json.RawMessage
+	if err := json.Unmarshal(encoded.Payload, &document); err != nil {
+		t.Fatal(err)
+	}
+	document["futureTopLevel"] = json.RawMessage(`true`)
+	futurePayload, err := json.Marshal(document)
+	if err != nil {
+		t.Fatal(err)
+	}
+	decoded, err := replayArtifacts.DecodeArtifact(recordings.DecodeArtifactRequest{Payload: futurePayload})
+	if err != nil {
+		t.Fatalf("DecodeArtifact(additive field): %v", err)
+	}
+	if !reflect.DeepEqual(decoded.IgnoredJSONPaths, []string{"$.futureTopLevel"}) {
+		t.Fatalf("DecodeArtifact(additive field) paths = %#v", decoded.IgnoredJSONPaths)
 	}
 }
 

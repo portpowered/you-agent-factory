@@ -97,6 +97,56 @@ func assertCurrentFixtureWorkerFacts(t *testing.T, value recordings.PortableReco
 	}
 }
 
+func TestPortableRecordingDecodeReportsWorkerHistoryFutureFields(t *testing.T) {
+	value, err := loadFixture("valid-v3-worker-history.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	payload, err := json.Marshal(value)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var document map[string]json.RawMessage
+	if err := json.Unmarshal(payload, &document); err != nil {
+		t.Fatal(err)
+	}
+	document["futureTopLevel"] = json.RawMessage(`true`)
+	var history map[string]json.RawMessage
+	if err := json.Unmarshal(document["workerHistory"], &history); err != nil {
+		t.Fatal(err)
+	}
+	history["futureWorkerField"] = json.RawMessage(`"ignored"`)
+	document["workerHistory"], err = json.Marshal(history)
+	if err != nil {
+		t.Fatal(err)
+	}
+	payload, err = json.Marshal(document)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	decoded, diagnostics, err := recordings.DecodePortableRecordingWithDiagnostics(bytes.NewReader(payload))
+	if err != nil {
+		t.Fatalf("DecodePortableRecordingWithDiagnostics() error = %v", err)
+	}
+	if !reflect.DeepEqual(diagnostics.Paths(), []string{
+		"$.futureTopLevel", "$.workerHistory.futureWorkerField",
+	}) {
+		t.Fatalf("ignored paths = %#v", diagnostics.Paths())
+	}
+	wantKnown, err := json.Marshal(value)
+	if err != nil {
+		t.Fatal(err)
+	}
+	gotKnown, err := json.Marshal(decoded)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(gotKnown, wantKnown) {
+		t.Fatalf("known Factory and Worker facts changed after additive fields")
+	}
+}
+
 func TestLegacyFixturesNormalizeWorkerHistoryAsUnavailable(t *testing.T) {
 	t.Parallel()
 	for _, name := range []string{"valid-v1.json", "valid-v2.json", "valid-v2-checkpoint.json"} {
@@ -473,8 +523,13 @@ func TestSupportedSchemaCorruptionKeepsItsOwnedDiagnostic(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = recording.DecodeAndValidate(bytes.NewReader(payload))
-	assertDiagnostic(t, err, recording.CodeMalformedContract, "")
+	_, diagnostics, err := recordings.DecodePortableRecordingWithDiagnostics(bytes.NewReader(payload))
+	if err != nil {
+		t.Fatalf("DecodePortableRecordingWithDiagnostics() error = %v, want additive field accepted", err)
+	}
+	if !reflect.DeepEqual(diagnostics.Paths(), []string{"$.unsupportedField"}) {
+		t.Fatalf("ignored paths = %#v, want unsupportedField path", diagnostics.Paths())
+	}
 }
 
 func TestMalformedFixtureReturnsTypedAreaDiagnostic(t *testing.T) {
@@ -537,14 +592,19 @@ func TestValidationRejectsEventOrderingAndUnknownArtifactReferences(t *testing.T
 	assertDiagnostic(t, recording.Validate(valid), recording.CodeInvalidSummary, "events[1].artifactIds[0]")
 }
 
-func TestStrictDecodeRejectsProhibitedOrUnknownDetail(t *testing.T) {
+func TestDecodeAcceptsUnknownDetailAndReportsItsPath(t *testing.T) {
 	data, err := os.ReadFile(filepath.Join("testdata", "valid-v2.json"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	data = append(data[:len(data)-2], []byte(",\n  \"runtimeState\": {\"secret\": true}\n}\n")...)
-	_, err = recording.DecodeAndValidate(bytes.NewReader(data))
-	assertDiagnostic(t, err, recording.CodeMalformedContract, "")
+	_, diagnostics, err := recordings.DecodePortableRecordingWithDiagnostics(bytes.NewReader(data))
+	if err != nil {
+		t.Fatalf("DecodePortableRecordingWithDiagnostics() error = %v, want additive field accepted", err)
+	}
+	if !reflect.DeepEqual(diagnostics.Paths(), []string{"$.runtimeState"}) {
+		t.Fatalf("ignored paths = %#v, want runtimeState path", diagnostics.Paths())
+	}
 }
 
 func TestValidationRejectsMalformedPublicSummaries(t *testing.T) {

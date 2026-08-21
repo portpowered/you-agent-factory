@@ -166,6 +166,7 @@ type (
 	PortableRecordingCheckpointSummary                         = recordingcontracts.PortableRecordingCheckpointSummary
 	PortableRecordingCodec                                     = recordingcontracts.PortableRecordingCodec
 	PortableRecordingCompatibilityPolicy                       = recordingcontracts.PortableRecordingCompatibilityPolicy
+	PortableRecordingDecodeDiagnostics                         = recordingcontracts.PortableRecordingDecodeDiagnostics
 	PortableRecordingDiagnostic                                = recordingcontracts.PortableRecordingDiagnostic
 	PortableRecordingDiagnosticCode                            = recordingcontracts.PortableRecordingDiagnosticCode
 	PortableRecordingEventSummary                              = recordingcontracts.PortableRecordingEventSummary
@@ -503,6 +504,7 @@ var (
 	BuildPortableRecording                             = recordingcontracts.BuildPortableRecording
 	CurrentPortableRecordingCodec                      = recordingcontracts.CurrentPortableRecordingCodec
 	DecodePortableRecording                            = recordingcontracts.DecodePortableRecording
+	DecodePortableRecordingWithDiagnostics             = recordingcontracts.DecodePortableRecordingWithDiagnostics
 	DecodePortableRecordingWithVersions                = recordingcontracts.DecodePortableRecordingWithVersions
 	FactoryMetadataWarnings                            = recordingcontracts.FactoryMetadataWarnings
 	NormalizePortableRecordingWorkerHistory            = recordingcontracts.NormalizePortableRecordingWorkerHistory
@@ -564,10 +566,11 @@ type HistoricalDispatch struct {
 // HistoricalRecordingQueryResult contains detached canonical history,
 // selected-tick state, recording status, and dispatch facts.
 type HistoricalRecordingQueryResult struct {
-	Recording  HistoricalRecordingIdentity
-	Status     RecordingStatusFacts
-	Events     []CanonicalEvent
-	WorldState WorldStateView
+	Recording        HistoricalRecordingIdentity
+	Status           RecordingStatusFacts
+	Events           []CanonicalEvent
+	IgnoredJSONPaths []string
+	WorldState       WorldStateView
 	// WorkstationRequests is the selected-tick workstation read model derived
 	// from the same historical world state, keeping HTTP and MCP on one owner
 	// projection result.

@@ -1,7 +1,6 @@
 package contracts
 
 import (
-	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -11,6 +10,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/portpowered/infinite-you/pkg/services/recordings/internal/jsoncompat"
 	workerrecording "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/worker_capture"
 )
 
@@ -18,7 +18,16 @@ var portableRecordingSHA256Pattern = regexp.MustCompile(`^sha256:[0-9a-f]{64}$`)
 
 // DecodePortableRecording decodes and validates one portable recording document.
 func DecodePortableRecording(reader io.Reader) (PortableRecording, error) {
-	return CurrentPortableRecordingCodec().Decode(reader)
+	recording, _, err := CurrentPortableRecordingCodec().DecodeWithDiagnostics(reader)
+	return recording, err
+}
+
+// DecodePortableRecordingWithDiagnostics decodes and validates one portable
+// recording while retaining only sorted paths for ignored additive fields.
+func DecodePortableRecordingWithDiagnostics(
+	reader io.Reader,
+) (PortableRecording, PortableRecordingDecodeDiagnostics, error) {
+	return CurrentPortableRecordingCodec().DecodeWithDiagnostics(reader)
 }
 
 // PortableRecordingCompatibilityPolicy defines the versions understood by a
@@ -29,8 +38,8 @@ type PortableRecordingCompatibilityPolicy struct {
 	SupportedReplayCompatibilityVersions []string
 }
 
-// PortableRecordingCodec is a strict, version-pinned portable recording
-// reader/validator. It has no persistence or replay side effects.
+// PortableRecordingCodec is a version-pinned portable recording reader and
+// validator. It has no persistence or replay side effects.
 type PortableRecordingCodec struct {
 	policy PortableRecordingCompatibilityPolicy
 }
@@ -58,16 +67,25 @@ func CurrentPortableRecordingCodec() PortableRecordingCodec {
 
 // Decode decodes and validates one document against the codec's pinned policy.
 func (codec PortableRecordingCodec) Decode(reader io.Reader) (PortableRecording, error) {
+	recording, _, err := codec.DecodeWithDiagnostics(reader)
+	return recording, err
+}
+
+// DecodeWithDiagnostics decodes and validates one document against the
+// codec's pinned policy, returning only safe paths for ignored fields.
+func (codec PortableRecordingCodec) DecodeWithDiagnostics(
+	reader io.Reader,
+) (PortableRecording, PortableRecordingDecodeDiagnostics, error) {
 	policy := codec.effectivePolicy()
 	document, err := decodePortableRecordingDocument(reader)
 	if err != nil {
-		return PortableRecording{}, portableRecordingDiagnostic(
+		return PortableRecording{}, PortableRecordingDecodeDiagnostics{}, portableRecordingDiagnostic(
 			PortableRecordingCodeMalformedContract, "document", "", "decode recording: "+err.Error(),
 		)
 	}
 	header, err := decodePortableRecordingHeader(document)
 	if err != nil {
-		return PortableRecording{}, portableRecordingDiagnostic(
+		return PortableRecording{}, PortableRecordingDecodeDiagnostics{}, portableRecordingDiagnostic(
 			PortableRecordingCodeMalformedContract, "document", "", "decode recording header: "+err.Error(),
 		)
 	}
@@ -78,22 +96,27 @@ func (codec PortableRecordingCodec) Decode(reader io.Reader) (PortableRecording,
 		if err := validatePortableRecordingCompatibilityWithPolicy(
 			policy, header.RecordingKind, header.SchemaVersion, header.ReplayCompatibilityVersion,
 		); err != nil {
-			return PortableRecording{}, err
+			return PortableRecording{}, PortableRecordingDecodeDiagnostics{}, err
 		}
 	}
 
-	decoder := json.NewDecoder(bytes.NewReader(document))
-	decoder.DisallowUnknownFields()
 	var recording PortableRecording
-	if err := decoder.Decode(&recording); err != nil {
-		return PortableRecording{}, portableRecordingDiagnostic(
+	diagnostics, err := jsoncompat.DecodeDocument(document, &recording)
+	if err != nil {
+		return PortableRecording{}, PortableRecordingDecodeDiagnostics{}, portableRecordingDiagnostic(
 			PortableRecordingCodeMalformedContract, "document", "", "decode recording: "+err.Error(),
 		)
 	}
 	if err := codec.Validate(recording); err != nil {
-		return PortableRecording{}, err
+		return PortableRecording{}, PortableRecordingDecodeDiagnostics{}, err
 	}
-	return recording, nil
+	paths, err := collectPortableRecordingDecodePaths(document, recording, diagnostics.Paths())
+	if err != nil {
+		return PortableRecording{}, PortableRecordingDecodeDiagnostics{}, portableRecordingDiagnostic(
+			PortableRecordingCodeMalformedContract, "document", "", "decode recording diagnostics: "+err.Error(),
+		)
+	}
+	return recording, PortableRecordingDecodeDiagnostics{IgnoredJSONPaths: paths}, nil
 }
 
 // Validate validates one detached recording against the codec's pinned policy.
@@ -156,17 +179,9 @@ type portableRecordingHeader struct {
 }
 
 func decodePortableRecordingDocument(reader io.Reader) ([]byte, error) {
-	if reader == nil {
-		return nil, fmt.Errorf("recording reader is required")
-	}
-	decoder := json.NewDecoder(reader)
-	var document json.RawMessage
-	if err := decoder.Decode(&document); err != nil {
-		return nil, err
-	}
-	var trailing any
-	if err := decoder.Decode(&trailing); err != io.EOF {
-		return nil, fmt.Errorf("recording must contain exactly one JSON document")
+	document, err := jsoncompat.ReadSingleDocument(reader)
+	if err != nil {
+		return nil, fmt.Errorf("recording must contain exactly one JSON document: %w", err)
 	}
 	return document, nil
 }

@@ -546,7 +546,7 @@ func TestLoad_RunStartedFactoryBoundaryRejectsRetiredCronIntervalField(t *testin
 	}
 }
 
-func TestLoad_RunStartedFactoryBoundaryRejectsUnsupportedGeneratedField(t *testing.T) {
+func TestLoad_RunStartedFactoryBoundaryAcceptsUnsupportedGeneratedField(t *testing.T) {
 	recordedAt := time.Date(2026, 4, 20, 12, 0, 0, 0, time.UTC)
 	factoryJSON := []byte(`{
 		"name": "unsupported-generated-field-factory",
@@ -564,15 +564,12 @@ func TestLoad_RunStartedFactoryBoundaryRejectsUnsupportedGeneratedField(t *testi
 	path := filepath.Join(t.TempDir(), "unsupported-field.replay.json")
 	writeReplayArtifactWithFactoryJSON(t, path, recordedAt, factoryJSON)
 
-	_, err := Load(testReplayStorage(), path, testFactorySnapshotDecoder)
-	if err == nil {
-		t.Fatal("Load() error = nil, want strict run-started factory boundary error")
+	artifact, err := Load(testReplayStorage(), path, testFactorySnapshotDecoder)
+	if err != nil {
+		t.Fatalf("Load() error = %v, want additive field accepted", err)
 	}
-	if !strings.Contains(err.Error(), "decode factory generated-schema boundary") {
-		t.Fatalf("Load() error = %q, want generated boundary context", err)
-	}
-	if !strings.Contains(err.Error(), `json: unknown field "unsupportedField"`) {
-		t.Fatalf("Load() error = %q, want unknown-field rejection", err)
+	if len(artifact.Events) == 0 {
+		t.Fatal("Load() returned no replay events")
 	}
 }
 

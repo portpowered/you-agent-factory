@@ -1,13 +1,11 @@
 package worker_capture
 
 import (
-	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"reflect"
 	"strings"
 	"time"
@@ -359,30 +357,6 @@ func (codec WorkerRecordingCodec) EncodeWorkerPortableRecording(recording Worker
 		)
 	}
 	return payload, nil
-}
-
-// DecodeWorkerPortableRecording strictly decodes and validates exactly one
-// portable Worker recording. Unknown envelope fields and trailing JSON are
-// rejected before any replay projection is returned.
-func (codec WorkerRecordingCodec) DecodeWorkerPortableRecording(payload []byte) (WorkerPortableRecording, error) {
-	decoder := json.NewDecoder(bytes.NewReader(payload))
-	decoder.DisallowUnknownFields()
-	var recording WorkerPortableRecording
-	if err := decoder.Decode(&recording); err != nil {
-		return WorkerPortableRecording{}, portableDiagnostic(
-			WorkerPortableCodeMalformedContract, "document", "portable recording JSON is malformed", ErrWorkerPortableRecording,
-		)
-	}
-	var trailing any
-	if err := decoder.Decode(&trailing); err != io.EOF {
-		return WorkerPortableRecording{}, portableDiagnostic(
-			WorkerPortableCodeMalformedContract, "document", "portable recording must contain exactly one JSON document", ErrWorkerPortableRecording,
-		)
-	}
-	if err := codec.ValidateWorkerPortableRecording(recording); err != nil {
-		return WorkerPortableRecording{}, err
-	}
-	return cloneWorkerPortableRecording(recording), nil
 }
 
 // ReplayWorkerPortableRecording validates and reduces portable records using
@@ -843,23 +817,6 @@ func portableRecordFromCanonical(record events.Record) (WorkerPortableRecord, er
 		ItemID: draft.ItemID, ParentItemID: draft.ParentItemID,
 		ProviderSessionRef: draft.ProviderSessionRef, Payload: append(json.RawMessage(nil), record.Payload...),
 	}, nil
-}
-
-func decodeWorkerDraftStrict(payload json.RawMessage) (workers.Draft, error) {
-	decoder := json.NewDecoder(bytes.NewReader(payload))
-	decoder.DisallowUnknownFields()
-	var draft workers.Draft
-	if err := decoder.Decode(&draft); err != nil {
-		return workers.Draft{}, err
-	}
-	var trailing any
-	if err := decoder.Decode(&trailing); err != io.EOF {
-		return workers.Draft{}, errors.New("Worker draft contains trailing JSON")
-	}
-	if err := workers.ValidateDraft(draft); err != nil {
-		return workers.Draft{}, err
-	}
-	return draft, nil
 }
 
 func providerAttributionFromRecords(records []WorkerPortableRecord) WorkerPortableProviderAttribution {
