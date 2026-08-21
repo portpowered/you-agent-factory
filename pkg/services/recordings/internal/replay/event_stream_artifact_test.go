@@ -2,6 +2,7 @@ package replay
 
 import (
 	"encoding/json"
+	"errors"
 	"io"
 	"os"
 	"path/filepath"
@@ -47,6 +48,49 @@ func TestArtifactFromEventStream_ParsesCanonicalEventStreamAndSkipsTruncatedTail
 	if got := factory.Workers; got == nil || len(*got) != 1 {
 		t.Fatalf("artifact factory workers = %#v, want hydrated factory config", got)
 	}
+}
+
+func TestArtifactFromEventStreamRejectsNonTailCorruption(t *testing.T) {
+	artifact := testReplayArtifact(t,
+		replayWorkRequestEvent(t, "request-1", 1, "api", []factoryapi.Work{{
+			Name:         "task-1",
+			TraceId:      stringPtrIfNotEmpty("trace-1"),
+			WorkId:       stringPtrIfNotEmpty("work-1"),
+			WorkTypeName: stringPtrIfNotEmpty("task"),
+		}}, nil),
+	)
+	event, err := json.Marshal(artifact.Events[0])
+	if err != nil {
+		t.Fatalf("Marshal event: %v", err)
+	}
+	completeBlock := "data: " + string(event) + "\n\n"
+
+	tests := map[string]string{
+		"malformed complete block":      completeBlock + "data: {\"id\":\"broken\"\n\n",
+		"malformed mid-stream block":    completeBlock + "data: {\"id\":\"broken\"\n\n" + completeBlock,
+		"no complete recoverable event": "data: {\"id\":\"broken\"\n",
+	}
+	for name, stream := range tests {
+		t.Run(name, func(t *testing.T) {
+			result, err := ArtifactFromEventStream(strings.NewReader(stream), testFactorySnapshotDecoder)
+			if result != nil || err == nil {
+				t.Fatalf("ArtifactFromEventStream = (%#v, %v), want error", result, err)
+			}
+		})
+	}
+}
+
+func TestArtifactFromEventStreamReturnsScannerFailure(t *testing.T) {
+	result, err := ArtifactFromEventStream(failingEventStreamReader{}, testFactorySnapshotDecoder)
+	if result != nil || err == nil || !strings.Contains(err.Error(), "scan event stream") {
+		t.Fatalf("ArtifactFromEventStream = (%#v, %v), want scanner error", result, err)
+	}
+}
+
+type failingEventStreamReader struct{}
+
+func (failingEventStreamReader) Read([]byte) (int, error) {
+	return 0, errors.New("event stream read failed")
 }
 
 func TestArtifactFromEventStreamFileRejectsMissingFileOperations(t *testing.T) {

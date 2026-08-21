@@ -1,13 +1,17 @@
 package service
 
 import (
+	"bytes"
 	"errors"
+	"fmt"
 	"strconv"
 	"strings"
 	"sync"
 
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	recordings "github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/recordings/internal/canonical"
+	replayimpl "github.com/portpowered/infinite-you/pkg/services/recordings/internal/replay"
 	recordinglifecycle "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/recording_lifecycle"
 	recordingsreplay "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/replay"
 )
@@ -23,24 +27,31 @@ type neutralReplayPlan struct {
 // Service keeps neutral replay load/plan/observe behavior behind the
 // Recordings-owned replay capability.
 type Service struct {
-	lifecycle   recordinglifecycle.Service
-	projection  recordings.ProjectionService
-	mu          sync.Mutex
-	replayPlans map[recordings.ReplayPlanHandle]*neutralReplayPlan
-	nextPlan    int
+	lifecycle             recordinglifecycle.Service
+	projection            recordings.ProjectionService
+	readFile              recordings.RecordingReadFile
+	decodeFactorySnapshot factorydefinitions.FactorySnapshotJSONDecoder
+	mu                    sync.Mutex
+	replayPlans           map[recordings.ReplayPlanHandle]*neutralReplayPlan
+	nextPlan              int
 }
 
 var _ recordingsreplay.Service = (*Service)(nil)
 
-// New constructs the private replay owner.
+// New constructs the private replay owner with the exact read-side source and
+// Factory snapshot decoder selected by the owning Recordings wire.
 func New(
 	lifecycle recordinglifecycle.Service,
 	projection recordings.ProjectionService,
+	readFile recordings.RecordingReadFile,
+	decodeFactorySnapshot factorydefinitions.FactorySnapshotJSONDecoder,
 ) *Service {
 	return &Service{
-		lifecycle:   lifecycle,
-		projection:  projection,
-		replayPlans: make(map[recordings.ReplayPlanHandle]*neutralReplayPlan),
+		lifecycle:             lifecycle,
+		projection:            projection,
+		readFile:              readFile,
+		decodeFactorySnapshot: decodeFactorySnapshot,
+		replayPlans:           make(map[recordings.ReplayPlanHandle]*neutralReplayPlan),
 	}
 }
 
@@ -64,6 +75,104 @@ func (service *Service) LoadReplayRecording(
 			Events:      append([]recordings.CanonicalEvent(nil), snapshot.Events...),
 		},
 	}, nil
+}
+
+func (service *Service) LoadReplayRecordingForResume(
+	request recordings.LoadReplayRecordingForResumeRequest,
+) (recordings.LoadReplayRecordingForResumeResult, error) {
+	snapshot, err := service.lifecycle.Snapshot(request.RecordingID)
+	if errors.Is(err, recordings.ErrMissingRecordingTarget) {
+		return recordings.LoadReplayRecordingForResumeResult{}, recordings.ErrReplayRecordingNotFound
+	}
+	if err != nil {
+		return recordings.LoadReplayRecordingForResumeResult{}, err
+	}
+	events, skippedTrailingBlocks, err := service.resumeEvents(request.RecordingID, snapshot)
+	if err != nil {
+		return recordings.LoadReplayRecordingForResumeResult{}, err
+	}
+	return recordings.LoadReplayRecordingForResumeResult{
+		Recording: recordings.ReplayRecordingFacts{
+			RecordingID: request.RecordingID,
+			Scope:       snapshot.Status.Scope,
+			Events:      events,
+		},
+		RecoveredEventCount:   len(events),
+		Truncated:             skippedTrailingBlocks > 0,
+		SkippedTrailingBlocks: skippedTrailingBlocks,
+	}, nil
+}
+
+func (service *Service) resumeEvents(
+	recordingID recordings.RecordingID,
+	snapshot recordinglifecycle.Snapshot,
+) ([]recordings.CanonicalEvent, int, error) {
+	if service.readFile == nil || service.decodeFactorySnapshot == nil {
+		return append([]recordings.CanonicalEvent(nil), snapshot.Events...), 0, nil
+	}
+	path := string(snapshot.Status.Artifact)
+	if strings.TrimSpace(path) == "" {
+		return nil, 0, fmt.Errorf("resume recording source is missing for %q", recordingID)
+	}
+	data, err := service.readFile(path)
+	if err != nil {
+		return nil, 0, fmt.Errorf("read resume recording %q: %w", path, err)
+	}
+	parsed, err := replayimpl.ArtifactFromEventStream(
+		bytes.NewReader(data),
+		service.decodeFactorySnapshot,
+	)
+	if err != nil {
+		return nil, 0, fmt.Errorf("parse resume recording %q: %w", path, err)
+	}
+	events, err := canonicalEventsFromResumeArtifact(
+		recordingID,
+		snapshot.Status.Scope,
+		snapshot.Events,
+		parsed.Artifact.Events,
+	)
+	if err != nil {
+		return nil, 0, err
+	}
+	return events, parsed.SkippedTrailingBlocks, nil
+}
+
+func canonicalEventsFromResumeArtifact(
+	recordingID recordings.RecordingID,
+	scope recordings.CanonicalEventScope,
+	retained []recordings.CanonicalEvent,
+	factoryEvents []factorydefinitions.FactoryEvent,
+) ([]recordings.CanonicalEvent, error) {
+	generationID := "resume-recording/" + string(recordingID)
+	if len(retained) > 0 && retained[0].Cursor.StreamGenerationID != "" {
+		generationID = retained[0].Cursor.StreamGenerationID
+	}
+	events := make([]recordings.CanonicalEvent, len(factoryEvents))
+	for index, event := range factoryEvents {
+		canonicalEvent := canonical.CanonicalEventFromFactory(event, generationID)
+		if canonicalEvent.Scope != (recordings.CanonicalEventScope{}) &&
+			canonicalEvent.Scope != scope {
+			return nil, fmt.Errorf(
+				"resume recording event %q has scope %#v, want %#v: %w",
+				event.Id,
+				canonicalEvent.Scope,
+				scope,
+				recordings.ErrCorruptReplayInput,
+			)
+		}
+		canonicalEvent.Scope = scope
+		canonicalEvent.Cursor.StreamGenerationID = generationID
+		events[index] = canonicalEvent
+	}
+	for _, event := range events {
+		if !canonical.ValidAppendEvent(event) {
+			return nil, fmt.Errorf("resume recording contains invalid event %q: %w", event.ID, recordings.ErrCorruptReplayInput)
+		}
+	}
+	if err := canonical.ValidateProjectionEvents(scope, nil, events); err != nil {
+		return nil, fmt.Errorf("validate resume recording event order: %w", err)
+	}
+	return events, nil
 }
 
 func validateNeutralReplayPlan(request recordings.CreateReplayPlanRequest) error {

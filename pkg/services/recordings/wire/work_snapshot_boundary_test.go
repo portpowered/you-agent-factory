@@ -224,6 +224,12 @@ func (fake *workRecordingsRootFake) LoadReplayRecording(
 	return recordings.LoadReplayRecordingResult{}, recordings.ErrMissingReplayArtifact
 }
 
+func (fake *workRecordingsRootFake) LoadReplayRecordingForResume(
+	recordings.LoadReplayRecordingForResumeRequest,
+) (recordings.LoadReplayRecordingForResumeResult, error) {
+	return recordings.LoadReplayRecordingForResumeResult{}, recordings.ErrMissingReplayArtifact
+}
+
 func (fake *workRecordingsRootFake) CreateReplayPlan(
 	recordings.CreateReplayPlanRequest,
 ) (recordings.CreateReplayPlanResult, error) {

@@ -1,13 +1,16 @@
 package service_test
 
 import (
+	"encoding/json"
 	"errors"
 	"strings"
 	"testing"
 	"time"
 
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	recordings "github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/recordings/internal/canonical"
+	replayimpl "github.com/portpowered/infinite-you/pkg/services/recordings/internal/replay"
 	projectionquerywire "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/projection_query/wire"
 	recordinglifecycle "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/recording_lifecycle"
 	recordinglifecyclewire "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/recording_lifecycle/wire"
@@ -46,6 +49,192 @@ func TestLoadReplayRecordingReturnsDetachedFinalizedFacts(t *testing.T) {
 	if reloaded.Recording.Events[0].Kind != "FACTORY_STATE_RESPONSE" {
 		t.Fatalf("reload event kind = %q, want original retained facts", reloaded.Recording.Events[0].Kind)
 	}
+}
+
+func TestLoadReplayRecordingForResumeReturnsDetachedUnfinalizedFacts(t *testing.T) {
+	t.Parallel()
+
+	replay, lifecycle, recordingID, scope := newReplayHarness(t)
+	if _, err := replay.LoadReplayRecordingForResume(recordings.LoadReplayRecordingForResumeRequest{
+		RecordingID: "missing-recording",
+	}); !errors.Is(err, recordings.ErrReplayRecordingNotFound) {
+		t.Fatalf("missing resume recording error = %v, want ErrReplayRecordingNotFound", err)
+	}
+
+	loaded, err := replay.LoadReplayRecordingForResume(recordings.LoadReplayRecordingForResumeRequest{
+		RecordingID: recordingID,
+	})
+	if err != nil {
+		t.Fatalf("LoadReplayRecordingForResume: %v", err)
+	}
+	if loaded.Recording.RecordingID != recordingID {
+		t.Fatalf("recording id = %q, want %q", loaded.Recording.RecordingID, recordingID)
+	}
+	if loaded.Recording.Scope != scope {
+		t.Fatalf("scope = %#v, want %#v", loaded.Recording.Scope, scope)
+	}
+	if len(loaded.Recording.Events) != 2 || loaded.RecoveredEventCount != 2 {
+		t.Fatalf("recovery counts = (%d, %d), want (2, 2)",
+			len(loaded.Recording.Events), loaded.RecoveredEventCount)
+	}
+	if loaded.Truncated || loaded.SkippedTrailingBlocks != 0 {
+		t.Fatalf("recovery metadata = (truncated=%t, skipped=%d), want no truncation",
+			loaded.Truncated, loaded.SkippedTrailingBlocks)
+	}
+
+	loaded.Recording.Events[0].Kind = "MUTATED"
+	reloaded, err := replay.LoadReplayRecordingForResume(recordings.LoadReplayRecordingForResumeRequest{
+		RecordingID: recordingID,
+	})
+	if err != nil {
+		t.Fatalf("LoadReplayRecordingForResume reload: %v", err)
+	}
+	if reloaded.Recording.Events[0].Kind != "FACTORY_STATE_RESPONSE" {
+		t.Fatalf("reload event kind = %q, want original retained facts", reloaded.Recording.Events[0].Kind)
+	}
+
+	if _, err := replay.LoadReplayRecording(recordings.LoadReplayRecordingRequest{
+		RecordingID: recordingID,
+	}); !errors.Is(err, recordings.ErrReplayRecordingNotFinalized) {
+		t.Fatalf("neutral load error = %v, want ErrReplayRecordingNotFinalized", err)
+	}
+
+	if _, err := lifecycle.QueryRecordingStatus(recordings.RecordingStatusRequest{
+		RecordingID: recordingID,
+	}); err != nil {
+		t.Fatalf("QueryRecordingStatus: %v", err)
+	}
+}
+
+func TestLoadReplayRecordingForResumeRecoversTruncatedEventStreamTail(t *testing.T) {
+	t.Parallel()
+
+	_, lifecycle, recordingID, scope := newReplayHarness(t)
+	stream := resumeEventStream(t, scope)
+	readFile := func(path string) ([]byte, error) {
+		if path != "artifact:replay-load-plan" {
+			t.Fatalf("resume source path = %q, want lifecycle artifact path", path)
+		}
+		return stream, nil
+	}
+	decodeFactorySnapshot := func(data []byte) (*factorydefinitions.FactorySnapshot, error) {
+		return factorydefinitions.NewFactorySnapshot(json.RawMessage(data))
+	}
+	replay := replayservice.New(
+		lifecycle,
+		projectionquerywire.NewService(),
+		recordings.RecordingReadFile(readFile),
+		decodeFactorySnapshot,
+	)
+
+	loaded, err := replay.LoadReplayRecordingForResume(recordings.LoadReplayRecordingForResumeRequest{
+		RecordingID: recordingID,
+	})
+	if err != nil {
+		t.Fatalf("LoadReplayRecordingForResume: %v", err)
+	}
+	if loaded.RecoveredEventCount != 2 || len(loaded.Recording.Events) != 2 {
+		t.Fatalf("recovered events = (%d, %d), want (2, 2)",
+			loaded.RecoveredEventCount, len(loaded.Recording.Events))
+	}
+	if !loaded.Truncated || loaded.SkippedTrailingBlocks != 1 {
+		t.Fatalf("recovery metadata = (truncated=%t, skipped=%d), want truncated tail", loaded.Truncated, loaded.SkippedTrailingBlocks)
+	}
+	if loaded.Recording.Events[0].ID != "factory-event/run-started" ||
+		loaded.Recording.Events[1].ID != "resume-event-1" {
+		t.Fatalf("recovered event order = %#v", loaded.Recording.Events)
+	}
+	if loaded.Recording.Scope != scope {
+		t.Fatalf("recovered scope = %#v, want %#v", loaded.Recording.Scope, scope)
+	}
+
+	if _, err := replay.LoadReplayRecording(recordings.LoadReplayRecordingRequest{
+		RecordingID: recordingID,
+	}); !errors.Is(err, recordings.ErrReplayRecordingNotFinalized) {
+		t.Fatalf("neutral load error = %v, want ErrReplayRecordingNotFinalized", err)
+	}
+
+	completePrefix := strings.TrimSuffix(string(stream), "data: {\"id\":\"truncated\"\n")
+	strictReplay := replayservice.New(
+		lifecycle,
+		projectionquerywire.NewService(),
+		func(string) ([]byte, error) {
+			return []byte(completePrefix + "data: {\"id\":\"broken\"\n\n"), nil
+		},
+		decodeFactorySnapshot,
+	)
+	if _, err := strictReplay.LoadReplayRecordingForResume(recordings.LoadReplayRecordingForResumeRequest{
+		RecordingID: recordingID,
+	}); err == nil || !strings.Contains(err.Error(), "decode event stream block") {
+		t.Fatalf("non-tail corruption error = %v, want parser block error", err)
+	}
+}
+
+func TestLoadReplayRecordingForResumePreservesStreamReadFailures(t *testing.T) {
+	t.Parallel()
+
+	_, lifecycle, recordingID, _ := newReplayHarness(t)
+	replay := replayservice.New(
+		lifecycle,
+		projectionquerywire.NewService(),
+		func(string) ([]byte, error) { return nil, errors.New("recording source unavailable") },
+		func([]byte) (*factorydefinitions.FactorySnapshot, error) { return nil, nil },
+	)
+	if _, err := replay.LoadReplayRecordingForResume(recordings.LoadReplayRecordingForResumeRequest{
+		RecordingID: recordingID,
+	}); err == nil || !strings.Contains(err.Error(), "read resume recording") {
+		t.Fatalf("resume read error = %v, want explicit source failure", err)
+	}
+}
+
+func resumeEventStream(
+	t *testing.T,
+	scope recordings.CanonicalEventScope,
+) []byte {
+	t.Helper()
+	factorySnapshot, err := factorydefinitions.NewFactorySnapshot(map[string]any{
+		"id": "resume-factory",
+	})
+	if err != nil {
+		t.Fatalf("NewFactorySnapshot: %v", err)
+	}
+	artifact, err := replayimpl.NewEventLogArtifact(
+		time.Unix(1_700_000_000, 0).UTC(),
+		factorySnapshot,
+		nil,
+		factorydefinitions.ReplayDiagnostics{},
+	)
+	if err != nil {
+		t.Fatalf("NewEventLogArtifact: %v", err)
+	}
+	sessionID := scope.FactorySessionID
+	artifact.Events[0].Context.SessionID = &sessionID
+	artifact.Events = append(artifact.Events, factorydefinitions.FactoryEvent{
+		Context: factorydefinitions.FactoryEventContext{
+			EventTime: time.Unix(1_700_000_001, 0).UTC(),
+			Sequence:  1,
+			SessionID: &sessionID,
+			Tick:      1,
+		},
+		Id:            "resume-event-1",
+		Payload:       json.RawMessage(`{"works":[]}`),
+		SchemaVersion: factorydefinitions.FactoryEventSchemaVersionV1,
+		Type:          factorydefinitions.FactoryEventTypeWorkRequest,
+	})
+
+	var builder strings.Builder
+	for _, event := range artifact.Events {
+		data, err := json.Marshal(event)
+		if err != nil {
+			t.Fatalf("Marshal event: %v", err)
+		}
+		builder.WriteString("data: ")
+		builder.Write(data)
+		builder.WriteString("\n\n")
+	}
+	builder.WriteString(`data: {"id":"truncated"`)
+	builder.WriteByte('\n')
+	return []byte(builder.String())
 }
 
 func TestLoadReplayRecordingTypedFailures(t *testing.T) {
@@ -524,7 +713,7 @@ func newReplayHarness(t *testing.T) (
 	)
 	lifecycle := recordinglifecyclewire.NewService(planner, nil, nil)
 	projection := projectionquerywire.NewService()
-	replay := replayservice.New(lifecycle, projection)
+	replay := replayservice.New(lifecycle, projection, nil, nil)
 	scope := recordings.CanonicalEventScope{FactorySessionID: "session-replay-load-plan"}
 	bound, err := lifecycle.BindRecording(recordings.BindRecordingRequest{
 		RecordingID: "recording-replay-load-plan",

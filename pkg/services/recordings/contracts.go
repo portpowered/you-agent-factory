@@ -143,6 +143,8 @@ type (
 	LoadReplayInputResult                                      = recordingcontracts.LoadReplayInputResult
 	LoadReplayRecordingRequest                                 = recordingcontracts.LoadReplayRecordingRequest
 	LoadReplayRecordingResult                                  = recordingcontracts.LoadReplayRecordingResult
+	LoadReplayRecordingForResumeRequest                        = recordingcontracts.LoadReplayRecordingForResumeRequest
+	LoadReplayRecordingForResumeResult                         = recordingcontracts.LoadReplayRecordingForResumeResult
 	MetadataMismatchWarning                                    = recordingcontracts.MetadataMismatchWarning
 	ObserveReplayRequest                                       = recordingcontracts.ObserveReplayRequest
 	ObserveReplayResult                                        = recordingcontracts.ObserveReplayResult

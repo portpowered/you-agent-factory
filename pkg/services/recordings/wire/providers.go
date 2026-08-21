@@ -97,6 +97,7 @@ func NewRuntimeRoot(
 	root := recordingsinternal.NewRuntimeRootWithHistoricalQuery(
 		targets,
 		writeFile,
+		readFile,
 		publication,
 		captureSnapshot,
 		decodeSnapshot,

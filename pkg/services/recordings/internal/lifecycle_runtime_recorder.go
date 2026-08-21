@@ -337,6 +337,7 @@ func lifecycleEventFromCanonical(event recordings.CanonicalEvent) recordings.Lif
 func NewRuntimeRoot(
 	targets recordings.LiveRecordingTargetPlanner,
 	writeFile func(string, []byte) error,
+	readFile recordings.RecordingReadFile,
 	publication interface {
 		Publish(context.Context, string, []byte) error
 		Read(context.Context, string) ([]byte, error)
@@ -351,6 +352,7 @@ func NewRuntimeRoot(
 	return NewRuntimeRootWithHistoricalQuery(
 		targets,
 		writeFile,
+		readFile,
 		publication,
 		captureSnapshot,
 		decodeSnapshot,
@@ -367,6 +369,7 @@ func NewRuntimeRoot(
 func NewRuntimeRootWithHistoricalQuery(
 	targets recordings.LiveRecordingTargetPlanner,
 	writeFile func(string, []byte) error,
+	readFile recordings.RecordingReadFile,
 	publication interface {
 		Publish(context.Context, string, []byte) error
 		Read(context.Context, string) ([]byte, error)
@@ -387,7 +390,7 @@ func NewRuntimeRootWithHistoricalQuery(
 		writer = NewReplayRecordingSnapshotWriter(writeFile)
 		tickers = NewRecordingFlushTickerFactory()
 	}
-	service := NewServiceWithLifecycleEffectsAndHistoricalQueryAndLogger(
+	service := NewServiceWithLifecycleEffectsAndHistoricalQueryAndLoggerAndReplaySource(
 		router,
 		projection,
 		targets,
@@ -395,6 +398,8 @@ func NewRuntimeRootWithHistoricalQuery(
 		tickers,
 		publication,
 		historicalQuery,
+		readFile,
+		decodeSnapshot,
 		logger,
 		clocks...,
 	)

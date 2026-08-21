@@ -213,6 +213,12 @@ func (service *combinedService) LoadReplayRecording(
 	return service.replayService.LoadReplayRecording(request)
 }
 
+func (service *combinedService) LoadReplayRecordingForResume(
+	request recordings.LoadReplayRecordingForResumeRequest,
+) (recordings.LoadReplayRecordingForResumeResult, error) {
+	return service.replayService.LoadReplayRecordingForResume(request)
+}
+
 func (service *combinedService) CreateReplayPlan(
 	request recordings.CreateReplayPlanRequest,
 ) (recordings.CreateReplayPlanResult, error) {
@@ -269,6 +275,8 @@ func NewServiceWithLifecycleEffects(
 		publication,
 		logging.NoopLogger{},
 		nil,
+		nil,
+		nil,
 		clocks...,
 	)
 }
@@ -297,6 +305,8 @@ func NewServiceWithLifecycleEffectsAndLogger(
 		publication,
 		logger,
 		nil,
+		nil,
+		nil,
 		clocks...,
 	)
 }
@@ -322,6 +332,8 @@ func NewServiceWithLifecycleEffectsAndHistoricalQuery(
 		publication,
 		logging.NoopLogger{},
 		historicalQuery,
+		nil,
+		nil,
 		clocks...,
 	)
 }
@@ -339,15 +351,17 @@ func NewServiceWithLifecycleEffectsAndHistoricalQueryAndLogger(
 	logger logging.Logger,
 	clocks ...recordings.RecordingClock,
 ) recordings.Service {
-	return newServiceWithLifecycleEffects(
+	return NewServiceWithLifecycleEffectsAndHistoricalQueryAndLoggerAndReplaySource(
 		ledger,
 		projection,
 		targetPlanner,
 		writer,
 		tickers,
 		publication,
-		logger,
 		historicalQuery,
+		nil,
+		nil,
+		logger,
 		clocks...,
 	)
 }
@@ -361,6 +375,8 @@ func newServiceWithLifecycleEffects(
 	publication portableArtifactPublication,
 	logger logging.Logger,
 	historicalQuery historicalquery.Service,
+	readFile recordings.RecordingReadFile,
+	decodeFactorySnapshot factorydefinitions.FactorySnapshotJSONDecoder,
 	clocks ...recordings.RecordingClock,
 ) recordings.Service {
 	if ledger == nil || projection == nil {
@@ -377,7 +393,7 @@ func newServiceWithLifecycleEffects(
 		ProjectionService: projection,
 		Service:           lifecycle,
 		artifactsExport:   artifactsexportwire.NewService(lifecycle, publication),
-		replayService:     replaywire.NewService(lifecycle, projection),
+		replayService:     replaywire.NewService(lifecycle, projection, readFile, decodeFactorySnapshot),
 		canonicalLedger:   canonicalledgerwire.NewService(ledger),
 		historicalQuery:   historicalQuery,
 		replayByKey:       make(map[string]*recordings.ReplayArtifact),
