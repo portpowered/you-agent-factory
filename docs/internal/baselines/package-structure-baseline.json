@@ -684,22 +684,12 @@
     },
     {
       "rule": "functional-test-missing-subsection",
-      "filePath": "tests/functional/guards_batch/executor_review_state_lane_classification.go",
-      "target": "guards_batch"
-    },
-    {
-      "rule": "functional-test-missing-subsection",
       "filePath": "tests/functional/guards_batch/failed_immutability_long_test.go",
       "target": "guards_batch"
     },
     {
       "rule": "functional-test-missing-subsection",
       "filePath": "tests/functional/guards_batch/helpers_long_test.go",
-      "target": "guards_batch"
-    },
-    {
-      "rule": "functional-test-missing-subsection",
-      "filePath": "tests/functional/guards_batch/helpers_test.go",
       "target": "guards_batch"
     },
     {
