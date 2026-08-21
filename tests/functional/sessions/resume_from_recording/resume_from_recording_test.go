@@ -75,7 +75,7 @@ type resumeFromRecordingScenario struct {
 
 type resumeFromRecordingBoundary struct {
 	work        factoryapi.Work
-	session     factoryapi.FactorySession
+	board       factoryapi.StatusResponse
 	completedID string
 	events      []factoryapi.FactoryEvent
 	cursor      factoryapi.FactoryEvent
@@ -134,16 +134,15 @@ func (scenario *resumeFromRecordingScenario) captureAtKillBoundary(
 	if got := support.WorkItemCustomerLocation(work); got != support.WorkCustomerLocation("task", "processing") {
 		t.Fatalf("pre-kill Work location = %q, want task:processing", got)
 	}
-	session := support.GetDefaultSession(t, baseURL)
-	if session.Runtime.Progress.Categories.Initial != 0 || session.Runtime.Progress.Categories.Processing != 1 {
-		t.Fatalf("pre-kill board progress = %+v, want one processing Work", session.Runtime.Progress.Categories)
-	}
+	board := support.WaitForStatus(t, baseURL, resumeFromRecordingTimeout, func(status factoryapi.StatusResponse) bool {
+		return status.Categories.Initial == 0 && status.Categories.Processing == 1
+	})
 	events := support.GetFactoryEventsForSessionAt(t, baseURL, factorysessions.DefaultSessionID)
 	assertResumeFromRecordingFactoryEvents(t, "before restart", events)
 	completedID := requireResumeFromRecordingCompletedDispatchID(t, events)
 	return resumeFromRecordingBoundary{
 		work:        work,
-		session:     session,
+		board:       board,
 		completedID: completedID,
 		events:      events,
 		cursor:      requireResumeFromRecordingFactoryEvent(t, events, factoryapi.FactoryEventTypeDispatchReconciled, completedID),
@@ -165,9 +164,11 @@ func (scenario *resumeFromRecordingScenario) assertRestored(
 	if got := support.WorkItemCustomerLocation(work); got != support.WorkCustomerLocation("task", "processing") {
 		t.Fatalf("post-restart Work location = %q, want restored task:processing", got)
 	}
-	session := support.GetDefaultSession(t, baseURL)
-	if session.Runtime.Progress.Categories.Initial != 0 || session.Runtime.Progress.Categories.Processing != 1 {
-		t.Fatalf("post-restart board progress = %+v, want restored one processing Work", session.Runtime.Progress.Categories)
+	board := support.WaitForStatus(t, baseURL, resumeFromRecordingTimeout, func(status factoryapi.StatusResponse) bool {
+		return status.Categories.Initial == 0 && status.Categories.Processing == 1
+	})
+	if board.Categories.Terminal != boundary.board.Categories.Terminal || board.Categories.Failed != boundary.board.Categories.Failed {
+		t.Fatalf("post-restart board terminal/failed counts = %+v, want preserved boundary counts %+v", board.Categories, boundary.board.Categories)
 	}
 	restartedEvents := support.GetFactoryEventsForSessionAt(t, baseURL, factorysessions.DefaultSessionID)
 	assertResumeFromRecordingFactoryEvents(t, "after restart", restartedEvents)
@@ -185,7 +186,7 @@ func (scenario *resumeFromRecordingScenario) resumeAndFinish(
 ) {
 	t.Helper()
 	scenario.runner.ReleaseRemainingDispatch()
-	support.WaitForTerminalStatus(t, baseURL, resumeFromRecordingTimeout)
+	finished := support.WaitForTerminalStatus(t, baseURL, resumeFromRecordingTimeout)
 	finalWork := support.ListDefaultSessionWork(t, baseURL)
 	if got := support.CountWorkAtCustomerState(finalWork, support.WorkCustomerLocation("task", "complete")); got != 1 {
 		t.Fatalf("post-resume completed Work count = %d, want 1; listed=%#v", got, finalWork.Results)
@@ -193,9 +194,8 @@ func (scenario *resumeFromRecordingScenario) resumeAndFinish(
 	if got := support.CountWorkAtCustomerState(finalWork, support.WorkCustomerLocation("task", "processing")); got != 0 {
 		t.Fatalf("post-resume processing Work count = %d, want 0", got)
 	}
-	finished := support.GetDefaultSession(t, baseURL)
-	if finished.Runtime.Progress.Categories.Terminal != 1 || finished.Runtime.Progress.Categories.Processing != 0 || finished.Runtime.Progress.Categories.Failed != 0 {
-		t.Fatalf("post-resume board progress = %+v, want one terminal Work and no failed/processing Work", finished.Runtime.Progress.Categories)
+	if finished.Categories.Terminal != 1 || finished.Categories.Processing != 0 || finished.Categories.Failed != 0 {
+		t.Fatalf("post-resume board progress = %+v, want one terminal Work and no failed/processing Work", finished.Categories)
 	}
 	if got := scenario.runner.CallCount(); got != 3 {
 		t.Fatalf("provider command calls after resume = %d, want exactly 3", got)
