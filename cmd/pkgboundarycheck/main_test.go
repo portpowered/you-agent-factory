@@ -88,18 +88,19 @@ func TestRunRejectsApplicationGraphImportsFromTestsOutsidePackageRoot(t *testing
 	writeGoSourceFile(t, repoRoot, "pkg/root/root.go", "package root\n")
 	writeGoImportFile(t, repoRoot, "tests/stress/alternate_graph_test.go", "stress", applicationGraphImportPath)
 
-	stderr := &bytes.Buffer{}
-	err := run(config{root: repoRoot, packageRoot: defaultScanRoot}, &bytes.Buffer{}, stderr)
-	if err == nil {
-		t.Fatal("run() error = nil, want alternate test injector rejected")
+	stdout := &bytes.Buffer{}
+	err := run(config{root: repoRoot, packageRoot: defaultScanRoot}, stdout, &bytes.Buffer{})
+	if err != nil {
+		t.Fatalf("run() error = %v, want test-only alternate injector to remain non-blocking", err)
 	}
 	for _, want := range []string{
 		"prohibited application composition import",
 		"tests/stress/alternate_graph_test.go",
-		"inject the collaborator through pkg/root",
+		"[class=test-only]",
+		"dependency violation counts: production=0 test-only=1",
 	} {
-		if !strings.Contains(stderr.String(), want) {
-			t.Fatalf("run() stderr = %q, want %q", stderr.String(), want)
+		if !strings.Contains(stdout.String(), want) {
+			t.Fatalf("run() stdout = %q, want %q", stdout.String(), want)
 		}
 	}
 }
@@ -246,8 +247,8 @@ func directSession() { _ = sessions.NewLiveSession("", "", nil, nil) }
 			t.Fatalf("run() stderr = %q, want substring %q", got, want)
 		}
 	}
-	if got := err.Error(); got != "[agent-factory:pkg-boundary] found 4 package-boundary violation(s)" {
-		t.Fatalf("run() error = %q, want four violations", got)
+	if got := err.Error(); got != "[agent-factory:pkg-boundary] found 3 package-boundary violation(s)" {
+		t.Fatalf("run() error = %q, want three production violations", got)
 	}
 }
 
@@ -297,17 +298,22 @@ import hostedsources "github.com/portpowered/infinite-you/pkg/services/automatio
 func directImplementation() { hostedsources.New() }
 `)
 
+	stdout := &bytes.Buffer{}
 	stderr := &bytes.Buffer{}
-	err := run(config{root: repoRoot, packageRoot: defaultScanRoot}, &bytes.Buffer{}, stderr)
+	err := run(config{root: repoRoot, packageRoot: defaultScanRoot}, stdout, stderr)
 	if err == nil {
-		t.Fatal("run() error = nil, want external-effect implementation construction rejected")
+		t.Fatal("run() error = nil, want the unrecorded dedicated test-service import to remain blocking")
 	}
+	output := stdout.String() + stderr.String()
 	for _, want := range []string{
 		"prohibited product-service construction: github.com/portpowered/infinite-you/pkg/services/automations/internal/services/hosted_sources.New",
+		"prohibited test import of service internals: github.com/portpowered/infinite-you/pkg/services/automations/internal/services/hosted_sources",
+		"[class=test-only]",
+		"dependency violation counts: production=0 test-only=2",
 		"construct the collaborator in pkg/wire and inject its service-root role",
 	} {
-		if got := stderr.String(); !strings.Contains(got, want) {
-			t.Fatalf("run() stderr = %q, want substring %q", got, want)
+		if !strings.Contains(output, want) {
+			t.Fatalf("run() output = %q, want substring %q", output, want)
 		}
 	}
 }
@@ -1276,6 +1282,7 @@ func TestRunFailsForUnapprovedRootPackageFamily(t *testing.T) {
 		"[agent-factory:pkg-boundary] unapproved root package family: pkg/experimental",
 		"  reason: pkg/experimental is outside the approved package-family allowlist.",
 		"  remediation: move the code under an approved owner or deliberately update the allowlist with ownership rationale.",
+		"[agent-factory:pkg-boundary] dependency violation counts: production=0 test-only=0",
 		"[agent-factory:pkg-boundary] active generated-code exceptions: pkg/transports/http/client (root), pkg/transports/http/generated (root)",
 		"",
 	}, "\n")

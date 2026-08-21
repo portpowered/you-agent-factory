@@ -157,7 +157,7 @@ func TestRunRequiresExactDeletionOnlyBaselineForReusableSupportWireImport(t *tes
 	}
 }
 
-func TestReusableSupportScanDoesNotConflateTestFiles(t *testing.T) {
+func TestReusableSupportScanClassifiesTestFiles(t *testing.T) {
 	t.Parallel()
 
 	repoRoot := t.TempDir()
@@ -172,8 +172,11 @@ func TestReusableSupportScanDoesNotConflateTestFiles(t *testing.T) {
 	if err != nil {
 		t.Fatalf("scanSupportServiceSubpackageImports() error = %v", err)
 	}
-	if len(findings) != 0 {
-		t.Fatalf("reusable support findings = %#v, want _test.go handled only by test baseline", findings)
+	if len(findings) != 1 {
+		t.Fatalf("reusable support findings = %#v, want one test-only edge", findings)
+	}
+	if findings[0].class != testOnlySourceClass {
+		t.Fatalf("reusable support finding class = %q, want %q", findings[0].class, testOnlySourceClass)
 	}
 }
 
@@ -201,6 +204,54 @@ func TestCreateReusableSupportBaselineRefusesOverwrite(t *testing.T) {
 	if err := createSupportServiceImportBaseline(config{root: repoRoot}); err == nil ||
 		!strings.Contains(err.Error(), "refusing to overwrite") {
 		t.Fatalf("second create error = %v, want overwrite refusal", err)
+	}
+}
+
+func TestCreateReusableSupportBaselineIgnoresTestOnlyFindings(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	writeGoImportFile(
+		t,
+		repoRoot,
+		"internal/testutil/runtime_test.go",
+		"testutil",
+		"github.com/portpowered/infinite-you/pkg/services/factory_definitions/service",
+	)
+	err := createSupportServiceImportBaseline(config{root: repoRoot})
+	if err == nil || !strings.Contains(err.Error(), "no production migration debt") {
+		t.Fatalf("createSupportServiceImportBaseline() error = %v, want production-only empty-baseline rejection", err)
+	}
+	if _, statErr := os.Stat(filepath.Join(repoRoot, supportServiceImportBaselinePath)); !os.IsNotExist(statErr) {
+		t.Fatalf("support baseline stat error = %v, want no test-only baseline written", statErr)
+	}
+}
+
+func TestRunRejectsTestOnlyReusableSupportBaseline(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	makeDir(t, repoRoot, "pkg/root")
+	const (
+		filePath   = "internal/testutil/runtime_test.go"
+		importPath = "github.com/portpowered/infinite-you/pkg/services/factory_definitions/service"
+	)
+	writeGoImportFile(t, repoRoot, filePath, "testutil", importPath)
+	writeSupportServiceBaseline(t, repoRoot, supportServiceImportBaseline{
+		Version: 1,
+		Entries: []supportServiceImportBaselineEntry{{
+			Owner:        "factory_definitions",
+			ImportPath:   importPath,
+			FilePath:     filePath,
+			TargetRoot:   "pkg/services/factory_definitions",
+			Stage:        supportServiceImportBaselineStage,
+			DeletionGate: supportServiceImportDeletionGate,
+		}},
+	})
+
+	err := run(config{root: repoRoot, packageRoot: defaultScanRoot}, &bytes.Buffer{}, &bytes.Buffer{})
+	if err == nil || !strings.Contains(err.Error(), "class = \"test-only\", want \"production\"") {
+		t.Fatalf("run() error = %v, want test-only support baseline rejected", err)
 	}
 }
 

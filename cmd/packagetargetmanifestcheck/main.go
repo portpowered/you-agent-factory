@@ -18,6 +18,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 type config struct {
@@ -36,19 +37,48 @@ func main() {
 	}
 }
 
-func run(cfg config, stdout, _ io.Writer) error {
+func run(cfg config, stdout, stderr io.Writer) error {
 	repoRoot, err := filepath.Abs(cfg.root)
 	if err != nil {
 		return fmt.Errorf("resolve repository root: %w", err)
 	}
-	movesFile := resolveRepoPath(repoRoot, cfg.movesPath)
+	movesPath := cfg.movesPath
+	if movesPath == "" {
+		movesPath = unfinishedMovesRelativePath
+	}
+	movesFile := resolveRepoPath(repoRoot, movesPath)
 	moves, err := loadUnfinishedMoves(movesFile)
 	if err != nil {
 		return err
 	}
-	if err := validateOpenMoveLedger(repoRoot, moves); err != nil {
+	findings, err := scanPackageTargetFindings(repoRoot, moves.Moves)
+	if err != nil {
+		return err
+	}
+	if err := validateOpenMoveLedgerSchema(repoRoot, moves); err != nil {
+		writePackageTargetObservationCounts(stderr, findings)
+		writePackageTargetTestOnlyObservations(stderr, findings)
+		writePackageTargetViolationCountsForFindings(stderr, packageTargetProductionRows(findings), findings)
 		return fmt.Errorf("[agent-factory:package-target-manifest] %w", err)
 	}
+	productionStale := packageTargetProductionStaleRows(moves.Moves, findings)
+	if len(productionStale) > 0 {
+		writePackageTargetObservationCounts(stderr, findings)
+		writePackageTargetTestOnlyObservations(stderr, findings)
+		writePackageTargetViolationCountsForFindings(stderr, productionStale, findings)
+		for _, row := range productionStale {
+			writeStaleProductionPackageTargetRow(stderr, row)
+		}
+		return fmt.Errorf(
+			"[agent-factory:package-target-manifest] found %d stale production row(s) [%s]\nLINT_VIOLATION_COUNT: %d",
+			len(productionStale),
+			strings.Join(packageTargetStaleRowPaths(productionStale), ", "),
+			len(productionStale),
+		)
+	}
+	writePackageTargetObservationCounts(stdout, findings)
+	writePackageTargetTestOnlyObservations(stdout, findings)
+	writePackageTargetViolationCountsForFindings(stdout, productionStale, findings)
 	fmt.Fprintf(
 		stdout,
 		"[agent-factory:package-target-manifest] all %d open migration row(s) hold the closed destination vocabulary and name live packages (%s)\n",

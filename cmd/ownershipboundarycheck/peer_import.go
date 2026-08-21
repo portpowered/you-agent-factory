@@ -123,7 +123,7 @@ func scanPeerServiceImports(
 			}
 			return nil
 		}
-		if !strings.HasSuffix(entry.Name(), ".go") || strings.HasSuffix(entry.Name(), "_test.go") {
+		if !strings.HasSuffix(entry.Name(), ".go") {
 			return nil
 		}
 		relative, err := filepath.Rel(repoRoot, path)
@@ -157,6 +157,7 @@ func scanPeerServiceImports(
 				FilePath: relative,
 				Target:   importPath,
 				Line:     fileSet.Position(spec.Pos()).Line,
+				class:    classifyBoundarySource(relative),
 			})
 		}
 		return nil

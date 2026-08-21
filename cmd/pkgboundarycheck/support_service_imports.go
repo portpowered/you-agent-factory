@@ -17,6 +17,7 @@ type supportServiceImportFinding struct {
 	owner      string
 	importPath string
 	filePath   string
+	class      boundarySourceClass
 }
 
 type supportServiceImportBaseline struct {
@@ -29,6 +30,7 @@ type supportServiceImportBaselineEntry struct {
 	ImportPath   string `json:"importPath"`
 	FilePath     string `json:"filePath"`
 	TargetRoot   string `json:"targetRoot"`
+	Class        string `json:"class,omitempty"`
 	Stage        string `json:"stage"`
 	DeletionGate string `json:"deletionGate"`
 }
@@ -78,7 +80,7 @@ func scanSupportRootServiceSubpackageImports(
 		if entry.IsDir() {
 			return nil
 		}
-		if filepath.Ext(entry.Name()) != ".go" || strings.HasSuffix(entry.Name(), "_test.go") {
+		if filepath.Ext(entry.Name()) != ".go" {
 			return nil
 		}
 		filePath, err := filepath.Rel(repoRoot, path)
@@ -86,7 +88,14 @@ func scanSupportRootServiceSubpackageImports(
 			return err
 		}
 		filePath = filepath.ToSlash(filePath)
-		parsedFile, err := parser.ParseFile(token.NewFileSet(), path, nil, parser.ImportsOnly)
+		content, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		if bytesContainGeneratedMarker(content) {
+			return nil
+		}
+		parsedFile, err := parser.ParseFile(token.NewFileSet(), path, content, parser.ImportsOnly|parser.ParseComments)
 		if err != nil {
 			return err
 		}
@@ -110,8 +119,9 @@ func scanSupportRootServiceSubpackageImports(
 				owner:      importedOwner,
 				importPath: importPath,
 				filePath:   filePath,
+				class:      classifyBoundarySource(filePath),
 			}
-			findingsByKey[supportServiceImportKey(filePath, importPath)] = finding
+			findingsByKey[supportServiceImportKey(filePath, importPath, finding.class)] = finding
 		}
 		return nil
 	})
@@ -157,7 +167,20 @@ func partitionSupportServiceImportFindings(
 		if err := validateSupportServiceImportBaselineEntry(entry); err != nil {
 			return nil, nil, err
 		}
-		key := supportServiceImportKey(entry.FilePath, entry.ImportPath)
+		class, err := sourceClassFromBaseline(entry.Class, entry.FilePath)
+		if err != nil {
+			return nil, nil, err
+		}
+		if class != productionSourceClass {
+			return nil, nil, fmt.Errorf(
+				"reusable support service import baseline entry %s -> %s class = %q, want %q",
+				entry.FilePath,
+				entry.ImportPath,
+				class,
+				productionSourceClass,
+			)
+		}
+		key := supportServiceImportKey(entry.FilePath, entry.ImportPath, class)
 		if _, duplicate := baselineByKey[key]; duplicate {
 			return nil, nil, fmt.Errorf(
 				"duplicate reusable support service import baseline entry: %s -> %s",
@@ -168,14 +191,20 @@ func partitionSupportServiceImportFindings(
 		baselineByKey[key] = entry
 	}
 
-	var blocking []supportServiceImportFinding
+	var visible []supportServiceImportFinding
 	seen := make(map[string]struct{}, len(findings))
 	for _, finding := range findings {
-		key := supportServiceImportKey(finding.filePath, finding.importPath)
+		if effectiveBoundarySourceClass(finding.class, finding.filePath) != productionSourceClass {
+			// Test-only support imports remain visible to the report, but this
+			// general dependency baseline is production-only.
+			visible = append(visible, finding)
+			continue
+		}
+		key := supportServiceImportKey(finding.filePath, finding.importPath, finding.class)
 		seen[key] = struct{}{}
 		entry, recorded := baselineByKey[key]
 		if !recorded {
-			blocking = append(blocking, finding)
+			visible = append(visible, finding)
 			continue
 		}
 		if entry.Owner != finding.owner {
@@ -200,7 +229,7 @@ func partitionSupportServiceImportFindings(
 		}
 		return strings.Compare(left.ImportPath, right.ImportPath)
 	})
-	return blocking, stale, nil
+	return visible, stale, nil
 }
 
 func validateSupportServiceImportBaselineEntry(entry supportServiceImportBaselineEntry) error {
@@ -213,6 +242,9 @@ func validateSupportServiceImportBaselineEntry(entry supportServiceImportBaselin
 		if strings.ContainsAny(value, "*?[]") {
 			return fmt.Errorf("reusable support service import baseline entry must be exact and cannot contain wildcards: %#v", entry)
 		}
+	}
+	if _, err := sourceClassFromBaseline(entry.Class, entry.FilePath); err != nil {
+		return err
 	}
 	wantTargetRoot := "pkg/services/" + entry.Owner
 	if entry.Owner == "wire" {
@@ -261,8 +293,9 @@ func createSupportServiceImportBaseline(cfg config) error {
 	if err != nil {
 		return err
 	}
+	findings = filterSupportServiceImportsByClass(findings, productionSourceClass)
 	if len(findings) == 0 {
-		return fmt.Errorf("refusing to create empty reusable support service import baseline: no migration debt exists")
+		return fmt.Errorf("refusing to create empty reusable support service import baseline: no production migration debt exists")
 	}
 	baseline := supportServiceImportBaseline{
 		Version: 1,
@@ -273,6 +306,7 @@ func createSupportServiceImportBaseline(cfg config) error {
 			Owner:      finding.owner,
 			ImportPath: finding.importPath,
 			FilePath:   finding.filePath,
+			Class:      string(finding.class),
 			TargetRoot: func() string {
 				if finding.owner == "wire" {
 					return "pkg/wire"
@@ -295,17 +329,22 @@ func createSupportServiceImportBaseline(cfg config) error {
 	return nil
 }
 
-func supportServiceImportKey(filePath, importPath string) string {
-	return filePath + "\x00" + importPath
+func supportServiceImportKey(filePath, importPath string, classes ...boundarySourceClass) string {
+	class := classifyBoundarySource(filePath)
+	if len(classes) > 0 {
+		class = effectiveBoundarySourceClass(classes[0], filePath)
+	}
+	return filepath.ToSlash(filePath) + "\x00" + string(class) + "\x00" + importPath
 }
 
 func writeSupportServiceImportFindings(writer io.Writer, findings []supportServiceImportFinding) {
 	for _, finding := range findings {
 		fmt.Fprintf(
 			writer,
-			"[agent-factory:pkg-boundary] prohibited reusable support service implementation import: %s (%s)\n",
+			"[agent-factory:pkg-boundary] prohibited reusable support service implementation import: %s (%s) [class=%s]\n",
 			finding.importPath,
 			finding.filePath,
+			effectiveBoundarySourceClass(finding.class, finding.filePath),
 		)
 		fmt.Fprintln(writer, "  reason: repository-wide reusable test support is not an application composition root.")
 		fmt.Fprintln(writer, "  remediation: use the owning service root contract, a typed edge fake, package-local owner coverage, or root.BuildProcess.")
@@ -316,9 +355,13 @@ func writeStaleSupportServiceBaselineEntries(writer io.Writer, entries []support
 	for _, entry := range entries {
 		fmt.Fprintf(
 			writer,
-			"[agent-factory:pkg-boundary] stale reusable support service import baseline entry: %s -> %s\n",
+			"[agent-factory:pkg-boundary] stale reusable support service import baseline entry: %s -> %s [class=%s]\n",
 			entry.FilePath,
 			entry.ImportPath,
+			func() boundarySourceClass {
+				class, _ := sourceClassFromBaseline(entry.Class, entry.FilePath)
+				return class
+			}(),
 		)
 		fmt.Fprintln(writer, "  reason: the concrete reusable-support import no longer exists.")
 		fmt.Fprintf(writer, "  remediation: remove this entry from %s in the same change.\n", supportServiceImportBaselinePath)

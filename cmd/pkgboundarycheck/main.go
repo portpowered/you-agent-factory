@@ -419,6 +419,7 @@ type retiredPackageImportFinding struct {
 	retiredPackageRoot
 	importPath string
 	filePath   string
+	class      boundarySourceClass
 }
 
 type handwrittenGeneratedFinding struct {
@@ -439,12 +440,14 @@ type migrationShimFinding struct {
 type applicationGraphImportFinding struct {
 	packagePath string
 	filePath    string
+	class       boundarySourceClass
 }
 
 type domainTransportImportFinding struct {
 	packagePath string
 	importPath  string
 	filePath    string
+	class       boundarySourceClass
 }
 
 type peerServiceImportFinding struct {
@@ -452,6 +455,7 @@ type peerServiceImportFinding struct {
 	peer       string
 	importPath string
 	filePath   string
+	class      boundarySourceClass
 }
 
 type peerServiceImportBaseline struct {
@@ -465,6 +469,7 @@ type peerServiceImportBaselineEntry struct {
 	ImportPath   string `json:"importPath"`
 	FilePath     string `json:"filePath"`
 	TargetRoot   string `json:"targetRoot"`
+	Class        string `json:"class,omitempty"`
 	Stage        string `json:"stage"`
 	DeletionGate string `json:"deletionGate"`
 }
@@ -472,12 +477,14 @@ type peerServiceImportBaselineEntry struct {
 type transportServiceImplementationFinding struct {
 	importPath string
 	filePath   string
+	class      boundarySourceClass
 }
 
 type testServiceImportFinding struct {
 	owner      string
 	importPath string
 	filePath   string
+	class      boundarySourceClass
 }
 
 type testServiceImportBaseline struct {
@@ -490,6 +497,7 @@ type testServiceImportBaselineEntry struct {
 	ImportPath   string `json:"importPath"`
 	FilePath     string `json:"filePath"`
 	TargetRoot   string `json:"targetRoot"`
+	Class        string `json:"class,omitempty"`
 	Stage        string `json:"stage"`
 	DeletionGate string `json:"deletionGate"`
 }
@@ -501,6 +509,7 @@ type serviceConstructionFinding struct {
 	filePath   string
 	line       int
 	count      int
+	class      boundarySourceClass
 }
 
 type serviceConstructionBaseline struct {
@@ -514,6 +523,7 @@ type serviceConstructionBaselineEntry struct {
 	Symbol       string `json:"symbol"`
 	FilePath     string `json:"filePath"`
 	Count        int    `json:"count"`
+	Class        string `json:"class,omitempty"`
 	Stage        string `json:"stage"`
 	DeletionGate string `json:"deletionGate"`
 }
@@ -637,11 +647,16 @@ func runWithPolicy(cfg config, policy boundaryPolicy, stdout io.Writer, stderr i
 	}
 	visibleFindings, _ := filterRecordedScanResult(findings, baseline)
 	blockingViolationCount := countBlockingViolations(visibleFindings)
+	classifiedDependencyCounts := countClassifiedDependencyViolations(visibleFindings)
+	testOnlyFindings := testOnlyDependencyFindings(visibleFindings)
 	if blockingViolationCount == 0 {
 		if cfg.all {
 			writeBoundaryFindings(stdout, findings)
 			writeBaselineSummaries(stdout, findings)
+		} else {
+			writeBoundaryFindings(stdout, testOnlyFindings)
 		}
+		writeClassifiedDependencyViolationCounts(stdout, classifiedDependencyCounts)
 		fmt.Fprintln(stdout, "[agent-factory:pkg-boundary] package boundary passed (no blocking package-boundary violations)")
 		writeGeneratedCodeExceptionSummary(stdout, policy)
 		return nil
@@ -655,28 +670,25 @@ func runWithPolicy(cfg config, policy boundaryPolicy, stdout io.Writer, stderr i
 	if cfg.all {
 		writeBaselineSummaries(stderr, findings)
 	}
+	writeClassifiedDependencyViolationCounts(stderr, classifiedDependencyCounts)
 	writeGeneratedCodeExceptionSummary(stderr, policy)
 	return fmt.Errorf("[agent-factory:pkg-boundary] found %d package-boundary violation(s)", blockingViolationCount)
 }
 
 func countBlockingViolations(findings scanResult) int {
-	count := len(findings.rootPackageFindings) +
-		len(findings.retiredPackageRootFindings) +
-		len(findings.retiredPackageImportFindings) +
-		len(findings.migrationShimFindings) +
-		len(findings.applicationGraphImportFindings) +
-		len(findings.handwrittenGeneratedFindings) +
-		len(findings.domainTransportFindings) +
-		len(findings.peerServiceImportFindings) +
-		len(findings.stalePeerServiceBaselineEntries) +
+	return countAlwaysBlockingViolations(findings) +
+		countProductionBoundaryViolations(findings) +
+		// Test-service imports are an intentional test-specific policy. They
+		// remain blocking even though their source class is test-only.
 		len(findings.testServiceImportFindings) +
-		len(findings.staleTestServiceBaselineEntries) +
-		len(findings.supportServiceImportFindings) +
-		len(findings.staleSupportServiceBaselineEntries) +
-		len(findings.serviceConstructionFindings) +
-		len(findings.staleServiceConstructionEntries) +
-		len(findings.transportImplementationFindings) +
-		len(findings.externalImplementationFindings) +
+		len(findings.staleTestServiceBaselineEntries)
+}
+
+func countAlwaysBlockingViolations(findings scanResult) int {
+	return len(findings.rootPackageFindings) +
+		len(findings.retiredPackageRootFindings) +
+		len(findings.migrationShimFindings) +
+		len(findings.handwrittenGeneratedFindings) +
 		len(findings.transportBehaviorFindings) +
 		len(findings.staleTransportBehaviorEntries) +
 		len(findings.functionalProcessEdgeFindings) +
@@ -685,10 +697,90 @@ func countBlockingViolations(findings scanResult) int {
 		len(findings.productionDefaultFindings) +
 		len(findings.staleProductionDefaultEntries) +
 		len(findings.initializerBehaviorFindings) +
-		len(findings.staleInitializerBehaviorEntries)
-	count += len(findings.testBehaviorFindings) + len(findings.staleTestBehaviorEntries)
-	count += len(findings.petriPublicSurfaceFindings) + len(findings.stalePetriPublicSurfaceEntries)
-	return count + len(findings.providerEffectOwnershipFindings)
+		len(findings.staleInitializerBehaviorEntries) +
+		len(findings.testBehaviorFindings) +
+		len(findings.staleTestBehaviorEntries) +
+		len(findings.petriPublicSurfaceFindings) +
+		len(findings.stalePetriPublicSurfaceEntries) +
+		len(findings.providerEffectOwnershipFindings)
+}
+
+func countProductionBoundaryViolations(findings scanResult) int {
+	return countProductionBoundaryImports(findings) + countProductionBoundaryBaselines(findings)
+}
+
+func countProductionBoundaryImports(findings scanResult) int {
+	count := 0
+	count += countProductionBoundaryFindings(
+		findings.retiredPackageImportFindings,
+		func(finding retiredPackageImportFinding) boundarySourceClass { return finding.class },
+		func(finding retiredPackageImportFinding) string { return finding.filePath },
+	)
+	count += countProductionBoundaryFindings(
+		findings.applicationGraphImportFindings,
+		func(finding applicationGraphImportFinding) boundarySourceClass { return finding.class },
+		func(finding applicationGraphImportFinding) string { return finding.filePath },
+	)
+	count += countProductionBoundaryFindings(
+		findings.domainTransportFindings,
+		func(finding domainTransportImportFinding) boundarySourceClass { return finding.class },
+		func(finding domainTransportImportFinding) string { return finding.filePath },
+	)
+	count += countProductionBoundaryFindings(
+		findings.peerServiceImportFindings,
+		func(finding peerServiceImportFinding) boundarySourceClass { return finding.class },
+		func(finding peerServiceImportFinding) string { return finding.filePath },
+	)
+	count += countProductionBoundaryFindings(
+		findings.supportServiceImportFindings,
+		func(finding supportServiceImportFinding) boundarySourceClass { return finding.class },
+		func(finding supportServiceImportFinding) string { return finding.filePath },
+	)
+	count += countProductionBoundaryFindings(
+		findings.serviceConstructionFindings,
+		func(finding serviceConstructionFinding) boundarySourceClass { return finding.class },
+		func(finding serviceConstructionFinding) string { return finding.filePath },
+	)
+	count += countProductionBoundaryFindings(
+		findings.transportImplementationFindings,
+		func(finding transportServiceImplementationFinding) boundarySourceClass { return finding.class },
+		func(finding transportServiceImplementationFinding) string { return finding.filePath },
+	)
+	count += countProductionBoundaryFindings(
+		findings.externalImplementationFindings,
+		func(finding transportServiceImplementationFinding) boundarySourceClass { return finding.class },
+		func(finding transportServiceImplementationFinding) string { return finding.filePath },
+	)
+	return count
+}
+
+func countProductionBoundaryBaselines(findings scanResult) int {
+	count := 0
+	count += countProductionBoundaryFindings(
+		findings.stalePeerServiceBaselineEntries,
+		func(entry peerServiceImportBaselineEntry) boundarySourceClass {
+			class, _ := sourceClassFromBaseline(entry.Class, entry.FilePath)
+			return class
+		},
+		func(entry peerServiceImportBaselineEntry) string { return entry.FilePath },
+	)
+	count += countProductionBoundaryFindings(
+		findings.staleSupportServiceBaselineEntries,
+		func(entry supportServiceImportBaselineEntry) boundarySourceClass {
+			class, _ := sourceClassFromBaseline(entry.Class, entry.FilePath)
+			return class
+		},
+		func(entry supportServiceImportBaselineEntry) string { return entry.FilePath },
+	)
+	count += countProductionBoundaryFindings(
+		findings.staleServiceConstructionEntries,
+		func(entry serviceConstructionBaselineEntry) boundarySourceClass {
+			class, _ := sourceClassFromBaseline(entry.Class, entry.FilePath)
+			return class
+		},
+		func(entry serviceConstructionBaselineEntry) string { return entry.FilePath },
+	)
+	return count
 }
 
 func writeBoundaryFindings(writer io.Writer, findings scanResult) {
@@ -857,7 +949,7 @@ func scanRepo(cfg config, policy boundaryPolicy) (scanResult, error) {
 		peerServiceFindings,
 		result.peerServiceImportFindings,
 		func(finding peerServiceImportFinding) string {
-			return peerServiceImportKey(finding.filePath, finding.importPath)
+			return peerServiceImportKey(finding.filePath, finding.importPath, finding.class)
 		},
 	)
 	result.peerServiceBaselineCount = len(peerServiceBaseline.Entries)
@@ -878,7 +970,7 @@ func scanRepo(cfg config, policy boundaryPolicy) (scanResult, error) {
 		testServiceFindings,
 		result.testServiceImportFindings,
 		func(finding testServiceImportFinding) string {
-			return testServiceImportKey(finding.filePath, finding.importPath)
+			return testServiceImportKey(finding.filePath, finding.importPath, finding.class)
 		},
 	)
 	result.testServiceBaselineCount = len(testServiceBaseline.Entries)
@@ -899,7 +991,7 @@ func scanRepo(cfg config, policy boundaryPolicy) (scanResult, error) {
 		supportServiceFindings,
 		result.supportServiceImportFindings,
 		func(finding supportServiceImportFinding) string {
-			return supportServiceImportKey(finding.filePath, finding.importPath)
+			return supportServiceImportKey(finding.filePath, finding.importPath, finding.class)
 		},
 	)
 	result.supportServiceBaselineCount = len(supportServiceBaseline.Entries)
@@ -920,7 +1012,7 @@ func scanRepo(cfg config, policy boundaryPolicy) (scanResult, error) {
 		serviceConstructionFindings,
 		result.serviceConstructionFindings,
 		func(finding serviceConstructionFinding) string {
-			return serviceConstructionKey(finding.filePath, finding.importPath, finding.symbol)
+			return serviceConstructionKey(finding.filePath, finding.importPath, finding.symbol, finding.class)
 		},
 	)
 	result.serviceConstructionBaselineCount = len(serviceConstructionBaseline.Entries)
@@ -1079,7 +1171,7 @@ func scanConvergedServiceSubpackageImports(repoRoot string) ([]transportServiceI
 		if shouldSkipRepositoryWalkDirectory(repoRoot, path, entry) {
 			return filepath.SkipDir
 		}
-		if entry.IsDir() || filepath.Ext(entry.Name()) != ".go" || strings.HasSuffix(entry.Name(), "_test.go") {
+		if entry.IsDir() || filepath.Ext(entry.Name()) != ".go" {
 			return nil
 		}
 		filePath, err := filepath.Rel(repoRoot, path)
@@ -1090,6 +1182,9 @@ func scanConvergedServiceSubpackageImports(repoRoot string) ([]transportServiceI
 		content, err := os.ReadFile(path)
 		if err != nil {
 			return err
+		}
+		if bytesContainGeneratedMarker(content) {
+			return nil
 		}
 		parsedFile, err := parser.ParseFile(token.NewFileSet(), path, content, parser.ImportsOnly)
 		if err != nil {
@@ -1135,6 +1230,7 @@ func scanConvergedServiceSubpackageImports(repoRoot string) ([]transportServiceI
 				findings = append(findings, transportServiceImplementationFinding{
 					importPath: importPath,
 					filePath:   filePath,
+					class:      classifyBoundarySource(filePath),
 				})
 				break
 			}
@@ -1149,6 +1245,7 @@ func scanConvergedServiceSubpackageImports(repoRoot string) ([]transportServiceI
 			findings = append(findings, transportServiceImplementationFinding{
 				importPath: importPath,
 				filePath:   filePath,
+				class:      classifyBoundarySource(filePath),
 			})
 		}
 		return nil
@@ -1195,6 +1292,9 @@ func scanTestServiceSubpackageImports(repoRoot string) ([]testServiceImportFindi
 		if err != nil {
 			return err
 		}
+		if bytesContainGeneratedMarker(content) {
+			return nil
+		}
 		parsedFile, err := parser.ParseFile(token.NewFileSet(), path, content, parser.ImportsOnly)
 		if err != nil {
 			return err
@@ -1226,6 +1326,7 @@ func scanTestServiceSubpackageImports(repoRoot string) ([]testServiceImportFindi
 				owner:      importedOwner,
 				importPath: importPath,
 				filePath:   filePath,
+				class:      classifyBoundarySource(filePath),
 			}
 			findingsByKey[testServiceImportKey(filePath, importPath)] = finding
 		}
@@ -1281,7 +1382,14 @@ func partitionTestServiceImportFindings(
 		if err := validateTestServiceImportBaselineEntry(entry); err != nil {
 			return nil, nil, err
 		}
-		key := testServiceImportKey(entry.FilePath, entry.ImportPath)
+		class, err := sourceClassFromBaseline(entry.Class, entry.FilePath)
+		if err != nil || class != testOnlySourceClass {
+			if err != nil {
+				return nil, nil, err
+			}
+			return nil, nil, fmt.Errorf("test service import baseline entry %s -> %s class = %q, want %q", entry.FilePath, entry.ImportPath, class, testOnlySourceClass)
+		}
+		key := testServiceImportKey(entry.FilePath, entry.ImportPath, class)
 		if _, duplicate := baselineByKey[key]; duplicate {
 			return nil, nil, fmt.Errorf(
 				"duplicate test service import baseline entry: %s -> %s",
@@ -1295,7 +1403,7 @@ func partitionTestServiceImportFindings(
 	var blocking []testServiceImportFinding
 	seen := make(map[string]struct{}, len(findings))
 	for _, finding := range findings {
-		key := testServiceImportKey(finding.filePath, finding.importPath)
+		key := testServiceImportKey(finding.filePath, finding.importPath, finding.class)
 		seen[key] = struct{}{}
 		entry, recorded := baselineByKey[key]
 		if !recorded {
@@ -1340,6 +1448,13 @@ func validateTestServiceImportBaselineEntry(entry testServiceImportBaselineEntry
 		if strings.ContainsAny(value, "*?[]") {
 			return fmt.Errorf("test service import baseline entry must be exact and cannot contain wildcards: %#v", entry)
 		}
+	}
+	class, err := sourceClassFromBaseline(entry.Class, entry.FilePath)
+	if err != nil || class != testOnlySourceClass {
+		if err != nil {
+			return err
+		}
+		return fmt.Errorf("test service import baseline entry %s -> %s class = %q, want %q", entry.FilePath, entry.ImportPath, class, testOnlySourceClass)
 	}
 	if entry.Stage != testServiceImportBaselineStage {
 		return fmt.Errorf(
@@ -1398,6 +1513,7 @@ func createTestServiceImportBaseline(cfg config) error {
 			ImportPath:   finding.importPath,
 			FilePath:     finding.filePath,
 			TargetRoot:   "pkg/services/" + finding.owner,
+			Class:        string(finding.class),
 			Stage:        testServiceImportBaselineStage,
 			DeletionGate: testServiceImportDeletionGate,
 		})
@@ -1427,8 +1543,12 @@ func createTestServiceImportBaseline(cfg config) error {
 	return nil
 }
 
-func testServiceImportKey(filePath, importPath string) string {
-	return filepath.ToSlash(filePath) + "\x00" + importPath
+func testServiceImportKey(filePath, importPath string, classes ...boundarySourceClass) string {
+	class := classifyBoundarySource(filePath)
+	if len(classes) > 0 {
+		class = effectiveBoundarySourceClass(classes[0], filePath)
+	}
+	return filepath.ToSlash(filePath) + "\x00" + string(class) + "\x00" + importPath
 }
 
 var repositoryBoundaryIgnoredDirectoryNames = map[string]struct{}{
@@ -1514,6 +1634,9 @@ func scanProductServiceConstruction(repoRoot string) ([]serviceConstructionFindi
 		if err != nil {
 			return err
 		}
+		if bytesContainGeneratedMarker(content) {
+			return nil
+		}
 		fset := token.NewFileSet()
 		parsedFile, err := parser.ParseFile(fset, path, content, 0)
 		if err != nil {
@@ -1565,7 +1688,8 @@ func scanProductServiceConstruction(repoRoot string) ([]serviceConstructionFindi
 			importsByName[name] = root
 		}
 		record := func(root importedServiceRoot, symbol string, position token.Pos) {
-			key := serviceConstructionKey(filePath, root.importPath, symbol)
+			class := classifyBoundarySource(filePath)
+			key := serviceConstructionKey(filePath, root.importPath, symbol, class)
 			finding := findingsByKey[key]
 			if finding.count == 0 {
 				finding = serviceConstructionFinding{
@@ -1574,6 +1698,7 @@ func scanProductServiceConstruction(repoRoot string) ([]serviceConstructionFindi
 					symbol:     symbol,
 					filePath:   filePath,
 					line:       fset.Position(position).Line,
+					class:      class,
 				}
 			}
 			finding.count++
@@ -1717,7 +1842,11 @@ func partitionServiceConstructionFindings(
 		if err := validateServiceConstructionBaselineEntry(entry); err != nil {
 			return nil, nil, err
 		}
-		key := serviceConstructionKey(entry.FilePath, entry.ImportPath, entry.Symbol)
+		class, err := sourceClassFromBaseline(entry.Class, entry.FilePath)
+		if err != nil {
+			return nil, nil, err
+		}
+		key := serviceConstructionKey(entry.FilePath, entry.ImportPath, entry.Symbol, class)
 		if _, duplicate := baselineByKey[key]; duplicate {
 			return nil, nil, fmt.Errorf("duplicate service construction baseline entry: %s -> %s.%s", entry.FilePath, entry.ImportPath, entry.Symbol)
 		}
@@ -1726,7 +1855,7 @@ func partitionServiceConstructionFindings(
 	var blocking []serviceConstructionFinding
 	seen := make(map[string]struct{}, len(findings))
 	for _, finding := range findings {
-		key := serviceConstructionKey(finding.filePath, finding.importPath, finding.symbol)
+		key := serviceConstructionKey(finding.filePath, finding.importPath, finding.symbol, finding.class)
 		seen[key] = struct{}{}
 		entry, recorded := baselineByKey[key]
 		if !recorded || entry.Count != finding.count {
@@ -1770,6 +1899,9 @@ func validateServiceConstructionBaselineEntry(entry serviceConstructionBaselineE
 			return fmt.Errorf("service construction baseline entry must be exact and cannot contain wildcards: %#v", entry)
 		}
 	}
+	if _, err := sourceClassFromBaseline(entry.Class, entry.FilePath); err != nil {
+		return err
+	}
 	wantOwner, servicePackage := serviceRootOwner(entry.ImportPath)
 	if !servicePackage {
 		repositoryPath := strings.TrimPrefix(entry.ImportPath, repositoryImportPrefix)
@@ -1790,8 +1922,12 @@ func validateServiceConstructionBaselineEntry(entry serviceConstructionBaselineE
 	return nil
 }
 
-func serviceConstructionKey(filePath, importPath, symbol string) string {
-	return filepath.ToSlash(filePath) + "\x00" + importPath + "\x00" + symbol
+func serviceConstructionKey(filePath, importPath, symbol string, classes ...boundarySourceClass) string {
+	class := classifyBoundarySource(filePath)
+	if len(classes) > 0 {
+		class = effectiveBoundarySourceClass(classes[0], filePath)
+	}
+	return filepath.ToSlash(filePath) + "\x00" + string(class) + "\x00" + importPath + "\x00" + symbol
 }
 
 func serviceRootOwner(importPath string) (string, bool) {
@@ -1896,14 +2032,17 @@ func scanTransportServiceImplementationImports(repoRoot string) ([]transportServ
 		if shouldSkipRepositoryWalkDirectory(repoRoot, path, entry) {
 			return filepath.SkipDir
 		}
-		if entry.IsDir() || filepath.Ext(entry.Name()) != ".go" || strings.HasSuffix(entry.Name(), "_test.go") {
+		if entry.IsDir() || filepath.Ext(entry.Name()) != ".go" {
 			return nil
 		}
 		content, err := os.ReadFile(path)
 		if err != nil {
 			return err
 		}
-		parsedFile, err := parser.ParseFile(token.NewFileSet(), path, content, parser.ImportsOnly)
+		if bytesContainGeneratedMarker(content) {
+			return nil
+		}
+		parsedFile, err := parser.ParseFile(token.NewFileSet(), path, content, parser.ImportsOnly|parser.ParseComments)
 		if err != nil {
 			return err
 		}
@@ -1923,6 +2062,7 @@ func scanTransportServiceImplementationImports(repoRoot string) ([]transportServ
 					findings = append(findings, transportServiceImplementationFinding{
 						importPath: importPath,
 						filePath:   filePath,
+						class:      classifyBoundarySource(filePath),
 					})
 					break
 				}
@@ -1955,7 +2095,7 @@ func scanPeerServiceImports(repoRoot string) ([]peerServiceImportFinding, error)
 		if shouldSkipRepositoryWalkDirectory(repoRoot, path, entry) {
 			return filepath.SkipDir
 		}
-		if entry.IsDir() || filepath.Ext(entry.Name()) != ".go" || strings.HasSuffix(entry.Name(), "_test.go") {
+		if entry.IsDir() || filepath.Ext(entry.Name()) != ".go" {
 			return nil
 		}
 		filePath, err := filepath.Rel(repoRoot, path)
@@ -1972,7 +2112,10 @@ func scanPeerServiceImports(repoRoot string) ([]peerServiceImportFinding, error)
 		if err != nil {
 			return err
 		}
-		parsedFile, err := parser.ParseFile(token.NewFileSet(), path, content, parser.ImportsOnly)
+		if bytesContainGeneratedMarker(content) {
+			return nil
+		}
+		parsedFile, err := parser.ParseFile(token.NewFileSet(), path, content, parser.ImportsOnly|parser.ParseComments)
 		if err != nil {
 			return err
 		}
@@ -1995,6 +2138,7 @@ func scanPeerServiceImports(repoRoot string) ([]peerServiceImportFinding, error)
 			}
 			findings = append(findings, peerServiceImportFinding{
 				owner: owner, peer: serviceParts[0], importPath: importPath, filePath: filePath,
+				class: classifyBoundarySource(filePath),
 			})
 		}
 		return nil
@@ -2060,7 +2204,11 @@ func partitionPeerServiceImportFindings(
 		if err := validatePeerServiceImportBaselineEntry(entry); err != nil {
 			return nil, nil, fmt.Errorf("peer service import baseline entry %d: %w", index, err)
 		}
-		key := peerServiceImportKey(entry.FilePath, entry.ImportPath)
+		class, err := sourceClassFromBaseline(entry.Class, entry.FilePath)
+		if err != nil {
+			return nil, nil, fmt.Errorf("peer service import baseline entry %d: %w", index, err)
+		}
+		key := peerServiceImportKey(entry.FilePath, entry.ImportPath, class)
 		if _, exists := baselineByKey[key]; exists {
 			return nil, nil, fmt.Errorf(
 				"peer service import baseline entry %d: duplicate file/import edge %s -> %s",
@@ -2075,7 +2223,7 @@ func partitionPeerServiceImportFindings(
 	remaining := make(map[string]struct{}, len(findings))
 	var violations []peerServiceImportFinding
 	for _, finding := range findings {
-		key := peerServiceImportKey(finding.filePath, finding.importPath)
+		key := peerServiceImportKey(finding.filePath, finding.importPath, finding.class)
 		entry, approved := baselineByKey[key]
 		if !approved {
 			violations = append(violations, finding)
@@ -2123,6 +2271,9 @@ func validatePeerServiceImportBaselineEntry(entry peerServiceImportBaselineEntry
 			return fmt.Errorf("%s must be exact and cannot contain wildcards", field)
 		}
 	}
+	if _, err := sourceClassFromBaseline(entry.Class, entry.FilePath); err != nil {
+		return err
+	}
 	if entry.Stage != peerServiceImportBaselineStage || entry.DeletionGate != peerServiceImportDeletionGate {
 		return fmt.Errorf("stage or deletionGate is not the recognized peer-service migration contract")
 	}
@@ -2144,8 +2295,12 @@ func validatePeerServiceImportBaselineEntry(entry peerServiceImportBaselineEntry
 	return nil
 }
 
-func peerServiceImportKey(filePath, importPath string) string {
-	return filepath.ToSlash(filePath) + "\x00" + importPath
+func peerServiceImportKey(filePath, importPath string, classes ...boundarySourceClass) string {
+	class := classifyBoundarySource(filePath)
+	if len(classes) > 0 {
+		class = effectiveBoundarySourceClass(classes[0], filePath)
+	}
+	return filepath.ToSlash(filePath) + "\x00" + string(class) + "\x00" + importPath
 }
 
 func scanDomainTransportImports(repoRoot string, exceptions []string) ([]domainTransportImportFinding, error) {
@@ -2166,7 +2321,7 @@ func scanDomainTransportImports(repoRoot string, exceptions []string) ([]domainT
 			if shouldSkipRepositoryWalkDirectory(repoRoot, path, entry) {
 				return filepath.SkipDir
 			}
-			if entry.IsDir() || filepath.Ext(entry.Name()) != ".go" || strings.HasSuffix(entry.Name(), "_test.go") {
+			if entry.IsDir() || filepath.Ext(entry.Name()) != ".go" {
 				return nil
 			}
 			filePath, err := filepath.Rel(repoRoot, path)
@@ -2184,6 +2339,9 @@ func scanDomainTransportImports(repoRoot string, exceptions []string) ([]domainT
 			if err != nil {
 				return err
 			}
+			if bytesContainGeneratedMarker(content) {
+				return nil
+			}
 			parsedFile, err := parser.ParseFile(token.NewFileSet(), path, content, parser.ImportsOnly)
 			if err != nil {
 				return fmt.Errorf("parse Factory package imports %s: %w", filePath, err)
@@ -2196,6 +2354,7 @@ func scanDomainTransportImports(repoRoot string, exceptions []string) ([]domainT
 						packagePath: packagePath,
 						importPath:  importPath,
 						filePath:    filePath,
+						class:       classifyBoundarySource(filePath),
 					})
 				}
 			}
@@ -2303,6 +2462,9 @@ func scanRetiredPackageImports(repoRoot string, scanRoot string, packageRoot str
 		if err != nil {
 			return fmt.Errorf("read package import file %s: %w", filepath.ToSlash(path), err)
 		}
+		if bytesContainGeneratedMarker(content) {
+			return nil
+		}
 		parsedFile, err := parser.ParseFile(token.NewFileSet(), path, content, parser.ImportsOnly)
 		if err != nil {
 			return fmt.Errorf("parse package imports %s: %w", filepath.ToSlash(path), err)
@@ -2326,6 +2488,7 @@ func scanRetiredPackageImports(repoRoot string, scanRoot string, packageRoot str
 					retiredPackageRoot: retiredRoot,
 					importPath:         importPath,
 					filePath:           filepath.ToSlash(filePath),
+					class:              classifyBoundarySource(filepath.ToSlash(filePath)),
 				})
 			}
 		}
@@ -2365,6 +2528,9 @@ func scanApplicationGraphImports(repoRoot string, scanRoot string, packageRoot s
 		if err != nil {
 			return fmt.Errorf("read package import file %s: %w", filepath.ToSlash(path), err)
 		}
+		if bytesContainGeneratedMarker(content) {
+			return nil
+		}
 		if !strings.Contains(string(content), applicationGraphImportPath) {
 			return nil
 		}
@@ -2393,6 +2559,7 @@ func scanApplicationGraphImports(repoRoot string, scanRoot string, packageRoot s
 		findings = append(findings, applicationGraphImportFinding{
 			packagePath: packagePath,
 			filePath:    filepath.ToSlash(filePath),
+			class:       classifyBoundarySource(filepath.ToSlash(filePath)),
 		})
 		return nil
 	})
@@ -2584,7 +2751,7 @@ func writeRetiredPackageRootFindings(writer io.Writer, findings []retiredPackage
 
 func writeRetiredPackageImportFindings(writer io.Writer, findings []retiredPackageImportFinding) {
 	for _, finding := range findings {
-		fmt.Fprintf(writer, "[agent-factory:pkg-boundary] prohibited retired package import: %s (%s)\n", finding.importPath, finding.filePath)
+		fmt.Fprintf(writer, "[agent-factory:pkg-boundary] prohibited retired package import: %s (%s) [class=%s]\n", finding.importPath, finding.filePath, effectiveBoundarySourceClass(finding.class, finding.filePath))
 		fmt.Fprintf(writer, "  canonical owner: %s\n", finding.canonicalOwner)
 		fmt.Fprintf(writer, "  remediation: import %s directly; do not recreate or depend on %s.\n", finding.canonicalOwner, finding.packagePath)
 	}
@@ -2617,7 +2784,7 @@ func writeMigrationShimBlockingFindings(writer io.Writer, findings []migrationSh
 
 func writeApplicationGraphImportFindings(writer io.Writer, findings []applicationGraphImportFinding) {
 	for _, finding := range findings {
-		fmt.Fprintf(writer, "[agent-factory:pkg-boundary] prohibited application composition import: %s (%s)\n", finding.packagePath, finding.filePath)
+		fmt.Fprintf(writer, "[agent-factory:pkg-boundary] prohibited application composition import: %s (%s) [class=%s]\n", finding.packagePath, finding.filePath, effectiveBoundarySourceClass(finding.class, finding.filePath))
 		fmt.Fprintln(writer, "  reason: pkg/wire is the outward application composition root and must not be imported by domain or transport packages.")
 		fmt.Fprintln(writer, "  remediation: depend on a narrow domain-owned contract and inject the collaborator through pkg/root or pkg/initializer.")
 	}
@@ -2625,7 +2792,7 @@ func writeApplicationGraphImportFindings(writer io.Writer, findings []applicatio
 
 func writeDomainTransportImportFindings(writer io.Writer, findings []domainTransportImportFinding) {
 	for _, finding := range findings {
-		fmt.Fprintf(writer, "[agent-factory:pkg-boundary] prohibited domain transport import: %s (%s)\n", finding.importPath, finding.filePath)
+		fmt.Fprintf(writer, "[agent-factory:pkg-boundary] prohibited domain transport import: %s (%s) [class=%s]\n", finding.importPath, finding.filePath, effectiveBoundarySourceClass(finding.class, finding.filePath))
 		fmt.Fprintf(writer, "  domain owner: %s\n", finding.packagePath)
 		fmt.Fprintln(writer, "  reason: protected domain packages must not consume transport contracts or adapters.")
 		fmt.Fprintln(writer, "  remediation: define the input at its domain owner and map generated values under pkg/transports/mapping.")
@@ -2634,7 +2801,7 @@ func writeDomainTransportImportFindings(writer io.Writer, findings []domainTrans
 
 func writePeerServiceImportFindings(writer io.Writer, findings []peerServiceImportFinding) {
 	for _, finding := range findings {
-		fmt.Fprintf(writer, "[agent-factory:pkg-boundary] prohibited peer service subpackage import: %s (%s)\n", finding.importPath, finding.filePath)
+		fmt.Fprintf(writer, "[agent-factory:pkg-boundary] prohibited peer service subpackage import: %s (%s) [class=%s]\n", finding.importPath, finding.filePath, effectiveBoundarySourceClass(finding.class, finding.filePath))
 		fmt.Fprintf(writer, "  service owner: pkg/services/%s; peer owner: pkg/services/%s\n", finding.owner, finding.peer)
 		fmt.Fprintf(writer, "  remediation: publish the required value or capability at pkg/services/%s and import only that peer root.\n", finding.peer)
 	}
@@ -2644,9 +2811,13 @@ func writeStalePeerServiceBaselineEntries(writer io.Writer, entries []peerServic
 	for _, entry := range entries {
 		fmt.Fprintf(
 			writer,
-			"[agent-factory:pkg-boundary] stale peer service import baseline entry: %s -> %s\n",
+			"[agent-factory:pkg-boundary] stale peer service import baseline entry: %s -> %s [class=%s]\n",
 			entry.FilePath,
 			entry.ImportPath,
+			func() boundarySourceClass {
+				class, _ := sourceClassFromBaseline(entry.Class, entry.FilePath)
+				return class
+			}(),
 		)
 		fmt.Fprintln(writer, "  reason: the recorded bypass edge no longer exists.")
 		fmt.Fprintln(writer, "  remediation: remove this entry from service-cross-import-baseline.json in the same change.")
@@ -2669,9 +2840,10 @@ func writeTestServiceImportFindings(writer io.Writer, findings []testServiceImpo
 	for _, finding := range findings {
 		fmt.Fprintf(
 			writer,
-			"[agent-factory:pkg-boundary] prohibited test import of service internals: %s (%s)\n",
+			"[agent-factory:pkg-boundary] prohibited test import of service internals: %s (%s) [class=%s]\n",
 			finding.importPath,
 			finding.filePath,
+			effectiveBoundarySourceClass(finding.class, finding.filePath),
 		)
 		fmt.Fprintf(writer, "  service owner: pkg/services/%s\n", finding.owner)
 		fmt.Fprintln(writer, "  remediation: use the service root contract, move the invariant to the owning service, or exercise cross-service behavior through root.BuildProcess.")
@@ -2682,9 +2854,13 @@ func writeStaleTestServiceBaselineEntries(writer io.Writer, entries []testServic
 	for _, entry := range entries {
 		fmt.Fprintf(
 			writer,
-			"[agent-factory:pkg-boundary] stale test service import baseline entry: %s -> %s\n",
+			"[agent-factory:pkg-boundary] stale test service import baseline entry: %s -> %s [class=%s]\n",
 			entry.FilePath,
 			entry.ImportPath,
+			func() boundarySourceClass {
+				class, _ := sourceClassFromBaseline(entry.Class, entry.FilePath)
+				return class
+			}(),
 		)
 		fmt.Fprintln(writer, "  reason: the concrete cross-owner test import no longer exists.")
 		fmt.Fprintf(writer, "  remediation: remove this entry from %s in the same change.\n", testServiceImportBaselinePath)
@@ -2707,12 +2883,13 @@ func writeServiceConstructionFindings(writer io.Writer, findings []serviceConstr
 	for _, finding := range findings {
 		fmt.Fprintf(
 			writer,
-			"[agent-factory:pkg-boundary] prohibited product-service construction: %s.%s (%s:%d, %d selection(s))\n",
+			"[agent-factory:pkg-boundary] prohibited product-service construction: %s.%s (%s:%d, %d selection(s), class=%s)\n",
 			finding.importPath,
 			finding.symbol,
 			finding.filePath,
 			finding.line,
 			finding.count,
+			effectiveBoundarySourceClass(finding.class, finding.filePath),
 		)
 		fmt.Fprintf(writer, "  service owner: pkg/services/%s\n", finding.owner)
 		fmt.Fprintln(writer, "  remediation: construct the collaborator in pkg/wire and inject its service-root role; owner-local invariants may construct it inside the owning service.")
@@ -2723,10 +2900,14 @@ func writeStaleServiceConstructionBaselineEntries(writer io.Writer, entries []se
 	for _, entry := range entries {
 		fmt.Fprintf(
 			writer,
-			"[agent-factory:pkg-boundary] stale service construction baseline entry: %s -> %s.%s\n",
+			"[agent-factory:pkg-boundary] stale service construction baseline entry: %s -> %s.%s [class=%s]\n",
 			entry.FilePath,
 			entry.ImportPath,
 			entry.Symbol,
+			func() boundarySourceClass {
+				class, _ := sourceClassFromBaseline(entry.Class, entry.FilePath)
+				return class
+			}(),
 		)
 		fmt.Fprintln(writer, "  reason: the recorded construction selection no longer exists.")
 		fmt.Fprintf(writer, "  remediation: remove this entry from %s in the same change.\n", serviceConstructionBaselinePath)
@@ -2747,7 +2928,7 @@ func writeServiceConstructionBaselineSummary(writer io.Writer, count int) {
 
 func writeTransportServiceImplementationFindings(writer io.Writer, findings []transportServiceImplementationFinding) {
 	for _, finding := range findings {
-		fmt.Fprintf(writer, "[agent-factory:pkg-boundary] prohibited transport service implementation import: %s (%s)\n", finding.importPath, finding.filePath)
+		fmt.Fprintf(writer, "[agent-factory:pkg-boundary] prohibited transport service implementation import: %s (%s) [class=%s]\n", finding.importPath, finding.filePath, effectiveBoundarySourceClass(finding.class, finding.filePath))
 		fmt.Fprintln(writer, "  reason: transports may consume only service root contracts or explicitly public service subservices.")
 		fmt.Fprintln(writer, "  remediation: publish the required capability at its service boundary and keep representation mapping in the transport.")
 	}
@@ -2755,7 +2936,7 @@ func writeTransportServiceImplementationFindings(writer io.Writer, findings []tr
 
 func writeExternalServiceImplementationFindings(writer io.Writer, findings []transportServiceImplementationFinding) {
 	for _, finding := range findings {
-		fmt.Fprintf(writer, "[agent-factory:pkg-boundary] prohibited external service subpackage import: %s (%s)\n", finding.importPath, finding.filePath)
+		fmt.Fprintf(writer, "[agent-factory:pkg-boundary] prohibited external service subpackage import: %s (%s) [class=%s]\n", finding.importPath, finding.filePath, effectiveBoundarySourceClass(finding.class, finding.filePath))
 		fmt.Fprintln(writer, "  reason: service subpackages are owner-internal for ordinary consumers; pkg/wire is the unrestricted composition-root exception.")
 		fmt.Fprintln(writer, "  remediation: import the exact pkg/services/<service-name> root and use its published contract.")
 	}

@@ -219,18 +219,21 @@ func TestRunRejectsUnrecordedCrossOwnerTestServiceInternal(t *testing.T) {
 		"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution/runtimepersist",
 	)
 
+	stdout := &bytes.Buffer{}
 	stderr := &bytes.Buffer{}
-	err := run(config{root: repoRoot, packageRoot: defaultScanRoot}, &bytes.Buffer{}, stderr)
+	err := run(config{root: repoRoot, packageRoot: defaultScanRoot}, stdout, stderr)
 	if err == nil {
-		t.Fatal("run() error = nil, want cross-owner test service import rejected")
+		t.Fatal("run() error = nil, want unrecorded test-only service import to remain blocking")
 	}
+	output := stdout.String() + stderr.String()
 	for _, want := range []string{
 		"prohibited test import of service internals",
 		"pkg/services/factory_sessions/internal/execution/runtimepersist",
-		"use the service root contract",
+		"[class=test-only]",
+		"dependency violation counts: production=0 test-only=2",
 	} {
-		if !strings.Contains(stderr.String(), want) {
-			t.Fatalf("run() stderr = %q, want %q", stderr.String(), want)
+		if !strings.Contains(output, want) {
+			t.Fatalf("run() output = %q, want %q", output, want)
 		}
 	}
 }
@@ -295,7 +298,7 @@ func TestRunAllowsRecordedTestServiceInternalAndRejectsStaleEntry(t *testing.T) 
 		stderr := &bytes.Buffer{}
 		err := run(config{root: repoRoot, packageRoot: defaultScanRoot}, &bytes.Buffer{}, stderr)
 		if err == nil || !strings.Contains(stderr.String(), "stale test service import baseline entry") {
-			t.Fatalf("run() = %v stderr=%q, want stale test baseline failure", err, stderr.String())
+			t.Fatalf("run() = %v stderr=%q, want blocking stale test baseline", err, stderr.String())
 		}
 	})
 }
@@ -341,10 +344,10 @@ func TestRunRejectsRetiredExecutionTestHarnessPackageAndImport(t *testing.T) {
 		repoRoot := t.TempDir()
 		writeGoImportFile(t, repoRoot, "pkg/wire/session_test.go", "wire", importPath)
 
-		stderr := &bytes.Buffer{}
-		err := run(config{root: repoRoot, packageRoot: defaultScanRoot}, &bytes.Buffer{}, stderr)
-		if err == nil || !strings.Contains(stderr.String(), "prohibited retired package import: "+importPath) {
-			t.Fatalf("run() = %v stderr=%q, want retired package import rejected", err, stderr.String())
+		stdout := &bytes.Buffer{}
+		err := run(config{root: repoRoot, packageRoot: defaultScanRoot}, stdout, &bytes.Buffer{})
+		if err != nil || !strings.Contains(stdout.String(), "prohibited retired package import: "+importPath) || !strings.Contains(stdout.String(), "[class=test-only]") {
+			t.Fatalf("run() = %v stdout=%q, want visible non-blocking test-only retired import", err, stdout.String())
 		}
 	})
 }
