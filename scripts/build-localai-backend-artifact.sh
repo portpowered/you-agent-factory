@@ -245,20 +245,23 @@ stage_darwin_llama_package() {
 
 stage_darwin_go_package() {
 	local package_root="${backend_path}/package"
-	local library
+	local library library_count=0
 	mkdir -p "${package_root}/lib"
 	cp -f "${backend_path}/${binary}" "${package_root}/${binary}"
 	cp -f "${backend_path}/run.sh" "${package_root}/run.sh"
-	shopt -s nullglob
-	local libraries=("${backend_path}"/libgo*.dylib)
-	shopt -u nullglob
-	if (( ${#libraries[@]} == 0 )); then
+	# The pinned whisper checkout names its Darwin output with a .dylib suffix,
+	# while other pinned Go backends may retain the CMake .so suffix. Stage both
+	# Mach-O names so the package contains the library selected by run.sh.
+	for library in "${backend_path}"/libgo*.dylib "${backend_path}"/libgo*.so; do
+		if [[ -s "$library" ]]; then
+			cp -f "$library" "${package_root}/"
+			library_count=$((library_count + 1))
+		fi
+	done
+	if (( library_count == 0 )); then
 		echo "Darwin ${BACKEND_ID} build did not produce a Go backend dylib" >&2
 		exit 1
 	fi
-	for library in "${libraries[@]}"; do
-		cp -f "$library" "${package_root}/"
-	done
 }
 
 stage_windows_runtime() {
@@ -358,7 +361,7 @@ if [[ "$TARGET_ID" == "windows-amd64" ]]; then
 			# The upstream package target is Unix-only. Build its gRPC target with
 			# the static Windows toolchain and stage it under the canonical
 			# llama-cpp-cpu-all entrypoint used by the package contract.
-			"$make_command" -C "$backend_path" BUILD_TYPE=cpu BUILD_GRPC_FOR_BACKEND_LLAMA=1 CMAKE_ARGS="$cmake_args_text" grpc-server
+			CMAKE_ARGS="$cmake_args_text" "$make_command" -C "$backend_path" BUILD_TYPE=cpu BUILD_GRPC_FOR_BACKEND_LLAMA=1 grpc-server
 			mkdir -p "${backend_path}/package"
 			built_binary="$(find "$backend_path" -maxdepth 3 -type f \( -name 'grpc-server.exe' -o -name 'grpc-server' \) -size +0c -print -quit)"
 			[[ -n "$built_binary" ]] || { echo "Windows llama gRPC executable was not produced" >&2; exit 1; }
@@ -387,7 +390,7 @@ if [[ "$TARGET_ID" == "windows-amd64" ]]; then
 	else
 	case "$BACKEND_ID" in
 	localai-llamacpp)
-		"$make_command" -C "$backend_path" "${os_make_args[@]}" BUILD_TYPE="$BUILD_TYPE" BUILD_GRPC_FOR_BACKEND_LLAMA=1 CMAKE_ARGS="$cmake_args_text" llama-cpp-cpu-all
+		CMAKE_ARGS="$cmake_args_text" "$make_command" -C "$backend_path" "${os_make_args[@]}" BUILD_TYPE="$BUILD_TYPE" BUILD_GRPC_FOR_BACKEND_LLAMA=1 llama-cpp-cpu-all
 			if [[ "$TARGET_ID" == "darwin-arm64" ]]; then
 				stage_darwin_llama_package
 			else

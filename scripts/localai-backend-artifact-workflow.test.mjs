@@ -284,8 +284,16 @@ test("the pinned build repairs LocalAI path and Darwin shell incompatibilities",
 	assert.match(buildScript, /ensure_localai_grpc_compat_path/);
 	assert.match(buildScript, /ln -s "\$grpc_path" "\$compatibility_path"/);
 	assert.match(buildScript, /stage_darwin_go_package/);
+	assert.match(buildScript, /for library in "\$\{backend_path\}"\/libgo\*\.dylib "\$\{backend_path\}"\/libgo\*\.so/);
 	assert.match(buildScript, /BUILD_TYPE="\$BUILD_TYPE" JOBS=2 "\$binary"/);
 	assert.match(buildScript, /localai-whisper\|localai-vibevoice\)\r?\n\s+if \[\[ "\$TARGET_ID" == "darwin-arm64" \]\]/);
+});
+
+test("the pinned llama build preserves recursive protobuf CMake arguments", async () => {
+	const buildScript = await readFile("scripts/build-localai-backend-artifact.sh", "utf8");
+	assert.match(buildScript, /CMAKE_ARGS="\$cmake_args_text" "\$make_command" -C "\$backend_path" BUILD_TYPE=cpu BUILD_GRPC_FOR_BACKEND_LLAMA=1 grpc-server/);
+	assert.match(buildScript, /CMAKE_ARGS="\$cmake_args_text" "\$make_command" -C "\$backend_path" "\$\{os_make_args\[@\]\}" BUILD_TYPE="\$BUILD_TYPE" BUILD_GRPC_FOR_BACKEND_LLAMA=1 llama-cpp-cpu-all/);
+	assert.doesNotMatch(buildScript, /BUILD_GRPC_FOR_BACKEND_LLAMA=1 CMAKE_ARGS="\$cmake_args_text"/);
 });
 
 test("manifest verification rejects bytes tampered after manifest creation", async (t) => {
