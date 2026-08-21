@@ -83,6 +83,38 @@ func TestRunnerInferencer_InferStreamEmitsDeltas(t *testing.T) {
 	}
 }
 
+// TestRunnerInferencer_InferStreamCarriesTypedError pins the harness-seam
+// contract: a failed inference must stream an ErrorValue that carries the
+// error OBJECT, not just its text, so consumers that honor ErrorValue.Err can
+// recover the typed provider classification.
+func TestRunnerInferencer_InferStreamCarriesTypedError(t *testing.T) {
+	t.Parallel()
+
+	failure := workerexecution.NewProviderError(
+		workerexecution.WorkFailureTypePermanentBadRequest,
+		"invalid request",
+		nil,
+	)
+	inferencer := newRunnerInferencer(&sequenceRunner{errors: []error{failure}}, workerexecution.ProviderInferenceRequest{})
+	ch, err := inferencer.InferStream(context.Background(), messages.InferenceRequest{})
+	if err != nil {
+		t.Fatalf("InferStream: %v", err)
+	}
+	var streamed *messages.ErrorValue
+	for msg := range ch {
+		if msg.Type == messages.StreamTypeError {
+			streamed, _ = msg.Value.(*messages.ErrorValue)
+		}
+	}
+	if streamed == nil || streamed.Err == nil {
+		t.Fatalf("stream error value = %#v, want the error object preserved", streamed)
+	}
+	var providerErr *workerexecution.ProviderError
+	if !errors.As(streamed.Err, &providerErr) || providerErr.Type != workerexecution.WorkFailureTypePermanentBadRequest {
+		t.Fatalf("stream error = %v, want the typed provider error", streamed.Err)
+	}
+}
+
 func TestRunnerInferencer_RetriesTransientProviderFailure(t *testing.T) {
 	t.Parallel()
 

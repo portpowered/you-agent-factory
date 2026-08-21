@@ -412,6 +412,85 @@ func TestExecuteDetachedPropagatesRunnerFailure(t *testing.T) {
 	}
 }
 
+// TestExecuteDetachedPreservesTypedProviderErrorAcrossHarnessSeam pins the
+// second root-cause fix from the rsm-4 review-lane kill: the go-agent-loop
+// engine rebuilds a failing inference turn as errors.New(message), which
+// destroyed the typed *ProviderError -- worker-session ledgers recorded
+// `type: unknown, family: terminal` for a retryable provider failure. The
+// typed error the runner produced must survive ExecuteDetached, through the
+// REAL library harness, after the inferencer's bounded retries exhaust.
+func TestExecuteDetachedPreservesTypedProviderErrorAcrossHarnessSeam(t *testing.T) {
+	t.Parallel()
+
+	providerFailure := workerexecution.NewProviderError(
+		workerexecution.WorkFailureTypeInternalServerError,
+		`Codex rollout inspection reached record limit for provider session "01a02180"`,
+		nil,
+	)
+	runner := &detachedRunnerStub{err: providerFailure}
+
+	result, err := ExecuteDetached(
+		context.Background(),
+		NewLibraryHarnessAdapter(localToolFileSystem{}),
+		runner,
+		DetachedRequest{Attempt: detachedAttempt()},
+	)
+	if err == nil {
+		t.Fatal("ExecuteDetached() error = nil, want the exhausted provider failure")
+	}
+	var providerErr *workerexecution.ProviderError
+	if !errors.As(err, &providerErr) || providerErr.Type != workerexecution.WorkFailureTypeInternalServerError {
+		t.Fatalf("ExecuteDetached() error = %v, want the typed provider error preserved across the harness seam", err)
+	}
+	if decision := workerexecution.WorkFailureDecisionFromProviderError(providerErr); !decision.Retryable {
+		t.Fatalf("failure decision = %#v, want the retryable classification to survive", decision)
+	}
+	if metadata := failureMetadataForError(err); metadata == nil ||
+		metadata.Type != workerexecution.WorkFailureTypeInternalServerError ||
+		metadata.Family != workerexecution.WorkFailureFamilyRetryable {
+		t.Fatalf("failureMetadataForError() = %#v, want typed retryable metadata, not unknown/terminal", metadata)
+	}
+	if got := failureClassForError(err); got != FailureClassProvider {
+		t.Fatalf("failureClassForError() = %q, want %q", got, FailureClassProvider)
+	}
+	// The inferencer's own bounded retry budget still applies before the typed
+	// error surfaces: one initial call plus agentRunProviderMaxRetries.
+	if runner.callCount() != 1+agentRunProviderMaxRetries {
+		t.Fatalf("runner executed %d times, want %d bounded attempts", runner.callCount(), 1+agentRunProviderMaxRetries)
+	}
+	if result.Content != "" {
+		t.Fatalf("ExecuteDetached() Content = %q, want the failed runner turn result", result.Content)
+	}
+}
+
+// TestExecuteDetachedKeepsCancellationOverTypedRunnerError pins the precedence
+// guard on the re-attach: a caller-owned cancellation or deadline that ends the
+// loop must stay observable even when the last runner turn also failed.
+func TestExecuteDetachedKeepsCancellationOverTypedRunnerError(t *testing.T) {
+	t.Parallel()
+
+	providerFailure := workerexecution.NewProviderError(
+		workerexecution.WorkFailureTypePermanentBadRequest,
+		"invalid request",
+		nil,
+	)
+	canceled := fmt.Errorf("agent loop interrupted: %w", context.Canceled)
+
+	_, err := ExecuteDetached(
+		context.Background(),
+		&inferencingHarnessStub{err: canceled},
+		&detachedRunnerStub{err: providerFailure},
+		DetachedRequest{Attempt: detachedAttempt()},
+	)
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("ExecuteDetached() error = %v, want the cancellation to keep precedence", err)
+	}
+	var providerErr *workerexecution.ProviderError
+	if errors.As(err, &providerErr) {
+		t.Fatalf("ExecuteDetached() error = %v, want the runner error not to replace a cancellation", err)
+	}
+}
+
 // TestLastRunnerResultSnapshotIsConcurrencySafe exercises the request-scoped
 // observer under concurrent turns; the agent loop may drive parallel tool
 // turns, and a torn snapshot would return a mixed result.

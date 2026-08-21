@@ -380,6 +380,7 @@ func isSafeProviderMetadataKey(key string) bool {
 		"inspection_limit_line",
 		"inspection_limit_observed",
 		"inspection_record_count",
+		"inspection_records_skipped",
 		"inspection_retained_text_truncated",
 		"inspection_source_bytes",
 		"inspection_transcript_truncated",

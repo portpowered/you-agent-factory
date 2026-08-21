@@ -81,10 +81,18 @@ func newContinuationAttempt(effect Effect) execution.ContinuationAttempt {
 		}
 		content, session, finalErr := decoder.final()
 		if finalErr != nil {
-			return providers.ExecuteResult{}, execution.AttemptFailure{
+			failure := execution.AttemptFailure{
 				SessionRef:      decoder.sessionRef(),
 				FinalParseError: finalErr,
 			}
+			// A skipped oversized record only fails the execution when the
+			// stream ends without a recoverable final agent decision. Keep the
+			// pre-existing record-limit classification for that terminal case.
+			if skipped := decoder.skippedRecordFailure(); skipped != nil {
+				failure.Declared = skipped
+				failure.Diagnostics = decoder.diagnostics()
+			}
+			return providers.ExecuteResult{}, failure
 		}
 		metadata := cloneMetadata(effectResult.Metadata)
 		if metadata == nil {
@@ -135,7 +143,8 @@ func collectFailure(
 		failure.FlushError = flushErr
 		failed = true
 	}
-	if decoder.limit != nil || decoder.transcriptFull || decoder.diagnosticsFull || decoder.retainedTextFull {
+	if decoder.limit != nil || decoder.recordSkips > 0 ||
+		decoder.transcriptFull || decoder.diagnosticsFull || decoder.retainedTextFull {
 		failure.Diagnostics = decoder.diagnostics()
 	}
 	return failure, failed

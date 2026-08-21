@@ -70,9 +70,12 @@ func (i *runnerInferencer) InferStream(ctx context.Context, req messages.Inferen
 	go func() {
 		defer close(ch)
 		if err != nil {
+			// Carry the error object, not just its text: typed provider errors
+			// keep their retryable/terminal classification wherever the loop
+			// honors ErrorValue.Err instead of rebuilding errors.New(message).
 			ch <- messages.StreamMessage{
 				Type:  messages.StreamTypeError,
-				Value: messages.NewErrorValue(err.Error()),
+				Value: messages.NewErrorValueWithError(err),
 			}
 			return
 		}
