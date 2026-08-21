@@ -365,6 +365,29 @@ provider identity has no observation or transcript. A completed provider
 session is covered end to end by the repository's functional CLI check,
 including list, show, live and terminal stream frames, and read.
 
+### Turn context usage
+
+When supported provider usage evidence exists, `show --output json` and the
+Worker Session API return `turnUsage` beside `tokenUsage`:
+
+```json
+{
+  "tokenUsage": {"inputTokens": 700, "outputTokens": 12},
+  "turnUsage": {
+    "turnCount": 3,
+    "finalContextTokens": 450,
+    "peakContextTokens": 450
+  }
+}
+```
+
+`turnCount` counts supported provider usage turns. `finalContextTokens` is the
+final turn's derived input. `peakContextTokens` is the largest derived input.
+Provider counters are cumulative. Worker Sessions subtracts each counter from
+the previous value, starting from zero. These fields describe context shape,
+not pricing or cost. The optional `turnUsage` block is omitted when the
+transcript has no supported usage evidence.
+
 ## Reload prompts at dispatch time
 
 Supported worker and workstation prompt files are read when a dispatch starts.

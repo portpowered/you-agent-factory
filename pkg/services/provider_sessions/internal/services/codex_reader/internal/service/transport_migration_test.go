@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"reflect"
 	"runtime"
 	"strings"
 	"testing"
@@ -36,6 +37,22 @@ func TestParseCodexSessionSummary_ExtractsDiagnosticDetails(t *testing.T) {
 	if parsed.Summary.TokenUsage == nil || parsed.Summary.TokenUsage.TotalTokens == nil ||
 		*parsed.Summary.TokenUsage.TotalTokens != 130 {
 		t.Fatalf("token usage = %#v, want total 130", parsed.Summary.TokenUsage)
+	}
+}
+
+func TestParseCodexSessionSummaryRetainsCumulativeInputCountersInOrder(t *testing.T) {
+	session := strings.Join([]string{
+		`{"type":"event_msg","payload":{"type":"token_count","info":{"total_token_usage":{"input_tokens":100,"total_tokens":120}}}}`,
+		`{"type":"event_msg","payload":{"type":"token_count","info":{"total_token_usage":{"input_tokens":250,"total_tokens":280}}}}`,
+		`{"type":"event_msg","payload":{"type":"token_count","info":{"total_token_usage":{"input_tokens":700,"total_tokens":730}}}}`,
+	}, "\n")
+
+	parsed, err := ParseDetails(strings.NewReader(session))
+	if err != nil {
+		t.Fatalf("ParseDetails: %v", err)
+	}
+	if got, want := parsed.Summary.CumulativeInputTokens, []int{100, 250, 700}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("cumulative input tokens = %#v, want %#v", got, want)
 	}
 }
 

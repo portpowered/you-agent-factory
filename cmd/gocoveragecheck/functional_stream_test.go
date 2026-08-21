@@ -53,6 +53,67 @@ func TestFunctionalStreamReportsPackageBeforeChildCompletes(t *testing.T) {
 	}
 }
 
+func TestFunctionalStreamSuppressesKnownLifecycleActionsButNotObserverUpdates(t *testing.T) {
+	var sink bytes.Buffer
+	observed := make([]goTestTimingEvent, 0, 4)
+	reporter := newFunctionalStreamReporterWithObserver(&sink, func(event goTestTimingEvent) {
+		observed = append(observed, event)
+	})
+	writer := reporter.stdoutWriter()
+	packageName := modulePath + "/tests/functional/streaming"
+	for _, action := range []string{"start", "run", "pause", "cont"} {
+		if _, err := writer.Write(marshalFunctionalStreamEvent(goTestTimingEvent{
+			Action:  action,
+			Package: packageName,
+		})); err != nil {
+			t.Fatalf("write %s event: %v", action, err)
+		}
+	}
+
+	if got := sink.String(); got != "" {
+		t.Fatalf("known lifecycle events reached the human stream: %q", got)
+	}
+	if len(observed) != 4 {
+		t.Fatalf("observer saw %d lifecycle events, want 4", len(observed))
+	}
+	for index, action := range []string{"start", "run", "pause", "cont"} {
+		if observed[index].Action != action || observed[index].Package != packageName {
+			t.Fatalf("observer event %d = %+v, want action=%s package=%s", index, observed[index], action, packageName)
+		}
+	}
+}
+
+func TestFunctionalStreamPreservesUnknownActionAndNormalOutputAndResult(t *testing.T) {
+	var sink bytes.Buffer
+	reporter := newFunctionalStreamReporter(&sink)
+	writer := reporter.stdoutWriter()
+	packageName := modulePath + "/tests/functional/streaming"
+	unknown := []byte(`{"Time":"2026-08-20T12:00:00Z","Action":"future","Package":"` + packageName + `","Test":"TestFuture"}` + "\n")
+	if _, err := writer.Write(unknown); err != nil {
+		t.Fatalf("write unknown action: %v", err)
+	}
+	if _, err := writer.Write(marshalFunctionalStreamEvent(goTestTimingEvent{
+		Action:  "output",
+		Package: packageName,
+		Output:  "--- FAIL: TestVisible (0.01s)\n",
+	})); err != nil {
+		t.Fatalf("write output event: %v", err)
+	}
+	if _, err := writer.Write(marshalFunctionalStreamEvent(goTestTimingEvent{
+		Action:  timingOutcomeFail,
+		Package: packageName,
+		Elapsed: 0.01,
+	})); err != nil {
+		t.Fatalf("write package result event: %v", err)
+	}
+
+	want := string(unknown) + "--- FAIL: TestVisible (0.01s)\n" +
+		"Functional package result: package=" + packageName + " outcome=fail elapsed=0.010s\n"
+	if got := sink.String(); got != want {
+		t.Fatalf("functional stream = %q, want unknown action, output, and result %q", got, want)
+	}
+}
+
 func TestFunctionalStreamCompactsSuccessfulPackageCoverageList(t *testing.T) {
 	var sink bytes.Buffer
 	reporter := newFunctionalStreamReporter(&sink)

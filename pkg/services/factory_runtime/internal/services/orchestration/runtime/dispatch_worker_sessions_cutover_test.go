@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil/recordingfixtures"
+	"github.com/portpowered/infinite-you/internal/testutil/runtimefixtures"
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	eventswire "github.com/portpowered/infinite-you/pkg/services/events/wire"
@@ -233,6 +234,108 @@ func TestFactoryImpl_PlanDispatchExecutesThroughWorkerSessionsStart(t *testing.T
 			"AcceptDispatchResult outcome = %q, want DUPLICATE_IDEMPOTENT after Worker Sessions completion",
 			accepted.Outcome,
 		)
+	}
+}
+
+func TestFactoryImpl_PlanDispatchCapturesResolvedWorkerDefinitionFactsInObservation(t *testing.T) {
+	impl, execution, workerSessions := newResolvedWorkerDefinitionRuntime(t)
+	impl.state = interfaces.FactoryStateRunning
+	plan := factory.PlanDispatchRequest{
+		DispatchID: "resolved-model-dispatch", CorrelationID: "resolved-model-correlation",
+		WorkIDs: []string{"resolved-model-work"}, WorkstationName: "t-process",
+		WorkerType: "definition-worker", ReplayKey: "t-process/resolved-model-trace/resolved-model-work",
+	}
+	planned, err := impl.PlanDispatch(t.Context(), plan)
+	requireNoRootErr(t, err, "PlanDispatch")
+	if planned.Outcome != factory.DispatchPlanOutcomeAccepted {
+		t.Fatalf("PlanDispatch outcome = %q, want ACCEPTED", planned.Outcome)
+	}
+	request, ok := execution.lastRequest.Load().(workers.ExecuteRequest)
+	if !ok {
+		t.Fatal("Workers Execute request was not recorded")
+	}
+	assertResolvedWorkerRequest(t, plan, request)
+	observation, err := workerSessions.GetObservationByWorkerSessionID(
+		t.Context(),
+		workersessions.GetObservationByWorkerSessionIDRequest{WorkerSessionID: plan.DispatchID},
+	)
+	requireNoRootErr(t, err, "GetObservationByWorkerSessionID")
+	assertResolvedWorkerObservation(t, plan, request, observation)
+}
+
+func newResolvedWorkerDefinitionRuntime(t *testing.T) (*factoryImpl, *recordingRootExecutionService, workersessions.Service) {
+	t.Helper()
+	execution := &recordingRootExecutionService{testWorkstationBoundary: &testWorkstationBoundary{}}
+	events, err := eventswire.NewService(logging.NoopLogger{})
+	requireNoRootErr(t, err, "New events service")
+	workerSessions, err := workersessionswire.NewService(
+		execution,
+		events,
+		logging.NoopLogger{},
+		platformclock.Real{},
+		unavailableProviderSessions{},
+		nil,
+	)
+	requireNoRootErr(t, err, "New Worker Sessions service")
+	runtime, _, err := newTestFactoryWithScriptedLedger(
+		withNet(buildSimpleNet()),
+		withInlineDispatch(),
+		withWorkerService(execution),
+		withWorkerSessions(workerSessions),
+		withRuntimeConfig(runtimefixtures.RuntimeDefinitionLookupFixture{
+			Workstations: map[string]*interfaces.FactoryWorkstationConfig{
+				"t-process": {
+					Name:           "t-process",
+					Type:           interfaces.WorkstationTypeModel,
+					WorkerTypeName: "definition-worker",
+				},
+			},
+			Workers: map[string]*interfaces.FactoryWorkerConfig{
+				"definition-worker": {
+					Name:             "definition-worker",
+					Type:             interfaces.WorkerTypeModel,
+					ExecutorProvider: "codex",
+					ModelProvider:    "resolved-provider",
+					Model:            "gpt-5.6-luna",
+					ReasoningEffort:  "high",
+				},
+			},
+		}),
+		withLogger(logging.NoopLogger{}),
+	)
+	requireNoRootErr(t, err, "New")
+	impl, ok := runtime.(*factoryImpl)
+	if !ok {
+		t.Fatalf("factory type = %T, want *factoryImpl", runtime)
+	}
+	return impl, execution, workerSessions
+}
+
+func assertResolvedWorkerRequest(t *testing.T, plan factory.PlanDispatchRequest, request workers.ExecuteRequest) {
+	t.Helper()
+	if request.Correlation.DispatchID != plan.DispatchID {
+		t.Fatalf("executed dispatch correlation = %q, want %q", request.Correlation.DispatchID, plan.DispatchID)
+	}
+	if request.Target.Model.Name != "gpt-5.6-luna" || request.Target.Model.Provider != "resolved-provider" || request.Target.Model.ReasoningEffort != "high" {
+		t.Fatalf("downstream model request = %#v, want resolved model/provider/effort", request.Target.Model)
+	}
+}
+
+func assertResolvedWorkerObservation(
+	t *testing.T,
+	plan factory.PlanDispatchRequest,
+	request workers.ExecuteRequest,
+	observation workersessions.Observation,
+) {
+	t.Helper()
+	if observation.WorkerSessionID != plan.DispatchID || observation.AttemptID == "" {
+		t.Fatalf("observation identity = %#v, want dispatch identity and attempt ID", observation)
+	}
+	if observation.Model == nil || *observation.Model != request.Target.Model.Name {
+		t.Fatalf("observation model = %#v, want downstream model %q", observation.Model, request.Target.Model.Name)
+	}
+	if observation.ReasoningEffort == nil || *observation.ReasoningEffort != request.Target.Model.ReasoningEffort {
+		t.Fatalf("observation reasoning effort = %#v, want downstream effort %q", observation.ReasoningEffort, request.Target.Model.ReasoningEffort)
 	}
 }
 

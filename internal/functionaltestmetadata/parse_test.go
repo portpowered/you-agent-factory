@@ -444,7 +444,7 @@ func TestParseNormalizesWindowsStyleGoldenPaths(t *testing.T) {
 	root := writeTree(t, map[string]string{
 		"pkg/golden_test.go": "package pkg\n\nimport \"testing\"\n\n" +
 			"// TestGoldenPath normalizes separators in golden references.\n" +
-			"//golden: docs\\temp\\functional\\provider-sessions\\cursor\\success\\manifest.json\n" +
+			"//golden: tests\\functional\\internal\\support\\testdata\\provider-sessions\\cursor\\success\\manifest.json\n" +
 			"func TestGoldenPath(t *testing.T) {}\n",
 	})
 

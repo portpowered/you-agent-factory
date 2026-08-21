@@ -33,6 +33,7 @@ func TestListJSONUsesStableSessionDocumentAndNullOptionals(t *testing.T) {
 				Transcript:     factoryapi.WorkerSessionObservationTranscript("AVAILABLE"),
 				DurationMillis: int64Ptr(2500),
 				TokenUsage:     &factoryapi.ProviderSessionTokenUsage{TotalTokens: intPtr(17)},
+				TurnUsage:      &factoryapi.WorkerSessionTurnUsage{TurnCount: 3, FinalContextTokens: 450, PeakContextTokens: 450},
 				Failure:        &factoryapi.WorkerSessionFailure{Kind: "INCOMPLETE_OUTPUT", Detail: "safe incomplete-output detail"},
 			},
 			{
@@ -66,27 +67,38 @@ func TestListJSONUsesStableSessionDocumentAndNullOptionals(t *testing.T) {
 	if err := json.Unmarshal(output.Bytes(), &document); err != nil {
 		t.Fatalf("decode JSON output: %v; output=%q", err, output.String())
 	}
-	if len(document.Sessions) != 2 {
-		t.Fatalf("session count = %d, want 2", len(document.Sessions))
+	assertStableSessionDocument(t, document.Sessions)
+}
+
+func assertStableSessionDocument(t *testing.T, sessions []map[string]json.RawMessage) {
+	t.Helper()
+	if len(sessions) != 2 {
+		t.Fatalf("session count = %d, want 2", len(sessions))
 	}
 	for _, key := range []string{"providerSession", "model", "reasoningEffort", "turnId", "startedAt", "endedAt", "durationMillis", "tokenUsage", "failure"} {
-		if got, ok := document.Sessions[1][key]; !ok || string(got) != "null" {
+		if got, ok := sessions[1][key]; !ok || string(got) != "null" {
 			t.Fatalf("session 2 %s = %s, want explicit null", key, got)
 		}
 	}
-	if got := string(document.Sessions[0]["model"]); got != `"gpt-5.6-luna"` {
+	if _, ok := sessions[1]["turnUsage"]; ok {
+		t.Fatalf("session 2 turnUsage = %s, want field omitted without supported evidence", sessions[1]["turnUsage"])
+	}
+	if got := string(sessions[0]["model"]); got != `"gpt-5.6-luna"` {
 		t.Fatalf("session 1 model = %s, want gpt-5.6-luna", got)
 	}
-	if got := string(document.Sessions[0]["reasoningEffort"]); got != `"high"` {
+	if got := string(sessions[0]["reasoningEffort"]); got != `"high"` {
 		t.Fatalf("session 1 reasoningEffort = %s, want high", got)
 	}
-	if got := string(document.Sessions[0]["durationMillis"]); got != "2500" {
+	if got := string(sessions[0]["durationMillis"]); got != "2500" {
 		t.Fatalf("session 1 durationMillis = %s, want 2500", got)
 	}
-	if got := string(document.Sessions[0]["tokenUsage"]); !strings.Contains(got, `"totalTokens":17`) {
+	if got := string(sessions[0]["tokenUsage"]); !strings.Contains(got, `"totalTokens":17`) {
 		t.Fatalf("session 1 tokenUsage = %s, want totalTokens 17", got)
 	}
-	if got := string(document.Sessions[0]["failure"]); !strings.Contains(got, `"kind":"INCOMPLETE_OUTPUT"`) {
+	if got := string(sessions[0]["turnUsage"]); got != `{"turnCount":3,"finalContextTokens":450,"peakContextTokens":450}` {
+		t.Fatalf("session 1 turnUsage = %s, want derived values", got)
+	}
+	if got := string(sessions[0]["failure"]); !strings.Contains(got, `"kind":"INCOMPLETE_OUTPUT"`) {
 		t.Fatalf("session 1 failure = %s, want INCOMPLETE_OUTPUT", got)
 	}
 }

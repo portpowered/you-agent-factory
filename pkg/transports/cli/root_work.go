@@ -9,6 +9,7 @@ import (
 	startupcli "github.com/portpowered/infinite-you/pkg/initializer/process"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/transports/cli/cobracompletion"
+	visualizationcli "github.com/portpowered/infinite-you/pkg/services/factory_visualization/transports/cli"
 	"github.com/portpowered/infinite-you/pkg/services/work/transports/cli/climanifest"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifestcobra"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/cliserver"
@@ -65,13 +66,17 @@ func newRootCommandWithGeneratedRepresentativeFamily(options CommandFactory) *co
 	if err != nil {
 		panic(fmt.Sprintf("build providers command: %v", err))
 	}
+	metricsCmd := visualizationcli.NewMetricsCommand(visualizationcli.MetricsCommandConfig{
+		Query: options.runtimeMetricsQuery, HomeDir: options.homeDir,
+		JSON: func() bool { return globals != nil && globals.json },
+	})
 	b12, err := newB12ProductionFamilies(globals, diagnostics, operatorDefaults, options)
 	if err != nil {
 		panic(fmt.Sprintf("build B12 production families: %v", err))
 	}
 
 	return NewRootCommandFromSubcommands(root, RootSubcommands{Commands: productionRootSubcommands(
-		globals, diagnostics, options, factoryConfigInit, docsCmd, modelsCmd, providersCmd, b12,
+		globals, diagnostics, options, factoryConfigInit, docsCmd, modelsCmd, providersCmd, metricsCmd, b12,
 	)})
 }
 
@@ -300,6 +305,7 @@ func productionRootSubcommands(
 	docsCmd *cobra.Command,
 	modelsCmd *cobra.Command,
 	providersCmd *cobra.Command,
+	metricsCmd *cobra.Command,
 	b12 b12ProductionFamilies,
 ) []*cobra.Command {
 	return []*cobra.Command{
@@ -310,6 +316,7 @@ func productionRootSubcommands(
 		b12.MCP,
 		modelsCmd,
 		providersCmd,
+		metricsCmd,
 		b12.Run,
 		b12.Server,
 		b12.Submit,

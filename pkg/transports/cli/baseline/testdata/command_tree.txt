@@ -15,6 +15,7 @@ you factory update	update <name>	you factory
 you init	init	you
 you mcp	mcp	you
 you mcp serve	serve	you mcp
+you metrics	metrics	you
 you models	models	you
 you models inspect	inspect <model-name>	you models
 you models invoke	invoke <model-name>	you models
@@ -41,6 +42,9 @@ you session terminate	terminate [session-id]	you session
 you submit	submit	you
 you submit batch	batch [path|-|<inline-json>]	you submit
 you work	work	you
+you work approval	approval	you work
+you work approval list	list	you work approval
+you work approval show	show <approval-id>	you work approval
 you work list	list	you work
 you work move	move <work-id> <state-name>	you work
 you work show	show <work-id>	you work

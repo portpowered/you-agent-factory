@@ -645,6 +645,7 @@ func TestObservationClone_DetachesNestedValues(t *testing.T) {
 	wantStarted, wantEnded, wantDuration := started, ended, duration
 	cacheWrite, cachedInput, input, output, reasoning, total := 1, 2, 3, 4, 5, 6
 	wantInput := input
+	turnUsage := TurnUsage{TurnCount: 3, FinalContextTokens: 450, PeakContextTokens: 450}
 	failure := FailureCause{Kind: FailureCauseWorkersExecutionFailure, Detail: "failed"}
 	model, reasoningEffort := "gpt-5.6-luna", "high"
 	original := Observation{
@@ -661,6 +662,7 @@ func TestObservationClone_DetachesNestedValues(t *testing.T) {
 		Duration:                 &duration,
 		DurationBasis:            DurationBasisRecordedTimestamps,
 		TokenUsage:               &TokenUsage{CacheWriteTokens: &cacheWrite, CachedInputTokens: &cachedInput, InputTokens: &input, OutputTokens: &output, ReasoningOutputTokens: &reasoning, TotalTokens: &total},
+		TurnUsage:                &turnUsage,
 		Transcript:               TranscriptAvailabilityAvailable,
 		Failure:                  &failure,
 		Parse:                    ParseDiagnostics{EventCount: 2, Errors: []ParseDiagnostic{{Code: "bad", LineNumber: 3, Message: "malformed"}}},
@@ -671,12 +673,14 @@ func TestObservationClone_DetachesNestedValues(t *testing.T) {
 	*original.EndedAt = ended.Add(time.Hour)
 	*original.Duration = time.Hour
 	*original.TokenUsage.InputTokens = 99
+	original.TurnUsage.TurnCount = 99
 	*original.Model = "mutated-model"
 	*original.ReasoningEffort = "mutated-effort"
 	original.Failure.Detail = "mutated"
 	original.Parse.Errors[0].Message = "mutated"
 	if clone.WorkIDs[0] != "work-1" || !clone.StartedAt.Equal(wantStarted) || !clone.EndedAt.Equal(wantEnded) || *clone.Duration != wantDuration ||
 		*clone.TokenUsage.InputTokens != wantInput || *clone.Model != "gpt-5.6-luna" || *clone.ReasoningEffort != "high" ||
+		clone.TurnUsage == nil || clone.TurnUsage.TurnCount != 3 ||
 		clone.Failure.Detail != "failed" || clone.Parse.Errors[0].Message != "malformed" {
 		t.Fatalf("Clone() retained mutable source state: %#v", clone)
 	}

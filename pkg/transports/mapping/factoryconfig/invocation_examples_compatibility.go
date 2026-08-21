@@ -1,3 +1,4 @@
+// Invocation-example and compatibility mapping helpers.
 package factoryconfig
 
 import (
@@ -175,4 +176,43 @@ func onlyDefaultSources(sources []work.ArgumentSource) bool {
 		}
 	}
 	return true
+}
+
+func cloneFactoryOrchestratorConfig(cfg *interfaces.FactoryOrchestratorConfig) *interfaces.FactoryOrchestratorConfig {
+	if cfg == nil {
+		return nil
+	}
+	cloned := &interfaces.FactoryOrchestratorConfig{
+		Kind: cfg.Kind,
+	}
+	if cfg.Petri != nil {
+		cloned.Petri = &interfaces.FactoryOrchestratorPetriConfig{}
+	}
+	if cfg.JavaScript != nil {
+		js := *cfg.JavaScript
+		if cfg.JavaScript.InlineSource != nil {
+			inline := *cfg.JavaScript.InlineSource
+			js.InlineSource = &inline
+		}
+		if len(cfg.JavaScript.Metadata) > 0 {
+			js.Metadata = make(map[string]string, len(cfg.JavaScript.Metadata))
+			for key, value := range cfg.JavaScript.Metadata {
+				js.Metadata[key] = value
+			}
+		}
+		if len(cfg.JavaScript.ArgsSchema) > 0 {
+			js.ArgsSchema = append(json.RawMessage(nil), cfg.JavaScript.ArgsSchema...)
+		}
+		if len(cfg.JavaScript.DefaultPolicy) > 0 {
+			js.DefaultPolicy = append(json.RawMessage(nil), cfg.JavaScript.DefaultPolicy...)
+		}
+		if len(cfg.JavaScript.Agents) > 0 {
+			js.Agents = make(map[string]interfaces.FactoryOrchestratorJavaScriptAgent, len(cfg.JavaScript.Agents))
+			for id, agent := range cfg.JavaScript.Agents {
+				js.Agents[id] = agent
+			}
+		}
+		cloned.JavaScript = &js
+	}
+	return cloned
 }

@@ -592,6 +592,10 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 		return nil, err
 	}
 	server := provideACPServer(loggingLogger, chatsessionsService, factoryTargetCatalogService, targetExecutionService, eventsService, wireAcpServerResolveHomeDir, responseBridge, v92)
+	runtimeMetricsQuery, err := provideFactoryVisualizationMetricsQuery(loggingLogger)
+	if err != nil {
+		return nil, err
+	}
 	commandOperations := cli.CommandOperations{
 		ObserveCLI:                        cliObserver,
 		NamedFactoryCatalog:               v,
@@ -657,6 +661,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 		ResponsePresentation:              v86,
 		ACP:                               operations,
 		ACPServer:                         server,
+		RuntimeMetricsQuery:               runtimeMetricsQuery,
 	}
 	commandFactory := provideCLICommandFactory(commandOperations)
 	stdioRunnerBuilder, err := application.NewStdioRunnerBuilder(managedRunnerFactory)
@@ -703,10 +708,6 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 		return nil, err
 	}
 	processDetachedOperationsCapability, err := provideFactorySessionDetachedOperations(factorysessionsService)
-	if err != nil {
-		return nil, err
-	}
-	runtimeMetricsQuery, err := provideFactoryVisualizationMetricsQuery(loggingLogger)
 	if err != nil {
 		return nil, err
 	}

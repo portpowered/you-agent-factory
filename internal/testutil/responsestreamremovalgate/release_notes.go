@@ -15,17 +15,26 @@ var releaseNotesRequiredMarkers = []string{
 	"no longer emit private NDJSON",
 	`"recordType": "progress"`,
 	`"recordType": "compaction"`,
+	`"recordType": "stream_gap"`,
 	`"recordType": "primary_result"`,
-	`"recordType": "response_event"`,
+	`"recordType": "factory_event"`,
 	`"recordType": "invocation_result"`,
-	"event.kind=PROGRESS",
-	"event.phase=UPDATED",
-	"event.kind=STREAM_GAP",
+	`"event": {`,
+	`"response": {`,
+	"FactoryEvent",
 	"primaryResult",
 	"Pre-invocation CLI error envelope",
 	`"code":"INVOCATION_OUTPUT_UNSUPPORTED"`,
 	"Supported stdout vocabulary",
 	"Old → new mapping",
+}
+
+var releaseNotesForbiddenMarkers = []string{
+	"recordType=response_event",
+	`"recordType": "response_event"`,
+	"FactoryResponseEvent",
+	"event.kind=PROGRESS",
+	"event.phase=UPDATED",
 }
 
 // AssertReleaseNotesMigrationMapping proves the packaged release note identifies
@@ -44,6 +53,11 @@ func AssertReleaseNotesMigrationMapping(repoRoot string) error {
 	for _, marker := range releaseNotesRequiredMarkers {
 		if !strings.Contains(text, marker) {
 			return fmt.Errorf("release notes missing migration marker %q", marker)
+		}
+	}
+	for _, marker := range releaseNotesForbiddenMarkers {
+		if strings.Contains(text, marker) {
+			return fmt.Errorf("release notes contain stale migration marker %q", marker)
 		}
 	}
 	for _, recordType := range PublicNDJSONRecordTypes {

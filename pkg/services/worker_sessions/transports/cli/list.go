@@ -179,6 +179,7 @@ type listJSONObservation struct {
 	StartedAt                *time.Time                                       `json:"startedAt"`
 	State                    factoryapi.WorkerSessionObservationState         `json:"state"`
 	TokenUsage               *listJSONTokenUsage                              `json:"tokenUsage"`
+	TurnUsage                *listJSONTurnUsage                               `json:"turnUsage,omitempty"`
 	Transcript               factoryapi.WorkerSessionObservationTranscript    `json:"transcript"`
 	TurnID                   *string                                          `json:"turnId"`
 	WorkIDs                  []string                                         `json:"workIds"`
@@ -192,6 +193,12 @@ type listJSONTokenUsage struct {
 	OutputTokens          *int `json:"outputTokens"`
 	ReasoningOutputTokens *int `json:"reasoningOutputTokens"`
 	TotalTokens           *int `json:"totalTokens"`
+}
+
+type listJSONTurnUsage struct {
+	TurnCount          int `json:"turnCount"`
+	FinalContextTokens int `json:"finalContextTokens"`
+	PeakContextTokens  int `json:"peakContextTokens"`
 }
 
 func encodeListJSON(output io.Writer, result factoryapi.ListWorkerSessionsResponse) error {

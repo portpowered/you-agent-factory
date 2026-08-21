@@ -215,8 +215,18 @@ func observationJSON(session factoryapi.WorkerSessionObservation) listJSONObserv
 		EndedAt: session.EndedAt, Failure: session.Failure, Model: session.Model, Parse: session.Parse,
 		ProviderSession: session.ProviderSession, ProviderSessionAvailable: session.ProviderSessionAvailable,
 		ReasoningEffort: session.ReasoningEffort, StartedAt: session.StartedAt, State: session.State, TokenUsage: tokenUsage,
+		TurnUsage:  turnUsageJSON(session.TurnUsage),
 		Transcript: session.Transcript, TurnID: session.TurnId, WorkIDs: session.WorkIds,
 		WorkerSessionID: session.WorkerSessionId,
+	}
+}
+
+func turnUsageJSON(usage *factoryapi.WorkerSessionTurnUsage) *listJSONTurnUsage {
+	if usage == nil {
+		return nil
+	}
+	return &listJSONTurnUsage{
+		TurnCount: usage.TurnCount, FinalContextTokens: usage.FinalContextTokens, PeakContextTokens: usage.PeakContextTokens,
 	}
 }
 
@@ -225,6 +235,9 @@ func renderShow(output io.Writer, session factoryapi.WorkerSessionObservation) e
 		return err
 	}
 	if err := writeTokenUsage(output, session.TokenUsage); err != nil {
+		return err
+	}
+	if err := writeTurnUsage(output, session.TurnUsage); err != nil {
 		return err
 	}
 	if err := writeFailure(output, session.Failure); err != nil {
@@ -262,6 +275,15 @@ func writeTokenUsage(output io.Writer, usage *factoryapi.ProviderSessionTokenUsa
 	_, err := fmt.Fprintf(output, "Token usage:\tinput=%s cached-input=%s cache-write=%s output=%s reasoning=%s total=%s\n",
 		intOrDash(usage.InputTokens), intOrDash(usage.CachedInputTokens), intOrDash(usage.CacheWriteTokens),
 		intOrDash(usage.OutputTokens), intOrDash(usage.ReasoningOutputTokens), intOrDash(usage.TotalTokens))
+	return err
+}
+
+func writeTurnUsage(output io.Writer, usage *factoryapi.WorkerSessionTurnUsage) error {
+	if usage == nil {
+		_, err := fmt.Fprintln(output, "Turn usage:\tunavailable")
+		return err
+	}
+	_, err := fmt.Fprintf(output, "Turn usage:\tcount=%d final-context=%d peak-context=%d\n", usage.TurnCount, usage.FinalContextTokens, usage.PeakContextTokens)
 	return err
 }
 

@@ -83,6 +83,43 @@ func TestFunctionalCoverageCommandSmoke_ReportsExplicitTierSelection(t *testing.
 	}
 }
 
+// TestFunctionalCoverageCommandSmoke_DefersOrdinaryGocoverageFailure proves
+// the CI-only handoff preserves gocoveragecheck's exact exit code while
+// allowing the compact verdict step to own an ordinary exit-1 outcome.
+func TestFunctionalCoverageCommandSmoke_DefersOrdinaryGocoverageFailure(t *testing.T) {
+	repoRoot := testutil.MustRepoPath(t, ".")
+	goStub := writeExecutableScript(t, "stub-go-functional-failure", `#!/bin/sh
+printf '%s\n' 'Functional suite inventory: discovered-packages=1 observed-packages=1 (pass=0 fail=1 skip=0) top-level-tests=1 (pass=0 fail=1 skip=0)'
+printf '%s\n' 'coverage not evaluated: 1 failed tests observed; package floors were NOT checked because the coverage test run failed' >&2
+exit 1
+`)
+	exitPath := filepath.Join(t.TempDir(), "gocoveragecheck-exit-code.txt")
+	makefilePath := writeVerifyFastWrapperMakefile(t, repoRoot, map[string]string{
+		"functional-boundary-check": "@printf '%s\\n' 'stub:boundary-ok'\n",
+	})
+
+	output, err := runMakefileTargetWithArgs(
+		repoRoot,
+		makefilePath,
+		fmt.Sprintf("GO=%s", goStub),
+		fmt.Sprintf("FUNCTIONAL_GOCOVERAGE_EXIT_FILE=%s", filepath.ToSlash(exitPath)),
+		"test-functional-coverage",
+	)
+	if err != nil {
+		t.Fatalf("ordinary gocoveragecheck failure was not deferred: %v\n%s", err, output)
+	}
+	gotExit, readErr := os.ReadFile(exitPath)
+	if readErr != nil {
+		t.Fatalf("read recorded gocoveragecheck exit code: %v", readErr)
+	}
+	if strings.TrimSpace(string(gotExit)) != "1" {
+		t.Fatalf("recorded gocoveragecheck exit code = %q, want 1", gotExit)
+	}
+	if !strings.Contains(output, "coverage not evaluated:") {
+		t.Fatalf("deferred gocoveragecheck diagnostics were not preserved:\n%s", output)
+	}
+}
+
 // TestFunctionalTestVizLaneScriptSmoke_TimesOutAndRetainsDiagnostics proves a
 // budget expiry fails the process while preserving output produced before the
 // interruption, including inventory and quarantine diagnostics.

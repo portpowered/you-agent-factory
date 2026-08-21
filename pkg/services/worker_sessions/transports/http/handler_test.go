@@ -21,6 +21,7 @@ import (
 func TestListWorkerSessionsBySessionIDProjectsPopulatedObservation(t *testing.T) {
 	total := 17
 	duration := 2500 * time.Millisecond
+	turnCount, finalContext, peakContext := 3, 450, 450
 	observations := []workersessions.Observation{
 		{
 			WorkerSessionID:          "worker-session-1",
@@ -35,6 +36,7 @@ func TestListWorkerSessionsBySessionIDProjectsPopulatedObservation(t *testing.T)
 			Duration:                 &duration,
 			DurationBasis:            workersessions.DurationBasisRecordedTimestamps,
 			TokenUsage:               &workersessions.TokenUsage{TotalTokens: &total},
+			TurnUsage:                &workersessions.TurnUsage{TurnCount: turnCount, FinalContextTokens: finalContext, PeakContextTokens: peakContext},
 			Transcript:               workersessions.TranscriptAvailabilityAvailable,
 		},
 	}
@@ -140,6 +142,7 @@ func assertPopulatedListResponse(t *testing.T, payload []byte, total int) {
 	assertListObservationIdentity(t, got)
 	assertListObservationProvider(t, got)
 	assertListObservationUsage(t, got, total)
+	assertListObservationTurnUsage(t, got, 3, 450, 450)
 	assertListObservationTiming(t, got)
 	assertListObservationTurn(t, got)
 	assertListObservationExecutionFacts(t, got)
@@ -338,8 +341,9 @@ func TestGetWorkerSessionObservationBySessionIDProjectsFailureDiagnostics(t *tes
 		State: workersessions.StateFailed, Duration: durationPtr(2500 * time.Millisecond),
 		DurationBasis: workersessions.DurationBasisRecordedTimestamps,
 		TokenUsage:    &workersessions.TokenUsage{TotalTokens: &total}, Transcript: workersessions.TranscriptAvailabilityAvailable,
-		Failure: failure,
-		Parse:   workersessions.ParseDiagnostics{EventCount: 4, Errors: []workersessions.ParseDiagnostic{{Code: "provider_session_parse_error", LineNumber: 3, Message: "malformed event"}}},
+		TurnUsage: &workersessions.TurnUsage{TurnCount: 3, FinalContextTokens: 450, PeakContextTokens: 450},
+		Failure:   failure,
+		Parse:     workersessions.ParseDiagnostics{EventCount: 4, Errors: []workersessions.ParseDiagnostic{{Code: "provider_session_parse_error", LineNumber: 3, Message: "malformed event"}}},
 	}}
 	handler := NewHandler(NewAdapter(service, workServiceStub{}), zap.NewNop())
 	recorder := httptest.NewRecorder()
@@ -364,6 +368,7 @@ func assertFailureObservationResponse(t *testing.T, payload []byte, service *fak
 	assertFailureObservationIdentity(t, response)
 	assertFailureObservationCause(t, response)
 	assertFailureObservationUsage(t, response, total, duration)
+	assertFailureObservationTurnUsage(t, response)
 	assertFailureObservationParse(t, response)
 	assertFailureObservationExecutionFacts(t, response)
 	assertFailureObservationRequest(t, service)

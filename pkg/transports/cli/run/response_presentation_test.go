@@ -262,7 +262,7 @@ func TestHumanFactoryEventRenderer_CustomerLifecycleGolden(t *testing.T) {
 	}
 }
 
-func TestJSONFactoryEventRenderer_EmitsDiscriminatedSafeNDJSON(t *testing.T) {
+func TestJSONFactoryEventRenderer_EmitsCanonicalFactoryEventAndInvocationResponseNDJSON(t *testing.T) {
 	const providerCanary = "PRIVATE_PROVIDER_CHUNK_71f2"
 	providerResponse := providerCanary
 	wantPrimaryResult := []work.WorkContentPart{
@@ -300,7 +300,14 @@ func TestJSONFactoryEventRenderer_EmitsDiscriminatedSafeNDJSON(t *testing.T) {
 		assertFactoryEventNDJSONRecord(t, line, events[index], index)
 	}
 	assertInvocationResultNDJSONRecord(t, lines[len(lines)-1], wantPrimaryResult)
-	for _, forbidden := range []string{providerCanary, "textDelta", "providerSession", "FactoryResponseEvent"} {
+	for _, forbidden := range []string{
+		providerCanary,
+		"textDelta",
+		"providerSession",
+		"FactoryResponseEvent",
+		`"recordType":"response_event"`,
+		`"invocation":`,
+	} {
 		if strings.Contains(output.String(), forbidden) {
 			t.Fatalf("NDJSON exposed provider-only value %q:\n%s", forbidden, output.String())
 		}
@@ -324,6 +331,9 @@ func assertFactoryEventNDJSONRecord(
 	var event factorydefinitions.FactoryEvent
 	if err := json.Unmarshal(record["event"], &event); err != nil {
 		t.Fatalf("decode event %d: %v", index, err)
+	}
+	if event.Id != want.Id || event.SchemaVersion != want.SchemaVersion || event.Type != want.Type {
+		t.Fatalf("event %d canonical identity changed: %#v, want id=%q schema=%q type=%q", index, event, want.Id, want.SchemaVersion, want.Type)
 	}
 	if event.Context.Sequence != want.Context.Sequence || event.Context.SessionSequence == nil ||
 		*event.Context.SessionSequence != *want.Context.SessionSequence {

@@ -23,6 +23,7 @@ catalog_contract.go
 catalog_scope_characterization_test.go
 host_contract.go
 host_scope_characterization_test.go
+inference_failure.go
 local_execution_contract.go
 managed_runtime_contract.go
 presentation_port.go
@@ -33,7 +34,7 @@ runtime_construction_contract.go
 service_contract.go
 ```
 
-**Totals:** 14 root-level `.go` files — 14 thin committed root contract
+**Totals:** 15 root-level `.go` files — 15 thin committed root contract
 files, 0 excess fold clusters in this packet.
 
 The inventory is mirrored by:

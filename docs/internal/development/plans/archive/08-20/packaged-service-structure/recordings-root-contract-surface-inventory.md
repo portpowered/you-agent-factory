@@ -26,16 +26,21 @@ Private subservices and common implementation packages under
 | --- | --- | --- |
 | `contracts.go` | Thin committed root contract (keep) | Singular `Service` interface plus aliases for transport-neutral event, projection, replay, lifecycle, artifact, metadata, and portable-recording vocabulary. The implementation declarations live under `recordings/internal/contracts`. |
 | `contracts_test.go` | Thin committed root contract (keep) | Co-located characterization tests for published `Service` slice contracts. |
-| `root_surface_test.go` | Thin committed root contract (keep) | Regression proof for one root `Service` interface, no exported root functions, and only canonical child directories. |
+| `lifecycle_capability.go` | Thin committed root contract (keep) | Published lifecycle capability and detached recording lifecycle vocabulary used by peers that do not need the broad root service. |
+| `lifecycle_capability_test.go` | Thin committed root contract (keep) | Characterization tests for the published recording lifecycle capability. |
+| `replay_artifact_capability.go` | Thin committed root contract (keep) | Published replay and portable-artifact capabilities used by peers that do not need lifecycle or projection operations. |
+| `replay_artifact_capability_test.go` | Thin committed root contract (keep) | Characterization tests for replay-artifact behavior through the published root capability. |
+| `runtime_recording_binder.go` | Thin committed root contract (keep) | Published optional binder that lets runtime recorders attach to the canonical lifecycle capability without receiving the broad service. |
 | `runtime_request_boundary_test.go` | Thin committed root contract (keep) | Runtime request-boundary test proving runtime dispatch constructs through the Recordings root contract. |
 | `service_root_contract_fake_test.go` | Thin committed root contract (keep) | Root-contract fake harness for per-slice characterization through one root dependency. |
 | `service_root_contract_invariants_test.go` | Thin committed root contract (keep) | Root-contract invariant characterization for append order, subscribe cursors, and projection outcomes. |
 | `service_root_contract_lifecycle_test.go` | Thin committed root contract (keep) | Root-contract characterization for recording lifecycle bind/start/stop/finalize paths. |
 | `service_root_contract_replay_test.go` | Thin committed root contract (keep) | Root-contract characterization for replay load/plan/execution success and typed failures. |
 | `service_root_contract_seam_test.go` | Thin committed root contract (keep) | Peer-shaped characterization consumer exercising every published `Service` slice through one root dependency. |
+| `worker_capture.go` | Thin committed root contract (keep) | Published Worker recording vocabulary and adapters backed by the private Recordings capture service. |
 | `workers_root_boundary_test.go` | Thin committed root contract (keep) | Workers import-boundary test proving worker execution stays on the published Recordings root seam. |
 
-**Totals:** 10 root-level `.go` files — all thin committed root contract (keep);
+**Totals:** 15 root-level `.go` files — all thin committed root contract (keep);
 no excess fold/consolidation debt remains at the public root after the Recordings
 convergence seal.
 

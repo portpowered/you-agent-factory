@@ -4,6 +4,7 @@ set -euo pipefail
 
 artifact_root="${FUNCTIONAL_TEST_VIZ_DIR:-.artifacts/functional-test-viz}"
 make_bin="${MAKE_BIN:-make}"
+node_bin="${NODE_BIN:-node}"
 tier="${FUNCTIONAL_TEST_TIER:-pr-short}"
 trigger="${FUNCTIONAL_TEST_TRIGGER:-local}"
 budget="${FUNCTIONAL_TEST_BUDGET:-35m}"
@@ -16,11 +17,13 @@ coverage_path="${FUNCTIONAL_TEST_VIZ_JSON:-$artifact_root/coverage-summary.json}
 profile_path="${FUNCTIONAL_TEST_VIZ_PROFILE:-$artifact_root/coverage.out}"
 markdown_path="${FUNCTIONAL_TEST_VIZ_MARKDOWN:-$artifact_root/functional-tests.md}"
 status_path="$artifact_root/diagnostic-status.txt"
+gocoverage_exit_path="${FUNCTIONAL_GOCOVERAGE_EXIT_FILE:-$artifact_root/gocoveragecheck-exit-code.txt}"
+verdict_path="${FUNCTIONAL_COVERAGE_VERDICT_FILE:-$artifact_root/functional-coverage-verdict.txt}"
 
 mkdir -p "$artifact_root"
 # Each invocation owns these outputs. Remove them before starting so a later
 # timeout cannot publish a complete artifact produced by an earlier run.
-rm -f "$status_path" "$timing_path" "$coverage_path" "$profile_path" "$markdown_path"
+rm -f "$status_path" "$timing_path" "$coverage_path" "$profile_path" "$markdown_path" "$gocoverage_exit_path" "$verdict_path"
 
 printf '%s\n' \
   "Functional CI runner: tier=$tier trigger=$trigger short=$short budget=$budget selection=subtractive quarantine=$quarantine jobs=$functional_jobs" \
@@ -52,6 +55,7 @@ timeout --signal=TERM --kill-after=30s "$budget" \
     FUNCTIONAL_TEST_BUDGET="$budget" \
     FUNCTIONAL_SHORT="$short" \
     FUNCTIONAL_QUARANTINE="$quarantine" \
+    FUNCTIONAL_GOCOVERAGE_EXIT_FILE="$gocoverage_exit_path" \
     2>&1 | tee -a "$log_path"
 pipeline_status=("${PIPESTATUS[@]}")
 set -e
@@ -155,6 +159,33 @@ if [ "$command_status" -ne 0 ]; then
   printf '%s\n' "Functional CI runner: tier failed with exit=$command_status; diagnostics retained under $artifact_root." \
     | tee -a "$log_path" >&2
   exit "$command_status"
+fi
+
+# The Make target deliberately records only gocoveragecheck's ordinary exit 1
+# so its complete stream can remain in this successful run step. Classify that
+# handoff from the compact terminal markers and write the extract consumed by
+# the final failing verdict step. Any unrecognized or missing handoff is an
+# infrastructure failure and keeps this full-stream step red.
+set +e
+"$node_bin" scripts/ci/functional-coverage-verdict.mjs \
+  --log "$log_path" \
+  --exit-code-file "$gocoverage_exit_path" \
+  --output "$verdict_path" \
+  2>&1 | tee -a "$log_path"
+verdict_pipeline_status=("${PIPESTATUS[@]}")
+set -e
+
+verdict_status="${verdict_pipeline_status[0]}"
+verdict_tee_status="${verdict_pipeline_status[1]}"
+if [ "$verdict_tee_status" -ne 0 ]; then
+  printf '%s\n' "Functional CI runner: verdict log writer failed with exit=$verdict_tee_status; tier failed closed." \
+    | tee -a "$log_path" >&2
+  exit "$verdict_tee_status"
+fi
+if [ "$verdict_status" -ne 0 ]; then
+  printf '%s\n' "Functional CI runner: compact verdict could not classify the recorded coverage outcome; diagnostics retained under $artifact_root." \
+    | tee -a "$log_path" >&2
+  exit "$verdict_status"
 fi
 
 printf '%s\n' "Functional CI runner: tier completed within budget=$budget; diagnostics written under $artifact_root." \
