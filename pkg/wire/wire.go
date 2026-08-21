@@ -148,6 +148,8 @@ var servicesSet = wire.NewSet(
 	provideFactoryVisualizationMetricsQuery,
 	provideRuntimeMetricsQueryCapability,
 	provideFactorySessionExecutionRuntimeOpening,
+	provideCostsQuery,
+	provideCostsQueryCapability,
 	provideFactorySessionsRuntimeAssembly,
 	provideFactoryWebhooksService,
 	providePortableRecordingWriter,
@@ -436,7 +438,7 @@ var BundleSet = wire.NewSet(
 	provideRunInvocationOperation,
 	provideModelsCLIInvocationOperation,
 	provideCLICommandFactory,
-	initializerapplication.NewProcess,
+	initializerapplication.NewProcessWithRuntimeCosts,
 	wire.Bind(new(processcontract.Initializer), new(*initializerapplication.Initializer)),
 	wire.Bind(new(processcontract.CommandFactory), new(cli.CommandFactory)),
 )

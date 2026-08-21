@@ -35,6 +35,7 @@ type Process struct {
 	detachedOps    processcontract.DetachedOperationsCapability
 	runtimeMetrics processcontract.RuntimeMetricsQueryCapability
 	executionOpen  processcontract.ExecutionRuntimeOpeningCapability
+	runtimeCosts   processcontract.RuntimeCostsQueryCapability
 }
 
 func NewProcess(
@@ -47,6 +48,56 @@ func NewProcess(
 	detachedOps processcontract.DetachedOperationsCapability,
 	runtimeMetrics processcontract.RuntimeMetricsQueryCapability,
 	executionOpen processcontract.ExecutionRuntimeOpeningCapability,
+) (*Process, error) {
+	return newProcess(commandFactory, initializer, providers, lifecycle, acpServer, workerReader, detachedOps, runtimeMetrics, executionOpen, nil)
+}
+
+// NewProcessWithRuntimeCosts constructs the application process with the
+// optional stateless Costs capability in addition to runtime metrics. The
+// separate constructor preserves the existing process construction contract
+// for embedders that do not select the Costs operation.
+func NewProcessWithRuntimeCosts(
+	commandFactory processcontract.CommandFactory,
+	initializer processcontract.Initializer,
+	providers ProviderRegistry,
+	lifecycle ProcessLifecycle,
+	acpServer processcontract.ACPServer,
+	workerReader processcontract.WorkerRecordingReader,
+	detachedOps processcontract.DetachedOperationsCapability,
+	runtimeMetrics processcontract.RuntimeMetricsQueryCapability,
+	runtimeCosts processcontract.RuntimeCostsQueryCapability,
+) (*Process, error) {
+	return newProcess(commandFactory, initializer, providers, lifecycle, acpServer, workerReader, detachedOps, runtimeMetrics, nil, runtimeCosts)
+}
+
+// NewProcessWithRuntimeCostsAndExecution constructs the canonical process
+// with both the Costs query and durable Factory Session opening capabilities.
+func NewProcessWithRuntimeCostsAndExecution(
+	commandFactory processcontract.CommandFactory,
+	initializer processcontract.Initializer,
+	providers ProviderRegistry,
+	lifecycle ProcessLifecycle,
+	acpServer processcontract.ACPServer,
+	workerReader processcontract.WorkerRecordingReader,
+	detachedOps processcontract.DetachedOperationsCapability,
+	runtimeMetrics processcontract.RuntimeMetricsQueryCapability,
+	executionOpen processcontract.ExecutionRuntimeOpeningCapability,
+	runtimeCosts processcontract.RuntimeCostsQueryCapability,
+) (*Process, error) {
+	return newProcess(commandFactory, initializer, providers, lifecycle, acpServer, workerReader, detachedOps, runtimeMetrics, executionOpen, runtimeCosts)
+}
+
+func newProcess(
+	commandFactory processcontract.CommandFactory,
+	initializer processcontract.Initializer,
+	providers ProviderRegistry,
+	lifecycle ProcessLifecycle,
+	acpServer processcontract.ACPServer,
+	workerReader processcontract.WorkerRecordingReader,
+	detachedOps processcontract.DetachedOperationsCapability,
+	runtimeMetrics processcontract.RuntimeMetricsQueryCapability,
+	executionOpen processcontract.ExecutionRuntimeOpeningCapability,
+	runtimeCosts processcontract.RuntimeCostsQueryCapability,
 ) (*Process, error) {
 	if providers == nil {
 		return nil, fmt.Errorf("construct application process: provider registry is required")
@@ -64,6 +115,7 @@ func NewProcess(
 		detachedOps:    detachedOps,
 		runtimeMetrics: runtimeMetrics,
 		executionOpen:  executionOpen,
+		runtimeCosts:   runtimeCosts,
 	}, nil
 }
 
@@ -132,6 +184,15 @@ func (p *Process) ExecutionRuntimeOpening() processcontract.ExecutionRuntimeOpen
 		return nil
 	}
 	return p.executionOpen
+}
+
+// RuntimeCostsQuery returns the opaque stateless Costs capability composed for
+// this process. pkg/root owns the typed public projection.
+func (p *Process) RuntimeCostsQuery() processcontract.RuntimeCostsQueryCapability {
+	if p == nil {
+		return nil
+	}
+	return p.runtimeCosts
 }
 
 // Execute constructs and runs one fresh command tree using invocation-local

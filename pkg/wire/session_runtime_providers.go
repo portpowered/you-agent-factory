@@ -23,6 +23,8 @@ import (
 	platformrandom "github.com/portpowered/infinite-you/pkg/platform/random"
 	"github.com/portpowered/infinite-you/pkg/services/automations"
 	automationswire "github.com/portpowered/infinite-you/pkg/services/automations/wire"
+	costs "github.com/portpowered/infinite-you/pkg/services/costs"
+	costswire "github.com/portpowered/infinite-you/pkg/services/costs/wire"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	events "github.com/portpowered/infinite-you/pkg/services/events"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
@@ -626,6 +628,34 @@ func provideRuntimeMetricsQueryCapability(
 		return nil, errors.New("construct runtime metrics query capability: query is required")
 	}
 	return runtimeMetricsQueryCapability{query: query}, nil
+}
+
+// provideCostsQuery composes valuation over the existing canonical metrics
+// query and the narrow Operator Settings document reader. Costs reads no
+// artifacts or configuration directly.
+func provideCostsQuery(
+	settings operatorsettings.Service,
+	metrics factoryvisualization.RuntimeMetricsQuery,
+	logger logging.Logger,
+) (costs.CostsQuery, error) {
+	return costswire.NewCostsQuery(settings, metrics, logger)
+}
+
+func provideCostsQueryCapability(
+	query costs.CostsQuery,
+) (processcontract.RuntimeCostsQueryCapability, error) {
+	if query == nil {
+		return nil, errors.New("construct runtime costs query capability: query is required")
+	}
+	return runtimeCostsQueryCapability{query: query}, nil
+}
+
+type runtimeCostsQueryCapability struct {
+	query costs.CostsQuery
+}
+
+func (capability runtimeCostsQueryCapability) RuntimeCostsQuery() any {
+	return capability.query
 }
 
 type runtimeMetricsQueryCapability struct {

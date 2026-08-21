@@ -719,7 +719,15 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	if err != nil {
 		return nil, err
 	}
-	process, err := application.NewProcess(commandFactory, initializer, providerRegistry, processLifecycle, server, workerRecordingReader, processDetachedOperationsCapability, processRuntimeMetricsQueryCapability, processExecutionRuntimeOpeningCapability)
+	costsQuery, err := provideCostsQuery(operatorsettingsService, runtimeMetricsQuery, loggingLogger)
+	if err != nil {
+		return nil, err
+	}
+	processRuntimeCostsQueryCapability, err := provideCostsQueryCapability(costsQuery)
+	if err != nil {
+		return nil, err
+	}
+	process, err := application.NewProcessWithRuntimeCostsAndExecution(commandFactory, initializer, providerRegistry, processLifecycle, server, workerRecordingReader, processDetachedOperationsCapability, processRuntimeMetricsQueryCapability, processExecutionRuntimeOpeningCapability, processRuntimeCostsQueryCapability)
 	if err != nil {
 		return nil, err
 	}
@@ -905,6 +913,8 @@ var servicesSet = wire5.NewSet(
 	provideFactoryVisualizationMetricsQuery,
 	provideRuntimeMetricsQueryCapability,
 	provideFactorySessionExecutionRuntimeOpening,
+	provideCostsQuery,
+	provideCostsQueryCapability,
 	provideFactorySessionsRuntimeAssembly,
 	provideFactoryWebhooksService,
 	providePortableRecordingWriter,
@@ -1149,5 +1159,5 @@ var BundleSet = wire5.NewSet(
 	provideDirectJavaScriptHostAdapter, wire.NewDirectJavaScriptRunOperation, application.NewInitializer, wire.NewExecutionServiceBuilder, provideCLIExecutionServiceBuilder,
 	provideRunInvocationOperation,
 	provideModelsCLIInvocationOperation,
-	provideCLICommandFactory, application.NewProcess, wire5.Bind(new(process.Initializer), new(*application.Initializer)), wire5.Bind(new(process.CommandFactory), new(cli.CommandFactory)),
+	provideCLICommandFactory, application.NewProcessWithRuntimeCosts, wire5.Bind(new(process.Initializer), new(*application.Initializer)), wire5.Bind(new(process.CommandFactory), new(cli.CommandFactory)),
 )

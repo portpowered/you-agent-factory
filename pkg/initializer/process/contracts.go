@@ -139,6 +139,14 @@ type ExecutionRuntimeOpeningCapability interface {
 	ExecutionRuntimeOpening() any
 }
 
+// RuntimeCostsQueryCapability is the neutral process handoff for the
+// stateless Costs valuation operation. The initializer retains the selected
+// capability without importing either Operator Settings or Factory
+// Visualization; pkg/root reifies the opaque value at the caller boundary.
+type RuntimeCostsQueryCapability interface {
+	RuntimeCostsQuery() any
+}
+
 // ACPServer is the neutral application-process capability for serving the ACP
 // protocol. The transport package supplies the concrete implementation at the
 // composition root; the initializer only retains the protocol operation.

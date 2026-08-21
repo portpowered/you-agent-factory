@@ -210,6 +210,18 @@
       "minimum": 100.00
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/services/costs",
+      "minimum": 88.20
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/costs/internal/service",
+      "minimum": 86.00
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/costs/wire",
+      "minimum": 100.00
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/services/edges",
       "minimum": 71.65
     },

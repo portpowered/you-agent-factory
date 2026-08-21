@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	initializerapplication "github.com/portpowered/infinite-you/pkg/initializer/application"
+	costs "github.com/portpowered/infinite-you/pkg/services/costs"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factoryvisualization "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
@@ -62,6 +63,21 @@ func RuntimeMetricsQueryFromProcess(process any) factoryvisualization.RuntimeMet
 		return nil
 	}
 	query, _ := capability.RuntimeMetricsQuery().(factoryvisualization.RuntimeMetricsQuery)
+	return query
+}
+
+// CostsQueryFromProcess returns the stateless Costs operation carried by the
+// canonical process composition.
+func CostsQueryFromProcess(process any) costs.CostsQuery {
+	applicationProcess, ok := process.(*initializerapplication.Process)
+	if !ok || applicationProcess == nil {
+		return nil
+	}
+	capability := applicationProcess.RuntimeCostsQuery()
+	if capability == nil {
+		return nil
+	}
+	query, _ := capability.RuntimeCostsQuery().(costs.CostsQuery)
 	return query
 }
 
