@@ -40,7 +40,7 @@ func prepareCoverageRun(cfg config, targetOS string, logicalCPUs int, profilePat
 	coverageTestArgs := []string{
 		"test",
 		fmt.Sprintf("-coverpkg=%s", coverPackageArgument),
-		fmt.Sprintf("-p=%d", cfg.testJobs(targetOS, logicalCPUs)),
+		fmt.Sprintf("-p=%d", cfg.instrumentedTestJobs(targetOS, logicalCPUs)),
 		// Coverage is authoritative, so every package must run even when a prior
 		// non-instrumented invocation is cached.
 		"-count=1",

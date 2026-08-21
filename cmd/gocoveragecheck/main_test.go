@@ -2,6 +2,7 @@ package main
 
 import (
 	"errors"
+	"flag"
 	"os"
 	"path/filepath"
 	"slices"
@@ -107,6 +108,62 @@ func TestCoverageTestJobs(t *testing.T) {
 	}
 }
 
+func TestInstrumentedTestJobsOverrideIsIndependentFromDiscoveryJobs(t *testing.T) {
+	t.Parallel()
+
+	cfg := config{
+		suite:            "functional",
+		jobs:             4,
+		testJobsOverride: 8,
+	}
+	if got := cfg.instrumentedTestJobs("linux", 4); got != 8 {
+		t.Fatalf("config.instrumentedTestJobs() = %d, want override 8", got)
+	}
+	if got := cfg.testJobs("linux", 4); got != 4 {
+		t.Fatalf("config.testJobs() = %d, want discovery jobs 4", got)
+	}
+}
+
+func TestInstrumentedTestJobsFallsBackToExistingJobs(t *testing.T) {
+	t.Parallel()
+
+	cfg := config{suite: "functional", jobs: 6}
+	if got := cfg.instrumentedTestJobs("linux", 4); got != 6 {
+		t.Fatalf("config.instrumentedTestJobs() = %d, want existing jobs 6", got)
+	}
+}
+
+func TestParseConfigTracksExplicitTestJobsOverride(t *testing.T) {
+	originalArgs := os.Args
+	originalFlagSet := flag.CommandLine
+	t.Cleanup(func() {
+		os.Args = originalArgs
+		flag.CommandLine = originalFlagSet
+	})
+
+	flag.CommandLine = flag.NewFlagSet("gocoveragecheck", flag.ContinueOnError)
+	os.Args = []string{"gocoveragecheck", "-test-jobs=8"}
+
+	cfg := parseConfig()
+	if cfg.testJobsOverride != 8 || !cfg.testJobsOverrideSet {
+		t.Fatalf("parseConfig() test-jobs = (%d, %t), want (8, true)", cfg.testJobsOverride, cfg.testJobsOverrideSet)
+	}
+}
+
+func TestValidateConfigRejectsNonPositiveTestJobsOverride(t *testing.T) {
+	t.Parallel()
+
+	cases := []config{
+		{testJobsOverride: -1},
+		{testJobsOverrideSet: true},
+	}
+	for _, cfg := range cases {
+		if err := validateConfig(cfg); err == nil || !strings.Contains(err.Error(), "-test-jobs must be a positive integer") {
+			t.Fatalf("validateConfig(%+v) error = %v, want positive test-jobs diagnostic", cfg, err)
+		}
+	}
+}
+
 func TestRunForOSWithCPUUsesDerivedUnitJobs(t *testing.T) {
 	originalCommandRunner := commandRunner
 	originalStdout := stdoutWriter
@@ -146,6 +203,27 @@ func TestRunForOSWithCPUUsesDerivedUnitJobs(t *testing.T) {
 	}
 	if stdout.Len() == 0 || stderr.Len() != 0 {
 		t.Fatalf("coverage output = stdout %q, stderr %q; want stdout only", stdout.String(), stderr.String())
+	}
+
+	invocations = nil
+	_, err = runForOSWithCPU(config{
+		min:              0,
+		suite:            "functional",
+		jobs:             4,
+		testJobsOverride: 8,
+		totalOnly:        true,
+		coverpkg:         strings.Join([]string{modulePath + "/pkg/config", modulePath + "/pkg/service"}, ","),
+		packages:         "./pkg/config",
+		profile:          filepath.Join(t.TempDir(), "coverage.out"),
+	}, "linux", 4)
+	if err != nil {
+		t.Fatalf("runForOSWithCPU() with test-jobs override error = %v", err)
+	}
+	if len(invocations) != 1 {
+		t.Fatalf("coverage invocations with test-jobs override = %d, want one", len(invocations))
+	}
+	if !slices.Contains(invocations[0].args, "-p=8") {
+		t.Fatalf("go test args with test-jobs override = %v, want -p=8", invocations[0].args)
 	}
 }
 
