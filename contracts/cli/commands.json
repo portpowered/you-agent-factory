@@ -14207,6 +14207,264 @@
         "operationId": "pullModel"
       }
     },
+    "you.metrics": {
+      "id": "you.metrics",
+      "name": "metrics",
+      "path": "you metrics",
+      "aliases": [],
+      "completeness": "authoritative",
+      "documentation": {
+        "formatVersion": "1.0.0",
+        "itemId": "you.metrics",
+        "documentation": {
+          "title": {
+            "id": "you.metrics.title",
+            "canonicalEnglish": "Inspect Factory Runtime metrics"
+          },
+          "description": {
+            "id": "you.metrics.description",
+            "canonicalEnglish": "Inspect recorded Factory Runtime metrics grouped by workstation, worker, or provider. Token and dispatch counts are reported with failure reasons and percentile latency; cost is reported as unavailable until a pricing source is configured."
+          }
+        },
+        "examples": [
+          "you metrics",
+          "you metrics --group-by worker",
+          "you metrics --group-by provider"
+        ],
+        "visibility": "public",
+        "sourceHash": "0000000000000000000000000000000000000000000000000000000000000000"
+      },
+      "lifecycle": {
+        "formatVersion": "1.0.0",
+        "itemId": "you.metrics",
+        "state": "active",
+        "since": "1.0.0"
+      },
+      "visibility": "visible",
+      "runnable": true,
+      "placement": "local-only",
+      "usage": {
+        "line": "metrics",
+        "example": "  # Inspect all recorded Factory Runtime metrics.\n  you metrics\n\n  # Group the same metrics by worker type.\n  you metrics --group-by worker"
+      },
+      "flags": {
+        "you.metrics.flag.debug": {
+          "id": "you.metrics.flag.debug",
+          "long": "debug",
+          "shorthand": "d",
+          "aliases": [],
+          "scope": "inherited",
+          "inheritedFromInputId": "you.flag.debug",
+          "valueType": "bool",
+          "required": false,
+          "default": "false",
+          "changedDefault": false,
+          "noOptionDefault": "true",
+          "repeatable": false,
+          "normalization": "",
+          "completion": "none",
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.metrics.flag.debug",
+            "state": "active",
+            "since": "1.0.0"
+          }
+        },
+        "you.metrics.flag.group-by": {
+          "id": "you.metrics.flag.group-by",
+          "long": "group-by",
+          "usage": "group metrics by workstation, worker, or provider",
+          "shorthand": "",
+          "aliases": [],
+          "scope": "local",
+          "valueType": "string",
+          "required": false,
+          "default": "workstation",
+          "changedDefault": false,
+          "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "",
+          "completion": "none",
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.metrics.flag.group-by",
+            "state": "active",
+            "since": "1.0.0"
+          }
+        },
+        "you.metrics.flag.json": {
+          "id": "you.metrics.flag.json",
+          "long": "json",
+          "shorthand": "",
+          "aliases": [],
+          "scope": "inherited",
+          "inheritedFromInputId": "you.flag.json",
+          "valueType": "bool",
+          "required": false,
+          "default": "false",
+          "changedDefault": false,
+          "noOptionDefault": "true",
+          "repeatable": false,
+          "normalization": "",
+          "completion": "none",
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.metrics.flag.json",
+            "state": "active",
+            "since": "1.0.0"
+          }
+        },
+        "you.metrics.flag.remote": {
+          "id": "you.metrics.flag.remote",
+          "long": "remote",
+          "shorthand": "",
+          "aliases": [],
+          "scope": "inherited",
+          "inheritedFromInputId": "you.flag.remote",
+          "valueType": "bool",
+          "required": false,
+          "default": "false",
+          "changedDefault": false,
+          "noOptionDefault": "true",
+          "repeatable": false,
+          "normalization": "",
+          "completion": "none",
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.metrics.flag.remote",
+            "state": "active",
+            "since": "1.0.0"
+          }
+        },
+        "you.metrics.flag.server": {
+          "id": "you.metrics.flag.server",
+          "long": "server",
+          "shorthand": "",
+          "aliases": [],
+          "scope": "inherited",
+          "inheritedFromInputId": "you.flag.server",
+          "valueType": "string",
+          "required": false,
+          "default": "http://localhost:7437",
+          "changedDefault": false,
+          "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "",
+          "completion": "none",
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.metrics.flag.server",
+            "state": "active",
+            "since": "1.0.0"
+          }
+        },
+        "you.metrics.flag.verbose": {
+          "id": "you.metrics.flag.verbose",
+          "long": "verbose",
+          "shorthand": "v",
+          "aliases": [],
+          "scope": "inherited",
+          "inheritedFromInputId": "you.flag.verbose",
+          "valueType": "bool",
+          "required": false,
+          "default": "false",
+          "changedDefault": false,
+          "noOptionDefault": "true",
+          "repeatable": false,
+          "normalization": "",
+          "completion": "none",
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.metrics.flag.verbose",
+            "state": "active",
+            "since": "1.0.0"
+          }
+        }
+      },
+      "precedence": {
+        "order": [
+          "cli",
+          "stdin",
+          "environment",
+          "operator-config",
+          "manifest-default",
+          "factory-signature-default"
+        ],
+        "withinTier": {
+          "scalar": "last",
+          "repeated": "append"
+        },
+        "acrossTiers": "replace",
+        "multipleBindings": "reject"
+      },
+      "channels": {
+        "input": [
+          "cli",
+          "env",
+          "config",
+          "stdin"
+        ],
+        "output": [
+          "stdout",
+          "stderr"
+        ]
+      },
+      "outputs": {
+        "you.metrics.output.human": {
+          "id": "you.metrics.output.human",
+          "channel": "stdout",
+          "format": "text"
+        }
+      },
+      "exits": {
+        "you.metrics.exit.success": {
+          "id": "you.metrics.exit.success",
+          "code": 0,
+          "kind": "success"
+        },
+        "you.metrics.exit.failure": {
+          "id": "you.metrics.exit.failure",
+          "code": 1,
+          "kind": "failure"
+        },
+        "you.metrics.exit.usage": {
+          "id": "you.metrics.exit.usage",
+          "code": 1,
+          "kind": "usage"
+        }
+      },
+      "sideEffects": {
+        "you.metrics.side-effect.filesystem": {
+          "id": "you.metrics.side-effect.filesystem",
+          "kind": "filesystem"
+        }
+      },
+      "constraints": {
+        "runtime": [
+          "local"
+        ],
+        "platforms": [
+          "linux",
+          "darwin",
+          "windows"
+        ]
+      },
+      "handler": {
+        "id": "you.metrics.handler"
+      }
+    },
     "you.providers": {
       "id": "you.providers",
       "name": "providers",
