@@ -8,6 +8,7 @@ import (
 	"go/parser"
 	"go/token"
 	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"slices"
@@ -128,6 +129,91 @@ func listFunctionalTestPackageMetadata(patterns []string, repoRoot string) ([]fu
 		return nil, errors.New("resolve go coverage lane: no packages matched")
 	}
 
+	candidatePaths, usedCurrentTree, err := currentTreeFunctionalPackageCandidates(patterns, repoRoot)
+	if err != nil {
+		return nil, err
+	}
+	if usedCurrentTree {
+		return listFunctionalTestPackageMetadataForCandidates(candidatePaths, repoRoot)
+	}
+	return listFunctionalTestPackageMetadataFromPatterns(patterns, repoRoot)
+}
+
+func currentTreeFunctionalPackageCandidates(patterns []string, repoRoot string) ([]string, bool, error) {
+	if !slices.Equal(patterns, functionalTestPatterns) {
+		return nil, false, nil
+	}
+	root := filepath.Join(repoRoot, "tests", "functional")
+	if _, err := os.Stat(root); err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			return nil, false, nil
+		}
+		return nil, false, fmt.Errorf("discover functional tests: inspect current functional tree: %w", err)
+	}
+
+	candidates := make(map[string]struct{})
+	err := filepath.WalkDir(root, func(path string, entry fs.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return fmt.Errorf("discover functional tests: inspect current functional tree entry %q: %w", filepath.ToSlash(path), walkErr)
+		}
+		if entry.IsDir() {
+			if entry.Name() == "testdata" {
+				return fs.SkipDir
+			}
+			return nil
+		}
+		if !strings.HasSuffix(entry.Name(), ".go") {
+			return nil
+		}
+		relativeDir, err := filepath.Rel(repoRoot, filepath.Dir(path))
+		if err != nil {
+			return fmt.Errorf("discover functional tests: resolve current functional package directory %q: %w", filepath.ToSlash(filepath.Dir(path)), err)
+		}
+		candidates[modulePath+"/"+filepath.ToSlash(relativeDir)] = struct{}{}
+		return nil
+	})
+	if err != nil {
+		return nil, false, err
+	}
+
+	paths := make([]string, 0, len(candidates))
+	for path := range candidates {
+		paths = append(paths, path)
+	}
+	if len(paths) == 0 {
+		return nil, false, nil
+	}
+	slices.Sort(paths)
+	return paths, true, nil
+}
+
+func listFunctionalTestPackageMetadataForCandidates(candidatePaths []string, repoRoot string) ([]functionalGoListPackage, error) {
+	listedPackages, err := listFunctionalTestPackageBatchWithFieldsAndFlags(
+		candidatePaths,
+		functionalGoListJSONFields,
+		[]string{"-find"},
+		repoRoot,
+	)
+	if err != nil {
+		return nil, err
+	}
+	listedPackages, err = mergeFunctionalGoListPackages(listedPackages)
+	if err != nil {
+		return nil, err
+	}
+	runnableCandidates := make([]string, 0, len(candidatePaths))
+	for _, candidatePath := range candidatePaths {
+		if isFunctionalTestPackage(candidatePath) {
+			runnableCandidates = append(runnableCandidates, candidatePath)
+		}
+	}
+	if len(runnableCandidates) == 0 {
+		return nil, errors.New("resolve go coverage lane: no packages matched")
+	}
+	return selectFunctionalPackageSet(runnableCandidates, listedPackages)
+}
+
+func listFunctionalTestPackageMetadataFromPatterns(patterns []string, repoRoot string) ([]functionalGoListPackage, error) {
 	// Resolve package identities separately from test-file metadata. A wildcard
 	// metadata query makes one go list process inspect every test file before it
 	// returns. The identity query stays cheap; a single concrete metadata query

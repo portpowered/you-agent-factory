@@ -156,25 +156,44 @@ func TestDiscoverFunctionalTestInventoryParallelizesConcretePackageBatches(t *te
 	}
 }
 
+func TestCurrentTreeFunctionalPackageCandidatesSkipTestdataAndNonGoFiles(t *testing.T) {
+	repoRoot := t.TempDir()
+	visibleDir := filepath.Join(repoRoot, "tests", "functional", "visible")
+	testdataDir := filepath.Join(visibleDir, "testdata")
+	if err := os.MkdirAll(testdataDir, 0o755); err != nil {
+		t.Fatalf("create candidate fixture directories: %v", err)
+	}
+	writeFunctionalDiscoveryFixture(t, visibleDir, "visible_test.go", "package visible\n")
+	writeFunctionalDiscoveryFixture(t, visibleDir, "notes.txt", "not a Go source file\n")
+	writeFunctionalDiscoveryFixture(t, testdataDir, "ignored_test.go", "package ignored\n")
+
+	paths, usedCurrentTree, err := currentTreeFunctionalPackageCandidates(functionalTestPatterns, repoRoot)
+	if err != nil {
+		t.Fatalf("currentTreeFunctionalPackageCandidates() error = %v", err)
+	}
+	if !usedCurrentTree {
+		t.Fatal("currentTreeFunctionalPackageCandidates() did not use the current tree")
+	}
+	want := []string{modulePath + "/tests/functional/visible"}
+	if !slices.Equal(paths, want) {
+		t.Fatalf("candidate package paths = %v, want %v", paths, want)
+	}
+}
+
 func TestResolveFunctionalTestPackagesWithMetadataUsesCurrentTreeGoList(t *testing.T) {
 	originalRunner := commandRunner
 	t.Cleanup(func() { commandRunner = originalRunner })
 
 	packagePath := modulePath + "/tests/functional/metadata"
 	secondPackagePath := modulePath + "/tests/functional/metadata-second"
-	supportPath := modulePath + "/tests/functional/internal/support"
 	repoRoot := t.TempDir()
-	packageDir := filepath.Join(repoRoot, "metadata")
-	secondPackageDir := filepath.Join(repoRoot, "metadata-second")
-	supportDir := filepath.Join(repoRoot, "support")
+	packageDir := filepath.Join(repoRoot, "tests", "functional", "metadata")
+	secondPackageDir := filepath.Join(repoRoot, "tests", "functional", "metadata-second")
 	if err := os.MkdirAll(packageDir, 0o755); err != nil {
 		t.Fatalf("create package directory: %v", err)
 	}
 	if err := os.MkdirAll(secondPackageDir, 0o755); err != nil {
 		t.Fatalf("create second package directory: %v", err)
-	}
-	if err := os.MkdirAll(supportDir, 0o755); err != nil {
-		t.Fatalf("create support directory: %v", err)
 	}
 	writeFunctionalDiscoveryFixture(t, packageDir, "metadata_test.go", `package metadata
 
@@ -182,17 +201,17 @@ import "testing"
 
 func TestMetadata(t *testing.T) {}
 `)
+	writeFunctionalDiscoveryFixture(t, secondPackageDir, "second_test.go", `package metadatasecond
+
+import "testing"
+
+func TestSecond(t *testing.T) {}
+`)
 
 	var invocations []commandInvocation
 	commandRunner = func(invocation commandInvocation) (string, string, error) {
 		invocations = append(invocations, invocation)
 		switch {
-		case slices.Equal(invocation.args, []string{"list", functionalGoListErrorFlag, functionalGoListIdentityJSONFields, "-find", "./tests/functional/..."}):
-			return strings.Join([]string{
-				marshalFunctionalGoListPackage(t, functionalGoListPackage{ImportPath: supportPath, Dir: supportDir}),
-				marshalFunctionalGoListPackage(t, functionalGoListPackage{ImportPath: packagePath, Dir: packageDir}),
-				marshalFunctionalGoListPackage(t, functionalGoListPackage{ImportPath: secondPackagePath, Dir: secondPackageDir}),
-			}, "\n"), "", nil
 		case slices.Equal(invocation.args, []string{"list", functionalGoListErrorFlag, functionalGoListJSONFields, "-find", packagePath, secondPackagePath}):
 			return strings.Join([]string{
 				marshalFunctionalGoListPackage(t, functionalGoListPackage{ImportPath: packagePath, Dir: packageDir, TestGoFiles: []string{"metadata_test.go"}}),
@@ -214,8 +233,8 @@ func TestMetadata(t *testing.T) {}
 	if len(listed) != 2 || listed[0].ImportPath != packagePath || !slices.Equal(listed[0].TestGoFiles, []string{"metadata_test.go"}) || listed[1].ImportPath != secondPackagePath || !slices.Equal(listed[1].TestGoFiles, []string{"second_test.go"}) {
 		t.Fatalf("listed metadata = %+v, want one combined build-selected metadata query", listed)
 	}
-	if len(invocations) != 2 {
-		t.Fatalf("go list invocations = %d, want identity plus concrete metadata queries: %+v", len(invocations), invocations)
+	if len(invocations) != 1 {
+		t.Fatalf("go list invocations = %d, want one concrete metadata query: %+v", len(invocations), invocations)
 	}
 	for _, invocation := range invocations {
 		if invocation.name != "go" || invocation.dir != repoRoot {
