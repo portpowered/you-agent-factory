@@ -182,6 +182,31 @@ build_grpc_dependencies() {
 	fi
 }
 
+ensure_localai_grpc_compat_path() {
+	local grpc_path="${LOCALAI_ROOT}/backend/cpp/grpc"
+	local compatibility_path="${LOCALAI_ROOT}/backend/grpc"
+	local expected_path actual_path
+
+	if [[ ! -d "$grpc_path" ]]; then
+		echo "pinned LocalAI gRPC directory is missing: ${grpc_path}" >&2
+		exit 1
+	fi
+	expected_path="$(cd "$grpc_path" && pwd -P)"
+	if [[ -e "$compatibility_path" || -L "$compatibility_path" ]]; then
+		if [[ ! -d "$compatibility_path" ]]; then
+			echo "LocalAI gRPC compatibility path is not a directory: ${compatibility_path}" >&2
+			exit 1
+		fi
+		actual_path="$(cd "$compatibility_path" && pwd -P)"
+		if [[ "$actual_path" != "$expected_path" ]]; then
+			echo "LocalAI gRPC compatibility path resolves to ${actual_path}, expected ${expected_path}" >&2
+			exit 1
+		fi
+		return
+	fi
+	ln -s "$grpc_path" "$compatibility_path"
+}
+
 generate_go_protocol() {
 	local grpc_path="${LOCALAI_ROOT}/backend/cpp/grpc"
 	local protoc_path="${grpc_path}/installed_packages/bin/protoc"
@@ -216,6 +241,24 @@ stage_darwin_llama_package() {
 		cp -f "${shared_libraries[@]}" "${package_root}/lib/"
 	fi
 	shopt -u nullglob
+}
+
+stage_darwin_go_package() {
+	local package_root="${backend_path}/package"
+	local library
+	mkdir -p "${package_root}/lib"
+	cp -f "${backend_path}/${binary}" "${package_root}/${binary}"
+	cp -f "${backend_path}/run.sh" "${package_root}/run.sh"
+	shopt -s nullglob
+	local libraries=("${backend_path}"/libgo*.dylib)
+	shopt -u nullglob
+	if (( ${#libraries[@]} == 0 )); then
+		echo "Darwin ${BACKEND_ID} build did not produce a Go backend dylib" >&2
+		exit 1
+	fi
+	for library in "${libraries[@]}"; do
+		cp -f "$library" "${package_root}/"
+	done
 }
 
 stage_windows_runtime() {
@@ -304,6 +347,9 @@ os_make_args=()
 if [[ "$TARGET_ID" == "darwin-arm64" ]]; then
 	os_make_args=(OS=Darwin)
 fi
+if [[ "$BACKEND_ID" == "localai-llamacpp" ]]; then
+	ensure_localai_grpc_compat_path
+fi
 
 if [[ "$TARGET_ID" == "windows-amd64" ]]; then
 	mkdir -p "${backend_path}/package"
@@ -338,10 +384,10 @@ if [[ "$TARGET_ID" == "windows-amd64" ]]; then
 			;;
 	esac
 	stage_windows_runtime "${backend_path}/package"
-else
+	else
 	case "$BACKEND_ID" in
-		localai-llamacpp)
-			"$make_command" -C "$backend_path" "${os_make_args[@]}" BUILD_TYPE="$BUILD_TYPE" BUILD_GRPC_FOR_BACKEND_LLAMA=1 CMAKE_ARGS="$cmake_args_text" llama-cpp-cpu-all
+	localai-llamacpp)
+		"$make_command" -C "$backend_path" "${os_make_args[@]}" BUILD_TYPE="$BUILD_TYPE" BUILD_GRPC_FOR_BACKEND_LLAMA=1 CMAKE_ARGS="$cmake_args_text" llama-cpp-cpu-all
 			if [[ "$TARGET_ID" == "darwin-arm64" ]]; then
 				stage_darwin_llama_package
 			else
@@ -352,7 +398,12 @@ else
 			fi
 			;;
 		localai-whisper|localai-vibevoice)
-			"$make_command" -C "$backend_path" "${os_make_args[@]}" BUILD_TYPE="$BUILD_TYPE" build
+			if [[ "$TARGET_ID" == "darwin-arm64" ]]; then
+				"$make_command" -C "$backend_path" "${os_make_args[@]}" BUILD_TYPE="$BUILD_TYPE" JOBS=2 "$binary"
+				stage_darwin_go_package
+			else
+				"$make_command" -C "$backend_path" "${os_make_args[@]}" BUILD_TYPE="$BUILD_TYPE" build
+			fi
 			;;
 		*)
 			echo "unsupported Unix backend: $BACKEND_ID" >&2

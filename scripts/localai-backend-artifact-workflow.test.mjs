@@ -273,10 +273,19 @@ test("the workflow uses immutable actions, package inputs, and the pinned tag gu
 	);
 	const buildScript = await readFile("scripts/build-localai-backend-artifact.sh", "utf8");
 	assert.match(buildScript, /backend\/cpp\/grpc/);
-	assert.doesNotMatch(buildScript, /backend\/grpc/);
+	assert.match(buildScript, /compatibility_path="\$\{LOCALAI_ROOT\}\/backend\/grpc"/);
 	assert.match(buildScript, /VCPKG_OVERLAY_TRIPLETS/);
 	assert.match(buildScript, /grpc-server/);
 	assert.match(buildScript, /llama-cpp-cpu-all/);
+});
+
+test("the pinned build repairs LocalAI path and Darwin shell incompatibilities", async () => {
+	const buildScript = await readFile("scripts/build-localai-backend-artifact.sh", "utf8");
+	assert.match(buildScript, /ensure_localai_grpc_compat_path/);
+	assert.match(buildScript, /ln -s "\$grpc_path" "\$compatibility_path"/);
+	assert.match(buildScript, /stage_darwin_go_package/);
+	assert.match(buildScript, /BUILD_TYPE="\$BUILD_TYPE" JOBS=2 "\$binary"/);
+	assert.match(buildScript, /localai-whisper\|localai-vibevoice\)\r?\n\s+if \[\[ "\$TARGET_ID" == "darwin-arm64" \]\]/);
 });
 
 test("manifest verification rejects bytes tampered after manifest creation", async (t) => {
