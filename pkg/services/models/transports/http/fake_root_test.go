@@ -183,6 +183,13 @@ func (fake *rootFake) InvokeModelWithLease(
 	return models.InvokeModelResult{}, models.ErrUnsupportedOperation
 }
 
+func (fake *rootFake) InvokeModel(
+	context.Context,
+	models.InvokeModelRequest,
+) (models.InvokeModelResult, error) {
+	return models.InvokeModelResult{}, models.ErrUnsupportedOperation
+}
+
 func (fake *rootFake) CancelInvocation(
 	context.Context,
 	models.CancelInvocationRequest,

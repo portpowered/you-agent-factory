@@ -163,3 +163,11 @@ func (fake fakeModelsRoot) InvokeModelWithLease(
 	}
 	return fake.invokeModelWithLease(ctx, request)
 }
+
+func (fake fakeModelsRoot) InvokeModel(
+	context.Context,
+	models.InvokeModelRequest,
+) (models.InvokeModelResult, error) {
+	fake.markInvoked()
+	panic("unexpected InvokeModel on fake models root")
+}

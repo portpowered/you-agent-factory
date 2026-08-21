@@ -179,7 +179,8 @@ func (s *service) releaseInvocationLease(
 	ctx context.Context,
 	request models.InvokeModelRequest,
 ) {
-	_, _ = s.runtimeHost.ReleaseModelLease(ctx, models.ReleaseModelLeaseRequest{
+	releaseContext := context.WithoutCancel(ctx)
+	_, _ = s.runtimeHost.ReleaseModelLease(releaseContext, models.ReleaseModelLeaseRequest{
 		Scope: request.Scope,
 		Lease: request.Lease,
 	})

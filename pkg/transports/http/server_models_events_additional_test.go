@@ -291,7 +291,16 @@ func (fake strictModelsServiceFake) GetCatalogModel(ctx context.Context, request
 	return modelinference.GetModelResult{Model: detail}, err
 }
 
-func (fake strictModelsServiceFake) InvokeModel(ctx context.Context, name string, request modelinference.Request) (modelinference.Result, error) {
+func (fake strictModelsServiceFake) InvokeModel(_ context.Context, _ modelinference.InvokeModelRequest) (modelinference.InvokeModelResult, error) {
+	return modelinference.InvokeModelResult{}, modelinference.ErrUnsupportedOperation
+}
+
+type strictModelsServiceInvoker struct {
+	fake strictModelsServiceFake
+}
+
+func (invoker strictModelsServiceInvoker) InvokeModel(ctx context.Context, name string, request modelinference.Request) (modelinference.Result, error) {
+	fake := invoker.fake
 	if fake.invoke == nil {
 		panic("unexpected models.Service.InvokeModel call")
 	}
@@ -309,7 +318,7 @@ func newStrictModelTestServer(models strictModelsServiceFake) *Server {
 	logger := zap.NewNop()
 	return newServerFromRoles(
 		nil, nil, nil, nil, nil, nil,
-		modelshttp.NewHandler(modelshttp.NewAdapter(models, models, modelHTTPContentPreparation{}, modelHTTPTestScope()), logger),
+		modelshttp.NewHandler(modelshttp.NewAdapter(models, strictModelsServiceInvoker{fake: models}, modelHTTPContentPreparation{}, modelHTTPTestScope()), logger),
 		nil, httpFactoryValidator{}, nil,
 		nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, logger,
 	)

@@ -118,6 +118,10 @@ func (stub ownedCoverageModelsRoot) InvokeModelWithLease(ctx context.Context, re
 	return modelinference.InvokeModelResult{}, modelinference.ErrUnsupportedOperation
 }
 
+func (stub ownedCoverageModelsRoot) InvokeModel(context.Context, modelinference.InvokeModelRequest) (modelinference.InvokeModelResult, error) {
+	return modelinference.InvokeModelResult{}, modelinference.ErrUnsupportedOperation
+}
+
 func (stub ownedCoverageModelsRoot) CancelInvocation(context.Context, modelinference.CancelInvocationRequest) (modelinference.CancelInvocationResult, error) {
 	return modelinference.CancelInvocationResult{}, modelinference.ErrUnsupportedOperation
 }

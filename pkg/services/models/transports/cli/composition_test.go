@@ -118,6 +118,10 @@ func (stub compositionModelsRoot) InvokeModelWithLease(context.Context, modelinf
 	return modelinference.InvokeModelResult{}, modelinference.ErrUnsupportedOperation
 }
 
+func (stub compositionModelsRoot) InvokeModel(context.Context, modelinference.InvokeModelRequest) (modelinference.InvokeModelResult, error) {
+	return modelinference.InvokeModelResult{}, modelinference.ErrUnsupportedOperation
+}
+
 func (stub compositionModelsRoot) CancelInvocation(context.Context, modelinference.CancelInvocationRequest) (modelinference.CancelInvocationResult, error) {
 	return modelinference.CancelInvocationResult{}, modelinference.ErrUnsupportedOperation
 }

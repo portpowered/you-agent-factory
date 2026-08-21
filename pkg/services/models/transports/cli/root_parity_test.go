@@ -109,6 +109,12 @@ func (root *scopeLifecycleModelsRoot) InvokeModelWithLease(
 	return modelinference.InvokeModelResult{}, modelinference.ErrUnsupportedOperation
 }
 
+func (root *scopeLifecycleModelsRoot) InvokeModel(
+	context.Context, modelinference.InvokeModelRequest,
+) (modelinference.InvokeModelResult, error) {
+	return modelinference.InvokeModelResult{}, modelinference.ErrUnsupportedOperation
+}
+
 func testRuntimeScope(t *testing.T) modelinference.RuntimeScopeRef {
 	t.Helper()
 	scope, err := (modelinference.RuntimeScopeRef{}).Parse("cli-parity:test-scope")

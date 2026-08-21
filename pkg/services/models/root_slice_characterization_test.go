@@ -149,6 +149,13 @@ func (*runtimeScopePeerService) InvokeModelWithLease(
 	return models.InvokeModelResult{}, models.ErrUnsupportedOperation
 }
 
+func (*runtimeScopePeerService) InvokeModel(
+	context.Context,
+	models.InvokeModelRequest,
+) (models.InvokeModelResult, error) {
+	return models.InvokeModelResult{}, models.ErrUnsupportedOperation
+}
+
 func (*runtimeScopePeerService) CancelInvocation(
 	context.Context,
 	models.CancelInvocationRequest,

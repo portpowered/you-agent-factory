@@ -78,6 +78,11 @@ type Service interface {
 	// invocation identity, and lease-disposition facts. Runtime handles,
 	// endpoints, processes, and filesystem paths remain private.
 	InvokeModelWithLease(context.Context, InvokeModelRequest) (InvokeModelResult, error)
+	// InvokeModel owns the complete provider-neutral invocation transaction. It
+	// validates and resolves the request, prepares model assets, makes a
+	// compatible host ready, acquires capacity, delegates the prepared call to
+	// InvokeModelWithLease, and returns only detached outputs and failures.
+	InvokeModel(context.Context, InvokeModelRequest) (InvokeModelResult, error)
 	// CancelInvocation requests cancellation of one scoped invocation. First,
 	// repeated, and late cancellation return typed outcomes; context
 	// cancellation and explicit cancellation converge on the same cancelled

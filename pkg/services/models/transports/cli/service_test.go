@@ -114,6 +114,10 @@ func (stub stubModelsRoot) InvokeModelWithLease(ctx context.Context, request mod
 	return modelinference.InvokeModelResult{}, modelinference.ErrUnsupportedOperation
 }
 
+func (stub stubModelsRoot) InvokeModel(context.Context, modelinference.InvokeModelRequest) (modelinference.InvokeModelResult, error) {
+	return modelinference.InvokeModelResult{}, modelinference.ErrUnsupportedOperation
+}
+
 func (stub stubModelsRoot) CancelInvocation(context.Context, modelinference.CancelInvocationRequest) (modelinference.CancelInvocationResult, error) {
 	return modelinference.CancelInvocationResult{}, modelinference.ErrUnsupportedOperation
 }

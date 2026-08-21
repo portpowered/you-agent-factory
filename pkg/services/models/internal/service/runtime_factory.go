@@ -377,6 +377,348 @@ func (o *Root) InvokeModelWithLease(
 	return o.inference.InvokeModelWithLease(ctx, request)
 }
 
+type joinedInvocationPlan struct {
+	modelName string
+	operation models.Operation
+	prepared  models.InvokeModelRequest
+	lease     models.ModelLeaseRef
+}
+
+const joinedInvocationFailureRuntime = "runtime_failure"
+
+// InvokeModel owns the complete prepared-model transaction. The injected
+// Inference owner remains responsible for the lease-backed primitive; this
+// root method supplies the preparation and compensating lifecycle around it.
+func (o *Root) InvokeModel(
+	ctx context.Context,
+	request models.InvokeModelRequest,
+) (models.InvokeModelResult, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	started := joinedInvocationStart(o)
+	stage := "validate"
+	modelName := ""
+	operationName := request.Operation
+	var invocation models.ModelInvocationRef
+	finish := func(result models.InvokeModelResult, err error) (models.InvokeModelResult, error) {
+		if result.ModelName != "" {
+			modelName = result.ModelName
+		}
+		if result.Operation != "" {
+			operationName = result.Operation
+		}
+		if !result.Invocation.IsZero() {
+			invocation = result.Invocation
+		}
+		if err != nil {
+			result = joinedInvocationFailureResult(result)
+		}
+		joinedInvocationRecord(
+			o, modelName, operationName, invocation, stage, err,
+			joinedInvocationElapsed(o, started),
+		)
+		return result.Clone(), err
+	}
+
+	if err := validateJoinedRoot(o); err != nil {
+		return finish(models.InvokeModelResult{}, err)
+	}
+	plan, preparedStage, err := o.prepareJoinedInvocation(ctx, request)
+	stage = preparedStage
+	modelName = plan.modelName
+	operationName = plan.operation.Name
+	if err != nil {
+		return finish(models.InvokeModelResult{}, joinedInvocationContextError(ctx, err))
+	}
+
+	result, invokeStage, err := o.executeJoinedInvocation(ctx, plan)
+	stage = invokeStage
+	return finish(result, joinedInvocationContextError(ctx, err))
+}
+
+func validateJoinedRoot(o *Root) error {
+	if o == nil || o.runtimeScopes == nil || o.assets == nil || o.runtimeHost == nil || o.inference == nil {
+		return models.ErrUnsupportedOperation
+	}
+	return nil
+}
+
+func (o *Root) prepareJoinedInvocation(
+	ctx context.Context,
+	request models.InvokeModelRequest,
+) (joinedInvocationPlan, string, error) {
+	plan := joinedInvocationPlan{}
+	if err := request.ValidateGeneric(); err != nil {
+		return plan, "validate", err
+	}
+
+	resolution, err := o.ResolveModelReference(ctx, models.ResolveModelReferenceRequest{
+		Scope: request.Scope, Reference: request.Model,
+	})
+	if err != nil {
+		return plan, "resolve", err
+	}
+	resolved := resolution.Resolved
+	plan.modelName = resolved.Definition.Name
+	plan.prepared, plan.operation, err = models.PrepareGenericInvocation(request, resolved.Definition)
+	if err != nil {
+		return plan, "resolve", err
+	}
+	plan.prepared.ModelName = plan.modelName
+	plan.prepared.Operation = plan.operation.Name
+	if len(plan.prepared.Inputs) > 0 && inferenceInputIsZero(plan.prepared.Input) {
+		plan.prepared.Input = plan.prepared.Inputs[0].Clone()
+	}
+
+	assetReference := joinedAssetReference(request.Model, resolved)
+	if _, err := o.PrepareModelAssets(ctx, models.PrepareModelAssetsRequest{
+		Scope:     request.Scope,
+		Name:      plan.modelName,
+		Reference: assetReference,
+		Offline:   request.Offline,
+		Backend:   resolved.Definition.Backend,
+	}); err != nil {
+		return plan, "acquire_assets", err
+	}
+	if _, err := o.EnsureModelHost(ctx, models.EnsureModelHostRequest{
+		Scope: request.Scope,
+		Name:  plan.modelName,
+	}); err != nil {
+		return plan, "ensure_host", err
+	}
+	leaseResult, err := o.AcquireModelLease(ctx, models.AcquireModelLeaseRequest{
+		Scope: request.Scope, Name: plan.modelName, Holder: request.Holder,
+	})
+	if err != nil {
+		return plan, "acquire_lease", err
+	}
+	plan.lease = leaseResult.Lease.Lease
+	if plan.lease.IsZero() {
+		return plan, "acquire_lease", models.ErrHostLeaseNotFound
+	}
+	plan.prepared.Lease = plan.lease
+	return plan, "invoke", nil
+}
+
+func (o *Root) executeJoinedInvocation(
+	ctx context.Context,
+	plan joinedInvocationPlan,
+) (models.InvokeModelResult, string, error) {
+	result, err := o.InvokeModelWithLease(ctx, plan.prepared)
+	result = joinedInvocationResultIdentity(result, plan)
+	if err != nil {
+		return o.finishJoinedFailure(ctx, plan, result, "invoke", err)
+	}
+	if result.Status == models.ModelInvocationStatusCompleted {
+		result.Outputs, err = models.NormalizeGenericInvocationOutputs(
+			plan.operation, result.Content, result.Artifacts,
+		)
+		if err != nil {
+			result.Status = models.ModelInvocationStatusFailed
+			return o.finishJoinedFailure(ctx, plan, result, "invoke", err)
+		}
+	}
+	if result.Status == models.ModelInvocationStatusAccepted {
+		result.Status = models.ModelInvocationStatusFailed
+		return o.finishJoinedFailure(
+			ctx, plan, result, "invoke",
+			fmt.Errorf("%w: joined invocation did not complete", models.ErrInferenceFailed),
+		)
+	}
+	if result.Status == models.ModelInvocationStatusFailed {
+		return o.finishJoinedFailure(ctx, plan, result, "invoke", models.ErrInferenceFailed)
+	}
+	if result.Status == models.ModelInvocationStatusCancelled {
+		return o.finishJoinedFailure(ctx, plan, result, "invoke", models.ErrInferenceCancelled)
+	}
+	if result.Status != models.ModelInvocationStatusCompleted {
+		result.Status = models.ModelInvocationStatusFailed
+		return o.finishJoinedFailure(ctx, plan, result, "invoke", models.ErrInferenceFailed)
+	}
+	return o.releaseJoinedInvocation(ctx, plan, result)
+}
+
+func (o *Root) finishJoinedFailure(
+	ctx context.Context,
+	plan joinedInvocationPlan,
+	result models.InvokeModelResult,
+	stage string,
+	invokeErr error,
+) (models.InvokeModelResult, string, error) {
+	if !joinedInvocationLeaseReleased(result) {
+		releaseErr := o.releaseJoinedLease(ctx, plan.prepared.Scope, plan.lease)
+		if releaseErr == nil {
+			result.LeaseDisposition = models.InvocationLeaseReleased
+		}
+		invokeErr = errors.Join(invokeErr, releaseErr)
+	}
+	return result, stage, invokeErr
+}
+
+func (o *Root) releaseJoinedInvocation(
+	ctx context.Context,
+	plan joinedInvocationPlan,
+	result models.InvokeModelResult,
+) (models.InvokeModelResult, string, error) {
+	if joinedInvocationLeaseReleased(result) {
+		return result, "release", nil
+	}
+	releaseErr := o.releaseJoinedLease(ctx, plan.prepared.Scope, plan.lease)
+	if releaseErr == nil {
+		result.LeaseDisposition = models.InvocationLeaseReleased
+	} else {
+		result.Status = models.ModelInvocationStatusFailed
+	}
+	return result, "release", releaseErr
+}
+
+func joinedInvocationResultIdentity(
+	result models.InvokeModelResult,
+	plan joinedInvocationPlan,
+) models.InvokeModelResult {
+	result.Scope = plan.prepared.Scope
+	result.Lease = plan.lease
+	result.ModelName = plan.modelName
+	result.Operation = plan.operation.Name
+	return result
+}
+
+func joinedInvocationFailureResult(result models.InvokeModelResult) models.InvokeModelResult {
+	result.Content = nil
+	result.Artifacts = nil
+	result.Outputs = nil
+	return result
+}
+
+func joinedAssetReference(
+	reference models.ModelReference,
+	resolved models.ResolvedModelReference,
+) models.ModelReference {
+	if resolved.Provenance.Kind == models.ModelReferenceSourceHuggingFace &&
+		resolved.Definition.Source != "" {
+		return models.ModelReference{NameOrURI: resolved.Definition.Source}
+	}
+	return reference
+}
+
+func inferenceInputIsZero(input models.InferenceInput) bool {
+	return input.Name == "" && input.Modality == "" && input.ContentType == "" &&
+		input.MediaType == "" && input.Content == "" && input.Artifact == nil
+}
+
+func joinedInvocationLeaseReleased(result models.InvokeModelResult) bool {
+	return result.LeaseDisposition == models.InvocationLeaseReleased ||
+		result.LeaseDisposition == models.InvocationLeaseExpired
+}
+
+func (o *Root) releaseJoinedLease(
+	ctx context.Context,
+	scope models.RuntimeScopeRef,
+	lease models.ModelLeaseRef,
+) error {
+	if o == nil || o.runtimeHost == nil || lease.IsZero() {
+		return nil
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	releaseContext := context.WithoutCancel(ctx)
+	_, err := o.ReleaseModelLease(releaseContext, models.ReleaseModelLeaseRequest{
+		Scope: scope, Lease: lease,
+	})
+	return err
+}
+
+func joinedInvocationContextError(ctx context.Context, err error) error {
+	if err == nil || ctx == nil || ctx.Err() == nil || errors.Is(err, models.ErrInferenceCancelled) {
+		return err
+	}
+	return errors.Join(models.ErrInferenceCancelled, err)
+}
+
+func joinedInvocationStart(o *Root) time.Time {
+	if o != nil && o.process.Clock != nil {
+		return o.process.Clock()
+	}
+	return time.Now()
+}
+
+func joinedInvocationElapsed(o *Root, started time.Time) time.Duration {
+	ended := time.Now()
+	if o != nil && o.process.Clock != nil {
+		ended = o.process.Clock()
+	}
+	if ended.Before(started) {
+		return 0
+	}
+	return ended.Sub(started)
+}
+
+func joinedInvocationRecord(
+	o *Root,
+	modelName string,
+	operation string,
+	invocation models.ModelInvocationRef,
+	stage string,
+	err error,
+	elapsed time.Duration,
+) {
+	if o == nil || o.process.Logger == nil {
+		return
+	}
+	fields := []zap.Field{
+		zap.String("model_name", modelName),
+		zap.String("operation", operation),
+		zap.String("invocation", invocation.String()),
+		zap.String("stage", stage),
+		zap.Duration("duration", elapsed),
+	}
+	if err != nil {
+		fields = append(fields,
+			zap.String("outcome", "FAILED"),
+			zap.String("failure_class", joinedInvocationFailureClass(err)),
+		)
+		o.process.Logger.Warn("models invocation completed", fields...)
+		return
+	}
+	fields = append(fields, zap.String("outcome", "COMPLETED"))
+	o.process.Logger.Info("models invocation completed", fields...)
+}
+
+func joinedInvocationFailureClass(err error) string {
+	var invocationFailure *models.InvocationFailure
+	if errors.As(err, &invocationFailure) && invocationFailure != nil && invocationFailure.Class != "" {
+		return string(invocationFailure.Class)
+	}
+	var configurationFailure models.ModelConfigurationFailure
+	if errors.As(err, &configurationFailure) {
+		return string(models.InvocationFailureClassConfiguration)
+	}
+	switch {
+	case errors.Is(err, models.ErrInferenceCancelled), errors.Is(err, models.ErrAssetCancelled), errors.Is(err, models.ErrHostCancelled):
+		return string(models.InvocationFailureClassCancellation)
+	case errors.Is(err, models.ErrInferenceTimeout), errors.Is(err, models.ErrHostLoadingTimeout):
+		return string(models.InvocationFailureClassTimeout)
+	case errors.Is(err, models.ErrHostProtocolIncompatible):
+		return string(models.InvocationFailureClassBackendProtocol)
+	case errors.Is(err, models.ErrHostRuntimeNotReady), errors.Is(err, models.ErrHostProcessCrash):
+		return string(models.InvocationFailureClassBackendReadiness)
+	case errors.Is(err, models.ErrAssetOffline):
+		return string(models.InvocationFailureClassOfflineCache)
+	case errors.Is(err, models.ErrInferenceArtifactInvalid):
+		return string(models.InvocationFailureClassArtifact)
+	case errors.Is(err, models.ErrModelRevisionUnresolved):
+		return string(models.InvocationFailureClassRevisionResolution)
+	case errors.Is(err, models.ErrModelReferenceInvalid):
+		return string(models.InvocationFailureClassInvalidModelReference)
+	case errors.Is(err, models.ErrInferenceFailed):
+		return joinedInvocationFailureRuntime
+	default:
+		return joinedInvocationFailureRuntime
+	}
+}
+
 func (o *Root) CancelInvocation(
 	ctx context.Context,
 	request models.CancelInvocationRequest,
@@ -596,6 +938,13 @@ func (s *runtimeService) RemoveModelAssets(
 	models.RemoveModelAssetsRequest,
 ) (models.RemoveModelAssetsResult, error) {
 	return models.RemoveModelAssetsResult{}, models.ErrUnsupportedOperation
+}
+
+func (s *runtimeService) InvokeModel(
+	context.Context,
+	models.InvokeModelRequest,
+) (models.InvokeModelResult, error) {
+	return models.InvokeModelResult{}, models.ErrUnsupportedOperation
 }
 
 func (s *runtimeService) InvokeLocal(ctx context.Context, request models.LocalInvocationRequest) (models.LocalInvocationResult, error) {

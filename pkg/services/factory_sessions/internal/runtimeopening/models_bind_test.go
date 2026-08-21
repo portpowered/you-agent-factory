@@ -150,6 +150,13 @@ func (fake *recordingModelsService) InvokeModelWithLease(
 	return models.InvokeModelResult{}, models.ErrUnsupportedOperation
 }
 
+func (fake *recordingModelsService) InvokeModel(
+	context.Context,
+	models.InvokeModelRequest,
+) (models.InvokeModelResult, error) {
+	return models.InvokeModelResult{}, models.ErrUnsupportedOperation
+}
+
 func (fake *recordingModelsService) CancelInvocation(
 	context.Context,
 	models.CancelInvocationRequest,
