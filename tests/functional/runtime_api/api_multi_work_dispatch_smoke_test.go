@@ -22,11 +22,13 @@ func TestSubmitMultipleRuntimeWorkItemsCompletes(t *testing.T) {
 
 	submitted := server.SubmitRuntimeWork(t,
 		work.SubmitRequest{
+			Name:       "first concurrent item",
 			WorkTypeID: "task",
 			TraceID:    "trace-multi-1",
 			Payload:    []byte(`{"title":"first concurrent item"}`),
 		},
 		work.SubmitRequest{
+			Name:       "second concurrent item",
 			WorkTypeID: "task",
 			TraceID:    "trace-multi-2",
 			Payload:    []byte(`{"title":"second concurrent item"}`),
