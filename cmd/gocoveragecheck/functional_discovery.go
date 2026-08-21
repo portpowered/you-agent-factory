@@ -21,7 +21,6 @@ import (
 const (
 	functionalDiscoveryParallelThreshold = 8
 	functionalDiscoveryMaxJobs           = 4
-	functionalDiscoveryMetadataMaxJobs   = 8
 	functionalGoListErrorFlag            = "-e"
 	functionalGoListIdentityJSONFields   = "-json=Dir,ImportPath"
 	functionalGoListJSONFields           = "-json=Dir,ImportPath,TestGoFiles,XTestGoFiles"
@@ -157,8 +156,8 @@ func listFunctionalTestPackageMetadata(patterns []string, repoRoot string) ([]fu
 	listedPackages, err := listFunctionalTestPackagesWithMaxJobs(
 		functionalPaths,
 		functionalPaths,
-		functionalDiscoveryMetadataMaxJobs,
-		functionalDiscoveryMetadataMaxJobs,
+		functionalDiscoveryMaxJobs,
+		functionalDiscoveryMaxJobs,
 		repoRoot,
 	)
 	if err != nil {
