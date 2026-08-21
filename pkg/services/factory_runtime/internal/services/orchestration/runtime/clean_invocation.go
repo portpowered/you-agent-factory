@@ -401,62 +401,73 @@ func validateRestoredDispatchInputs(
 	seenDispatchWork := make(map[string]string)
 	for dispatchID, dispatch := range restored.ActiveDispatches {
 		for _, input := range dispatch.Inputs {
-			if input.Resource != nil && input.WorkItem == nil {
-				continue
-			}
-			workID := input.TokenID
-			if input.WorkItem != nil && input.WorkItem.ID != "" {
-				if workID != "" && workID != input.WorkItem.ID {
-					return fmt.Errorf(
-						"restore Work board: active dispatch %q input token %q does not match Work %q",
-						dispatchID,
-						input.TokenID,
-						input.WorkItem.ID,
-					)
-				}
-				workID = input.WorkItem.ID
-			}
-			if workID == "" {
-				return fmt.Errorf("restore Work board: active dispatch %q contains a Work input without an identity", dispatchID)
-			}
-			if input.PlaceID == "" {
-				return fmt.Errorf("restore Work board: active dispatch %q input for Work %q has no logical place", dispatchID, workID)
-			}
-			if previousDispatch, exists := seenDispatchWork[workID]; exists {
-				return fmt.Errorf(
-					"restore Work board: Work %q is referenced by active dispatches %q and %q",
-					workID,
-					previousDispatch,
-					dispatchID,
-				)
-			}
-			seenDispatchWork[workID] = dispatchID
-			if occupiedPlace, exists := occupiedWorkIDs[workID]; exists {
-				return fmt.Errorf(
-					"restore Work board: Work %q is both occupied at %q and consumed by active dispatch %q",
-					workID,
-					occupiedPlace,
-					dispatchID,
-				)
-			}
-			item, exists := items[workID]
-			if !exists {
-				return fmt.Errorf("restore Work board: active dispatch %q references unknown Work %q", dispatchID, workID)
-			}
-			placeID, exists := placements[workID]
-			if !exists || placeID != input.PlaceID {
-				return fmt.Errorf(
-					"restore Work board: active dispatch %q places Work %q at %q, want restored place %q",
-					dispatchID,
-					workID,
-					input.PlaceID,
-					placeID,
-				)
-			}
-			if item.ID != workID {
-				return fmt.Errorf("restore Work board: active dispatch %q references mismatched Work %q", dispatchID, workID)
+			if err := validateRestoredDispatchInput(dispatchID, input, placements, occupiedWorkIDs, items, seenDispatchWork); err != nil {
+				return err
 			}
 		}
+	}
+	return nil
+}
+
+func validateRestoredDispatchInput(
+	dispatchID string,
+	input interfaces.WorkstationInput,
+	placements map[string]string,
+	occupiedWorkIDs map[string]string,
+	items map[string]work.FactoryWorkItem,
+	seenDispatchWork map[string]string,
+) error {
+	workID, ok := restoredDispatchWorkID(input)
+	if !ok {
+		return nil
+	}
+	if workID == "" {
+		return fmt.Errorf("restore Work board: active dispatch %q contains a Work input without an identity", dispatchID)
+	}
+	if input.WorkItem != nil && input.WorkItem.ID != "" && input.TokenID != "" && input.TokenID != input.WorkItem.ID {
+		return fmt.Errorf(
+			"restore Work board: active dispatch %q input token %q does not match Work %q",
+			dispatchID,
+			input.TokenID,
+			input.WorkItem.ID,
+		)
+	}
+	if input.PlaceID == "" {
+		return fmt.Errorf("restore Work board: active dispatch %q input for Work %q has no logical place", dispatchID, workID)
+	}
+	if previousDispatch, exists := seenDispatchWork[workID]; exists {
+		return fmt.Errorf(
+			"restore Work board: Work %q is referenced by active dispatches %q and %q",
+			workID,
+			previousDispatch,
+			dispatchID,
+		)
+	}
+	seenDispatchWork[workID] = dispatchID
+	if occupiedPlace, exists := occupiedWorkIDs[workID]; exists {
+		return fmt.Errorf(
+			"restore Work board: Work %q is both occupied at %q and consumed by active dispatch %q",
+			workID,
+			occupiedPlace,
+			dispatchID,
+		)
+	}
+	item, exists := items[workID]
+	if !exists {
+		return fmt.Errorf("restore Work board: active dispatch %q references unknown Work %q", dispatchID, workID)
+	}
+	placeID, exists := placements[workID]
+	if !exists || placeID != input.PlaceID {
+		return fmt.Errorf(
+			"restore Work board: active dispatch %q places Work %q at %q, want restored place %q",
+			dispatchID,
+			workID,
+			input.PlaceID,
+			placeID,
+		)
+	}
+	if item.ID != workID {
+		return fmt.Errorf("restore Work board: active dispatch %q references mismatched Work %q", dispatchID, workID)
 	}
 	return nil
 }
@@ -466,12 +477,8 @@ func validateRestoredWorkSourceIdentities(
 	items map[string]work.FactoryWorkItem,
 ) error {
 	for workID, item := range items {
-		if strings.TrimSpace(workID) == "" || strings.TrimSpace(item.ID) == "" || workID != item.ID {
-			return fmt.Errorf(
-				"restore Work board: Work index key %q does not match Work identity %q",
-				workID,
-				item.ID,
-			)
+		if err := validateRestoredWorkIdentity("Work", workID, item.ID, true); err != nil {
+			return err
 		}
 	}
 	for name, source := range map[string]map[string]work.FactoryWorkItem{
@@ -480,31 +487,33 @@ func validateRestoredWorkSourceIdentities(
 		"failed": restored.FailedWorkItemsByID,
 	} {
 		for workID, item := range source {
-			if strings.TrimSpace(workID) == "" && strings.TrimSpace(item.ID) == "" {
-				return fmt.Errorf("restore Work board: %s Work entry has no Work identity", name)
-			}
-			if workID != "" && item.ID != "" && workID != item.ID {
-				return fmt.Errorf(
-					"restore Work board: %s Work index key %q does not match Work identity %q",
-					name,
-					workID,
-					item.ID,
-				)
+			if err := validateRestoredWorkIdentity(name, workID, item.ID, false); err != nil {
+				return err
 			}
 		}
 	}
 	for workID, terminal := range restored.TerminalWorkByID {
-		itemID := terminal.WorkItem.ID
-		if strings.TrimSpace(workID) == "" && strings.TrimSpace(itemID) == "" {
-			return fmt.Errorf("restore Work board: terminal Work entry has no Work identity")
+		if err := validateRestoredWorkIdentity("terminal", workID, terminal.WorkItem.ID, false); err != nil {
+			return err
 		}
-		if workID != "" && itemID != "" && workID != itemID {
-			return fmt.Errorf(
-				"restore Work board: terminal Work index key %q does not match Work identity %q",
-				workID,
-				itemID,
-			)
-		}
+	}
+	return nil
+}
+
+func validateRestoredWorkIdentity(category, workID, itemID string, strict bool) error {
+	if strict && (strings.TrimSpace(workID) == "" || strings.TrimSpace(itemID) == "") {
+		return fmt.Errorf("restore Work board: Work index key %q does not match Work identity %q", workID, itemID)
+	}
+	if !strict && strings.TrimSpace(workID) == "" && strings.TrimSpace(itemID) == "" {
+		return fmt.Errorf("restore Work board: %s Work entry has no Work identity", category)
+	}
+	if workID != "" && itemID != "" && workID != itemID {
+		return fmt.Errorf(
+			"restore Work board: %s Work index key %q does not match Work identity %q",
+			category,
+			workID,
+			itemID,
+		)
 	}
 	return nil
 }
@@ -515,14 +524,6 @@ func validateRestoredWorkItemPlacement(workID string, item work.FactoryWorkItem,
 			"restore Work board: Work index key %q does not match Work identity %q",
 			workID,
 			item.ID,
-		)
-	}
-	if item.PlaceID != "" && item.PlaceID != place.ID {
-		return fmt.Errorf(
-			"restore Work board: Work %q records place %q but occupancy places it at %q",
-			workID,
-			item.PlaceID,
-			place.ID,
 		)
 	}
 	if item.WorkTypeID != "" && place.TypeID != "" && item.WorkTypeID != place.TypeID {
@@ -637,47 +638,71 @@ func restoredWorkPlacements(
 	if restored == nil {
 		return placements
 	}
-	placeIDs := make([]string, 0, len(restored.PlaceOccupancyByID))
-	for placeID := range restored.PlaceOccupancyByID {
+	addRestoredOccupancyPlacements(placements, restored.PlaceOccupancyByID)
+	addRestoredDispatchPlacements(placements, restored.ActiveDispatches)
+	if restored.PlaceOccupancyByID == nil {
+		addRestoredItemPlacements(placements, items)
+	}
+	return placements
+}
+
+func addRestoredOccupancyPlacements(
+	placements map[string]string,
+	occupancy map[string]interfaces.FactoryPlaceOccupancy,
+) {
+	placeIDs := make([]string, 0, len(occupancy))
+	for placeID := range occupancy {
 		placeIDs = append(placeIDs, placeID)
 	}
 	sort.Strings(placeIDs)
 	for _, placeID := range placeIDs {
-		workIDs := append([]string(nil), restored.PlaceOccupancyByID[placeID].WorkItemIDs...)
+		workIDs := append([]string(nil), occupancy[placeID].WorkItemIDs...)
 		sort.Strings(workIDs)
 		for _, workID := range workIDs {
-			if workID == "" {
-				continue
-			}
-			if _, exists := placements[workID]; !exists {
-				placements[workID] = placeID
-			}
+			addRestoredPlacement(placements, workID, placeID)
 		}
 	}
-	for _, dispatch := range restored.ActiveDispatches {
+}
+
+func addRestoredDispatchPlacements(
+	placements map[string]string,
+	dispatches map[string]interfaces.FactoryWorldDispatch,
+) {
+	for _, dispatch := range dispatches {
 		for _, input := range dispatch.Inputs {
-			if input.Resource != nil && input.WorkItem == nil {
+			workID, ok := restoredDispatchWorkID(input)
+			if !ok || input.PlaceID == "" {
 				continue
 			}
-			workID := input.TokenID
-			if input.WorkItem != nil && input.WorkItem.ID != "" {
-				workID = input.WorkItem.ID
-			}
-			if workID != "" && input.PlaceID != "" {
-				if _, exists := placements[workID]; !exists {
-					placements[workID] = input.PlaceID
-				}
-			}
+			addRestoredPlacement(placements, workID, input.PlaceID)
 		}
 	}
-	if restored.PlaceOccupancyByID == nil {
-		for workID, item := range items {
-			if item.WorkTypeID != "" && item.State != "" {
-				placements[workID] = state.PlaceID(item.WorkTypeID, item.State)
-			}
-		}
+}
+
+func addRestoredItemPlacements(placements map[string]string, items map[string]work.FactoryWorkItem) {
+	for workID, item := range items {
+		placeID := state.PlaceID(item.WorkTypeID, item.State)
+		addRestoredPlacement(placements, workID, placeID)
 	}
-	return placements
+}
+
+func addRestoredPlacement(placements map[string]string, workID, placeID string) {
+	if workID == "" || placeID == "" {
+		return
+	}
+	if _, exists := placements[workID]; !exists {
+		placements[workID] = placeID
+	}
+}
+
+func restoredDispatchWorkID(input interfaces.WorkstationInput) (string, bool) {
+	if input.Resource != nil && input.WorkItem == nil {
+		return "", false
+	}
+	if input.WorkItem != nil && input.WorkItem.ID != "" {
+		return input.WorkItem.ID, true
+	}
+	return input.TokenID, true
 }
 
 func restoredWorkTokenForPlacement(

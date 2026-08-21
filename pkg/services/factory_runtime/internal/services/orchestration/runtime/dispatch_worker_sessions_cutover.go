@@ -19,13 +19,10 @@ import (
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
-// startThroughWorkerSessions is the W4 Runtime dispatch cutover seam. For
-// every resolved dispatch it reserves one stable, control-addressable Worker
-// Session identity, commits
-// that association to canonical Factory Events before Start can publish Worker
-// Session lifecycle records, then hands the resolved request to
-// worker_sessions.Service.Start (which drives the injected Workers execution
-// service underneath).
+// startThroughWorkerSessions is the W4 Runtime dispatch cutover seam. It
+// reserves a stable Worker Session identity, commits that association before
+// lifecycle publication, and hands the request to worker_sessions.Service.Start
+// (which drives the injected Workers execution service underneath).
 // The Worker Sessions terminal outcome is translated back into the exact
 // workers.WorkstationDispatchResult shape the pre-cutover accept callback
 // expects, so existing Work materialization and Factory result behavior is
@@ -226,8 +223,7 @@ func handedOffToWorkers(startResult workersessions.InvokeSessionResult) bool {
 	return result.Cause.Kind != workersessions.FailureCauseEventPublicationFailure
 }
 
-// WorkerSessionsObservation returns the runtime-bound detached Worker Session
-// observation projection for the current Factory Session.
+// WorkerSessionsObservation returns detached Worker Session observations.
 func (f *factoryImpl) WorkerSessionsObservation() workersessions.ObservationService {
 	if f == nil || f.cfg == nil {
 		return nil

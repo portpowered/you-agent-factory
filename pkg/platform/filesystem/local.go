@@ -3,10 +3,17 @@
 package filesystem
 
 import (
+	"errors"
 	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
+	"time"
+)
+
+const (
+	localReplaceAttempts = 20
+	localReplaceDelay    = 10 * time.Millisecond
 )
 
 type Local struct{}
@@ -89,6 +96,28 @@ func (Local) Remove(path string) error                     { return os.Remove(pa
 func (Local) RemoveAll(path string) error                  { return os.RemoveAll(path) }
 func (Local) Chmod(path string, mode fs.FileMode) error    { return os.Chmod(path, mode) }
 func (Local) Rename(oldPath, newPath string) error         { return os.Rename(oldPath, newPath) }
+
+// RenameReplacing publishes oldPath at newPath. Windows cannot rename over an
+// existing file, so the replacement path retries the remove-and-rename window
+// that can be held briefly by antivirus or indexing processes.
+func (local Local) RenameReplacing(oldPath, newPath string) error {
+	lastErr := local.Rename(oldPath, newPath)
+	if lastErr == nil {
+		return nil
+	}
+	for range localReplaceAttempts {
+		if err := local.Remove(newPath); err != nil && !errors.Is(err, os.ErrNotExist) {
+			lastErr = err
+		} else {
+			lastErr = local.Rename(oldPath, newPath)
+			if lastErr == nil {
+				return nil
+			}
+		}
+		time.Sleep(localReplaceDelay)
+	}
+	return lastErr
+}
 func (Local) WriteFile(path string, data []byte, mode fs.FileMode) error {
 	return os.WriteFile(path, data, mode)
 }

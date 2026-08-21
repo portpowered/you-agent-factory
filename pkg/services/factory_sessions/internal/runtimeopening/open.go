@@ -2,6 +2,7 @@ package runtimeopening
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"path/filepath"
@@ -750,4 +751,64 @@ func setWorkerAttemptStarter(
 		return
 	}
 	setter.SetWorkerAttemptStarter(starter)
+}
+
+type historicalRecordingReader interface {
+	QueryHistoricalRecording(recordings.HistoricalRecordingQueryRequest) (recordings.HistoricalRecordingQueryResult, error)
+}
+
+// restoreCurrentBoardState loads a detached Factory world state through the
+// public Recordings history contract for callers that explicitly request a
+// current-board read.
+func restoreCurrentBoardState(
+	service historicalRecordingReader,
+	recordPath string,
+	sessionID string,
+) (*factorydefinitions.FactoryWorldState, error) {
+	recordPath = strings.TrimSpace(recordPath)
+	if recordPath == "" {
+		return nil, nil
+	}
+	if service == nil {
+		return nil, fmt.Errorf("restore current Factory Session board: Recordings history is unavailable")
+	}
+	scope := recordings.CanonicalEventScope{FactorySessionID: strings.TrimSpace(sessionID)}
+	result, err := service.QueryHistoricalRecording(recordings.HistoricalRecordingQueryRequest{
+		Recording: recordings.HistoricalRecordingIdentity{
+			RecordingID: recordings.RecordingID("current-board/" + scope.FactorySessionID),
+			Artifact:    recordings.RecordingArtifactReference(recordPath),
+			Scope:       scope,
+		},
+	})
+	if err != nil {
+		var queryErr *recordings.HistoricalRecordingQueryError
+		if errors.As(err, &queryErr) && queryErr.Kind == recordings.HistoricalRecordingQueryErrorMissingHistory {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("restore current Factory Session board from %q: %w", recordPath, err)
+	}
+	view := result.WorldState
+	if view.SchemaVersion != recordings.WorldStateViewSchemaV1 || strings.TrimSpace(view.Payload) == "" {
+		return nil, fmt.Errorf(
+			"restore current Factory Session board from %q: Recordings returned an incompatible world-state view",
+			recordPath,
+		)
+	}
+	if view.Scope != scope {
+		return nil, fmt.Errorf(
+			"restore current Factory Session board from %q: world-state scope %#v does not match %#v",
+			recordPath,
+			view.Scope,
+			scope,
+		)
+	}
+	var state factorydefinitions.FactoryWorldState
+	if err := json.Unmarshal([]byte(view.Payload), &state); err != nil {
+		return nil, fmt.Errorf(
+			"restore current Factory Session board from %q: decode world state: %w",
+			recordPath,
+			err,
+		)
+	}
+	return &state, nil
 }
