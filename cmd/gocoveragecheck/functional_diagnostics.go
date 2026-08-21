@@ -9,7 +9,11 @@ import (
 	"time"
 )
 
-const functionalTimingSnapshotInterval = time.Second
+// Keep partial timing diagnostics fresh without rewriting the full package
+// state document for every second of a long non-streaming unit run. Streaming
+// lanes still publish on each observed package event; the interval only
+// controls the background persistence path.
+const functionalTimingSnapshotInterval = 5 * time.Second
 const functionalCoverageSnapshotInterval = 5 * time.Second
 
 // functionalTimingTracker records package lifecycle events independently from
@@ -236,7 +240,7 @@ func (snapshotter *functionalTimingSnapshotter) run() {
 // A streaming lane still publishes per event, because its progress lines are
 // the live log a reader watches, and it observes a few dozen packages. A
 // non-streaming lane has no sink to emit to, so persistence is left entirely to
-// the one-second ticker in run(): the timeout snapshot it exists to protect is
+// the periodic ticker in run(): the timeout snapshot it exists to protect is
 // still on disk, without paying a full document write per event. The unit lane
 // observes hundreds of packages, which is what makes the difference matter.
 func (snapshotter *functionalTimingSnapshotter) observe(event goTestTimingEvent) {
