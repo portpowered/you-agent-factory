@@ -235,8 +235,10 @@ func (loader *replayInputLoader) loadPortableReplayInput(
 	}
 	loader.logReplayInputOutcome("success", "", string(recordings.ReplayInputFamilyPortable))
 	return recordings.LoadReplayInputResult{
-		Portable:         &value,
-		IgnoredJSONPaths: diagnostics.Paths(),
+		Portable: &value,
+		Diagnostics: &recordings.ReplayInputDecodeDiagnostics{
+			IgnoredJSONPaths: diagnostics.Paths(),
+		},
 	}, nil
 }
 

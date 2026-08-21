@@ -173,6 +173,7 @@ type (
 	PortableRecordingFailureSummary                            = recordingcontracts.PortableRecordingFailureSummary
 	PortableRecordingRedactionMetadata                         = recordingcontracts.PortableRecordingRedactionMetadata
 	PortableRecordingResult                                    = recordingcontracts.PortableRecordingResult
+	ReplayInputDecodeDiagnostics                               = recordingcontracts.ReplayInputDecodeDiagnostics
 	PortableRecordingSessionSummary                            = recordingcontracts.PortableRecordingSessionSummary
 	PortableRecordingSourceSummary                             = recordingcontracts.PortableRecordingSourceSummary
 	PortableRecordingWorkerHistory                             = recordingcontracts.PortableRecordingWorkerHistory

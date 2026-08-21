@@ -183,8 +183,16 @@ type LoadReplayInputRequest struct {
 // LoadReplayInputResult contains exactly one of Portable or Legacy, depending
 // on which replay input family the selected path contained.
 type LoadReplayInputResult struct {
-	Portable         *PortableRecording
-	Legacy           *ReplayArtifact
+	Portable    *PortableRecording
+	Legacy      *ReplayArtifact
+	Diagnostics *ReplayInputDecodeDiagnostics
+}
+
+// ReplayInputDecodeDiagnostics contains safe metadata produced while loading
+// one replay input. The pointer on LoadReplayInputResult keeps the established
+// result value comparable for runtime-opening request assertions while still
+// carrying path-only compatibility diagnostics.
+type ReplayInputDecodeDiagnostics struct {
 	IgnoredJSONPaths []string
 }
 

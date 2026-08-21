@@ -79,8 +79,11 @@ func TestReplayInputLoaderReturnsPortableDecodeDiagnostics(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadReplayInput() error = %v", err)
 	}
-	if !reflect.DeepEqual(result.IgnoredJSONPaths, []string{"$.futureReplayField"}) {
-		t.Fatalf("ignored paths = %#v, want future replay path", result.IgnoredJSONPaths)
+	if result.Diagnostics == nil {
+		t.Fatal("replay diagnostics = nil, want ignored future-field path")
+	}
+	if !reflect.DeepEqual(result.Diagnostics.IgnoredJSONPaths, []string{"$.futureReplayField"}) {
+		t.Fatalf("ignored paths = %#v, want future replay path", result.Diagnostics.IgnoredJSONPaths)
 	}
 }
 
