@@ -233,6 +233,43 @@ func TestNew_WithRestoredActiveDispatchUsesRecordedWorkPlacement(t *testing.T) {
 	}
 }
 
+func TestNew_WithRestoredHumanApprovalDispatchDoesNotRestoreWorkPlacement(t *testing.T) {
+	restored := &interfaces.FactoryWorldState{
+		WorkItemsByID: map[string]work.FactoryWorkItem{
+			"work-approval": {
+				ID: "work-approval", WorkTypeID: "task", State: "done",
+			},
+		},
+		ActiveDispatches: map[string]interfaces.FactoryWorldDispatch{
+			"dispatch-approval": {
+				DispatchID: "dispatch-approval", WorkItemIDs: []string{"work-approval"},
+			},
+		},
+		PendingHumanApprovalsByID: map[string]interfaces.FactoryWorldHumanApproval{
+			"approval-1": {ApprovalID: "approval-1", DispatchID: "dispatch-approval"},
+		},
+		// A pending approval retains the Work claim in its durable approval
+		// projection; it must not be re-materialized as an ordinary Work token.
+		PlaceOccupancyByID: map[string]interfaces.FactoryPlaceOccupancy{},
+	}
+
+	f, err := newTestFactory(
+		withNet(buildSimpleNet()),
+		withClock(platformclock.NewDeterministic(time.Unix(0, 0).UTC(), time.Second)),
+		withRestoredWorldState(restored),
+	)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	snapshot, err := f.GetEngineStateSnapshot(context.Background())
+	if err != nil {
+		t.Fatalf("GetEngineStateSnapshot: %v", err)
+	}
+	if tokens := snapshot.Marking.PlaceTokens["task:done"]; len(tokens) != 0 {
+		t.Fatalf("restored pending approval Work token IDs = %#v, want no ordinary Work token", tokens)
+	}
+}
+
 func assertCurrentRestoredResourceTokens(
 	t *testing.T,
 	snapshot *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net],
