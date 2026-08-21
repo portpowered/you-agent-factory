@@ -86,23 +86,25 @@ Minimal batch:
 | `DEPENDS_ON` | The source work waits for the target work to reach a required state. |
 | `PARENT_CHILD` | The source work becomes a child of the target work. |
 
-Use `DEPENDS_ON` for prerequisite ordering between siblings and `PARENT_CHILD`
+Use `DEPENDS_ON` for prerequisite ordering between Work items and `PARENT_CHILD`
 for explicit parent-aware lineage. See [Choose The Relation Type](#choose-the-relation-type)
 for examples and field tables.
 
-## One batch, one name namespace
+## Relation endpoint scope
 
 `works[].name` is the authored name of a Work item in this request. Names must
 be unique across the entire `works[]` array, including when the items have
-different `workTypeName` values. The factory uses those names to resolve
-`relations[]`; it does not use the Work ID, a work type, or a name from another
-submission as an implicit relation endpoint.
+different `workTypeName` values.
 
-Every `sourceWorkName` and `targetWorkName` must match a `works[].name` in the
-same submitted `FACTORY_REQUEST_BATCH`. A relation cannot point at an existing
-Work from an earlier batch, a Work in a different batch, or an item that is not
-also included in this request. If the batch needs that relationship, submit the
-related Work items together and declare the relation by their authored names.
+`sourceWorkName` always names a Work in the submitted batch. `DEPENDS_ON` can
+target a Work in the same batch or an existing Work on the selected Factory
+Session board. Use an exact `targetWorkName`, a stable `targetWorkId`, or both.
+When both fields are supplied, they must identify the same Work.
+
+Live admission searches only the selected Factory Session. An ambiguous target
+name requires `targetWorkId`. An unknown or cross-session target rejects the
+whole batch. `PARENT_CHILD` remains same-batch: both endpoints must be in
+`works[]`.
 
 This name scope is separate from request idempotency: reusing a `requestId`
 reconciles the same submission, while changing the `requestId` starts a new
@@ -361,7 +363,7 @@ shared work type.
 
 The factory indexes every `works[].name` and validates the full batch before it
 creates work tokens. Invalid JSON, retired field aliases, duplicate work names,
-unknown same-batch relation endpoints, invalid work types, invalid states,
+unresolved `DEPENDS_ON` targets, invalid work types, invalid states,
 self-relations, and dependency cycles reject the whole batch. No partial Work
 is created: a valid item earlier in `works[]` is not admitted when another item
 or relation makes the request invalid.
@@ -405,8 +407,9 @@ batch uses two distinct names even though the Work types remain different:
 }
 ```
 
-Relation endpoints must both be present in this request; an existing Work in a
-different submission does not satisfy the lookup:
+An unknown `DEPENDS_ON` target is invalid. Live admission can resolve an
+existing target on the selected Factory Session, but it cannot resolve a name
+that is absent from both the submitted batch and that board:
 
 ```json
 {
@@ -419,40 +422,46 @@ different submission does not satisfy the lookup:
     {
       "type": "DEPENDS_ON",
       "sourceWorkName": "publish",
-      "targetWorkName": "review"
+      "targetWorkName": "missing-review"
     }
   ]
 }
 ```
 
-The same deterministic check is available in live submission and `--dry-run`.
-It identifies the relation index and type, both endpoint values, and the
-missing field, for example: `work_request: relations[0] relation type
-"DEPENDS_ON" has sourceWorkName "publish" and targetWorkName "review";
-endpoint targetWorkName="review" is missing from this batch; relation
-endpoints must name Work declared in this batch's works[] (not previously
-submitted Work); add the named Work to works[] or correct targetWorkName`.
-Repair it by adding the named Work to this request or changing the endpoint to
-one of the names already declared in `works[]`. This corrected request adds
-the prerequisite instead of referring to a Work submitted earlier:
+The live diagnostic identifies the relation index and offending target field.
+Repair the request by correcting the target name, supplying its Work ID, or
+adding the prerequisite to this batch. Use `targetWorkId` when a board name is
+ambiguous. `--dry-run` validates request shape but cannot inspect the selected
+Factory Session board.
+
+This request uses a target from an earlier batch by Work ID:
 
 ```json
 {
-  "requestId": "intra-batch-endpoint",
+  "requestId": "cross-batch-endpoint",
   "type": "FACTORY_REQUEST_BATCH",
   "works": [
-    { "name": "publish", "workTypeName": "story" },
-    { "name": "review", "workTypeName": "story" }
+    {
+      "name": "publish",
+      "workId": "publish-work-id",
+      "workTypeName": "story"
+    }
   ],
   "relations": [
     {
       "type": "DEPENDS_ON",
       "sourceWorkName": "publish",
-      "targetWorkName": "review"
+      "targetWorkId": "review-work-id",
+      "requiredState": "complete"
     }
   ]
 }
 ```
+
+If the existing Work name `review` is unique on the selected board, replace
+`targetWorkId` with `targetWorkName: "review"`. If both fields are present,
+they must resolve to the same Work. A target from another Factory Session is
+not eligible for this lookup.
 
 A relation cannot point to itself:
 
@@ -572,7 +581,7 @@ Use the relation that matches the behavior you need:
 
 | Relation type | Use it when | Source means | Target means |
 |---------------|-------------|--------------|--------------|
-| `DEPENDS_ON` | One sibling work item must wait for another sibling work item to reach a state. | The blocked work item. | The prerequisite work item. |
+| `DEPENDS_ON` | One Work item must wait for another Work item to reach a state. | The blocked work item. | The prerequisite work item. |
 | `PARENT_CHILD` | A child work item should belong to a parent's child set for parent-aware fan-in. | The child work item. | The parent work item. |
 
 `DEPENDS_ON` example:
@@ -588,6 +597,25 @@ Use the relation that matches the behavior you need:
 
 Read that as: `publish` waits for `review`.
 
+## Cross-batch dependency outcomes
+
+Submit the prerequisite in one batch, then submit the dependent in a later
+batch. A live `DEPENDS_ON` target lookup uses the selected Factory Session
+board.
+
+If the target is active, the dependent remains undispatched until the target
+reaches `requiredState`. If the target already reached `requiredState`, the
+dependent becomes eligible immediately. If the target failed, the dependent
+enters the standard dependency failure cascade and receives no worker dispatch.
+
+For multiple dependencies, every target must satisfy its required state. One
+failed target causes the dependent to fail, even when another target completed.
+
+Unknown, ambiguous, conflicting, and cross-session target references reject the
+whole batch before any Work is admitted. An ambiguous name requires
+`targetWorkId`. `PARENT_CHILD` does not use this cross-batch lookup: both
+endpoints must remain in the submitted `works[]` array.
+
 `PARENT_CHILD` example:
 
 ```json
@@ -601,9 +629,9 @@ Read that as: `publish` waits for `review`.
 Read that as: `story-auth` is a child of `story-set`.
 
 Use `PARENT_CHILD` for submitted parent-aware batches. Use `DEPENDS_ON` for
-ordinary prerequisite ordering between siblings. A single batch may include
-both relation types when the workflow needs both parent membership and sibling
-ordering.
+ordinary prerequisite ordering within or across batches. A single batch may
+include both relation types when the workflow needs both parent membership and
+prerequisite ordering.
 
 ## Minimum Fields For Parent-Child File Input
 
@@ -661,12 +689,14 @@ Avoid setting tag names that begin with `_work_`. The factory writes
 |-------|----------|-------------|
 | `type` | Yes | Use `DEPENDS_ON` or `PARENT_CHILD`. |
 | `sourceWorkName` | Yes | Name of the blocked work item for `DEPENDS_ON`, or the child work item for `PARENT_CHILD`. |
-| `targetWorkName` | Yes | Name of the prerequisite work item for `DEPENDS_ON`, or the parent work item for `PARENT_CHILD`. |
+| `targetWorkName` | One of `targetWorkName` or `targetWorkId` | Exact name of the prerequisite Work for `DEPENDS_ON`, or the parent Work for `PARENT_CHILD`. `DEPENDS_ON` can resolve the name on the selected Factory Session board. |
+| `targetWorkId` | One of `targetWorkName` or `targetWorkId` | Stable Work ID for a `DEPENDS_ON` target. Use it when a target name is ambiguous. If both target fields are supplied, they must identify the same Work. |
 | `requiredState` | Only for `DEPENDS_ON` | Target state required before the source can run. Defaults to `complete`. Omit it for `PARENT_CHILD`; supplying it rejects the whole batch. |
 
-Declare batch relations by name. Do not use `targetWorkId` in submitted batch
-relations; target work IDs are resolved during normalization and may appear in
-events after submission.
+For `PARENT_CHILD`, target references must resolve to Work items in the
+submitted batch. For `DEPENDS_ON`, declare the source by name and identify the
+target by name, ID, or both. Live admission normalizes the target reference to
+its canonical Work ID.
 
 ## Visualize batch dependencies (`you work visualize`)
 
@@ -711,9 +741,12 @@ Before dropping a batch file into `factory/inputs/...`, confirm:
   the guarded parent input.
 - Every `PARENT_CHILD.sourceWorkName` names a child.
 - Every `PARENT_CHILD.targetWorkName` names a parent.
-- Every relation source and target matches a work item name in this request's
-  `works[]`; do not target previously submitted or otherwise existing Work by
-  name.
+- Every `DEPENDS_ON.sourceWorkName` names a work item in this request's
+  `works[]`.
+- Every `DEPENDS_ON` target supplies `targetWorkName`, `targetWorkId`, or both.
+  Live submission resolves the target on the selected Factory Session.
+- Use `targetWorkId` when a target name is ambiguous. Confirm that both target
+  fields identify the same Work when both are supplied.
 - `requiredState`, when used on `DEPENDS_ON`, names an actual state on the
   target work type.
 - `DEPENDS_ON` relations do not create cycles.

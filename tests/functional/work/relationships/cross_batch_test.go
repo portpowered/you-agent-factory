@@ -110,7 +110,7 @@ func scaffoldCrossBatchGitFactory(t *testing.T) string {
 	factoryDir := support.ScaffoldFactory(t, crossBatchDependencyFactoryConfig())
 	support.WriteAgentConfig(t, factoryDir, "worker", support.BuildModelWorkerConfig("codex", "test-model"))
 	support.WriteWorkstationConfig(t, factoryDir, "start", "---\ntype: MODEL_WORKSTATION\n---\nAdvance cross-batch Work.\n")
-	support.WriteWorkstationConfig(t, factoryDir, "finish", "---\ntype: MODEL_WORKSTATION\n---\nComplete cross-batch Work and merge its marker.\n")
+	support.WriteWorkstationConfig(t, factoryDir, "finish", "---\ntype: MODEL_WORKSTATION\n---\nComplete cross-batch Work {{ (index .Inputs 0).Name }} and merge its marker.\n")
 	initCrossBatchGitRepository(t, factoryDir)
 	return factoryDir
 }

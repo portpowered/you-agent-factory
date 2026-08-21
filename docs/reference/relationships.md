@@ -27,19 +27,23 @@ is different: it is a per-input workstation guard, not an entry in batch
 `relations[]`. A workstation can use `SAME_NAME` together with either batch
 relation.
 
-## Submitted relation name scope
+## Submitted relation endpoints
 
-Submitted `DEPENDS_ON` and `PARENT_CHILD` relations use the name namespace of
-one `FACTORY_REQUEST_BATCH`. For each relation, both `sourceWorkName` and
-`targetWorkName` must exactly match a `works[].name` declared in that same
-request. These fields are intra-batch name references, not Work IDs and not
-lookups into other batches or current Factory state. A previously submitted or
-otherwise existing Work cannot be targeted by name; include it in the current
-`works[]` array or correct the endpoint name.
+`sourceWorkName` always identifies a Work declared in the submitted
+`FACTORY_REQUEST_BATCH`. A `DEPENDS_ON` target can be declared in that batch or
+can already exist on the selected Factory Session board.
 
-This rule is different from `SAME_NAME`: a workstation's `SAME_NAME` guard may
-select matching Work from different submissions, but that guard does not widen
-the endpoint rule for submitted `DEPENDS_ON` or `PARENT_CHILD` relations.
+For a `DEPENDS_ON` target, use one of these exact references:
+
+- `targetWorkName` resolves an unambiguous Work name.
+- `targetWorkId` resolves a stable Work ID.
+- Both fields are allowed when they identify the same Work.
+
+Live admission searches only the selected Factory Session board. A target in a
+different session is not visible. An ambiguous name must use `targetWorkId`.
+`PARENT_CHILD` keeps its stricter rule: both endpoints must be declared in the
+submitted batch. `SAME_NAME` remains a workstation guard and does not change
+either batch relation rule.
 
 ## Source And Target Semantics
 
@@ -57,9 +61,9 @@ whose selected Work name must equal the guarded input's Work name.
 
 ## `DEPENDS_ON`
 
-Use `DEPENDS_ON` for ordinary prerequisite ordering between siblings in one
-batch. It blocks dispatch ordering; it does not create parent lineage for
-parent-aware input guards.
+Use `DEPENDS_ON` for prerequisite ordering between Work items in one batch or
+across batches. It blocks dispatch ordering; it does not create parent lineage
+for parent-aware input guards.
 
 ```json
 {
@@ -107,6 +111,56 @@ blocked source work token. The scheduler keeps the source from running until
 the target reaches the required state. If the source is one input of a
 multi-input workstation, this dependency is still checked after the complete
 input binding is assembled; see [Joined-input dispatch invariant](#joined-input-dispatch-invariant).
+
+### Cross-batch targets and terminal outcomes
+
+When a `DEPENDS_ON` target is not declared in the new batch, live admission
+resolves it on the selected Factory Session board. Name lookup is exact. If
+multiple board Work items have that name, admission rejects the batch and tells
+the operator to use `targetWorkId`.
+
+The normalized relation stores the target's canonical Work ID. If both target
+fields are supplied, different resolutions reject the whole batch. Unknown or
+cross-session targets also reject the whole batch before any Work is admitted.
+
+An active target keeps the source undispatched. A target already in
+`requiredState` releases the source immediately after admission. A failed target
+does not satisfy a normal successful dependency, so the source enters the
+standard dependency failure cascade and receives no worker dispatch.
+
+With multiple `DEPENDS_ON` relations, every target must satisfy its required
+state. Any failed target causes the dependent source to follow the failure
+cascade. These terminal rules also apply when all targets were already terminal
+before the dependent batch was submitted.
+
+For example, submit `review` first with Work ID `review-work-id`. Submit the
+dependent Work later with either `targetWorkName` or `targetWorkId`:
+
+```json
+{
+  "requestId": "publish-after-review",
+  "type": "FACTORY_REQUEST_BATCH",
+  "works": [
+    {
+      "name": "publish",
+      "workId": "publish-work-id",
+      "workTypeName": "story",
+      "payload": { "title": "Publish release" }
+    }
+  ],
+  "relations": [
+    {
+      "type": "DEPENDS_ON",
+      "sourceWorkName": "publish",
+      "targetWorkId": "review-work-id",
+      "requiredState": "complete"
+    }
+  ]
+}
+```
+
+Use `targetWorkName: "review"` instead when the board name is unique. If both
+fields are present, they must identify `review-work-id`.
 
 ## `SAME_NAME`
 
@@ -330,18 +384,23 @@ Common rejection reasons:
 |---------|--------|
 | Invalid JSON or retired field aliases | Whole batch rejected |
 | Duplicate `works[].name` values anywhere in the batch, including across Work types | Whole batch rejected |
-| Relation `sourceWorkName` or `targetWorkName` is absent from this request's `works[]` (including a previously submitted Work) | Whole batch rejected |
+| `DEPENDS_ON` target cannot resolve by name or ID on the selected Factory Session board | Whole batch rejected |
+| `PARENT_CHILD` source or target is absent from this request's `works[]` | Whole batch rejected |
 | Self-relation (`source` equals `target`) | Whole batch rejected |
 | `DEPENDS_ON` cycle between siblings | Whole batch rejected |
 | `requiredState` names a state that does not exist on the target work type | Whole batch rejected |
 | Unknown `workTypeName` or invalid batch shape | Whole batch rejected |
 
-Declare batch relations by work name. Do not use `targetWorkId` in submitted
-batch relations. The duplicate-name and same-request endpoint checks are
-topology-independent and are also performed by `you submit batch --dry-run`;
-live submission then applies Factory-topology checks such as work-type,
-state, and required-state validation. A rejected live request creates no
-partial Work or relationship side effects.
+For `DEPENDS_ON`, declare the source with `sourceWorkName`, then identify the
+target with `targetWorkName`, `targetWorkId`, or both. The target lookup uses
+the selected Factory Session during live admission. For `PARENT_CHILD`, declare
+both endpoints in this request's `works[]`; an existing Work does not satisfy
+that rule.
+
+The duplicate-name and same-batch endpoint checks are topology-independent and
+also run during `you submit batch --dry-run`. Dry run cannot inspect a live
+board, so live submission performs the target lookup and related state checks.
+A rejected live request creates no partial Work or relationship side effects.
 
 ## Normalization Outcomes
 
@@ -349,10 +408,11 @@ After a batch passes validation, the factory normalizes it:
 
 1. Missing work IDs are generated as `batch-<requestId>-<work-name>`.
 2. Work item tags receive `_work_name` and `_work_type` values.
-3. `DEPENDS_ON` relations attach to the blocked source work token.
-4. `PARENT_CHILD` relations attach to the child work token and set parent
+3. `DEPENDS_ON` target references normalize to the canonical target Work ID.
+4. `DEPENDS_ON` relations attach to the blocked source work token.
+5. `PARENT_CHILD` relations attach to the child work token and set parent
    lineage for parent-aware guards.
-5. Canonical history records a `WORK_REQUEST` event before related work-input
+6. Canonical history records a `WORK_REQUEST` event before related work-input
    and relationship-change events.
 
 Independent items in the same batch may dispatch in parallel, subject to the
