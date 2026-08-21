@@ -25,7 +25,7 @@ func TestNewFactoryEngine_RequiresClock(t *testing.T) {
 	engine, err := NewFactoryEngine(
 		nil, nil, nil,
 		nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil,
-		nil,
+		nil, nil,
 	)
 	if engine != nil || err == nil || !strings.Contains(err.Error(), "clock is required") {
 		t.Fatalf("NewFactoryEngine() = (%v, %v), want nil engine and clock dependency error", engine, err)
@@ -43,7 +43,7 @@ func newTestFactoryEngine(
 		nil, platformclock.Real{}, func() string { return fmt.Sprintf("test-id-%d", testWorkRequestIdentity.Add(1)) }, nil, nil,
 		token_transformer.New(net.Places, net.WorkTypes, petri.NewWorkIDGenerator()),
 		nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil,
-		nil,
+		nil, nil,
 	)
 	if err != nil {
 		panic(err)
@@ -91,6 +91,17 @@ func WithSeededRestoredWorkIDs(workIDs ...string) Option {
 		e.seededRestoredWorkIDs = make(map[string]struct{}, len(workIDs))
 		for _, workID := range workIDs {
 			e.seededRestoredWorkIDs[workID] = struct{}{}
+		}
+	}
+}
+
+// WithSeededReplayWorkIDsWithRecordedDispatch marks restored Work whose replay
+// facts include a dispatch that must be re-materialized.
+func WithSeededReplayWorkIDsWithRecordedDispatch(workIDs ...string) Option {
+	return func(e *FactoryEngine) {
+		e.replayDispatchWorkIDs = make(map[string]struct{}, len(workIDs))
+		for _, workID := range workIDs {
+			e.replayDispatchWorkIDs[workID] = struct{}{}
 		}
 	}
 }

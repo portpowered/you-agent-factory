@@ -205,6 +205,39 @@ func seedRestoredWork(
 	return seededWorkIDs
 }
 
+// restoredWorkIDsWithRecordedDispatch returns the Work identities whose
+// restored replay facts include a dispatch. Replay must re-materialize those
+// requests so the recorded side effect can run, replacing their seeded token
+// at the materialization boundary; Work without a recorded dispatch remains
+// seeded in place.
+func restoredWorkIDsWithRecordedDispatch(restored *interfaces.FactoryWorldState) map[string]struct{} {
+	workIDs := make(map[string]struct{})
+	if restored == nil {
+		return workIDs
+	}
+	for _, dispatch := range restored.ActiveDispatches {
+		addRestoredDispatchWorkIDs(workIDs, dispatch.WorkItemIDs)
+	}
+	for _, dispatch := range restored.CompletedDispatches {
+		addRestoredDispatchWorkIDs(workIDs, dispatch.WorkItemIDs)
+	}
+	for _, dispatch := range restored.FailedDispatches {
+		addRestoredDispatchWorkIDs(workIDs, dispatch.WorkItemIDs)
+	}
+	for _, approval := range restored.PendingHumanApprovalsByID {
+		addRestoredDispatchWorkIDs(workIDs, approval.WorkItemIDs)
+	}
+	return workIDs
+}
+
+func addRestoredDispatchWorkIDs(destination map[string]struct{}, workIDs []string) {
+	for _, workID := range workIDs {
+		if workID != "" {
+			destination[workID] = struct{}{}
+		}
+	}
+}
+
 func restoredWorkItems(restored *interfaces.FactoryWorldState) map[string]work.FactoryWorkItem {
 	items := make(map[string]work.FactoryWorkItem)
 	if restored == nil {

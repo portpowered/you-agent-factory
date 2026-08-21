@@ -95,7 +95,7 @@ func TestBuildRuntimeMarkingReportsOnlyRestoredWorkActuallySeeded(t *testing.T) 
 		restoredWorldState: restoredWorldStateFixture(base, ""),
 	}
 
-	marking, seededWorkIDs := buildRuntimeMarking(cfg)
+	marking, seededWorkIDs, _ := buildRuntimeMarking(cfg)
 	if len(marking.TokensInPlace("task:done")) != 1 {
 		t.Fatalf("restored marking task:done tokens = %d, want one", len(marking.TokensInPlace("task:done")))
 	}
@@ -107,6 +107,33 @@ func TestBuildRuntimeMarkingReportsOnlyRestoredWorkActuallySeeded(t *testing.T) 
 	}
 	if _, ok := seededWorkIDs["work-not-on-board"]; ok {
 		t.Fatalf("seeded restored Work IDs = %#v, must exclude historical Work absent from occupancy", seededWorkIDs)
+	}
+}
+
+func TestRestoredWorkIDsWithRecordedDispatchIncludesReplayDispatchFacts(t *testing.T) {
+	restored := &interfaces.FactoryWorldState{
+		ActiveDispatches: map[string]interfaces.FactoryWorldDispatch{
+			"active": {WorkItemIDs: []string{"work-active"}},
+		},
+		CompletedDispatches: []interfaces.FactoryWorldDispatchCompletion{
+			{WorkItemIDs: []string{"work-completed"}},
+		},
+		FailedDispatches: []interfaces.FactoryWorldDispatchCompletion{
+			{WorkItemIDs: []string{"work-failed"}},
+		},
+		PendingHumanApprovalsByID: map[string]interfaces.FactoryWorldHumanApproval{
+			"approval": {WorkItemIDs: []string{"work-pending"}},
+		},
+	}
+
+	got := restoredWorkIDsWithRecordedDispatch(restored)
+	for _, workID := range []string{"work-active", "work-completed", "work-failed", "work-pending"} {
+		if _, ok := got[workID]; !ok {
+			t.Fatalf("recorded-dispatch Work IDs = %#v, missing %q", got, workID)
+		}
+	}
+	if len(got) != 4 {
+		t.Fatalf("recorded-dispatch Work IDs = %#v, want four identities", got)
 	}
 }
 

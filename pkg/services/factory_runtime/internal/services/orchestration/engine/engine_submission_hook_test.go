@@ -386,25 +386,18 @@ func TestSubmissionHook_AppliesMarkingMutationsAndRecordsSubmissionID(t *testing
 	}
 }
 
-func TestSubmissionHook_DeduplicatesOnlySeededReplayWork(t *testing.T) {
-	newReplayBatch := func(requestID string, workIDs ...string) work.GeneratedSubmissionBatch {
-		works := make([]work.Work, 0, len(workIDs))
-		for _, workID := range workIDs {
-			works = append(works, work.Work{
-				Name:       workID,
-				WorkID:     workID,
-				WorkTypeID: "task",
-			})
-		}
-		return work.GeneratedSubmissionBatch{
-			Request: work.WorkRequest{
-				RequestID: requestID,
-				Type:      work.WorkRequestTypeFactoryRequestBatch,
-				Works:     works,
-			},
-			Metadata: work.GeneratedSubmissionBatchMetadata{Source: "external-submit"},
-		}
+func replaySubmissionBatch(requestID string, workIDs ...string) work.GeneratedSubmissionBatch {
+	works := make([]work.Work, 0, len(workIDs))
+	for _, workID := range workIDs {
+		works = append(works, work.Work{Name: workID, WorkID: workID, WorkTypeID: "task"})
 	}
+	return work.GeneratedSubmissionBatch{
+		Request:  work.WorkRequest{RequestID: requestID, Type: work.WorkRequestTypeFactoryRequestBatch, Works: works},
+		Metadata: work.GeneratedSubmissionBatchMetadata{Source: "external-submit"},
+	}
+}
+
+func TestSubmissionHook_DeduplicatesOnlySeededReplayWork(t *testing.T) {
 
 	t.Run("seeded work is acknowledged while new replay work is materialized", func(t *testing.T) {
 		n := buildTestNet()
@@ -416,7 +409,7 @@ func TestSubmissionHook_DeduplicatesOnlySeededReplayWork(t *testing.T) {
 			onTick: func(_ context.Context, _ interfaces.SubmissionHookContext[submissionSnapshot]) (interfaces.SubmissionHookResult, error) {
 				return interfaces.SubmissionHookResult{
 					GeneratedBatches: []work.GeneratedSubmissionBatch{
-						newReplayBatch("replay-request", "work-seeded", "work-replayed"),
+						replaySubmissionBatch("replay-request", "work-seeded", "work-replayed"),
 					},
 				}, nil
 			},
@@ -446,7 +439,7 @@ func TestSubmissionHook_DeduplicatesOnlySeededReplayWork(t *testing.T) {
 				priority: -100,
 				onTick: func(_ context.Context, _ interfaces.SubmissionHookContext[submissionSnapshot]) (interfaces.SubmissionHookResult, error) {
 					return interfaces.SubmissionHookResult{GeneratedBatches: []work.GeneratedSubmissionBatch{
-						newReplayBatch("replay-request", "work-replayed"),
+						replaySubmissionBatch("replay-request", "work-replayed"),
 					}}, nil
 				},
 			}),
@@ -469,7 +462,7 @@ func TestSubmissionHook_DeduplicatesOnlySeededReplayWork(t *testing.T) {
 				priority: 1,
 				onTick: func(_ context.Context, _ interfaces.SubmissionHookContext[submissionSnapshot]) (interfaces.SubmissionHookResult, error) {
 					return interfaces.SubmissionHookResult{GeneratedBatches: []work.GeneratedSubmissionBatch{
-						newReplayBatch("ordinary-request", "work-seeded"),
+						replaySubmissionBatch("ordinary-request", "work-seeded"),
 					}}, nil
 				},
 			}),
@@ -480,6 +473,37 @@ func TestSubmissionHook_DeduplicatesOnlySeededReplayWork(t *testing.T) {
 		markingSnapshot := eng.GetMarking()
 		assertMarkingTokenIDs(t, markingSnapshot.TokensInPlace("task:init"), []string{"work-seeded", "work-seeded"}, "ordinary generated marking")
 	})
+}
+
+func TestSubmissionHook_ReplacesSeededReplayWorkWithRecordedDispatch(t *testing.T) {
+	n := buildTestNet()
+	marking := petri.NewMarking("test-wf")
+	marking.AddToken(newMoveTestToken("token-seeded", "work-seeded", "task:init"))
+	eng := newTestFactoryEngine(n, marking, nil,
+		WithSeededRestoredWorkIDs("work-seeded"),
+		WithSeededReplayWorkIDsWithRecordedDispatch("work-seeded"),
+		WithSubmissionHook(&testSubmissionHook{
+			name:     factoryruntime.ReplaySubmissionHookName,
+			priority: -100,
+			onTick: func(_ context.Context, _ interfaces.SubmissionHookContext[submissionSnapshot]) (interfaces.SubmissionHookResult, error) {
+				return interfaces.SubmissionHookResult{GeneratedBatches: []work.GeneratedSubmissionBatch{
+					replaySubmissionBatch("replay-request", "work-seeded"),
+				}}, nil
+			},
+		}),
+	)
+
+	if err := eng.Tick(context.Background()); err != nil {
+		t.Fatalf("Tick() error: %v", err)
+	}
+	markingSnapshot := eng.GetMarking()
+	tokens := markingSnapshot.TokensInPlace("task:init")
+	if len(tokens) != 1 {
+		t.Fatalf("task:init token count = %d, want one replacement token", len(tokens))
+	}
+	if tokens[0].Color.WorkID != "work-seeded" || tokens[0].ID == "token-seeded" {
+		t.Fatalf("replayed replacement token = %#v, want one fresh token for work-seeded", tokens[0])
+	}
 }
 
 func assertStringSequence(t *testing.T, got, want []string, label string) {

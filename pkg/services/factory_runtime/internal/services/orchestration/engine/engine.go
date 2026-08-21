@@ -37,6 +37,7 @@ type FactoryEngine struct {
 	submissionHook        *queuedSubmissionHook
 	submissionHooks       []factory.SubmissionHook
 	seededRestoredWorkIDs map[string]struct{}
+	replayDispatchWorkIDs map[string]struct{}
 	submissionState       map[string]map[string]string
 	workRequests          map[string]workdomain.WorkRequestSubmitResult
 	projectionWaiters     map[string]chan struct{}
@@ -97,6 +98,7 @@ func NewFactoryEngine(
 	automaticTicksPaused func() bool,
 	onResultBufferDrained func(int),
 	seededRestoredWorkIDs map[string]struct{},
+	seededReplayWorkIDsWithRecordedDispatch map[string]struct{},
 ) (*FactoryEngine, error) {
 	if clock == nil {
 		return nil, fmt.Errorf("Factory Runtime engine clock is required")
@@ -133,6 +135,7 @@ func NewFactoryEngine(
 		submissionHook:        newQueuedSubmissionHook(),
 		submissionHooks:       append([]factory.SubmissionHook(nil), submissionHooks...),
 		seededRestoredWorkIDs: cloneWorkIDSet(seededRestoredWorkIDs),
+		replayDispatchWorkIDs: cloneWorkIDSet(seededReplayWorkIDsWithRecordedDispatch),
 		submissionState:       make(map[string]map[string]string),
 		workRequests:          make(map[string]workdomain.WorkRequestSubmitResult),
 		projectionWaiters:     make(map[string]chan struct{}),
