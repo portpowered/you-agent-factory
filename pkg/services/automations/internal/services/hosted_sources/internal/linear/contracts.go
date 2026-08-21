@@ -28,4 +28,5 @@ type SecretResolver func(
 // Clock schedules hosted Linear poller waits.
 type Clock interface {
 	After(time.Duration) <-chan time.Time
+	Now() time.Time
 }

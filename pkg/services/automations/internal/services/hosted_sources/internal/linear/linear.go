@@ -106,6 +106,7 @@ type linearIssuePage struct {
 type Client struct {
 	Endpoint   string
 	HTTPClient HTTPDoer
+	Clock      Clock
 	Logger     *zap.Logger
 }
 
@@ -644,10 +645,19 @@ func (c Client) fetchIssuesPage(ctx context.Context, apiKey, cursor string, filt
 		return linearIssuePage{}, fmt.Errorf("read hosted linear graphql response: %w", err)
 	}
 
-	return decodeIssuesPageResponse(resp.StatusCode, data)
+	return decodeIssuesPageResponseWithHeaders(resp.StatusCode, resp.Header, data, clientNow(c))
 }
 
-func decodeIssuesPageResponse(statusCode int, data []byte) (linearIssuePage, error) {
+func decodeIssuesPageResponseWithHeaders(
+	statusCode int,
+	headers http.Header,
+	data []byte,
+	now time.Time,
+) (linearIssuePage, error) {
+	if statusCode == http.StatusTooManyRequests {
+		return linearIssuePage{}, newRateLimitError(headers, rateLimitExtensions{}, now)
+	}
+
 	var decoded struct {
 		Data struct {
 			Issues struct {
@@ -659,20 +669,19 @@ func decodeIssuesPageResponse(statusCode int, data []byte) (linearIssuePage, err
 			} `json:"issues"`
 		} `json:"data"`
 		Errors []struct {
-			Message    string `json:"message"`
-			Extensions struct {
-				Code string `json:"code"`
-			} `json:"extensions"`
+			Message    string              `json:"message"`
+			Extensions rateLimitExtensions `json:"extensions"`
 		} `json:"errors"`
 	}
 	if err := json.Unmarshal(data, &decoded); err != nil {
 		return linearIssuePage{}, fmt.Errorf("decode hosted linear graphql response: %w", err)
 	}
 	if len(decoded.Errors) > 0 {
-		code := decoded.Errors[0].Extensions.Code
+		graphqlError := decoded.Errors[0]
+		code := graphqlError.Extensions.Code
 		msg := decoded.Errors[0].Message
-		if code == "RATELIMITED" {
-			return linearIssuePage{}, fmt.Errorf("hosted linear graphql rate limited: %s", msg)
+		if isRateLimitCode(code) {
+			return linearIssuePage{}, newRateLimitError(headers, graphqlError.Extensions, now)
 		}
 		return linearIssuePage{}, fmt.Errorf("hosted linear graphql error: %s", msg)
 	}
@@ -684,4 +693,19 @@ func decodeIssuesPageResponse(statusCode int, data []byte) (linearIssuePage, err
 		Next:   decoded.Data.Issues.PageInfo.EndCursor,
 		More:   decoded.Data.Issues.PageInfo.HasNextPage,
 	}, nil
+}
+
+func clientNow(client Client) time.Time {
+	if client.Clock != nil {
+		return client.Clock.Now()
+	}
+	// A missing clock is retained for direct adapter callers that only need
+	// successful responses. Rate-limit date metadata treats this zero value as
+	// unusable instead of consulting ambient process time.
+	return time.Time{}
+}
+
+func isRateLimitCode(code string) bool {
+	normalized := strings.ToUpper(strings.ReplaceAll(strings.TrimSpace(code), "_", ""))
+	return normalized == "RATELIMITED" || normalized == "RATELIMIT"
 }
