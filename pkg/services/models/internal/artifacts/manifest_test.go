@@ -16,6 +16,15 @@ const fixtureProtocolRevision = "ad62c6df07ae1169eb14411a565a689cd996b19c"
 func TestDecodeSelectsDetachedDescriptorAndVerifiesFixtureBytes(t *testing.T) {
 	t.Parallel()
 
+	manifest := decodeFixtureManifest(t)
+	descriptor := selectFixtureDescriptor(t, manifest)
+	assertFixtureDescriptor(t, descriptor)
+	verifyFixtureDescriptorBytes(t, descriptor)
+	assertDescriptorIsDetached(t, manifest, descriptor)
+}
+
+func decodeFixtureManifest(t *testing.T) artifacts.Manifest {
+	t.Helper()
 	manifest, err := artifacts.DecodeManifest(fixtureManifest(t))
 	if err != nil {
 		t.Fatalf("DecodeManifest: %v", err)
@@ -23,17 +32,30 @@ func TestDecodeSelectsDetachedDescriptorAndVerifiesFixtureBytes(t *testing.T) {
 	if manifest.ArtifactCount() != 1 {
 		t.Fatalf("ArtifactCount = %d, want one fixture entry", manifest.ArtifactCount())
 	}
+	return manifest
+}
 
-	descriptor, err := manifest.Select(artifacts.SelectionRequest{
+func selectFixtureDescriptor(t *testing.T, manifest artifacts.Manifest) artifacts.ArtifactDescriptor {
+	t.Helper()
+	descriptor, err := manifest.Select(fixtureSelectionRequest())
+	if err != nil {
+		t.Fatalf("Select: %v", err)
+	}
+	return descriptor
+}
+
+func fixtureSelectionRequest() artifacts.SelectionRequest {
+	return artifacts.SelectionRequest{
 		Backend:          "localai-vibevoice",
 		OperatingSystem:  "linux",
 		Architecture:     "amd64",
 		ProtocolRevision: fixtureProtocolRevision,
 		Accelerator:      "cpu",
-	})
-	if err != nil {
-		t.Fatalf("Select: %v", err)
 	}
+}
+
+func assertFixtureDescriptor(t *testing.T, descriptor artifacts.ArtifactDescriptor) {
+	t.Helper()
 	if descriptor.ID != "localai-vibevoice/linux-amd64" || descriptor.Backend.ID != "localai-vibevoice" {
 		t.Fatalf("descriptor identity = %#v, want detached backend identity", descriptor)
 	}
@@ -49,18 +71,19 @@ func TestDecodeSelectsDetachedDescriptorAndVerifiesFixtureBytes(t *testing.T) {
 	if descriptor.Artifact.SHA256 != "10a84e67d02d078f711608accf13cb80b6724a4c03dc4acae5ba936831801172" {
 		t.Fatalf("descriptor sha256 = %q, want fixture checksum", descriptor.Artifact.SHA256)
 	}
+}
+
+func verifyFixtureDescriptorBytes(t *testing.T, descriptor artifacts.ArtifactDescriptor) {
+	t.Helper()
 	if err := descriptor.VerifyBytes([]byte("pinned-backend-fixture")); err != nil {
 		t.Fatalf("VerifyBytes: %v", err)
 	}
+}
 
+func assertDescriptorIsDetached(t *testing.T, manifest artifacts.Manifest, descriptor artifacts.ArtifactDescriptor) {
+	t.Helper()
 	descriptor.Target.Accelerators[0] = "mutated"
-	next, err := manifest.Select(artifacts.SelectionRequest{
-		Backend:          "localai-vibevoice",
-		OperatingSystem:  "linux",
-		Architecture:     "amd64",
-		ProtocolRevision: fixtureProtocolRevision,
-		Accelerator:      "cpu",
-	})
+	next, err := manifest.Select(fixtureSelectionRequest())
 	if err != nil {
 		t.Fatalf("Select after descriptor mutation: %v", err)
 	}
