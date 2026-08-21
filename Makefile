@@ -217,7 +217,7 @@ endef
 
 
 .PHONY: default default-pipeline-banner build install bundle-api print-go-parallelism
-.PHONY: fmt vet deps deps-tidy clean init typecheck release lint
+.PHONY: fmt fmt-check vet deps deps-tidy clean init typecheck release lint
 
 .PHONY: test test-full test-unit test-unit-fresh test-ci-workflows test-lane-audit test-maintenance test-integration test-contract test-stress test-release
 .PHONY: test-functional test-functional-fresh test-functional-long test-functional-long-compile test-backend-functional functional-boundary-check functional-test-viz
@@ -914,6 +914,17 @@ test-race:
 
 fmt:
 	$(GO) fmt ./...
+
+fmt-check:
+	@set -e; \
+	paths_file="$${TMPDIR:-.}/you-gofmt-check-$$.paths"; \
+	trap 'rm -f "$$paths_file"' 0 1 2 3 15; \
+	git ls-files -z --cached -- 'cmd/**/*.go' 'pkg/**/*.go' > "$$paths_file"; \
+	violations="$$(xargs -0 $(GO)fmt -l < "$$paths_file")"; \
+	if test -n "$$violations"; then \
+		printf '%s\n' "$$violations"; \
+		exit 1; \
+	fi
 
 vet:
 	$(GO) vet ./...
