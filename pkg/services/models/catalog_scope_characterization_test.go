@@ -802,7 +802,7 @@ func TestGenericCatalogMissingLookupAndReadinessValuesRemainDetached(t *testing.
 	}
 }
 
-func TestInvocationFailureAndReadinessErrorsExposeStableSafeIdentity(t *testing.T) {
+func TestInvocationFailureMethodsExposeStableSafeIdentity(t *testing.T) {
 	t.Parallel()
 
 	cause := errors.New("private backend detail")
@@ -822,6 +822,10 @@ func TestInvocationFailureAndReadinessErrorsExposeStableSafeIdentity(t *testing.
 	if nilFailure.Error() != "" || nilFailure.Unwrap() != nil {
 		t.Fatal("nil InvocationFailure methods did not remain safe")
 	}
+}
+
+func TestInvocationErrorProjectsManagedRuntimeReadiness(t *testing.T) {
+	t.Parallel()
 
 	readinessCases := []struct {
 		state  models.ReadinessState
