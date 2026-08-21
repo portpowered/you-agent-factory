@@ -165,7 +165,12 @@ func (scenario *resumeFromRecordingScenario) startFirstProcess(
 	process.command = command
 	process.stdout = &stdout
 	process.stderr = &stderr
-	t.Cleanup(func() { process.stop(t) })
+	t.Cleanup(func() {
+		process.stop(t)
+		if t.Failed() {
+			t.Logf("predecessor output after cleanup: stdout=%q stderr=%q", stdout.String(), stderr.String())
+		}
+	})
 	return process
 }
 
