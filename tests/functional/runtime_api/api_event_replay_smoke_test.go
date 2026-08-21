@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
@@ -42,6 +43,7 @@ func TestAPIEventReplaySmoke_PublicEventsAndSessionProjectionExposeActiveAndComp
 	}
 
 	assertEventReplayActiveSession(t, outcome.activeSession)
+	support.WaitForSessionTerminalStatus(t, server.URL(), factorysessions.DefaultSessionID, 10*time.Second)
 	assertEventReplayCompletedSession(t, support.GetDefaultSession(t, server.URL()))
 
 	work := server.ListWork(t)

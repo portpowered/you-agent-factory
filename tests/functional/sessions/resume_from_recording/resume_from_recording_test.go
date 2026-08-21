@@ -542,22 +542,31 @@ func assertResumeFromRecordingSuccessorEvents(
 	boundary resumeFromRecordingBoundary,
 ) {
 	t.Helper()
-	if len(successor) < len(predecessor) {
-		t.Fatalf("successor Factory Event history has %d events, want at least predecessor length %d", len(successor), len(predecessor))
+	cursorIndex := indexResumeFromRecordingEvent(predecessor, boundary.completedEventID)
+	if cursorIndex < 0 {
+		t.Fatal("predecessor Factory Event history has no acknowledged completion event")
 	}
-	for index, expected := range predecessor {
+	successorCursorIndex := indexResumeFromRecordingEvent(successor, boundary.completedEventID)
+	if successorCursorIndex < 0 {
+		t.Fatalf("successor Factory Event history has no acknowledged event %q", boundary.completedEventID)
+	}
+	if successorCursorIndex != cursorIndex {
+		t.Fatalf("successor acknowledged event index = %d, want predecessor index %d", successorCursorIndex, cursorIndex)
+	}
+	// The pre-kill snapshot can include events emitted after the durable
+	// checkpoint that made the acknowledged completion restartable. Only the
+	// prefix through that acknowledged cursor is therefore canonical across
+	// the process boundary; the successor suffix is checked from its public
+	// cursor below.
+	for index, expected := range predecessor[:cursorIndex+1] {
 		actual := successor[index]
 		if actual.Id != expected.Id || actual.Type != expected.Type || actual.Context.Sequence != expected.Context.Sequence ||
 			support.ReconnectSequenceForFactoryEvent(actual) != support.ReconnectSequenceForFactoryEvent(expected) {
 			t.Fatalf("successor Factory Event prefix[%d] = %#v, want predecessor %#v", index, actual, expected)
 		}
 	}
-	cursorIndex := indexResumeFromRecordingEvent(predecessor, boundary.completedEventID)
-	if cursorIndex < 0 {
-		t.Fatal("predecessor Factory Event history has no acknowledged completion event")
-	}
 	combined := append([]factoryapi.FactoryEvent(nil), predecessor[:cursorIndex+1]...)
-	combined = append(combined, successor[cursorIndex+1:]...)
+	combined = append(combined, successor[successorCursorIndex+1:]...)
 	assertResumeFromRecordingFactoryEvents(t, "across restart", combined)
 }
 
