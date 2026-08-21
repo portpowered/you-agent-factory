@@ -59,7 +59,26 @@ test("production Make computation yields the bounded numeric budget", (t) => {
 	assertBudgetOutput(result, 4);
 });
 
-test("explicit functional CI jobs override is shared by discovery and coverage only", (t) => {
+test("explicit functional CI jobs keep discovery and instrumented coverage separate", (t) => {
+	if (!requireMake(t)) return;
+
+	const result = runMake(
+		[
+			"YOU_LOGICAL_CPUS=8",
+			"YOU_EXPECTED_CONCURRENT_LANES=4",
+			"FUNCTIONAL_DEFAULT_JOBS=4",
+			"FUNCTIONAL_TEST_JOBS=8",
+		],
+		["-n", "test-unit", "test-functional", "test-functional-coverage"],
+	);
+	assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
+	assert.match(result.stdout, /unitlane -jobs 2/);
+	assert.match(result.stdout, /functionallane -jobs 4/);
+	assert.match(result.stdout, /gocoveragecheck -suite functional -stream -jobs 4 -test-jobs 8/);
+	assert.doesNotMatch(result.stdout, /functionallane -jobs 4 .*test-jobs/);
+});
+
+test("functional coverage without the CI test-window override keeps the existing command", (t) => {
 	if (!requireMake(t)) return;
 
 	const result = runMake(
@@ -68,12 +87,11 @@ test("explicit functional CI jobs override is shared by discovery and coverage o
 			"YOU_EXPECTED_CONCURRENT_LANES=4",
 			"FUNCTIONAL_DEFAULT_JOBS=4",
 		],
-		["-n", "test-unit", "test-functional", "test-functional-coverage"],
+		["-n", "test-functional-coverage"],
 	);
-	assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
-	assert.match(result.stdout, /unitlane -jobs 2/);
-	assert.match(result.stdout, /functionallane -jobs 4/);
-	assert.match(result.stdout, /gocoveragecheck -suite functional -stream -jobs 4/);
+	assert.equal(result.status, 0);
+	assert.match(result.stdout, /gocoveragecheck -suite functional -stream -jobs 4(?! -test-jobs)/);
+	assert.doesNotMatch(result.stdout, /-test-jobs/);
 });
 
 test("corrupted production result warns, falls back, and reaches numeric job flags", (t) => {

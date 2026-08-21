@@ -67,7 +67,8 @@ func TestFunctionalTestVizContract_WiresBoundarySingleCoverageThenMarkdown(t *te
 		"functional-boundary-check": "@printf '%s\\n' 'stub:boundary-ok'\n",
 		"test-functional-coverage": "@printf '%s\\n' 'stub:coverage-once'\n" +
 			"\t@printf '%s\\n' 'profile=$(GO_FUNCTIONAL_COVERAGE_PROFILE)'\n" +
-			"\t@printf '%s\\n' 'json=$(GO_FUNCTIONAL_COVERAGE_JSON_OUTPUT)'\n",
+			"\t@printf '%s\\n' 'json=$(GO_FUNCTIONAL_COVERAGE_JSON_OUTPUT)'\n" +
+			"\t@printf '%s\\n' 'test-jobs=$(FUNCTIONAL_TEST_JOBS)'\n",
 	})
 	goStub := writeMakeEchoScript(t, "stub-go")
 
@@ -76,6 +77,7 @@ func TestFunctionalTestVizContract_WiresBoundarySingleCoverageThenMarkdown(t *te
 		makefilePath,
 		"functional-test-viz",
 		"GO="+goStub,
+		"FUNCTIONAL_TEST_JOBS=8",
 	)
 	if err != nil {
 		t.Fatalf("run functional-test-viz wiring contract: %v\n%s", err, output)
@@ -100,6 +102,9 @@ func TestFunctionalTestVizContract_WiresBoundarySingleCoverageThenMarkdown(t *te
 	}
 	if !strings.Contains(output, "json="+functionalTestVizDefaultJSON) {
 		t.Fatalf("coverage invocation missing default JSON path:\n%s", output)
+	}
+	if !strings.Contains(output, "test-jobs=8") {
+		t.Fatalf("coverage invocation did not preserve the CI test-jobs override:\n%s", output)
 	}
 	if !strings.Contains(output, "-coverage-summary "+functionalTestVizDefaultJSON) {
 		t.Fatalf("Markdown generator missing default coverage-summary path:\n%s", output)

@@ -11,6 +11,7 @@ budget="${FUNCTIONAL_TEST_BUDGET:-35m}"
 short="${FUNCTIONAL_SHORT:-true}"
 quarantine="${FUNCTIONAL_QUARANTINE:-tests/functional/functional-quarantine.json}"
 functional_jobs="${FUNCTIONAL_DEFAULT_JOBS:-make-default}"
+functional_test_jobs="${FUNCTIONAL_TEST_JOBS:-make-default}"
 log_path="$artifact_root/command.log"
 timing_path="${FUNCTIONAL_TEST_VIZ_TIMING:-$artifact_root/functional-timing-summary.json}"
 coverage_path="${FUNCTIONAL_TEST_VIZ_JSON:-$artifact_root/coverage-summary.json}"
@@ -26,7 +27,7 @@ mkdir -p "$artifact_root"
 rm -f "$status_path" "$timing_path" "$coverage_path" "$profile_path" "$markdown_path" "$gocoverage_exit_path" "$verdict_path"
 
 printf '%s\n' \
-  "Functional CI runner: tier=$tier trigger=$trigger short=$short budget=$budget selection=subtractive quarantine=$quarantine jobs=$functional_jobs" \
+  "Functional CI runner: tier=$tier trigger=$trigger short=$short budget=$budget selection=subtractive quarantine=$quarantine jobs=$functional_jobs test_jobs=$functional_test_jobs" \
   "Functional CI runner: timeout=$budget; partial diagnostics are retained under $artifact_root on failure." \
   | tee "$log_path"
 

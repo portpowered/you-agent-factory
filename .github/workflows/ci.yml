@@ -236,15 +236,25 @@ jobs:
         run: |
           runner_cpus="$(nproc 2>/dev/null || true)"
           case "$runner_cpus" in
-            ''|*[!0-9]*) runner_cpus=0 ;;
+            ''|*[!0-9]*|0|0[0-9]*)
+              echo "Functional CI runner: nproc returned an unusable logical CPU count: '$runner_cpus'" >&2
+              exit 1
+              ;;
           esac
+          max_functional_logical_cpus=64
+          if [ "${#runner_cpus}" -gt 2 ] || [ "$runner_cpus" -gt "$max_functional_logical_cpus" ]; then
+            echo "Functional CI runner: logical CPU count '$runner_cpus' exceeds the bounded test-jobs limit of $max_functional_logical_cpus" >&2
+            exit 1
+          fi
           if [ "$runner_cpus" -lt 2 ]; then
             functional_jobs=2
           else
             functional_jobs="$runner_cpus"
           fi
-          echo "Functional CI runner: logical_cpus=$runner_cpus jobs=$functional_jobs"
+          functional_test_jobs=$((runner_cpus * 2))
+          echo "Functional CI runner: logical_cpus=$runner_cpus jobs=$functional_jobs test_jobs=$functional_test_jobs"
           echo "jobs=$functional_jobs" >> "$GITHUB_OUTPUT"
+          echo "test_jobs=$functional_test_jobs" >> "$GITHUB_OUTPUT"
       - name: Verify quarantined package inventory on Linux
         if: matrix.suite == 'functional'
         run: bash scripts/ci/verify-functional-quarantine-packages.sh
@@ -378,6 +388,7 @@ jobs:
           FUNCTIONAL_TEST_BUDGET: "75m"
           FUNCTIONAL_SHORT: "false"
           FUNCTIONAL_DEFAULT_JOBS: ${{ steps.functional-parallelism.outputs.jobs }}
+          FUNCTIONAL_TEST_JOBS: ${{ steps.functional-parallelism.outputs.test_jobs }}
           FUNCTIONAL_GOCOVERAGE_EXIT_FILE: .artifacts/functional-test-viz/gocoveragecheck-exit-code.txt
           FUNCTIONAL_COVERAGE_VERDICT_FILE: .artifacts/functional-test-viz/functional-coverage-verdict.txt
           INFINITE_YOU_RUN_ACPX_REAL_CLIENT: "1"
