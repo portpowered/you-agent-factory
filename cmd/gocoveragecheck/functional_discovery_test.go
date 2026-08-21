@@ -221,7 +221,7 @@ func TestSecond(t *testing.T) {}
 	}
 }
 
-func TestResolveFunctionalTestPackagesWithMetadataBatchesCurrentTreeCandidates(t *testing.T) {
+func TestResolveFunctionalTestPackagesWithMetadataListsCurrentTreeCandidatesOnce(t *testing.T) {
 	originalRunner := commandRunner
 	t.Cleanup(func() { commandRunner = originalRunner })
 
@@ -284,9 +284,8 @@ func TestResolveFunctionalTestPackagesWithMetadataBatchesCurrentTreeCandidates(t
 	if !slices.Equal(gotPackages, packages) || len(listed) != packageCount {
 		t.Fatalf("packages/listed = %v/%d, want %v/%d", gotPackages, len(listed), packages, packageCount)
 	}
-	wantInvocations := (packageCount + functionalDiscoveryMaxJobs - 1) / functionalDiscoveryMaxJobs
-	if len(invocations) != wantInvocations {
-		t.Fatalf("go list invocations = %d, want %d: %+v", len(invocations), wantInvocations, invocations)
+	if len(invocations) != 1 {
+		t.Fatalf("go list invocations = %d, want one concrete metadata query: %+v", len(invocations), invocations)
 	}
 	seen := make(map[string]struct{}, packageCount)
 	for _, invocation := range invocations {

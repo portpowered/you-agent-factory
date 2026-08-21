@@ -196,37 +196,18 @@ func listFunctionalTestPackageMetadataForCandidates(candidatePaths []string, rep
 	// by the active build. Go list reports that probe miss as a package Error;
 	// it is the one expected non-package result that can be discarded here.
 	// Every other listing error remains fail-closed.
-	batches := functionalStringBatches(candidatePaths, functionalDiscoveryMaxJobs)
-	results := make([]functionalGoListPackageMetadataResult, len(batches))
-	var waitGroup sync.WaitGroup
-	for index, batch := range batches {
-		waitGroup.Add(1)
-		go func(index int, batch []string) {
-			defer waitGroup.Done()
-			result, err := listFunctionalTestPackageBatchWithFieldsAndFlagsAllowingBuildConstraintErrors(
-				batch,
-				functionalGoListJSONFields,
-				[]string{"-find"},
-				repoRoot,
-			)
-			results[index] = result
-			if err != nil {
-				results[index].err = err
-			}
-		}(index, batch)
+	result, err := listFunctionalTestPackageBatchWithFieldsAndFlagsAllowingBuildConstraintErrors(
+		candidatePaths,
+		functionalGoListJSONFields,
+		[]string{"-find"},
+		repoRoot,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("discover functional tests: go list metadata batch %q: %w", strings.Join(candidatePaths, " "), err)
 	}
-	waitGroup.Wait()
-
-	listedPackages := make([]functionalGoListPackage, 0, len(candidatePaths))
-	excludedPaths := make([]string, 0)
-	for index, result := range results {
-		if result.err != nil {
-			return nil, fmt.Errorf("discover functional tests: go list metadata batch %q: %w", strings.Join(batches[index], " "), result.err)
-		}
-		listedPackages = append(listedPackages, result.packages...)
-		excludedPaths = append(excludedPaths, result.buildConstraintExcluded...)
-	}
-	listedPackages, err := mergeFunctionalGoListPackages(listedPackages)
+	listedPackages := result.packages
+	excludedPaths := result.buildConstraintExcluded
+	listedPackages, err = mergeFunctionalGoListPackages(listedPackages)
 	if err != nil {
 		return nil, err
 	}
@@ -248,29 +229,6 @@ func listFunctionalTestPackageMetadataForCandidates(candidatePaths []string, rep
 		return nil, errors.New("resolve go coverage lane: no packages matched")
 	}
 	return selectFunctionalPackageSet(runnableCandidates, listedPackages)
-}
-
-func functionalStringBatches(values []string, maxJobs int) [][]string {
-	values = sortedUniqueStrings(values)
-	if len(values) == 0 {
-		return nil
-	}
-	if len(values) < functionalDiscoveryParallelThreshold {
-		return [][]string{values}
-	}
-	if maxJobs < 1 {
-		maxJobs = 1
-	}
-	if maxJobs > len(values) {
-		maxJobs = len(values)
-	}
-	batchSize := (len(values) + maxJobs - 1) / maxJobs
-	batches := make([][]string, 0, maxJobs)
-	for start := 0; start < len(values); start += batchSize {
-		end := min(start+batchSize, len(values))
-		batches = append(batches, append([]string(nil), values[start:end]...))
-	}
-	return batches
 }
 
 func listFunctionalTestPackageMetadataFromPatterns(patterns []string, repoRoot string) ([]functionalGoListPackage, error) {
