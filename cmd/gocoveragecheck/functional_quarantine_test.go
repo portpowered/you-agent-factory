@@ -423,6 +423,115 @@ func TestFunctionalQuarantineRuntimeVerificationScopesListingToTestSelectors(t *
 	}
 }
 
+func TestPrepareFunctionalCoverageRunReportsDiscoveryLifecycle(t *testing.T) {
+	originalRunner := commandRunner
+	originalStdout := stdoutWriter
+	t.Cleanup(func() {
+		commandRunner = originalRunner
+		stdoutWriter = originalStdout
+	})
+
+	packagePath := modulePath + "/tests/functional/discovery-output"
+	repoRoot := t.TempDir()
+	packageDir := filepath.Join(repoRoot, "discovery-output")
+	if err := os.MkdirAll(packageDir, 0o755); err != nil {
+		t.Fatalf("create package directory: %v", err)
+	}
+	writeFunctionalDiscoveryFixture(t, packageDir, "discovery_test.go", `package discoveryoutput
+
+import "testing"
+
+func TestOne(t *testing.T) {}
+func TestTwo(t *testing.T) {}
+`)
+	quarantinePath := filepath.Join(repoRoot, "functional-quarantine.json")
+	quarantineData := []byte(`{"version":1,"suite":"functional","entries":[]}`)
+	if err := os.WriteFile(quarantinePath, quarantineData, 0o644); err != nil {
+		t.Fatalf("write quarantine fixture: %v", err)
+	}
+
+	commandRunner = func(invocation commandInvocation) (string, string, error) {
+		if invocation.name != "go" || !slices.Equal(invocation.args, []string{"list", "-json", packagePath}) {
+			t.Fatalf("discovery invocation = %+v, want go list -json", invocation)
+		}
+		return marshalFunctionalGoListPackage(t, functionalGoListPackage{
+			ImportPath:  packagePath,
+			Dir:         packageDir,
+			TestGoFiles: []string{"discovery_test.go"},
+		}), "", nil
+	}
+
+	var stdout bytes.Buffer
+	stdoutWriter = &stdout
+	_, selected, err := prepareFunctionalCoverageRun(
+		config{functionalQuarantine: quarantinePath, timeout: time.Minute},
+		[]string{packagePath},
+		"linux",
+		repoRoot,
+	)
+	if err != nil {
+		t.Fatalf("prepareFunctionalCoverageRun() error = %v", err)
+	}
+	if !slices.Equal(selected, []string{packagePath}) {
+		t.Fatalf("selected packages = %v, want %q", selected, packagePath)
+	}
+
+	output := stdout.String()
+	begin := strings.Index(output, "Functional discovery: begin")
+	end := strings.Index(output, "Functional discovery: end")
+	gate := strings.Index(output, "Functional gate:")
+	if begin < 0 || end < 0 || gate < 0 || !(begin < end && end < gate) {
+		t.Fatalf("discovery lifecycle output ordering is wrong: %q", output)
+	}
+	if !strings.Contains(output, "Functional discovery: begin requested-packages=1") {
+		t.Fatalf("discovery begin output = %q, want requested package count", output)
+	}
+	if !strings.Contains(output, "Functional discovery: end status=complete elapsed=") ||
+		!strings.Contains(output, "discovered-packages=1 discovered-tests=2") {
+		t.Fatalf("discovery end output = %q, want terminal counts and elapsed duration", output)
+	}
+	if !strings.Contains(output, "Functional gate: discovered-packages=1 discovered-tests=2") {
+		t.Fatalf("functional gate output = %q, want unchanged discovered counts", output)
+	}
+}
+
+func TestPrepareFunctionalCoverageRunReportsFailedDiscoveryEnd(t *testing.T) {
+	originalRunner := commandRunner
+	originalStdout := stdoutWriter
+	t.Cleanup(func() {
+		commandRunner = originalRunner
+		stdoutWriter = originalStdout
+	})
+
+	packagePath := modulePath + "/tests/functional/discovery-output"
+	repoRoot := t.TempDir()
+	quarantinePath := filepath.Join(repoRoot, "functional-quarantine.json")
+	if err := os.WriteFile(quarantinePath, []byte(`{"version":1,"suite":"functional","entries":[]}`), 0o644); err != nil {
+		t.Fatalf("write quarantine fixture: %v", err)
+	}
+	commandRunner = func(commandInvocation) (string, string, error) {
+		return "", "go: malformed discovery fixture", errors.New("exit status 1")
+	}
+
+	var stdout bytes.Buffer
+	stdoutWriter = &stdout
+	_, _, err := prepareFunctionalCoverageRun(
+		config{functionalQuarantine: quarantinePath, timeout: time.Minute},
+		[]string{packagePath},
+		"linux",
+		repoRoot,
+	)
+	if err == nil || !strings.Contains(err.Error(), "go list") {
+		t.Fatalf("prepareFunctionalCoverageRun() error = %v, want fail-closed go list diagnostic", err)
+	}
+	output := stdout.String()
+	if !strings.Contains(output, "Functional discovery: begin requested-packages=1") ||
+		!strings.Contains(output, "Functional discovery: end status=failed elapsed=") ||
+		strings.Contains(output, "Functional gate:") {
+		t.Fatalf("failed discovery output = %q, want begin, failed end, and no gate", output)
+	}
+}
+
 func TestFunctionalQuarantineRuntimeVerificationRejectsStaleSelector(t *testing.T) {
 	originalRunner := commandRunner
 	t.Cleanup(func() { commandRunner = originalRunner })

@@ -99,6 +99,8 @@ func prepareFunctionalCoverageRun(cfg config, packages []string, targetOS string
 	if !filepath.IsAbs(quarantinePath) {
 		quarantinePath = filepath.Join(repoRoot, quarantinePath)
 	}
+	discoveryStarted := time.Now()
+	fmt.Fprintf(stdoutWriter, "Functional discovery: begin requested-packages=%d\n", len(sortedUniqueStrings(packages)))
 	selection, manifest, err := resolveFunctionalCoverageSelection(
 		quarantinePath,
 		packages,
@@ -108,8 +110,10 @@ func prepareFunctionalCoverageRun(cfg config, packages []string, targetOS string
 		repoRoot,
 	)
 	if err != nil {
+		writeFunctionalDiscoveryEnd(discoveryStarted, "failed", functionalTestInventory{})
 		return functionalCoverageSelection{}, nil, err
 	}
+	writeFunctionalDiscoveryEnd(discoveryStarted, "complete", selection.Inventory)
 	fmt.Fprintf(
 		stdoutWriter,
 		"Functional gate: discovered-packages=%d discovered-tests=%d quarantined-packages=%d quarantined-test-selectors=%d package-excluded-tests=%d test-excluded-packages=%d selected-packages=%d selected-tests=%d selection=subtractive quarantine=%s\n",
@@ -127,6 +131,24 @@ func prepareFunctionalCoverageRun(cfg config, packages []string, targetOS string
 		return functionalCoverageSelection{}, nil, err
 	}
 	return selection, selectedFunctionalPackages(selection), nil
+}
+
+func writeFunctionalDiscoveryEnd(started time.Time, status string, inventory functionalTestInventory) {
+	if status == "" {
+		status = "failed"
+	}
+	elapsed := time.Since(started).Seconds()
+	if elapsed < 0 {
+		elapsed = 0
+	}
+	fmt.Fprintf(
+		stdoutWriter,
+		"Functional discovery: end status=%s elapsed=%.3fs discovered-packages=%d discovered-tests=%d\n",
+		status,
+		elapsed,
+		len(inventory.Packages),
+		functionalTestCount(inventory),
+	)
 }
 
 const (
