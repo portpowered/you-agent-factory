@@ -12,6 +12,7 @@ import (
 	modelseffects "github.com/portpowered/infinite-you/pkg/services/models/internal/effects"
 	runtimehost "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_host"
 	internalservice "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_host/internal/service"
+	runtimescopes "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_scopes"
 )
 
 func TestManagedLocalAIPreflightRejectsUnsupportedHostBeforeProcessStart(t *testing.T) {
@@ -332,6 +333,68 @@ func TestManagedLocalAIRetentionUsesResolvedLoadPolicyAndInjectedClock(t *testin
 	}
 }
 
+func TestManagedLocalAIUsesOperatorOverlayForPinnedIdentity(t *testing.T) {
+	t.Parallel()
+
+	clock := newDeterministicHostClock()
+	cacheDirectory := t.TempDir()
+	writeCacheFixture(t, cacheDirectory, true)
+	scopes := newScopes(t, "story-003-overlay")
+	cfg := managedLocalAIConfig(models.LoadPolicyOnDemand)
+	cfg.Resources[0].Backend = "LLAMACPP"
+	backend := "localai-llamacpp"
+	loadPolicy := models.LoadPolicyKeepWarm
+	ref := openScopeWithOverlays(t, scopes, cacheDirectory, cfg, map[string]models.ModelOverlay{
+		" omnivoice_q4_k_m ": {Backend: &backend, LoadPolicy: &loadPolicy},
+	})
+	launcher := &controlledProcessLauncher{}
+	protocol := &testProtocolNegotiator{}
+	host, err := internalservice.NewWiredWithSupervisorConfig(
+		scopes,
+		mustAssetsService(t, scopes),
+		launcher,
+		http.DefaultClient,
+		clock,
+		nil,
+		nil,
+		internalservice.SupervisorTestConfig{},
+		internalservice.HostPolicyTestConfig{IdleUnloadAfter: time.Hour},
+		runtimehost.Options{
+			Platform:             managedHostPlatform(),
+			CompatibilityChecker: &testCompatibilityChecker{},
+			ProtocolNegotiator:   protocol,
+		},
+	)
+	if err != nil {
+		t.Fatalf("NewWiredWithSupervisorConfig: %v", err)
+	}
+	t.Cleanup(func() { _ = internalservice.ShutdownHost(context.Background(), host) })
+
+	if _, err := host.EnsureModelHost(context.Background(), models.EnsureModelHostRequest{
+		Scope: ref,
+		Name:  managedModelName,
+	}); err != nil {
+		t.Fatalf("EnsureModelHost: %v", err)
+	}
+	if call := protocol.call(); call.request.Backend != backend {
+		t.Fatalf("protocol backend = %q, want %q", call.request.Backend, backend)
+	}
+	lease, err := host.AcquireModelLease(context.Background(), models.AcquireModelLeaseRequest{
+		Scope: ref, Name: managedModelName, Holder: "worker-a",
+	})
+	if err != nil {
+		t.Fatalf("AcquireModelLease: %v", err)
+	}
+	if _, err := host.ReleaseModelLease(context.Background(), models.ReleaseModelLeaseRequest{
+		Scope: ref, Lease: lease.Lease.Lease,
+	}); err != nil {
+		t.Fatalf("ReleaseModelLease: %v", err)
+	}
+	if clock.timerCount() != 0 {
+		t.Fatalf("operator KEEP_WARM timer count = %d, want 0", clock.timerCount())
+	}
+}
+
 const managedModelName = "OMNIVOICE_Q4_K_M"
 
 func managedLocalAIConfig(loadPolicy models.LoadPolicy) models.RuntimeConfig {
@@ -341,6 +404,25 @@ func managedLocalAIConfig(loadPolicy models.LoadPolicy) models.RuntimeConfig {
 	cfg.Workers[0].Command = "fake-localai"
 	cfg.Workers[0].Args = []string{"--grpc-endpoint", "grpc://127.0.0.1:50051"}
 	return cfg
+}
+
+func openScopeWithOverlays(
+	t *testing.T,
+	scopes runtimescopes.Service,
+	cacheDirectory string,
+	config models.RuntimeConfig,
+	overlays map[string]models.ModelOverlay,
+) models.RuntimeScopeRef {
+	t.Helper()
+	ref, err := scopes.Open(models.RuntimeBinding{
+		CacheDirectory: cacheDirectory,
+		OperatorModels: overlays,
+		RuntimeConfig:  func() *models.RuntimeConfig { return &config },
+	})
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	return mustParseScope(t, ref)
 }
 
 func managedHostPlatform() models.AssetHostPlatform {

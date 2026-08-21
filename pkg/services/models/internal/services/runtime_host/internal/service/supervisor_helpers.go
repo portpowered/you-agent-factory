@@ -2,6 +2,7 @@ package service
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 
 	models "github.com/portpowered/infinite-you/pkg/services/models"
@@ -86,11 +87,23 @@ func modelScopedResource(factoryCfg *models.RuntimeConfig, modelName string) *mo
 	return nil
 }
 
-func supervisedIdentityForModel(runtimeCfg *models.RuntimeConfig, modelName string) supervisedIdentity {
+func supervisedIdentityForModel(
+	runtimeCfg *models.RuntimeConfig,
+	overlays map[string]models.ModelOverlay,
+	modelName string,
+) supervisedIdentity {
 	identity := supervisedIdentity{Name: strings.TrimSpace(modelName)}
 	if resource := modelScopedResource(runtimeCfg, modelName); resource != nil {
 		identity.Backend = strings.TrimSpace(resource.Backend)
 		identity.LoadPolicy = strings.ToUpper(strings.TrimSpace(resource.LoadPolicy))
+	}
+	if overlay, ok := modelOverlay(overlays, modelName); ok {
+		if overlay.Backend != nil {
+			identity.Backend = strings.TrimSpace(*overlay.Backend)
+		}
+		if overlay.LoadPolicy != nil {
+			identity.LoadPolicy = strings.ToUpper(strings.TrimSpace(string(*overlay.LoadPolicy)))
+		}
 	}
 	return supervisedIdentity{
 		Name:       identity.Name,
@@ -98,6 +111,24 @@ func supervisedIdentityForModel(runtimeCfg *models.RuntimeConfig, modelName stri
 		LoadPolicy: identity.LoadPolicy,
 		Revision:   identity.Revision,
 	}
+}
+
+func modelOverlay(
+	overlays map[string]models.ModelOverlay,
+	modelName string,
+) (models.ModelOverlay, bool) {
+	canonical := strings.ToLower(strings.TrimSpace(modelName))
+	matching := make([]string, 0, 1)
+	for name := range overlays {
+		if strings.ToLower(strings.TrimSpace(name)) == canonical {
+			matching = append(matching, name)
+		}
+	}
+	if len(matching) == 0 {
+		return models.ModelOverlay{}, false
+	}
+	sort.Strings(matching)
+	return overlays[matching[0]].Clone(), true
 }
 
 func cacheInspectionFromAssets(inspection scopedassets.RuntimeCacheInspection) cacheInspection {

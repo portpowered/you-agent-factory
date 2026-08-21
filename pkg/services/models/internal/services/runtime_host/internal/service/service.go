@@ -125,7 +125,7 @@ func (s *service) InspectModelHost(
 	snapshot := hostSnapshotFromAssets(request.Scope, request.Name, inspection)
 	snapshot = sanitizeManagedHostSnapshot(
 		snapshot,
-		supervisedIdentityForModel(binding.RuntimeConfig(), request.Name),
+		supervisedIdentityForModel(binding.RuntimeConfig(), binding.OperatorModels, request.Name),
 	)
 	snapshot = s.overlaySupervisedReadiness(
 		binding,
@@ -171,7 +171,7 @@ func (s *service) EnsureModelHost(
 	}
 
 	runtimeCfg := binding.RuntimeConfig()
-	identity := supervisedIdentityForModel(runtimeCfg, request.Name)
+	identity := supervisedIdentityForModel(runtimeCfg, binding.OperatorModels, request.Name)
 	baseSnapshot := hostSnapshotFromAssets(request.Scope, request.Name, inspection)
 	baseSnapshot = sanitizeManagedHostSnapshot(baseSnapshot, identity)
 
@@ -257,7 +257,7 @@ func (s *service) StopModelHost(
 		return models.StopModelHostResult{}, err
 	}
 	baseSnapshot := hostSnapshotFromAssets(request.Scope, request.Name, inspection)
-	identity := supervisedIdentityForModel(binding.RuntimeConfig(), request.Name)
+	identity := supervisedIdentityForModel(binding.RuntimeConfig(), binding.OperatorModels, request.Name)
 	baseSnapshot = sanitizeManagedHostSnapshot(baseSnapshot, identity)
 
 	slotKey := runtimeSlotKey(request.Scope, request.Name)
@@ -371,7 +371,7 @@ func (s *service) OnLeaseCapacityReleased(
 	if err != nil {
 		return
 	}
-	s.releaseSlotCapacity(scope, modelName, binding.RuntimeConfig())
+	s.releaseSlotCapacityWithOverlays(scope, modelName, binding.RuntimeConfig(), binding.OperatorModels)
 }
 
 func (s *service) releaseSlotCapacity(
@@ -379,8 +379,17 @@ func (s *service) releaseSlotCapacity(
 	modelName string,
 	runtimeCfg *models.RuntimeConfig,
 ) {
+	s.releaseSlotCapacityWithOverlays(scope, modelName, runtimeCfg, nil)
+}
+
+func (s *service) releaseSlotCapacityWithOverlays(
+	scope models.RuntimeScopeRef,
+	modelName string,
+	runtimeCfg *models.RuntimeConfig,
+	overlays map[string]models.ModelOverlay,
+) {
 	slotKey := runtimeSlotKey(scope, modelName)
-	identity := supervisedIdentityForModel(runtimeCfg, modelName)
+	identity := supervisedIdentityForModel(runtimeCfg, overlays, modelName)
 
 	s.mu.Lock()
 	s.releaseSlotCapacityLocked(slotKey)
@@ -395,7 +404,7 @@ func (s *service) overlaySupervisedReadiness(
 	inspection scopedassets.RuntimeCacheInspection,
 	snapshot models.ModelHostSnapshot,
 ) models.ModelHostSnapshot {
-	identity := supervisedIdentityForModel(binding.RuntimeConfig(), modelName)
+	identity := supervisedIdentityForModel(binding.RuntimeConfig(), binding.OperatorModels, modelName)
 	if !requiresSupervisedBackend(identity.Backend) || !inspection.Installed {
 		return snapshot
 	}
