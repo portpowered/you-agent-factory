@@ -69,14 +69,15 @@ func (s *Service) GetWork(
 	if err != nil {
 		return work.ReadModel{}, err
 	}
-	for _, item := range snapshot.Items {
+	models := annotatedReadModels(snapshot)
+	for _, item := range models {
 		if item.CursorID == id {
-			return detachReadModel(item), nil
+			return item, nil
 		}
 	}
-	for _, item := range snapshot.Items {
+	for _, item := range models {
 		if item.WorkID == id {
-			return detachReadModel(item), nil
+			return item, nil
 		}
 	}
 	return work.ReadModel{}, work.ErrWorkNotFound
@@ -140,30 +141,33 @@ func optionalBool(value bool) *bool {
 
 func newSelection(options work.ListOptions) (stateaccessquery.Selection, error) {
 	return stateaccessquery.NewSelectionWithOptions(stateaccessquery.SelectionOptions{
-		StateName:    optional(options.StateName),
-		StateType:    optional(options.StateType),
-		Name:         optional(options.Name),
-		WorkTypeName: optional(options.WorkTypeName),
-		TraceID:      optional(options.TraceID),
-		Terminal:     optionalBool(options.Terminal),
-		NonTerminal:  optionalBool(options.NonTerminal),
-		SortBy:       options.SortBy,
+		StateName:         optional(options.StateName),
+		StateType:         optional(options.StateType),
+		Name:              optional(options.Name),
+		WorkTypeName:      optional(options.WorkTypeName),
+		TraceID:           optional(options.TraceID),
+		Terminal:          optionalBool(options.Terminal),
+		NonTerminal:       optionalBool(options.NonTerminal),
+		IncludeSuperseded: options.IncludeSuperseded,
+		SortBy:            options.SortBy,
 	})
 }
 
 func orderedReadModels(snapshot work.ReadSnapshot, selection stateaccessquery.Selection) []work.ReadModel {
-	byID := make(map[string]work.ReadModel, len(snapshot.Items))
-	items := make([]stateaccessquery.Item, 0, len(snapshot.Items))
-	for _, item := range snapshot.Items {
-		item = detachReadModel(item)
+	annotated := annotatedReadModels(snapshot)
+	byID := make(map[string]work.ReadModel, len(annotated))
+	items := make([]stateaccessquery.Item, 0, len(annotated))
+	for _, item := range annotated {
 		byID[item.CursorID] = item
 		items = append(items, stateaccessquery.Item{
 			ID:                     item.CursorID,
+			WorkID:                 item.WorkID,
 			Name:                   item.Name,
 			WorkTypeName:           item.WorkTypeName,
 			State:                  stateToQueryState(item.State),
 			TraceID:                item.TraceID,
 			CurrentChainingTraceID: item.CurrentChainingTraceID,
+			SupersededBy:           item.SupersededBy,
 		})
 	}
 	selected := selection.Apply(items)
@@ -172,6 +176,43 @@ func orderedReadModels(snapshot work.ReadSnapshot, selection stateaccessquery.Se
 		ordered = append(ordered, byID[item.ID])
 	}
 	return ordered
+}
+
+func annotatedReadModels(snapshot work.ReadSnapshot) []work.ReadModel {
+	models := make([]work.ReadModel, 0, len(snapshot.Items))
+	items := make([]stateaccessquery.Item, 0, len(snapshot.Items))
+	for _, item := range snapshot.Items {
+		item = detachReadModel(item)
+		// Supersession is a read-time derivation. Do not carry a provider-supplied
+		// value across the boundary when canonical admission facts are absent.
+		item.SupersededBy = ""
+		models = append(models, item)
+		items = append(items, stateaccessquery.Item{
+			ID:                     item.CursorID,
+			WorkID:                 item.WorkID,
+			Name:                   item.Name,
+			WorkTypeName:           item.WorkTypeName,
+			State:                  stateToQueryState(item.State),
+			TraceID:                item.TraceID,
+			CurrentChainingTraceID: item.CurrentChainingTraceID,
+		})
+	}
+
+	admissions := make([]stateaccessquery.Admission, 0, len(snapshot.Admissions))
+	for _, admission := range snapshot.Admissions {
+		admissions = append(admissions, stateaccessquery.Admission{
+			WorkID: admission.WorkID,
+			Name:   admission.Name,
+			Order:  admission.Order,
+		})
+	}
+	annotatedItems := stateaccessquery.AnnotateSupersession(items, admissions)
+	for index, item := range annotatedItems {
+		if index < len(models) {
+			models[index].SupersededBy = item.SupersededBy
+		}
+	}
+	return models
 }
 
 func nextIndex(items []work.ReadModel, cursor string) int {

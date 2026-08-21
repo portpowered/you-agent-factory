@@ -9,13 +9,14 @@ import (
 )
 
 const (
-	FilterStateName    = "state.name"
-	FilterStateType    = "state.type"
-	FilterName         = "name"
-	FilterWorkTypeName = "workTypeName"
-	FilterTraceID      = "traceId"
-	FilterTerminal     = "terminal"
-	FilterNonTerminal  = "nonTerminal"
+	FilterStateName         = "state.name"
+	FilterStateType         = "state.type"
+	FilterName              = "name"
+	FilterWorkTypeName      = "workTypeName"
+	FilterTraceID           = "traceId"
+	FilterTerminal          = "terminal"
+	FilterNonTerminal       = "nonTerminal"
+	FilterIncludeSuperseded = "includeSuperseded"
 
 	SortByStateType = "state.type"
 
@@ -28,17 +29,18 @@ const (
 // ListOptions is the validated list-request shape used by state-access query
 // preparation and selection.
 type ListOptions struct {
-	StateName    string
-	StateType    string
-	Name         string
-	WorkTypeName string
-	TraceID      string
-	Terminal     bool
-	NonTerminal  bool
-	SortBy       string
-	MaxResults   int
-	NextToken    string
-	Counts       bool
+	StateName         string
+	StateType         string
+	Name              string
+	WorkTypeName      string
+	TraceID           string
+	Terminal          bool
+	NonTerminal       bool
+	IncludeSuperseded bool
+	SortBy            string
+	MaxResults        int
+	NextToken         string
+	Counts            bool
 }
 
 // PreparedListRequest is the detached, validated value returned to transport
@@ -144,6 +146,9 @@ func NormalizeList(options ListOptions) (ListQuery, error) {
 	}
 	if options.NonTerminal {
 		active = append(active, FilterNonTerminal)
+	}
+	if options.IncludeSuperseded {
+		active = append(active, FilterIncludeSuperseded)
 	}
 	if options.SortBy != "" {
 		active = append(active, "sortBy")

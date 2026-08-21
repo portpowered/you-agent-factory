@@ -14,13 +14,14 @@ import (
 const (
 	DefaultListMaxResults = 50
 
-	FilterStateName    = "state.name"
-	FilterStateType    = "state.type"
-	FilterName         = "name"
-	FilterWorkTypeName = "workTypeName"
-	FilterTraceID      = "traceId"
-	FilterTerminal     = "terminal"
-	FilterNonTerminal  = "nonTerminal"
+	FilterStateName         = "state.name"
+	FilterStateType         = "state.type"
+	FilterName              = "name"
+	FilterWorkTypeName      = "workTypeName"
+	FilterTraceID           = "traceId"
+	FilterTerminal          = "terminal"
+	FilterNonTerminal       = "nonTerminal"
+	FilterIncludeSuperseded = "includeSuperseded"
 
 	SortByStateType = "state.type"
 
@@ -37,13 +38,15 @@ var ErrWorkNotFound = errors.New("Work not found")
 // ReadModel is the detached customer-facing Work projection returned by the
 // root Service state-access slice (ListWork, GetWork, MoveWorkAndRead). It
 // deliberately contains no token, place, marking, or topology fields and no
-// Factory Runtime or peer implementation types.
+// Factory Runtime or peer implementation types. SupersededBy is a read-time
+// successor annotation for older terminal or failed same-name attempts.
 type ReadModel struct {
 	CursorID                 string
 	Name                     string
 	WorkID                   string
 	WorkTypeName             string
 	State                    *State
+	SupersededBy             string
 	ChainingTraceDepth       int
 	CurrentChainingTraceID   string
 	PreviousChainingTraceIDs []string
@@ -445,10 +448,21 @@ type ListCountSummary struct {
 	Total int
 }
 
+// WorkAdmission is the detached canonical admission fact used by Work read
+// policy. Order is session-local admission order, not lifecycle state.
+type WorkAdmission struct {
+	WorkID string
+	Name   string
+	Order  int
+}
+
 // ReadSnapshot is the detached runtime observation consumed only by the Work
 // owner. Factory Sessions adapts its live runtime into this contract, so Work
 // never imports Factory Runtime and transports never observe engine types.
-type ReadSnapshot struct{ Items []ReadModel }
+type ReadSnapshot struct {
+	Items      []ReadModel
+	Admissions []WorkAdmission
+}
 
 // StopSummary is the Work-owned detached copy of the stopped-state context
 // needed by a Work read. Factory Sessions remains the policy owner that
@@ -486,17 +500,18 @@ type State struct {
 // ListOptions is the plain Work-owned state-access list request contract used by
 // Service.ListWork. Filters, ordering, and pagination stay transport-independent.
 type ListOptions struct {
-	StateName    string
-	StateType    string
-	Name         string
-	WorkTypeName string
-	TraceID      string
-	Terminal     bool
-	NonTerminal  bool
-	SortBy       string
-	MaxResults   int
-	NextToken    string
-	Counts       bool
+	StateName         string
+	StateType         string
+	Name              string
+	WorkTypeName      string
+	TraceID           string
+	Terminal          bool
+	NonTerminal       bool
+	IncludeSuperseded bool
+	SortBy            string
+	MaxResults        int
+	NextToken         string
+	Counts            bool
 }
 
 // PreparedListRequest is the detached, validated value returned to transport
@@ -536,17 +551,18 @@ type ListQuery struct {
 func (q ListQuery) Options() ListOptions {
 	opts := q.query.Options()
 	return ListOptions{
-		StateName:    opts.StateName,
-		StateType:    opts.StateType,
-		Name:         opts.Name,
-		WorkTypeName: opts.WorkTypeName,
-		TraceID:      opts.TraceID,
-		Terminal:     opts.Terminal,
-		NonTerminal:  opts.NonTerminal,
-		SortBy:       opts.SortBy,
-		MaxResults:   opts.MaxResults,
-		NextToken:    opts.NextToken,
-		Counts:       opts.Counts,
+		StateName:         opts.StateName,
+		StateType:         opts.StateType,
+		Name:              opts.Name,
+		WorkTypeName:      opts.WorkTypeName,
+		TraceID:           opts.TraceID,
+		Terminal:          opts.Terminal,
+		NonTerminal:       opts.NonTerminal,
+		IncludeSuperseded: opts.IncludeSuperseded,
+		SortBy:            opts.SortBy,
+		MaxResults:        opts.MaxResults,
+		NextToken:         opts.NextToken,
+		Counts:            opts.Counts,
 	}
 }
 
@@ -598,33 +614,35 @@ func ValidWorkStateType(stateType string) bool {
 
 func listOptionsToQuery(options ListOptions) stateaccessquery.ListOptions {
 	return stateaccessquery.ListOptions{
-		StateName:    options.StateName,
-		StateType:    options.StateType,
-		Name:         options.Name,
-		WorkTypeName: options.WorkTypeName,
-		TraceID:      options.TraceID,
-		Terminal:     options.Terminal,
-		NonTerminal:  options.NonTerminal,
-		SortBy:       options.SortBy,
-		MaxResults:   options.MaxResults,
-		NextToken:    options.NextToken,
-		Counts:       options.Counts,
+		StateName:         options.StateName,
+		StateType:         options.StateType,
+		Name:              options.Name,
+		WorkTypeName:      options.WorkTypeName,
+		TraceID:           options.TraceID,
+		Terminal:          options.Terminal,
+		NonTerminal:       options.NonTerminal,
+		IncludeSuperseded: options.IncludeSuperseded,
+		SortBy:            options.SortBy,
+		MaxResults:        options.MaxResults,
+		NextToken:         options.NextToken,
+		Counts:            options.Counts,
 	}
 }
 
 func listOptionsFromQuery(options stateaccessquery.ListOptions) ListOptions {
 	return ListOptions{
-		StateName:    options.StateName,
-		StateType:    options.StateType,
-		Name:         options.Name,
-		WorkTypeName: options.WorkTypeName,
-		TraceID:      options.TraceID,
-		Terminal:     options.Terminal,
-		NonTerminal:  options.NonTerminal,
-		SortBy:       options.SortBy,
-		MaxResults:   options.MaxResults,
-		NextToken:    options.NextToken,
-		Counts:       options.Counts,
+		StateName:         options.StateName,
+		StateType:         options.StateType,
+		Name:              options.Name,
+		WorkTypeName:      options.WorkTypeName,
+		TraceID:           options.TraceID,
+		Terminal:          options.Terminal,
+		NonTerminal:       options.NonTerminal,
+		IncludeSuperseded: options.IncludeSuperseded,
+		SortBy:            options.SortBy,
+		MaxResults:        options.MaxResults,
+		NextToken:         options.NextToken,
+		Counts:            options.Counts,
 	}
 }
 
