@@ -6,7 +6,9 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/controlplane"
 	fse "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution"
+	durableexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/durable_execution"
 )
 
 type handoffLiveOwner struct {
@@ -100,8 +102,8 @@ func TestServiceResumeInterruptedSessionDelegatesOnlyAfterLiveProbe(t *testing.T
 	if live.probeCalls != 1 || live.resumeIntCalls != 1 {
 		t.Fatalf("live calls = probe:%d resumeInterrupted:%d, want 1:1", live.probeCalls, live.resumeIntCalls)
 	}
-	if service.IsNonLiveReplay() {
-		t.Fatal("successful resume handoff remained marked as non-live")
+	if !service.IsNonLiveReplay() {
+		t.Fatal("successful resume handoff lost replay routing marker")
 	}
 }
 
@@ -270,15 +272,32 @@ func testSuccessfulHandoffRetainsOwner(t *testing.T, projection RecordingReplayP
 	if _, err := service.Resume(context.Background(), sessionID, fse.ControlRequest{}); err != nil {
 		t.Fatalf("second Resume error = %v", err)
 	}
-	if _, err := service.Pause(context.Background(), sessionID, fse.ControlRequest{}); err != nil {
-		t.Fatalf("Pause after handoff error = %v", err)
+	result, err := controlplane.PauseDurableFactorySession(
+		context.Background(),
+		&replayControlPlaneHost{execution: service},
+		sessionID,
+		fse.ControlRequest{},
+	)
+	if err != nil {
+		t.Fatalf("control-plane Pause after handoff error = %v", err)
+	}
+	if result.SessionID != sessionID {
+		t.Fatalf("control-plane Pause result session = %q, want %q", result.SessionID, sessionID)
 	}
 	if live.probeCalls != 1 || live.resumeCalls != 2 || live.pauseCalls != 1 {
 		t.Fatalf("live calls = probe:%d resume:%d pause:%d, want 1:2:1", live.probeCalls, live.resumeCalls, live.pauseCalls)
 	}
-	if service.IsNonLiveReplay() {
-		t.Fatal("successful handoff remains non-live")
+	if !service.IsNonLiveReplay() {
+		t.Fatal("successful handoff lost replay routing marker")
 	}
+}
+
+type replayControlPlaneHost struct {
+	execution durableexecution.Service
+}
+
+func (h *replayControlPlaneHost) DurableExecution() durableexecution.Service {
+	return h.execution
 }
 
 type handoffOwnerWithoutProbe struct{ fse.Service }

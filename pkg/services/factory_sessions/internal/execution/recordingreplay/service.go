@@ -66,14 +66,10 @@ func (s *Service) Inspection() factorysessions.HistoricalReplayInspection {
 
 // IsNonLiveReplay lets control-plane routing recognize recorded canonical
 // session identities that predate the durable-execution ID prefix convention.
+// The exception remains true after handoff because this service still owns the
+// replay identity and delegates subsequent operations to the live owner.
 func (s *Service) IsNonLiveReplay() bool {
-	if s == nil {
-		return true
-	}
-	s.mu.RLock()
-	handedOff := s.handedOff
-	s.mu.RUnlock()
-	return !handedOff
+	return true
 }
 
 var _ fse.Service = (*Service)(nil)
