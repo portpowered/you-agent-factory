@@ -171,9 +171,11 @@ type listJSONObservation struct {
 	DurationMillis           *int64                                           `json:"durationMillis"`
 	EndedAt                  *time.Time                                       `json:"endedAt"`
 	Failure                  *factoryapi.WorkerSessionFailure                 `json:"failure"`
+	Model                    *string                                          `json:"model"`
 	Parse                    factoryapi.WorkerSessionParseDiagnostics         `json:"parse"`
 	ProviderSession          *factoryapi.WorkerSessionProviderSessionRef      `json:"providerSession"`
 	ProviderSessionAvailable bool                                             `json:"providerSessionAvailable"`
+	ReasoningEffort          *string                                          `json:"reasoningEffort"`
 	StartedAt                *time.Time                                       `json:"startedAt"`
 	State                    factoryapi.WorkerSessionObservationState         `json:"state"`
 	TokenUsage               *listJSONTokenUsage                              `json:"tokenUsage"`
@@ -371,7 +373,7 @@ func renderList(output io.Writer, result factoryapi.ListWorkerSessionsResponse) 
 		_, err := fmt.Fprintln(output, "No worker sessions found.")
 		return err
 	}
-	if _, err := fmt.Fprintln(output, "DIRECT\tPROVIDER\tKIND\tSESSION ID\tWORK ID\tATTEMPT\tSTATE\tTOKENS\tDURATION\tFAILURE"); err != nil {
+	if _, err := fmt.Fprintln(output, "DIRECT\tPROVIDER\tKIND\tSESSION ID\tWORK ID\tATTEMPT\tSTATE\tTOKENS\tDURATION\tFAILURE\tMODEL\tREASONING EFFORT"); err != nil {
 		return err
 	}
 	for _, session := range result.Sessions {
@@ -403,7 +405,7 @@ func renderList(output io.Writer, result factoryapi.ListWorkerSessionsResponse) 
 		}
 		if _, err := fmt.Fprintf(
 			output,
-			"%t\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
+			"%t\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
 			session.Direct,
 			provider,
 			kind,
@@ -414,6 +416,8 @@ func renderList(output io.Writer, result factoryapi.ListWorkerSessionsResponse) 
 			formatTokens(session.TokenUsage),
 			formatDuration(session.DurationMillis),
 			failure,
+			stringOrDash(session.Model),
+			stringOrDash(session.ReasoningEffort),
 		); err != nil {
 			return err
 		}

@@ -25,6 +25,7 @@ func TestListJSONUsesStableSessionDocumentAndNullOptionals(t *testing.T) {
 		_ = json.NewEncoder(w).Encode(factoryapi.ListWorkerSessionsResponse{Sessions: []factoryapi.WorkerSessionObservation{
 			{
 				WorkerSessionId: "worker-session-1", AttemptId: "attempt-1",
+				Model: stringPtrForTest("gpt-5.6-luna"), ReasoningEffort: stringPtrForTest("high"),
 				ProviderSessionAvailable: true,
 				ProviderSession:          &factoryapi.WorkerSessionProviderSessionRef{Provider: "codex", Kind: "session_id", Id: "provider-session-1"},
 				WorkIds:                  []string{"work-1"}, State: factoryapi.WorkerSessionObservationState("FAILED"),
@@ -68,10 +69,16 @@ func TestListJSONUsesStableSessionDocumentAndNullOptionals(t *testing.T) {
 	if len(document.Sessions) != 2 {
 		t.Fatalf("session count = %d, want 2", len(document.Sessions))
 	}
-	for _, key := range []string{"providerSession", "turnId", "startedAt", "endedAt", "durationMillis", "tokenUsage", "failure"} {
+	for _, key := range []string{"providerSession", "model", "reasoningEffort", "turnId", "startedAt", "endedAt", "durationMillis", "tokenUsage", "failure"} {
 		if got, ok := document.Sessions[1][key]; !ok || string(got) != "null" {
 			t.Fatalf("session 2 %s = %s, want explicit null", key, got)
 		}
+	}
+	if got := string(document.Sessions[0]["model"]); got != `"gpt-5.6-luna"` {
+		t.Fatalf("session 1 model = %s, want gpt-5.6-luna", got)
+	}
+	if got := string(document.Sessions[0]["reasoningEffort"]); got != `"high"` {
+		t.Fatalf("session 1 reasoningEffort = %s, want high", got)
 	}
 	if got := string(document.Sessions[0]["durationMillis"]); got != "2500" {
 		t.Fatalf("session 1 durationMillis = %s, want 2500", got)
@@ -90,6 +97,7 @@ func TestListHumanRendersLabelsTokensDurationAndFailure(t *testing.T) {
 		_ = json.NewEncoder(w).Encode(factoryapi.ListWorkerSessionsResponse{Sessions: []factoryapi.WorkerSessionObservation{
 			{
 				WorkerSessionId: "worker-session-1", AttemptId: "attempt-1",
+				Model: stringPtrForTest("gpt-5.6-luna"), ReasoningEffort: stringPtrForTest("high"),
 				ProviderSessionAvailable: true,
 				ProviderSession:          &factoryapi.WorkerSessionProviderSessionRef{Provider: "codex", Kind: "session_id", Id: "provider-session-1"},
 				WorkIds:                  []string{"work-1"}, State: factoryapi.WorkerSessionObservationState("FAILED"),
@@ -108,12 +116,33 @@ func TestListHumanRendersLabelsTokensDurationAndFailure(t *testing.T) {
 		t.Fatalf("List() error = %v", err)
 	}
 	for _, want := range []string{
-		"DIRECT\tPROVIDER\tKIND\tSESSION ID\tWORK ID\tATTEMPT\tSTATE\tTOKENS\tDURATION\tFAILURE",
-		"false\tcodex\tsession_id\tprovider-session-1\twork-1\tattempt-1\tFAILED\t17\t2.5s\tWORKERS_EXECUTION_FAILURE",
+		"DIRECT\tPROVIDER\tKIND\tSESSION ID\tWORK ID\tATTEMPT\tSTATE\tTOKENS\tDURATION\tFAILURE\tMODEL\tREASONING EFFORT",
+		"false\tcodex\tsession_id\tprovider-session-1\twork-1\tattempt-1\tFAILED\t17\t2.5s\tWORKERS_EXECUTION_FAILURE\tgpt-5.6-luna\thigh",
 	} {
 		if !strings.Contains(output.String(), want) {
 			t.Fatalf("output %q missing %q", output.String(), want)
 		}
+	}
+}
+
+func TestListHumanRendersAbsentExecutionFactsAsDashes(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(factoryapi.ListWorkerSessionsResponse{Sessions: []factoryapi.WorkerSessionObservation{{
+			WorkerSessionId: "legacy-session", AttemptId: "attempt-legacy", WorkIds: []string{"work-1"},
+			State: factoryapi.WorkerSessionObservationState("COMPLETED"),
+		}}})
+	}))
+	defer server.Close()
+
+	var output bytes.Buffer
+	if err := NewList(testHTTPProtocol(t))(ListConfig{
+		Context: context.Background(), Server: server.URL, WorkID: "work-1", Output: &output,
+	}); err != nil {
+		t.Fatalf("List() error = %v", err)
+	}
+	if !strings.Contains(output.String(), "COMPLETED\t-\t-") {
+		t.Fatalf("output %q missing absent model and reasoning-effort columns", output.String())
 	}
 }
 
