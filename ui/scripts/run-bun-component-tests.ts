@@ -2,6 +2,10 @@ import { listComponentTestFiles } from "./component-test-files";
 
 const ISOLATED_COMPONENT_TEST_MARKER = ".isolated.bun.component.test.tsx";
 const PRELOAD_PATH = "./src/testing/bun/component.setup.ts";
+// The Bun and Vitest component runners share the four-vCPU CI job. Keep Bun's
+// test scheduler from consuming the entire host while Vitest uses its four
+// configured workers.
+const MAX_COMPONENT_TEST_CONCURRENCY = "4";
 
 const componentTests = listComponentTestFiles()
   .filter((file) => file.runner === "bun")
@@ -30,6 +34,7 @@ function runComponentTests(files: string[]): void {
       PRELOAD_PATH,
       "--reporter=dots",
       "--timeout=10000",
+      `--max-concurrency=${MAX_COMPONENT_TEST_CONCURRENCY}`,
       ...files,
     ],
     cwd: process.cwd(),
