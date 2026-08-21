@@ -673,6 +673,13 @@ for argument in "$@"; do
       ;;
   esac
 done
+printf '%s\n' 'Functional suite inventory: discovered-packages=1 observed-packages=1 (pass=1 fail=0 skip=0) top-level-tests=1 (pass=1 fail=0 skip=0) deferred-short-tests=0 wall=0.001s complete=true'
+printf '%s\n' 'total: (statements) 80.0%'
+printf '%s\n' 'Functional package coverage verdict:'
+printf '%s\n' '  floor violations: none'
+printf '%s\n' '  package=github.com/portpowered/infinite-you/pkg/alpha coverage=80.0% floor=75.0% delta=+5.0pp gate=pass lane=functional'
+printf '%s\n' '  tally: measured-packages=1 gated-packages=1 below-floor=0 near-floor=0 gate-failures=0'
+printf '%s\n' 'Go coverage 80.0% meets minimum 33.1%.'
 printf '%s\n' "fake-make:$*"
 `)
 	artifactRoot := filepath.Join(t.TempDir(), "functional-test-viz-artifacts")

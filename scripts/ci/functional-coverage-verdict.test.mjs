@@ -130,6 +130,19 @@ test("captures the exact recorded gocoveragecheck exit code", () => {
 	assert.throws(() => parseRecordedExitCode("256", "test exit file"), /outside the supported/);
 });
 
+test("retains the uppercase final green coverage gate in the compact extract", () => {
+	const extracted = extractFunctionalCoverageVerdict(
+		[
+			"Functional suite inventory: discovered-packages=1 observed-packages=1 complete=true",
+			"Functional package coverage verdict:",
+			"  tally: measured-packages=1 gated-packages=1 below-floor=0 near-floor=0 gate-failures=0",
+			"Go coverage 80.0% meets minimum 33.1%.",
+		].join("\n"),
+	);
+	assert.equal(extracted.hasGreenGate, true);
+	assert.match(extracted.text, /Go coverage 80\.0% meets minimum 33\.1%\./);
+});
+
 test("defers ordinary test and coverage-gate failures but propagates timeout and infrastructure outcomes", () => {
 	const testFailure = classifyFunctionalCoverageRun({
 		commandExitCode: 0,

@@ -36,7 +36,7 @@ function isCompactVerdictLine(line) {
 		line.startsWith("  tally:") ||
 		line.startsWith("package coverage regression:") ||
 		line.startsWith("coverage not evaluated:") ||
-		/^go coverage (?:found |.* below minimum |.* meets minimum )/.test(line)
+		/^(?:go|Go) coverage (?:found |.* below minimum |.* meets minimum )/.test(line)
 	);
 }
 
