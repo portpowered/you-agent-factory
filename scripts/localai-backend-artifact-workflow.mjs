@@ -1,12 +1,16 @@
-import { appendFileSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
+import { appendFileSync, copyFileSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import { join, normalize, relative, resolve } from "node:path";
 import { execFileSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { fileURLToPath } from "node:url";
 
 const repositoryRoot = resolve(fileURLToPath(new URL("..", import.meta.url)));
 const defaultConfigPath = join(repositoryRoot, ".github", "localai-backend-artifacts.json");
 const shaPattern = /^[0-9a-f]{40}$/;
+const digestPattern = /^[0-9a-f]{64}$/;
 const versionPattern = /^\d+\.\d+(?:\.\d+)?$/;
+const repositoryPattern = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/;
+const supportedAccelerators = new Set(["cpu", "metal"]);
 
 const expectedBackendIds = ["localai-llamacpp", "localai-whisper", "localai-vibevoice"];
 const expectedTargetIds = ["darwin-arm64", "linux-amd64", "windows-amd64"];
@@ -42,9 +46,9 @@ const targetHostFacts = {
 };
 
 const expectedTargetFacts = {
-	"darwin-arm64": { os: "darwin", architecture: "arm64", runner: "macos-14", buildType: "metal" },
-	"linux-amd64": { os: "linux", architecture: "amd64", runner: "ubuntu-24.04", buildType: "cpu" },
-	"windows-amd64": { os: "windows", architecture: "amd64", runner: "windows-2022", buildType: "cpu" },
+	"darwin-arm64": { os: "darwin", architecture: "arm64", runner: "macos-14", buildType: "metal", accelerators: ["metal"] },
+	"linux-amd64": { os: "linux", architecture: "amd64", runner: "ubuntu-24.04", buildType: "cpu", accelerators: ["cpu"] },
+	"windows-amd64": { os: "windows", architecture: "amd64", runner: "windows-2022", buildType: "cpu", accelerators: ["cpu"] },
 };
 
 export function loadConfig(configPath = defaultConfigPath) {
@@ -68,6 +72,21 @@ function validateSha(errors, value, label) {
 function validateVersion(errors, value, label) {
 	if (typeof value !== "string" || !versionPattern.test(value)) {
 		addError(errors, `${label} must be an exact numeric tool version`);
+	}
+}
+
+function validateAccelerators(errors, value, label) {
+	if (!Array.isArray(value) || value.length === 0) {
+		addError(errors, `${label} must contain at least one accelerator`);
+		return;
+	}
+	const seen = new Set();
+	for (const accelerator of value) {
+		if (typeof accelerator !== "string" || !supportedAccelerators.has(accelerator)) {
+			addError(errors, `${label} contains unsupported accelerator ${accelerator}`);
+		}
+		if (seen.has(accelerator)) addError(errors, `${label} contains duplicate ${accelerator}`);
+		seen.add(accelerator);
 	}
 }
 
@@ -129,6 +148,7 @@ function validateTarget(errors, target) {
 			addError(errors, `target ${field} must be non-empty`);
 		}
 	}
+	validateAccelerators(errors, target.accelerators, `target ${target.id ?? "<unknown>"} accelerators`);
 	if (typeof target.runner === "string" && /latest|master|main/i.test(target.runner)) {
 		addError(errors, `target ${target.id ?? "<unknown>"} runner must not be floating`);
 	}
@@ -139,7 +159,7 @@ function validateTarget(errors, target) {
 		addError(errors, `target ${target.id ?? "<unknown>"} has unsupported architecture ${target.architecture}`);
 	}
 	const expected = expectedTargetFacts[target.id];
-	if (expected && (target.os !== expected.os || target.architecture !== expected.architecture || target.runner !== expected.runner || target.buildType !== expected.buildType)) {
+	if (expected && (target.os !== expected.os || target.architecture !== expected.architecture || target.runner !== expected.runner || target.buildType !== expected.buildType || JSON.stringify(target.accelerators) !== JSON.stringify(expected.accelerators))) {
 		addError(errors, `target ${target.id} does not match its pinned OS, architecture, and build type`);
 	}
 }
@@ -154,6 +174,7 @@ export function matrixForConfig(config) {
 				os: target?.os,
 				architecture: target?.architecture,
 				build_type: target?.buildType,
+				accelerators: target?.accelerators,
 				source_path: backend?.sourcePath,
 				source_repository: backend?.sourceRepository,
 				source_commit: backend?.sourceCommit,
@@ -290,12 +311,15 @@ export function buildMetadata({ config, localaiRoot, backendId, targetId }) {
 			operatingSystem: verified.target.os,
 			architecture: verified.target.architecture,
 			buildType: verified.target.buildType,
+			accelerators: [...verified.target.accelerators],
 		},
 		source: {
 			repository: config.localaiRepository,
 			commit: config.localaiCommit,
+			path: verified.backend.sourcePath,
 			backendRepository: verified.backend.sourceRepository,
 			backendCommit: verified.backend.sourceCommit,
+			backendPinVariable: verified.backend.sourcePinVariable,
 		},
 		protocol: {
 			path: config.protocolPath,
@@ -363,6 +387,239 @@ function listFilesWithDirectory(root) {
 	return files;
 }
 
+function validateRepository(repository) {
+	if (typeof repository !== "string" || !repositoryPattern.test(repository)) {
+		throw new Error(`repository must be an owner/name identifier, received ${repository || "<missing>"}`);
+	}
+}
+
+function canonicalPinDocument(config) {
+	return {
+		localaiRepository: config.localaiRepository,
+		localaiCommit: config.localaiCommit,
+		protocolPath: config.protocolPath,
+		protocolRevision: config.protocolRevision,
+		grpcCommit: config.grpcCommit,
+		vcpkgCommit: config.vcpkgCommit,
+		toolchain: Object.fromEntries(Object.entries(config.toolchain).sort(([left], [right]) => left.localeCompare(right))),
+		backends: config.backends.map(({ id, sourceRepository, sourceCommit, sourcePinVariable }) => ({ id, sourceRepository, sourceCommit, sourcePinVariable })),
+		targets: config.targets.map(({ id, os, architecture, buildType, accelerators }) => ({ id, os, architecture, buildType, accelerators })),
+	};
+}
+
+export function publicationIdentity(config) {
+	const result = validateConfig(config);
+	if (result.errors.length > 0) throw new Error(result.errors.join("; "));
+	const pinFingerprint = createHash("sha256")
+		.update(JSON.stringify(canonicalPinDocument(config)))
+		.digest("hex");
+	return {
+		pinFingerprint,
+		releaseTag: `localai-backends-v${config.schemaVersion}-${pinFingerprint}`,
+	};
+}
+
+export function artifactArchiveName({ backend, target }) {
+	const extension = target.id === "windows-amd64" ? "zip" : "tar.gz";
+	return `localai-backend-${backend.id}-${target.id}-${backend.sourceCommit}.${extension}`;
+}
+
+function artifactMetadataName(archiveName) {
+	return `${archiveName}.metadata.json`;
+}
+
+function expectedArtifactEntries(config) {
+	return config.backends.flatMap((backend) =>
+		config.targets.map((target) => ({
+			backend,
+			target,
+			key: `${backend.id}/${target.id}`,
+			archiveName: artifactArchiveName({ backend, target }),
+		})),
+	);
+}
+
+function listArtifactDirectoryFiles(directory) {
+	if (!statSync(directory).isDirectory()) throw new Error(`artifact directory is missing: ${directory}`);
+	return readdirSync(directory).sort().map((name) => {
+		const path = join(directory, name);
+		if (!statSync(path).isFile()) throw new Error(`artifact directory contains a non-file entry: ${name}`);
+		return name;
+	});
+}
+
+function readJsonFile(path, label) {
+	try {
+		return JSON.parse(readFileSync(path, "utf8"));
+	} catch (error) {
+		throw new Error(`${label} is not valid JSON: ${error.message}`);
+	}
+}
+
+function metadataField(metadata, path) {
+	return path.split(".").reduce((value, key) => value?.[key], metadata);
+}
+
+function assertMetadataField(metadata, path, expected, label) {
+	const actual = metadataField(metadata, path);
+	if (JSON.stringify(actual) !== JSON.stringify(expected)) {
+		throw new Error(`${label} ${path} is ${JSON.stringify(actual)}, expected ${JSON.stringify(expected)}`);
+	}
+}
+
+function validateMatrixMetadata(metadata, { config, backend, target, key }) {
+	if (!isPlainObject(metadata)) throw new Error(`${key} metadata must be an object`);
+	const expectedFields = {
+		formatVersion: 1,
+		backend: backend.id,
+		"target.id": target.id,
+		"target.operatingSystem": target.os,
+		"target.architecture": target.architecture,
+		"target.buildType": target.buildType,
+		"target.accelerators": target.accelerators,
+		"source.repository": config.localaiRepository,
+		"source.commit": config.localaiCommit,
+		"source.path": backend.sourcePath,
+		"source.backendRepository": backend.sourceRepository,
+		"source.backendCommit": backend.sourceCommit,
+		"source.backendPinVariable": backend.sourcePinVariable,
+		"protocol.path": config.protocolPath,
+		"protocol.revision": config.protocolRevision,
+		"payload.binary": backend.binary,
+		"payload.makeTarget": backend.makeTarget,
+	};
+	for (const [path, expected] of Object.entries(expectedFields)) assertMetadataField(metadata, path, expected, `${key} metadata mismatch:`);
+	for (const [name, expected] of Object.entries(config.toolchain)) assertMetadataField(metadata, `toolchain.${name}`, expected, `${key} metadata mismatch:`);
+	assertMetadataField(metadata, "toolchain.grpcCommit", config.grpcCommit, `${key} metadata mismatch:`);
+	assertMetadataField(metadata, "toolchain.vcpkgCommit", config.vcpkgCommit, `${key} metadata mismatch:`);
+}
+
+function readArchiveDigest(path, label) {
+	const bytes = readFileSync(path);
+	if (bytes.length === 0) throw new Error(`${label} is empty`);
+	return {
+		sizeBytes: bytes.length,
+		sha256: createHash("sha256").update(bytes).digest("hex"),
+	};
+}
+
+export function verifyManifestArchives({ manifest, artifactDirectory }) {
+	if (!isPlainObject(manifest) || !Array.isArray(manifest.artifacts) || manifest.artifacts.length !== expectedBackendIds.length * expectedTargetIds.length) {
+		throw new Error("manifest must contain exactly nine backend artifacts");
+	}
+	const seenIds = new Set();
+	const seenNames = new Set();
+	for (const entry of manifest.artifacts) {
+		const id = entry?.id;
+		const name = entry?.artifact?.name;
+		if (typeof id !== "string" || seenIds.has(id)) throw new Error(`manifest contains duplicate artifact identity ${id || "<missing>"}`);
+		if (typeof name !== "string" || !/^[A-Za-z0-9][A-Za-z0-9._-]+$/.test(name) || seenNames.has(name)) {
+			throw new Error(`manifest contains duplicate or unsafe archive identity ${name || "<missing>"}`);
+		}
+		seenIds.add(id);
+		seenNames.add(name);
+		if (!Number.isSafeInteger(entry.artifact.sizeBytes) || entry.artifact.sizeBytes <= 0) {
+			throw new Error(`${id} manifest sizeBytes must be a positive integer`);
+		}
+		if (typeof entry.artifact.sha256 !== "string" || !digestPattern.test(entry.artifact.sha256)) {
+			throw new Error(`${id} manifest sha256 must be a lowercase 64-character digest`);
+		}
+		const archivePath = join(artifactDirectory, name);
+		assertPathInside(artifactDirectory, archivePath, `${id} archive`);
+		const observed = readArchiveDigest(archivePath, `${id} archive`);
+		if (observed.sizeBytes !== entry.artifact.sizeBytes || observed.sha256 !== entry.artifact.sha256) {
+			throw new Error(`${id} archive integrity mismatch: manifest size/digest do not match published bytes`);
+		}
+	}
+	return true;
+}
+
+export function createManifest({ config, artifactDirectory, repository }) {
+	validateRepository(repository);
+	const result = validateConfig(config);
+	if (result.errors.length > 0) throw new Error(result.errors.join("; "));
+	const identity = publicationIdentity(config);
+	const expected = expectedArtifactEntries(config);
+	const expectedFiles = expected.flatMap(({ archiveName }) => [archiveName, artifactMetadataName(archiveName)]).sort();
+	const actualFiles = listArtifactDirectoryFiles(artifactDirectory);
+	if (JSON.stringify(actualFiles) !== JSON.stringify(expectedFiles)) {
+		throw new Error(`matrix artifact set must contain exactly the nine archives and nine provenance sidecars; expected ${expectedFiles.join(", ")}, received ${actualFiles.join(", ")}`);
+	}
+	const artifacts = expected.map(({ backend, target, key, archiveName }) => {
+		const metadata = readJsonFile(join(artifactDirectory, artifactMetadataName(archiveName)), `${key} metadata`);
+		validateMatrixMetadata(metadata, { config, backend, target, key });
+		const digest = readArchiveDigest(join(artifactDirectory, archiveName), `${key} archive`);
+		return {
+			id: key,
+			backend: {
+				id: backend.id,
+				source: {
+					repository: backend.sourceRepository,
+					commit: backend.sourceCommit,
+					pinVariable: backend.sourcePinVariable,
+				},
+			},
+			source: {
+				repository: config.localaiRepository,
+				commit: config.localaiCommit,
+				path: backend.sourcePath,
+			},
+			protocol: {
+				path: config.protocolPath,
+				revision: config.protocolRevision,
+			},
+			target: {
+				id: target.id,
+				operatingSystem: target.os,
+				architecture: target.architecture,
+				accelerators: [...target.accelerators],
+			},
+			artifact: {
+				name: archiveName,
+				location: `https://github.com/${repository}/releases/download/${identity.releaseTag}/${archiveName}`,
+				sizeBytes: digest.sizeBytes,
+				sha256: digest.sha256,
+			},
+		};
+	});
+	const manifest = {
+		schemaVersion: 1,
+		kind: "localai-backend-artifacts",
+		publication: {
+			id: identity.releaseTag,
+			releaseTag: identity.releaseTag,
+			repository,
+			pinFingerprint: identity.pinFingerprint,
+			source: {
+				repository: config.localaiRepository,
+				commit: config.localaiCommit,
+			},
+			protocol: {
+				path: config.protocolPath,
+				revision: config.protocolRevision,
+			},
+			toolchain: {
+				...config.toolchain,
+				grpcCommit: config.grpcCommit,
+				vcpkgCommit: config.vcpkgCommit,
+			},
+		},
+		artifacts,
+	};
+	verifyManifestArchives({ manifest, artifactDirectory });
+	return manifest;
+}
+
+export function writePublicationBundle({ config, artifactDirectory, outputDirectory, repository }) {
+	const manifest = createManifest({ config, artifactDirectory, repository });
+	mkdirSync(outputDirectory, { recursive: true });
+	if (readdirSync(outputDirectory).length > 0) throw new Error(`publication directory must be empty: ${outputDirectory}`);
+	for (const entry of manifest.artifacts) copyFileSync(join(artifactDirectory, entry.artifact.name), join(outputDirectory, entry.artifact.name));
+	writeFileSync(join(outputDirectory, "manifest.json"), `${JSON.stringify(manifest, null, 2)}\n`);
+	verifyManifestArchives({ manifest, artifactDirectory: outputDirectory });
+	return { manifest, outputDirectory };
+}
+
 function parseOption(args, name) {
 	const index = args.indexOf(name);
 	if (index < 0 || !args[index + 1]) throw new Error(`${name} is required`);
@@ -423,6 +680,23 @@ function main(argv) {
 		});
 		writeFileSync(parseOption(argv, "--output"), `${JSON.stringify(metadata, null, 2)}\n`);
 		process.stdout.write(`LOCALAI_BACKEND_METADATA_OK backend=${metadata.backend} target=${metadata.target.id}\n`);
+		return;
+	}
+	if (command === "join") {
+		const config = loadConfig(argv.includes("--config") ? parseOption(argv, "--config") : defaultConfigPath);
+		const result = writePublicationBundle({
+			config,
+			artifactDirectory: parseOption(argv, "--artifact-directory"),
+			outputDirectory: parseOption(argv, "--output-directory"),
+			repository: parseOption(argv, "--repository"),
+		});
+		const identity = result.manifest.publication;
+		if (argv.includes("--github-output")) {
+			const outputPath = parseOption(argv, "--github-output");
+			appendFileSync(outputPath, `release_tag=${identity.releaseTag}\n`);
+			appendFileSync(outputPath, `pin_fingerprint=${identity.pinFingerprint}\n`);
+		}
+		process.stdout.write(`LOCALAI_BACKEND_PUBLICATION_BUNDLE_OK release=${identity.releaseTag} artifacts=${result.manifest.artifacts.length}\n`);
 		return;
 	}
 	throw new Error(`unknown command ${command ?? "<missing>"}`);

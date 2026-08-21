@@ -45,6 +45,7 @@ jobs:
       TARGET_ID: ${{ matrix.target }}
       BUILD_TYPE: ${{ matrix.build_type }}
       GRPC_COMMIT: ${{ needs.validate-inputs.outputs.grpc_commit }}
+      BACKEND_SOURCE_COMMIT: ${{ matrix.source_commit }}
       LOCALAI_ARTIFACT_CONFIG: ${{ github.workspace }}/you-agent-factory/.github/localai-backend-artifacts.json
       SOURCE_PATH: ${{ matrix.source_path }}
     steps:
@@ -146,9 +147,12 @@ jobs:
           set -euo pipefail
           mkdir -p artifacts
           package_root="$LOCALAI_ROOT/$SOURCE_PATH/package"
-          archive="artifacts/localai-backend-${BACKEND_ID}-${TARGET_ID}.tar.gz"
+          archive_stem="localai-backend-${BACKEND_ID}-${TARGET_ID}-${BACKEND_SOURCE_COMMIT}"
+          archive="artifacts/${archive_stem}.tar.gz"
           tar -czf "$archive" -C "$package_root" .
           test -s "$archive"
+          cp "$package_root/build-metadata.json" "artifacts/${archive_stem}.tar.gz.metadata.json"
+          test -s "artifacts/${archive_stem}.tar.gz.metadata.json"
 
       - name: Archive the Windows backend package
         if: runner.os == 'Windows'
@@ -158,14 +162,103 @@ jobs:
           New-Item -ItemType Directory -Path artifacts -Force | Out-Null
           $packageRoot = Join-Path $env:LOCALAI_ROOT ($env:SOURCE_PATH -replace '/', '\\')
           $packageRoot = Join-Path $packageRoot 'package'
-          $archive = Join-Path (Get-Location) "artifacts/localai-backend-$env:BACKEND_ID-$env:TARGET_ID.zip"
+          $archiveStem = "localai-backend-$env:BACKEND_ID-$env:TARGET_ID-$env:BACKEND_SOURCE_COMMIT"
+          $archive = Join-Path (Get-Location) "artifacts/$archiveStem.zip"
           Compress-Archive -Path (Join-Path $packageRoot '*') -DestinationPath $archive -Force
           if ((Get-Item -LiteralPath $archive).Length -le 0) { throw 'Windows backend archive is empty' }
+          $metadata = Join-Path (Get-Location) "artifacts/$archiveStem.zip.metadata.json"
+          Copy-Item -LiteralPath (Join-Path $packageRoot 'build-metadata.json') -Destination $metadata
+          if ((Get-Item -LiteralPath $metadata).Length -le 0) { throw 'Windows backend metadata is empty' }
 
       - name: Upload one verified matrix-leg artifact
         uses: actions/upload-artifact@v4
         with:
-          name: localai-backend-${{ matrix.backend }}-${{ matrix.target }}
+          name: localai-backend-${{ matrix.backend }}-${{ matrix.target }}-${{ matrix.source_commit }}
           path: you-agent-factory/artifacts/*
           if-no-files-found: error
           retention-days: 14
+
+  join:
+    name: Join and verify complete backend publication
+    needs:
+      - validate-inputs
+      - build
+    if: ${{ always() && needs.validate-inputs.result == 'success' && needs.build.result == 'success' }}
+    runs-on: ubuntu-24.04
+    outputs:
+      release_tag: ${{ steps.join.outputs.release_tag }}
+      pin_fingerprint: ${{ steps.join.outputs.pin_fingerprint }}
+    steps:
+      - name: Check out repository sources
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+
+      - name: Download every successful matrix-leg result
+        uses: actions/download-artifact@v4
+        with:
+          pattern: localai-backend-*
+          path: .artifacts/matrix
+          merge-multiple: true
+
+      - name: Validate the closed set and build the publication bundle
+        id: join
+        shell: bash
+        env:
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          mkdir -p .artifacts/release
+          node scripts/localai-backend-artifact-workflow.mjs join \
+            --config .github/localai-backend-artifacts.json \
+            --artifact-directory .artifacts/matrix \
+            --output-directory .artifacts/release \
+            --repository "$GITHUB_REPOSITORY" \
+            --github-output "$GITHUB_OUTPUT"
+
+      - name: Upload the complete validated publication bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: localai-backend-release-${{ steps.join.outputs.release_tag }}
+          path: .artifacts/release/*
+          if-no-files-found: error
+          retention-days: 14
+
+  publish:
+    name: Publish immutable backend release
+    needs: join
+    if: ${{ needs.join.result == 'success' }}
+    runs-on: ubuntu-24.04
+    environment: localai-backend-publishing
+    permissions:
+      contents: write
+    steps:
+      - name: Download the complete validated publication bundle
+        uses: actions/download-artifact@v4
+        with:
+          name: localai-backend-release-${{ needs.join.outputs.release_tag }}
+          path: .artifacts/release
+
+      - name: Create a draft release without overwriting an immutable pin
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_SHA: ${{ github.sha }}
+          RELEASE_TAG: ${{ needs.join.outputs.release_tag }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "immutable backend release already exists: $RELEASE_TAG" >&2
+            exit 1
+          fi
+          gh release create "$RELEASE_TAG" \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" \
+            --draft \
+            --title "Pinned LocalAI backends $RELEASE_TAG" \
+            --notes "Complete nine-platform backend publication. The release remains draft until every archive and manifest asset is uploaded."
+          gh release upload "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" .artifacts/release/*
+          release_id="$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/$RELEASE_TAG" --jq '.id')"
+          printf '{"draft":false}\n' | gh api --method PATCH "repos/$GITHUB_REPOSITORY/releases/$release_id" --input - >/dev/null
+          echo "LOCALAI_BACKEND_RELEASE_PUBLISHED tag=$RELEASE_TAG assets=10"

@@ -1,15 +1,20 @@
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
 import test from "node:test";
 
 import {
+	artifactArchiveName,
+	createManifest,
 	loadConfig,
 	matrixForConfig,
+	publicationIdentity,
 	validateConfig,
 	verifyPayload,
+	verifyManifestArchives,
+	writePublicationBundle,
 } from "./localai-backend-artifact-workflow.mjs";
 
 const config = loadConfig();
@@ -96,4 +101,106 @@ test("the validation CLI emits a matrix output suitable for GitHub Actions", asy
 	assert.match(outputText, /^matrix=\{"include":\[/m);
 	assert.match(outputText, /localai_commit=b224c96db6f4b87306a33a808650bfce63b12588/);
 	assert.match(result.stdout, /LOCALAI_BACKEND_ARTIFACT_INPUTS_OK combinations=9/);
+});
+
+function metadataFixture(backend, target) {
+	return {
+		formatVersion: 1,
+		backend: backend.id,
+		target: {
+			id: target.id,
+			operatingSystem: target.os,
+			architecture: target.architecture,
+			buildType: target.buildType,
+			accelerators: target.accelerators,
+		},
+		source: {
+			repository: config.localaiRepository,
+			commit: config.localaiCommit,
+			path: backend.sourcePath,
+			backendRepository: backend.sourceRepository,
+			backendCommit: backend.sourceCommit,
+			backendPinVariable: backend.sourcePinVariable,
+		},
+		protocol: { path: config.protocolPath, revision: config.protocolRevision },
+		toolchain: { ...config.toolchain, grpcCommit: config.grpcCommit, vcpkgCommit: config.vcpkgCommit },
+		payload: { binary: backend.binary, makeTarget: backend.makeTarget },
+	};
+}
+
+async function matrixArtifactFixture(t) {
+	const root = await mkdtemp(join(tmpdir(), "localai-backend-join-"));
+	t.after(() => rm(root, { recursive: true, force: true }));
+	for (const backend of config.backends) {
+		for (const target of config.targets) {
+			const archiveName = artifactArchiveName({ backend, target });
+			await writeFile(join(root, archiveName), Buffer.from(`${backend.id}/${target.id}`));
+			await writeFile(join(root, `${archiveName}.metadata.json`), `${JSON.stringify(metadataFixture(backend, target))}\n`);
+		}
+	}
+	return root;
+}
+
+test("the join emits one P1 manifest for the exact nine archives and re-verifies their bytes", async (t) => {
+	const matrixRoot = await matrixArtifactFixture(t);
+	const outputRoot = await mkdtemp(join(tmpdir(), "localai-backend-release-"));
+	t.after(() => rm(outputRoot, { recursive: true, force: true }));
+	const result = writePublicationBundle({
+		config,
+		artifactDirectory: matrixRoot,
+		outputDirectory: outputRoot,
+		repository: "portpowered/infinite-you",
+	});
+	assert.equal(result.manifest.schemaVersion, 1);
+	assert.equal(result.manifest.kind, "localai-backend-artifacts");
+	assert.equal(result.manifest.artifacts.length, 9);
+	assert.equal(result.manifest.publication.releaseTag, publicationIdentity(config).releaseTag);
+	const artifact = result.manifest.artifacts.find((entry) => entry.id === "localai-llamacpp/darwin-arm64");
+	assert.equal(artifact.target.operatingSystem, "darwin");
+	assert.deepEqual(artifact.target.accelerators, ["metal"]);
+	assert.equal(artifact.source.commit, config.localaiCommit);
+	assert.equal(artifact.protocol.revision, config.protocolRevision);
+	assert.match(artifact.artifact.location, new RegExp(`/${result.manifest.publication.releaseTag}/`));
+	assert.match(artifact.artifact.sha256, /^[0-9a-f]{64}$/);
+	assert.equal(artifact.artifact.sizeBytes, Buffer.from("localai-llamacpp/darwin-arm64").length);
+	assert.deepEqual((await readdir(outputRoot)).sort(), [
+		"localai-backend-localai-llamacpp-darwin-arm64-6b4dc2116a92c5c8f2782bfe51fabe5ee66fb5ef.tar.gz",
+		"localai-backend-localai-llamacpp-linux-amd64-6b4dc2116a92c5c8f2782bfe51fabe5ee66fb5ef.tar.gz",
+		"localai-backend-localai-llamacpp-windows-amd64-6b4dc2116a92c5c8f2782bfe51fabe5ee66fb5ef.zip",
+		"localai-backend-localai-vibevoice-darwin-arm64-000e37282bc5bb09edc20f7047a47924122ba3a0.tar.gz",
+		"localai-backend-localai-vibevoice-linux-amd64-000e37282bc5bb09edc20f7047a47924122ba3a0.tar.gz",
+		"localai-backend-localai-vibevoice-windows-amd64-000e37282bc5bb09edc20f7047a47924122ba3a0.zip",
+		"localai-backend-localai-whisper-darwin-arm64-080bbbe85230f624f0b52127f1ae1218247989f9.tar.gz",
+		"localai-backend-localai-whisper-linux-amd64-080bbbe85230f624f0b52127f1ae1218247989f9.tar.gz",
+		"localai-backend-localai-whisper-windows-amd64-080bbbe85230f624f0b52127f1ae1218247989f9.zip",
+		"manifest.json",
+	]);
+});
+
+test("the join rejects missing and unexpected matrix results", async (t) => {
+	const missingRoot = await matrixArtifactFixture(t);
+	const missingArchive = artifactArchiveName({ backend: config.backends[0], target: config.targets[0] });
+	await rm(join(missingRoot, missingArchive));
+	await assert.rejects(
+		(async () => createManifest({ config, artifactDirectory: missingRoot, repository: "portpowered/infinite-you" })),
+		/exactly the nine archives and nine provenance sidecars/,
+	);
+
+	const extraRoot = await matrixArtifactFixture(t);
+	await writeFile(join(extraRoot, "unexpected.archive"), "unexpected");
+	assert.throws(
+		() => createManifest({ config, artifactDirectory: extraRoot, repository: "portpowered/infinite-you" }),
+		/exactly the nine archives and nine provenance sidecars/,
+	);
+});
+
+test("manifest verification rejects bytes tampered after manifest creation", async (t) => {
+	const root = await matrixArtifactFixture(t);
+	const manifest = createManifest({ config, artifactDirectory: root, repository: "portpowered/infinite-you" });
+	const archiveName = manifest.artifacts[0].artifact.name;
+	await writeFile(join(root, archiveName), "tampered bytes");
+	assert.throws(
+		() => verifyManifestArchives({ manifest, artifactDirectory: root }),
+		/integrity mismatch/,
+	);
 });

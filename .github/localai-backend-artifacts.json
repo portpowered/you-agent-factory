@@ -47,21 +47,24 @@
       "os": "darwin",
       "architecture": "arm64",
       "runner": "macos-14",
-      "buildType": "metal"
+      "buildType": "metal",
+      "accelerators": ["metal"]
     },
     {
       "id": "linux-amd64",
       "os": "linux",
       "architecture": "amd64",
       "runner": "ubuntu-24.04",
-      "buildType": "cpu"
+      "buildType": "cpu",
+      "accelerators": ["cpu"]
     },
     {
       "id": "windows-amd64",
       "os": "windows",
       "architecture": "amd64",
       "runner": "windows-2022",
-      "buildType": "cpu"
+      "buildType": "cpu",
+      "accelerators": ["cpu"]
     }
   ]
 }

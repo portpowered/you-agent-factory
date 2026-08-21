@@ -7,6 +7,7 @@ set -euo pipefail
 : "${TARGET_ID:?TARGET_ID is required}"
 : "${BUILD_TYPE:?BUILD_TYPE is required}"
 : "${GRPC_COMMIT:?GRPC_COMMIT is required}"
+: "${BACKEND_SOURCE_COMMIT:?BACKEND_SOURCE_COMMIT is required}"
 
 repository_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 config_path="${LOCALAI_ARTIFACT_CONFIG:-${repository_root}/.github/localai-backend-artifacts.json}"
