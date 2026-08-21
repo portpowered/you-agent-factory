@@ -10,7 +10,7 @@
   "toolchain": {
     "goVersion": "1.25.4",
     "cmakeVersion": "3.31.10",
-    "protobufVersion": "24.4",
+    "protobufVersion": "24.3",
     "grpcVersion": "1.59.0"
   },
   "workflowPins": {
