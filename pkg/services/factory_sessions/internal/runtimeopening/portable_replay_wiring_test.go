@@ -594,6 +594,7 @@ func (assembler portableReplayRuntimeAssemblerStub) Assemble(
 	factorydefinitions.MutableLoadedFactorySource,
 	string,
 	*factorydefinitions.ReplayArtifact,
+	*recordings.LoadResumeInputResult,
 	automations.Service,
 	bool,
 ) (
