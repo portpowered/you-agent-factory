@@ -1,12 +1,24 @@
 package cli
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"io"
 	"path/filepath"
 	"strings"
+	"syscall"
 
+	startupcli "github.com/portpowered/infinite-you/pkg/initializer/process"
+	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/transports/cli/factoryload"
+	operatorconfig "github.com/portpowered/infinite-you/pkg/services/operator_settings"
+	"github.com/portpowered/infinite-you/pkg/services/work"
+	"github.com/portpowered/infinite-you/pkg/services/work/transports/cli/climanifest"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifestcobra"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/cliserver"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/generated"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/resolvedinput"
 	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
@@ -282,4 +294,645 @@ func ParseArgvForCLIInputsInventory(root *cobra.Command, argv []string) (*cobra.
 		return cmd, positionals, err
 	}
 	return cmd, positionals, nil
+}
+
+func resolveOperatorDefaults(_ *cobra.Command, options *cliOperatorDefaultsOptions, rootOptions CommandFactory, homeDir string) (operatorconfig.ResolvedDefaults, error) {
+	if rootOptions.resolveOperatorDefaults == nil {
+		return operatorconfig.ResolvedDefaults{}, fmt.Errorf("Operator Settings defaults resolver is required")
+	}
+	environment := operatorconfig.Defaults{}
+	var err error
+	environment.WorkerModelProvider, _, err = lookupProcessEnvironment(
+		rootOptions,
+		operatorconfig.EnvDefaultWorkerModelProvider,
+	)
+	if err != nil {
+		return operatorconfig.ResolvedDefaults{}, err
+	}
+	environment.WorkerModel, _, err = lookupProcessEnvironment(
+		rootOptions,
+		operatorconfig.EnvDefaultWorkerModel,
+	)
+	if err != nil {
+		return operatorconfig.ResolvedDefaults{}, err
+	}
+	flags := operatorconfig.FlagOverrides{}
+	if options != nil {
+		flags.WorkerModelProvider = strings.TrimSpace(options.providerOverride)
+		flags.WorkerModel = strings.TrimSpace(options.modelOverride)
+	}
+	return rootOptions.resolveOperatorDefaults(homeDir, environment, flags)
+}
+
+func resolveProcessHomeDir(options CommandFactory) (string, error) {
+	if options.homeDir == nil {
+		return "", fmt.Errorf("process home directory resolver is required")
+	}
+	homeDir, err := options.homeDir()
+	if err != nil {
+		return "", fmt.Errorf("resolve process home directory: %w", err)
+	}
+	return homeDir, nil
+}
+
+func lookupProcessEnvironment(
+	options CommandFactory,
+	name string,
+) (string, bool, error) {
+	if options.lookupEnv == nil {
+		return "", false, fmt.Errorf("process environment lookup is required")
+	}
+	value, ok := options.lookupEnv(name)
+	return value, ok, nil
+}
+
+func persistentFlagValueIfChanged(cmd *cobra.Command, name, value string) string {
+	if cmd.Root().PersistentFlags().Changed(name) {
+		return value
+	}
+	return ""
+}
+
+func persistentInputWasCLI(cmd *cobra.Command, inputID, legacyName string) bool {
+	if cmd == nil {
+		return false
+	}
+	inputs, err := climanifestcobra.ResolvedPersistentInputs(cmd)
+	if err == nil {
+		state, found := inputs.State(inputID)
+		if found {
+			return state.Provenance == resolvedinput.SourceCLIFlag
+		}
+	}
+	return cmd.Root().PersistentFlags().Changed(legacyName)
+}
+
+func resolvedPersistentStringIfCLI(
+	cmd *cobra.Command,
+	inputID string,
+	legacyName string,
+	legacyValue string,
+) string {
+	inputs, err := climanifestcobra.ResolvedPersistentInputs(cmd)
+	if err == nil {
+		state, found := inputs.State(inputID)
+		if !found || state.Provenance != resolvedinput.SourceCLIFlag {
+			return ""
+		}
+		value, valueErr := inputs.String(inputID)
+		if valueErr == nil {
+			return value
+		}
+		return ""
+	}
+	return persistentFlagValueIfChanged(cmd, legacyName, legacyValue)
+}
+
+func representativeSourceValues(options CommandFactory) climanifestcobra.SourceCandidateProvider {
+	return func(
+		_ context.Context,
+		binding climanifest.SourceBinding,
+		kind resolvedinput.ValueKind,
+	) (resolvedinput.Value, bool, error) {
+		if kind != resolvedinput.ValueKindString {
+			return resolvedinput.Value{}, false, fmt.Errorf(
+				"source binding %q requires unsupported value kind %q",
+				binding.ID,
+				kind,
+			)
+		}
+		if binding.Source == climanifest.SourceEnvironment {
+			if options.lookupEnv == nil {
+				return resolvedinput.Value{}, false, nil
+			}
+			value, present, err := lookupProcessEnvironment(options, binding.ExternalKey)
+			if err != nil || !present || strings.TrimSpace(value) == "" {
+				return resolvedinput.Value{}, false, err
+			}
+			return resolvedinput.StringValue(strings.TrimSpace(value)), true, nil
+		}
+		if binding.Source != climanifest.SourceOperatorConfig {
+			return resolvedinput.Value{}, false, nil
+		}
+		return operatorConfigSourceValue(options, binding)
+	}
+}
+
+func operatorConfigSourceValue(
+	options CommandFactory,
+	binding climanifest.SourceBinding,
+) (resolvedinput.Value, bool, error) {
+	if options.loadOperatorConfig == nil {
+		return resolvedinput.Value{}, false, nil
+	}
+	homeDir, err := resolveProcessHomeDir(options)
+	if err != nil {
+		return resolvedinput.Value{}, false, err
+	}
+	config, err := options.loadOperatorConfig(
+		operatorconfig.DefaultConfigPath(homeDir),
+	)
+	if err != nil {
+		// A config path below a non-directory ancestor is unavailable in
+		// the same way as a missing optional config. Commands such as
+		// initializer-owned startup still owns the later, actionable creation error.
+		if errors.Is(err, syscall.ENOTDIR) {
+			return resolvedinput.Value{}, false, nil
+		}
+		return resolvedinput.Value{}, false, err
+	}
+	value := ""
+	switch binding.ExternalKey {
+	case "defaults.workerModelProvider":
+		value = config.Defaults.WorkerModelProvider
+	case "defaults.workerModel":
+		value = config.Defaults.WorkerModel
+	default:
+		return resolvedinput.Value{}, false, fmt.Errorf(
+			"source binding %q has unsupported operator-config key %q",
+			binding.ID,
+			binding.ExternalKey,
+		)
+	}
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return resolvedinput.Value{}, false, nil
+	}
+	return resolvedinput.StringValue(value), true, nil
+}
+
+func resolveRunBindFromServer(cmd *cobra.Command, server string, cfg *runcli.RunConfig) error {
+	if cfg == nil {
+		return fmt.Errorf("resolve local listener: run config is required")
+	}
+	if cfg.ListenExplicit || strings.TrimSpace(cfg.ListenAddress) != "" {
+		target, err := cliserver.LocalBindTargetFromListen(cfg.ListenAddress)
+		if err != nil {
+			return err
+		}
+		cfg.BindHost = target.Host
+		cfg.Port = target.Port
+		cfg.AutoPort = false
+		cfg.ListenExplicit = true
+		return nil
+	}
+	target, err := cliserver.LocalBindTargetFromServer(server)
+	if err != nil {
+		return err
+	}
+	cfg.BindHost = target.Host
+	cfg.Port = target.Port
+	cfg.AutoPort = true
+	return nil
+}
+
+func listenerOwner(defaultInvocation bool, cfg runcli.RunConfig) bool {
+	return defaultInvocation || cfg.WithServer || cfg.WithSite
+}
+
+func warnLegacyListenerBinding(cmd *cobra.Command, cfg runcli.RunConfig, defaultInvocation, explicitServer bool) {
+	if !explicitServer || !listenerOwner(defaultInvocation, cfg) {
+		return
+	}
+	if cmd == nil || cmd.ErrOrStderr() == nil {
+		return
+	}
+	if cfg.ListenExplicit {
+		_, _ = fmt.Fprintln(
+			cmd.ErrOrStderr(),
+			"warning: --listen takes precedence over --server for the local listener; use --listen for the listener and reserve --server for the factory API endpoint",
+		)
+		return
+	}
+	_, _ = fmt.Fprintln(
+		cmd.ErrOrStderr(),
+		"warning: --server is deprecated for local listener binding; use --listen <host:port> instead",
+	)
+}
+
+func resolveRunFactorySelection(
+	cmd *cobra.Command,
+	cfg *runcli.RunConfig,
+	homeDir string,
+	namedFactoryCatalog interfaces.NamedFactoryCatalog,
+	resolveNamedFactoryRoots NamedFactoryRootsResolver,
+	resolveNamedFactoryCandidatePaths interfaces.NamedFactoryCandidatePathsResolver,
+) error {
+	factoryChanged := cmd.Flags().Changed("factory")
+	dirChanged := cmd.Flags().Changed("dir")
+	namedChanged := cmd.Flags().Changed("named")
+	if namedChanged {
+		switch {
+		case factoryChanged:
+			return fmt.Errorf("--named cannot be used with --factory")
+		case dirChanged:
+			return fmt.Errorf("--named cannot be used with --dir")
+		}
+		return resolveRunNamedFactorySelection(
+			cmd.Context(),
+			cfg,
+			homeDir,
+			namedFactoryCatalog,
+			resolveNamedFactoryRoots,
+			resolveNamedFactoryCandidatePaths,
+		)
+	}
+	if factoryChanged && dirChanged {
+		return fmt.Errorf("--factory cannot be used with --dir")
+	}
+	if !factoryChanged {
+		return nil
+	}
+	if cfg.ResolveFactoryConfigRoot == nil {
+		return fmt.Errorf("Factory Definitions config root resolver is required")
+	}
+	factoryRoot, err := cfg.ResolveFactoryConfigRoot(cfg.FactoryConfigPath)
+	if contextErr := cmd.Context().Err(); contextErr != nil {
+		return contextErr
+	}
+	if err != nil {
+		return err
+	}
+	cfg.Dir = factoryRoot
+	return nil
+}
+
+func resolveRunNamedFactorySelection(
+	ctx context.Context,
+	cfg *runcli.RunConfig,
+	homeDir string,
+	namedFactoryCatalog interfaces.NamedFactoryCatalog,
+	resolveNamedFactoryRoots NamedFactoryRootsResolver,
+	resolveNamedFactoryCandidatePaths interfaces.NamedFactoryCandidatePathsResolver,
+) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if namedFactoryCatalog == nil {
+		return fmt.Errorf("Factory Definitions named-factory catalog is required")
+	}
+	if resolveNamedFactoryRoots == nil {
+		return fmt.Errorf("Factory Definitions named-factory root resolver is required")
+	}
+	if resolveNamedFactoryCandidatePaths == nil {
+		return fmt.Errorf("Factory Definitions named-factory candidate-path resolver is required")
+	}
+	cwd := startupcli.WorkingDirectory(ctx)
+	if strings.TrimSpace(cwd) == "" {
+		return fmt.Errorf("resolve current working directory for --named: process working directory is required")
+	}
+	roots, err := resolveNamedFactoryRoots(homeDir, cwd)
+	if contextErr := ctx.Err(); contextErr != nil {
+		return contextErr
+	}
+	if err != nil {
+		return fmt.Errorf("resolve named-Factory roots: %w", err)
+	}
+	resolution, err := namedFactoryCatalog.ResolveNamedFactoryAcrossRoots(
+		roots.Project,
+		roots.Global,
+		cfg.NamedFactoryName,
+	)
+	if contextErr := ctx.Err(); contextErr != nil {
+		return contextErr
+	}
+	if err != nil {
+		candidates, candidateErr := resolveNamedFactoryCandidatePaths(
+			roots.Project,
+			roots.Global,
+			cfg.NamedFactoryName,
+		)
+		if contextErr := ctx.Err(); contextErr != nil {
+			return contextErr
+		}
+		if candidateErr != nil {
+			return err
+		}
+		return factoryload.MaybeFormatOperatorErrorForNamedFactory(err, candidates)
+	}
+	cfg.Dir = resolution.FactoryDir
+	cfg.NamedFactoryResolution = resolution
+	return nil
+}
+
+func resolveRunFactoryPrompt(
+	cmd *cobra.Command,
+	cfg *runcli.RunConfig,
+	promptArgs []string,
+	preparation work.InvocationInputPreparation,
+) error {
+	factoryChanged := cmd.Flags().Changed("factory")
+	namedChanged := cmd.Flags().Changed("named")
+	workChanged := cmd.Flags().Changed("work")
+	if err := rejectFileBackedRunShape(cfg, workChanged); err != nil {
+		return err
+	}
+
+	if !factoryChanged && !namedChanged {
+		return resolveUnselectedRunFactoryPrompt(cmd, cfg, promptArgs, workChanged, preparation)
+	}
+	if factoryChanged && runFactorySourceUsesJavaScript(cfg.FactoryConfigPath) {
+		return rejectJavaScriptFilePrompt(cfg)
+	}
+	return resolveSelectedRunFactoryPrompt(cmd, cfg, promptArgs, workChanged, preparation)
+}
+
+func rejectFileBackedRunShape(cfg *runcli.RunConfig, workChanged bool) error {
+	if !cfg.InvocationFileExplicit {
+		return nil
+	}
+	switch {
+	case workChanged:
+		return fmt.Errorf("--to-file cannot be used with --work")
+	case cfg.Continuously:
+		return fmt.Errorf("--to-file cannot be used with --continuously")
+	case strings.TrimSpace(cfg.ReplayPath) != "":
+		return fmt.Errorf("--to-file cannot be used with --replay")
+	default:
+		return nil
+	}
+}
+
+func resolveUnselectedRunFactoryPrompt(
+	cmd *cobra.Command,
+	cfg *runcli.RunConfig,
+	promptArgs []string,
+	workChanged bool,
+	preparation work.InvocationInputPreparation,
+) error {
+	if cfg.InvocationFileExplicit {
+		return resolveCompatibilityRunFactoryPrompt(cmd, cfg, promptArgs, workChanged, preparation)
+	}
+	return resolveLegacyRunFactoryPrompt(cmd, promptArgs, preparation)
+}
+
+func rejectJavaScriptFilePrompt(cfg *runcli.RunConfig) error {
+	if cfg.InvocationFileExplicit {
+		return fmt.Errorf("--to-file is not supported for JavaScript workflow invocation")
+	}
+	return nil
+}
+
+func resolveSelectedRunFactoryPrompt(
+	cmd *cobra.Command,
+	cfg *runcli.RunConfig,
+	promptArgs []string,
+	workChanged bool,
+	preparation work.InvocationInputPreparation,
+) error {
+	signatureSource := filepath.Join(cfg.Dir, interfaces.FactoryConfigFile)
+	if strings.TrimSpace(cfg.FactoryConfigPath) != "" {
+		signatureSource = cfg.FactoryConfigPath
+	}
+	manifest, err := generated.RunSubmitFamilyManifest()
+	if err != nil {
+		return fmt.Errorf("load run CLI manifest: %w", err)
+	}
+	schema, diagnostics, err := runcli.ResolveFactoryInvocationInputSchema(
+		cmd.Context(),
+		manifest,
+		"you.run",
+		cfg.LoadFactoryConfigFile,
+		signatureSource,
+	)
+	if err != nil {
+		return err
+	}
+	if err := runcli.MapCompositionDiagnostics(diagnostics); err != nil {
+		return err
+	}
+	signature := runcli.InvocationSignatureFromEffectiveSchema(schema)
+	if signature != nil {
+		return resolveSignatureRunFactoryPrompt(cmd, cfg, promptArgs, signature, preparation)
+	}
+	return resolveCompatibilityRunFactoryPrompt(cmd, cfg, promptArgs, workChanged, preparation)
+}
+
+func runFactorySourceUsesJavaScript(path string) bool {
+	switch strings.ToLower(filepath.Ext(strings.TrimSpace(path))) {
+	case ".js", ".mjs", ".cjs":
+		return true
+	default:
+		return false
+	}
+}
+
+func resolveLegacyRunFactoryPrompt(cmd *cobra.Command, promptArgs []string, preparation work.InvocationInputPreparation) error {
+	for _, arg := range promptArgs {
+		if strings.HasPrefix(arg, "-") {
+			return fmt.Errorf("unknown flag: %s", arg)
+		}
+	}
+	if len(promptArgs) == 0 && runCommandInputIsTTY(cmd.Context()) {
+		return nil
+	}
+	input, err := prepareRunInvocationInputWithFile(cmd, promptArgs, nil, nil, preparation)
+	if err != nil {
+		return mapRunInvocationInputError(err, "")
+	}
+	if input.ResolvedInput != nil {
+		return fmt.Errorf("positional prompt arguments require --factory or --named")
+	}
+	return nil
+}
+
+func resolveSignatureRunFactoryPrompt(
+	cmd *cobra.Command,
+	cfg *runcli.RunConfig,
+	promptArgs []string,
+	signature *interfaces.InvocationSignatureConfig,
+	preparation work.InvocationInputPreparation,
+) error {
+	if preparation == nil {
+		return fmt.Errorf("Work invocation-input preparation is required")
+	}
+	stdinText, err := collectRunInvocationStdin(
+		promptArgs,
+		cmd.InOrStdin(),
+		func() bool { return startupcli.StdinIsTTY(cmd.Context()) },
+	)
+	if err != nil {
+		return mapRunInvocationInputError(err, cfg.NamedFactoryName)
+	}
+	// Service mode is a long-lived host, so signature defaults must not turn an
+	// absent command input into an invocation. Explicit raw input remains on
+	// the invocation path; WorkFile is handled later by the service runtime.
+	if cfg.Continuously && !continuousSignatureInvocationRequested(cfg, promptArgs, stdinText) {
+		return nil
+	}
+	prepared, err := prepareRunInvocationInputWithStdin(
+		cmd.Context(),
+		promptArgs,
+		signature,
+		invocationFilePath(cfg),
+		preparation,
+		stdinText,
+	)
+	if err != nil {
+		return mapRunInvocationInputError(err, cfg.NamedFactoryName)
+	}
+	cfg.InvocationNormalizedArguments = prepared.NormalizedArguments
+	cfg.PreparedInvocationInput = &prepared
+	cfg.InvocationArguments = work.RuntimeInvocationArguments(signature, prepared.NormalizedArguments)
+	return nil
+}
+
+func continuousSignatureInvocationRequested(
+	cfg *runcli.RunConfig,
+	promptArgs []string,
+	stdinText *string,
+) bool {
+	if cfg != nil && cfg.InvocationFileExplicit {
+		return true
+	}
+	return len(promptArgs) > 0 || stdinText != nil
+}
+
+func resolveCompatibilityRunFactoryPrompt(
+	cmd *cobra.Command,
+	cfg *runcli.RunConfig,
+	promptArgs []string,
+	workChanged bool,
+	preparation work.InvocationInputPreparation,
+) error {
+	input, err := prepareRunInvocationInputWithFile(cmd, promptArgs, nil, invocationFilePath(cfg), preparation)
+	if err != nil {
+		return mapRunInvocationInputError(err, cfg.NamedFactoryName)
+	}
+	if workChanged && input.ResolvedInput != nil {
+		return fmt.Errorf("%s cannot be used with --work", runcli.InvocationInputSourceFromWork(input.Source))
+	}
+	if workChanged {
+		cfg.CleanInvocationInputSource = runcli.InvocationInputSourceWorkFile
+	}
+	if input.ResolvedInput == nil {
+		return nil
+	}
+	cfg.PreparedInvocationInput = &input
+	// Keep a non-nil, empty runtime argument set for compatibility input. It
+	// marks this as a one-shot invocation so Factory Definitions can resolve
+	// omitted exact placeholders to their normal runtime defaults, while the
+	// compatibility text itself remains in PreparedInvocationInput.
+	cfg.InvocationArguments = &work.InvocationArguments{
+		Arguments: map[string]work.InvocationArgument{},
+	}
+	assignCompatibilityInvocationInput(cfg, input)
+	return nil
+}
+
+func prepareRunInvocationInput(
+	cmd *cobra.Command,
+	promptArgs []string,
+	signature *interfaces.InvocationSignatureConfig,
+	preparation work.InvocationInputPreparation,
+) (work.PreparedInvocationInput, error) {
+	return prepareRunInvocationInputWithFile(cmd, promptArgs, signature, nil, preparation)
+}
+
+func prepareRunInvocationInputWithFile(
+	cmd *cobra.Command,
+	promptArgs []string,
+	signature *interfaces.InvocationSignatureConfig,
+	filePath *string,
+	preparation work.InvocationInputPreparation,
+) (work.PreparedInvocationInput, error) {
+	if preparation == nil {
+		return work.PreparedInvocationInput{}, fmt.Errorf("Work invocation-input preparation is required")
+	}
+	stdinText, err := collectRunInvocationStdin(
+		promptArgs,
+		cmd.InOrStdin(),
+		func() bool { return startupcli.StdinIsTTY(cmd.Context()) },
+	)
+	if err != nil {
+		return work.PreparedInvocationInput{}, err
+	}
+	return prepareRunInvocationInputWithStdin(
+		cmd.Context(),
+		promptArgs,
+		signature,
+		filePath,
+		preparation,
+		stdinText,
+	)
+}
+
+func prepareRunInvocationInputWithStdin(
+	ctx context.Context,
+	promptArgs []string,
+	signature *interfaces.InvocationSignatureConfig,
+	filePath *string,
+	preparation work.InvocationInputPreparation,
+	stdinText *string,
+) (work.PreparedInvocationInput, error) {
+	if preparation == nil {
+		return work.PreparedInvocationInput{}, fmt.Errorf("Work invocation-input preparation is required")
+	}
+	return preparation.PrepareInvocationInput(ctx, work.InvocationInputPreparationRequest{
+		Arguments: append([]string(nil), promptArgs...),
+		Signature: signature,
+		StdinText: stdinText,
+		FilePath:  filePath,
+	})
+}
+
+func invocationFilePath(cfg *runcli.RunConfig) *string {
+	if cfg == nil || !cfg.InvocationFileExplicit {
+		return nil
+	}
+	path := cfg.InvocationFilePath
+	return &path
+}
+
+func collectRunInvocationStdin(
+	arguments []string,
+	stdin io.Reader,
+	stdinIsTTY func() bool,
+) (*string, error) {
+	explicitStdin := false
+	for _, argument := range arguments {
+		if strings.TrimSpace(argument) == "-" {
+			explicitStdin = true
+			break
+		}
+	}
+	if stdinIsTTY == nil {
+		if stdin == nil {
+			return nil, fmt.Errorf("classify invocation stdin: process terminal metadata is required")
+		}
+	} else if !explicitStdin && stdinIsTTY() {
+		return nil, nil
+	}
+	if stdin == nil {
+		return nil, fmt.Errorf("read invocation stdin: process stdin is required")
+	}
+	data, err := io.ReadAll(stdin)
+	if err != nil {
+		return nil, fmt.Errorf("read invocation stdin: %w", err)
+	}
+	if len(data) == 0 && !explicitStdin {
+		return nil, nil
+	}
+	text := string(data)
+	return &text, nil
+}
+
+func assignCompatibilityInvocationInput(cfg *runcli.RunConfig, input work.PreparedInvocationInput) {
+	payload := input.ResolvedInput.Text
+	source := runcli.InvocationInputSourceFromWork(input.Source)
+	switch source {
+	case runcli.InvocationInputSourcePositional:
+		cfg.InvocationPositionalText = &payload
+	case runcli.InvocationInputSourceStdin:
+		cfg.InvocationStdinText = &payload
+	}
+	cfg.CleanInvocationInputSource = source
+}
+
+func runCommandInputIsTTY(ctx context.Context) bool {
+	return startupcli.StdinIsTTY(ctx)
+}
+
+func mapRunInvocationInputError(err error, factoryName string) error {
+	return runcli.MapInvocationInputError(work.QualifyInvocationArgumentError(err, factoryName))
 }

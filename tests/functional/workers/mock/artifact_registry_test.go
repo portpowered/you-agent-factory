@@ -53,6 +53,11 @@ type artifactRegistryScenario struct {
 	runner  *artifactRegistryCommandRunner
 }
 
+type artifactRegistryProjectionObservation struct {
+	listed  factoryapi.ListWorkResponse
+	session factoryapi.FactorySession
+}
+
 func runArtifactRegistryScenario(t *testing.T, produceArtifacts bool) artifactRegistryScenario {
 	t.Helper()
 
@@ -106,14 +111,52 @@ func runArtifactRegistryScenario(t *testing.T, produceArtifacts bool) artifactRe
 		)
 	}
 
+	listed, session := waitForArtifactRegistryProjection(t, baseURL, produceArtifacts)
 	scenario := artifactRegistryScenario{
-		listed:  support.ListDefaultSessionWork(t, baseURL),
+		listed:  listed,
 		events:  support.GetFactoryEventsAt(t, baseURL),
-		session: support.GetDefaultSession(t, baseURL),
+		session: session,
 		runner:  runner,
 	}
 	command.Stop(t)
 	return scenario
+}
+
+func waitForArtifactRegistryProjection(
+	t *testing.T,
+	baseURL string,
+	produceArtifacts bool,
+) (factoryapi.ListWorkResponse, factoryapi.FactorySession) {
+	t.Helper()
+	wantState := "failed"
+	if produceArtifacts {
+		wantState = "complete"
+	}
+	observation, err := support.WaitForObservation(
+		15*time.Second,
+		func() (artifactRegistryProjectionObservation, error) {
+			return artifactRegistryProjectionObservation{
+				listed:  support.ListDefaultSessionWork(t, baseURL),
+				session: support.GetDefaultSession(t, baseURL),
+			}, nil
+		},
+		func(observation artifactRegistryProjectionObservation) bool {
+			item, ok := findArtifactRegistryWork(observation.listed)
+			if !ok || item.State == nil || item.State.Name != wantState {
+				return false
+			}
+			if produceArtifacts {
+				return observation.session.Runtime.Progress.Categories.Terminal == 1 &&
+					observation.session.Runtime.Progress.Categories.Failed == 0
+			}
+			return observation.session.Runtime.Progress.Categories.Terminal == 0 &&
+				observation.session.Runtime.Progress.Categories.Failed == 1
+		},
+	)
+	if err != nil {
+		t.Fatalf("timed out waiting for %q Work projection: %v", wantState, err)
+	}
+	return observation.listed, observation.session
 }
 
 func waitForArtifactRegistryCompletion(stream *support.FactoryEventStream) bool {
@@ -211,13 +254,20 @@ func assertArtifactRegistrySuccess(t *testing.T, scenario artifactRegistryScenar
 
 func artifactRegistryWork(t *testing.T, listed factoryapi.ListWorkResponse) factoryapi.Work {
 	t.Helper()
-	for _, item := range listed.Results {
-		if support.StringPointerValue(item.WorkId) == artifactRegistryWorkID {
-			return item
-		}
+	if item, ok := findArtifactRegistryWork(listed); ok {
+		return item
 	}
 	t.Fatalf("public Work list is missing %q: %#v", artifactRegistryWorkID, listed.Results)
 	return factoryapi.Work{}
+}
+
+func findArtifactRegistryWork(listed factoryapi.ListWorkResponse) (factoryapi.Work, bool) {
+	for _, item := range listed.Results {
+		if support.StringPointerValue(item.WorkId) == artifactRegistryWorkID {
+			return item, true
+		}
+	}
+	return factoryapi.Work{}, false
 }
 
 func assertArtifactRegistryProjection(

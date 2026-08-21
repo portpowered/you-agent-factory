@@ -44,6 +44,36 @@ func TestRunSucceedsWithApprovedRootPackageFamilies(t *testing.T) {
 	}
 }
 
+func TestRunPreservesOrderedDiagnosticsAndBlockingOutcome(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	writeGoImportFile(t, repoRoot, "pkg/services/work/a.go", "work", applicationGraphImportPath)
+	writeGoImportFile(t, repoRoot, "pkg/services/work/z.go", "work", applicationGraphImportPath)
+
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+	err := run(config{root: repoRoot, packageRoot: defaultScanRoot}, stdout, stderr)
+	if err == nil || err.Error() != "[agent-factory:pkg-boundary] found 2 package-boundary violation(s)" {
+		t.Fatalf("run() error = %v, want two blocking violations", err)
+	}
+	if got := stdout.String(); got != "" {
+		t.Fatalf("run() stdout = %q, want diagnostics on stderr for blocking findings", got)
+	}
+	lastIndex := -1
+	for _, want := range []string{
+		"prohibited application composition import: pkg/services/work (pkg/services/work/a.go) [class=production]",
+		"prohibited application composition import: pkg/services/work (pkg/services/work/z.go) [class=production]",
+		"dependency violation counts: production=2 test-only=0",
+	} {
+		index := strings.Index(stderr.String(), want)
+		if index <= lastIndex {
+			t.Fatalf("run() stderr = %q, want ordered diagnostic %q after index %d", stderr.String(), want, lastIndex)
+		}
+		lastIndex = index
+	}
+}
+
 func TestRunAllowsOnlyRootAndWireToImportApplicationGraph(t *testing.T) {
 	t.Parallel()
 
