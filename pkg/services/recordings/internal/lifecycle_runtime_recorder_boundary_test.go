@@ -7,6 +7,7 @@ import (
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	recordingevents "github.com/portpowered/infinite-you/pkg/services/recordings/internal/events"
+	"github.com/portpowered/infinite-you/pkg/services/work"
 	"strings"
 	"testing"
 	"time"
@@ -126,6 +127,86 @@ func assertTerminalRunPayload(t *testing.T, rawPayload string, startedAt, finish
 	if payload.WallClock.FinishedAt == nil || !payload.WallClock.FinishedAt.Equal(finishedAt) {
 		t.Fatalf("finished event finished at = %v, want %s", payload.WallClock.FinishedAt, finishedAt)
 	}
+}
+
+func TestRuntimeOpeningReconstructsCanonicalFactoryWorldStateFromFixture(t *testing.T) {
+	t.Parallel()
+
+	base := time.Date(2026, time.April, 10, 12, 0, 0, 0, time.UTC)
+	root := NewService(
+		NewRuntimeLedger(nil, func() time.Time { return base }, "roundtrip", nil),
+		NewProjectionService(),
+	)
+	opening, ok := root.(recordings.RuntimeOpening)
+	if !ok {
+		t.Fatal("Recordings root does not expose RuntimeOpening")
+	}
+
+	factorySnapshot, err := factorydefinitions.NewFactorySnapshot(map[string]any{
+		"name": "roundtrip-factory",
+		"workTypes": []any{
+			map[string]any{
+				"name": "task",
+				"states": []any{
+					map[string]any{"name": "init", "type": "INITIAL"},
+					map[string]any{"name": "done", "type": "TERMINAL"},
+				},
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("NewFactorySnapshot: %v", err)
+	}
+
+	const workID = "work-roundtrip"
+	const traceID = "trace-roundtrip"
+	restored, err := opening.ReconstructCanonicalFactoryWorldState(
+		roundtripFixtureEvents(t, base, factorySnapshot),
+		1,
+	)
+	if err != nil {
+		t.Fatalf("ReconstructCanonicalFactoryWorldState: %v", err)
+	}
+	item, ok := restored.WorkItemsByID[workID]
+	if !ok {
+		t.Fatalf("reconstructed Work = %#v, want %s", restored.WorkItemsByID, workID)
+	}
+	if item.PlaceID != "task:init" || item.TraceID != traceID {
+		t.Fatalf("reconstructed Work placement/trace = (%q, %q), want task:init/%s", item.PlaceID, item.TraceID, traceID)
+	}
+	if got := restored.PlaceOccupancyByID["task:init"].WorkItemIDs; len(got) != 1 || got[0] != workID {
+		t.Fatalf("reconstructed Work occupancy = %#v, want [%s]", got, workID)
+	}
+}
+
+func roundtripFixtureEvents(t *testing.T, base time.Time, factorySnapshot *factorydefinitions.FactorySnapshot) []factorydefinitions.FactoryEvent {
+	t.Helper()
+	requestID := "request-roundtrip"
+	traceID := "trace-roundtrip"
+	workID := "work-roundtrip"
+	workIDs := []string{workID}
+	traceIDs := []string{traceID}
+	return []factorydefinitions.FactoryEvent{
+		{Id: "run-roundtrip", Type: factorydefinitions.FactoryEventTypeRunRequest,
+			Payload: mustMarshalRoundtripTest(t, factorydefinitions.RunRequestEventPayload{Factory: factorySnapshot, RecordedAt: base}),
+			Context: factorydefinitions.FactoryEventContext{Tick: 0, Sequence: 0, EventTime: base}},
+		{Id: "work-roundtrip", Type: factorydefinitions.FactoryEventTypeWorkRequest,
+			Payload: mustMarshalRoundtripTest(t, work.WorkRequestEventPayload{Type: work.WorkRequestTypeFactoryRequestBatch,
+				Works: []work.WorkRequestEventWork{{Name: "Roundtrip work", WorkID: workID, WorkTypeID: "task",
+					State: &work.WorkEventState{Name: "init"}, TraceID: traceID,
+					Content: []work.WorkContentPart{{Type: work.WorkContentPartTypeText, Text: "fixture payload"}}}}}),
+			Context: factorydefinitions.FactoryEventContext{Tick: 1, Sequence: 1, EventTime: base.Add(time.Second),
+				RequestID: &requestID, TraceIDs: &traceIDs, WorkIDs: &workIDs}},
+	}
+}
+
+func mustMarshalRoundtripTest(t *testing.T, value any) []byte {
+	t.Helper()
+	encoded, err := json.Marshal(value)
+	if err != nil {
+		t.Fatalf("marshal roundtrip fixture: %v", err)
+	}
+	return encoded
 }
 
 func TestRuntimeRootKeepsConcurrentLedgersIsolatedAndReleasesRoutes(t *testing.T) {

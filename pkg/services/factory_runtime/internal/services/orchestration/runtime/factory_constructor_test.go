@@ -2,8 +2,6 @@ package runtime
 
 import (
 	"context"
-	"encoding/json"
-	"os"
 	"reflect"
 	"strings"
 	"testing"
@@ -19,8 +17,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/orchestrators/petri"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/scheduler"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/state"
-	"github.com/portpowered/infinite-you/pkg/services/recordings"
-	recordingswire "github.com/portpowered/infinite-you/pkg/services/recordings/wire"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
@@ -235,109 +231,6 @@ func restoredWorldStateFixture(base time.Time, resourcePlaceID string) *interfac
 			resourcePlaceID: {PlaceID: resourcePlaceID, ResourceTokenIDs: []string{"recorded-resource-token"}},
 		},
 	}
-}
-
-func TestNew_RoundTripsCanonicalRecordingThroughRecordingsRoot(t *testing.T) {
-	base := time.Date(2026, time.April, 10, 12, 0, 0, 0, time.UTC)
-	root, err := recordingswire.NewServiceWithProjectionAndEffects(
-		recordingswire.NewRuntimeLedger(nil, func() time.Time { return base }, "roundtrip", nil),
-		recordingswire.NewProjectionService(),
-		nil,
-		func(string, []byte) error { return nil },
-		os.MkdirAll,
-		func(dir, pattern string) (recordings.RecordingTemporaryFile, error) {
-			return os.CreateTemp(dir, pattern)
-		},
-		os.Remove,
-		os.Rename,
-		os.ReadFile,
-	)
-	if err != nil {
-		t.Fatalf("NewService: %v", err)
-	}
-	opening, ok := root.(recordings.RuntimeOpening)
-	if !ok {
-		t.Fatal("Recordings root does not expose RuntimeOpening")
-	}
-
-	factorySnapshot, err := interfaces.NewFactorySnapshot(map[string]any{
-		"name": "roundtrip-factory",
-		"workTypes": []any{
-			map[string]any{
-				"name": "task",
-				"states": []any{
-					map[string]any{"name": "init", "type": "INITIAL"},
-					map[string]any{"name": "done", "type": "TERMINAL"},
-				},
-			},
-		},
-	})
-	if err != nil {
-		t.Fatalf("NewFactorySnapshot: %v", err)
-	}
-
-	workID := "work-roundtrip"
-	traceID := "trace-roundtrip"
-	events := roundtripFixtureEvents(t, base, factorySnapshot)
-
-	restored, err := opening.ReconstructCanonicalFactoryWorldState(events, 1)
-	if err != nil {
-		t.Fatalf("ReconstructCanonicalFactoryWorldState: %v", err)
-	}
-	if got := restored.WorkItemsByID[workID].PlaceID; got != "task:init" {
-		t.Fatalf("reconstructed Work place = %q, want task:init", got)
-	}
-
-	f, err := newTestFactory(
-		withNet(buildSimpleNet()),
-		withClock(platformclock.NewDeterministic(base.Add(2*time.Second), time.Second)),
-		withRestoredWorldState(&restored),
-	)
-	if err != nil {
-		t.Fatalf("New: %v", err)
-	}
-	snapshot, err := f.GetEngineStateSnapshot(context.Background())
-	if err != nil {
-		t.Fatalf("GetEngineStateSnapshot: %v", err)
-	}
-	placeTokens := snapshot.Marking.PlaceTokens["task:init"]
-	if len(placeTokens) != 1 {
-		t.Fatalf("round-tripped Work tokens = %#v, want one token at task:init", placeTokens)
-	}
-	token := snapshot.Marking.Tokens[placeTokens[0]]
-	if token == nil || token.Color.WorkID != workID || token.Color.TraceID != traceID {
-		t.Fatalf("round-tripped Work token = %#v, want %s/%s", token, workID, traceID)
-	}
-}
-
-func roundtripFixtureEvents(t *testing.T, base time.Time, factorySnapshot *interfaces.FactorySnapshot) []interfaces.FactoryEvent {
-	t.Helper()
-	requestID := "request-roundtrip"
-	traceID := "trace-roundtrip"
-	workID := "work-roundtrip"
-	workIDs := []string{workID}
-	traceIDs := []string{traceID}
-	return []interfaces.FactoryEvent{
-		{Id: "run-roundtrip", Type: interfaces.FactoryEventTypeRunRequest,
-			Payload: mustMarshalRoundtripTest(t, interfaces.RunRequestEventPayload{Factory: factorySnapshot, RecordedAt: base}),
-			Context: interfaces.FactoryEventContext{Tick: 0, Sequence: 0, EventTime: base}},
-		{Id: "work-roundtrip", Type: interfaces.FactoryEventTypeWorkRequest,
-			Payload: mustMarshalRoundtripTest(t, work.WorkRequestEventPayload{Type: work.WorkRequestTypeFactoryRequestBatch,
-				Works: []work.WorkRequestEventWork{{Name: "Roundtrip work", WorkID: workID, WorkTypeID: "task",
-					State: &work.WorkEventState{Name: "init"}, TraceID: traceID,
-					Content: []work.WorkContentPart{{Type: work.WorkContentPartTypeText, Text: "fixture payload"}}}}}),
-			Context: interfaces.FactoryEventContext{Tick: 1, Sequence: 1, EventTime: base.Add(time.Second),
-				RequestID: &requestID, TraceIDs: &traceIDs, WorkIDs: &workIDs}},
-	}
-}
-
-func mustMarshalRoundtripTest(t *testing.T, value any) []byte {
-	t.Helper()
-	encoded, err := json.Marshal(value)
-	if err != nil {
-		t.Fatalf("marshal roundtrip fixture: %v", err)
-	}
-	return encoded
 }
 
 type resourceCapacityRuntimeHarness struct {
