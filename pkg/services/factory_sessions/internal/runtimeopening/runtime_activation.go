@@ -177,6 +177,7 @@ func recordingsRuntimeOpeningRequest(request factoryruntime.RuntimeActivationReq
 		RecordPath:    request.Inputs.Recordings.RecordPath,
 		ReplayPath:    request.Inputs.Recordings.ReplayPath,
 		ResumePath:    request.Inputs.Recordings.ResumePath,
+		ResumeInput:   request.Inputs.ResumeInput,
 		WorkflowID:    request.Inputs.Recordings.WorkflowID,
 		FlushInterval: request.Inputs.Recordings.FlushInterval,
 	}
@@ -243,7 +244,7 @@ func (f *Factory) openActivatedRuntime(
 	ctx context.Context,
 	request *factorysessions.RuntimeOpeningRequest,
 ) (runtimeProducts, error) {
-	return f.openActivatedRuntimeWithReplayInput(ctx, request, nil)
+	return f.openActivatedRuntimeWithInputs(ctx, request, nil, nil)
 }
 
 func (f *Factory) openActivatedRuntimeWithReplayInput(
@@ -251,10 +252,27 @@ func (f *Factory) openActivatedRuntimeWithReplayInput(
 	request *factorysessions.RuntimeOpeningRequest,
 	preloadedReplayInput *recordings.LoadReplayInputResult,
 ) (runtimeProducts, error) {
+	return f.openActivatedRuntimeWithInputs(ctx, request, preloadedReplayInput, nil)
+}
+
+func (f *Factory) openActivatedRuntimeWithResumeInput(
+	ctx context.Context,
+	request *factorysessions.RuntimeOpeningRequest,
+	resumeInput *recordings.LoadResumeInputResult,
+) (runtimeProducts, error) {
+	return f.openActivatedRuntimeWithInputs(ctx, request, nil, resumeInput)
+}
+
+func (f *Factory) openActivatedRuntimeWithInputs(
+	ctx context.Context,
+	request *factorysessions.RuntimeOpeningRequest,
+	preloadedReplayInput *recordings.LoadReplayInputResult,
+	resumeInput *recordings.LoadResumeInputResult,
+) (runtimeProducts, error) {
 	if f == nil || f.runtimeRoot == nil {
 		return runtimeProducts{}, fmt.Errorf("open Factory Runtime: Runtime root is required")
 	}
-	activationRequest, err := f.activationRequestWithReplayInput(ctx, request, preloadedReplayInput)
+	activationRequest, err := f.activationRequestWithInputs(ctx, request, preloadedReplayInput, resumeInput)
 	if err != nil {
 		return runtimeProducts{}, err
 	}
@@ -333,13 +351,22 @@ func (f *Factory) activationRequest(
 	ctx context.Context,
 	request *factorysessions.RuntimeOpeningRequest,
 ) (factoryruntime.RuntimeActivationRequest, error) {
-	return f.activationRequestWithReplayInput(ctx, request, nil)
+	return f.activationRequestWithInputs(ctx, request, nil, nil)
 }
 
 func (f *Factory) activationRequestWithReplayInput(
 	ctx context.Context,
 	request *factorysessions.RuntimeOpeningRequest,
 	preloadedReplayInput *recordings.LoadReplayInputResult,
+) (factoryruntime.RuntimeActivationRequest, error) {
+	return f.activationRequestWithInputs(ctx, request, preloadedReplayInput, nil)
+}
+
+func (f *Factory) activationRequestWithInputs(
+	ctx context.Context,
+	request *factorysessions.RuntimeOpeningRequest,
+	preloadedReplayInput *recordings.LoadReplayInputResult,
+	resumeInput *recordings.LoadResumeInputResult,
 ) (factoryruntime.RuntimeActivationRequest, error) {
 	opening, runtimeID, err := f.activationOpening(request)
 	if err != nil {
@@ -358,7 +385,7 @@ func (f *Factory) activationRequestWithReplayInput(
 		sessionID,
 		opening.Recordings.WorkflowID,
 	)
-	inputs := runtimeActivationInputs(opening)
+	inputs := runtimeActivationInputs(opening, resumeInput)
 	// Runtime root activation must receive the same resolved source identity
 	// that Definitions used. In particular, named paths and directory-backed
 	// authored files cannot be rediscovered from the caller's shorthand after
@@ -682,8 +709,11 @@ func runtimeSnapshotResolverUnavailable() error {
 	}
 }
 
-func runtimeActivationInputs(request factorysessions.RuntimeOpeningRequest) factoryruntime.RuntimeActivationInputs {
-	return factoryruntime.RuntimeActivationInputs{
+func runtimeActivationInputs(
+	request factorysessions.RuntimeOpeningRequest,
+	resumeInput *recordings.LoadResumeInputResult,
+) factoryruntime.RuntimeActivationInputs {
+	inputs := factoryruntime.RuntimeActivationInputs{
 		Definition: factoryruntime.RuntimeActivationDefinitionInputs{
 			Directory:        request.FactoryDefinition.Directory,
 			SourcePath:       request.FactoryDefinition.SourcePath,
@@ -727,6 +757,10 @@ func runtimeActivationInputs(request factorysessions.RuntimeOpeningRequest) fact
 			ConfigPath:          request.OperatorDefaults.ConfigPath,
 		},
 	}
+	if resumeInput != nil {
+		inputs.ResumeInput = *resumeInput
+	}
+	return inputs
 }
 
 func runtimeActivationMockWorkers(input *workers.MockWorkersConfig) *factoryruntime.RuntimeActivationMockWorkersConfig {

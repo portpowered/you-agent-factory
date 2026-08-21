@@ -4,6 +4,7 @@ import (
 	"time"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	"github.com/portpowered/infinite-you/pkg/services/recordings"
 )
 
 // RuntimeActivationInputs are the remaining value selections needed by the
@@ -16,6 +17,7 @@ type RuntimeActivationInputs struct {
 	Session             RuntimeActivationSessionInputs
 	Workers             RuntimeActivationWorkerInputs
 	Recordings          RuntimeActivationRecordingInputs
+	ResumeInput         recordings.LoadResumeInputResult
 	ModelCacheDirectory string
 	OperatorDefaults    RuntimeActivationOperatorDefaults
 }

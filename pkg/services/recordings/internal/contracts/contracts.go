@@ -140,6 +140,7 @@ type RuntimeOpeningRequest struct {
 	RecordPath    string
 	ReplayPath    string
 	ResumePath    string
+	ResumeInput   LoadResumeInputResult
 	WorkflowID    string
 	FlushInterval time.Duration
 }

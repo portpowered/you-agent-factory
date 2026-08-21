@@ -645,11 +645,13 @@ func (f *Factory) openForRequest(
 		if f.recordingsRuntime == nil {
 			return runtimeProducts{}, fmt.Errorf("open Factory Runtime: Recordings resume input capability is required")
 		}
-		if _, err := f.recordingsRuntime.LoadResumeInput(recordings.LoadResumeInputRequest{
+		input, err := f.recordingsRuntime.LoadResumeInput(recordings.LoadResumeInputRequest{
 			Path: request.Recordings.ResumePath,
-		}); err != nil {
+		})
+		if err != nil {
 			return runtimeProducts{}, fmt.Errorf("open Factory Runtime: load resume input: %w", err)
 		}
+		return f.openActivatedRuntimeWithResumeInput(ctx, request, &input)
 	}
 	return f.openActivatedRuntime(ctx, request)
 }

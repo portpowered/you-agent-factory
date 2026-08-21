@@ -188,6 +188,11 @@ func TestRuntimeOpeningRequestRoundTripsResumePathToRecordingsContract(t *testin
 	t.Parallel()
 
 	const resumePath = "source.recording.json"
+	resumeInput := recordings.LoadResumeInputResult{
+		Input: recordings.LoadReplayInputResult{
+			Legacy: &factorydefinitions.ReplayArtifact{},
+		},
+	}
 	request := factorysessions.RuntimeOpeningRequest{
 		FactoryDefinition: factorydefinitions.RuntimeOpeningRequest{Directory: "/factory"},
 		Recordings: recordings.RuntimeOpeningRequest{
@@ -198,7 +203,7 @@ func TestRuntimeOpeningRequestRoundTripsResumePathToRecordingsContract(t *testin
 
 	activation := factoryruntime.RuntimeActivationRequest{
 		Snapshot: activationSnapshot(),
-		Inputs:   runtimeActivationInputs(request),
+		Inputs:   runtimeActivationInputs(request, &resumeInput),
 	}
 	opening, err := runtimeOpeningRequestFromActivation(activation)
 	if err != nil {
@@ -209,6 +214,9 @@ func TestRuntimeOpeningRequestRoundTripsResumePathToRecordingsContract(t *testin
 	}
 	if opening.Recordings.RecordPath != request.Recordings.RecordPath {
 		t.Fatalf("Recordings successor path = %q, want %q", opening.Recordings.RecordPath, request.Recordings.RecordPath)
+	}
+	if opening.Recordings.ResumeInput != resumeInput {
+		t.Fatalf("Recordings resume input = %#v, want %#v", opening.Recordings.ResumeInput, resumeInput)
 	}
 }
 
@@ -369,7 +377,12 @@ func TestOpenForRequestConsumesResumeSourceBeforeLiveSuccessorActivation(t *test
 	t.Parallel()
 
 	root := &resumeRoutingRoot{}
-	resumeRuntime := &resumeInputRuntime{}
+	resumeInput := recordings.LoadResumeInputResult{
+		Input: recordings.LoadReplayInputResult{
+			Legacy: &factorydefinitions.ReplayArtifact{},
+		},
+	}
+	resumeRuntime := &resumeInputRuntime{result: resumeInput}
 	factory := &Factory{
 		runtimeRoot:               root,
 		recordingsRuntime:         resumeRuntime,
@@ -388,6 +401,9 @@ func TestOpenForRequestConsumesResumeSourceBeforeLiveSuccessorActivation(t *test
 	}
 	if resumeRuntime.path != "source.recording.json" {
 		t.Fatalf("resume source path = %q, want source.recording.json", resumeRuntime.path)
+	}
+	if root.activation.Inputs.ResumeInput != resumeInput {
+		t.Fatalf("activation resume input = %#v, want %#v", root.activation.Inputs.ResumeInput, resumeInput)
 	}
 	if root.activation.Inputs.Recordings.ResumePath != "source.recording.json" {
 		t.Fatalf("activation resume path = %q, want source.recording.json", root.activation.Inputs.Recordings.ResumePath)
@@ -428,14 +444,15 @@ func (root *resumeRoutingRoot) Deactivate(
 
 type resumeInputRuntime struct {
 	recordings.RuntimeOpening
-	path string
+	path   string
+	result recordings.LoadResumeInputResult
 }
 
 func (runtime *resumeInputRuntime) LoadResumeInput(
 	request recordings.LoadResumeInputRequest,
 ) (recordings.LoadResumeInputResult, error) {
 	runtime.path = request.Path
-	return recordings.LoadResumeInputResult{}, nil
+	return runtime.result, nil
 }
 
 type replayRoutingRoot struct {
