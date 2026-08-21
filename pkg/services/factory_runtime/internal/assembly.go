@@ -202,6 +202,12 @@ func (a *Assembly) Assemble(
 	if err != nil {
 		return nil, nil, factoryruntime.SessionBuildSpec{}, nil, nil, err
 	}
+	if resumeInput != nil {
+		// The resumed ledger must expose the recorded prefix before the live
+		// successor starts emitting events; otherwise public reconnect cursors
+		// cannot cross the process boundary.
+		spec.ReplayEvents = cloneFactoryEvents(restoredEvents)
+	}
 	spec.RestoredWorldState, err = reconstructRestoredWorldState(
 		recordingsRuntime,
 		restoredEvents,
@@ -235,11 +241,18 @@ func cloneReplayArtifactEvents(artifact *factorydefinitions.ReplayArtifact) []fa
 	if artifact == nil || len(artifact.Events) == 0 {
 		return nil
 	}
-	events := make([]factorydefinitions.FactoryEvent, len(artifact.Events))
-	for index, event := range artifact.Events {
-		events[index] = event.Clone()
+	return cloneFactoryEvents(artifact.Events)
+}
+
+func cloneFactoryEvents(events []factorydefinitions.FactoryEvent) []factorydefinitions.FactoryEvent {
+	if len(events) == 0 {
+		return nil
 	}
-	return events
+	cloned := make([]factorydefinitions.FactoryEvent, len(events))
+	for index, event := range events {
+		cloned[index] = event.Clone()
+	}
+	return cloned
 }
 
 func restoredEventsForOpening(

@@ -29,6 +29,53 @@ func generatedHistoryEvents(t testing.TB, history *FactoryEventHistory) []factor
 	return generated
 }
 
+func TestFactoryEventHistory_SeedCanonicalEventsPreservesPrefixAndCursorState(t *testing.T) {
+	t0 := time.Date(2026, 8, 21, 12, 0, 0, 0, time.UTC)
+	predecessor := newTestFactoryEventHistory(nil, func() time.Time { return t0 })
+	predecessor.RecordInitialStructure()
+	predecessor.RecordRunRequest()
+	predecessor.RecordSessionLifecycleFromFactoryConfig(
+		"session-alpha", &interfaces.FactoryConfig{Name: "factory-alpha"}, 0, t0,
+	)
+	predecessor.RecordFactoryStateChange(
+		0, interfaces.FactoryStateIdle, interfaces.FactoryStateRunning, "start", t0,
+	)
+	prefix := predecessor.CanonicalEvents()
+
+	successor := newTestFactoryEventHistory(nil, func() time.Time { return t0.Add(time.Second) })
+	if err := successor.SeedCanonicalEvents(prefix); err != nil {
+		t.Fatalf("SeedCanonicalEvents: %v", err)
+	}
+	successor.RecordInitialStructure()
+	successor.RecordRunRequest()
+	successor.RecordSessionLifecycleFromFactoryConfig(
+		"session-alpha", &interfaces.FactoryConfig{Name: "factory-alpha"}, 0, t0.Add(time.Second),
+	)
+	successor.RecordFactoryStateChange(
+		0, interfaces.FactoryStateIdle, interfaces.FactoryStateRunning, "start", t0.Add(time.Second),
+	)
+	successor.RecordSessionResumed(
+		SessionLifecycleControlInput{SessionID: "session-alpha"}, t0.Add(2*time.Second),
+	)
+
+	events := successor.CanonicalEvents()
+	if len(events) != len(prefix)+1 {
+		t.Fatalf("seeded event count = %d, want %d", len(events), len(prefix)+1)
+	}
+	for index, expected := range prefix {
+		actual := events[index]
+		if actual.Id != expected.Id || actual.Context.Sequence != expected.Context.Sequence {
+			t.Fatalf("seeded prefix[%d] = %#v, want %#v", index, actual, expected)
+		}
+	}
+	if got := events[len(prefix)].Context.Sequence; got != len(prefix) {
+		t.Fatalf("successor sequence = %d, want %d", got, len(prefix))
+	}
+	if events[len(prefix)].Context.SessionSequence == nil || *events[len(prefix)].Context.SessionSequence != 1 {
+		t.Fatalf("successor session sequence = %#v, want 1", events[len(prefix)].Context.SessionSequence)
+	}
+}
+
 func TestFactoryEventHistory_EventRecorderCannotMutateCanonicalHistory(t *testing.T) {
 	history := newTestFactoryEventHistory(
 		eventHistoryProjectionNet(),

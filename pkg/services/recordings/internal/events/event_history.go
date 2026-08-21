@@ -127,6 +127,7 @@ type FactoryEventHistory struct {
 	runRecordedAt       time.Time
 	hasRunRequest       bool
 	hasRunResponse      bool
+	hasInitialStructure bool
 	sessionStartedAt    time.Time
 	hasSessionStarted   bool
 	hasSessionCompleted bool
@@ -154,6 +155,50 @@ func NewFactoryEventHistory(topology recordings.InitialStructureSource, now func
 		streamGenerationID: streamGenerationID,
 		streams:            make(map[int]*eventHistorySubscription),
 	}
+}
+
+// SeedCanonicalEvents restores an already-recorded event prefix before the
+// runtime emits successor lifecycle events. The restored identities and
+// ordering metadata remain untouched so public reconnect cursors continue
+// across a process replacement.
+func (h *FactoryEventHistory) SeedCanonicalEvents(events []interfaces.FactoryEvent) error {
+	if h == nil {
+		return fmt.Errorf("factory event history is unavailable")
+	}
+	if len(events) == 0 {
+		return nil
+	}
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if len(h.events) > 0 {
+		return fmt.Errorf("factory event history already contains events")
+	}
+	h.events = cloneFactoryEvents(events)
+	for _, event := range h.events {
+		switch event.Type {
+		case interfaces.FactoryEventTypeInitialStructureRequest:
+			h.hasInitialStructure = true
+		case interfaces.FactoryEventTypeRunRequest:
+			h.hasRunRequest = true
+			h.runRecordedAt = interfaces.CanonicalEventTime(event.Context.EventTime)
+		case interfaces.FactoryEventTypeRunResponse:
+			h.hasRunResponse = true
+		case interfaces.FactoryEventTypeSessionStarted:
+			h.hasSessionStarted = true
+			h.sessionStartedAt = interfaces.CanonicalEventTime(event.Context.EventTime)
+		case interfaces.FactoryEventTypeSessionCompleted:
+			h.hasSessionCompleted = true
+		}
+		if event.Context.SessionID != nil {
+			if sessionID := strings.TrimSpace(*event.Context.SessionID); sessionID != "" {
+				h.sessionID = sessionID
+			}
+		}
+		if event.Context.SessionSequence != nil && *event.Context.SessionSequence >= h.nextSessionSequence {
+			h.nextSessionSequence = *event.Context.SessionSequence + 1
+		}
+	}
+	return nil
 }
 
 // StreamGenerationID returns the stable opaque identifier for this live event
@@ -310,11 +355,16 @@ func (h *FactoryEventHistory) RecordInitialStructure() {
 	eventTime := interfaces.CanonicalEventTime(h.now())
 	payload := h.initialStructure
 	factory := eventsnapshot.FromInitialStructure(payload)
-	h.mu.RLock()
+	h.mu.Lock()
+	if h.hasInitialStructure {
+		h.mu.Unlock()
+		return
+	}
+	h.hasInitialStructure = true
 	if h.initialFactory != nil {
 		factory = h.initialFactory.Clone()
 	}
-	h.mu.RUnlock()
+	h.mu.Unlock()
 	h.appendEvent(domainFactoryEvent(
 		interfaces.FactoryEventTypeInitialStructureRequest,
 		eventIDInitialStructure,

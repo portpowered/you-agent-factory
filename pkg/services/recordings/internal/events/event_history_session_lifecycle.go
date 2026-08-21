@@ -468,9 +468,18 @@ func (h *FactoryEventHistory) RecordFactoryStateChange(tick int, previous interf
 	}
 	eventTime = interfaces.CanonicalEventTime(eventTime)
 	nextState := next
+	eventID := fmt.Sprintf("%s/%d/%s", eventIDStateChangePrefix, tick, next)
+	h.mu.RLock()
+	for _, existing := range h.events {
+		if existing.Id == eventID {
+			h.mu.RUnlock()
+			return
+		}
+	}
+	h.mu.RUnlock()
 	h.appendEvent(domainFactoryEvent(
 		interfaces.FactoryEventTypeFactoryStateResponse,
-		fmt.Sprintf("%s/%d/%s", eventIDStateChangePrefix, tick, next),
+		eventID,
 		interfaces.FactoryEventContext{Tick: tick, EventTime: eventTime},
 		interfaces.FactoryStateResponseEventPayload{
 			PreviousState: &previous,

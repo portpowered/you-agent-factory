@@ -150,9 +150,13 @@ type RuntimeOpeningRequest struct {
 // root once; callers provide only the topology, identity, clock, and loaded
 // definition values for this runtime.
 type RuntimeScopeRequest struct {
-	Topology         InitialStructureSource
-	Definitions      interfaces.RuntimeDefinitionLookup
-	LoadedFactory    interfaces.LoadedFactorySource
+	Topology      InitialStructureSource
+	Definitions   interfaces.RuntimeDefinitionLookup
+	LoadedFactory interfaces.LoadedFactorySource
+	// ReplayEvents is an optional canonical prefix restored before the live
+	// runtime emits successor lifecycle events. It preserves public event
+	// identities and ordering across a process replacement.
+	ReplayEvents     []interfaces.FactoryEvent
 	Now              func() time.Time
 	RecordingID      string
 	RecordPath       string

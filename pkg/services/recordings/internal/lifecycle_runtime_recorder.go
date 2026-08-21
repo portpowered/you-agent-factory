@@ -550,6 +550,17 @@ func (service *combinedService) openRuntimeLedger(
 	if ledger == nil {
 		return nil, "", fmt.Errorf("Recordings runtime ledger is unavailable")
 	}
+	if len(request.ReplayEvents) > 0 {
+		seeder, ok := ledger.(interface {
+			SeedCanonicalEvents([]factorydefinitions.FactoryEvent) error
+		})
+		if !ok {
+			return nil, "", fmt.Errorf("Recordings runtime ledger does not support restored event history")
+		}
+		if err := seeder.SeedCanonicalEvents(request.ReplayEvents); err != nil {
+			return nil, "", fmt.Errorf("seed restored Factory Event history: %w", err)
+		}
+	}
 	routeKey := strings.TrimSpace(request.FactorySessionID)
 	if routeKey == "" {
 		routeKey = ledger.StreamGenerationID()

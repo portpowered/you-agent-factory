@@ -222,6 +222,7 @@ func (service runtimeWorkersServiceWithProgress) ResolveTemplateFields(
 type runtimeOpeningWithFlush struct {
 	recordings.RuntimeOpening
 	flushInterval time.Duration
+	replayEvents  []factorydefinitions.FactoryEvent
 }
 
 func (opening runtimeOpeningWithFlush) OpenRuntime(
@@ -229,6 +230,7 @@ func (opening runtimeOpeningWithFlush) OpenRuntime(
 	request recordings.RuntimeScopeRequest,
 ) (recordings.RuntimeScopeResult, error) {
 	request.FlushInterval = opening.flushInterval
+	request.ReplayEvents = cloneFactoryEvents(opening.replayEvents)
 	return opening.RuntimeOpening.OpenRuntime(ctx, request)
 }
 
@@ -444,6 +446,7 @@ func buildBundle(
 		runtimeOpeningWithFlush{
 			RuntimeOpening: recordingsRuntime,
 			flushInterval:  recordFlushInterval,
+			replayEvents:   cloneFactoryEvents(spec.ReplayEvents),
 		},
 		workerServiceWithProgress,
 		workerSessionsFactory,
