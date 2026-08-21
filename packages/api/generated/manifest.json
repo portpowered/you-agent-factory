@@ -31,7 +31,7 @@
       "path": "generated/cli/command-manifest.schema.json"
     },
     "generated.cli.commands": {
-      "artifactHash": "5976c18907f92691688fbf357d88c06bbe6f6c03dd7d20225eca17b1feec5ee4",
+      "artifactHash": "15ae5c6756b7ff8daf6f34a9c10b464cee9b65212ed337f6686d8ccc7533332e",
       "documentation": {
         "documentation": {
           "description": {
@@ -48,7 +48,7 @@
         ],
         "formatVersion": "1.0.0",
         "itemId": "generated.cli.commands",
-        "sourceHash": "5976c18907f92691688fbf357d88c06bbe6f6c03dd7d20225eca17b1feec5ee4",
+        "sourceHash": "15ae5c6756b7ff8daf6f34a9c10b464cee9b65212ed337f6686d8ccc7533332e",
         "visibility": "public"
       },
       "family": "cli",
@@ -211,7 +211,7 @@
       "path": "generated/mcp/tools.json"
     },
     "generated.openapi.openapi": {
-      "artifactHash": "a9a8c9fb034d0680ab038c38262ad835aac3dcd408a3a6f12ee48638bd65f6aa",
+      "artifactHash": "a58be3841c7469b93b8b0fa72725baba1af5f026b36cc48bb37bb86752042144",
       "documentation": {
         "documentation": {
           "description": {
@@ -228,7 +228,7 @@
         ],
         "formatVersion": "1.0.0",
         "itemId": "generated.openapi.openapi",
-        "sourceHash": "a9a8c9fb034d0680ab038c38262ad835aac3dcd408a3a6f12ee48638bd65f6aa",
+        "sourceHash": "a58be3841c7469b93b8b0fa72725baba1af5f026b36cc48bb37bb86752042144",
         "visibility": "public"
       },
       "family": "openapi",

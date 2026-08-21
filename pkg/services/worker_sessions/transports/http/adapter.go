@@ -647,6 +647,15 @@ func (a *Adapter) ListWorkerSessions(
 		return factoryapi.ListWorkerSessionsResponse{}, err
 	}
 
+	return a.listWorkerSessionsForWork(ctx, scope, workID, workModel.Name)
+}
+
+func (a *Adapter) listWorkerSessionsForWork(
+	ctx context.Context,
+	scope workerSessionScope,
+	workID string,
+	workName string,
+) (factoryapi.ListWorkerSessionsResponse, error) {
 	observations := a.observationsForScope(scope)
 	if observations == nil {
 		return factoryapi.ListWorkerSessionsResponse{}, errors.New("Worker Sessions service is required")
@@ -668,14 +677,13 @@ func (a *Adapter) ListWorkerSessions(
 	for _, observation := range result.Observations {
 		attribution[observation.WorkerSessionID] = workerSessionWorkAttribution{
 			WorkID:   workID,
-			WorkName: workModel.Name,
+			WorkName: workName,
 		}
 	}
-	response := listWorkerSessionObservationsResponseToAPI(
+	return listWorkerSessionObservationsResponseToAPI(
 		workersessions.ListWorkerSessionObservationsResult{Observations: result.Observations},
 		attribution,
-	)
-	return response, nil
+	), nil
 }
 
 // ListTopLevelWorkerSessions returns bounded observations through the stable
