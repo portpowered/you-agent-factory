@@ -90,7 +90,7 @@ func resolveFunctionalCoverageSelection(path string, packages []string, timeout 
 	return selection, manifest, nil
 }
 
-func prepareFunctionalCoverageRun(cfg config, packages []string, targetOS string, repoRoot string) (functionalCoverageSelection, []string, error) {
+func prepareFunctionalCoverageRun(cfg config, packages []string, targetOS string, logicalCPUs int, repoRoot string) (functionalCoverageSelection, []string, error) {
 	quarantinePath := cfg.functionalQuarantine
 	if !filepath.IsAbs(quarantinePath) {
 		quarantinePath = filepath.Join(repoRoot, quarantinePath)
@@ -100,7 +100,7 @@ func prepareFunctionalCoverageRun(cfg config, packages []string, targetOS string
 		packages,
 		cfg.timeout,
 		cfg.short,
-		cfg.testJobs(targetOS),
+		cfg.testJobs(targetOS, logicalCPUs),
 		repoRoot,
 	)
 	if err != nil {
