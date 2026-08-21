@@ -18,6 +18,7 @@ import (
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
+	platformmetrics "github.com/portpowered/infinite-you/pkg/platform/metrics"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	platformrandom "github.com/portpowered/infinite-you/pkg/platform/random"
 	"github.com/portpowered/infinite-you/pkg/services/automations"
@@ -25,11 +26,14 @@ import (
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	events "github.com/portpowered/infinite-you/pkg/services/events"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/transports/mapping/validationentry"
 	factorydefinitionswire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factoryruntimewire "github.com/portpowered/infinite-you/pkg/services/factory_runtime/wire"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factorysessionwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire"
+	factoryvisualization "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
+	factoryvisualizationwire "github.com/portpowered/infinite-you/pkg/services/factory_visualization/wire"
 	"github.com/portpowered/infinite-you/pkg/services/models"
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
@@ -40,7 +44,6 @@ import (
 	recordingswire "github.com/portpowered/infinite-you/pkg/services/recordings/wire"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	workerswire "github.com/portpowered/infinite-you/pkg/services/workers/wire"
-	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/transports/mapping/validationentry"
 	"go.uber.org/zap"
 )
 
@@ -597,6 +600,40 @@ type detachedOperationsCapability struct {
 
 func (capability detachedOperationsCapability) DetachedOperations() any {
 	return capability.operations
+}
+
+// provideFactoryVisualizationMetricsQuery composes the one process-scoped,
+// stateless query from the narrow Platform Metrics reader. The artifact root
+// remains a per-call request value, so this construction does not retain
+// runtime/session state.
+func provideFactoryVisualizationMetricsQuery(
+	logger logging.Logger,
+) (factoryvisualization.RuntimeMetricsQuery, error) {
+	reader, err := platformmetrics.NewRuntimeMetricsReader(platformfilesystem.Local{})
+	if err != nil {
+		return nil, err
+	}
+	return factoryvisualizationwire.NewRuntimeMetricsQuery(
+		reader,
+		logger,
+	)
+}
+
+func provideRuntimeMetricsQueryCapability(
+	query factoryvisualization.RuntimeMetricsQuery,
+) (processcontract.RuntimeMetricsQueryCapability, error) {
+	if query == nil {
+		return nil, errors.New("construct runtime metrics query capability: query is required")
+	}
+	return runtimeMetricsQueryCapability{query: query}, nil
+}
+
+type runtimeMetricsQueryCapability struct {
+	query factoryvisualization.RuntimeMetricsQuery
+}
+
+func (capability runtimeMetricsQueryCapability) RuntimeMetricsQuery() any {
+	return capability.query
 }
 
 func provideFactorySessionsRuntimeAssembly(

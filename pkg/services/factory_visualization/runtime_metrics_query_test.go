@@ -11,6 +11,7 @@ import (
 	"strings"
 	"testing"
 
+	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	platformmetrics "github.com/portpowered/infinite-you/pkg/platform/metrics"
 	factoryvisualization "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
@@ -36,7 +37,11 @@ func TestRuntimeMetricsQueryReadsAcrossActiveRotatedAndCompressedArtifacts(t *te
 		metricRecord("provider.duration", 20, "session-a", "runtime-a", "ws", "worker", "provider", "", "ms"),
 	}, "")
 
-	query, err := factoryvisualizationwire.NewRuntimeMetricsQuery(platformmetrics.NewRuntimeMetricsReader(), logging.NoopLogger{})
+	reader, err := platformmetrics.NewRuntimeMetricsReader(platformfilesystem.Local{})
+	if err != nil {
+		t.Fatalf("NewRuntimeMetricsReader() error = %v", err)
+	}
+	query, err := factoryvisualizationwire.NewRuntimeMetricsQuery(reader, logging.NoopLogger{})
 	if err != nil {
 		t.Fatalf("NewRuntimeMetricsQuery() error = %v", err)
 	}
@@ -252,24 +257,13 @@ func TestRuntimeMetricsQueryAppliesIndependentAndCombinedFilters(t *testing.T) {
 func TestRuntimeMetricsQueryFiltersAcrossActiveRotatedAndCompressedScopes(t *testing.T) {
 	t.Parallel()
 
-	root := t.TempDir()
-	writeRuntimeMetricsJSONL(t, filepath.Join(root, "120000.000000000-runtime-metrics-session-a-runtime-a.log"), []factoryvisualization.RuntimeMetricRecord{
-		metricRecord("provider.input_tokens", 1, "session-a", "runtime-a", "active", "worker-a", "provider-a", "", "tokens"),
-		metricRecord("dispatch.duration", 10, "session-a", "runtime-a", "active", "worker-a", "provider-a", "", "ms"),
-		metricRecord("provider.duration", 5, "session-a", "runtime-a", "active", "worker-a", "provider-a", "", "ms"),
-	}, "")
-	writeRuntimeMetricsJSONL(t, filepath.Join(root, "120001.000000000-runtime-metrics-session-a-runtime-b-2026-08-20T12-01-00.000.log"), []factoryvisualization.RuntimeMetricRecord{
-		metricRecord("provider.input_tokens", 2, "session-a", "runtime-b", "rotated", "worker-b", "provider-b", "", "tokens"),
-		metricRecord("dispatch.duration", 20, "session-a", "runtime-b", "rotated", "worker-b", "provider-b", "", "ms"),
-		metricRecord("provider.duration", 15, "session-a", "runtime-b", "rotated", "worker-b", "provider-b", "", "ms"),
-	}, "")
-	writeRuntimeMetricsGZIP(t, filepath.Join(root, "120002.000000000-runtime-metrics-session-b-runtime-a-2026-08-20T12-02-00.000.log.gz"), []factoryvisualization.RuntimeMetricRecord{
-		metricRecord("provider.input_tokens", 4, "session-b", "runtime-a", "compressed", "worker-c", "provider-c", "", "tokens"),
-		metricRecord("dispatch.duration", 40, "session-b", "runtime-a", "compressed", "worker-c", "provider-c", "", "ms"),
-		metricRecord("provider.duration", 35, "session-b", "runtime-a", "compressed", "worker-c", "provider-c", "", "ms"),
-	}, "")
+	root := installScopedMetricsFixture(t)
 
-	query, err := factoryvisualizationwire.NewRuntimeMetricsQuery(platformmetrics.NewRuntimeMetricsReader(), logging.NoopLogger{})
+	reader, err := platformmetrics.NewRuntimeMetricsReader(platformfilesystem.Local{})
+	if err != nil {
+		t.Fatalf("NewRuntimeMetricsReader() error = %v", err)
+	}
+	query, err := factoryvisualizationwire.NewRuntimeMetricsQuery(reader, logging.NoopLogger{})
 	if err != nil {
 		t.Fatalf("NewRuntimeMetricsQuery() error = %v", err)
 	}
@@ -346,10 +340,36 @@ func TestRuntimeMetricsQueryFiltersAcrossActiveRotatedAndCompressedScopes(t *tes
 	if err != nil {
 		t.Fatalf("QueryRuntimeMetrics(no match) error = %v", err)
 	}
-	if noMatch.Totals.InputTokens != 0 || noMatch.Totals.DispatchDuration != nil || noMatch.Totals.ProviderDuration != nil ||
-		len(noMatch.Workstations) != 0 || len(noMatch.WorkerTypes) != 0 || len(noMatch.Providers) != 0 {
-		t.Fatalf("no-match result = %#v, want an empty scoped result", noMatch)
+	assertEmptyRuntimeMetricsResult(t, noMatch)
+}
+
+func assertEmptyRuntimeMetricsResult(t *testing.T, result factoryvisualization.RuntimeMetricsQueryResult) {
+	t.Helper()
+	if result.Totals.InputTokens != 0 || result.Totals.DispatchDuration != nil || result.Totals.ProviderDuration != nil ||
+		len(result.Workstations) != 0 || len(result.WorkerTypes) != 0 || len(result.Providers) != 0 {
+		t.Fatalf("no-match result = %#v, want an empty scoped result", result)
 	}
+}
+
+func installScopedMetricsFixture(t *testing.T) string {
+	t.Helper()
+	root := t.TempDir()
+	writeRuntimeMetricsJSONL(t, filepath.Join(root, "120000.000000000-runtime-metrics-session-a-runtime-a.log"), []factoryvisualization.RuntimeMetricRecord{
+		metricRecord("provider.input_tokens", 1, "session-a", "runtime-a", "active", "worker-a", "provider-a", "", "tokens"),
+		metricRecord("dispatch.duration", 10, "session-a", "runtime-a", "active", "worker-a", "provider-a", "", "ms"),
+		metricRecord("provider.duration", 5, "session-a", "runtime-a", "active", "worker-a", "provider-a", "", "ms"),
+	}, "")
+	writeRuntimeMetricsJSONL(t, filepath.Join(root, "120001.000000000-runtime-metrics-session-a-runtime-b-2026-08-20T12-01-00.000.log"), []factoryvisualization.RuntimeMetricRecord{
+		metricRecord("provider.input_tokens", 2, "session-a", "runtime-b", "rotated", "worker-b", "provider-b", "", "tokens"),
+		metricRecord("dispatch.duration", 20, "session-a", "runtime-b", "rotated", "worker-b", "provider-b", "", "ms"),
+		metricRecord("provider.duration", 15, "session-a", "runtime-b", "rotated", "worker-b", "provider-b", "", "ms"),
+	}, "")
+	writeRuntimeMetricsGZIP(t, filepath.Join(root, "120002.000000000-runtime-metrics-session-b-runtime-a-2026-08-20T12-02-00.000.log.gz"), []factoryvisualization.RuntimeMetricRecord{
+		metricRecord("provider.input_tokens", 4, "session-b", "runtime-a", "compressed", "worker-c", "provider-c", "", "tokens"),
+		metricRecord("dispatch.duration", 40, "session-b", "runtime-a", "compressed", "worker-c", "provider-c", "", "ms"),
+		metricRecord("provider.duration", 35, "session-b", "runtime-a", "compressed", "worker-c", "provider-c", "", "ms"),
+	}, "")
+	return root
 }
 
 func TestRuntimeMetricsQueryCalculatesIndependentNearestRankPercentilesPerDimension(t *testing.T) {

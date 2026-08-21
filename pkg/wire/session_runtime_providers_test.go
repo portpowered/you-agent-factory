@@ -25,6 +25,7 @@ import (
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factorysessionwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire"
+	factoryvisualization "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
 	globalconfigmapping "github.com/portpowered/infinite-you/pkg/services/operator_settings/transports/globalconfig"
 	settingswire "github.com/portpowered/infinite-you/pkg/services/operator_settings/wire"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
@@ -35,6 +36,44 @@ import (
 func codexWireTestOutput(content string) []byte {
 	item, _ := json.Marshal(map[string]any{"type": "item.completed", "item": map[string]any{"id": "message", "type": "agent_message", "text": content}})
 	return []byte("{\"type\":\"turn.started\"}\n" + string(item) + "\n{\"type\":\"turn.completed\",\"usage\":{\"input_tokens\":1,\"output_tokens\":1}}\n")
+}
+
+func TestProvideFactoryVisualizationMetricsQueryConstructsInertCapability(t *testing.T) {
+	t.Parallel()
+
+	query, err := provideFactoryVisualizationMetricsQuery(logging.NoopLogger{})
+	if err != nil {
+		t.Fatalf("provideFactoryVisualizationMetricsQuery() error = %v", err)
+	}
+	if query == nil {
+		t.Fatal("provideFactoryVisualizationMetricsQuery() returned nil query")
+	}
+	capability, err := provideRuntimeMetricsQueryCapability(query)
+	if err != nil {
+		t.Fatalf("provideRuntimeMetricsQueryCapability() error = %v", err)
+	}
+	got, ok := capability.RuntimeMetricsQuery().(factoryvisualization.RuntimeMetricsQuery)
+	if !ok || got == nil {
+		t.Fatalf("RuntimeMetricsQuery() = %#v, want a non-nil query operation", capability.RuntimeMetricsQuery())
+	}
+
+	result, err := query.QueryRuntimeMetrics(t.Context(), factoryvisualization.RuntimeMetricsQueryRequest{
+		MetricsRoot: t.TempDir(),
+	})
+	if err != nil {
+		t.Fatalf("constructed query operation error = %v", err)
+	}
+	if result.Cost.Availability != factoryvisualization.RuntimeMetricsCostUnavailable {
+		t.Fatalf("constructed query cost = %#v, want unavailable", result.Cost)
+	}
+}
+
+func TestProvideRuntimeMetricsQueryCapabilityRejectsMissingQuery(t *testing.T) {
+	t.Parallel()
+
+	if capability, err := provideRuntimeMetricsQueryCapability(nil); capability != nil || err == nil {
+		t.Fatalf("provideRuntimeMetricsQueryCapability(nil) = (%#v, %v), want construction failure", capability, err)
+	}
 }
 
 type wireTestProviderRegistry struct{}
@@ -320,7 +359,7 @@ func TestProcessCloseContinuesThroughEveryLifecycleOwnerAfterFailure(t *testing.
 			return targetCloseErr
 		},
 	}}
-	process, err := initializerapplication.NewProcess(nil, nil, wireTestProviderRegistry{}, lifecycle, nil, nil, nil)
+	process, err := initializerapplication.NewProcess(nil, nil, wireTestProviderRegistry{}, lifecycle, nil, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("NewProcess() error = %v", err)
 	}

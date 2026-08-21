@@ -15,13 +15,15 @@ type RuntimeMetricsReader = platformmetrics.Reader
 // Platform Metrics reader.
 type RuntimeMetricRecord = platformmetrics.RuntimeMetricRecord
 
-// RuntimeMetricsQuery is a read-only, stateless query over retained runtime
-// metrics artifacts. It is a named operation rather than a second root
-// interface so Factory Visualization retains one peer-facing service root.
+// RuntimeMetricsQuery is the narrow, read-only Factory Visualization query
+// capability over retained runtime metrics artifacts. It is a named operation
+// rather than a second service-root interface, so composing this stateless
+// read side does not require a runtime event source or presentation sink.
 type RuntimeMetricsQuery func(context.Context, RuntimeMetricsQueryRequest) (RuntimeMetricsQueryResult, error)
 
 // QueryRuntimeMetrics invokes the query operation through its descriptive
-// method form. Callers may also invoke the named operation directly.
+// method form. The named operation remains callable directly for small
+// adapters while the method gives downstream consumers a stable contract.
 func (query RuntimeMetricsQuery) QueryRuntimeMetrics(
 	ctx context.Context,
 	request RuntimeMetricsQueryRequest,

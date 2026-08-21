@@ -11,6 +11,8 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+
+	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 )
 
 const (
@@ -22,7 +24,7 @@ const (
 
 func TestRuntimeMetricsReaderReadsRetainedArtifactsAndToleratesTornTail(t *testing.T) {
 	root := installReaderFixtureTree(t)
-	reader := NewRuntimeMetricsReader()
+	reader := newRuntimeMetricsReader(t)
 
 	want := []RuntimeMetricRecord{
 		{"record_id": "rotated-1", "metric_name": "provider.completed"},
@@ -52,7 +54,7 @@ func TestRuntimeMetricsReaderRejectsMalformedCompleteLineWithArtifactContext(t *
 	copyFixtureTree(t, readerMalformedFixture, root)
 	path := filepath.Join(root, "120000.000000000-runtime-metrics-session-reader-runtime-reader-malformed.log")
 
-	got, err := NewRuntimeMetricsReader().Read(context.Background(), root)
+	got, err := newRuntimeMetricsReader(t).Read(context.Background(), root)
 	if err == nil {
 		t.Fatal("Read() error = nil, want malformed complete-line error")
 	}
@@ -70,6 +72,24 @@ func TestRuntimeMetricsReaderRejectsMalformedCompleteLineWithArtifactContext(t *
 	}
 }
 
+func TestRuntimeMetricsReaderRejectsNonObjectJSONRecord(t *testing.T) {
+	root := t.TempDir()
+	path := filepath.Join(root, readerActiveName)
+	if err := os.WriteFile(path, []byte("null\n"), 0o600); err != nil {
+		t.Fatalf("WriteFile(%q): %v", path, err)
+	}
+
+	_, err := newRuntimeMetricsReader(t).Read(context.Background(), root)
+	if err == nil {
+		t.Fatal("Read() error = nil, want JSON object validation error")
+	}
+	for _, want := range []string{filepath.Base(path), "line 1", "JSON record must be an object"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Fatalf("error = %q, want it to contain %q", err, want)
+		}
+	}
+}
+
 func TestRuntimeMetricsReaderReportsGzipDecoderFailureWithArtifactContext(t *testing.T) {
 	root := t.TempDir()
 	path := filepath.Join(root, readerCompressedName)
@@ -77,7 +97,7 @@ func TestRuntimeMetricsReaderReportsGzipDecoderFailureWithArtifactContext(t *tes
 		t.Fatalf("WriteFile(%q): %v", path, err)
 	}
 
-	_, err := NewRuntimeMetricsReader().Read(context.Background(), root)
+	_, err := newRuntimeMetricsReader(t).Read(context.Background(), root)
 	if err == nil {
 		t.Fatal("Read() error = nil, want gzip decoder error")
 	}
@@ -93,14 +113,29 @@ func TestRuntimeMetricsReaderHonorsCancellationAndMissingRoot(t *testing.T) {
 	root := installReaderFixtureTree(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	if _, err := NewRuntimeMetricsReader().Read(ctx, root); !errors.Is(err, context.Canceled) {
+	if _, err := newRuntimeMetricsReader(t).Read(ctx, root); !errors.Is(err, context.Canceled) {
 		t.Fatalf("canceled Read() error = %v, want context.Canceled", err)
 	}
 
 	missing := filepath.Join(t.TempDir(), "does-not-exist")
-	if _, err := NewRuntimeMetricsReader().Read(context.Background(), missing); err == nil || !strings.Contains(err.Error(), missing) {
+	if _, err := newRuntimeMetricsReader(t).Read(context.Background(), missing); err == nil || !strings.Contains(err.Error(), missing) {
 		t.Fatalf("missing-root error = %v, want root context", err)
 	}
+}
+
+func TestRuntimeMetricsReaderRequiresFilesystem(t *testing.T) {
+	if reader, err := NewRuntimeMetricsReader(nil); reader != nil || err == nil {
+		t.Fatalf("NewRuntimeMetricsReader(nil) = (%#v, %v), want construction failure", reader, err)
+	}
+}
+
+func newRuntimeMetricsReader(t *testing.T) *RuntimeMetricsReader {
+	t.Helper()
+	reader, err := NewRuntimeMetricsReader(platformfilesystem.Local{})
+	if err != nil {
+		t.Fatalf("NewRuntimeMetricsReader() error = %v", err)
+	}
+	return reader
 }
 
 func installReaderFixtureTree(t *testing.T) string {

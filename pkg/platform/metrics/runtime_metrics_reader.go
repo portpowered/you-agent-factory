@@ -10,7 +10,6 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
-	"os"
 	"path/filepath"
 	"regexp"
 	"sort"
@@ -38,21 +37,39 @@ type Reader interface {
 	Read(context.Context, string) ([]RuntimeMetricRecord, error)
 }
 
+// ArtifactFileSystem supplies the policy-free filesystem effects needed to
+// discover and stream selected metrics artifacts. The reader owns no ambient
+// filesystem implementation; Wire supplies the concrete Platform adapter.
+type ArtifactFileSystem interface {
+	Stat(string) (fs.FileInfo, error)
+	WalkDir(string, fs.WalkDirFunc) error
+	Open(string) (io.ReadCloser, error)
+}
+
 // RuntimeMetricsReader reads complete JSONL records from the active and
 // retained runtime metrics artifacts below a supplied root.
-type RuntimeMetricsReader struct{}
+type RuntimeMetricsReader struct {
+	filesystem ArtifactFileSystem
+}
 
 var _ Reader = (*RuntimeMetricsReader)(nil)
 
-// NewRuntimeMetricsReader constructs the stateless runtime metrics reader.
-func NewRuntimeMetricsReader() *RuntimeMetricsReader {
-	return &RuntimeMetricsReader{}
+// NewRuntimeMetricsReader constructs the stateless runtime metrics reader
+// from the exact filesystem effects selected by the composition root.
+func NewRuntimeMetricsReader(filesystem ArtifactFileSystem) (*RuntimeMetricsReader, error) {
+	if filesystem == nil {
+		return nil, errors.New("construct runtime metrics reader: filesystem is required")
+	}
+	return &RuntimeMetricsReader{filesystem: filesystem}, nil
 }
 
 // Read discovers metric artifacts below root and returns their complete JSON
 // records in deterministic artifact and line order. An incomplete final line
 // is tolerated because an active writer may be interrupted during a write.
 func (r *RuntimeMetricsReader) Read(ctx context.Context, root string) ([]RuntimeMetricRecord, error) {
+	if r == nil || r.filesystem == nil {
+		return nil, errors.New("read runtime metrics: filesystem is required")
+	}
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -60,7 +77,7 @@ func (r *RuntimeMetricsReader) Read(ctx context.Context, root string) ([]Runtime
 		return nil, fmt.Errorf("read runtime metrics: %w", err)
 	}
 
-	artifacts, err := discoverRuntimeMetricsArtifacts(ctx, root)
+	artifacts, err := discoverRuntimeMetricsArtifacts(ctx, root, r.filesystem)
 	if err != nil {
 		return nil, err
 	}
@@ -69,7 +86,7 @@ func (r *RuntimeMetricsReader) Read(ctx context.Context, root string) ([]Runtime
 		if err := ctx.Err(); err != nil {
 			return records, fmt.Errorf("read runtime metrics artifact %q: %w", path, err)
 		}
-		artifactRecords, err := readRuntimeMetricsArtifact(ctx, path)
+		artifactRecords, err := readRuntimeMetricsArtifact(ctx, path, r.filesystem)
 		records = append(records, artifactRecords...)
 		if err != nil {
 			return records, err
@@ -78,12 +95,16 @@ func (r *RuntimeMetricsReader) Read(ctx context.Context, root string) ([]Runtime
 	return records, nil
 }
 
-func discoverRuntimeMetricsArtifacts(ctx context.Context, root string) ([]string, error) {
+func discoverRuntimeMetricsArtifacts(
+	ctx context.Context,
+	root string,
+	filesystem ArtifactFileSystem,
+) ([]string, error) {
 	if root == "" {
 		return nil, errors.New("read runtime metrics: root is required")
 	}
 	root = filepath.Clean(root)
-	info, err := os.Stat(root)
+	info, err := filesystem.Stat(root)
 	if err != nil {
 		return nil, fmt.Errorf("read runtime metrics root %q: %w", root, err)
 	}
@@ -92,14 +113,14 @@ func discoverRuntimeMetricsArtifacts(ctx context.Context, root string) ([]string
 	}
 
 	artifacts := make([]string, 0)
-	err = filepath.WalkDir(root, func(path string, entry fs.DirEntry, walkErr error) error {
+	err = filesystem.WalkDir(root, func(path string, entry fs.DirEntry, walkErr error) error {
 		if ctxErr := ctx.Err(); ctxErr != nil {
 			return ctxErr
 		}
 		if walkErr != nil {
 			return fmt.Errorf("inspect runtime metrics path %q: %w", path, walkErr)
 		}
-		if entry.IsDir() || entry.Type()&os.ModeSymlink != 0 || !isRuntimeMetricsArtifact(entry.Name()) {
+		if entry.IsDir() || entry.Type()&fs.ModeSymlink != 0 || !isRuntimeMetricsArtifact(entry.Name()) {
 			return nil
 		}
 		if !entry.Type().IsRegular() {
@@ -119,8 +140,12 @@ func isRuntimeMetricsArtifact(name string) bool {
 	return runtimeMetricsActiveName.MatchString(name) || runtimeMetricsBackupName.MatchString(name)
 }
 
-func readRuntimeMetricsArtifact(ctx context.Context, path string) (records []RuntimeMetricRecord, returnErr error) {
-	file, err := os.Open(path)
+func readRuntimeMetricsArtifact(
+	ctx context.Context,
+	path string,
+	filesystem ArtifactFileSystem,
+) (records []RuntimeMetricRecord, returnErr error) {
+	file, err := filesystem.Open(path)
 	if err != nil {
 		return nil, fmt.Errorf("read runtime metrics artifact %q: %w", path, err)
 	}
@@ -185,6 +210,9 @@ func decodeRuntimeMetricRecord(line []byte) (RuntimeMetricRecord, error) {
 	var record RuntimeMetricRecord
 	if err := json.Unmarshal(line, &record); err != nil {
 		return nil, err
+	}
+	if record == nil {
+		return nil, errors.New("JSON record must be an object")
 	}
 	return record, nil
 }

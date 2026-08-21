@@ -7,6 +7,7 @@ import (
 	initializerapplication "github.com/portpowered/infinite-you/pkg/initializer/application"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	factoryvisualization "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"github.com/portpowered/infinite-you/pkg/wire"
 )
@@ -45,6 +46,23 @@ func DetachedOperationsFromProcess(process any) factorysessions.DetachedService 
 	}
 	operations, _ := capability.DetachedOperations().(factorysessions.DetachedService)
 	return operations
+}
+
+// RuntimeMetricsQueryFromProcess returns the Factory Visualization metrics
+// query carried by the canonical process composition. The process is accepted
+// as an opaque value so callers can use the same narrow boundary in functional
+// harnesses without exposing the application graph.
+func RuntimeMetricsQueryFromProcess(process any) factoryvisualization.RuntimeMetricsQuery {
+	applicationProcess, ok := process.(*initializerapplication.Process)
+	if !ok || applicationProcess == nil {
+		return nil
+	}
+	capability := applicationProcess.RuntimeMetricsQuery()
+	if capability == nil {
+		return nil
+	}
+	query, _ := capability.RuntimeMetricsQuery().(factoryvisualization.RuntimeMetricsQuery)
+	return query
 }
 
 // BuildStatelessWorkers constructs the standalone Workers Execute root. It

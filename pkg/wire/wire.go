@@ -19,10 +19,10 @@ import (
 	factoryvisualizationwire "github.com/portpowered/infinite-you/pkg/services/factory_visualization/wire"
 	providersessionshttp "github.com/portpowered/infinite-you/pkg/services/provider_sessions/transports/http"
 	"github.com/portpowered/infinite-you/pkg/services/work"
+	workersessionsrootcli "github.com/portpowered/infinite-you/pkg/services/worker_sessions/transports/cli/worker_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	acp "github.com/portpowered/infinite-you/pkg/transports/acp"
 	"github.com/portpowered/infinite-you/pkg/transports/cli"
-	workersessionsrootcli "github.com/portpowered/infinite-you/pkg/services/worker_sessions/transports/cli/worker_sessions"
 	mcpstdio "github.com/portpowered/infinite-you/pkg/transports/mcp/stdio"
 )
 
@@ -145,6 +145,8 @@ var servicesSet = wire.NewSet(
 	wire.Bind(new(automations.Service), new(automations.Root)),
 	provideFactorySessionsService,
 	provideFactorySessionDetachedOperations,
+	provideFactoryVisualizationMetricsQuery,
+	provideRuntimeMetricsQueryCapability,
 	provideFactorySessionsRuntimeAssembly,
 	provideFactoryWebhooksService,
 	providePortableRecordingWriter,

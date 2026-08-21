@@ -22,10 +22,10 @@ import (
 	wire3 "github.com/portpowered/infinite-you/pkg/services/factory_visualization/wire"
 	"github.com/portpowered/infinite-you/pkg/services/provider_sessions/transports/http"
 	"github.com/portpowered/infinite-you/pkg/services/work"
+	"github.com/portpowered/infinite-you/pkg/services/worker_sessions/transports/cli/worker_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"github.com/portpowered/infinite-you/pkg/transports/acp"
 	"github.com/portpowered/infinite-you/pkg/transports/cli"
-	"github.com/portpowered/infinite-you/pkg/services/worker_sessions/transports/cli/worker_sessions"
 	"github.com/portpowered/infinite-you/pkg/transports/mcp/stdio"
 )
 
@@ -706,7 +706,15 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	if err != nil {
 		return nil, err
 	}
-	process, err := application.NewProcess(commandFactory, initializer, providerRegistry, processLifecycle, server, workerRecordingReader, processDetachedOperationsCapability)
+	runtimeMetricsQuery, err := provideFactoryVisualizationMetricsQuery(loggingLogger)
+	if err != nil {
+		return nil, err
+	}
+	processRuntimeMetricsQueryCapability, err := provideRuntimeMetricsQueryCapability(runtimeMetricsQuery)
+	if err != nil {
+		return nil, err
+	}
+	process, err := application.NewProcess(commandFactory, initializer, providerRegistry, processLifecycle, server, workerRecordingReader, processDetachedOperationsCapability, processRuntimeMetricsQueryCapability)
 	if err != nil {
 		return nil, err
 	}
@@ -889,6 +897,8 @@ var servicesSet = wire5.NewSet(
 	provideAutomationHostedSourceInputs,
 	provideAutomationsRoot, wire5.Bind(new(automations.Service), new(automations.Root)), provideFactorySessionsService,
 	provideFactorySessionDetachedOperations,
+	provideFactoryVisualizationMetricsQuery,
+	provideRuntimeMetricsQueryCapability,
 	provideFactorySessionsRuntimeAssembly,
 	provideFactoryWebhooksService,
 	providePortableRecordingWriter,
