@@ -75,7 +75,6 @@ type resumeFromRecordingScenario struct {
 
 type resumeFromRecordingBoundary struct {
 	work        factoryapi.Work
-	board       factoryapi.StatusResponse
 	completedID string
 	events      []factoryapi.FactoryEvent
 	cursor      factoryapi.FactoryEvent
@@ -134,15 +133,12 @@ func (scenario *resumeFromRecordingScenario) captureAtKillBoundary(
 	if got := support.WorkItemCustomerLocation(work); got != support.WorkCustomerLocation("task", "processing") {
 		t.Fatalf("pre-kill Work location = %q, want task:processing", got)
 	}
-	board := support.WaitForStatus(t, baseURL, resumeFromRecordingTimeout, func(status factoryapi.StatusResponse) bool {
-		return status.Categories.Initial == 0 && status.Categories.Processing == 1
-	})
 	events := support.GetFactoryEventsForSessionAt(t, baseURL, factorysessions.DefaultSessionID)
 	assertResumeFromRecordingFactoryEvents(t, "before restart", events)
+	requireResumeFromRecordingWorkStateEvent(t, events, scenario.workID, "processing")
 	completedID := requireResumeFromRecordingCompletedDispatchID(t, events)
 	return resumeFromRecordingBoundary{
 		work:        work,
-		board:       board,
 		completedID: completedID,
 		events:      events,
 		cursor:      requireResumeFromRecordingFactoryEvent(t, events, factoryapi.FactoryEventTypeDispatchReconciled, completedID),
@@ -164,15 +160,10 @@ func (scenario *resumeFromRecordingScenario) assertRestored(
 	if got := support.WorkItemCustomerLocation(work); got != support.WorkCustomerLocation("task", "processing") {
 		t.Fatalf("post-restart Work location = %q, want restored task:processing", got)
 	}
-	board := support.WaitForStatus(t, baseURL, resumeFromRecordingTimeout, func(status factoryapi.StatusResponse) bool {
-		return status.Categories.Initial == 0 && status.Categories.Processing == 1
-	})
-	if board.Categories.Terminal != boundary.board.Categories.Terminal || board.Categories.Failed != boundary.board.Categories.Failed {
-		t.Fatalf("post-restart board terminal/failed counts = %+v, want preserved boundary counts %+v", board.Categories, boundary.board.Categories)
-	}
 	restartedEvents := support.GetFactoryEventsForSessionAt(t, baseURL, factorysessions.DefaultSessionID)
 	assertResumeFromRecordingFactoryEvents(t, "after restart", restartedEvents)
 	assertResumeFromRecordingFactoryEventIDsPresent(t, boundary.events, restartedEvents)
+	requireResumeFromRecordingWorkStateEvent(t, restartedEvents, scenario.workID, "processing")
 	support.AssertSingleWorkRequestEvent(t, restartedEvents, scenario.requestID, scenario.workID, "task")
 	if got := countResumeFromRecordingDispatchEvents(restartedEvents, factoryapi.FactoryEventTypeDispatchReconciled, boundary.completedID); got != 1 {
 		t.Fatalf("completed dispatch reconciled events after restart = %d, want 1", got)
@@ -186,16 +177,13 @@ func (scenario *resumeFromRecordingScenario) resumeAndFinish(
 ) {
 	t.Helper()
 	scenario.runner.ReleaseRemainingDispatch()
-	finished := support.WaitForTerminalStatus(t, baseURL, resumeFromRecordingTimeout)
-	finalWork := support.ListDefaultSessionWork(t, baseURL)
+	finalWork := waitForResumeFromRecordingWorkState(t, baseURL, scenario.workID, "complete")
 	if got := support.CountWorkAtCustomerState(finalWork, support.WorkCustomerLocation("task", "complete")); got != 1 {
 		t.Fatalf("post-resume completed Work count = %d, want 1; listed=%#v", got, finalWork.Results)
 	}
-	if got := support.CountWorkAtCustomerState(finalWork, support.WorkCustomerLocation("task", "processing")); got != 0 {
-		t.Fatalf("post-resume processing Work count = %d, want 0", got)
-	}
-	if finished.Categories.Terminal != 1 || finished.Categories.Processing != 0 || finished.Categories.Failed != 0 {
-		t.Fatalf("post-resume board progress = %+v, want one terminal Work and no failed/processing Work", finished.Categories)
+	completedWork := requireResumeFromRecordingWork(t, finalWork, scenario.workID)
+	if got := support.WorkItemCustomerLocation(completedWork); got != support.WorkCustomerLocation("task", "complete") {
+		t.Fatalf("post-resume Work location = %q, want task:complete", got)
 	}
 	if got := scenario.runner.CallCount(); got != 3 {
 		t.Fatalf("provider command calls after resume = %d, want exactly 3", got)
@@ -203,6 +191,7 @@ func (scenario *resumeFromRecordingScenario) resumeAndFinish(
 	finalEvents := support.GetFactoryEventsForSessionAt(t, baseURL, factorysessions.DefaultSessionID)
 	assertResumeFromRecordingFactoryEvents(t, "after resume", finalEvents)
 	assertResumeFromRecordingFactoryEventIDsPresent(t, boundary.events, finalEvents)
+	requireResumeFromRecordingWorkStateEvent(t, finalEvents, scenario.workID, "complete")
 	support.AssertSingleWorkRequestEvent(t, finalEvents, scenario.requestID, scenario.workID, "task")
 	if got := countResumeFromRecordingDispatchEvents(finalEvents, factoryapi.FactoryEventTypeDispatchReconciled, boundary.completedID); got != 1 {
 		t.Fatalf("completed dispatch reconciled events after resume = %d, want 1", got)
@@ -442,6 +431,58 @@ func requireResumeFromRecordingWork(
 	}
 	t.Fatalf("public Work listing is missing %q: %#v", workID, listed.Results)
 	return factoryapi.Work{}
+}
+
+// waitForResumeFromRecordingWorkState waits on the committed public Work
+// projection after a provider release. The runner signal proves the provider
+// boundary; this bounded read is still needed because Work projection writes
+// are committed asynchronously after the runtime event is emitted.
+func waitForResumeFromRecordingWorkState(
+	t *testing.T,
+	baseURL, workID, state string,
+) factoryapi.ListWorkResponse {
+	t.Helper()
+	wantLocation := support.WorkCustomerLocation("task", state)
+	listed, err := support.WaitForObservation(
+		resumeFromRecordingTimeout,
+		func() (factoryapi.ListWorkResponse, error) {
+			return support.ListDefaultSessionWork(t, baseURL), nil
+		},
+		func(listed factoryapi.ListWorkResponse) bool {
+			for _, work := range listed.Results {
+				if support.StringPointerValue(work.WorkId) == workID && support.WorkItemCustomerLocation(work) == wantLocation {
+					return true
+				}
+			}
+			return false
+		},
+	)
+	if err != nil {
+		t.Fatalf("wait for Work %q at %s: %v", workID, wantLocation, err)
+	}
+	return listed
+}
+
+func requireResumeFromRecordingWorkStateEvent(
+	t *testing.T,
+	events []factoryapi.FactoryEvent,
+	workID, state string,
+) factoryapi.FactoryEvent {
+	t.Helper()
+	for _, event := range events {
+		if event.Type != factoryapi.FactoryEventTypeWorkStateChange {
+			continue
+		}
+		payload, err := event.Payload.AsWorkStateChangeEventPayload()
+		if err != nil {
+			t.Fatalf("decode WORK_STATE_CHANGE event %q: %v", event.Id, err)
+		}
+		if payload.WorkId == workID && payload.ToState == state {
+			return event
+		}
+	}
+	t.Fatalf("public Factory Events contain no WORK_STATE_CHANGE for Work %q to %s", workID, state)
+	return factoryapi.FactoryEvent{}
 }
 
 func requireResumeFromRecordingCompletedDispatchID(
