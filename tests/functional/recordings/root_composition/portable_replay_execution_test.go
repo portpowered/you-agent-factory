@@ -94,8 +94,12 @@ func TestPortableReplayResumeProbeUsesRootExecutionOpening(t *testing.T) {
 // boundary.
 func TestPortableReplayResumeHandoffUsesRootExecutionOpening(t *testing.T) {
 	const workflowName = "resumable-two-step-fake-children"
-	projectRoot := functionalWriteResumableWorkflowFixture(t, workflowName)
+	projectRoot, home, sessionID := functionalInterruptPortableReplay(t, workflowName)
+	functionalResumePortableReplay(t, projectRoot, home, sessionID, workflowName)
+}
 
+func functionalInterruptPortableReplay(t *testing.T, workflowName string) (string, string, string) {
+	projectRoot := functionalWriteResumableWorkflowFixture(t, workflowName)
 	commandRunner := newFunctionalReplayHandoffCommandRunner()
 	home := t.TempDir()
 	env := append(os.Environ(), "HOME="+home, "USERPROFILE="+home)
@@ -147,8 +151,14 @@ func TestPortableReplayResumeHandoffUsesRootExecutionOpening(t *testing.T) {
 	}
 	server.Stop(t)
 	server.Close(t)
+	return projectRoot, home, started.SessionId
+}
 
-	payload := functionalPortableReplayPayloadForSessionSource(t, started.SessionId, workflowName+".js")
+func functionalResumePortableReplay(
+	t *testing.T,
+	projectRoot, home, sessionID, workflowName string,
+) {
+	payload := functionalPortableReplayPayloadForSessionSource(t, sessionID, workflowName+".js")
 	edges := functionalPortableReplayEdges(t, payload, &functionalReplayLiveConstructionCalls{})
 	edges.ProviderCommandRunner = support.NewShapedProviderCommandRunner(
 		platformprocess.CommandResult{Stdout: []byte("resumed step")},
@@ -161,7 +171,7 @@ func TestPortableReplayResumeHandoffUsesRootExecutionOpening(t *testing.T) {
 	opened, err := opening.OpenExecutionRuntime(t.Context(), factorysessions.ExecutionRuntimeOpeningRequest{
 		ProjectRoot:       projectRoot,
 		SystemConfigHome:  home,
-		FactorySessionID:  started.SessionId,
+		FactorySessionID:  sessionID,
 		ReplayPath:        "recording.json",
 		PersistencePolicy: factorysessions.PersistencePolicyEnabled,
 	})
@@ -178,14 +188,14 @@ func TestPortableReplayResumeHandoffUsesRootExecutionOpening(t *testing.T) {
 	})
 	resumed, err := opened.Execution.ResumeInterruptedSession(
 		t.Context(),
-		started.SessionId,
+		sessionID,
 		factorysessions.ResumeSessionRequest{RequestID: "portable-replay-handoff-resume"},
 	)
 	if err != nil {
 		t.Fatalf("ResumeInterruptedSession(restorable replay) error = %v", err)
 	}
-	if resumed.SessionID != started.SessionId {
-		t.Fatalf("resumed session id = %q, want %q", resumed.SessionID, started.SessionId)
+	if resumed.SessionID != sessionID {
+		t.Fatalf("resumed session id = %q, want %q", resumed.SessionID, sessionID)
 	}
 	responseSubscriber, ok := opened.Execution.(interface {
 		SubscribeResponseEvents(context.Context, string, factorysessions.ResponseEventSubscriptionRequest) (*factorysessions.ResponseEventCursor, error)
@@ -195,14 +205,14 @@ func TestPortableReplayResumeHandoffUsesRootExecutionOpening(t *testing.T) {
 	}
 	responseCursor, err := responseSubscriber.SubscribeResponseEvents(
 		t.Context(),
-		started.SessionId,
-		factorysessions.ResponseEventSubscriptionRequest{SessionID: started.SessionId},
+		sessionID,
+		factorysessions.ResponseEventSubscriptionRequest{SessionID: sessionID},
 	)
 	if err != nil {
 		t.Fatalf("SubscribeResponseEvents(after handoff) error = %v", err)
 	}
 	functionalWaitForResponseTerminal(t, responseCursor)
-	listed, err := opened.Execution.ListDispatches(t.Context(), started.SessionId)
+	listed, err := opened.Execution.ListDispatches(t.Context(), sessionID)
 	if err != nil {
 		t.Fatalf("ListDispatches(after handoff) error = %v", err)
 	}

@@ -7,6 +7,7 @@ import (
 	initializerapplication "github.com/portpowered/infinite-you/pkg/initializer/application"
 	"github.com/portpowered/infinite-you/pkg/services/automations"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factoryvisualization "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
 )
 
@@ -138,6 +139,87 @@ func TestRuntimeMetricsQueryFromProcessResolvesTypedCapability(t *testing.T) {
 	if got := RuntimeMetricsQueryFromProcess(wrongType); got != nil {
 		t.Fatalf("RuntimeMetricsQueryFromProcess(wrong type) = %#v, want nil", got)
 	}
+}
+
+func TestExecutionRuntimeOpeningFromProcessResolvesTypedCapability(t *testing.T) {
+	t.Parallel()
+
+	if opening := ExecutionRuntimeOpeningFromProcess(nil); opening != nil {
+		t.Fatalf("ExecutionRuntimeOpeningFromProcess(nil) = %#v, want nil", opening)
+	}
+	processWithoutOpening, err := initializerapplication.NewProcess(
+		nil,
+		nil,
+		rootWorkerProcessRegistry{},
+		rootWorkerProcessLifecycle{},
+		nil, nil, nil, nil, nil,
+	)
+	if err != nil {
+		t.Fatalf("NewProcess(without execution opening) error = %v", err)
+	}
+	if opening := ExecutionRuntimeOpeningFromProcess(processWithoutOpening); opening != nil {
+		t.Fatalf("ExecutionRuntimeOpeningFromProcess(without capability) = %#v, want nil", opening)
+	}
+
+	wrongType, err := initializerapplication.NewProcess(
+		nil,
+		nil,
+		rootWorkerProcessRegistry{},
+		rootWorkerProcessLifecycle{},
+		nil, nil, nil, nil,
+		rootExecutionRuntimeOpeningCapabilityProbe{opening: struct{}{}},
+	)
+	if err != nil {
+		t.Fatalf("NewProcess(wrong-type execution opening) error = %v", err)
+	}
+	if opening := ExecutionRuntimeOpeningFromProcess(wrongType); opening != nil {
+		t.Fatalf("ExecutionRuntimeOpeningFromProcess(wrong type) = %#v, want nil", opening)
+	}
+
+	want := factorysessions.OpenedExecutionRuntime{Close: func() error { return nil }}
+	request := factorysessions.ExecutionRuntimeOpeningRequest{
+		ProjectRoot:      "project-root",
+		SystemConfigHome: "system-config-home",
+		FactorySessionID: "session-1",
+		ReplayPath:       "recording.json",
+	}
+	process, err := initializerapplication.NewProcess(
+		nil,
+		nil,
+		rootWorkerProcessRegistry{},
+		rootWorkerProcessLifecycle{},
+		nil, nil, nil, nil,
+		rootExecutionRuntimeOpeningCapabilityProbe{
+			opening: factorysessions.ExecutionRuntimeOpeningFunc(func(ctx context.Context, got factorysessions.ExecutionRuntimeOpeningRequest) (factorysessions.OpenedExecutionRuntime, error) {
+				if ctx == nil || got.ProjectRoot != request.ProjectRoot || got.ReplayPath != request.ReplayPath {
+					t.Errorf("execution opening request = (%v, %#v), want context and %#v", ctx, got, request)
+				}
+				return want, nil
+			}),
+		},
+	)
+	if err != nil {
+		t.Fatalf("NewProcess(execution opening) error = %v", err)
+	}
+	opening := ExecutionRuntimeOpeningFromProcess(process)
+	if opening == nil {
+		t.Fatal("ExecutionRuntimeOpeningFromProcess(composed capability) returned nil")
+	}
+	got, err := opening.OpenExecutionRuntime(context.Background(), request)
+	if err != nil {
+		t.Fatalf("OpenExecutionRuntime() error = %v", err)
+	}
+	if got.Execution != want.Execution || got.Close == nil {
+		t.Fatalf("OpenExecutionRuntime() = %#v, want execution and close capability", got)
+	}
+}
+
+type rootExecutionRuntimeOpeningCapabilityProbe struct {
+	opening any
+}
+
+func (probe rootExecutionRuntimeOpeningCapabilityProbe) ExecutionRuntimeOpening() any {
+	return probe.opening
 }
 
 type rootRuntimeMetricsQueryCapabilityProbe struct {

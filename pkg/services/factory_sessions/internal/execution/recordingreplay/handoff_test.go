@@ -6,6 +6,7 @@ import (
 	"reflect"
 	"testing"
 
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/controlplane"
 	fse "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution"
 	durableexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/durable_execution"
@@ -33,6 +34,10 @@ type handoffLiveOwner struct {
 	dispatches      fse.ListDispatchesResult
 	queryResult     fse.ListDispatchesResult
 	queryErr        error
+	responseCalls   int
+	responseRequest factorysessions.ResponseEventSubscriptionRequest
+	responseCursor  *factorysessions.ResponseEventCursor
+	responseErr     error
 }
 
 func (s *handoffLiveOwner) HasRestorableState(context.Context, string) (bool, error) {
@@ -78,6 +83,16 @@ func (s *handoffLiveOwner) QueryDispatches(_ context.Context, request fse.Dispat
 	s.queryCalls++
 	s.queryRequest = request
 	return s.queryResult, s.queryErr
+}
+
+func (s *handoffLiveOwner) SubscribeResponseEvents(
+	_ context.Context,
+	_ string,
+	request factorysessions.ResponseEventSubscriptionRequest,
+) (*factorysessions.ResponseEventCursor, error) {
+	s.responseCalls++
+	s.responseRequest = request
+	return s.responseCursor, s.responseErr
 }
 
 var _ fse.Service = (*handoffLiveOwner)(nil)
@@ -162,6 +177,49 @@ func TestServiceResumeUsesLiveResultAndMakesLiveOwnerAuthoritative(t *testing.T)
 	}
 	if live.queryCalls != 1 {
 		t.Fatalf("unknown QueryDispatches reached live owner: calls = %d, want 1", live.queryCalls)
+	}
+}
+
+func TestServiceSubscribeResponseEventsRoutesOnlyAfterHandoff(t *testing.T) {
+	projection, err := ReplayRecording(buildLifecycleRecording(t, "PAUSED", false))
+	if err != nil {
+		t.Fatalf("ReplayRecording: %v", err)
+	}
+	sessionID := projection.Session.SessionID
+	request := factorysessions.ResponseEventSubscriptionRequest{
+		SessionID: sessionID, AfterSequence: 7, DispatchID: "dispatch-1",
+	}
+	cursor := &factorysessions.ResponseEventCursor{}
+	live := &handoffLiveOwner{restorable: true, responseCursor: cursor}
+	service := NewService(projection, live)
+
+	if _, err := service.SubscribeResponseEvents(context.Background(), sessionID, request); !errors.Is(err, ErrNonLiveReplay) {
+		t.Fatalf("historical SubscribeResponseEvents error = %v, want ErrNonLiveReplay", err)
+	}
+	if live.responseCalls != 0 {
+		t.Fatalf("historical response subscription calls = %d, want 0", live.responseCalls)
+	}
+	if _, err := service.SubscribeResponseEvents(context.Background(), "missing", request); !errors.Is(err, fse.ErrSessionNotFound) {
+		t.Fatalf("unknown SubscribeResponseEvents error = %v, want ErrSessionNotFound", err)
+	}
+	if _, err := service.Resume(context.Background(), sessionID, fse.ControlRequest{}); err != nil {
+		t.Fatalf("Resume error = %v", err)
+	}
+	got, err := service.SubscribeResponseEvents(context.Background(), sessionID, request)
+	if err != nil {
+		t.Fatalf("live SubscribeResponseEvents error = %v", err)
+	}
+	if got != cursor || live.responseCalls != 1 || !reflect.DeepEqual(live.responseRequest, request) {
+		t.Fatalf("live response subscription = (%p, %d, %#v), want (%p, 1, %#v)", got, live.responseCalls, live.responseRequest, cursor, request)
+	}
+
+	withoutSubscriber := &handoffLiveOwnerWithoutResponseEvents{restorable: true}
+	service = NewService(projection, withoutSubscriber)
+	if _, err := service.Resume(context.Background(), sessionID, fse.ControlRequest{}); err != nil {
+		t.Fatalf("Resume without response subscriber error = %v", err)
+	}
+	if _, err := service.SubscribeResponseEvents(context.Background(), sessionID, request); !errors.Is(err, factorysessions.ErrRuntimeNotAvailable) {
+		t.Fatalf("unsupported response subscription error = %v, want ErrRuntimeNotAvailable", err)
 	}
 }
 
@@ -301,6 +359,19 @@ func (h *replayControlPlaneHost) DurableExecution() durableexecution.Service {
 }
 
 type handoffOwnerWithoutProbe struct{ fse.Service }
+
+type handoffLiveOwnerWithoutResponseEvents struct {
+	fse.Service
+	restorable bool
+}
+
+func (s *handoffLiveOwnerWithoutResponseEvents) HasRestorableState(context.Context, string) (bool, error) {
+	return s.restorable, nil
+}
+
+func (s *handoffLiveOwnerWithoutResponseEvents) Resume(context.Context, string, fse.ControlRequest) (fse.LifecycleControlResult, error) {
+	return fse.LifecycleControlResult{}, nil
+}
 
 func TestServiceWallsEightNonResumeOperationsBeforeHandoff(t *testing.T) {
 	projection, err := ReplayRecording(buildLifecycleRecording(t, "INTERRUPTED", false))
