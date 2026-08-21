@@ -6962,6 +6962,8 @@ export interface components {
       requestId?: string;
       /** @description Configured work type name from factory.json for this submitted work item. */
       workTypeName?: string;
+      /** @description Optional successor Work ID when this terminal or failed same-name Work item has been superseded by a later admission. */
+      supersededBy?: string;
       /** @description Current lifecycle state for this work item when returned by read APIs. Submit requests use the state's name when an explicit initial state is provided. */
       state?: components["schemas"]["WorkState"];
       /** @description Current chaining depth for this work item when the runtime already knows its upstream lineage. */
@@ -7752,6 +7754,8 @@ export interface components {
     WorkListNonTerminal: boolean;
     /** @description Optional count request. When true, the response includes counts.total for the complete filtered selection before ordering page slicing and pagination. */
     WorkListCounts: boolean;
+    /** @description Optional historical view. When true, includes terminal or failed same-name Work items that have a later admitted successor; otherwise those superseded rows are omitted before counts and pagination. */
+    WorkListIncludeSuperseded: boolean;
     /** @description Work or token identifier, depending on route. */
     WorkOrTokenID: string;
     /** @description Optional session list scope. Defaults to live for backward-compatible live workspace session listing. */
@@ -8168,6 +8172,8 @@ export interface operations {
         nonTerminal?: components["parameters"]["WorkListNonTerminal"];
         /** @description Optional count request. When true, the response includes counts.total for the complete filtered selection before ordering page slicing and pagination. */
         counts?: components["parameters"]["WorkListCounts"];
+        /** @description Optional historical view. When true, includes terminal or failed same-name Work items that have a later admitted successor; otherwise those superseded rows are omitted before counts and pagination. */
+        includeSuperseded?: components["parameters"]["WorkListIncludeSuperseded"];
       };
       header?: never;
       path: {

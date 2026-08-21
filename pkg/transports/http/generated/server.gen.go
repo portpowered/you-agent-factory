@@ -15310,6 +15310,14 @@ func (a *Work) UnmarshalJSON(b []byte) error {
 		delete(object, "structuredResult")
 	}
 
+	if raw, found := object["supersededBy"]; found {
+		err = json.Unmarshal(raw, &a.SupersededBy)
+		if err != nil {
+			return fmt.Errorf("error reading 'supersededBy': %w", err)
+		}
+		delete(object, "supersededBy")
+	}
+
 	if raw, found := object["tags"]; found {
 		err = json.Unmarshal(raw, &a.Tags)
 		if err != nil {
@@ -15444,6 +15452,13 @@ func (a Work) MarshalJSON() ([]byte, error) {
 	object["structuredResult"], err = json.Marshal(a.StructuredResult)
 	if err != nil {
 		return nil, fmt.Errorf("error marshaling 'structuredResult': %w", err)
+	}
+
+	if a.SupersededBy != nil {
+		object["supersededBy"], err = json.Marshal(a.SupersededBy)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'supersededBy': %w", err)
+		}
 	}
 
 	if a.Tags != nil {
