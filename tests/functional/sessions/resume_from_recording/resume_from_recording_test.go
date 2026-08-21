@@ -1,9 +1,13 @@
 package resume_from_recording_test
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
+	"errors"
+	"net"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"sync"
 	"testing"
@@ -31,8 +35,11 @@ func TestKilledFactorySessionResumesOriginalDispatchesAfterRestart(t *testing.T)
 
 	scenario := newResumeFromRecordingScenario(t)
 	t.Cleanup(scenario.runner.ReleaseRemainingDispatch)
-	first := scenario.startProcess(t, "first")
-	submitted := support.SubmitDefaultSessionWork(t, first.URL(), factoryapi.SubmitWorkRequest{
+	first := scenario.startFirstProcess(t)
+	firstURL := first.waitForReady(t)
+	first.waitFor(t, "first-returned")
+	first.waitFor(t, "second-entered")
+	submitted := support.SubmitDefaultSessionWork(t, firstURL, factoryapi.SubmitWorkRequest{
 		Name:         stringPointer("resume-from-recording-work"),
 		Payload:      map[string]any{"subject": "resume-from-recording"},
 		WorkTypeName: "task",
@@ -42,24 +49,52 @@ func TestKilledFactorySessionResumesOriginalDispatchesAfterRestart(t *testing.T)
 	}
 	scenario.workID = *submitted.WorkId
 	scenario.requestID = submitted.RequestId
-	scenario.awaitKillBoundary(t)
-	boundary := scenario.captureAtKillBoundary(t, first.URL())
+	boundary := scenario.captureAtKillBoundary(t, firstURL)
 
-	// Stop joins the first root-built process before the replacement is
-	// constructed. The recording is left naturally unfinalized by cancellation;
-	// this test never edits or finalizes its persisted state.
-	first.Stop(t)
-	select {
-	case <-first.Done():
-	default:
-		t.Fatal("first process stop returned before its command joined")
-	}
-	scenario.runner.wait(t, scenario.runner.secondCanceled, "canceled second provider dispatch")
+	// Kill joins the first root-built process before the replacement is
+	// constructed. An OS process kill leaves the recording naturally
+	// unfinalized; this test never edits or finalizes its persisted state.
+	first.killAndJoin(t)
 	assertResumeFromRecordingUnfinalizedRecording(t, scenario.recordingPath)
 
-	second := scenario.startProcess(t, "successor")
+	second := scenario.startSuccessorProcess(t)
 	scenario.assertRestored(t, second.URL(), boundary)
 	scenario.resumeAndFinish(t, second.URL(), boundary)
+}
+
+// TestResumeFromRecordingChildProcess hosts the predecessor in a separate OS
+// process so the parent can exercise an actual abrupt process boundary. The
+// parent test is the only caller; a normal package run skips this helper.
+func TestResumeFromRecordingChildProcess(t *testing.T) {
+	if os.Getenv("RSM7_RESUME_CHILD") != "1" {
+		t.Skip("predecessor child process helper")
+	}
+	control, err := net.DialTimeout("tcp", os.Getenv("RSM7_RESUME_CONTROL"), resumeFromRecordingTimeout)
+	if err != nil {
+		t.Fatalf("connect predecessor control: %v", err)
+	}
+	defer control.Close()
+	childControl := newResumeFromRecordingChildControl(control)
+	runner := newResumeFromRecordingChildCommandRunner(childControl)
+	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir:                os.Getenv("RSM7_RESUME_FACTORY_DIR"),
+		WaitForServiceModeRuntime: true,
+		Env: []string{
+			"HOME=" + os.Getenv("RSM7_RESUME_HOME"),
+			"USERPROFILE=" + os.Getenv("RSM7_RESUME_HOME"),
+		},
+		Args: []string{
+			"--record", os.Getenv("RSM7_RESUME_RECORDING"),
+		},
+		Edges: serviceedges.Edges{ProviderCommandRunner: runner},
+	})
+	if err := childControl.send(resumeFromRecordingChildMessage{
+		Type: "ready",
+		URL:  server.URL(),
+	}); err != nil {
+		t.Fatalf("announce predecessor readiness: %v", err)
+	}
+	select {}
 }
 
 type resumeFromRecordingScenario struct {
@@ -93,35 +128,247 @@ func newResumeFromRecordingScenario(t *testing.T) *resumeFromRecordingScenario {
 	}
 }
 
-func (scenario *resumeFromRecordingScenario) startProcess(
+func (scenario *resumeFromRecordingScenario) startFirstProcess(
 	t *testing.T,
-	name string,
+) *resumeFromRecordingChildProcess {
+	t.Helper()
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen for predecessor control: %v", err)
+	}
+	process := &resumeFromRecordingChildProcess{
+		listener: listener,
+		messages: make(chan resumeFromRecordingChildMessage, 16),
+		waitDone: make(chan struct{}),
+	}
+	go process.acceptMessages()
+	command := exec.Command(
+		os.Args[0],
+		"-test.run=^TestResumeFromRecordingChildProcess$",
+		"-test.v",
+	)
+	command.Env = append(os.Environ(),
+		"RSM7_RESUME_CHILD=1",
+		"RSM7_RESUME_CONTROL="+listener.Addr().String(),
+		"RSM7_RESUME_FACTORY_DIR="+scenario.projectRoot,
+		"RSM7_RESUME_HOME="+scenario.home,
+		"RSM7_RESUME_RECORDING="+scenario.recordingPath,
+	)
+	command.Dir = scenario.projectRoot
+	var stdout, stderr syncBuffer
+	command.Stdout = &stdout
+	command.Stderr = &stderr
+	if err := command.Start(); err != nil {
+		_ = listener.Close()
+		t.Fatalf("start predecessor process: %v", err)
+	}
+	process.command = command
+	process.stdout = &stdout
+	process.stderr = &stderr
+	t.Cleanup(func() { process.stop(t) })
+	return process
+}
+
+func (scenario *resumeFromRecordingScenario) startSuccessorProcess(
+	t *testing.T,
 ) *support.FunctionalAPIServer {
 	t.Helper()
 	return support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir:                scenario.projectRoot,
 		WaitForServiceModeRuntime: true,
 		Env:                       scenario.env,
-		Args:                      scenario.recordingArgs(name),
+		Args:                      []string{"--resume", scenario.recordingPath, "--record", scenario.successorPath},
 		Edges:                     serviceedges.Edges{ProviderCommandRunner: scenario.runner},
 	})
 }
 
-func (scenario *resumeFromRecordingScenario) recordingArgs(name string) []string {
-	if name == "successor" {
-		return []string{"--resume", scenario.recordingPath, "--record", scenario.successorPath}
-	}
-	return []string{"--record", scenario.recordingPath}
+type resumeFromRecordingChildMessage struct {
+	Type string `json:"type"`
+	URL  string `json:"url,omitempty"`
 }
 
-func (scenario *resumeFromRecordingScenario) awaitKillBoundary(t *testing.T) {
-	t.Helper()
-	scenario.runner.wait(t, scenario.runner.firstReturned, "first provider dispatch")
-	scenario.runner.wait(t, scenario.runner.secondEntered, "second provider dispatch")
-	if got := scenario.runner.CallCount(); got != 2 {
-		t.Fatalf("provider command calls at kill boundary = %d, want 2", got)
+type resumeFromRecordingChildControl struct {
+	connection net.Conn
+	encoder    *json.Encoder
+	mu         sync.Mutex
+}
+
+func newResumeFromRecordingChildControl(connection net.Conn) *resumeFromRecordingChildControl {
+	return &resumeFromRecordingChildControl{
+		connection: connection,
+		encoder:    json.NewEncoder(connection),
 	}
 }
+
+func (control *resumeFromRecordingChildControl) send(message resumeFromRecordingChildMessage) error {
+	control.mu.Lock()
+	defer control.mu.Unlock()
+	return control.encoder.Encode(message)
+}
+
+type resumeFromRecordingChildProcess struct {
+	listener net.Listener
+	command  *exec.Cmd
+	messages chan resumeFromRecordingChildMessage
+	waitDone chan struct{}
+	waitOnce sync.Once
+	waitErr  error
+	stdout   *syncBuffer
+	stderr   *syncBuffer
+}
+
+func (process *resumeFromRecordingChildProcess) acceptMessages() {
+	connection, err := process.listener.Accept()
+	if err != nil {
+		close(process.messages)
+		return
+	}
+	defer connection.Close()
+	decoder := json.NewDecoder(bufio.NewReader(connection))
+	for {
+		var message resumeFromRecordingChildMessage
+		if err := decoder.Decode(&message); err != nil {
+			break
+		}
+		process.messages <- message
+	}
+	close(process.messages)
+}
+
+func (process *resumeFromRecordingChildProcess) waitForReady(t *testing.T) string {
+	t.Helper()
+	message := process.waitFor(t, "ready")
+	if message.URL == "" {
+		t.Fatalf("predecessor readiness message has no URL")
+	}
+	return message.URL
+}
+
+func (process *resumeFromRecordingChildProcess) waitFor(t *testing.T, wantType string) resumeFromRecordingChildMessage {
+	t.Helper()
+	timer := time.NewTimer(resumeFromRecordingTimeout)
+	defer timer.Stop()
+	select {
+	case message, ok := <-process.messages:
+		if !ok {
+			t.Fatalf("predecessor exited before control message %q; stdout=%q stderr=%q", wantType, process.stdout.String(), process.stderr.String())
+		}
+		if message.Type != wantType {
+			t.Fatalf("predecessor control message = %q, want %q", message.Type, wantType)
+		}
+		return message
+	case <-timer.C:
+		t.Fatalf("predecessor did not send control message %q within %s; stdout=%q stderr=%q", wantType, resumeFromRecordingTimeout, process.stdout.String(), process.stderr.String())
+		return resumeFromRecordingChildMessage{}
+	}
+}
+
+func (process *resumeFromRecordingChildProcess) killAndJoin(t *testing.T) {
+	t.Helper()
+	if process.command.ProcessState == nil {
+		if err := process.command.Process.Kill(); err != nil && !errors.Is(err, os.ErrProcessDone) {
+			t.Fatalf("kill predecessor process: %v", err)
+		}
+	}
+	if err := process.join(); err == nil {
+		t.Fatal("predecessor process exited cleanly after an explicit kill")
+	}
+}
+
+func (process *resumeFromRecordingChildProcess) stop(t testing.TB) {
+	t.Helper()
+	if process == nil || process.command == nil {
+		return
+	}
+	if process.command.ProcessState == nil {
+		if err := process.command.Process.Kill(); err != nil && !errors.Is(err, os.ErrProcessDone) {
+			t.Errorf("kill predecessor process during cleanup: %v", err)
+		}
+	}
+	_ = process.join()
+	_ = process.listener.Close()
+}
+
+func (process *resumeFromRecordingChildProcess) join() error {
+	process.waitOnce.Do(func() {
+		process.waitErr = process.command.Wait()
+		close(process.waitDone)
+	})
+	<-process.waitDone
+	return process.waitErr
+}
+
+type syncBuffer struct {
+	mu   sync.Mutex
+	data []byte
+}
+
+func (buffer *syncBuffer) Write(data []byte) (int, error) {
+	buffer.mu.Lock()
+	defer buffer.mu.Unlock()
+	buffer.data = append(buffer.data, data...)
+	return len(data), nil
+}
+
+func (buffer *syncBuffer) String() string {
+	buffer.mu.Lock()
+	defer buffer.mu.Unlock()
+	return string(append([]byte(nil), buffer.data...))
+}
+
+type resumeFromRecordingChildCommandRunner struct {
+	delegate *support.ShapedProviderCommandRunner
+	control  *resumeFromRecordingChildControl
+
+	mu    sync.Mutex
+	calls int
+}
+
+func newResumeFromRecordingChildCommandRunner(
+	control *resumeFromRecordingChildControl,
+) *resumeFromRecordingChildCommandRunner {
+	return &resumeFromRecordingChildCommandRunner{
+		control: control,
+		delegate: support.NewShapedProviderCommandRunner(
+			platformprocess.CommandResult{Stdout: []byte("step-one COMPLETE")},
+			platformprocess.CommandResult{Stdout: []byte("step-two interrupted COMPLETE")},
+		),
+	}
+}
+
+func (runner *resumeFromRecordingChildCommandRunner) Run(
+	ctx context.Context,
+	request platformprocess.CommandRequest,
+) (platformprocess.CommandResult, error) {
+	runner.mu.Lock()
+	runner.calls++
+	call := runner.calls
+	runner.mu.Unlock()
+
+	result, err := runner.delegate.Run(ctx, request)
+	if err != nil {
+		return result, err
+	}
+	switch call {
+	case 1:
+		if err := runner.control.send(resumeFromRecordingChildMessage{Type: "first-returned"}); err != nil {
+			return platformprocess.CommandResult{}, err
+		}
+		return result, nil
+	case 2:
+		if err := runner.control.send(resumeFromRecordingChildMessage{Type: "second-entered"}); err != nil {
+			return platformprocess.CommandResult{}, err
+		}
+		select {
+		case <-ctx.Done():
+			return platformprocess.CommandResult{}, ctx.Err()
+		}
+	default:
+		return result, nil
+	}
+}
+
+var _ platformprocess.CommandRunner = (*resumeFromRecordingChildCommandRunner)(nil)
 
 func (scenario *resumeFromRecordingScenario) captureAtKillBoundary(
 	t *testing.T,
@@ -500,9 +747,6 @@ type resumeFromRecordingCommandRunner struct {
 
 	mu                  sync.Mutex
 	calls               int
-	firstReturned       chan struct{}
-	secondEntered       chan struct{}
-	secondCanceled      chan struct{}
 	thirdEntered        chan struct{}
 	releaseRemaining    chan struct{}
 	releaseRemainingOne sync.Once
@@ -511,13 +755,9 @@ type resumeFromRecordingCommandRunner struct {
 func newResumeFromRecordingCommandRunner() *resumeFromRecordingCommandRunner {
 	return &resumeFromRecordingCommandRunner{
 		delegate: support.NewShapedProviderCommandRunner(
-			platformprocess.CommandResult{Stdout: []byte("step-one COMPLETE")},
-			platformprocess.CommandResult{Stdout: []byte("step-two interrupted COMPLETE")},
 			platformprocess.CommandResult{Stdout: []byte("step-two resumed COMPLETE")},
 		),
-		firstReturned:    make(chan struct{}),
-		secondEntered:    make(chan struct{}),
-		secondCanceled:   make(chan struct{}),
+		calls:            2,
 		thirdEntered:     make(chan struct{}),
 		releaseRemaining: make(chan struct{}),
 	}
@@ -537,18 +777,6 @@ func (runner *resumeFromRecordingCommandRunner) Run(
 		return result, err
 	}
 	switch call {
-	case 1:
-		close(runner.firstReturned)
-		return result, nil
-	case 2:
-		close(runner.secondEntered)
-		select {
-		case <-ctx.Done():
-			close(runner.secondCanceled)
-			return platformprocess.CommandResult{}, ctx.Err()
-		case <-runner.releaseRemaining:
-			return result, nil
-		}
 	case 3:
 		close(runner.thirdEntered)
 		select {
