@@ -2,8 +2,11 @@ package runtimeopening
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"path/filepath"
+	"reflect"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -16,6 +19,155 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
+
+func TestRestoreCurrentBoardStatePreservesDetachedMixedWorkProjection(t *testing.T) {
+	t.Parallel()
+
+	scope := recordings.CanonicalEventScope{FactorySessionID: "~default"}
+	want := factorydefinitions.FactoryWorldState{
+		Tick: 19,
+		WorkRequestsByID: map[string]factorydefinitions.WorkRequestPayload{
+			"request-batch-1": {
+				RequestID: "request-batch-1",
+				WorkItems: []work.FactoryWorkItem{{ID: "work-init"}, {ID: "work-processing"}, {ID: "work-awaiting-ci"}},
+			},
+		},
+		WorkItemsByID: map[string]work.FactoryWorkItem{
+			"work-init": {
+				ID: "work-init", WorkTypeID: "task", State: "init", DisplayName: "Initialize",
+				TraceID: "trace-batch", Content: []work.WorkContentPart{{Type: work.WorkContentPartTypeText, Text: "first"}},
+				Tags: map[string]string{"lane": "one"}, StructuredResult: nil, StructuredResultPresent: true,
+			},
+			"work-processing": {
+				ID: "work-processing", WorkTypeID: "task", State: "PROCESSING", DisplayName: "Process",
+				TraceID: "trace-batch", ParentID: "work-init", StructuredResult: map[string]any{"step": 2},
+			},
+			"work-awaiting-ci": {
+				ID: "work-awaiting-ci", WorkTypeID: "task", State: "awaiting-ci", DisplayName: "Await CI",
+				TraceID: "trace-batch", Content: []work.WorkContentPart{{Type: work.WorkContentPartTypeText, Text: "third"}},
+			},
+		},
+		RelationsByWorkID: map[string][]work.FactoryRelation{
+			"work-processing": {{
+				Type: string(work.WorkRelationDependsOn), TargetWorkID: "work-init", RequiredState: "done",
+			}},
+		},
+		PlaceOccupancyByID: map[string]factorydefinitions.FactoryPlaceOccupancy{
+			"task:init":        {PlaceID: "task:init", WorkItemIDs: []string{"work-init"}},
+			"task:PROCESSING":  {PlaceID: "task:PROCESSING", WorkItemIDs: []string{"work-processing"}},
+			"task:awaiting-ci": {PlaceID: "task:awaiting-ci", WorkItemIDs: []string{"work-awaiting-ci"}},
+		},
+	}
+	payload, err := json.Marshal(want)
+	if err != nil {
+		t.Fatalf("marshal world state: %v", err)
+	}
+	var expected factorydefinitions.FactoryWorldState
+	if err := json.Unmarshal(payload, &expected); err != nil {
+		t.Fatalf("unmarshal expected world state: %v", err)
+	}
+	reader := &historicalBoardReaderStub{
+		result: recordings.HistoricalRecordingQueryResult{
+			WorldState: recordings.WorldStateView{
+				SchemaVersion: recordings.WorldStateViewSchemaV1,
+				Scope:         scope,
+				Payload:       string(payload),
+			},
+		},
+	}
+
+	first, err := restoreCurrentBoardState(reader, "board.json", "~default")
+	if err != nil {
+		t.Fatalf("first restore: %v", err)
+	}
+	if first == nil || !reflect.DeepEqual(*first, expected) {
+		t.Fatalf("first restored state = %#v, want %#v", first, expected)
+	}
+	first.WorkItemsByID["work-init"] = work.FactoryWorkItem{ID: "mutated"}
+
+	second, err := restoreCurrentBoardState(reader, "board.json", "~default")
+	if err != nil {
+		t.Fatalf("second restore: %v", err)
+	}
+	if second == nil || !reflect.DeepEqual(*second, expected) {
+		t.Fatalf("second restored state = %#v, want original state", second)
+	}
+	if reader.calls != 2 {
+		t.Fatalf("history query calls = %d, want 2", reader.calls)
+	}
+	if reader.request.Recording.Scope != scope ||
+		reader.request.Recording.Artifact != "board.json" ||
+		reader.request.Recording.RecordingID != "current-board/~default" {
+		t.Fatalf("history query request = %#v", reader.request)
+	}
+}
+
+func TestRestoreCurrentBoardStateFailsClosedForCorruptHistory(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name string
+		stub historicalBoardReaderStub
+		want string
+	}{
+		{
+			name: "query failure",
+			stub: historicalBoardReaderStub{err: errors.New("corrupt canonical history")},
+			want: "restore current Factory Session board from \"board.json\"",
+		},
+		{
+			name: "incompatible view",
+			stub: historicalBoardReaderStub{result: recordings.HistoricalRecordingQueryResult{
+				WorldState: recordings.WorldStateView{SchemaVersion: "unknown", Scope: recordings.CanonicalEventScope{FactorySessionID: "~default"}, Payload: "{}"},
+			}},
+			want: "incompatible world-state view",
+		},
+		{
+			name: "invalid payload",
+			stub: historicalBoardReaderStub{result: recordings.HistoricalRecordingQueryResult{
+				WorldState: recordings.WorldStateView{SchemaVersion: recordings.WorldStateViewSchemaV1, Scope: recordings.CanonicalEventScope{FactorySessionID: "~default"}, Payload: "not-json"},
+			}},
+			want: "decode world state",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := restoreCurrentBoardState(&tc.stub, "board.json", "~default")
+			if err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("restore error = %v, want substring %q", err, tc.want)
+			}
+		})
+	}
+}
+
+func TestRestoreCurrentBoardStateTreatsMissingArtifactAsInitialOpen(t *testing.T) {
+	t.Parallel()
+
+	state, err := restoreCurrentBoardState(&historicalBoardReaderStub{err: &recordings.HistoricalRecordingQueryError{
+		Kind: recordings.HistoricalRecordingQueryErrorMissingHistory,
+	}}, "board.json", "~default")
+	if err != nil {
+		t.Fatalf("missing history restore error = %v, want nil", err)
+	}
+	if state != nil {
+		t.Fatalf("missing history state = %#v, want nil", state)
+	}
+}
+
+type historicalBoardReaderStub struct {
+	result  recordings.HistoricalRecordingQueryResult
+	err     error
+	calls   int
+	request recordings.HistoricalRecordingQueryRequest
+}
+
+func (stub *historicalBoardReaderStub) QueryHistoricalRecording(
+	request recordings.HistoricalRecordingQueryRequest,
+) (recordings.HistoricalRecordingQueryResult, error) {
+	stub.calls++
+	stub.request = request
+	return stub.result, stub.err
+}
 
 func TestRuntimeActivationUsesEngineServiceForDetachedHandoff(t *testing.T) {
 	t.Parallel()

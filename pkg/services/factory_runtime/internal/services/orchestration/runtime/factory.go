@@ -234,7 +234,10 @@ func New(
 
 	sched := buildRuntimeScheduler(cfg)
 	effectiveLogger := logging.EnsureLogger(cfg.logger)
-	marking, seededRestoredWorkIDs, seededReplayWorkIDsWithRecordedDispatch := buildRuntimeMarking(cfg)
+	marking, seededRestoredWorkIDs, seededReplayWorkIDsWithRecordedDispatch, err := buildRuntimeMarking(cfg)
+	if err != nil {
+		return nil, fmt.Errorf("restore Factory Runtime Work board: %w", err)
+	}
 	sharedTransformer, subs := buildRuntimeSubsystems(cfg, sched, effectiveLogger, newID, seededRestoredWorkIDs)
 	resultBuffer := buffers.NewTypedBuffer[workerexecution.WorkResult](defaultRuntimeBufferSize)
 	effectiveEventHistory := ensureEventHistory(cfg)
@@ -371,7 +374,7 @@ func firstDecisionEnvelopeService(
 // identities inserted into it, and the restored Work identities with recorded
 // dispatch facts. Invalid or unoccupied historical Work is deliberately absent
 // from the first returned set.
-func buildRuntimeMarking(cfg *runtimeConfig) (*petri.Marking, map[string]struct{}, map[string]struct{}) {
+func buildRuntimeMarking(cfg *runtimeConfig) (*petri.Marking, map[string]struct{}, map[string]struct{}, error) {
 	marking := petri.NewMarking(cfg.net.ID)
 	seededRestoredWorkIDs := make(map[string]struct{})
 	seededReplayWorkIDsWithRecordedDispatch := restoredWorkIDsWithRecordedDispatch(cfg.restoredWorldState)
@@ -390,13 +393,17 @@ func buildRuntimeMarking(cfg *runtimeConfig) (*petri.Marking, map[string]struct{
 			marking.AddToken(tok)
 		}
 	}
-	if restoredWorkCount(cfg.restoredWorldState) > 0 {
+	if cfg.restoredWorldState != nil {
 		if !hasConstructionNow {
 			constructionNow = cfg.clock.Now()
 		}
-		seededRestoredWorkIDs = seedRestoredWork(marking, cfg.net, cfg.restoredWorldState, constructionNow, resourcePlaceIDs)
+		var err error
+		seededRestoredWorkIDs, err = seedRestoredWork(marking, cfg.net, cfg.restoredWorldState, constructionNow, resourcePlaceIDs)
+		if err != nil {
+			return nil, nil, nil, err
+		}
 	}
-	return marking, seededRestoredWorkIDs, seededReplayWorkIDsWithRecordedDispatch
+	return marking, seededRestoredWorkIDs, seededReplayWorkIDsWithRecordedDispatch, nil
 }
 func ensureEventHistory(cfg *runtimeConfig) recordings.RuntimeLedger {
 	eventHistory := cfg.eventHistory

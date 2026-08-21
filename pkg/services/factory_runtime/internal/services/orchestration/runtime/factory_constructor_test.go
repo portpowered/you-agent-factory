@@ -233,6 +233,101 @@ func TestNew_WithRestoredActiveDispatchUsesRecordedWorkPlacement(t *testing.T) {
 	}
 }
 
+func TestNew_WithRestoredWorldStateSeedsEachOccupiedWorkExactlyOnce(t *testing.T) {
+	base := time.Date(2026, time.April, 10, 12, 0, 0, 0, time.UTC)
+	net := buildSimpleNet()
+	net.WorkTypes["task"].States = []state.StateDefinition{
+		{Value: "init", Category: state.StateCategoryInitial},
+		{Value: "processing", Category: state.StateCategoryProcessing},
+		{Value: "done", Category: state.StateCategoryTerminal},
+		{Value: "failed", Category: state.StateCategoryFailed},
+	}
+	net.Places = make(map[string]*petri.Place)
+	for _, place := range net.WorkTypes["task"].GeneratePlaces() {
+		net.Places[place.ID] = place
+	}
+	restored := &interfaces.FactoryWorldState{
+		WorkItemsByID: map[string]work.FactoryWorkItem{
+			"work-init": {
+				ID: "work-init", WorkTypeID: "task", State: "init", PlaceID: "task:init",
+				DisplayName: "Initialize", TraceID: "trace-batch",
+			},
+			"work-processing": {
+				ID: "work-processing", WorkTypeID: "task", State: "processing", PlaceID: "task:processing",
+				DisplayName: "Process", TraceID: "trace-batch", ParentID: "work-init",
+			},
+			"work-done": {
+				ID: "work-done", WorkTypeID: "task", State: "done", PlaceID: "task:done",
+				DisplayName: "Done", TraceID: "trace-batch",
+			},
+		},
+		ActiveWorkItemsByID: map[string]work.FactoryWorkItem{
+			"work-init":       {ID: "work-init", WorkTypeID: "task", State: "init", PlaceID: "task:init"},
+			"work-processing": {ID: "work-processing", WorkTypeID: "task", State: "processing", PlaceID: "task:processing"},
+		},
+		TerminalWorkByID: map[string]interfaces.FactoryTerminalWork{
+			"work-done": {WorkItem: work.FactoryWorkItem{ID: "work-done", WorkTypeID: "task", State: "done", PlaceID: "task:done"}, Status: "TERMINAL"},
+		},
+		WorkRequestsByID: map[string]interfaces.WorkRequestPayload{
+			"request-batch": {RequestID: "request-batch", WorkItems: []work.FactoryWorkItem{
+				{ID: "work-init"}, {ID: "work-processing"}, {ID: "work-done"},
+			}},
+		},
+		PlaceOccupancyByID: map[string]interfaces.FactoryPlaceOccupancy{
+			"task:init": {PlaceID: "task:init", WorkItemIDs: []string{"work-init"}},
+			"task:done": {PlaceID: "task:done", WorkItemIDs: []string{"work-done"}},
+		},
+		ActiveDispatches: map[string]interfaces.FactoryWorldDispatch{
+			"dispatch-processing": {
+				DispatchID:  "dispatch-processing",
+				WorkItemIDs: []string{"work-processing"},
+				Inputs: []interfaces.WorkstationInput{{
+					TokenID: "work-processing", PlaceID: "task:processing",
+					WorkItem: &work.FactoryWorkItem{ID: "work-processing"},
+				}},
+			},
+		},
+	}
+
+	f, err := newTestFactory(
+		withNet(net),
+		withClock(platformclock.NewDeterministic(base, time.Second)),
+		withRestoredWorldState(restored),
+	)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	snapshot, err := f.GetEngineStateSnapshot(context.Background())
+	if err != nil {
+		t.Fatalf("GetEngineStateSnapshot: %v", err)
+	}
+	wantByPlace := map[string]string{
+		"task:init":       "work-init",
+		"task:processing": "work-processing",
+		"task:done":       "work-done",
+	}
+	seen := make(map[string]int, len(wantByPlace))
+	for placeID, workID := range wantByPlace {
+		tokenIDs := snapshot.Marking.PlaceTokens[placeID]
+		if len(tokenIDs) != 1 {
+			t.Fatalf("restored token IDs at %q = %#v, want one token", placeID, tokenIDs)
+		}
+		token := snapshot.Marking.Tokens[tokenIDs[0]]
+		if token == nil || token.Color.WorkID != workID {
+			t.Fatalf("restored token at %q = %#v, want Work %q", placeID, token, workID)
+		}
+		seen[token.Color.WorkID]++
+	}
+	if len(seen) != len(wantByPlace) {
+		t.Fatalf("restored Work identities = %#v, want one identity per occupied place", seen)
+	}
+	for workID, count := range seen {
+		if count != 1 {
+			t.Fatalf("restored Work %q appears %d times, want once", workID, count)
+		}
+	}
+}
+
 func TestNew_WithRestoredHumanApprovalDispatchDoesNotRestoreWorkPlacement(t *testing.T) {
 	restored := &interfaces.FactoryWorldState{
 		WorkItemsByID: map[string]work.FactoryWorkItem{
@@ -267,6 +362,51 @@ func TestNew_WithRestoredHumanApprovalDispatchDoesNotRestoreWorkPlacement(t *tes
 	}
 	if tokens := snapshot.Marking.PlaceTokens["task:done"]; len(tokens) != 0 {
 		t.Fatalf("restored pending approval Work token IDs = %#v, want no ordinary Work token", tokens)
+	}
+}
+
+func TestNew_WithIncompatibleRestoredWorldStateFailsClosed(t *testing.T) {
+	tests := []struct {
+		name     string
+		restored *interfaces.FactoryWorldState
+		want     string
+	}{
+		{
+			name: "unknown occupied place",
+			restored: &interfaces.FactoryWorldState{
+				WorkItemsByID: map[string]work.FactoryWorkItem{
+					"work-1": {ID: "work-1", WorkTypeID: "task", State: "missing", PlaceID: "task:missing"},
+				},
+				PlaceOccupancyByID: map[string]interfaces.FactoryPlaceOccupancy{
+					"task:missing": {PlaceID: "task:missing", WorkItemIDs: []string{"work-1"}},
+				},
+			},
+			want: "not present in the current Factory topology",
+		},
+		{
+			name: "active Work without occupancy",
+			restored: &interfaces.FactoryWorldState{
+				WorkItemsByID: map[string]work.FactoryWorkItem{
+					"work-1": {ID: "work-1", WorkTypeID: "task", State: "init", PlaceID: "task:init"},
+				},
+				ActiveWorkItemsByID: map[string]work.FactoryWorkItem{
+					"work-1": {ID: "work-1", WorkTypeID: "task", State: "init", PlaceID: "task:init"},
+				},
+				PlaceOccupancyByID: map[string]interfaces.FactoryPlaceOccupancy{},
+			},
+			want: "has no current place occupancy",
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			_, err := newTestFactory(
+				withNet(buildSimpleNet()),
+				withRestoredWorldState(test.restored),
+			)
+			if err == nil || !strings.Contains(err.Error(), test.want) {
+				t.Fatalf("New error = %v, want substring %q", err, test.want)
+			}
+		})
 	}
 }
 
