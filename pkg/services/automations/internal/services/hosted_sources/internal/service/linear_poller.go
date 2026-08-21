@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"strings"
 
-	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	hostedsources "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/hosted_sources"
 	hostedlinear "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/hosted_sources/internal/linear"
+	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"go.uber.org/zap"
 )
@@ -26,6 +26,7 @@ type LinearPoller struct {
 	runtimeConfig  interfaces.RuntimeConfigLookup
 	workstation    interfaces.FactoryWorkstationConfig
 	worker         *interfaces.FactoryWorkerConfig
+	jitter         retryJitter
 	submitter      Submitter
 }
 
@@ -41,6 +42,7 @@ func NewLinearPoller(
 	runtimeConfig interfaces.RuntimeConfigLookup,
 	workstation interfaces.FactoryWorkstationConfig,
 	worker *interfaces.FactoryWorkerConfig,
+	jitter retryJitter,
 	submitter Submitter,
 ) (*LinearPoller, error) {
 	switch {
@@ -77,6 +79,7 @@ func NewLinearPoller(
 		runtimeConfig:  runtimeConfig,
 		workstation:    workstation,
 		worker:         worker,
+		jitter:         jitter,
 		submitter:      submitter,
 	}, nil
 }

@@ -31,6 +31,7 @@ type Config struct {
 	SecretResolver hostedlinear.SecretResolver
 	Checkpoints    hostedlinear.CheckpointStore
 	LinearEndpoint string
+	Jitter         retryJitter
 }
 
 func startLinearPollerWithConfig(
@@ -61,10 +62,13 @@ func startLinearPollerWithConfig(
 			return err
 		}
 	}
+	if cfg.Jitter == nil {
+		cfg.Jitter = func(base time.Duration) time.Duration { return base }
+	}
 	return StartLinearPoller(
 		ctx, sidecars, cfg.Logger, cfg.Clock, cfg.HTTPClient,
 		cfg.SecretResolver, cfg.Checkpoints, cfg.LinearEndpoint,
-		runtimeConfig, workstation, worker, submitter,
+		runtimeConfig, workstation, worker, cfg.Jitter, submitter,
 	)
 }
 
@@ -317,7 +321,7 @@ func TestNewLinearPoller_RequiresExternalEffects(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			_, err := NewLinearPoller(
 				zap.NewNop(), tc.clock, tc.client, tc.resolver, tc.checkpoints, "", runtimeCfg,
-				interfaces.FactoryWorkstationConfig{}, worker,
+				interfaces.FactoryWorkstationConfig{}, worker, nil,
 				func(context.Context, work.WorkRequest) error { return nil },
 			)
 			if err == nil || !strings.Contains(err.Error(), tc.want) {
@@ -492,9 +496,12 @@ func TestRestartBackoff_ProgressesWithinBounds(t *testing.T) {
 		{attempt: 2, want: 2 * restartBackoffMin},
 		{attempt: 3, want: 4 * restartBackoffMin},
 		{attempt: 4, want: 8 * restartBackoffMin},
-		{attempt: 5, want: restartBackoffMax},
-		{attempt: 6, want: restartBackoffMax},
-		{attempt: 10, want: restartBackoffMax},
+		{attempt: 5, want: 16 * restartBackoffMin},
+		{attempt: 6, want: 32 * restartBackoffMin},
+		{attempt: 10, want: 512 * restartBackoffMin},
+		{attempt: 12, want: 2048 * restartBackoffMin},
+		{attempt: 13, want: restartBackoffMax},
+		{attempt: 14, want: restartBackoffMax},
 	}
 	for _, tc := range cases {
 		tc := tc
@@ -594,7 +601,8 @@ func TestStartLinearPoller_BackoffProgressesAfterRepeatedFailures(t *testing.T) 
 		2 * restartBackoffMin,
 		4 * restartBackoffMin,
 		8 * restartBackoffMin,
-		restartBackoffMax,
+		16 * restartBackoffMin,
+		32 * restartBackoffMin,
 	}
 	for attempt, wantBackoff := range wantBackoffs {
 		waitForObservedLogCount(t, observedLogs, "hosted linear poller restarting", attempt+1, time.Second)

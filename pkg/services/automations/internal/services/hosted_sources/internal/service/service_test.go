@@ -9,8 +9,8 @@ import (
 	"github.com/jonboulle/clockwork"
 	factorydefinitioncomposition "github.com/portpowered/infinite-you/internal/testutil/factorydefinitionfixtures"
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
-	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	hostedlinear "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/hosted_sources/internal/linear"
+	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 )
 
@@ -102,49 +102,49 @@ func TestNewLinearPollerRejectsMissingDependencies(t *testing.T) {
 		{
 			name: "clock",
 			run: func() error {
-				_, err := NewLinearPoller(nil, nil, httpClient, secretResolver, checkpoints, "", runtimeCfg, workstation, worker, submitter)
+				_, err := NewLinearPoller(nil, nil, httpClient, secretResolver, checkpoints, "", runtimeCfg, workstation, worker, nil, submitter)
 				return err
 			},
 		},
 		{
 			name: "http client",
 			run: func() error {
-				_, err := NewLinearPoller(nil, clock, nil, secretResolver, checkpoints, "", runtimeCfg, workstation, worker, submitter)
+				_, err := NewLinearPoller(nil, clock, nil, secretResolver, checkpoints, "", runtimeCfg, workstation, worker, nil, submitter)
 				return err
 			},
 		},
 		{
 			name: "secret resolver",
 			run: func() error {
-				_, err := NewLinearPoller(nil, clock, httpClient, nil, checkpoints, "", runtimeCfg, workstation, worker, submitter)
+				_, err := NewLinearPoller(nil, clock, httpClient, nil, checkpoints, "", runtimeCfg, workstation, worker, nil, submitter)
 				return err
 			},
 		},
 		{
 			name: "checkpoint store",
 			run: func() error {
-				_, err := NewLinearPoller(nil, clock, httpClient, secretResolver, nil, "", runtimeCfg, workstation, worker, submitter)
+				_, err := NewLinearPoller(nil, clock, httpClient, secretResolver, nil, "", runtimeCfg, workstation, worker, nil, submitter)
 				return err
 			},
 		},
 		{
 			name: "runtime config",
 			run: func() error {
-				_, err := NewLinearPoller(nil, clock, httpClient, secretResolver, checkpoints, "", nil, workstation, worker, submitter)
+				_, err := NewLinearPoller(nil, clock, httpClient, secretResolver, checkpoints, "", nil, workstation, worker, nil, submitter)
 				return err
 			},
 		},
 		{
 			name: "worker",
 			run: func() error {
-				_, err := NewLinearPoller(nil, clock, httpClient, secretResolver, checkpoints, "", runtimeCfg, workstation, nil, submitter)
+				_, err := NewLinearPoller(nil, clock, httpClient, secretResolver, checkpoints, "", runtimeCfg, workstation, nil, nil, submitter)
 				return err
 			},
 		},
 		{
 			name: "submitter",
 			run: func() error {
-				_, err := NewLinearPoller(nil, clock, httpClient, secretResolver, checkpoints, "", runtimeCfg, workstation, worker, nil)
+				_, err := NewLinearPoller(nil, clock, httpClient, secretResolver, checkpoints, "", runtimeCfg, workstation, worker, nil, nil)
 				return err
 			},
 		},
