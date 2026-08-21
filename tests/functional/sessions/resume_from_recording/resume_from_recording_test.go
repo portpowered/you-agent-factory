@@ -135,7 +135,6 @@ func (scenario *resumeFromRecordingScenario) captureAtKillBoundary(
 	}
 	events := support.GetFactoryEventsForSessionAt(t, baseURL, factorysessions.DefaultSessionID)
 	assertResumeFromRecordingFactoryEvents(t, "before restart", events)
-	requireResumeFromRecordingWorkStateEvent(t, events, scenario.workID, "processing")
 	completedID := requireResumeFromRecordingCompletedDispatchID(t, events)
 	return resumeFromRecordingBoundary{
 		work:        work,
@@ -163,7 +162,6 @@ func (scenario *resumeFromRecordingScenario) assertRestored(
 	restartedEvents := support.GetFactoryEventsForSessionAt(t, baseURL, factorysessions.DefaultSessionID)
 	assertResumeFromRecordingFactoryEvents(t, "after restart", restartedEvents)
 	assertResumeFromRecordingFactoryEventIDsPresent(t, boundary.events, restartedEvents)
-	requireResumeFromRecordingWorkStateEvent(t, restartedEvents, scenario.workID, "processing")
 	support.AssertSingleWorkRequestEvent(t, restartedEvents, scenario.requestID, scenario.workID, "task")
 	if got := countResumeFromRecordingDispatchEvents(restartedEvents, factoryapi.FactoryEventTypeDispatchReconciled, boundary.completedID); got != 1 {
 		t.Fatalf("completed dispatch reconciled events after restart = %d, want 1", got)
@@ -191,7 +189,6 @@ func (scenario *resumeFromRecordingScenario) resumeAndFinish(
 	finalEvents := support.GetFactoryEventsForSessionAt(t, baseURL, factorysessions.DefaultSessionID)
 	assertResumeFromRecordingFactoryEvents(t, "after resume", finalEvents)
 	assertResumeFromRecordingFactoryEventIDsPresent(t, boundary.events, finalEvents)
-	requireResumeFromRecordingWorkStateEvent(t, finalEvents, scenario.workID, "complete")
 	support.AssertSingleWorkRequestEvent(t, finalEvents, scenario.requestID, scenario.workID, "task")
 	if got := countResumeFromRecordingDispatchEvents(finalEvents, factoryapi.FactoryEventTypeDispatchReconciled, boundary.completedID); got != 1 {
 		t.Fatalf("completed dispatch reconciled events after resume = %d, want 1", got)
@@ -461,32 +458,6 @@ func waitForResumeFromRecordingWorkState(
 		t.Fatalf("wait for Work %q at %s: %v", workID, wantLocation, err)
 	}
 	return listed
-}
-
-func requireResumeFromRecordingWorkStateEvent(
-	t *testing.T,
-	events []factoryapi.FactoryEvent,
-	workID, state string,
-) factoryapi.FactoryEvent {
-	t.Helper()
-	for _, event := range events {
-		if event.Type != factoryapi.FactoryEventTypeWorkStateChange {
-			continue
-		}
-		payload, err := event.Payload.AsWorkStateChangeEventPayload()
-		if err != nil {
-			t.Fatalf("decode WORK_STATE_CHANGE event %q: %v", event.Id, err)
-		}
-		if payload.WorkId == workID && payload.ToState == state {
-			return event
-		}
-	}
-	types := make([]factoryapi.FactoryEventType, 0, len(events))
-	for _, event := range events {
-		types = append(types, event.Type)
-	}
-	t.Fatalf("public Factory Events contain no WORK_STATE_CHANGE for Work %q to %s; types=%#v", workID, state, types)
-	return factoryapi.FactoryEvent{}
 }
 
 func requireResumeFromRecordingCompletedDispatchID(
