@@ -12,8 +12,8 @@ import (
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
 	providerscli "github.com/portpowered/infinite-you/pkg/services/providers/transports/cli"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
-	"github.com/portpowered/infinite-you/pkg/transports/cli/generated"
 	workersessionscli "github.com/portpowered/infinite-you/pkg/services/worker_sessions/transports/cli/worker_sessions"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/generated"
 	"github.com/spf13/cobra"
 )
 
@@ -91,13 +91,16 @@ func TestProductionWorkerSessionsUsesResolvedOwnerInputs(t *testing.T) {
 	root.SetArgs([]string{
 		"--server", "https://factory.example",
 		"--json",
-		"worker-sessions", "list", "--work-id", "work-1", "--scope", "all",
+		"worker-sessions", "list", "--work-id", "work-1", "--scope", "all", "--limit", "7",
 	})
 	if err := root.Execute(); err != nil {
 		t.Fatalf("execute resolved worker-sessions list: %v", err)
 	}
 	if got.WorkID != "work-1" || got.Scope != "all" {
 		t.Fatalf("worker-sessions list config = %+v, want resolved work and scope", got)
+	}
+	if got.Limit != 7 || !got.LimitSet {
+		t.Fatalf("worker-sessions list limit config = %d/%t, want 7/true", got.Limit, got.LimitSet)
 	}
 	if got.Server != "https://factory.example" || !got.JSON {
 		t.Fatalf("worker-sessions list globals = server %q json %t, want resolved values", got.Server, got.JSON)
@@ -304,11 +307,23 @@ func TestWorkerSessionsGeneratedHandlersRejectMissingResolvedValues(t *testing.T
 			},
 		},
 		{
+			name: "list missing limit",
+			values: map[string]any{
+				"you.worker-sessions.list.flag.work-id": "work-1",
+				"you.worker-sessions.list.flag.scope":   "all",
+				"you.worker-sessions.list.flag.state":   []string{"RUNNING"},
+			},
+			call: func(cmd *cobra.Command, values map[string]any) error {
+				return executeGeneratedWorkerSessionsListWithValues(cmd, globals, diagnostics, func(workersessionscli.ListConfig) error { return nil }, values)
+			},
+		},
+		{
 			name: "list missing max results",
 			values: map[string]any{
 				"you.worker-sessions.list.flag.work-id": "work-1",
 				"you.worker-sessions.list.flag.scope":   "all",
 				"you.worker-sessions.list.flag.state":   []string{"RUNNING"},
+				"you.worker-sessions.list.flag.limit":   5,
 			},
 			call: func(cmd *cobra.Command, values map[string]any) error {
 				return executeGeneratedWorkerSessionsListWithValues(cmd, globals, diagnostics, func(workersessionscli.ListConfig) error { return nil }, values)

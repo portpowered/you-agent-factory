@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -84,6 +85,10 @@ func TestWorkerSessionsCLI(t *testing.T) {
 	waitForWorkerSession(t, ctx, process, env, factoryDir, baseURL, failureWorkID)
 	streamWorkerSession(t, ctx, process, env, factoryDir, baseURL, workerSessionsCodexFailureID, "FAILED")
 	assertFailedWorkerSession(t, ctx, process, env, factoryDir, baseURL, failureWorkID)
+	assertFleetWorkerSessionList(t, ctx, process, env, factoryDir, baseURL, map[string]string{
+		successWorkID: "worker-session-cli-success",
+		failureWorkID: "worker-session-cli-failure",
+	}, true)
 	assertMissingWorkerSessionOutcomes(t, ctx, process, env, factoryDir, baseURL)
 	assertMissingWorkerSessionInputs(t, ctx, process, env, factoryDir, baseURL)
 
@@ -107,6 +112,71 @@ func TestWorkerSessionsCLI(t *testing.T) {
 	)
 }
 
+// TestWorkerSessionsFleetListCLIConcurrent observes several sessions held in
+// flight at the same time, then compares the terminal fleet projection through
+// both the CLI and HTTP surfaces. The gate makes the active-state assertion
+// deterministic without relying on timing or the live daemon.
+func TestWorkerSessionsFleetListCLIConcurrent(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
+	defer cancel()
+
+	factoryDir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
+	support.ClearSeedInputs(t, factoryDir)
+	support.WriteAgentConfig(t, factoryDir, "worker", support.BuildModelWorkerConfig(modelprovider.ProviderCodex, "fixture-model"))
+	homeDir := t.TempDir()
+	gate := make(chan struct{})
+	runner := support.NewGatedSuccessCommandRunner("Fleet fixture COMPLETE", gate)
+	api := support.NewProcessAPIServer()
+	process := support.BuildProcess(t, serviceedges.Edges{
+		APIServerStarter:                    api.Start,
+		ProviderCommandRunner:               runner,
+		ProviderSessionResolveHomeDirectory: func() (string, error) { return homeDir, nil },
+	})
+	support.CleanupProcess(t, process)
+
+	env := functionalEnvironment(homeDir)
+	serverInputs := support.FakeInputs(ctx, []string{
+		"you", "run", "--dir", factoryDir, "--continuously", "--with-server", "--quiet",
+	})
+	serverInputs.Input.Env = env
+	serverInputs.Input.WorkingDirectory = factoryDir
+	server := support.StartProcessCommand(t, process, serverInputs.Input)
+	baseURL := api.WaitForURL(t)
+
+	workNames := []string{"worker-session-fleet-alpha", "worker-session-fleet-beta", "worker-session-fleet-gamma"}
+	expectedWorks := make(map[string]string, len(workNames))
+	for _, name := range workNames {
+		workID := submitWork(t, ctx, process, env, factoryDir, baseURL, name)
+		expectedWorks[workID] = name
+	}
+	active := waitForFleetWorkerSessionsState(t, ctx, process, env, factoryDir, baseURL, "RUNNING", len(expectedWorks))
+	for _, session := range active {
+		if session.WorkID == nil || session.WorkName == nil || session.StartedAt == nil || session.DurationMillis == nil {
+			t.Fatalf("active fleet observation omitted Work or timing facts: %#v", session)
+		}
+		if want, ok := expectedWorks[*session.WorkID]; !ok || *session.WorkName != want || session.State != "RUNNING" {
+			t.Fatalf("active fleet observation attribution = %#v, expected Work map %#v", session, expectedWorks)
+		}
+	}
+
+	close(gate)
+	terminal := waitForFleetWorkerSessionsState(t, ctx, process, env, factoryDir, baseURL, "COMPLETED", len(expectedWorks))
+	for _, session := range terminal {
+		if session.WorkID == nil || session.WorkName == nil || session.StartedAt == nil || session.DurationMillis == nil || *session.DurationMillis < 0 {
+			t.Fatalf("terminal fleet observation omitted Work or timing facts: %#v", session)
+		}
+		if want, ok := expectedWorks[*session.WorkID]; !ok || *session.WorkName != want || session.State != "COMPLETED" {
+			t.Fatalf("terminal fleet observation attribution = %#v, expected Work map %#v", session, expectedWorks)
+		}
+	}
+	assertFleetWorkerSessionList(t, ctx, process, env, factoryDir, baseURL, expectedWorks, false)
+
+	server.Stop(t)
+	if err := server.Err(); err != nil {
+		t.Fatalf("server Process.Execute: %v\nstdout:\n%s\nstderr:\n%s", err, serverInputs.Stdout(), serverInputs.Stderr())
+	}
+}
+
 func assertWorkerSessionsCLIHelp(t *testing.T, ctx context.Context, process support.Process, env []string, factoryDir string) {
 	t.Helper()
 	helpInputs := executeCLI(t, ctx, process, env, factoryDir, "worker-sessions")
@@ -114,7 +184,7 @@ func assertWorkerSessionsCLIHelp(t *testing.T, ctx context.Context, process supp
 		"Usage:",
 		"continue    Continue a Worker Session",
 		"invoke      Invoke a direct Worker",
-		"list        List direct or Factory Worker Sessions",
+		"list        List fleet-wide or Work-scoped Worker Sessions",
 		"read        Read a finished Worker Session",
 		"show        Show one Worker Session",
 		"stream      Stream one Worker Session",
@@ -126,6 +196,12 @@ func assertWorkerSessionsCLIHelp(t *testing.T, ctx context.Context, process supp
 	explicitHelpInputs := executeCLI(t, ctx, process, env, factoryDir, "worker-sessions", "--help")
 	if !strings.Contains(explicitHelpInputs.Stdout(), "Usage:") {
 		t.Fatalf("worker-sessions --help omitted usage:\n%s", explicitHelpInputs.Stdout())
+	}
+	listHelpInputs := executeCLI(t, ctx, process, env, factoryDir, "worker-sessions", "list", "--help")
+	for _, marker := range []string{"--work-id", "--state", "--limit", "fleet-wide", "provider-session"} {
+		if !strings.Contains(listHelpInputs.Stdout(), marker) {
+			t.Fatalf("worker-sessions list help omitted %q:\n%s", marker, listHelpInputs.Stdout())
+		}
 	}
 	unknownInputs, unknownErr := executeCLIExpectError(t, ctx, process, env, factoryDir, "worker-sessions", "--unknown")
 	if unknownErr == nil {
@@ -493,10 +569,13 @@ type workerSessionJSON struct {
 	DurationBasis   string               `json:"durationBasis"`
 	Failure         json.RawMessage      `json:"failure"`
 	ProviderSession *providerSessionJSON `json:"providerSession"`
+	StartedAt       *time.Time           `json:"startedAt"`
 	State           string               `json:"state"`
 	TokenUsage      *tokenUsageJSON      `json:"tokenUsage"`
 	Transcript      string               `json:"transcript"`
+	WorkID          *string              `json:"workId"`
 	WorkIDs         []string             `json:"workIds"`
+	WorkName        *string              `json:"workName"`
 	WorkerSessionID string               `json:"workerSessionId"`
 }
 
@@ -659,6 +738,123 @@ func assertFailedWorkerSession(t *testing.T, ctx context.Context, process suppor
 	assertWorkerSessionIdentity(t, shown, workerSessionsCodexFailureID, workID)
 	if shown.State != "FAILED" || (!strings.Contains(strings.ToLower(string(shown.Failure)), "auth") && !strings.Contains(strings.ToLower(string(shown.Failure)), "401")) {
 		t.Fatalf("failed show omitted recorded failure cause: %#v", shown)
+	}
+}
+
+func assertFleetWorkerSessionList(t *testing.T, ctx context.Context, process support.Process, env []string, factoryDir, baseURL string, expectedWorks map[string]string, requireProviderSession bool) {
+	t.Helper()
+	inputs := executeCLI(t, ctx, process, env, factoryDir,
+		"--server", baseURL, "worker-sessions", "list",
+		"--state", "COMPLETED", "--state", "FAILED", "--limit", "10", "--output", "json")
+	var cliList workerSessionListJSON
+	decodeCLIJSON(t, inputs, &cliList)
+	if len(cliList.Sessions) != len(expectedWorks) {
+		t.Fatalf("fleet CLI session count = %d, want %d: %#v", len(cliList.Sessions), len(expectedWorks), cliList)
+	}
+	byID := make(map[string]workerSessionJSON, len(cliList.Sessions))
+	for _, session := range cliList.Sessions {
+		if session.WorkerSessionID == "" || session.WorkID == nil || session.WorkName == nil || session.StartedAt == nil || session.DurationMillis == nil {
+			t.Fatalf("fleet CLI observation omitted required attribution/timing facts: %#v", session)
+		}
+		if requireProviderSession && (session.ProviderSession == nil || session.ProviderSession.Provider != "codex" || session.ProviderSession.Kind != "session_id") {
+			t.Fatalf("fleet CLI observation omitted provider/kind: %#v", session)
+		}
+		if session.State != "COMPLETED" && session.State != "FAILED" {
+			t.Fatalf("fleet CLI observation state = %q, want terminal state", session.State)
+		}
+		if session.State == "FAILED" {
+			var failure struct {
+				Kind string `json:"kind"`
+			}
+			if err := json.Unmarshal(session.Failure, &failure); err != nil || strings.TrimSpace(failure.Kind) == "" {
+				t.Fatalf("fleet CLI failed observation omitted failure kind: %s", session.Failure)
+			}
+		}
+		byID[session.WorkerSessionID] = session
+	}
+	for workID, workName := range expectedWorks {
+		found := false
+		for _, session := range cliList.Sessions {
+			if *session.WorkID == workID && *session.WorkName == workName {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Fatalf("fleet CLI list omitted Work attribution %s/%s: %#v", workID, workName, cliList)
+		}
+	}
+
+	limitedInputs := executeCLI(t, ctx, process, env, factoryDir,
+		"--server", baseURL, "worker-sessions", "list",
+		"--state", "COMPLETED", "--state", "FAILED", "--limit", "1", "--output", "json")
+	var limited workerSessionListJSON
+	decodeCLIJSON(t, limitedInputs, &limited)
+	if len(limited.Sessions) != 1 {
+		t.Fatalf("fleet CLI limit result count = %d, want 1: %#v", len(limited.Sessions), limited)
+	}
+
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, strings.TrimSuffix(baseURL, "/")+"/worker-sessions?state=COMPLETED&state=FAILED&limit=10", nil)
+	if err != nil {
+		t.Fatalf("build fleet HTTP request: %v", err)
+	}
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		t.Fatalf("fleet HTTP list request: %v", err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("fleet HTTP list status = %d, want 200", response.StatusCode)
+	}
+	var apiList factoryapi.ListWorkerSessionsResponse
+	if err := json.NewDecoder(response.Body).Decode(&apiList); err != nil {
+		t.Fatalf("decode fleet HTTP list: %v", err)
+	}
+	if len(apiList.Sessions) != len(cliList.Sessions) {
+		t.Fatalf("fleet HTTP session count = %d, CLI count = %d", len(apiList.Sessions), len(cliList.Sessions))
+	}
+	for _, session := range apiList.Sessions {
+		cliSession, ok := byID[session.WorkerSessionId]
+		if !ok {
+			t.Fatalf("fleet HTTP returned Worker Session %q absent from CLI list", session.WorkerSessionId)
+		}
+		if session.WorkId == nil || session.WorkName == nil || *session.WorkId != *cliSession.WorkID || *session.WorkName != *cliSession.WorkName {
+			t.Fatalf("fleet HTTP/CLI Work attribution mismatch for %s: HTTP=%#v CLI=%#v", session.WorkerSessionId, session, cliSession)
+		}
+	}
+}
+
+func waitForFleetWorkerSessionsState(t *testing.T, ctx context.Context, process support.Process, env []string, factoryDir, baseURL, state string, count int) []workerSessionJSON {
+	t.Helper()
+	deadline := time.NewTimer(20 * time.Second)
+	defer deadline.Stop()
+	ticker := time.NewTicker(10 * time.Millisecond)
+	defer ticker.Stop()
+	var lastOutput string
+	for {
+		inputs := support.FakeInputs(ctx, []string{
+			"you", "--server", baseURL, "worker-sessions", "list", "--state", state, "--limit", "20", "--output", "json",
+		})
+		inputs.Input.Env = append([]string(nil), env...)
+		inputs.Input.WorkingDirectory = factoryDir
+		if err := process.Execute(inputs.Input); err == nil {
+			var listed workerSessionListJSON
+			if decodeErr := json.Unmarshal([]byte(strings.TrimSpace(inputs.Stdout())), &listed); decodeErr == nil {
+				lastOutput = inputs.Stdout()
+				if len(listed.Sessions) >= count {
+					return listed.Sessions
+				}
+			}
+		} else {
+			lastOutput = inputs.Stdout() + "\n" + inputs.Stderr() + "\n" + err.Error()
+		}
+		select {
+		case <-ticker.C:
+		case <-deadline.C:
+			t.Fatalf("timed out waiting for %d fleet Worker Sessions in %s: %s", count, state, lastOutput)
+		case <-ctx.Done():
+			t.Fatalf("waiting for fleet Worker Sessions in %s canceled: %v", state, ctx.Err())
+		}
 	}
 }
 

@@ -237,7 +237,8 @@ a Factory Session or Work correlation:
 
 ```bash
 you --server http://localhost:7437 worker-sessions list
-you --server http://localhost:7437 worker-sessions list --scope direct --state COMPLETED --max-results 25
+you --server http://localhost:7437 worker-sessions list --state RUNNING --state FAILED --limit 25
+you --server http://localhost:7437 worker-sessions list --scope direct --state COMPLETED
 you --server http://localhost:7437 worker-sessions show --worker-session-id <worker-session-id>
 you --server http://localhost:7437 worker-sessions stream --worker-session-id <worker-session-id>
 you --server http://localhost:7437 worker-sessions read --worker-session-id <worker-session-id>
@@ -337,10 +338,22 @@ topic, and observation guidance needed for later `show`, `read`, or `stream`
 operations. A source must be terminal and have a valid server-recorded Provider
 Session that supports continuation.
 
-Top-level list defaults to `direct`; use `--scope factory` or `--scope all` to
-include Factory-originated observations explicitly. Repeat `--state` to filter
-by lifecycle state. `--max-results` bounds one page and `--next-token` resumes
-from the opaque cursor returned in JSON `paginationContext`.
+The unscoped top-level list is the fleet-wide view: it includes direct and
+Factory-originated observations across the process. Use `--scope direct`,
+`--scope factory`, or `--scope all` when an origin-specific view is needed.
+Repeat `--state` to select multiple lifecycle states (the values are combined
+with OR). `--limit` is a positive result bound applied after scope and state
+filters; `--next-token` resumes from the opaque cursor returned in JSON
+`paginationContext`. The legacy `--max-results` flag remains accepted for
+compatibility when `--limit` is omitted.
+
+The human fleet table includes Work name and ID, the stable Worker Session ID,
+provider and provider-session kind, provider-session ID when available, state,
+start time, duration, and exit/failure kind. A `-` means that the observation
+does not expose that fact. The Worker Session ID is the canonical identity for
+`show`, `stream`, and `read`; a provider-session ID is a separate
+provider-issued correlation value. JSON output preserves these identities and
+includes `workId` and `workName` when Work attribution can be resolved.
 
 The existing Work-oriented entry point remains available when a Work
 correlation is what you need:

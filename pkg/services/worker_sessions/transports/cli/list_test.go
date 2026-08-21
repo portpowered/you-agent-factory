@@ -28,7 +28,8 @@ func TestListJSONUsesStableSessionDocumentAndNullOptionals(t *testing.T) {
 				Model: stringPtrForTest("gpt-5.6-luna"), ReasoningEffort: stringPtrForTest("high"),
 				ProviderSessionAvailable: true,
 				ProviderSession:          &factoryapi.WorkerSessionProviderSessionRef{Provider: "codex", Kind: "session_id", Id: "provider-session-1"},
-				WorkIds:                  []string{"work-1"}, State: factoryapi.WorkerSessionObservationState("FAILED"),
+				WorkId:                   stringPtrForTest("work-1"), WorkName: stringPtrForTest("Build API"),
+				WorkIds: []string{"work-1"}, State: factoryapi.WorkerSessionObservationState("FAILED"),
 				DurationBasis:  factoryapi.WorkerSessionObservationDurationBasis("RECORDED_TIMESTAMPS"),
 				Transcript:     factoryapi.WorkerSessionObservationTranscript("AVAILABLE"),
 				DurationMillis: int64Ptr(2500),
@@ -75,7 +76,7 @@ func assertStableSessionDocument(t *testing.T, sessions []map[string]json.RawMes
 	if len(sessions) != 2 {
 		t.Fatalf("session count = %d, want 2", len(sessions))
 	}
-	for _, key := range []string{"providerSession", "model", "reasoningEffort", "turnId", "startedAt", "endedAt", "durationMillis", "tokenUsage", "failure"} {
+	for _, key := range []string{"providerSession", "model", "reasoningEffort", "turnId", "startedAt", "endedAt", "durationMillis", "tokenUsage", "failure", "factorySessionId", "recordingHealth", "recordingHealthReason", "workId", "workName"} {
 		if got, ok := sessions[1][key]; !ok || string(got) != "null" {
 			t.Fatalf("session 2 %s = %s, want explicit null", key, got)
 		}
@@ -101,6 +102,12 @@ func assertStableSessionDocument(t *testing.T, sessions []map[string]json.RawMes
 	if got := string(sessions[0]["failure"]); !strings.Contains(got, `"kind":"INCOMPLETE_OUTPUT"`) {
 		t.Fatalf("session 1 failure = %s, want INCOMPLETE_OUTPUT", got)
 	}
+	if got := string(sessions[0]["workId"]); got != `"work-1"` {
+		t.Fatalf("session 1 workId = %s, want work-1", got)
+	}
+	if got := string(sessions[0]["workName"]); got != `"Build API"` {
+		t.Fatalf("session 1 workName = %s, want Build API", got)
+	}
 }
 
 func TestListHumanRendersLabelsTokensDurationAndFailure(t *testing.T) {
@@ -112,7 +119,9 @@ func TestListHumanRendersLabelsTokensDurationAndFailure(t *testing.T) {
 				Model: stringPtrForTest("gpt-5.6-luna"), ReasoningEffort: stringPtrForTest("high"),
 				ProviderSessionAvailable: true,
 				ProviderSession:          &factoryapi.WorkerSessionProviderSessionRef{Provider: "codex", Kind: "session_id", Id: "provider-session-1"},
-				WorkIds:                  []string{"work-1"}, State: factoryapi.WorkerSessionObservationState("FAILED"),
+				WorkId:                   stringPtrForTest("work-1"), WorkName: stringPtrForTest("Build API"),
+				WorkIds: []string{"work-1"}, State: factoryapi.WorkerSessionObservationState("FAILED"),
+				StartedAt:      timePtr(time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)),
 				DurationMillis: int64Ptr(2500), TokenUsage: &factoryapi.ProviderSessionTokenUsage{TotalTokens: intPtr(17)},
 				Failure: &factoryapi.WorkerSessionFailure{Kind: "WORKERS_EXECUTION_FAILURE", Detail: "safe detail"},
 			},
@@ -128,8 +137,8 @@ func TestListHumanRendersLabelsTokensDurationAndFailure(t *testing.T) {
 		t.Fatalf("List() error = %v", err)
 	}
 	for _, want := range []string{
-		"DIRECT\tPROVIDER\tKIND\tSESSION ID\tWORK ID\tATTEMPT\tSTATE\tTOKENS\tDURATION\tFAILURE\tMODEL\tREASONING EFFORT",
-		"false\tcodex\tsession_id\tprovider-session-1\twork-1\tattempt-1\tFAILED\t17\t2.5s\tWORKERS_EXECUTION_FAILURE\tgpt-5.6-luna\thigh",
+		"WORK NAME", "WORK ID", "WORKER SESSION ID", "PROVIDER", "KIND", "PROVIDER SESSION ID", "STATE", "STARTED", "DURATION", "EXIT/FAILURE KIND",
+		"Build API", "work-1", "worker-session-1", "codex", "session_id", "provider-session-1", "FAILED", "2026-01-02T03:04:05Z", "2.5s", "WORKERS_EXECUTION_FAILURE",
 	} {
 		if !strings.Contains(output.String(), want) {
 			t.Fatalf("output %q missing %q", output.String(), want)
@@ -153,8 +162,9 @@ func TestListHumanRendersAbsentExecutionFactsAsDashes(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("List() error = %v", err)
 	}
-	if !strings.Contains(output.String(), "COMPLETED\t-\t-") {
-		t.Fatalf("output %q missing absent model and reasoning-effort columns", output.String())
+	lines := strings.Split(strings.TrimSpace(output.String()), "\n")
+	if len(lines) != 2 || !strings.Contains(lines[1], "legacy-session") || !strings.Contains(lines[1], "COMPLETED") || strings.Count(lines[1], "-") < 5 {
+		t.Fatalf("output %q missing absent execution facts", output.String())
 	}
 }
 
@@ -276,6 +286,57 @@ func TestListWithoutWorkIDUsesTopLevelIdentityCollection(t *testing.T) {
 	}
 }
 
+func TestListTopLevelSupportsRepeatedStatesAndPositiveLimit(t *testing.T) {
+	var gotQuery map[string][]string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotQuery = r.URL.Query()
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(factoryapi.ListWorkerSessionsResponse{Sessions: []factoryapi.WorkerSessionObservation{}})
+	}))
+	defer server.Close()
+
+	var output bytes.Buffer
+	if err := NewList(testHTTPProtocol(t))(ListConfig{
+		Context: context.Background(), Server: server.URL, Scope: "factory", States: []string{"RUNNING", "FAILED"},
+		Limit: 2, LimitSet: true, MaxResults: 9, NextToken: "cursor-1", OutputFormat: "json", Output: &output,
+	}); err != nil {
+		t.Fatalf("List() error = %v", err)
+	}
+	if got := gotQuery["scope"]; len(got) != 1 || got[0] != "factory" {
+		t.Fatalf("scope query = %#v, want factory", got)
+	}
+	if got := gotQuery["state"]; len(got) != 2 || got[0] != "RUNNING" || got[1] != "FAILED" {
+		t.Fatalf("state query = %#v, want repeated RUNNING/FAILED", got)
+	}
+	if got := gotQuery["limit"]; len(got) != 1 || got[0] != "2" {
+		t.Fatalf("limit query = %#v, want 2", got)
+	}
+	if _, ok := gotQuery["maxResults"]; ok {
+		t.Fatalf("query includes legacy maxResults when limit is set: %#v", gotQuery)
+	}
+	if got := gotQuery["nextToken"]; len(got) != 1 || got[0] != "cursor-1" {
+		t.Fatalf("nextToken query = %#v, want cursor-1", got)
+	}
+}
+
+func TestListRejectsNonPositiveLimit(t *testing.T) {
+	var output bytes.Buffer
+	err := NewList(testHTTPProtocol(t))(ListConfig{
+		Context: context.Background(), Server: "http://127.0.0.1:1", Limit: 0, LimitSet: true, OutputFormat: "json", Output: &output,
+	})
+	var typed *CLIError
+	if !errors.As(err, &typed) || typed.Code != "LIMIT_INVALID" {
+		t.Fatalf("error = %v, want LIMIT_INVALID", err)
+	}
+	var payload map[string]string
+	if decodeErr := json.Unmarshal(output.Bytes(), &payload); decodeErr != nil {
+		t.Fatalf("decode error JSON: %v; output=%q", decodeErr, output.String())
+	}
+	if payload["code"] != "LIMIT_INVALID" {
+		t.Fatalf("error payload = %#v, want LIMIT_INVALID", payload)
+	}
+}
+
 func TestListRejectsUnsupportedOutputFormat(t *testing.T) {
 	var output bytes.Buffer
 	err := NewList(testHTTPProtocol(t))(ListConfig{
@@ -300,5 +361,6 @@ func testHTTPProtocol(t *testing.T) clihttp.Protocol {
 	return protocol
 }
 
-func intPtr(value int) *int       { return &value }
-func int64Ptr(value int64) *int64 { return &value }
+func intPtr(value int) *int              { return &value }
+func int64Ptr(value int64) *int64        { return &value }
+func timePtr(value time.Time) *time.Time { return &value }

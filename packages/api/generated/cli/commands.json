@@ -9549,16 +9549,17 @@
         "documentation": {
           "title": {
             "id": "you.worker-sessions.list.title",
-          "canonicalEnglish": "List direct or Factory Worker Sessions"
+          "canonicalEnglish": "List fleet-wide or Work-scoped Worker Sessions"
           },
           "description": {
             "id": "you.worker-sessions.list.description",
-          "canonicalEnglish": "List authoritative Worker Session observations by stable identity. Omit --work-id to inspect direct sessions through the top-level identity surface; use --output json for one machine-readable sessions document."
+          "canonicalEnglish": "List authoritative Worker Session observations by stable identity. Omit --work-id to inspect the fleet-wide top-level identity surface, or provide --work-id for one Work. The human table shows Work name and ID, Worker Session ID, provider and kind, state, start time, duration, and exit or failure kind; provider-session identity remains distinct from Worker Session identity. Use --output json for stable machine-readable facts."
           }
         },
         "examples": [
           "you worker-sessions list",
-          "you worker-sessions list --scope direct --state COMPLETED --max-results 25",
+          "you worker-sessions list --state RUNNING --state FAILED --limit 25",
+          "you worker-sessions list --scope direct --state COMPLETED",
           "you worker-sessions list --work-id work-123",
           "you worker-sessions list --work-id work-123 --output json"
         ],
@@ -9606,7 +9607,7 @@
         "you.worker-sessions.list.flag.scope": {
           "id": "you.worker-sessions.list.flag.scope",
           "long": "scope",
-          "usage": "top-level observation scope: direct (default), factory, or all",
+          "usage": "top-level observation scope: omit for fleet-wide, or use direct, factory, or all",
           "shorthand": "",
           "aliases": [],
           "scope": "local",
@@ -9617,7 +9618,7 @@
             "all"
           ],
           "required": false,
-          "default": "direct",
+          "default": "",
           "changedDefault": false,
           "noOptionDefault": "",
           "repeatable": false,
@@ -9666,10 +9667,34 @@
             "since": "1.0.0"
           }
         },
+        "you.worker-sessions.list.flag.limit": {
+          "id": "you.worker-sessions.list.flag.limit",
+          "long": "limit",
+          "usage": "positive maximum Worker Session observations after scope and state filters",
+          "shorthand": "",
+          "aliases": [],
+          "scope": "local",
+          "valueType": "int",
+          "required": false,
+          "default": "0",
+          "changedDefault": false,
+          "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "",
+          "completion": "none",
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.worker-sessions.list.flag.limit",
+            "state": "active",
+            "since": "1.0.0"
+          }
+        },
         "you.worker-sessions.list.flag.max-results": {
           "id": "you.worker-sessions.list.flag.max-results",
           "long": "max-results",
-          "usage": "maximum top-level Worker Session observations to return per page",
+          "usage": "legacy maximum top-level Worker Session observations per page; prefer --limit",
           "shorthand": "",
           "aliases": [],
           "scope": "local",
