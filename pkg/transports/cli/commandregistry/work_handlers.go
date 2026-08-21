@@ -17,6 +17,7 @@ const (
 	workListTraceIDInputID            = "you.work.list.flag.trace-id"
 	workListTerminalInputID           = "you.work.list.flag.terminal"
 	workListNonTerminalInputID        = "you.work.list.flag.non-terminal"
+	workListIncludeSupersededInputID  = "you.work.list.flag.all"
 	workListSortByInputID             = "you.work.list.flag.sort-by"
 	workListMaxResultsInputID         = "you.work.list.flag.max-results"
 	workListNextTokenInputID          = "you.work.list.flag.next-token"
@@ -252,6 +253,10 @@ func resolvedListConfig(
 	if err != nil {
 		return workcli.ListConfig{}, err
 	}
+	includeSuperseded, err := inputs.Bool(workListIncludeSupersededInputID)
+	if err != nil {
+		return workcli.ListConfig{}, err
+	}
 	maxResults, err := inputs.Int(workListMaxResultsInputID)
 	if err != nil {
 		return workcli.ListConfig{}, err
@@ -276,7 +281,8 @@ func resolvedListConfig(
 		Context: cmd.Context(), Server: globals.server, SessionID: sessionID,
 		StateName: stateName, StateType: stateType, Name: name,
 		WorkTypeName: workTypeName, TraceID: traceID, Terminal: terminal,
-		NonTerminal: nonTerminal, SortBy: sortBy, MaxResults: maxResults,
+		NonTerminal: nonTerminal, IncludeSuperseded: includeSuperseded,
+		SortBy: sortBy, MaxResults: maxResults,
 		NextToken: nextToken, Counts: counts, JSON: globals.json,
 		Verbose: globals.verbose || globals.debug, Debug: globals.debug,
 		Output: cmd.OutOrStdout(),

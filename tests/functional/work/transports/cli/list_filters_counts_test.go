@@ -139,6 +139,121 @@ func TestWorkListFiltersAndCounts(t *testing.T) {
 	}
 }
 
+// TestWorkListAllAnnotatesSupersededSameName proves that the public CLI keeps
+// the current same-name Work visible by default while --all restores the
+// superseded attempt and identifies its successor in both JSON and human
+// output.
+func TestWorkListAllAnnotatesSupersededSameName(t *testing.T) {
+	factoryDir := support.ScaffoldFactory(t, workListFiltersCountsFactoryConfig())
+	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir:                factoryDir,
+		WaitForServiceModeRuntime: true,
+	})
+
+	process := support.BuildProcess(t, serviceedges.Edges{})
+	support.CleanupProcess(t, process)
+	home := t.TempDir()
+	oldWork := workListFiltersCountsWork{
+		Name:         "retryable-task",
+		WorkID:       "work-retryable-old",
+		WorkTypeName: "task",
+	}
+	newWork := workListFiltersCountsWork{
+		Name:         oldWork.Name,
+		WorkID:       "work-retryable-new",
+		WorkTypeName: oldWork.WorkTypeName,
+	}
+	submitWorkListFiltersCountsBatchWithRequestID(t, process, home, server.URL(),
+		"work-list-superseded-old", []workListFiltersCountsWork{oldWork})
+	moveWorkListFiltersCountsWork(t, process, home, server.URL(), oldWork.WorkID, "failed")
+	submitWorkListFiltersCountsBatchWithRequestID(t, process, home, server.URL(),
+		"work-list-superseded-new", []workListFiltersCountsWork{newWork})
+	freshFailure := workListFiltersCountsWork{
+		Name:         "fresh-failure",
+		WorkID:       "work-fresh-failure",
+		WorkTypeName: "task",
+	}
+	submitWorkListFiltersCountsBatchWithRequestID(t, process, home, server.URL(),
+		"work-list-fresh-failure", []workListFiltersCountsWork{freshFailure})
+	moveWorkListFiltersCountsWork(t, process, home, server.URL(), freshFailure.WorkID, "failed")
+
+	defaultOutput := executeWorkListFiltersCountsCLI(t, process, home, "--server", server.URL(),
+		"--json", "work", "list", "--name", oldWork.Name, "--counts")
+	var defaultList factoryapi.ListWorkResponse
+	if err := json.Unmarshal([]byte(strings.TrimSpace(defaultOutput)), &defaultList); err != nil {
+		t.Fatalf("decode default same-name Work list: %v\noutput:\n%s", err, defaultOutput)
+	}
+	assertWorkListFiltersCountsSummary(t, defaultList, 1, 1)
+	assertWorkListFiltersCountsIDs(t, defaultList, map[string]bool{newWork.WorkID: true})
+	if strings.Contains(defaultOutput, "supersededBy") || strings.Contains(defaultOutput, oldWork.WorkID) {
+		t.Fatalf("default same-name list exposed superseded Work: %s", defaultOutput)
+	}
+
+	terminal := listWorkListFiltersCounts(t, process, home, server.URL(),
+		"--all", "--name", oldWork.Name, "--terminal", "--counts")
+	assertWorkListFiltersCountsSummary(t, terminal, 1, 1)
+	assertWorkListFiltersCountsIDs(t, terminal, map[string]bool{oldWork.WorkID: true})
+	nonTerminal := listWorkListFiltersCounts(t, process, home, server.URL(),
+		"--all", "--name", oldWork.Name, "--non-terminal", "--counts")
+	assertWorkListFiltersCountsSummary(t, nonTerminal, 1, 1)
+	assertWorkListFiltersCountsIDs(t, nonTerminal, map[string]bool{newWork.WorkID: true})
+
+	firstPage := listWorkListFiltersCounts(t, process, home, server.URL(),
+		"--all", "--name", oldWork.Name, "--counts", "--max-results", "1")
+	assertWorkListFiltersCountsSummary(t, firstPage, 2, 1)
+	if firstPage.PaginationContext == nil || firstPage.PaginationContext.NextToken == nil ||
+		strings.TrimSpace(*firstPage.PaginationContext.NextToken) == "" {
+		t.Fatalf("--all same-name page missing next token: %#v", firstPage.PaginationContext)
+	}
+	secondPage := listWorkListFiltersCounts(t, process, home, server.URL(),
+		"--all", "--name", oldWork.Name, "--counts", "--max-results", "1",
+		"--next-token", *firstPage.PaginationContext.NextToken)
+	assertWorkListFiltersCountsSummary(t, secondPage, 2, 1)
+	assertDisjointWorkListFiltersCountsPages(t, firstPage, secondPage)
+
+	freshFailureList := listWorkListFiltersCounts(t, process, home, server.URL(),
+		"--terminal", "--name", freshFailure.Name, "--counts")
+	assertWorkListFiltersCountsSummary(t, freshFailureList, 1, 1)
+	assertWorkListFiltersCountsIDs(t, freshFailureList, map[string]bool{freshFailure.WorkID: true})
+
+	allOutput := executeWorkListFiltersCountsCLI(t, process, home, "--server", server.URL(),
+		"--json", "work", "list", "--all", "--name", oldWork.Name, "--counts")
+	var allList factoryapi.ListWorkResponse
+	if err := json.Unmarshal([]byte(strings.TrimSpace(allOutput)), &allList); err != nil {
+		t.Fatalf("decode --all same-name Work list: %v\noutput:\n%s", err, allOutput)
+	}
+	assertWorkListFiltersCountsSummary(t, allList, 2, 2)
+	seenOld := false
+	seenNew := false
+	for _, item := range allList.Results {
+		workID := support.StringPointerValue(item.WorkId)
+		switch workID {
+		case oldWork.WorkID:
+			seenOld = true
+			if support.StringPointerValue(item.SupersededBy) != newWork.WorkID {
+				t.Fatalf("superseded Work annotation = %q, want %q", support.StringPointerValue(item.SupersededBy), newWork.WorkID)
+			}
+		case newWork.WorkID:
+			seenNew = true
+			if item.SupersededBy != nil {
+				t.Fatalf("current Work has successor annotation: %#v", item.SupersededBy)
+			}
+		default:
+			t.Fatalf("unexpected same-name Work in --all response: %#v", item)
+		}
+	}
+	if !seenOld || !seenNew || !strings.Contains(allOutput, `"supersededBy":"`+newWork.WorkID+`"`) {
+		t.Fatalf("--all response missing old/new annotation: %s", allOutput)
+	}
+
+	human := executeWorkListFiltersCountsCLI(t, process, home, "--server", server.URL(),
+		"work", "list", "--all", "--name", oldWork.Name)
+	if !strings.Contains(human, oldWork.WorkID) || !strings.Contains(human, newWork.WorkID) ||
+		!strings.Contains(human, "Superseded by: "+newWork.WorkID) {
+		t.Fatalf("human --all list missing successor annotation:\n%s", human)
+	}
+}
+
 func workListFiltersCountsFactoryConfig() map[string]any {
 	states := []map[string]string{
 		{"name": "init", "type": "INITIAL"},
@@ -163,6 +278,18 @@ func submitWorkListFiltersCountsBatch(
 	serverURL string,
 	works []workListFiltersCountsWork,
 ) {
+	submitWorkListFiltersCountsBatchWithRequestID(t, process, home, serverURL,
+		workListFiltersCountsRequestID, works)
+}
+
+func submitWorkListFiltersCountsBatchWithRequestID(
+	t *testing.T,
+	process support.Process,
+	home string,
+	serverURL string,
+	requestID string,
+	works []workListFiltersCountsWork,
+) {
 	t.Helper()
 	requests := make([]workListFiltersCountsRequest, 0, len(works))
 	for _, item := range works {
@@ -174,7 +301,7 @@ func submitWorkListFiltersCountsBatch(
 		})
 	}
 	payload, err := json.Marshal(workListFiltersCountsBatch{
-		RequestID: workListFiltersCountsRequestID,
+		RequestID: requestID,
 		Type:      "FACTORY_REQUEST_BATCH",
 		Works:     requests,
 	})

@@ -12,22 +12,23 @@ import (
 func TestBuildListRequest_NormalizesQueryWithoutHTTP(t *testing.T) {
 	nextToken := encodeCursor("work/42")
 	request, err := buildListRequest(ListConfig{
-		Context:      context.Background(),
-		Server:       "https://factory.example",
-		SessionID:    "session/alpha",
-		StateName:    "in review",
-		StateType:    "PROCESSING",
-		Name:         "Plan & review",
-		WorkTypeName: "story/type",
-		TraceID:      "trace+1",
-		SortBy:       "state.type",
-		MaxResults:   25,
-		NextToken:    nextToken,
+		Context:           context.Background(),
+		Server:            "https://factory.example",
+		SessionID:         "session/alpha",
+		StateName:         "in review",
+		StateType:         "PROCESSING",
+		Name:              "Plan & review",
+		WorkTypeName:      "story/type",
+		TraceID:           "trace+1",
+		SortBy:            "state.type",
+		IncludeSuperseded: true,
+		MaxResults:        25,
+		NextToken:         nextToken,
 	}, workdomain.PreparedListRequest{
 		Options: workdomain.ListOptions{
 			StateName: "in review", StateType: "PROCESSING", Name: "Plan & review",
 			WorkTypeName: "story/type", TraceID: "trace+1", SortBy: "state.type",
-			MaxResults: 25, NextToken: nextToken,
+			IncludeSuperseded: true, MaxResults: 25, NextToken: nextToken,
 		},
 		FilterSummary: "state.name,state.type,name,workTypeName,traceId,sortBy",
 	})
@@ -36,14 +37,15 @@ func TestBuildListRequest_NormalizesQueryWithoutHTTP(t *testing.T) {
 	}
 
 	wantQuery := url.Values{
-		"state.name":   {"in review"},
-		"state.type":   {"PROCESSING"},
-		"name":         {"Plan & review"},
-		"workTypeName": {"story/type"},
-		"traceId":      {"trace+1"},
-		"sortBy":       {"state.type"},
-		"maxResults":   {"25"},
-		"nextToken":    {nextToken},
+		"state.name":        {"in review"},
+		"state.type":        {"PROCESSING"},
+		"name":              {"Plan & review"},
+		"workTypeName":      {"story/type"},
+		"traceId":           {"trace+1"},
+		"sortBy":            {"state.type"},
+		"includeSuperseded": {"true"},
+		"maxResults":        {"25"},
+		"nextToken":         {nextToken},
 	}
 	if got := request.endpoint.Path; got != "/factory-sessions/session/alpha/work" {
 		t.Fatalf("endpoint path = %q", got)

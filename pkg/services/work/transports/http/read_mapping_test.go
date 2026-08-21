@@ -23,19 +23,21 @@ func TestListOptionsFromAPI_MapsQueryParameters(t *testing.T) {
 	terminal := factoryapi.WorkListTerminal(true)
 	nonTerminal := factoryapi.WorkListNonTerminal(false)
 	counts := factoryapi.WorkListCounts(true)
+	includeSuperseded := factoryapi.WorkListIncludeSuperseded(true)
 
 	options, err := ListOptionsFromAPI(factoryapi.ListWorkBySessionIdParams{
-		StateName:    &stateName,
-		StateType:    &stateType,
-		Name:         &name,
-		WorkTypeName: &workTypeName,
-		TraceId:      &traceID,
-		Terminal:     &terminal,
-		NonTerminal:  &nonTerminal,
-		SortBy:       &sortBy,
-		MaxResults:   &maxResults,
-		NextToken:    &nextToken,
-		Counts:       &counts,
+		StateName:         &stateName,
+		StateType:         &stateType,
+		Name:              &name,
+		WorkTypeName:      &workTypeName,
+		TraceId:           &traceID,
+		Terminal:          &terminal,
+		NonTerminal:       &nonTerminal,
+		SortBy:            &sortBy,
+		MaxResults:        &maxResults,
+		NextToken:         &nextToken,
+		Counts:            &counts,
+		IncludeSuperseded: &includeSuperseded,
 	})
 	if err != nil {
 		t.Fatalf("ListOptionsFromAPI: %v", err)
@@ -50,7 +52,7 @@ func TestListOptionsFromAPI_MapsQueryParameters(t *testing.T) {
 		options.SortBy != work.SortByStateType ||
 		options.MaxResults != 25 ||
 		options.NextToken != "Y3Vyc29y" ||
-		!options.Counts {
+		!options.Counts || !options.IncludeSuperseded {
 		t.Fatalf("options = %#v, want mapped list query", options)
 	}
 }
@@ -89,6 +91,7 @@ func TestListWorkResponseToAPI_EncodesDetachedReadModels(t *testing.T) {
 			Name:         "Review PRD",
 			WorkTypeName: "prd",
 			State:        &work.State{Name: "init", Type: work.StateTypeInitial},
+			SupersededBy: "work-new",
 		}},
 		MaxResults: 50,
 		NextToken:  "next-page",
@@ -100,6 +103,9 @@ func TestListWorkResponseToAPI_EncodesDetachedReadModels(t *testing.T) {
 		response.PaginationContext.NextToken == nil ||
 		*response.PaginationContext.NextToken != "next-page" {
 		t.Fatalf("response = %#v, want encoded list page", response)
+	}
+	if response.Results[0].SupersededBy == nil || *response.Results[0].SupersededBy != "work-new" {
+		t.Fatalf("supersededBy = %#v, want work-new", response.Results[0].SupersededBy)
 	}
 }
 

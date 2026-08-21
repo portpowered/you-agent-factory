@@ -15,8 +15,8 @@ func TestList_SendsTerminalFilterAndCountsBeforePagination(t *testing.T) {
 	requestToken := encodeCursor("terminal-page")
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		query := r.URL.Query()
-		if query.Get("terminal") != "true" || query.Get("nonTerminal") != "" {
-			t.Fatalf("terminality query = %v, want terminal=true only", query)
+		if query.Get("terminal") != "true" || query.Get("nonTerminal") != "" || query.Get("includeSuperseded") != "true" {
+			t.Fatalf("terminality/supersession query = %v, want terminal=true and includeSuperseded=true only", query)
 		}
 		if query.Get("counts") != "true" || query.Get("maxResults") != "1" || query.Get("nextToken") != requestToken {
 			t.Fatalf("count/pagination query = %v", query)
@@ -27,6 +27,7 @@ func TestList_SendsTerminalFilterAndCountsBeforePagination(t *testing.T) {
 				Name:         "Failed work",
 				WorkId:       stringPtr("work-failed"),
 				WorkTypeName: stringPtr("story"),
+				SupersededBy: stringPtr("work-replacement"),
 				State: &factoryapi.WorkState{
 					Name: "failed",
 					Type: factoryapi.WorkStateTypeFAILED,
@@ -42,19 +43,20 @@ func TestList_SendsTerminalFilterAndCountsBeforePagination(t *testing.T) {
 
 	var output bytes.Buffer
 	err := NewList(testHTTPProtocol(t), testListRequestPreparation{})(ListConfig{
-		Context:    context.Background(),
-		Server:     serverBase(t, server),
-		Terminal:   true,
-		Counts:     true,
-		MaxResults: 1,
-		NextToken:  requestToken,
-		Output:     &output,
+		Context:           context.Background(),
+		Server:            serverBase(t, server),
+		Terminal:          true,
+		IncludeSuperseded: true,
+		Counts:            true,
+		MaxResults:        1,
+		NextToken:         requestToken,
+		Output:            &output,
 	})
 	if err != nil {
 		t.Fatalf("List: %v", err)
 	}
 	want := "Total: 3\nWORK ID\tNAME\tWORK TYPE\tSTATE NAME\tSTATE TYPE\tSTRUCTURED RESULT\tRELATIONS\n" +
-		"work-failed\tFailed work\tstory\tfailed\tFAILED\t\tnone\n"
+		"work-failed\tFailed work\tstory\tfailed\tFAILED\t\tnone\n  Superseded by: work-replacement\n"
 	if got := output.String(); got != want {
 		t.Fatalf("human output = %q, want %q", got, want)
 	}
