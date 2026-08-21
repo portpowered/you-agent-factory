@@ -233,6 +233,96 @@ func TestModelsJoinedInvokeConsumesGenericCacheThroughRootBuildProcess(t *testin
 	}
 }
 
+// TestModelsGenericHTTPInvocationReachesJoinedRootThroughProcess proves the
+// registered generic HTTP route uses the live Models scope and returns named
+// output from the joined root rather than the legacy model-invocation envelope.
+func TestModelsGenericHTTPInvocationReachesJoinedRootThroughProcess(t *testing.T) {
+	t.Parallel()
+
+	modelServer := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		if request.URL.Path == "/health" {
+			writer.WriteHeader(http.StatusOK)
+			return
+		}
+		http.NotFound(writer, request)
+	}))
+	t.Cleanup(modelServer.Close)
+
+	home := t.TempDir()
+	writeGenericBuiltinTTSCache(t, home)
+	writeGenericBuiltinTTSBackendCache(t, home)
+	rejectingNetwork := &rejectingModelAssetHTTP{}
+	hostLauncher := &recordingModelHostLauncher{endpoint: modelServer.URL}
+	protocol := &joinedProtocolNegotiator{}
+	compatibility := &joinedCompatibilityChecker{}
+	assetFiles := functionalModelAssetFileSystem{home: home}
+	config := localModelReadinessAssetsHostFactoryConfig(modelServer.URL)
+	resources := config["resources"].([]map[string]any)
+	resources[0]["model"] = "tts"
+	resources[0]["backend"] = "localai-vibevoice"
+	workers := config["workers"].([]map[string]any)
+	workers[0]["name"] = "tts-worker"
+	workers[0]["model"] = "tts"
+	workers[0]["args"] = []string{"--grpc-endpoint", modelServer.URL}
+	dir := support.ScaffoldFactory(t, config)
+	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir:                dir,
+		WaitForServiceModeRuntime: true,
+		Env:                       functionalHomeEnvironment(home),
+		Edges:                     genericHTTPInvocationEdges(rejectingNetwork, assetFiles, hostLauncher, protocol, compatibility, modelServer),
+	})
+
+	inputs := []factoryapi.ModelInvocationInput{{
+		Name: "text", Modality: factoryapi.ModelInvocationContentTypeText,
+		Content: func() *string { value := "generic HTTP input"; return &value }(),
+	}}
+	response := postFunctionalJSON[factoryapi.GenericModelInvocationResponse](
+		t,
+		server.URL()+"/models/invocations",
+		factoryapi.GenericModelInvocationRequest{
+			Scope: "factory-session:caller-supplied", Holder: "functional-generic-http",
+			Model: factoryapi.ModelReference{NameOrUri: "tts"}, Operation: "TTS", Inputs: &inputs,
+		},
+		"POST /models/invocations",
+	)
+	if len(response.Outputs) != 1 || response.Outputs[0].Name != "audio" || response.Outputs[0].Modality != factoryapi.ModelInvocationContentTypeAudio || response.Outputs[0].Content == nil || *response.Outputs[0].Content != "generic HTTP input" {
+		t.Fatalf("generic HTTP response = %#v, want one named audio output", response)
+	}
+	if rejectingNetwork.Calls() != 0 || hostLauncher.Calls() != 1 || protocol.Calls() == 0 || compatibility.Calls() == 0 {
+		t.Fatalf("generic HTTP effects = network %d, starts %d, protocol %d, compatibility %d; want cache hit and joined lifecycle", rejectingNetwork.Calls(), hostLauncher.Calls(), protocol.Calls(), compatibility.Calls())
+	}
+}
+
+func genericHTTPInvocationEdges(
+	rejectingNetwork *rejectingModelAssetHTTP,
+	assetFiles functionalModelAssetFileSystem,
+	hostLauncher *recordingModelHostLauncher,
+	protocol *joinedProtocolNegotiator,
+	compatibility *joinedCompatibilityChecker,
+	modelServer *httptest.Server,
+) serviceedges.Edges {
+	return serviceedges.Edges{
+		ModelAssetHTTPClient:           rejectingNetwork,
+		ModelAssetMakeDirectories:      assetFiles.MkdirAll,
+		ModelAssetInspectPath:          assetFiles.Stat,
+		ModelAssetResolveHomeDirectory: assetFiles.UserHomeDir,
+		ModelAssetResolveEnvironment:   func(string) string { return "" },
+		ModelAssetWriteFile:            assetFiles.WriteFile,
+		ModelAssetRenamePath:           assetFiles.Rename,
+		ModelAssetRemovePath:           assetFiles.Remove,
+		ModelAssetReadFile:             assetFiles.ReadFile,
+		ModelAssetReadDirectory:        assetFiles.ReadDir,
+		ModelAssetCreateFile:           assetFiles.Create,
+		ModelAssetOpenFile:             assetFiles.Open,
+		ModelHostProcessLauncher:       hostLauncher,
+		ModelHostProtocolNegotiator:    protocol,
+		ModelHostCompatibilityChecker:  compatibility,
+		ModelResolveBackendArtifact:    resolvePinnedTTSBackend,
+		ModelHostHTTPClient:            modelServer.Client(),
+		ModelRuntimeHTTPClient:         modelServer.Client(),
+	}
+}
+
 func TestModelsJoinedInvokeRejectsPinnedBackendBeforeProcessStartThroughRootBuildProcess(t *testing.T) {
 	t.Parallel()
 

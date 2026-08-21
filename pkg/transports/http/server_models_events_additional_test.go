@@ -342,7 +342,7 @@ func TestGenericModelInvocationRouteUsesRegisteredModelsHandler(t *testing.T) {
 		},
 	})
 	recorder := httptest.NewRecorder()
-	body := fmt.Sprintf(`{"scope":%q,"holder":"http-test","model":{"nameOrUri":"asr"},"operation":"ASR","inputs":[{"name":"audio","modality":"AUDIO","content":"fixture"}]}`, modelHTTPTestScope().String())
+	body := `{"scope":"factory-session:caller-supplied","holder":"http-test","model":{"nameOrUri":"asr"},"operation":"ASR","inputs":[{"name":"audio","modality":"AUDIO","content":"fixture"}]}`
 
 	srv.Handler().ServeHTTP(
 		recorder,
@@ -352,7 +352,7 @@ func TestGenericModelInvocationRouteUsesRegisteredModelsHandler(t *testing.T) {
 	if recorder.Code != http.StatusOK {
 		t.Fatalf("generic route status = %d body = %s, want 200", recorder.Code, recorder.Body.String())
 	}
-	if captured.Model.NameOrURI != "asr" || captured.Operation != "ASR" || len(captured.Inputs) != 1 {
+	if captured.Scope != modelHTTPTestScope() || captured.Model.NameOrURI != "asr" || captured.Operation != "ASR" || len(captured.Inputs) != 1 {
 		t.Fatalf("generic root request = %#v, want mapped request", captured)
 	}
 	var response factoryapi.GenericModelInvocationResponse
