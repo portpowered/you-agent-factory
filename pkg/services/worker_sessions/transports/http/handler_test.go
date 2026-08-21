@@ -169,14 +169,6 @@ func assertListObservationUsage(t *testing.T, observation factoryapi.WorkerSessi
 	}
 }
 
-func assertListObservationTurnUsage(t *testing.T, observation factoryapi.WorkerSessionObservation, turnCount, finalContext, peakContext int) {
-	t.Helper()
-	if observation.TurnUsage == nil || observation.TurnUsage.TurnCount != turnCount ||
-		observation.TurnUsage.FinalContextTokens != finalContext || observation.TurnUsage.PeakContextTokens != peakContext {
-		t.Fatalf("turn usage = %#v, want count/final/peak %d/%d/%d", observation.TurnUsage, turnCount, finalContext, peakContext)
-	}
-}
-
 func assertListObservationTiming(t *testing.T, observation factoryapi.WorkerSessionObservation) {
 	t.Helper()
 	if observation.DurationMillis == nil || *observation.DurationMillis != 2500 {
@@ -402,13 +394,6 @@ func assertFailureObservationUsage(t *testing.T, response factoryapi.WorkerSessi
 	t.Helper()
 	if response.TokenUsage == nil || response.TokenUsage.TotalTokens == nil || *response.TokenUsage.TotalTokens != total || response.DurationMillis == nil || *response.DurationMillis != duration {
 		t.Fatalf("usage/duration = %#v/%v, want %d/%d", response.TokenUsage, response.DurationMillis, total, duration)
-	}
-}
-
-func assertFailureObservationTurnUsage(t *testing.T, response factoryapi.WorkerSessionObservation) {
-	t.Helper()
-	if response.TurnUsage == nil || response.TurnUsage.TurnCount != 3 || response.TurnUsage.FinalContextTokens != 450 || response.TurnUsage.PeakContextTokens != 450 {
-		t.Fatalf("turn usage = %#v, want count/final/peak 3/450/450", response.TurnUsage)
 	}
 }
 

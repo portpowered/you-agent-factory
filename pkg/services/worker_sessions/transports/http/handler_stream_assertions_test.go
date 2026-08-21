@@ -6,7 +6,23 @@ import (
 	"testing"
 
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
+
+func assertListObservationTurnUsage(t *testing.T, observation factoryapi.WorkerSessionObservation, turnCount, finalContext, peakContext int) {
+	t.Helper()
+	if observation.TurnUsage == nil || observation.TurnUsage.TurnCount != turnCount ||
+		observation.TurnUsage.FinalContextTokens != finalContext || observation.TurnUsage.PeakContextTokens != peakContext {
+		t.Fatalf("turn usage = %#v, want count/final/peak %d/%d/%d", observation.TurnUsage, turnCount, finalContext, peakContext)
+	}
+}
+
+func assertFailureObservationTurnUsage(t *testing.T, response factoryapi.WorkerSessionObservation) {
+	t.Helper()
+	if response.TurnUsage == nil || response.TurnUsage.TurnCount != 3 || response.TurnUsage.FinalContextTokens != 450 || response.TurnUsage.PeakContextTokens != 450 {
+		t.Fatalf("turn usage = %#v, want count/final/peak 3/450/450", response.TurnUsage)
+	}
+}
 
 func assertRetainedTerminalFrames(t *testing.T, recorder *httptest.ResponseRecorder, service *fakeObservationService) {
 	t.Helper()

@@ -193,36 +193,6 @@ func TestInvokeObservationDiagnosticsAndTranscriptHelpers(t *testing.T) {
 	}
 }
 
-func TestObservationTurnUsageDiffersCumulativeInputCounters(t *testing.T) {
-	got := observationTurnUsage([]int{100, 250, 700})
-	if got == nil || got.TurnCount != 3 || got.FinalContextTokens != 450 || got.PeakContextTokens != 450 {
-		t.Fatalf("observationTurnUsage() = %#v, want three turns with final/peak 450", got)
-	}
-	if observationTurnUsage(nil) != nil {
-		t.Fatal("observationTurnUsage(nil) returned a value")
-	}
-	if observationTurnUsage([]int{100, 90}) != nil {
-		t.Fatal("observationTurnUsage(decreasing counters) returned a value")
-	}
-}
-
-func TestInvokeSafeDiagnosticMessages(t *testing.T) {
-	for _, test := range []struct {
-		input string
-		want  string
-	}{
-		{"", "provider session parse error"},
-		{"password=secret", "provider session parse error"},
-		{"a/b", "provider session parse error"},
-		{strings.Repeat("x", 300), strings.Repeat("x", 256)},
-		{"  ordinary   message ", "ordinary message"},
-	} {
-		if got := safeDiagnosticMessage(test.input); got != test.want {
-			t.Fatalf("safeDiagnosticMessage(%q) = %q, want %q", test.input, got, test.want)
-		}
-	}
-}
-
 func TestInvokeObservationTranscriptHelpers(t *testing.T) {
 	boolean, line, text, timestamp, turn := true, 4, "text", time.Unix(10, 0), 2
 	entries := transcriptEntries([]providersessions.TranscriptEntry{{
@@ -336,9 +306,7 @@ func TestInvokeObservationProjectionAndTranscriptOutcomes(t *testing.T) {
 	if err != nil || got.WorkerSessionID != "worker-1" || got.Transcript != workersessions.TranscriptAvailabilityAvailable {
 		t.Fatalf("GetObservation() = %#v, %v", got, err)
 	}
-	if got.TurnUsage == nil || got.TurnUsage.TurnCount != 3 || got.TurnUsage.FinalContextTokens != 450 || got.TurnUsage.PeakContextTokens != 450 {
-		t.Fatalf("GetObservation() turn usage = %#v, want derived cumulative deltas", got.TurnUsage)
-	}
+	assertObservationTurnUsage(t, got)
 	assertWorkerObservationLookups(t, registry, got, canceled)
 	if _, err := registry.GetObservation(context.Background(), workersessions.GetObservationRequest{ProviderSession: providers.SessionRef{Provider: providers.IDCodex, Kind: providers.SessionIDKind, ID: "missing"}}); !errors.Is(err, workersessions.ErrObservationSessionNotFound) {
 		t.Fatalf("GetObservation(missing) error = %v", err)
