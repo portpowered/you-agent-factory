@@ -2,20 +2,20 @@ package factory_test
 
 import (
 	"context"
+	"fmt"
+	"go/ast"
+	"go/parser"
+	"go/token"
+	"go/types"
 	"os"
-	"os/exec"
 	"reflect"
 	"strings"
 	"testing"
-	"time"
 
 	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 )
 
-const (
-	externalConsumerProofBuildMaxDuration = 60 * time.Second
-	externalConsumerProofBuildCleanupTime = 5 * time.Second
-)
+const externalConsumerProofFactoryImportPath = "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 
 // DEL-RUN-CKPT proof: CaptureCheckpoint, LoadCheckpoint, and RestoreCheckpoint
 // are gone from the published Factory Runtime root, and every external
@@ -33,69 +33,236 @@ func TestServiceDoesNotExposeDeletedCheckpointMethods(t *testing.T) {
 }
 
 // TestExternalConsumerCannotCallDeletedCheckpointMethods is the required
-// external-consumer negative-compilation proof: it invokes the Go compiler
-// against testdata/checkpointdeletionproof, an external-consumer fixture that
-// calls svc.CaptureCheckpoint/LoadCheckpoint/RestoreCheckpoint on a
-// factory.Service, and asserts the build fails with an undefined-method
-// diagnostic naming each removed selector. The fixture lives under a
-// directory named "testdata" specifically so `go build ./...`, `go vet
-// ./...`, and normal package discovery never compile it as part of this
-// module; only this test compiles it, on purpose, expecting failure.
+// external-consumer negative-compilation proof. It type-checks the fixture in
+// testdata/checkpointdeletionproof against the Service declaration parsed from
+// the published package source and requires an undefined-selector diagnostic
+// for every removed method. The fixture stays under testdata so normal package
+// discovery never compiles it; this test is its intentional type-checking
+// entrypoint.
 func TestExternalConsumerCannotCallDeletedCheckpointMethods(t *testing.T) {
-	// Keep the compiler proof serial with the package's other tests. The nested
-	// Go build can contend with the package test binary for the Windows build
-	// cache, so parallel scheduling turns a slow compile into an unbounded wait.
-	buildContext, cancel := externalConsumerProofBuildContext(t)
-	defer cancel()
-
-	cmd := exec.CommandContext(buildContext, "go", "build", "./testdata/checkpointdeletionproof")
-	// Give the nested build private cache and temporary-build directories. The
-	// external proof may run beside other package builds, and sharing those
-	// directories was the observed source of Windows lock contention.
-	cmd.Env = append(os.Environ(), "GOCACHE="+t.TempDir(), "GOTMPDIR="+t.TempDir())
-	// CommandContext kills the go process when the proof deadline expires.
-	// WaitDelay bounds the reap and pipe cleanup so orphaned compiler output
-	// cannot keep CombinedOutput blocked after cancellation.
-	cmd.WaitDelay = externalConsumerProofBuildCleanupTime
-	output, err := cmd.CombinedOutput()
-	if contextErr := buildContext.Err(); contextErr != nil {
-		childDeadline, _ := buildContext.Deadline()
-		t.Fatalf("external-consumer checkpoint deletion proof build ended with %v; child was killed and reaped at its %s deadline: %v\nbuild output:\n%s", contextErr, childDeadline.Format(time.RFC3339Nano), err, output)
-	}
-	if err == nil {
-		t.Fatalf("expected compilation of testdata/checkpointdeletionproof to fail because CaptureCheckpoint/LoadCheckpoint/RestoreCheckpoint no longer exist on factory.Service, but the build succeeded")
-	}
-
-	got := string(output)
-	for _, forbidden := range []string{"CaptureCheckpoint", "LoadCheckpoint", "RestoreCheckpoint"} {
-		if !strings.Contains(got, forbidden) {
-			t.Errorf("expected compiler diagnostic naming removed method %s, got build output:\n%s", forbidden, got)
+	factoryProof := checkpointProofFactoryPackage(t)
+	fixtureDiagnostics := checkpointProofTypeCheckFixture(t, factoryProof, "main.go")
+	deletedMethods := []string{"CaptureCheckpoint", "LoadCheckpoint", "RestoreCheckpoint"}
+	for _, forbidden := range deletedMethods {
+		if !checkpointProofHasUndefinedDiagnostic(fixtureDiagnostics, forbidden) {
+			t.Errorf("expected compiler diagnostic naming removed method %s as undefined, got diagnostics:\n%s", forbidden, checkpointProofDiagnosticsText(fixtureDiagnostics))
 		}
 	}
-	if !strings.Contains(got, "undefined") {
-		t.Errorf("expected an undefined-method compiler diagnostic, got build output:\n%s", got)
+	if len(fixtureDiagnostics) != len(deletedMethods) {
+		t.Errorf("expected exactly one diagnostic per deleted method, got %d:\n%s", len(fixtureDiagnostics), checkpointProofDiagnosticsText(fixtureDiagnostics))
+	}
+
+	positiveDiagnostics := checkpointProofTypeCheckFixture(t, factoryProof, "positive.go")
+	if len(positiveDiagnostics) != 0 {
+		t.Fatalf("expected valid external-consumer ControlPause call to type-check, got diagnostics:\n%s", checkpointProofDiagnosticsText(positiveDiagnostics))
 	}
 }
 
-func externalConsumerProofBuildContext(t *testing.T) (context.Context, context.CancelFunc) {
+type checkpointProofFactory struct {
+	pkg            *types.Package
+	contextPackage *types.Package
+}
+
+func checkpointProofFactoryPackage(t *testing.T) checkpointProofFactory {
 	t.Helper()
 
-	testDeadline, hasTestDeadline := t.Deadline()
-	if !hasTestDeadline {
-		return context.WithTimeout(context.Background(), externalConsumerProofBuildMaxDuration)
+	source, err := os.ReadFile("interfaces.go")
+	if err != nil {
+		t.Fatalf("read Factory Runtime Service source: %v", err)
+	}
+	return checkpointProofFactoryFromSource(t, source)
+}
+
+func checkpointProofFactoryFromSource(t *testing.T, source []byte) checkpointProofFactory {
+	t.Helper()
+
+	fileSet := token.NewFileSet()
+	file, err := parser.ParseFile(fileSet, "interfaces.go", source, parser.ParseComments)
+	if err != nil {
+		t.Fatalf("parse Factory Runtime Service source: %v", err)
+	}
+	serviceSpec := checkpointProofServiceSpec(file)
+	if serviceSpec == nil {
+		t.Fatal("Factory Runtime Service source does not declare Service")
 	}
 
-	now := time.Now()
-	childDeadline := testDeadline.Add(-externalConsumerProofBuildCleanupTime)
-	maxChildDeadline := now.Add(externalConsumerProofBuildMaxDuration)
-	if childDeadline.After(maxChildDeadline) {
-		childDeadline = maxChildDeadline
+	serviceFile := &ast.File{
+		Name: ast.NewIdent("factory"),
+		Decls: []ast.Decl{
+			&ast.GenDecl{Tok: token.IMPORT, Specs: []ast.Spec{checkpointProofContextImport()}},
+			&ast.GenDecl{Tok: token.TYPE, Specs: []ast.Spec{serviceSpec}},
+		},
 	}
-	if !childDeadline.After(now) {
-		t.Fatalf("external-consumer checkpoint deletion proof has no time left for a bounded child build and cleanup before the test deadline")
+	serviceFile.Imports = []*ast.ImportSpec{serviceFile.Decls[0].(*ast.GenDecl).Specs[0].(*ast.ImportSpec)}
+	serviceFile.Decls = append(serviceFile.Decls, checkpointProofServiceStubTypes(serviceSpec)...)
+
+	contextPackage := checkpointProofContextPackage(t)
+	config := types.Config{Importer: checkpointProofImporter{contextPackage: contextPackage}}
+	factoryPackage, err := config.Check(externalConsumerProofFactoryImportPath, fileSet, []*ast.File{serviceFile}, nil)
+	if err != nil {
+		t.Fatalf("type-check Factory Runtime Service source: %v", err)
+	}
+	service := factoryPackage.Scope().Lookup("Service")
+	if service == nil {
+		t.Fatal("type-checker did not publish Factory Runtime Service")
+	}
+	serviceType, ok := service.Type().(*types.Named)
+	if !ok {
+		t.Fatalf("type-checker published Service as %T, want named interface", service.Type())
+	}
+	serviceInterface, ok := serviceType.Underlying().(*types.Interface)
+	if !ok {
+		t.Fatalf("type-checker published Service underlying type as %T, want interface", serviceType.Underlying())
+	}
+	serviceInterface.Complete()
+	if types.NewMethodSet(serviceType).Lookup(nil, "ControlPause") == nil {
+		t.Fatal("type-checker did not retain surviving ControlPause method")
+	}
+	return checkpointProofFactory{pkg: factoryPackage, contextPackage: contextPackage}
+}
+
+func checkpointProofServiceSpec(file *ast.File) *ast.TypeSpec {
+	for _, declaration := range file.Decls {
+		group, ok := declaration.(*ast.GenDecl)
+		if !ok || group.Tok != token.TYPE {
+			continue
+		}
+		for _, specification := range group.Specs {
+			typeSpec, ok := specification.(*ast.TypeSpec)
+			if ok && typeSpec.Name.Name == "Service" {
+				return typeSpec
+			}
+		}
+	}
+	return nil
+}
+
+func checkpointProofContextImport() *ast.ImportSpec {
+	return &ast.ImportSpec{Path: &ast.BasicLit{Kind: token.STRING, Value: `"context"`}}
+}
+
+func checkpointProofContextPackage(t *testing.T) *types.Package {
+	t.Helper()
+
+	fileSet := token.NewFileSet()
+	file, err := parser.ParseFile(fileSet, "context.go", []byte("package context\ntype Context interface{}\n"), 0)
+	if err != nil {
+		t.Fatalf("parse checkpoint proof context package: %v", err)
+	}
+	contextPackage, err := (&types.Config{}).Check("context", fileSet, []*ast.File{file}, nil)
+	if err != nil {
+		t.Fatalf("type-check checkpoint proof context package: %v", err)
+	}
+	return contextPackage
+}
+
+func checkpointProofServiceStubTypes(serviceSpec *ast.TypeSpec) []ast.Decl {
+	selectorIdentifiers := make(map[*ast.Ident]struct{})
+	methodIdentifiers := make(map[*ast.Ident]struct{})
+	ast.Inspect(serviceSpec.Type, func(node ast.Node) bool {
+		switch current := node.(type) {
+		case *ast.SelectorExpr:
+			if qualifier, ok := current.X.(*ast.Ident); ok {
+				selectorIdentifiers[qualifier] = struct{}{}
+			}
+			selectorIdentifiers[current.Sel] = struct{}{}
+		case *ast.Field:
+			for _, name := range current.Names {
+				methodIdentifiers[name] = struct{}{}
+			}
+		}
+		return true
+	})
+
+	stubNames := make(map[string]struct{})
+	ast.Inspect(serviceSpec.Type, func(node ast.Node) bool {
+		identifier, ok := node.(*ast.Ident)
+		if !ok || identifier.Name == "Service" {
+			return true
+		}
+		if _, ok := selectorIdentifiers[identifier]; ok {
+			return true
+		}
+		if _, ok := methodIdentifiers[identifier]; ok {
+			return true
+		}
+		if types.Universe.Lookup(identifier.Name) != nil {
+			return true
+		}
+		stubNames[identifier.Name] = struct{}{}
+		return true
+	})
+
+	declarations := make([]ast.Decl, 0, len(stubNames))
+	for name := range stubNames {
+		declarations = append(declarations, &ast.GenDecl{
+			Tok: token.TYPE,
+			Specs: []ast.Spec{&ast.TypeSpec{
+				Name: ast.NewIdent(name),
+				Type: &ast.StructType{Fields: &ast.FieldList{}},
+			}},
+		})
+	}
+	return declarations
+}
+
+func checkpointProofTypeCheckFixture(t *testing.T, factoryProof checkpointProofFactory, filename string) []error {
+	t.Helper()
+
+	fileSet := token.NewFileSet()
+	source, err := os.ReadFile("testdata/checkpointdeletionproof/" + filename)
+	if err != nil {
+		t.Fatalf("read checkpoint deletion proof fixture %s: %v", filename, err)
+	}
+	file, err := parser.ParseFile(fileSet, filename, source, parser.ParseComments)
+	if err != nil {
+		t.Fatalf("parse checkpoint deletion proof fixture %s: %v", filename, err)
 	}
 
-	return context.WithDeadline(context.Background(), childDeadline)
+	diagnostics := make([]error, 0)
+	config := types.Config{
+		Importer: checkpointProofImporter{
+			factoryPackage: factoryProof.pkg,
+			contextPackage: factoryProof.contextPackage,
+		},
+		Error: func(err error) { diagnostics = append(diagnostics, err) },
+	}
+	_, _ = config.Check("checkpointdeletionproof", fileSet, []*ast.File{file}, nil)
+	return diagnostics
+}
+
+type checkpointProofImporter struct {
+	factoryPackage *types.Package
+	contextPackage *types.Package
+}
+
+func (i checkpointProofImporter) Import(path string) (*types.Package, error) {
+	switch path {
+	case externalConsumerProofFactoryImportPath:
+		return i.factoryPackage, nil
+	case "context":
+		return i.contextPackage, nil
+	default:
+		return nil, fmt.Errorf("checkpoint proof importer cannot load %q", path)
+	}
+}
+
+func checkpointProofHasUndefinedDiagnostic(diagnostics []error, method string) bool {
+	for _, diagnostic := range diagnostics {
+		message := diagnostic.Error()
+		if strings.Contains(message, "svc."+method+" undefined") && strings.Contains(message, "factory.Service") {
+			return true
+		}
+	}
+	return false
+}
+
+func checkpointProofDiagnosticsText(diagnostics []error) string {
+	messages := make([]string, 0, len(diagnostics))
+	for _, diagnostic := range diagnostics {
+		messages = append(messages, diagnostic.Error())
+	}
+	return strings.Join(messages, "\n")
 }
 
 // externalConsumerPeer implements factory.Service using only the surviving
