@@ -504,6 +504,12 @@ jobs:
         with:
           go-version-file: go.mod
           cache: true
+          # Give the complete lint inventory a lane-specific key so its module
+          # and build data are saved and reused by later measurements.
+          cache-dependency-path: |
+            go.mod
+            go.sum
+            .github/workflows/ci.yml
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: ${{ env.BUN_VERSION }}
