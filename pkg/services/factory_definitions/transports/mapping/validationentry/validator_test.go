@@ -30,14 +30,6 @@ func testFactoryDefinitionValidator(
 	return validator
 }
 
-func (v *programmableFactoryValidator) Validate(
-	context.Context,
-	*factorydefinitions.FactoryConfig,
-	factorydefinitions.WorkflowSourceReader,
-) factorydefinitions.ValidationResult {
-	return v.validateResult
-}
-
 func (v *programmableFactoryValidator) ValidateDefinition(
 	_ context.Context,
 	request factorydefinitions.DefinitionValidationRequest,
