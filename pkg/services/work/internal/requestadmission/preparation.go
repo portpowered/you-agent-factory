@@ -118,6 +118,22 @@ func (s requestPreparationService) PrepareWorkRequest(
 			))
 		}
 		request.Works[index].Content = content
+		payload, err := workPayloadForAdmissionSize(
+			request.Works[index].Content,
+			request.Works[index].Payload,
+		)
+		if err != nil {
+			return Request{}, requestPreparationError(fmt.Errorf(
+				"works[%d].payload: %w", index, err,
+			))
+		}
+		if err := validateWorkPayloadSize(
+			request.Works[index].Name,
+			request.Works[index].WorkID,
+			payload,
+		); err != nil {
+			return Request{}, requestPreparationError(err)
+		}
 	}
 	return request, nil
 }

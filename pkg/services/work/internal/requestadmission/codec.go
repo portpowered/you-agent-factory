@@ -51,6 +51,13 @@ func (factoryRequestBatchPreparation) PrepareFactoryRequestBatch(
 		if err := validateBatchWorkName(workNames, index, work); err != nil {
 			return PreparedFactoryRequestBatch{}, err
 		}
+		payload, err := workPayloadForAdmissionSize(work.Content, work.Payload)
+		if err != nil {
+			return PreparedFactoryRequestBatch{}, fmt.Errorf("work_request: works[%d] (%q) payload: %w", index, work.Name, err)
+		}
+		if err := validateWorkPayloadSize(work.Name, work.WorkID, payload); err != nil {
+			return PreparedFactoryRequestBatch{}, err
+		}
 		workIndex[work.Name] = normalizedBatchWork{}
 	}
 	for index, relation := range request.Relations {

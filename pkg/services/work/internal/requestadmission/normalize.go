@@ -71,6 +71,9 @@ func NormalizeWorkRequest(req Request, opts NormalizeOptions) ([]SubmitRequest, 
 		if err != nil {
 			return nil, fmt.Errorf("work_request: works[%d] (%q) has invalid content/payload: %w", i, work.Name, err)
 		}
+		if err := validateWorkPayloadSize(work.Name, workIndex[work.Name].id, payload); err != nil {
+			return nil, err
+		}
 
 		itemCurrentChainingTraceID := ResolveWorkRequestCurrentChainingTraceID(work.CurrentChainingTraceID, work.TraceID)
 		if itemCurrentChainingTraceID == "" {
