@@ -527,6 +527,19 @@ jobs:
           }
           console.log(`Backend Lint selected at ${selection.headSha}`);
           NODE
+      - name: Select Backend Lint runner parallelism
+        id: backend-lint-parallelism
+        shell: bash
+        run: |
+          runner_cpus="$(nproc 2>/dev/null || true)"
+          RUNNER_LOGICAL_CPUS="$runner_cpus" node --input-type=module <<'NODE'
+          import { appendFileSync } from 'node:fs';
+          import { resolveRunnerParallelism } from './scripts/ci/runner-parallelism.mjs';
+
+          const { logicalCPUs, jobs } = resolveRunnerParallelism(process.env.RUNNER_LOGICAL_CPUS);
+          console.log(`Backend Lint CI runner: logical_cpus=${logicalCPUs} jobs=${jobs}`);
+          appendFileSync(process.env.GITHUB_OUTPUT, `jobs=${jobs}\n`);
+          NODE
       - name: Install UI dependencies for canonical UI lint targets
         if: always()
         run: make ui-deps
@@ -542,6 +555,8 @@ jobs:
           status=${PIPESTATUS[0]}
           printf 'exit_code=%s\n' "$status" >> "$GITHUB_OUTPUT"
           exit "$status"
+        env:
+          LINT_JOBS: ${{ steps.backend-lint-parallelism.outputs.jobs }}
       - name: Render Backend Lint summary and gate
         if: always()
         run: >-
