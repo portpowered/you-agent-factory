@@ -593,6 +593,11 @@ func recordingHealthLoadError(err error) error {
 		return workersessions.ErrObservationCanceled
 	case errors.Is(err, os.ErrNotExist):
 		return nil
+	case errors.Is(err, recordings.ErrWorkerRecordingIncomplete):
+		// A live recording is a valid partial source while its terminal
+		// snapshot is still being persisted. Keep the projected Worker Session
+		// facts readable and let the live registry provide any newer fields.
+		return nil
 	case isCorruptWorkerRecordingError(err):
 		return fmt.Errorf("%w: %v", workersessions.ErrObservationRecordingCorrupt, err)
 	default:
@@ -604,11 +609,14 @@ func workerRecordingHealthMap(
 	snapshot recordings.WorkerRecordingSnapshot,
 	recordingID string,
 ) (map[string]workerRecordingHealth, error) {
-	if snapshot.RecordingID != recordingID {
+	if snapshot.RecordingID != "" && snapshot.RecordingID != recordingID {
 		return nil, fmt.Errorf("%w: recording identity %q does not match %q", workersessions.ErrObservationRecordingCorrupt, snapshot.RecordingID, recordingID)
 	}
 	if len(snapshot.Sessions) == 0 {
-		return nil, fmt.Errorf("%w: recording contains no Worker Session history", workersessions.ErrObservationRecordingCorrupt)
+		// The capture may be visible to the runtime before its first Worker
+		// Session record is durably written. An empty snapshot is therefore an
+		// empty health sidecar, not a malformed recording.
+		return map[string]workerRecordingHealth{}, nil
 	}
 	health := make(map[string]workerRecordingHealth, len(snapshot.Sessions))
 	for _, session := range snapshot.Sessions {

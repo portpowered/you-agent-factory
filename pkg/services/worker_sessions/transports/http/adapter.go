@@ -52,6 +52,10 @@ type sessionScopeResolver interface {
 	GetFactorySession(context.Context, string) (factorysessions.SessionProjection, error)
 }
 
+type sessionObservationResolver interface {
+	WorkerSessionsObservationForSession(string) workersessions.ObservationService
+}
+
 type workerSessionScope struct {
 	effectiveID  string
 	defaultScope bool
@@ -95,7 +99,11 @@ func (a *Adapter) GetWorkerSessionObservation(
 	if err != nil {
 		return factoryapi.WorkerSessionObservation{}, fmt.Errorf("resolve Factory Session scope: %w", err)
 	}
-	observation, err := a.observations.GetObservation(ctx, workersessions.GetObservationRequest{
+	observations := a.observationsForScope(scope)
+	if observations == nil {
+		return factoryapi.WorkerSessionObservation{}, errors.New("Worker Sessions service is required")
+	}
+	observation, err := observations.GetObservation(ctx, workersessions.GetObservationRequest{
 		ProviderSession: providers.SessionRef{Provider: providers.ID(provider), Kind: kind, ID: id},
 	})
 	if err != nil {
@@ -135,7 +143,11 @@ func (a *Adapter) GetWorkerSessionObservationByWorkerSessionID(
 	if err != nil {
 		return factoryapi.WorkerSessionObservation{}, fmt.Errorf("resolve Factory Session scope: %w", err)
 	}
-	observation, err := a.observations.GetObservationByWorkerSessionID(ctx, workersessions.GetObservationByWorkerSessionIDRequest{
+	observations := a.observationsForScope(scope)
+	if observations == nil {
+		return factoryapi.WorkerSessionObservation{}, errors.New("Worker Sessions service is required")
+	}
+	observation, err := observations.GetObservationByWorkerSessionID(ctx, workersessions.GetObservationByWorkerSessionIDRequest{
 		WorkerSessionID: workerSessionID,
 	})
 	if err != nil {
@@ -175,7 +187,11 @@ func (a *Adapter) ReadWorkerSessionTranscript(
 	if err != nil {
 		return factoryapi.WorkerSessionTranscriptResponse{}, fmt.Errorf("resolve Factory Session scope: %w", err)
 	}
-	observation, err := a.observations.GetObservation(ctx, workersessions.GetObservationRequest{
+	observations := a.observationsForScope(scope)
+	if observations == nil {
+		return factoryapi.WorkerSessionTranscriptResponse{}, errors.New("Worker Sessions service is required")
+	}
+	observation, err := observations.GetObservation(ctx, workersessions.GetObservationRequest{
 		ProviderSession: providers.SessionRef{Provider: providers.ID(provider), Kind: kind, ID: id},
 	})
 	if err != nil {
@@ -184,7 +200,7 @@ func (a *Adapter) ReadWorkerSessionTranscript(
 	if _, err := scopeWorkerSessionObservation(observation, scope); err != nil {
 		return factoryapi.WorkerSessionTranscriptResponse{}, fmt.Errorf("scope Worker Session observation: %w", err)
 	}
-	result, err := a.observations.ReadTranscript(ctx, workersessions.ReadTranscriptRequest{
+	result, err := observations.ReadTranscript(ctx, workersessions.ReadTranscriptRequest{
 		ProviderSession: providers.SessionRef{Provider: providers.ID(provider), Kind: kind, ID: id},
 	})
 	if err != nil {
@@ -223,7 +239,11 @@ func (a *Adapter) ReadWorkerSessionTranscriptByWorkerSessionID(
 	if err != nil {
 		return factoryapi.WorkerSessionTranscriptResponse{}, fmt.Errorf("resolve Factory Session scope: %w", err)
 	}
-	observation, err := a.observations.GetObservationByWorkerSessionID(ctx, workersessions.GetObservationByWorkerSessionIDRequest{
+	observations := a.observationsForScope(scope)
+	if observations == nil {
+		return factoryapi.WorkerSessionTranscriptResponse{}, errors.New("Worker Sessions service is required")
+	}
+	observation, err := observations.GetObservationByWorkerSessionID(ctx, workersessions.GetObservationByWorkerSessionIDRequest{
 		WorkerSessionID: workerSessionID,
 	})
 	if err != nil {
@@ -232,7 +252,7 @@ func (a *Adapter) ReadWorkerSessionTranscriptByWorkerSessionID(
 	if _, err := scopeWorkerSessionObservation(observation, scope); err != nil {
 		return factoryapi.WorkerSessionTranscriptResponse{}, fmt.Errorf("scope Worker Session observation: %w", err)
 	}
-	result, err := a.observations.ReadTranscript(ctx, workersessions.ReadTranscriptRequest{
+	result, err := observations.ReadTranscript(ctx, workersessions.ReadTranscriptRequest{
 		WorkerSessionID: workerSessionID,
 	})
 	if err != nil {
@@ -285,18 +305,22 @@ func (a *Adapter) StreamWorkerSessionEventsWithCursor(
 	if err != nil {
 		return factoryapi.WorkerSessionObservation{}, workersessions.ObservationSubscription{}, fmt.Errorf("resolve Factory Session scope: %w", err)
 	}
+	observations := a.observationsForScope(scope)
+	if observations == nil {
+		return factoryapi.WorkerSessionObservation{}, workersessions.ObservationSubscription{}, errors.New("Worker Sessions service is required")
+	}
 
 	request := workersessions.GetObservationRequest{
 		ProviderSession: providers.SessionRef{Provider: providers.ID(provider), Kind: kind, ID: id},
 	}
-	observation, err := a.observations.GetObservation(ctx, request)
+	observation, err := observations.GetObservation(ctx, request)
 	if err != nil {
 		return factoryapi.WorkerSessionObservation{}, workersessions.ObservationSubscription{}, fmt.Errorf("get Worker Session observation: %w", err)
 	}
 	if observation, err = scopeWorkerSessionObservation(observation, scope); err != nil {
 		return factoryapi.WorkerSessionObservation{}, workersessions.ObservationSubscription{}, fmt.Errorf("scope Worker Session observation: %w", err)
 	}
-	subscription, err := a.observations.StreamObservations(ctx, workersessions.StreamObservationsRequest{
+	subscription, err := observations.StreamObservations(ctx, workersessions.StreamObservationsRequest{
 		ProviderSession: request.ProviderSession,
 		// Carry the documented default explicitly so the canonical ledger
 		// receives the bounded stream policy at the transport boundary.
@@ -352,7 +376,11 @@ func (a *Adapter) StreamWorkerSessionEventsByWorkerSessionIDWithCursor(
 	if err != nil {
 		return factoryapi.WorkerSessionObservation{}, workersessions.ObservationSubscription{}, fmt.Errorf("resolve Factory Session scope: %w", err)
 	}
-	observation, err := a.observations.GetObservationByWorkerSessionID(ctx, workersessions.GetObservationByWorkerSessionIDRequest{
+	observations := a.observationsForScope(scope)
+	if observations == nil {
+		return factoryapi.WorkerSessionObservation{}, workersessions.ObservationSubscription{}, errors.New("Worker Sessions service is required")
+	}
+	observation, err := observations.GetObservationByWorkerSessionID(ctx, workersessions.GetObservationByWorkerSessionIDRequest{
 		WorkerSessionID: workerSessionID,
 	})
 	if err != nil {
@@ -361,7 +389,7 @@ func (a *Adapter) StreamWorkerSessionEventsByWorkerSessionIDWithCursor(
 	if observation, err = scopeWorkerSessionObservation(observation, scope); err != nil {
 		return factoryapi.WorkerSessionObservation{}, workersessions.ObservationSubscription{}, fmt.Errorf("scope Worker Session observation: %w", err)
 	}
-	subscription, err := a.observations.StreamObservationsByWorkerSessionID(ctx, workersessions.StreamObservationsByWorkerSessionIDRequest{
+	subscription, err := observations.StreamObservationsByWorkerSessionID(ctx, workersessions.StreamObservationsByWorkerSessionIDRequest{
 		WorkerSessionID: workerSessionID,
 		Limit:           workersessions.DefaultObservationStreamLimit,
 		ReplayOnly:      replayOnly,
@@ -605,7 +633,11 @@ func (a *Adapter) ListWorkerSessions(
 		return factoryapi.ListWorkerSessionsResponse{}, err
 	}
 
-	result, err := a.observations.ListObservations(ctx, workersessions.ListObservationsRequest{WorkID: workID})
+	observations := a.observationsForScope(scope)
+	if observations == nil {
+		return factoryapi.ListWorkerSessionsResponse{}, errors.New("Worker Sessions service is required")
+	}
+	result, err := observations.ListObservations(ctx, workersessions.ListObservationsRequest{WorkID: workID})
 	if err != nil {
 		if errors.Is(err, workersessions.ErrObservationWorkNotFound) {
 			return factoryapi.ListWorkerSessionsResponse{Sessions: []factoryapi.WorkerSessionObservation{}}, nil
@@ -783,6 +815,18 @@ func (a *Adapter) resolveWorkerSessionScope(ctx context.Context, sessionID strin
 	}
 	scope.defaultScope = projection.Context.Session != nil && projection.Context.Session.IsDefault
 	return scope, nil
+}
+
+func (a *Adapter) observationsForScope(scope workerSessionScope) observationService {
+	if a == nil {
+		return nil
+	}
+	if resolver, ok := a.resolver.(sessionObservationResolver); ok {
+		if observations := resolver.WorkerSessionsObservationForSession(scope.effectiveID); observations != nil {
+			return observations
+		}
+	}
+	return a.observations
 }
 
 func scopeWorkerSessionObservation(

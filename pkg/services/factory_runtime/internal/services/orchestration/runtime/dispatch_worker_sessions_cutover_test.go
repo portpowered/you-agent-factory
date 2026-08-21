@@ -929,12 +929,26 @@ func TestRecordedObservationMergeBranches(t *testing.T) {
 		TokenUsage: &workersessions.TokenUsage{InputTokens: intPointerForRecordedTest(7)}, Transcript: workersessions.TranscriptAvailabilityAvailable, Parse: workersessions.ParseDiagnostics{EventCount: 2},
 		Failure: &workersessions.FailureCause{Kind: workersessions.FailureCauseWorkersExecutionFailure, Detail: "live failure"},
 	}
-	merged := mergeRecordedObservations([]workersessions.Observation{{WorkerSessionID: "worker-1"}}, []workersessions.Observation{liveObservation})
+	recorded := []workersessions.Observation{{WorkerSessionID: "worker-1"}}
+	merged := mergeRecordedObservations(recorded, []workersessions.Observation{liveObservation})
 	if len(merged) != 1 || !merged[0].ProviderSessionAvailable || merged[0].ProviderSession.ID != "live-session" || merged[0].TokenUsage == nil || *merged[0].TokenUsage.InputTokens != 7 || merged[0].Transcript != workersessions.TranscriptAvailabilityAvailable || merged[0].Parse.EventCount != 2 || merged[0].Failure == nil {
 		t.Fatalf("mergeRecordedObservations() = %#v", merged)
 	}
-	if mergeRecordedObservations(nil, []workersessions.Observation{liveObservation}) != nil {
-		t.Fatal("mergeRecordedObservations(empty recorded) returned non-nil")
+	if recorded[0].ProviderSessionAvailable || recorded[0].TokenUsage != nil || recorded[0].Failure != nil {
+		t.Fatalf("mergeRecordedObservations() mutated recorded input = %#v", recorded)
+	}
+
+	liveOnly := workersessions.Observation{WorkerSessionID: "worker-live-only", WorkIDs: []string{"work-live-only"}}
+	liveOnlyResult := mergeRecordedObservations([]workersessions.Observation{{WorkerSessionID: "worker-recorded-only"}}, []workersessions.Observation{liveOnly})
+	if len(liveOnlyResult) != 2 || liveOnlyResult[0].WorkerSessionID != "worker-live-only" || liveOnlyResult[1].WorkerSessionID != "worker-recorded-only" {
+		t.Fatalf("mergeRecordedObservations(live-only) = %#v, want both observations in deterministic order", liveOnlyResult)
+	}
+	liveOnlyResult[0].WorkIDs[0] = "mutated"
+	if liveOnly.WorkIDs[0] != "work-live-only" {
+		t.Fatal("mergeRecordedObservations(live-only) returned a source-owned WorkIDs slice")
+	}
+	if got := mergeRecordedObservations(nil, []workersessions.Observation{liveObservation}); len(got) != 1 || got[0].WorkerSessionID != liveObservation.WorkerSessionID {
+		t.Fatalf("mergeRecordedObservations(empty recorded) = %#v, want live observation", got)
 	}
 }
 

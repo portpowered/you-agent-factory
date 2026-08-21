@@ -108,9 +108,17 @@ func assembleRuntimeProducts(
 	workerPrompts, _ := workerService.(workers.PromptTemplates)
 	liveControl, _ := factorySessionGateway.(factorysessions.LiveControlService)
 	var workerSessions workersessions.ObservationService
-	if provider, ok := factoryRuntime.(workerSessionsObservationForSessionProvider); ok {
+	// The process Factory Sessions root resolves its current selected runtime,
+	// which is not necessarily the runtime being opened here. Prefer the
+	// session's freshly assembled runtime instance so its observation decorator
+	// retains the matching Worker Sessions registry and canonical event ledger.
+	observationRuntime := factoryRuntime
+	if startup != nil && startup.RuntimeService() != nil {
+		observationRuntime = startup.RuntimeService()
+	}
+	if provider, ok := observationRuntime.(workerSessionsObservationForSessionProvider); ok {
 		workerSessions = provider.WorkerSessionsObservationForSession(effectiveFactorySessionID)
-	} else if provider, ok := factoryRuntime.(workerSessionsObservationProvider); ok {
+	} else if provider, ok := observationRuntime.(workerSessionsObservationProvider); ok {
 		workerSessions = provider.WorkerSessionsObservation()
 	}
 	inputResolver, _ := sessionInvocation.(roles.InvocationInputResolver)

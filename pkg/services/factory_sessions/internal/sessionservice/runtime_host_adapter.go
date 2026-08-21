@@ -13,6 +13,7 @@ import (
 	sessionruntime "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtime"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimebinding"
 	durableexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/durable_execution"
+	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 )
 
 // newSessionHost combines canonical state-derived callbacks with the few
@@ -27,6 +28,7 @@ func newSessionHost(
 	backendScopeID func() string,
 	logicalSessionKeyID func(*livesession.LiveSession) string,
 	streamGenerationID func(*livesession.LiveSession) string,
+	workerSessionsObservation func(string) workersessions.ObservationService,
 	stopLiveSession func(string) error,
 	observeLiveLifecycleControl func(string, factorysessions.LifecycleControlKind, factorysessions.ControlRequest, factorysessions.LifecycleControlOutcome, factorysessions.LifecycleStatus, error),
 	durableExecution func() durableexecution.Service,
@@ -41,8 +43,9 @@ func newSessionHost(
 		buildSessionProjectionContext: buildSessionProjectionContext,
 		resolveSyncPreflightTarget:    resolveSyncPreflightTarget,
 		backendScopeID:                backendScopeID, logicalSessionKeyID: logicalSessionKeyID,
-		streamGenerationID: streamGenerationID,
-		stopLiveSession:    stopLiveSession, observeLiveLifecycleControl: observeLiveLifecycleControl,
+		streamGenerationID:        streamGenerationID,
+		workerSessionsObservation: workerSessionsObservation,
+		stopLiveSession:           stopLiveSession, observeLiveLifecycleControl: observeLiveLifecycleControl,
 		durableExecution: durableExecution, directoryInspection: directoryInspection,
 		resolveSessionFolder: resolveSessionFolder,
 		selectTarget:         selectTarget,
