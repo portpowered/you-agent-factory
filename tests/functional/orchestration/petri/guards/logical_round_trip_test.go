@@ -1,6 +1,7 @@
 package guards
 
 import (
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -122,6 +123,76 @@ func TestLogicalRoundTripFactoryBoundaryStopsUnbalancedRoute(t *testing.T) {
 	assertTerminalWorkCorrelatesToTraceID(t, listed, traceID)
 	if runner.CallCount() != 4 {
 		t.Fatalf("provider command calls = %d, want 4", runner.CallCount())
+	}
+}
+
+func TestLogicalRoundTripFactoryBoundaryRecordReplayPreservesTerminalProjection(t *testing.T) {
+	dir := support.ScaffoldFactory(t, logicalRoundTripFactoryConfig(3, 6))
+	support.WriteAgentConfig(t, dir, "executor", support.BuildModelWorkerConfig(modelprovider.ProviderCodex, "gpt-5-codex"))
+	support.WriteAgentConfig(t, dir, "reviewer", support.BuildModelWorkerConfig(modelprovider.ProviderCodex, "gpt-5-codex"))
+	support.WriteWorkstationConfig(t, dir, "executor-loop-breaker", "---\ntype: LOGICAL_MOVE\n---\n")
+	support.WriteWorkstationConfig(t, dir, "review-loop-breaker", "---\ntype: LOGICAL_MOVE\n---\n")
+	testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
+		WorkTypeID: "story",
+		TraceID:    "trace-logical-round-trip-replay",
+		Payload:    []byte(`{"title":"logical round-trip replay"}`),
+	})
+
+	artifactPath := filepath.Join(t.TempDir(), "logical-round-trip.replay.json")
+	runner := support.NewShapedProviderCommandRunner(
+		codexCommandResult("HEAD stable\nDone. COMPLETE"),
+		codexCommandResult("HEAD stable\nneeds more work"),
+		codexCommandResult("HEAD stable\nDone. COMPLETE"),
+		codexCommandResult("HEAD stable\nneeds more work"),
+		codexCommandResult("HEAD stable\nDone. COMPLETE"),
+		codexCommandResult("HEAD stable\nneeds more work"),
+	)
+	liveServer := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir:                dir,
+		Args:                      []string{"--record", artifactPath},
+		WaitForServiceModeRuntime: true,
+		Edges:                     serviceedges.Edges{ProviderCommandRunner: runner},
+	})
+	support.WaitForTerminalStatus(t, liveServer.URL(), 15*time.Second)
+	liveWork := support.ListDefaultSessionWork(t, liveServer.URL())
+	liveEvents := liveServer.GetFactoryEvents(t)
+	liveServer.Stop(t)
+
+	if got := support.CountWorkAtCustomerState(liveWork, support.WorkCustomerLocation("story", "failed")); got != 1 {
+		t.Fatalf("live failed work count = %d, want 1; listed=%#v", got, liveWork)
+	}
+	if runner.CallCount() != 6 {
+		t.Fatalf("live provider command calls = %d, want 6", runner.CallCount())
+	}
+
+	artifact := testutil.LoadReplayArtifact(t, artifactPath)
+	if len(artifact.Events) == 0 {
+		t.Fatal("recorded logical round-trip artifact has no events")
+	}
+	replayServer := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir:                t.TempDir(),
+		Args:                      []string{"--replay", artifactPath, "--no-record"},
+		WaitForServiceModeRuntime: true,
+	})
+	support.WaitForTerminalStatus(t, replayServer.URL(), 15*time.Second)
+	replayedWork := support.ListDefaultSessionWork(t, replayServer.URL())
+	replayedEvents := replayServer.GetFactoryEvents(t)
+
+	if got := support.CountWorkAtCustomerState(replayedWork, support.WorkCustomerLocation("story", "failed")); got != 1 {
+		t.Fatalf("replayed failed work count = %d, want 1; listed=%#v", got, replayedWork)
+	}
+	if got := support.CountWorkAtCustomerState(replayedWork, support.WorkCustomerLocation("story", "complete")); got != 0 {
+		t.Fatalf("replayed complete work count = %d, want 0; listed=%#v", got, replayedWork)
+	}
+	for _, transitionID := range []string{"process", "review"} {
+		liveVisits := len(dispatchResponseIndexesForTransition(t, liveEvents, transitionID))
+		replayedVisits := len(dispatchResponseIndexesForTransition(t, replayedEvents, transitionID))
+		if replayedVisits != liveVisits || liveVisits != 3 {
+			t.Fatalf("%s replay visits = %d, live visits = %d; want three each", transitionID, replayedVisits, liveVisits)
+		}
+	}
+	if runner.CallCount() != 6 {
+		t.Fatalf("provider command calls after replay = %d, want unchanged 6", runner.CallCount())
 	}
 }
 
