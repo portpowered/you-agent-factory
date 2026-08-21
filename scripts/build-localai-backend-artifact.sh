@@ -146,6 +146,7 @@ if [[ "$TARGET_ID" == "windows-amd64" ]]; then
 	export CGO_ENABLED=1
 fi
 cmake_args_text="${cmake_args[*]:-}"
+grpc_added_cmake_args=""
 
 build_grpc_dependencies() {
 	local grpc_path="${LOCALAI_ROOT}/backend/cpp/grpc"
@@ -153,6 +154,7 @@ build_grpc_dependencies() {
 	local protoc_path="${install_path}/bin/protoc"
 	local plugin_path="${install_path}/bin/grpc_cpp_plugin"
 	local grpc_cmake_args="${cmake_args_text}"
+	grpc_added_cmake_args="-Dabsl_DIR=${install_path}/lib/cmake/absl -DProtobuf_DIR=${install_path}/lib/cmake/protobuf -Dutf8_range_DIR=${install_path}/lib/cmake/utf8_range -DgRPC_DIR=${install_path}/lib/cmake/grpc -DCMAKE_CXX_STANDARD_INCLUDE_DIRECTORIES=${install_path}/include"
 
 	if [[ ! -f "${grpc_path}/Makefile" ]]; then
 		echo "pinned LocalAI gRPC build directory is missing: ${grpc_path}" >&2
@@ -390,7 +392,15 @@ if [[ "$TARGET_ID" == "windows-amd64" ]]; then
 	else
 	case "$BACKEND_ID" in
 	localai-llamacpp)
-		CMAKE_ARGS="$cmake_args_text" "$make_command" -C "$backend_path" "${os_make_args[@]}" BUILD_TYPE="$BUILD_TYPE" BUILD_GRPC_FOR_BACKEND_LLAMA=1 llama-cpp-cpu-all
+		llama_make_args=()
+		if [[ "$TARGET_ID" == "darwin-arm64" ]]; then
+			# Xcode 15.4 rejects the pinned llama.cpp Apple M4 SVE intrinsic even
+			# though the runner can build the generic arm64 backend. Keep the
+			# CPU-all artifact name and package contract, but disable that
+			# unsupported per-generation variant for this Darwin toolchain.
+			llama_make_args=("ADDED_CMAKE_ARGS=${grpc_added_cmake_args} -DGGML_CPU_ALL_VARIANTS=OFF -DGGML_CPU_ARM_ARCH=armv8.2-a+dotprod")
+		fi
+		CMAKE_ARGS="$cmake_args_text" "$make_command" -C "$backend_path" "${os_make_args[@]}" "${llama_make_args[@]}" BUILD_TYPE="$BUILD_TYPE" BUILD_GRPC_FOR_BACKEND_LLAMA=1 llama-cpp-cpu-all
 			if [[ "$TARGET_ID" == "darwin-arm64" ]]; then
 				stage_darwin_llama_package
 			else
