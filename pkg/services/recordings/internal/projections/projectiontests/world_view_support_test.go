@@ -68,7 +68,7 @@ func TestBuildFactoryWorldView_HidesSystemTimeWorkFromNormalDashboardProjection(
 			WorkTypeID:  interfaces.SystemTimeWorkTypeID,
 			DisplayName: "daily-refresh tick",
 			TraceID:     "trace-time",
-			PlaceID:     interfaces.SystemTimePendingPlaceID,
+			State:       interfaces.SystemTimePendingState,
 			Tags: map[string]string{
 				interfaces.TimeWorkTagKeyCronWorkstation: "daily-refresh",
 				interfaces.TimeWorkTagKeyDueAt:           t0.Add(time.Second).Format(time.RFC3339Nano),
@@ -79,7 +79,7 @@ func TestBuildFactoryWorldView_HidesSystemTimeWorkFromNormalDashboardProjection(
 			WorkTypeID:  "task",
 			DisplayName: "Customer story",
 			TraceID:     "trace-1",
-			PlaceID:     "task:init",
+			State:       "init",
 		}),
 	}
 
@@ -159,7 +159,7 @@ func TestBuildFactoryWorldView_LabelsSystemTimeExpiryDispatchForDashboard(t *tes
 			WorkTypeID:  interfaces.SystemTimeWorkTypeID,
 			DisplayName: "daily-refresh tick",
 			TraceID:     "trace-time",
-			PlaceID:     interfaces.SystemTimePendingPlaceID,
+			State:       interfaces.SystemTimePendingState,
 			Tags: map[string]string{
 				interfaces.TimeWorkTagKeyCronWorkstation: "daily-refresh",
 				interfaces.TimeWorkTagKeyDueAt:           t0.Add(time.Second).Format(time.RFC3339Nano),
@@ -177,7 +177,7 @@ func TestBuildFactoryWorldView_LabelsSystemTimeExpiryDispatchForDashboard(t *tes
 					ID:         "time-daily-refresh",
 					WorkTypeID: interfaces.SystemTimeWorkTypeID,
 					TraceID:    "trace-time",
-					PlaceID:    interfaces.SystemTimePendingPlaceID,
+					State:      interfaces.SystemTimePendingState,
 					Tags: map[string]string{
 						interfaces.TimeWorkTagKeyCronWorkstation: "daily-refresh",
 					},
@@ -238,7 +238,7 @@ func TestBuildFactoryWorldView_HidesSystemTimeOnlyDispatchesFromSessionCounts(t 
 			WorkTypeID:  interfaces.SystemTimeWorkTypeID,
 			DisplayName: "expired cron tick",
 			TraceID:     "trace-time",
-			PlaceID:     interfaces.SystemTimePendingPlaceID,
+			State:       interfaces.SystemTimePendingState,
 		}),
 		workstationRequestEvent(2, t0.Add(2*time.Second), interfaces.WorkstationRequestPayload{
 			DispatchID:   "dispatch-expire",
@@ -252,7 +252,7 @@ func TestBuildFactoryWorldView_HidesSystemTimeOnlyDispatchesFromSessionCounts(t 
 						ID:         "time-expired",
 						WorkTypeID: interfaces.SystemTimeWorkTypeID,
 						TraceID:    "trace-time",
-						PlaceID:    interfaces.SystemTimePendingPlaceID,
+						State:      interfaces.SystemTimePendingState,
 					},
 				},
 			},
@@ -306,7 +306,7 @@ func buildWorldViewExecutionWithSystemTimeConsumedInput(t *testing.T) interfaces
 			WorkTypeID:  interfaces.SystemTimeWorkTypeID,
 			DisplayName: "daily-refresh tick",
 			TraceID:     "trace-time",
-			PlaceID:     interfaces.SystemTimePendingPlaceID,
+			State:       interfaces.SystemTimePendingState,
 			Tags: map[string]string{
 				interfaces.TimeWorkTagKeyCronWorkstation: "daily-refresh",
 				interfaces.TimeWorkTagKeyNominalAt:       t0.Format(time.RFC3339Nano),
@@ -319,7 +319,7 @@ func buildWorldViewExecutionWithSystemTimeConsumedInput(t *testing.T) interfaces
 			WorkTypeID:  "task",
 			DisplayName: "Customer story",
 			TraceID:     "trace-1",
-			PlaceID:     "task:init",
+			State:       "init",
 		}),
 		workstationRequestEvent(2, t0.Add(2*time.Second), interfaces.WorkstationRequestPayload{
 			DispatchID:   "dispatch-cron",
@@ -329,7 +329,7 @@ func buildWorldViewExecutionWithSystemTimeConsumedInput(t *testing.T) interfaces
 				{
 					TokenID:  "tok-story",
 					PlaceID:  "task:init",
-					WorkItem: &work.FactoryWorkItem{ID: "work-1", WorkTypeID: "task", DisplayName: "Customer story", TraceID: "trace-1", PlaceID: "task:init"},
+					WorkItem: &work.FactoryWorkItem{ID: "work-1", WorkTypeID: "task", DisplayName: "Customer story", TraceID: "trace-1", State: "init"},
 				},
 				{
 					TokenID: "tok-time",
@@ -338,7 +338,7 @@ func buildWorldViewExecutionWithSystemTimeConsumedInput(t *testing.T) interfaces
 						ID:         "time-daily-refresh",
 						WorkTypeID: interfaces.SystemTimeWorkTypeID,
 						TraceID:    "trace-time",
-						PlaceID:    interfaces.SystemTimePendingPlaceID,
+						State:      interfaces.SystemTimePendingState,
 						Tags: map[string]string{
 							interfaces.TimeWorkTagKeyCronWorkstation: "daily-refresh",
 							interfaces.TimeWorkTagKeyDueAt:           t0.Add(time.Second).Format(time.RFC3339Nano),
@@ -379,7 +379,7 @@ func failedTerminalWorkProjectionEvents(t0 time.Time) []factoryapi.FactoryEvent 
 			WorkTypeID:  "task",
 			DisplayName: "Blocked story",
 			TraceID:     "trace-failed",
-			PlaceID:     "task:init",
+			State:       "init",
 		}),
 		workstationRequestEvent(2, t0.Add(2*time.Second), interfaces.WorkstationRequestPayload{
 			DispatchID:   "dispatch-failed",
@@ -388,7 +388,7 @@ func failedTerminalWorkProjectionEvents(t0 time.Time) []factoryapi.FactoryEvent 
 			Inputs: []interfaces.WorkstationInput{{
 				TokenID:  "work-failed",
 				PlaceID:  "task:init",
-				WorkItem: &work.FactoryWorkItem{ID: "work-failed", WorkTypeID: "task", DisplayName: "Blocked story", TraceID: "trace-failed", PlaceID: "task:init"},
+				WorkItem: &work.FactoryWorkItem{ID: "work-failed", WorkTypeID: "task", DisplayName: "Blocked story", TraceID: "trace-failed", State: "init"},
 			}},
 		}),
 		inferenceResponseEvent(3, t0.Add(2500*time.Millisecond), factoryapi.InferenceResponseEventPayload{
@@ -419,11 +419,11 @@ func failedTerminalWorkProjectionEvents(t0 time.Time) []factoryapi.FactoryEvent 
 				Type:     string(interfaces.MutationMove),
 				TokenID:  "work-failed-terminal",
 				ToPlace:  "task:failed",
-				WorkItem: &work.FactoryWorkItem{ID: "work-failed", WorkTypeID: "task", DisplayName: "Blocked story", TraceID: "trace-failed", PlaceID: "task:failed"},
+				WorkItem: &work.FactoryWorkItem{ID: "work-failed", WorkTypeID: "task", DisplayName: "Blocked story", TraceID: "trace-failed", State: "failed"},
 			}},
 			TraceData: &interfaces.FactoryTraceData{TraceID: "trace-failed", WorkIDs: []string{"work-failed"}},
 			TerminalWork: &interfaces.FactoryTerminalWork{
-				WorkItem: work.FactoryWorkItem{ID: "work-failed", WorkTypeID: "task", DisplayName: "Blocked story", TraceID: "trace-failed", PlaceID: "task:failed"},
+				WorkItem: work.FactoryWorkItem{ID: "work-failed", WorkTypeID: "task", DisplayName: "Blocked story", TraceID: "trace-failed", State: "failed"},
 				Status:   "FAILED",
 			},
 		}),
@@ -456,7 +456,7 @@ func canonicalDispatchProviderSessionProjectionEvents(t0 time.Time) []factoryapi
 		WorkTypeID:  "task",
 		DisplayName: "Review draft",
 		TraceID:     "trace-1",
-		PlaceID:     "task:init",
+		State:       "init",
 		Tags:        map[string]string{"priority": "high"},
 	}
 	output := work.FactoryWorkItem{
@@ -464,7 +464,7 @@ func canonicalDispatchProviderSessionProjectionEvents(t0 time.Time) []factoryapi
 		WorkTypeID:  "task",
 		DisplayName: "Reviewed draft",
 		TraceID:     "trace-1",
-		PlaceID:     "task:complete",
+		State:       "complete",
 		Tags:        map[string]string{"priority": "high"},
 	}
 	return []factoryapi.FactoryEvent{
@@ -514,7 +514,7 @@ func assertCanonicalDispatchProviderSessionProjection(t *testing.T, completedVie
 	if len(dispatch.ConsumedInputs) != 1 || dispatch.ConsumedInputs[0].WorkItem == nil || dispatch.ConsumedInputs[0].WorkItem.ID != "work-1" {
 		t.Fatalf("dispatch consumed inputs = %#v, want work-1", dispatch.ConsumedInputs)
 	}
-	if len(dispatch.OutputWorkItems) == 0 || dispatch.OutputWorkItems[0].PlaceID != "task:complete" {
+	if len(dispatch.OutputWorkItems) == 0 || dispatch.OutputWorkItems[0].WorkTypeID+":"+dispatch.OutputWorkItems[0].State != "task:complete" {
 		t.Fatalf("dispatch output work items = %#v, want completed work item", dispatch.OutputWorkItems)
 	}
 	if dispatch.ConsumedInputs[0].PlaceID != "task:init" || dispatch.OutputWorkItems[0].DisplayName != "Reviewed draft" {

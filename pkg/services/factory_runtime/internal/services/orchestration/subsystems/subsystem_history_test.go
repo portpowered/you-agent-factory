@@ -24,7 +24,7 @@ func TestHistorySubsystem_Execute_MergesHistoryFromDispatchConsumedTokens(t *tes
 		Dispatches: map[string]*interfaces.DispatchEntry{
 			"dispatch-1": {
 				DispatchID: "dispatch-1",
-				ConsumedTokens: []factorytoken.Token{
+				ConsumedTokens: factorytoken.ToWorkerSlice([]factorytoken.Token{
 					{
 						ID:      "token-1",
 						PlaceID: "story:init",
@@ -51,7 +51,7 @@ func TestHistorySubsystem_Execute_MergesHistoryFromDispatchConsumedTokens(t *tes
 							}},
 						},
 					},
-				},
+				}),
 			},
 		},
 	}

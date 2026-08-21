@@ -196,10 +196,10 @@ func TestWorkRootPolicyServiceResolvePrimaryResultSubmittedTerminalSuccess(t *te
 	t.Parallel()
 
 	rootInitial := work.FactoryWorkItem{
-		ID: "work-root", WorkTypeID: "task", State: "init", DisplayName: "root", TraceID: "trace-1", PlaceID: "task:init",
+		ID: "work-root", WorkTypeID: "task", State: "init", DisplayName: "root", TraceID: "trace-1",
 	}
 	rootTerminal := work.FactoryWorkItem{
-		ID: "work-root", WorkTypeID: "task", State: "complete", DisplayName: "root", TraceID: "trace-1", PlaceID: "task:complete",
+		ID: "work-root", WorkTypeID: "task", State: "complete", DisplayName: "root", TraceID: "trace-1",
 		Content: []work.WorkContentPart{{Type: work.WorkContentPartTypeText, Text: "terminal output"}},
 	}
 	state := work.InvocationWorldState{

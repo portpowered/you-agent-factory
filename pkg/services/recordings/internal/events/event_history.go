@@ -811,7 +811,6 @@ func workItemFromToken(token workers.Token) work.FactoryWorkItem {
 	if currentChainingTraceID == "" {
 		currentChainingTraceID = token.Color.TraceID
 	}
-	_, stateValue := splitPlaceID(token.PlaceID)
 	return work.FactoryWorkItem{
 		ID:                       token.Color.WorkID,
 		WorkTypeID:               token.Color.WorkTypeID,
@@ -822,8 +821,7 @@ func workItemFromToken(token workers.Token) work.FactoryWorkItem {
 		TraceID:                  token.Color.TraceID,
 		Content:                  append([]work.WorkContentPart(nil), token.Color.Content...),
 		ParentID:                 token.Color.ParentID,
-		State:                    stateValue,
-		PlaceID:                  token.PlaceID,
+		State:                    token.State,
 		StructuredResult:         jsonvalue.Clone(token.Color.StructuredResult),
 		Tags:                     cloneStringMap(token.Color.Tags),
 		StructuredResultPresent:  jsonvalue.Present(token.Color.StructuredResult, token.Color.StructuredResultPresent),

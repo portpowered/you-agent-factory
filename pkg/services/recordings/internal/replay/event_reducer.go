@@ -31,6 +31,8 @@ type replayWorkStateChange struct {
 	eventID      string
 	observedTick int
 	change       work.WorkStateChangeRecord
+	fromPlaceID  string
+	toPlaceID    string
 }
 
 type replaySubmission struct {
@@ -194,13 +196,13 @@ func replayWorkStateChangeFromEvent(event interfaces.FactoryEvent) (*replayWorkS
 			WorkTypeName:  payload.WorkTypeName,
 			FromState:     payload.FromState,
 			ToState:       payload.ToState,
-			FromPlaceID:   payload.FromPlaceID,
-			ToPlaceID:     payload.ToPlaceID,
 			Source:        source,
 			RequestID:     stringValue(event.Context.RequestID),
 			TriggerWorkID: stringValue(payload.TriggerWorkID),
 			Reason:        stringValue(payload.Reason),
 		},
+		fromPlaceID: payload.FromPlaceID,
+		toPlaceID:   payload.ToPlaceID,
 	}, nil
 }
 
@@ -666,8 +668,8 @@ func workDispatchInputTokensForReplay(
 	}
 	for _, resource := range resourceValues(payload.Resources) {
 		tokens = append(tokens, workerexecution.Token{
-			ID:      "resource/" + resource.Name,
-			PlaceID: resource.Name + ":available",
+			ID:    "resource/" + resource.Name,
+			State: "available",
 			Color: workerexecution.Color{
 				WorkTypeID: resource.Name,
 				DataType:   workerexecution.DataTypeResource,

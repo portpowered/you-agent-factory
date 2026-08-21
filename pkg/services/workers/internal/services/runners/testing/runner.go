@@ -7,10 +7,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"strings"
 	"time"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	"github.com/portpowered/infinite-you/pkg/services/work"
 	workers "github.com/portpowered/infinite-you/pkg/services/workers"
 	workerprocess "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/process"
 )
@@ -158,7 +158,7 @@ func mockWorkerMatches(candidate MockWorkerConfig, req workers.CommandRequest) b
 		return false
 	}
 	for _, selector := range candidate.WorkInputs {
-		if !mockWorkInputSelectorMatches(selector, commandRequestInputTokens(req), req.InputBindings) {
+		if !mockWorkInputSelectorMatches(selector, req.Inputs, nil) {
 			return false
 		}
 	}
@@ -166,9 +166,9 @@ func mockWorkerMatches(candidate MockWorkerConfig, req workers.CommandRequest) b
 }
 
 type mockInputToken struct {
-	ID      string `json:"id"`
-	PlaceID string `json:"place_id"`
-	Color   struct {
+	ID    string `json:"id"`
+	State string `json:"state"`
+	Color struct {
 		WorkID     string            `json:"work_id"`
 		WorkTypeID string            `json:"work_type_id"`
 		DataType   string            `json:"data_type"`
@@ -179,19 +179,39 @@ type mockInputToken struct {
 }
 
 func commandRequestInputTokens(request workers.CommandRequest) []mockInputToken {
-	if len(request.InputTokens) == 0 {
+	if len(request.Inputs) == 0 {
 		return nil
 	}
 
-	out := make([]mockInputToken, 0, len(request.InputTokens))
-	for _, raw := range request.InputTokens {
-		token, ok := decodeToken(raw)
-		if !ok {
-			continue
-		}
-		out = append(out, token)
+	out := make([]mockInputToken, 0, len(request.Inputs))
+	for index, input := range request.Inputs {
+		out = append(out, mockInputToken{
+			ID:    fmt.Sprintf("input-%d", index),
+			State: input.State,
+			Color: struct {
+				WorkID     string            `json:"work_id"`
+				WorkTypeID string            `json:"work_type_id"`
+				DataType   string            `json:"data_type"`
+				TraceID    string            `json:"trace_id"`
+				Tags       map[string]string `json:"tags"`
+				Payload    []byte            `json:"payload"`
+			}{
+				WorkID: input.WorkID, WorkTypeID: input.WorkTypeID,
+				DataType: input.Kind, TraceID: input.Lineage.TraceID,
+				Tags: input.Tags, Payload: contentPayload(input.Content),
+			},
+		})
 	}
 	return out
+}
+
+func contentPayload(content []work.WorkContentPart) []byte {
+	for _, part := range content {
+		if part.Type.Normalized() == work.WorkContentPartTypeText {
+			return []byte(part.Text)
+		}
+	}
+	return nil
 }
 
 func decodeToken(raw any) (mockInputToken, bool) {
@@ -207,6 +227,17 @@ func decodeToken(raw any) (mockInputToken, bool) {
 }
 
 func mockWorkInputSelectorMatches(selector MockWorkInputSelector, rawTokens any, bindings map[string][]string) bool {
+	if inputs, ok := rawTokens.([]workers.WorkInput); ok {
+		for _, input := range inputs {
+			if input.Kind == string(workers.DataTypeResource) {
+				continue
+			}
+			if selectorMatchesWorkInput(selector, input) {
+				return true
+			}
+		}
+		return false
+	}
 	tokens, ok := decodeTokens(rawTokens)
 	if !ok {
 		return false
@@ -216,6 +247,40 @@ func mockWorkInputSelectorMatches(selector MockWorkInputSelector, rawTokens any,
 			continue
 		}
 		if selectorMatchesDecodedToken(selector, token, bindings) {
+			return true
+		}
+	}
+	return false
+}
+
+func selectorMatchesWorkInput(selector MockWorkInputSelector, input workers.WorkInput) bool {
+	if selector.WorkID != "" && selector.WorkID != input.WorkID {
+		return false
+	}
+	if selector.WorkType != "" && selector.WorkType != input.WorkTypeID {
+		return false
+	}
+	if selector.State != "" && selector.State != input.State {
+		return false
+	}
+	if selector.InputName != "" && !containsString(input.InputNames, selector.InputName) {
+		return false
+	}
+	if selector.TraceID != "" && selector.TraceID != input.Lineage.TraceID {
+		return false
+	}
+	if selector.Channel != "" && selector.Channel != input.Tags["channel"] {
+		return false
+	}
+	if selector.PayloadHash != "" && selector.PayloadHash != payloadHash(contentPayload(input.Content)) {
+		return false
+	}
+	return true
+}
+
+func containsString(values []string, want string) bool {
+	for _, value := range values {
+		if value == want {
 			return true
 		}
 	}
@@ -284,11 +349,7 @@ func tokenState(rawToken any) string {
 	if !ok {
 		return ""
 	}
-	prefix := token.Color.WorkTypeID + ":"
-	if strings.HasPrefix(token.PlaceID, prefix) {
-		return strings.TrimPrefix(token.PlaceID, prefix)
-	}
-	return ""
+	return token.State
 }
 
 func payloadHash(payload []byte) string {

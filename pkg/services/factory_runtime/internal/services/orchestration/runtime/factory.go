@@ -269,7 +269,7 @@ func New(
 			effectiveEventHistory.RecordWorkRequest(tick, record, cfg.clock.Now())
 		},
 		func(tick int, req work.SubmitRequest, token factorytoken.Token) {
-			effectiveEventHistory.RecordWorkInput(tick, req, token, cfg.clock.Now())
+			effectiveEventHistory.RecordWorkInput(tick, req, factorytoken.ToWorker(token), cfg.clock.Now())
 		},
 		func(record interfaces.FactoryDispatchRecord) {
 			effectiveEventHistory.RecordWorkstationRequest(
@@ -662,8 +662,6 @@ func (f *factoryImpl) recordOperatorWorkStateChange(result work.OperatorMoveResu
 		WorkTypeName:  workTypeName,
 		FromState:     result.FromState,
 		ToState:       result.ToState,
-		FromPlaceID:   result.FromPlaceID,
-		ToPlaceID:     result.ToPlaceID,
 		Source:        source,
 		RequestID:     requestID,
 		TriggerWorkID: triggerWorkID,

@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strings"
 	"text/template"
 	"time"
@@ -165,7 +166,8 @@ func (r *runner) execute(
 	}
 	started := r.now()
 	requestID := scriptRequestID(commandRequest.DispatchID)
-	r.record(scriptRequestEvent(commandRequest, requestID, started))
+	transitionID := request.Dispatch.TransitionID
+	r.record(scriptRequestEvent(commandRequest, requestID, started, transitionID))
 	observer := r.outputObserver(commandRequest.DispatchID, request.Correlation)
 	result, err := r.commandRunner.RunStreaming(
 		ctx,
@@ -181,6 +183,7 @@ func (r *runner) execute(
 		finished,
 		result,
 		err,
+		transitionID,
 	)
 }
 
@@ -192,9 +195,10 @@ func (r *runner) completeExecution(
 	finished time.Time,
 	result workers.CommandResult,
 	runErr error,
+	transitionID string,
 ) (workers.RunnerExecutionResult, error) {
 	duration := finished.Sub(started)
-	diagnostics := commandDiagnostics(commandRequest, result, duration)
+	diagnostics := commandDiagnostics(commandRequest, result, duration, transitionID)
 	if runErr != nil {
 		if interruption := classifyInterruption(ctx, runErr); interruption != nil {
 			diagnostics.Command.TimedOut = interruption.timedOut
@@ -206,6 +210,7 @@ func (r *runner) completeExecution(
 				interruption.outcome,
 				interruption.failureType,
 				finished,
+				transitionID,
 			))
 			partial := failureResult(result, diagnostics)
 			if interruption.timedOut {
@@ -221,6 +226,7 @@ func (r *runner) completeExecution(
 			workers.ScriptExecutionOutcomeProcessError,
 			workers.ScriptFailureTypeProcessError,
 			finished,
+			transitionID,
 		))
 		return failureResult(result, diagnostics), commandStartFailure(runErr, diagnostics)
 	}
@@ -233,6 +239,7 @@ func (r *runner) completeExecution(
 			workers.ScriptExecutionOutcomeFailedExitCode,
 			"",
 			finished,
+			transitionID,
 		))
 		return failureResult(result, diagnostics), executionFailure(
 			workers.WorkFailureTypeInternalServerError,
@@ -241,7 +248,7 @@ func (r *runner) completeExecution(
 			diagnostics,
 		)
 	}
-	r.record(scriptSuccessEvent(commandRequest, requestID, result, duration, finished))
+	r.record(scriptSuccessEvent(commandRequest, requestID, result, duration, finished, transitionID))
 	return workers.RunnerExecutionResult{
 		Content:     strings.TrimSpace(string(result.Stdout)),
 		Diagnostics: workers.CloneWorkDiagnostics(diagnostics),
@@ -392,17 +399,59 @@ func (r *runner) resolveCommandRequest(
 		Env:                      mergedEnvironment(request.ProcessEnvironment, envVars),
 		WorkDir:                  workDir,
 		DispatchID:               dispatch.DispatchID,
-		TransitionID:             dispatch.TransitionID,
 		WorkerType:               firstNonEmpty(request.WorkerType, dispatch.WorkerType),
 		WorkstationName:          firstNonEmpty(request.WorkstationType, dispatch.WorkstationName),
 		ProjectID:                firstNonEmpty(projectID, dispatch.ProjectID),
 		CurrentChainingTraceID:   dispatch.CurrentChainingTraceID,
 		PreviousChainingTraceIDs: append([]string(nil), dispatch.PreviousChainingTraceIDs...),
 		Execution:                dispatch.Execution,
-		InputTokens:              workers.InputTokens(tokens...),
-		InputBindings:            cloneStringSliceMap(dispatch.InputBindings),
+		Inputs:                   commandInputs(tokens, dispatch.InputBindings),
 		ProcessLifecycleObserver: request.ProcessLifecycleObserver,
 	}, nil
+}
+
+func commandInputs(tokens []workers.Token, bindings map[string][]string) []workers.WorkInput {
+	if len(tokens) == 0 {
+		return nil
+	}
+	namesByTokenID := make(map[string][]string)
+	for name, tokenIDs := range bindings {
+		for _, tokenID := range tokenIDs {
+			namesByTokenID[tokenID] = append(namesByTokenID[tokenID], name)
+		}
+	}
+	for tokenID := range namesByTokenID {
+		sort.Strings(namesByTokenID[tokenID])
+	}
+
+	inputs := make([]workers.WorkInput, 0, len(tokens))
+	for _, token := range tokens {
+		content := work.CloneWorkContentParts(token.Color.Content)
+		if len(content) == 0 && len(token.Color.Payload) > 0 {
+			content = []work.WorkContentPart{{
+				Type: work.WorkContentPartTypeText,
+				Text: string(token.Color.Payload),
+			}}
+		}
+		inputs = append(inputs, workers.WorkInput{
+			Kind:       string(token.Color.DataType),
+			State:      token.State,
+			InputNames: append([]string(nil), namesByTokenID[token.ID]...),
+			WorkID:     token.Color.WorkID,
+			Name:       token.Color.Name,
+			WorkTypeID: token.Color.WorkTypeID,
+			RequestID:  token.Color.RequestID,
+			Content:    content,
+			Tags:       cloneStringMap(token.Color.Tags),
+			Relations:  append([]work.Relation(nil), token.Color.Relations...),
+			Lineage: workers.WorkLineage{
+				ParentWorkID: token.Color.ParentID,
+				TraceID:      token.Color.TraceID,
+				OriginRef:    token.Color.Name,
+			},
+		})
+	}
+	return inputs
 }
 
 func snapshotRequest(
@@ -559,17 +608,6 @@ func mergeStringMaps(base, override map[string]string) map[string]string {
 		merged[key] = value
 	}
 	return merged
-}
-
-func cloneStringSliceMap(values map[string][]string) map[string][]string {
-	if len(values) == 0 {
-		return nil
-	}
-	cloned := make(map[string][]string, len(values))
-	for key, value := range values {
-		cloned[key] = append([]string(nil), value...)
-	}
-	return cloned
 }
 
 func cloneAnyValues(values []any) ([]any, error) {

@@ -128,7 +128,7 @@ func TestReconstructFactoryWorldState_ContinueDispatchReplaysNextTurnContent(t *
 		WorkTypeID:  "task",
 		DisplayName: "draft",
 		TraceID:     "trace-1",
-		PlaceID:     "task:init",
+		State:       "init",
 		Content: []work.WorkContentPart{{
 			Type: work.WorkContentPartTypeText,
 			Text: "input-content",
@@ -139,7 +139,7 @@ func TestReconstructFactoryWorldState_ContinueDispatchReplaysNextTurnContent(t *
 		WorkTypeID:  "task",
 		DisplayName: "draft",
 		TraceID:     "trace-1",
-		PlaceID:     "task:init",
+		State:       "init",
 		Content: []work.WorkContentPart{{
 			Type: work.WorkContentPartTypeText,
 			Text: "next-turn-output",
@@ -206,7 +206,7 @@ func TestReconstructFactoryWorldState_FailedDispatchReplaysRequestContent(t *tes
 		WorkTypeID:  "task",
 		DisplayName: "draft",
 		TraceID:     "trace-1",
-		PlaceID:     "task:init",
+		State:       "init",
 		Content: []work.WorkContentPart{{
 			Type: work.WorkContentPartTypeText,
 			Text: "input-content",
@@ -217,7 +217,7 @@ func TestReconstructFactoryWorldState_FailedDispatchReplaysRequestContent(t *tes
 		WorkTypeID:  "task",
 		DisplayName: "draft",
 		TraceID:     "trace-1",
-		PlaceID:     "task:failed",
+		State:       "failed",
 		Content: []work.WorkContentPart{{
 			Type: work.WorkContentPartTypeText,
 			Text: "input-content",

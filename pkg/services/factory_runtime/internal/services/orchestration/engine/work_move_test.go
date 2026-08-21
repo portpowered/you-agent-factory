@@ -28,9 +28,6 @@ func TestMoveWork_AcceptsValidRelocation(t *testing.T) {
 	if result.FromState != "init" || result.ToState != "complete" {
 		t.Fatalf("result states = %q -> %q, want init -> complete", result.FromState, result.ToState)
 	}
-	if result.FromPlaceID != "task:init" || result.ToPlaceID != "task:complete" {
-		t.Fatalf("result places = %q -> %q, want task:init -> task:complete", result.FromPlaceID, result.ToPlaceID)
-	}
 	if marking.Tokens["tok-1"].PlaceID != "task:complete" {
 		t.Fatalf("token place = %q, want task:complete", marking.Tokens["tok-1"].PlaceID)
 	}
@@ -64,9 +61,9 @@ func TestMoveWork_RejectsInFlightDispatch(t *testing.T) {
 	eng := newTestFactoryEngine(net, marking, nil)
 	eng.runtimeState.Dispatches["dispatch-1"] = &interfaces.DispatchEntry{
 		DispatchID: "dispatch-1",
-		ConsumedTokens: []factorytoken.Token{{
+		ConsumedTokens: factorytoken.ToWorkerSlice([]factorytoken.Token{{
 			Color: factorytoken.Color{WorkID: "work-1", WorkTypeID: "task"},
-		}},
+		}}),
 	}
 
 	_, err := eng.MoveWork(context.Background(), "work-1", "complete")

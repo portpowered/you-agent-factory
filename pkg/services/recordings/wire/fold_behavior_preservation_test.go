@@ -268,7 +268,6 @@ func TestWireFoldReconstructsCanonicalDispatchReplayWithWorkLineage(t *testing.T
 		ID:          workID,
 		WorkTypeID:  "task",
 		State:       "ready",
-		PlaceID:     "task:ready",
 		DisplayName: "replay work",
 		TraceID:     "wire-fold-trace",
 	}
@@ -279,8 +278,8 @@ func TestWireFoldReconstructsCanonicalDispatchReplayWithWorkLineage(t *testing.T
 		WorkItems: []work.FactoryWorkItem{workItem},
 	}, now)
 	token := workers.Token{
-		ID:      "wire-fold-token",
-		PlaceID: workItem.PlaceID,
+		ID:    "wire-fold-token",
+		State: workItem.State,
 		Color: workers.Color{
 			DataType:   workers.DataTypeWork,
 			Name:       workItem.DisplayName,

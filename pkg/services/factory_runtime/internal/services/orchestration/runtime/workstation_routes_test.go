@@ -464,7 +464,11 @@ func TestOrderedRuntimeWorkDispatchTokensUsesAuthoredInputAndResourceOrder(t *te
 	t.Parallel()
 
 	token := func(id, place string) workers.Token {
-		return workers.Token{ID: id, PlaceID: place}
+		prefix, stateName := place, ""
+		if index := strings.LastIndexByte(place, ':'); index >= 0 {
+			prefix, stateName = place[:index], place[index+1:]
+		}
+		return workers.Token{ID: id, State: stateName, Color: workers.Color{WorkTypeID: prefix}}
 	}
 	dispatch := work.WorkDispatch{InputTokens: workers.InputTokens(
 		token("unmatched", "other:state"),
@@ -579,46 +583,7 @@ func TestFailedWorkstationDispatchResultPreservesDispatchFailureIdentity(t *test
 func TestWorkInputsFromDispatchFiltersResourcesAndBuildsAttemptFacts(t *testing.T) {
 	t.Parallel()
 
-	invocation := &work.InvocationArguments{Arguments: map[string]work.InvocationArgument{
-		"mode": {Values: []string{"fast"}},
-	}}
-	dispatch := work.WorkDispatch{
-		TransitionID: "transition-inputs",
-		InputTokens: workers.InputTokens(
-			workers.Token{ID: "resource", Color: workers.Color{DataType: workers.DataTypeResource}},
-			workers.Token{
-				ID: "legacy",
-				Color: workers.Color{
-					DataType:            workers.DataTypeWork,
-					WorkID:              "work-legacy",
-					WorkTypeID:          "task",
-					RequestID:           "request-legacy",
-					Payload:             []byte("legacy payload"),
-					Tags:                map[string]string{"source": "legacy"},
-					InvocationArguments: invocation,
-				},
-				History: workers.History{
-					TotalVisits: map[string]int{"transition-inputs": 2},
-					FailureLog:  []workers.Failure{{Error: "last failure"}},
-				},
-			},
-			workers.Token{
-				ID: "content",
-				Color: workers.Color{
-					Name:       "content display name",
-					DataType:   workers.DataTypeWork,
-					WorkID:     "work-content",
-					WorkTypeID: "review",
-					Content: []work.WorkContentPart{{
-						Type: work.WorkContentPartTypeText,
-						Text: "content body",
-					}},
-				},
-				History: workers.History{TotalVisits: map[string]int{"transition-inputs": 4}},
-			},
-		),
-	}
-
+	dispatch := workInputsFromDispatchFixture()
 	inputs, gotInvocation, attempt := workInputsFromDispatch(dispatch)
 	if len(inputs) != 2 || attempt != 5 {
 		t.Fatalf("work inputs = %#v, attempt = %d; want two inputs and attempt 5", inputs, attempt)
@@ -626,14 +591,8 @@ func TestWorkInputsFromDispatchFiltersResourcesAndBuildsAttemptFacts(t *testing.
 	if gotInvocation.Arguments["mode"].Values[0] != "fast" {
 		t.Fatalf("invocation arguments = %#v, want cloned mode argument", gotInvocation)
 	}
-	if inputs[0].WorkID != "work-legacy" || inputs[0].Content[0].Text != "legacy payload" ||
-		inputs[0].AttemptFacts.AttemptNumber != 3 || inputs[0].AttemptFacts.LastFailure != "last failure" ||
-		inputs[0].Tags["source"] != "legacy" {
-		t.Fatalf("legacy input = %#v, want payload fallback and attempt facts", inputs[0])
-	}
-	if inputs[1].WorkID != "work-content" || inputs[1].Name != "content display name" || inputs[1].Content[0].Text != "content body" || inputs[1].AttemptFacts.AttemptNumber != 5 {
-		t.Fatalf("content input = %#v, want name, content, and attempt facts", inputs[1])
-	}
+	assertLegacyWorkInput(t, inputs[0])
+	assertContentWorkInput(t, inputs[1])
 }
 
 func TestDetachedResultMaterializationMapsTerminalOutcomes(t *testing.T) {

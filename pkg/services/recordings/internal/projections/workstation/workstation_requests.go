@@ -842,7 +842,7 @@ func mutationViewsForCompletion(
 			Type:      mutationTypeForOutput(input, item),
 			TokenId:   mutationTokenID(input, item),
 			FromPlace: workstationRequestStringPtr(input.PlaceID),
-			ToPlace:   workstationRequestStringPtr(item.PlaceID),
+			ToPlace:   workstationRequestStringPtr(workItemPlaceID(item)),
 			Token:     generatedTokenViewForWorkItem(mutationTokenID(input, item), item),
 		})
 	}
@@ -872,7 +872,7 @@ func generatedTokenViewForWorkItem(tokenID string, item work.FactoryWorkItem) *W
 	}
 	return &WorkstationFactoryWorldTokenView{
 		TokenId:                  tokenID,
-		PlaceId:                  item.PlaceID,
+		PlaceId:                  workItemPlaceID(item),
 		Name:                     workstationRequestStringPtr(item.DisplayName),
 		WorkId:                   workstationRequestStringPtr(item.ID),
 		WorkTypeId:               workstationRequestStringPtr(item.WorkTypeID),
@@ -882,6 +882,13 @@ func generatedTokenViewForWorkItem(tokenID string, item work.FactoryWorkItem) *W
 		TraceId:                  workstationRequestStringPtr(item.TraceID),
 		Tags:                     workstationRequestStringMapPtr(cloneStringMap(item.Tags)),
 	}
+}
+
+func workItemPlaceID(item work.FactoryWorkItem) string {
+	if strings.TrimSpace(item.WorkTypeID) == "" || strings.TrimSpace(item.State) == "" {
+		return strings.TrimSpace(item.State)
+	}
+	return strings.TrimSpace(item.WorkTypeID) + ":" + strings.TrimSpace(item.State)
 }
 
 func mutationTypeForOutput(input interfaces.WorkstationInput, item work.FactoryWorkItem) string {

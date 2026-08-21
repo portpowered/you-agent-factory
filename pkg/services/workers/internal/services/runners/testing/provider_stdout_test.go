@@ -67,3 +67,18 @@ func TestMockRejectStdout_ClaudeEmitsErrorResult(t *testing.T) {
 		t.Fatalf("is_error = %v, want true", result["is_error"])
 	}
 }
+
+func TestMockRejectResultUsesProviderOutputShapes(t *testing.T) {
+	for _, command := range []string{"codex", "claude"} {
+		result := mockRejectResult(command, &MockWorkerRejectConfig{Stderr: "ignored"})
+		if len(result.Stdout) == 0 {
+			t.Fatalf("%s reject stdout is empty, want provider-shaped output", command)
+		}
+		if result.Stderr != nil {
+			t.Fatalf("%s reject stderr = %q, want provider output to own stderr", command, result.Stderr)
+		}
+		if result.ExitCode != 1 {
+			t.Fatalf("%s reject exit code = %d, want 1", command, result.ExitCode)
+		}
+	}
+}

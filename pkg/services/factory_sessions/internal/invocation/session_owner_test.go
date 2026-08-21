@@ -615,7 +615,6 @@ func TestSessionOwnerWait_ReturnsFailedWhileActiveWorkHasScopedFailure(t *testin
 		WorkID:       failedChild.ID,
 		WorkTypeName: failedChild.WorkTypeID,
 		ToState:      "failed",
-		ToPlaceID:    failedChild.PlaceID,
 		RequestID:    "request-1",
 	}}
 	observation.WorldState.FailedWorkItemsByID[failedChild.ID] = failedChild
@@ -657,7 +656,6 @@ func TestSessionOwnerWait_ReturnsFailedFromStoppedScopedFailure(t *testing.T) {
 		WorkID:       failedChild.ID,
 		WorkTypeName: failedChild.WorkTypeID,
 		ToState:      "failed",
-		ToPlaceID:    failedChild.PlaceID,
 		RequestID:    "request-1",
 	}}
 	observation.WorldState.FailedWorkItemsByID[failedChild.ID] = failedChild
@@ -753,7 +751,6 @@ func invocationWorkItem(workID, workTypeName, stateName, name, placeID string) w
 		State:       stateName,
 		DisplayName: name,
 		TraceID:     workID + "-trace",
-		PlaceID:     placeID,
 		Content: []workdomain.WorkContentPart{{
 			Type: workdomain.WorkContentPartTypeText,
 			Text: workID + "-content",

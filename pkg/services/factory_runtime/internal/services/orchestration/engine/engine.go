@@ -734,7 +734,7 @@ func (e *FactoryEngine) forwardDispatchRecord(ctx context.Context, rec interface
 			CreatedTick:    e.runtimeState.TickCount,
 			Dispatch:       rec.Dispatch,
 			HeldMutations:  rec.Mutations,
-			ConsumedTokens: consumedTokenIDs(workers.WorkDispatchInputTokens(rec.Dispatch)),
+			ConsumedTokens: consumedTokenIDs(factorytoken.FromWorkerSlice(workers.WorkDispatchInputTokens(rec.Dispatch))),
 			HumanApproval:  humanApproval,
 		})
 	}

@@ -17,7 +17,7 @@ import (
 func TestPromptRenderer_BasicInterpolation(t *testing.T) {
 	renderer := &DefaultPromptRenderer{FactoryDocs: mustFactoryDocsLoader(t, platformfilesystem.Local{})}
 
-	tokens := []factoryruntime.RuntimeToken{{
+	tokens := []workers.Token{{
 		ID: "tok-1",
 		Color: factoryruntime.RuntimeTokenColor{
 			WorkID:     "work-123",
@@ -132,7 +132,7 @@ func TestPromptData_ExposesOnlyCanonicalTemplateRoots(t *testing.T) {
 func TestPromptRenderer_TopLevelTokenAliasFailsWhileInputsRender(t *testing.T) {
 	renderer := &DefaultPromptRenderer{}
 
-	tokens := []factoryruntime.RuntimeToken{{
+	tokens := []workers.Token{{
 		ID: "tok-1",
 		Color: factoryruntime.RuntimeTokenColor{
 			WorkID:  "work-123",
@@ -157,7 +157,7 @@ func TestPromptRenderer_TopLevelTokenAliasFailsWhileInputsRender(t *testing.T) {
 func TestPromptRenderer_RetryAwarePrompt(t *testing.T) {
 	renderer := &DefaultPromptRenderer{}
 
-	tokens := []factoryruntime.RuntimeToken{{
+	tokens := []workers.Token{{
 		ID: "tok-2",
 		Color: factoryruntime.RuntimeTokenColor{
 			WorkID:  "work-456",
@@ -171,7 +171,7 @@ func TestPromptRenderer_RetryAwarePrompt(t *testing.T) {
 			TotalVisits:         map[string]int{"tr-design": 2},
 			ConsecutiveFailures: map[string]int{},
 			LastError:           "",
-			FailureLog: []factoryruntime.RuntimeTokenFailure{
+			FailureLog: []workers.Failure{
 				{TransitionID: "tr-design", Timestamp: time.Now(), Error: "timeout", Attempt: 1},
 			},
 		},
@@ -313,7 +313,7 @@ func TestBuildPromptData_MapsFactoryContextSessionID(t *testing.T) {
 func TestPromptRenderer_ContextSessionID(t *testing.T) {
 	renderer := &DefaultPromptRenderer{}
 
-	tokens := []factoryruntime.RuntimeToken{{
+	tokens := []workers.Token{{
 		ID: "tok-session",
 		Color: factoryruntime.RuntimeTokenColor{
 			WorkID: "work-session",
@@ -353,7 +353,7 @@ func TestPromptRenderer_ContextSessionID(t *testing.T) {
 func TestPromptRenderer_ContextFields(t *testing.T) {
 	renderer := &DefaultPromptRenderer{}
 
-	tokens := []factoryruntime.RuntimeToken{{
+	tokens := []workers.Token{{
 		ID: "tok-3",
 		Color: factoryruntime.RuntimeTokenColor{
 			WorkID: "work-789",
@@ -390,7 +390,7 @@ GOPRIVATE: {{ index .Context.Env "GOPRIVATE" }}`
 func TestPromptRenderer_ContextProjectPrefersExplicitContextOverTokenTag(t *testing.T) {
 	renderer := &DefaultPromptRenderer{}
 
-	tokens := []factoryruntime.RuntimeToken{{
+	tokens := []workers.Token{{
 		ID: "tok-project",
 		Color: factoryruntime.RuntimeTokenColor{
 			WorkID:   "work-project",
@@ -419,7 +419,7 @@ func TestPromptRenderer_ContextProjectPrefersExplicitContextOverTokenTag(t *test
 func TestPromptRenderer_ContextProjectFallsBackToFirstWorkInputProjectTag(t *testing.T) {
 	renderer := &DefaultPromptRenderer{}
 
-	tokens := []factoryruntime.RuntimeToken{
+	tokens := []workers.Token{
 		{
 			ID: "resource-slot",
 			Color: factoryruntime.RuntimeTokenColor{
@@ -465,7 +465,7 @@ func TestPromptRenderer_ContextProjectFallsBackToFirstWorkInputProjectTag(t *tes
 func TestPromptRenderer_ContextProjectIgnoresResourceOnlyProjectTag(t *testing.T) {
 	renderer := &DefaultPromptRenderer{}
 
-	tokens := []factoryruntime.RuntimeToken{{
+	tokens := []workers.Token{{
 		ID: "resource-slot",
 		Color: factoryruntime.RuntimeTokenColor{
 			WorkID:   "slot-1",
@@ -490,7 +490,7 @@ func TestPromptRenderer_MissingOptionalFields(t *testing.T) {
 	renderer := &DefaultPromptRenderer{}
 
 	// Empty token — no tags, no history, no payload.
-	tokens := []factoryruntime.RuntimeToken{{
+	tokens := []workers.Token{{
 		ID:    "tok-empty",
 		Color: factoryruntime.RuntimeTokenColor{WorkID: "work-empty"},
 	}}
@@ -543,7 +543,7 @@ func TestPromptRenderer_InvalidTemplate(t *testing.T) {
 func TestPromptRenderer_MultipleInputTokens_PerVariableContext(t *testing.T) {
 	renderer := &DefaultPromptRenderer{}
 
-	tokens := []factoryruntime.RuntimeToken{
+	tokens := []workers.Token{
 		{
 			ID: "tok-prd",
 			Color: factoryruntime.RuntimeTokenColor{
@@ -592,7 +592,7 @@ Reviewer: {{ index (index .Inputs 1).Tags "reviewer" }}`
 func TestPromptRenderer_MultipleInputTokens_DistinctContexts(t *testing.T) {
 	renderer := &DefaultPromptRenderer{}
 
-	tokens := []factoryruntime.RuntimeToken{
+	tokens := []workers.Token{
 		{
 			ID: "tok-a",
 			Color: factoryruntime.RuntimeTokenColor{
@@ -645,7 +645,7 @@ B: {{ (index .Inputs 1).WorkID }} {{ (index .Inputs 1).WorkTypeID }} {{ (index .
 func TestPromptRenderer_MultipleInputTokens_PreservesPerInputCanonicalContent(t *testing.T) {
 	renderer := &DefaultPromptRenderer{}
 
-	tokens := []factoryruntime.RuntimeToken{
+	tokens := []workers.Token{
 		{
 			ID: "tok-text",
 			Color: factoryruntime.RuntimeTokenColor{
@@ -692,7 +692,7 @@ func TestPromptRenderer_ResourceToken_FirstInList(t *testing.T) {
 	renderer := &DefaultPromptRenderer{}
 
 	// Simulate a dispatch where the resource token appears first.
-	tokens := []factoryruntime.RuntimeToken{
+	tokens := []workers.Token{
 		{
 			ID: "agent-slot:resource:0",
 			Color: factoryruntime.RuntimeTokenColor{
@@ -733,7 +733,7 @@ func TestPromptRenderer_ResourceToken_FirstInList(t *testing.T) {
 func TestPromptRenderer_ResourceToken_DataTypeAccessible(t *testing.T) {
 	renderer := &DefaultPromptRenderer{}
 
-	tokens := []factoryruntime.RuntimeToken{
+	tokens := []workers.Token{
 		{
 			ID: "agent-slot:resource:0",
 			Color: factoryruntime.RuntimeTokenColor{
@@ -783,7 +783,7 @@ Count: {{ len .Inputs }}`
 func TestPromptRenderer_AllResourceTokens(t *testing.T) {
 	renderer := &DefaultPromptRenderer{}
 
-	tokens := []factoryruntime.RuntimeToken{
+	tokens := []workers.Token{
 		{
 			ID: "gpu:resource:0",
 			Color: factoryruntime.RuntimeTokenColor{
@@ -813,7 +813,7 @@ func TestPromptRenderer_AllResourceTokens(t *testing.T) {
 func TestPromptRenderer_NoTemplateSkipsResourcePayloads(t *testing.T) {
 	renderer := &DefaultPromptRenderer{}
 
-	tokens := []factoryruntime.RuntimeToken{
+	tokens := []workers.Token{
 		{
 			ID: "agent-slot:resource:0",
 			Color: factoryruntime.RuntimeTokenColor{
@@ -849,7 +849,7 @@ func TestPromptRenderer_NoTemplateSkipsResourcePayloads(t *testing.T) {
 func TestPromptRenderer_SingleToken_InputsSlicePopulated(t *testing.T) {
 	renderer := &DefaultPromptRenderer{}
 
-	tokens := []factoryruntime.RuntimeToken{{
+	tokens := []workers.Token{{
 		ID: "tok-single",
 		Color: factoryruntime.RuntimeTokenColor{
 			WorkID:  "work-single",

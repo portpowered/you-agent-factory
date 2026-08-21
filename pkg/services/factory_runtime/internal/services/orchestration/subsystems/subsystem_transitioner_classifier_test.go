@@ -221,7 +221,7 @@ func newClassifierSnapshot(now time.Time, output string) *interfaces.EngineState
 				TransitionID:    "t1",
 				WorkstationName: "classifier",
 				StartTime:       now.Add(-time.Second),
-				ConsumedTokens: []factorytoken.Token{{
+				ConsumedTokens: factorytoken.ToWorkerSlice([]factorytoken.Token{{
 					ID:        "tok-1",
 					PlaceID:   "task:init",
 					CreatedAt: now.Add(-time.Hour),
@@ -235,7 +235,7 @@ func newClassifierSnapshot(now time.Time, output string) *interfaces.EngineState
 						ConsecutiveFailures: map[string]int{},
 						PlaceVisits:         map[string]int{},
 					},
-				}},
+				}}),
 			},
 		},
 		Results: []workerexecution.WorkResult{{

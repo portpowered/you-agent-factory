@@ -1,16 +1,16 @@
 package subsystems_test
 
 import (
-	factorytoken "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/token"
+	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
-func firstInputToken(rawTokens []any) factorytoken.Token {
+func firstInputToken(rawTokens []any) workers.Token {
 	if len(rawTokens) == 0 {
-		return factorytoken.Token{}
+		return workers.Token{}
 	}
-	tok, ok := rawTokens[0].(factorytoken.Token)
+	tok, ok := rawTokens[0].(workers.Token)
 	if !ok {
-		return factorytoken.Token{}
+		return workers.Token{}
 	}
 	return tok
 }

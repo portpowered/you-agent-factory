@@ -8,6 +8,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/orchestrators/petri"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/state"
 	factorytoken "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/token"
+	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
 // WorkInQueueScheduler selects transition firings in deterministic batches.
@@ -127,8 +128,9 @@ func collectCandidate(et interfaces.EnabledTransition, topology *state.Net, runt
 	}
 
 	analysis := newQueuedCandidateAnalysis(et, topology)
+	bindings := runtimeBindings(et.Bindings)
 	for _, arcName := range arcNames {
-		analysis.consumeArc(arcName, et.Bindings[arcName])
+		analysis.consumeArc(arcName, bindings[arcName])
 	}
 	if len(analysis.consumeTokenIDs) == 0 {
 		return queuedCandidate{}, false
@@ -425,7 +427,21 @@ func activeTracesFromSnapshot(snapshot *interfaces.EngineStateSnapshot[petri.Mar
 	return active
 }
 
-func stableArcNames(bindings map[string][]factorytoken.Token) []string {
+func runtimeBindings(bindings map[string][]workerexecution.Token) map[string][]factorytoken.Token {
+	if len(bindings) == 0 {
+		return nil
+	}
+	projected := make(map[string][]factorytoken.Token, len(bindings))
+	for name, tokens := range bindings {
+		projected[name] = make([]factorytoken.Token, len(tokens))
+		for index, value := range tokens {
+			projected[name][index] = factorytoken.FromWorker(value)
+		}
+	}
+	return projected
+}
+
+func stableArcNames(bindings map[string][]workerexecution.Token) []string {
 	arcNames := make([]string, 0, len(bindings))
 	for arcName := range bindings {
 		arcNames = append(arcNames, arcName)

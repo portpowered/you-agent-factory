@@ -7,7 +7,7 @@ import (
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/orchestrators/petri"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/state"
-	factorytoken "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/token"
+	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
 var baseTokenTime = time.Date(2026, 4, 17, 9, 0, 0, 0, time.UTC)
@@ -87,13 +87,22 @@ func priorityEnabledTransition(transitionID, placeID, tokenID string, enteredAt 
 	return interfaces.EnabledTransition{
 		TransitionID: transitionID,
 		WorkerType:   "agent",
-		Bindings: map[string][]factorytoken.Token{
+		Bindings: map[string][]workerexecution.Token{
 			"input": {{
 				ID:        tokenID,
-				PlaceID:   placeID,
+				State:     stateFromPlaceID(placeID),
 				EnteredAt: enteredAt,
-				Color:     factorytoken.Color{WorkID: "work-" + tokenID, TraceID: "trace-" + tokenID, WorkTypeID: "task"},
+				Color:     workerexecution.Color{WorkID: "work-" + tokenID, TraceID: "trace-" + tokenID, WorkTypeID: "task"},
 			}},
 		},
 	}
+}
+
+func stateFromPlaceID(placeID string) string {
+	for index := len(placeID) - 1; index >= 0; index-- {
+		if placeID[index] == ':' {
+			return placeID[index+1:]
+		}
+	}
+	return placeID
 }

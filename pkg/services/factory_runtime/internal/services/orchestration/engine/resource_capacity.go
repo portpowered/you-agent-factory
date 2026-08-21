@@ -397,7 +397,7 @@ func resourceInUseCountLocked(runtimeState *RuntimeState, resourceID string) int
 			continue
 		}
 		for _, token := range dispatch.ConsumedTokens {
-			if token.Color.DataType != factorytoken.DataTypeResource || resourceIDForToken(token) != resourceID {
+			if token.Color.DataType != factorytoken.DataTypeResource || resourceIDForToken(factorytoken.FromWorker(token)) != resourceID {
 				continue
 			}
 			if _, exists := seen[token.ID]; exists {

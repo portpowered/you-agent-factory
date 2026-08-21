@@ -72,8 +72,8 @@ func TestFactoryRelationsFromRequest_PreservesNilInput(t *testing.T) {
 
 func TestFactoryWorldReducer_RemoveTokenCleansWorkIndexes(t *testing.T) {
 	reducer := newFactoryWorldReducer(0)
-	firstItem := work.FactoryWorkItem{ID: "work-1", WorkTypeID: "task", TraceID: "trace-1", PlaceID: "task:init"}
-	secondItem := work.FactoryWorkItem{ID: "work-2", WorkTypeID: "task", TraceID: "trace-2", PlaceID: "task:init"}
+	firstItem := work.FactoryWorkItem{ID: "work-1", WorkTypeID: "task", TraceID: "trace-1", State: "init"}
+	secondItem := work.FactoryWorkItem{ID: "work-2", WorkTypeID: "task", TraceID: "trace-2", State: "init"}
 
 	reducer.addWorkToken("tok-work-1", "task:init", firstItem)
 	reducer.addWorkToken("tok-work-2", "task:init", secondItem)
@@ -167,7 +167,7 @@ func TestFactoryWorldReducer_AppliesCanonicalWorkerExecutionEvents(t *testing.T)
 
 func TestFactoryWorldReducer_PreservesDetachedStructuredResultsAcrossOutputWork(t *testing.T) {
 	t0 := time.Date(2026, 7, 16, 2, 30, 0, 0, time.UTC)
-	input := work.FactoryWorkItem{ID: "work-input", WorkTypeID: "task", TraceID: "trace-input", PlaceID: "task:init"}
+	input := work.FactoryWorkItem{ID: "work-input", WorkTypeID: "task", TraceID: "trace-input", State: "init"}
 	structured := map[string]any{
 		"nested": map[string]any{"label": "ready"},
 		"items":  []any{json.Number("1"), json.Number("2")},
@@ -182,7 +182,7 @@ func TestFactoryWorldReducer_PreservesDetachedStructuredResultsAcrossOutputWork(
 		Workstation:  interfaces.FactoryWorkstationRef{ID: "t-review", Name: "Review"},
 		Inputs: []interfaces.WorkstationInput{{
 			TokenID:  "tok-input",
-			PlaceID:  input.PlaceID,
+			PlaceID:  "task:init",
 			WorkItem: &input,
 		}},
 	})
@@ -299,7 +299,7 @@ func TestFactoryWorldReducer_DetachesCompletedConsumedInputsFromDispatchSource(t
 		WorkTypeID:               "task",
 		DisplayName:              "Draft",
 		TraceID:                  "trace-1",
-		PlaceID:                  "task:init",
+		State:                    "init",
 		PreviousChainingTraceIDs: []string{"chain-a", "chain-b"},
 		Tags:                     map[string]string{"priority": "high"},
 	}

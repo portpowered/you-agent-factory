@@ -83,10 +83,10 @@ func activeRawEngineSnapshotForDashboardTest(now time.Time, topology *factoryrun
 				TransitionID:    "raw-transition",
 				WorkstationName: "raw-workstation",
 				StartTime:       now.Add(-5 * time.Second),
-				ConsumedTokens: []factoryruntime.RuntimeToken{{
-					ID:      "raw-token",
-					PlaceID: "task:processing",
-					Color:   factoryruntime.RuntimeTokenColor{Name: "raw-should-not-render", WorkID: "raw-work", WorkTypeID: "task"},
+				ConsumedTokens: []workerexecution.Token{{
+					ID:    "raw-token",
+					State: "processing",
+					Color: workerexecution.Color{Name: "raw-should-not-render", WorkID: "raw-work", WorkTypeID: "task"},
 				}},
 			},
 		},
@@ -589,8 +589,8 @@ func TestFormatSimpleDashboard_SnapshotOnlyDoesNotRenderSessionRows(t *testing.T
 			TransitionID:    "raw-transition",
 			WorkstationName: "raw-workstation",
 			Outcome:         workerexecution.OutcomeAccepted,
-			ConsumedTokens: []factoryruntime.RuntimeToken{
-				{ID: "raw-token", PlaceID: "task:processing", Color: factoryruntime.RuntimeTokenColor{Name: "raw-input", WorkID: "raw-work", WorkTypeID: "task"}},
+			ConsumedTokens: []workerexecution.Token{
+				{ID: "raw-token", State: "processing", Color: workerexecution.Color{Name: "raw-input", WorkID: "raw-work", WorkTypeID: "task"}},
 			},
 		}},
 		FactoryState: "RUNNING",

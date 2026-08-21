@@ -611,17 +611,19 @@ func parentChildTokens(marking *MarkingSnapshot, activeDispatches map[string]*in
 			continue
 		}
 		for _, token := range dispatch.ConsumedTokens {
-			if !isRegisteredChild(token, parentWorkID, childWorkTypeID) {
+			runtimeToken := factorytoken.FromWorker(token)
+			if !isRegisteredChild(runtimeToken, parentWorkID, childWorkTypeID) {
 				continue
 			}
-			identity := tokenIdentity(token)
+			identity := tokenIdentity(runtimeToken)
 			if _, exists := children[identity]; !exists {
-				children[identity] = token
+				children[identity] = runtimeToken
 			}
 		}
 	}
 	return children
 }
+
 
 func isRegisteredChild(token factorytoken.Token, parentWorkID, childWorkTypeID string) bool {
 	if token.Color.DataType == factorytoken.DataTypeResource || token.Color.ParentID != parentWorkID || token.Color.WorkID == "" {

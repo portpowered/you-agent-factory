@@ -35,12 +35,14 @@ func (r *factoryWorldReducer) applyDispatchCreated(event interfaces.FactoryEvent
 		}
 		placeID := r.workPlaces[item.ID]
 		if placeID == "" {
-			placeID = item.PlaceID
+			placeID = r.placeForWorkTypeState(item.WorkTypeID, item.State)
 		}
 		if placeID == "" {
 			placeID = r.initialPlaceForWorkType(item.WorkTypeID)
 		}
-		item.PlaceID = placeID
+		if item.State == "" {
+			item.State = stateFromPlaceID(placeID)
+		}
 		r.removeToken(item.ID)
 		r.stateValue.WorkItemsByID[item.ID] = item
 		r.stateValue.ActiveWorkItemsByID[item.ID] = item
@@ -347,7 +349,7 @@ func (r *factoryWorldReducer) applyDispatchOutputWork(
 		workIDs = appendUnique(workIDs, item.ID)
 		traceIDs = appendUnique(traceIDs, item.TraceID)
 		r.addTraceWork(item.TraceID, item.ID)
-		r.addWorkToken(item.ID, item.PlaceID, item)
+		r.addWorkToken(item.ID, r.placeForWorkTypeState(item.WorkTypeID, item.State), item)
 		outputWorkItems = append(outputWorkItems, item)
 	}
 	return outputWorkItems, workIDs, traceIDs
@@ -361,19 +363,16 @@ func (r *factoryWorldReducer) dispatchOutputWorkItem(
 	if item.ID == "" {
 		return workdomain.FactoryWorkItem{}
 	}
-	explicitPlaceID := item.PlaceID
-	previousPlaceID := item.PlaceID
+	explicitState := item.State != ""
+	previousPlaceID := r.workPlaces[item.ID]
 	if existing, ok := r.stateValue.WorkItemsByID[item.ID]; ok {
-		previousPlaceID = existing.PlaceID
 		item = mergeFactoryWorkItem(existing, item)
 	}
-	if explicitPlaceID == "" {
+	if !explicitState {
 		if derivedPlaceID := r.outputPlaceForWork(dispatch.Workstation.ID, payload.Outcome, item.WorkTypeID); derivedPlaceID != "" {
-			item.PlaceID = derivedPlaceID
-		} else if payload.Outcome == workerexecution.OutcomeContinue || payload.Outcome == workerexecution.OutcomeRejected {
-			item.PlaceID = previousPlaceID
-		} else if item.State != "" {
-			item.PlaceID = r.placeForWorkTypeState(item.WorkTypeID, item.State)
+			item.State = stateFromPlaceID(derivedPlaceID)
+		} else if (payload.Outcome == workerexecution.OutcomeContinue || payload.Outcome == workerexecution.OutcomeRejected) && previousPlaceID != "" {
+			item.State = stateFromPlaceID(previousPlaceID)
 		}
 	}
 	return item
@@ -551,7 +550,7 @@ func (r *factoryWorldReducer) recordFailedCompletion(completion interfaces.Facto
 	}
 	for _, workID := range completion.WorkItemIDs {
 		if item, ok := r.stateValue.WorkItemsByID[workID]; ok {
-			if _, routed := outputWorkIDs[workID]; routed && !r.isFailedPlace(item.PlaceID) {
+			if _, routed := outputWorkIDs[workID]; routed && !r.isFailedPlace(r.workPlaces[workID]) {
 				r.recordWorkFailureDetail(completion, item)
 				continue
 			}
@@ -675,8 +674,8 @@ func (r *factoryWorldReducer) applyWorkStateChange(payload interfaces.WorkStateC
 		item.State = payload.ToState
 	}
 	toPlaceID := payload.ToPlaceID
-	if toPlaceID != "" {
-		item.PlaceID = toPlaceID
+	if item.State == "" {
+		item.State = firstNonEmpty(payload.ToState, stateFromPlaceID(toPlaceID))
 	}
 
 	fromPlaceID := payload.FromPlaceID

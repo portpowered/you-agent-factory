@@ -212,8 +212,8 @@ func worldCandidateWorkstationArtifactDeclarations(
 	item work.FactoryWorkItem,
 	topology factorydefinitions.InitialStructurePayload,
 ) []work.ExpectedArtifactDeclaration {
-	placeID := strings.TrimSpace(item.PlaceID)
-	if placeID == "" && item.WorkTypeID != "" && item.State != "" {
+	placeID := ""
+	if item.WorkTypeID != "" && item.State != "" {
 		placeID = item.WorkTypeID + ":" + item.State
 	}
 	var declarations []work.ExpectedArtifactDeclaration

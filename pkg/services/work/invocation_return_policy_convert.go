@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/portpowered/infinite-you/pkg/platform/jsonvalue"
 	"github.com/portpowered/infinite-you/pkg/services/work/internal/invocationreturnpolicy"
@@ -316,7 +317,6 @@ func invocationWorldStateToInternal(state InvocationWorldState) invocationreturn
 				WorkID:       change.WorkID,
 				WorkTypeName: change.WorkTypeName,
 				ToState:      change.ToState,
-				ToPlaceID:    change.ToPlaceID,
 				RequestID:    change.RequestID,
 			}
 		}
@@ -376,11 +376,23 @@ func workItemToInternal(item FactoryWorkItem) invocationreturnpolicy.WorkItem {
 		TraceID:                  item.TraceID,
 		Content:                  contentPartsToInternal(item.Content),
 		ParentID:                 item.ParentID,
-		PlaceID:                  item.PlaceID,
+		PlaceID:                  workItemPlaceID(item),
 		StructuredResult:         jsonvalue.Clone(item.StructuredResult),
 		StructuredResultPresent:  jsonvalue.Present(item.StructuredResult, item.StructuredResultPresent),
 		Tags:                     cloneStringMap(item.Tags),
 	}
+}
+
+func workItemPlaceID(item FactoryWorkItem) string {
+	state := strings.TrimSpace(item.State)
+	if state == "" {
+		return ""
+	}
+	workTypeID := strings.TrimSpace(item.WorkTypeID)
+	if workTypeID == "" {
+		return state
+	}
+	return workTypeID + ":" + state
 }
 
 func primaryResultSelectionInputToInternal(input PrimaryResultSelectionInput) invocationreturnpolicy.PrimaryResultSelectionInput {

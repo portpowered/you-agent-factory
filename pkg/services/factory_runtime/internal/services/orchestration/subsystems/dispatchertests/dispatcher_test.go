@@ -432,7 +432,7 @@ func TestDispatcher_ForwardsObservedInputsWithoutConsumingThem(t *testing.T) {
 	if len(inputs) != 2 {
 		t.Fatalf("dispatch inputs = %#v, want parent and observed child result", inputs)
 	}
-	child, ok := inputs[1].(factorytoken.Token)
+	child, ok := inputs[1].(workers.Token)
 	if !ok || string(child.Color.Payload) != "child result" {
 		t.Fatalf("dispatch inputs = %#v, want parent and observed child result", inputs)
 	}
@@ -863,7 +863,7 @@ func dispatcherCronTimeToken(id string, workstation string, dueAt time.Time, exp
 	}
 }
 
-func dispatchHasInputWorkID(tokens []factorytoken.Token, workID string) bool {
+func dispatchHasInputWorkID(tokens []workerexecution.Token, workID string) bool {
 	for _, token := range tokens {
 		if token.Color.WorkID == workID {
 			return true

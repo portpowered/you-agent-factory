@@ -169,15 +169,7 @@ func runtimeWorkState(token *workers.Token, net *legacysnapshot.RuntimeTopology,
 	if token == nil {
 		return nil
 	}
-	workType, stateName := factoryruntime.SplitPlaceID(token.PlaceID)
-	if token.Color.WorkTypeID != "" {
-		workType = token.Color.WorkTypeID
-	}
-	if net != nil {
-		if place, ok := net.Places[token.PlaceID]; ok {
-			workType, stateName = place.TypeID, place.State
-		}
-	}
+	workType, stateName := token.Color.WorkTypeID, token.State
 	if stateName == "" {
 		return nil
 	}

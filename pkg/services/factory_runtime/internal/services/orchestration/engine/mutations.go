@@ -6,6 +6,7 @@ import (
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/orchestrators/petri"
+	factorytoken "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/token"
 )
 
 // applyMutations applies a batch of mutations to a marking atomically.
@@ -66,11 +67,12 @@ func applyCreate(marking *petri.Marking, places map[string]*petri.Place, m inter
 		return fmt.Errorf("CREATE mutation missing NewToken")
 	}
 
-	m.NewToken.PlaceID = m.ToPlace
-	if m.NewToken.EnteredAt.IsZero() {
-		m.NewToken.EnteredAt = now
+	token := factorytoken.FromWorker(*m.NewToken)
+	token.PlaceID = m.ToPlace
+	if token.EnteredAt.IsZero() {
+		token.EnteredAt = now
 	}
-	marking.AddToken(m.NewToken)
+	marking.AddToken(&token)
 	return nil
 }
 

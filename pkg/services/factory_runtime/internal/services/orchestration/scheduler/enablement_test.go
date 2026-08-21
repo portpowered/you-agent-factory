@@ -10,6 +10,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/state"
 	factorytoken "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/token"
 	"github.com/portpowered/infinite-you/pkg/services/work"
+	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
 func TestEnablementEvaluator_LogsEnabledTransition(t *testing.T) {
@@ -753,13 +754,24 @@ func sameNameDependencySnapshot(prerequisitePlace string) petri.MarkingSnapshot 
 	return petri.MarkingSnapshot{Tokens: tokens, PlaceTokens: placeTokens}
 }
 
-func assertJoinedBindingToken(t *testing.T, bindings map[string][]factorytoken.Token, name, wantID string) {
+func assertJoinedBindingToken(t *testing.T, bindings any, name, wantID string) {
 	t.Helper()
-	tokens, ok := bindings[name]
-	if !ok {
+	ids := tokenIDs(bindingTokens(bindings, name))
+	if ids == nil {
 		t.Fatalf("missing binding %q", name)
 	}
-	if len(tokens) != 1 || tokens[0].ID != wantID {
-		t.Fatalf("binding %q = %#v, want token %q", name, tokens, wantID)
+	if len(ids) != 1 || ids[0] != wantID {
+		t.Fatalf("binding %q = %#v, want token %q", name, ids, wantID)
+	}
+}
+
+func bindingTokens(bindings any, name string) any {
+	switch values := bindings.(type) {
+	case map[string][]factorytoken.Token:
+		return values[name]
+	case map[string][]workerexecution.Token:
+		return values[name]
+	default:
+		return nil
 	}
 }

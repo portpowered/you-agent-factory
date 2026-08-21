@@ -1004,8 +1004,11 @@ func TestCloneSubprocessExecutionRequest_DetachesMutableFields(t *testing.T) {
 		Execution: ExecutionMetadata{
 			WorkIDs: []string{"work-1"},
 		},
-		InputTokens:   []any{"token"},
-		InputBindings: map[string][]string{"slot": {"work-1"}},
+		Inputs: []workers.WorkInput{{
+			Kind:   string(workers.DataTypeWork),
+			State:  "review",
+			WorkID: "work-1",
+		}},
 	}
 
 	cloned := CloneSubprocessExecutionRequest(request)
@@ -1014,8 +1017,7 @@ func TestCloneSubprocessExecutionRequest_DetachesMutableFields(t *testing.T) {
 	cloned.Env[0] = "KEY=changed"
 	cloned.PreviousChainingTraceIDs[0] = "chain-z"
 	cloned.Execution.WorkIDs[0] = "work-2"
-	cloned.InputTokens[0] = "changed"
-	cloned.InputBindings["slot"][0] = "work-2"
+	cloned.Inputs[0].State = "changed"
 
 	if request.Args[0] != "--flag" {
 		t.Fatalf("original subprocess args mutated: %#v", request.Args)
@@ -1032,11 +1034,8 @@ func TestCloneSubprocessExecutionRequest_DetachesMutableFields(t *testing.T) {
 	if request.Execution.WorkIDs[0] != "work-1" {
 		t.Fatalf("original subprocess execution mutated: %#v", request.Execution)
 	}
-	if request.InputTokens[0] != "token" {
-		t.Fatalf("original subprocess input tokens mutated: %#v", request.InputTokens)
-	}
-	if request.InputBindings["slot"][0] != "work-1" {
-		t.Fatalf("original subprocess input bindings mutated: %#v", request.InputBindings)
+	if request.Inputs[0].State != "review" {
+		t.Fatalf("original subprocess Work input mutated: %#v", request.Inputs)
 	}
 }
 
