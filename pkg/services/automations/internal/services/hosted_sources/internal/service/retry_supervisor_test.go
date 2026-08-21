@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/jonboulle/clockwork"
+	platformrandom "github.com/portpowered/infinite-you/pkg/platform/random"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest/observer"
@@ -50,11 +51,26 @@ func TestDefaultRetryJitter_StaysWithinBoundedRange(t *testing.T) {
 		minimum := clampRetryDelay(base - base*retryJitterRatio/100)
 		maximum := clampRetryDelay(base + base*retryJitterRatio/100)
 		for sample := 0; sample < 100; sample++ {
-			got := defaultRetryJitter(base)
+			got := defaultRetryJitter(platformrandom.SourceFunc(func(bound int64) (int64, error) {
+				return bound / 2, nil
+			}), base)
 			if got < minimum || got > maximum {
 				t.Fatalf("defaultRetryJitter(%s) = %s, want within [%s, %s]", base, got, minimum, maximum)
 			}
 		}
+	}
+}
+
+func TestRetryJitterFromRandomSourceUsesInjectedEntropy(t *testing.T) {
+	base := restartBackoff(5)
+	source := platformrandom.SourceFunc(func(bound int64) (int64, error) {
+		return bound - 1, nil
+	})
+
+	got := retryJitterFromRandomSource(source)(base)
+	want := clampRetryDelay(base + base*retryJitterRatio/100)
+	if got != want {
+		t.Fatalf("injected jitter = %s, want upper bound %s", got, want)
 	}
 }
 

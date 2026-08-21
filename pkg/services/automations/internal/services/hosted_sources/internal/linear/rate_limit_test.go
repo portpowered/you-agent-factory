@@ -43,6 +43,25 @@ func TestClientFetchIssuesPage_PreservesSanitizedRetryAfter(t *testing.T) {
 	}
 }
 
+func TestClientFetchIssuesPage_WithoutClockRejectsHTTPDateGuidance(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Retry-After", "Wed, 21 Aug 2030 13:00:00 GMT")
+		w.WriteHeader(http.StatusTooManyRequests)
+	}))
+	defer server.Close()
+
+	_, err := (Client{Endpoint: server.URL, HTTPClient: server.Client()}).fetchIssuesPage(
+		context.Background(), "secret", "", linearIssueFilter{},
+	)
+	var rateLimitErr *RateLimitError
+	if !errors.As(err, &rateLimitErr) {
+		t.Fatalf("fetchIssuesPage() error = %v, want RateLimitError", err)
+	}
+	if _, ok := rateLimitErr.RetryDelay(); ok {
+		t.Fatal("retry delay = usable, want missing clock to make HTTP-date guidance unusable")
+	}
+}
+
 func TestDecodeIssuesPageResponse_RetryAfterSemantics(t *testing.T) {
 	now := time.Date(2026, 8, 21, 12, 0, 0, 0, time.UTC)
 	cases := []struct {

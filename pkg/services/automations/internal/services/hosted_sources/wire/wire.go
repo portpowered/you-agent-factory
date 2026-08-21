@@ -5,6 +5,7 @@ import (
 	"context"
 	"sync"
 
+	platformrandom "github.com/portpowered/infinite-you/pkg/platform/random"
 	hostedsources "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/hosted_sources"
 	hostedservice "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/hosted_sources/internal/service"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
@@ -50,6 +51,7 @@ func NewHostedPollers(
 		httpClient,
 		secretResolver,
 		linearEndpoint,
+		platformrandom.CryptoSource{},
 		checkpointStores...,
 	)}
 }

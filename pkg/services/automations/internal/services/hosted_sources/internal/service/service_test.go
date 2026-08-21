@@ -9,6 +9,7 @@ import (
 	"github.com/jonboulle/clockwork"
 	factorydefinitioncomposition "github.com/portpowered/infinite-you/internal/testutil/factorydefinitionfixtures"
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
+	platformrandom "github.com/portpowered/infinite-you/pkg/platform/random"
 	hostedlinear "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/hosted_sources/internal/linear"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/work"
@@ -28,6 +29,7 @@ func TestNewConstructsHostedSourcesServiceWithDefaults(t *testing.T) {
 		&http.Client{Timeout: hostedlinear.DefaultRequestTimeout},
 		hostedlinear.NewSecretResolver(func(string) string { return "" }, nil),
 		"",
+		platformrandom.CryptoSource{},
 		checkpoints,
 	)
 	if service == nil {
@@ -171,6 +173,7 @@ func TestServiceValidateLinearPollerDelegates(t *testing.T) {
 		&http.Client{Timeout: hostedlinear.DefaultRequestTimeout},
 		hostedlinear.NewSecretResolver(func(string) string { return "" }, nil),
 		"https://linear.example/graphql",
+		platformrandom.CryptoSource{},
 		checkpoints,
 	)
 
@@ -195,6 +198,7 @@ func TestServiceStartLinearPollerRejectsMissingAuth(t *testing.T) {
 		&http.Client{Timeout: hostedlinear.DefaultRequestTimeout},
 		hostedlinear.NewSecretResolver(func(string) string { return "" }, nil),
 		"",
+		platformrandom.CryptoSource{},
 		checkpoints,
 	)
 

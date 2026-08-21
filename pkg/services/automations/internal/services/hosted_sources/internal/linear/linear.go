@@ -648,10 +648,6 @@ func (c Client) fetchIssuesPage(ctx context.Context, apiKey, cursor string, filt
 	return decodeIssuesPageResponseWithHeaders(resp.StatusCode, resp.Header, data, clientNow(c))
 }
 
-func decodeIssuesPageResponse(statusCode int, data []byte) (linearIssuePage, error) {
-	return decodeIssuesPageResponseWithHeaders(statusCode, nil, data, time.Now())
-}
-
 func decodeIssuesPageResponseWithHeaders(
 	statusCode int,
 	headers http.Header,
@@ -703,7 +699,10 @@ func clientNow(client Client) time.Time {
 	if client.Clock != nil {
 		return client.Clock.Now()
 	}
-	return time.Now()
+	// A missing clock is retained for direct adapter callers that only need
+	// successful responses. Rate-limit date metadata treats this zero value as
+	// unusable instead of consulting ambient process time.
+	return time.Time{}
 }
 
 func isRateLimitCode(code string) bool {

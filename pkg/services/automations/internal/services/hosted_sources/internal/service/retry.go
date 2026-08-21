@@ -1,9 +1,7 @@
 package service
 
 import (
-	"crypto/rand"
 	"errors"
-	"math/big"
 	"time"
 
 	hostedlinear "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/hosted_sources/internal/linear"
@@ -22,6 +20,12 @@ const (
 // It receives the bounded exponential delay and returns a jittered candidate;
 // jitteredRetryBackoff clamps that candidate before it reaches the clock.
 type retryJitter func(time.Duration) time.Duration
+
+// RetryRandomSource supplies bounded entropy to the hosted retry policy. Wire
+// selects the platform implementation; tests can replace it deterministically.
+type RetryRandomSource interface {
+	Int63n(upperBound int64) (int64, error)
+}
 
 func retryDelay(consecutiveFailures int, runErr error, jitter retryJitter) (time.Duration, string) {
 	var rateLimitErr *hostedlinear.RateLimitError
@@ -50,13 +54,25 @@ func restartBackoff(consecutiveFailures int) time.Duration {
 func jitteredRetryBackoff(consecutiveFailures int, jitter retryJitter) time.Duration {
 	base := restartBackoff(consecutiveFailures)
 	if jitter == nil {
-		jitter = defaultRetryJitter
+		return clampRetryDelay(base)
 	}
 	return clampRetryDelay(jitter(base))
 }
 
-func defaultRetryJitter(base time.Duration) time.Duration {
+func retryJitterFromRandomSource(source RetryRandomSource) retryJitter {
+	if source == nil {
+		return nil
+	}
+	return func(base time.Duration) time.Duration {
+		return defaultRetryJitter(source, base)
+	}
+}
+
+func defaultRetryJitter(source RetryRandomSource, base time.Duration) time.Duration {
 	base = clampRetryDelay(base)
+	if source == nil {
+		return base
+	}
 	maxJitter := base * retryJitterRatio / 100
 	minimum := clampRetryDelay(base - maxJitter)
 	maximum := clampRetryDelay(base + maxJitter)
@@ -68,11 +84,11 @@ func defaultRetryJitter(base time.Duration) time.Duration {
 	if span == 0 {
 		return minimum
 	}
-	sample, err := rand.Int(rand.Reader, big.NewInt(int64(span)+1))
-	if err != nil {
+	sample, err := source.Int63n(int64(span) + 1)
+	if err != nil || sample < 0 || sample > int64(span) {
 		return base
 	}
-	return minimum + time.Duration(sample.Int64())
+	return minimum + time.Duration(sample)
 }
 
 func clampRetryDelay(delay time.Duration) time.Duration {

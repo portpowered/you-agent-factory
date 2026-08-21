@@ -66,7 +66,7 @@ func parseRetryAfterValue(value string, now time.Time) (time.Duration, bool) {
 	}
 
 	retryAt, err := http.ParseTime(value)
-	if err != nil || retryAt.Before(now) {
+	if err != nil || now.IsZero() || retryAt.Before(now) {
 		return 0, false
 	}
 	return retryAt.Sub(now), true

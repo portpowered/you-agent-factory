@@ -28,6 +28,7 @@ func New(
 	httpClient hostedlinear.HTTPDoer,
 	secretResolver hostedlinear.SecretResolver,
 	linearEndpoint string,
+	random RetryRandomSource,
 	checkpointStores ...hostedlinear.CheckpointStore,
 ) *Service {
 	var checkpoints hostedlinear.CheckpointStore
@@ -37,7 +38,7 @@ func New(
 	return &Service{
 		logger: defaultLogger(logger), clock: clock, httpClient: httpClient,
 		secretResolver: secretResolver, checkpoints: checkpoints, linearEndpoint: defaultLinearEndpoint(linearEndpoint),
-		jitter: defaultRetryJitter,
+		jitter: retryJitterFromRandomSource(random),
 	}
 }
 
