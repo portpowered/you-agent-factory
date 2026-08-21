@@ -908,6 +908,13 @@
     {
       "guards": [
         {
+          "logicalRoundTrip": {
+            "maxRawVisits": 24,
+            "workstations": [
+              "process",
+              "review"
+            ]
+          },
           "maxVisits": 12,
           "type": "VISIT_COUNT",
           "workstation": "process"
@@ -933,7 +940,14 @@
     {
       "guards": [
         {
-          "maxVisits": 10,
+          "logicalRoundTrip": {
+            "maxRawVisits": 24,
+            "workstations": [
+              "process",
+              "review"
+            ]
+          },
+          "maxVisits": 12,
           "type": "VISIT_COUNT",
           "workstation": "review"
         }
