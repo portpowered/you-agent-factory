@@ -137,6 +137,89 @@ type HostClock interface {
 	NewTimer(time.Duration) HostTimer
 }
 
+// PinnedHostProtocolVersion is the protocol revision negotiated by managed
+// LocalAI backend processes. The protocol representation stays behind the
+// Models effects seam; callers never import generated backend types.
+const PinnedHostProtocolVersion = "localai-backend-v1"
+
+// HostProtocolNegotiationRequest contains only provider-neutral facts needed
+// to negotiate a managed backend. It deliberately excludes endpoints,
+// credentials, cache paths, process handles, and backend-native messages.
+type HostProtocolNegotiationRequest struct {
+	ProtocolVersion string
+	Backend         string
+	ModelName       string
+	Revision        string
+	Platform        models.AssetHostPlatform
+}
+
+// HostProtocolNegotiationResult is the detached result of one pinned
+// readiness negotiation.
+type HostProtocolNegotiationResult struct {
+	ProtocolVersion string
+	Backend         string
+	Ready           bool
+}
+
+// HostProtocolNegotiator performs one readiness negotiation against a
+// process-owned endpoint. Implementations may use gRPC or a deterministic
+// protocol fixture, but LocalAI-native types remain private to the adapter.
+type HostProtocolNegotiator interface {
+	Negotiate(context.Context, string, HostProtocolNegotiationRequest) (HostProtocolNegotiationResult, error)
+}
+
+// HostGRPCDialer and HostGRPCConnection are the narrow policy-free effects
+// needed by PinnedGRPCNegotiator. The generated protocol client, channel, and
+// connection lifecycle remain behind this internal package boundary.
+type HostGRPCDialer interface {
+	Dial(context.Context, string) (HostGRPCConnection, error)
+}
+
+type HostGRPCConnection interface {
+	Negotiate(context.Context, HostProtocolNegotiationRequest) (HostProtocolNegotiationResult, error)
+	Close() error
+}
+
+// PinnedGRPCNegotiator adapts a policy-free gRPC dialer to the Models host
+// protocol seam. It owns no endpoint, retry, timeout, or backend policy.
+type PinnedGRPCNegotiator struct {
+	Dialer HostGRPCDialer
+}
+
+func (negotiator PinnedGRPCNegotiator) Negotiate(
+	ctx context.Context,
+	endpoint string,
+	request HostProtocolNegotiationRequest,
+) (HostProtocolNegotiationResult, error) {
+	if negotiator.Dialer == nil {
+		return HostProtocolNegotiationResult{}, models.ErrHostProtocolIncompatible
+	}
+	connection, err := negotiator.Dialer.Dial(ctx, endpoint)
+	if err != nil {
+		return HostProtocolNegotiationResult{}, err
+	}
+	if connection == nil {
+		return HostProtocolNegotiationResult{}, models.ErrHostProtocolIncompatible
+	}
+	defer func() { _ = connection.Close() }()
+	return connection.Negotiate(ctx, request)
+}
+
+// HostCompatibilityRequest carries provider-neutral compatibility facts to a
+// platform/accelerator policy implementation.
+type HostCompatibilityRequest struct {
+	Backend   string
+	ModelName string
+	Revision  string
+	Platform  models.AssetHostPlatform
+}
+
+// HostCompatibilityChecker validates platform and accelerator support before
+// a managed process starts.
+type HostCompatibilityChecker interface {
+	Check(context.Context, HostCompatibilityRequest) error
+}
+
 type RuntimeHTTPDoer interface {
 	Do(*http.Request) (*http.Response, error)
 }

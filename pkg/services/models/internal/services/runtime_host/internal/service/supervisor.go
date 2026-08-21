@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -21,19 +22,23 @@ const (
 )
 
 type supervisorSettings struct {
-	ReadinessTimeout    time.Duration
-	HealthCheckInterval time.Duration
-	HealthCheckPath     string
-	ProcessLauncher     modelseffects.HostProcessLauncher
-	HealthChecker       healthChecker
-	Clock               modelseffects.HostClock
-	ServerStartBuilder  func(
+	ReadinessTimeout     time.Duration
+	HealthCheckInterval  time.Duration
+	HealthCheckPath      string
+	ProcessLauncher      modelseffects.HostProcessLauncher
+	HealthChecker        healthChecker
+	ProtocolNegotiator   modelseffects.HostProtocolNegotiator
+	CompatibilityChecker modelseffects.HostCompatibilityChecker
+	Platform             models.AssetHostPlatform
+	Clock                modelseffects.HostClock
+	ServerStartBuilder   func(
 		supervisedIdentity,
 		cacheInspection,
 		*models.RuntimeWorker,
 	) (modelseffects.HostProcessStartSpec, error)
 	Diagnostics               hostDiagnostics
 	afterLoadStateObservation func()
+	onProcessFailure          func()
 }
 
 type healthChecker interface {
@@ -76,8 +81,11 @@ func (r *supervisedRuntime) hostSnapshotOverlay(
 		snapshot.ModelName = modelName
 		snapshot.ReadinessState = models.ReadinessStateReady
 		snapshot.LifecycleState = models.LifecycleStateLoaded
-		if r.endpoint != "" {
+		if r.endpoint != "" && !requiresPinnedGRPCBackend(r.identity.Backend) {
 			snapshot.Diagnostics["endpoint"] = r.endpoint
+		}
+		if requiresPinnedGRPCBackend(r.identity.Backend) {
+			delete(snapshot.Diagnostics, "cachePath")
 		}
 		return snapshot
 	case supervisedStateLoading:
@@ -86,6 +94,9 @@ func (r *supervisedRuntime) hostSnapshotOverlay(
 		snapshot.ModelName = modelName
 		snapshot.ReadinessState = models.ReadinessStateLoading
 		snapshot.LifecycleState = models.LifecycleStateLoading
+		if requiresPinnedGRPCBackend(r.identity.Backend) {
+			delete(snapshot.Diagnostics, "cachePath")
+		}
 		return snapshot
 	case supervisedStateFailed:
 		snapshot := base.Clone()
@@ -104,6 +115,9 @@ func (r *supervisedRuntime) hostSnapshotOverlay(
 		}
 		if r.failureClass != hostFailureClassNone {
 			snapshot.Diagnostics["failureClass"] = string(r.failureClass)
+		}
+		if requiresPinnedGRPCBackend(r.identity.Backend) {
+			delete(snapshot.Diagnostics, "cachePath")
 		}
 		return snapshot
 	default:
@@ -132,10 +146,9 @@ func (r *supervisedRuntime) ensureReady(
 		r.notifyAfterLoadStateObservation()
 		return r.waitForLoad(ctx, loadDone)
 	case supervisedStateFailed:
-		err := r.failureOutcomeLocked()
-		r.mu.Unlock()
-		r.notifyAfterLoadStateObservation()
-		return err
+		// A failed process is a completed attempt, not a permanent slot
+		// decision. Reset the attempt so a later invocation can recover after a
+		// crash or startup/readiness failure.
 	}
 	r.identity = identity
 	r.state = supervisedStateLoading
@@ -151,37 +164,76 @@ func (r *supervisedRuntime) ensureReady(
 
 	process, err := r.cfg.ProcessLauncher.Start(ctx, spec)
 	if err != nil {
+		if process != nil {
+			_ = process.Stop(context.Background())
+		}
 		return r.markFailed(
 			identity,
 			hostFailureClassProcessCrash,
 			fmt.Errorf("%w: %v", models.ErrHostProcessCrash, err),
 		)
 	}
+	if process == nil {
+		return r.markFailed(
+			identity,
+			hostFailureClassProcessCrash,
+			models.ErrHostProcessCrash,
+		)
+	}
+	processExit := make(chan error, 1)
+	go func() {
+		processExit <- process.Wait()
+	}()
+	r.mu.Lock()
+	r.process = process
+	r.endpoint = process.HealthEndpoint()
+	r.mu.Unlock()
 
 	deadline := r.cfg.Clock.Now().Add(r.cfg.ReadinessTimeout)
+	var lastReadinessErr error
 	for {
+		select {
+		case waitErr := <-processExit:
+			return r.markFailed(identity, hostFailureClassProcessCrash, processExitError(waitErr))
+		default:
+		}
 		if err := ctx.Err(); err != nil {
 			_ = process.Stop(context.Background())
 			return r.markFailed(identity, hostFailureClassCancelled, cancelHostError(err))
 		}
-		if checkErr := r.cfg.HealthChecker.Check(ctx, process.HealthEndpoint()); checkErr == nil {
+		ready, checkErr := r.checkReadiness(ctx, identity, process)
+		lastReadinessErr = checkErr
+		if errors.Is(checkErr, models.ErrHostProtocolIncompatible) {
+			_ = process.Stop(context.Background())
+			return r.markFailed(identity, hostFailureClassProtocol, checkErr)
+		}
+		if ready {
+			select {
+			case waitErr := <-processExit:
+				return r.markFailed(identity, hostFailureClassProcessCrash, processExitError(waitErr))
+			default:
+			}
 			r.mu.Lock()
 			r.state = supervisedStateReady
-			r.endpoint = process.HealthEndpoint()
-			r.process = process
 			r.failureClass = hostFailureClassNone
 			r.failureErr = nil
 			r.mu.Unlock()
 			r.cfg.Diagnostics.logLoadReady(identity)
-			go r.watchProcessExit(identity, process)
+			go r.watchProcessExit(identity, process, processExit)
 			return nil
 		}
 		if r.cfg.Clock.Now().After(deadline) {
 			_ = process.Stop(context.Background())
+			if errors.Is(lastReadinessErr, models.ErrHostUnsupportedPlatform) {
+				return r.markFailed(identity, hostFailureClassUnsupportedPlatform, lastReadinessErr)
+			}
 			return r.markFailed(identity, hostFailureClassLoadingTimeout, models.ErrHostLoadingTimeout)
 		}
 		timer := r.cfg.Clock.NewTimer(r.cfg.HealthCheckInterval)
 		select {
+		case waitErr := <-processExit:
+			timer.Stop()
+			return r.markFailed(identity, hostFailureClassProcessCrash, processExitError(waitErr))
 		case <-ctx.Done():
 			timer.Stop()
 			_ = process.Stop(context.Background())
@@ -189,6 +241,51 @@ func (r *supervisedRuntime) ensureReady(
 		case <-timer.C():
 		}
 	}
+}
+
+func processExitError(waitErr error) error {
+	if waitErr == nil {
+		return models.ErrHostProcessCrash
+	}
+	return fmt.Errorf("%w: %v", models.ErrHostProcessCrash, waitErr)
+}
+
+func (r *supervisedRuntime) checkReadiness(
+	ctx context.Context,
+	identity supervisedIdentity,
+	process modelseffects.HostManagedProcess,
+) (bool, error) {
+	if requiresPinnedGRPCBackend(identity.Backend) {
+		if r.cfg.ProtocolNegotiator == nil {
+			return false, models.ErrHostProtocolIncompatible
+		}
+		negotiated, err := r.cfg.ProtocolNegotiator.Negotiate(
+			ctx,
+			process.HealthEndpoint(),
+			modelseffects.HostProtocolNegotiationRequest{
+				ProtocolVersion: modelseffects.PinnedHostProtocolVersion,
+				Backend:         identity.Backend,
+				ModelName:       identity.Name,
+				Revision:        identity.Revision,
+				Platform:        r.cfg.Platform,
+			},
+		)
+		if err != nil {
+			return false, err
+		}
+		if negotiated.ProtocolVersion != modelseffects.PinnedHostProtocolVersion ||
+			!sameBackend(negotiated.Backend, identity.Backend) {
+			return false, models.ErrHostProtocolIncompatible
+		}
+		return negotiated.Ready, nil
+	}
+	if r.cfg.HealthChecker == nil {
+		return false, models.ErrHostRuntimeNotReady
+	}
+	if err := r.cfg.HealthChecker.Check(ctx, process.HealthEndpoint()); err != nil {
+		return false, err
+	}
+	return true, nil
 }
 
 func (r *supervisedRuntime) notifyAfterLoadStateObservation() {
@@ -221,14 +318,18 @@ func (r *supervisedRuntime) markFailed(
 	err error,
 ) error {
 	r.mu.Lock()
-	defer r.mu.Unlock()
 	r.state = supervisedStateFailed
 	r.failureClass = class
-	r.failureErr = err
+	r.failureErr = typedHostReadinessFailure(identity, class, err)
 	r.endpoint = ""
 	r.process = nil
+	failure := r.failureOutcomeLocked()
+	r.mu.Unlock()
 	r.cfg.Diagnostics.logLoadFailed(identity, class, err)
-	return r.failureOutcomeLocked()
+	if r.cfg.onProcessFailure != nil {
+		r.cfg.onProcessFailure()
+	}
+	return failure
 }
 
 func (r *supervisedRuntime) failureOutcomeLocked() error {
@@ -238,23 +339,38 @@ func (r *supervisedRuntime) failureOutcomeLocked() error {
 	return r.failureErr
 }
 
-func (r *supervisedRuntime) watchProcessExit(identity supervisedIdentity, process modelseffects.HostManagedProcess) {
-	waitErr := process.Wait()
+func (r *supervisedRuntime) failureOutcome() error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	return r.failureOutcomeLocked()
+}
+
+func (r *supervisedRuntime) watchProcessExit(
+	identity supervisedIdentity,
+	process modelseffects.HostManagedProcess,
+	processExit <-chan error,
+) {
+	waitErr := <-processExit
+	r.mu.Lock()
 	if r.process != process || r.state != supervisedStateReady {
+		r.mu.Unlock()
 		return
 	}
 	r.state = supervisedStateFailed
 	r.failureClass = hostFailureClassProcessCrash
-	if waitErr != nil {
-		r.failureErr = fmt.Errorf("%w: %v", models.ErrHostProcessCrash, waitErr)
-	} else {
-		r.failureErr = models.ErrHostProcessCrash
-	}
+	r.failureErr = typedHostReadinessFailure(
+		identity,
+		hostFailureClassProcessCrash,
+		processExitError(waitErr),
+	)
 	r.endpoint = ""
 	r.process = nil
-	r.cfg.Diagnostics.logProcessCrash(identity, r.failureErr)
+	failureErr := r.failureErr
+	r.mu.Unlock()
+	r.cfg.Diagnostics.logProcessCrash(identity, failureErr)
+	if r.cfg.onProcessFailure != nil {
+		r.cfg.onProcessFailure()
+	}
 }
 
 func (r *supervisedRuntime) isReady() bool {

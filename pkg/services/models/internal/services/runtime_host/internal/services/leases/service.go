@@ -28,3 +28,10 @@ type Service interface {
 		models.ReleaseModelLeaseRequest,
 	) (models.ReleaseModelLeaseResult, error)
 }
+
+// LeaseRevoker is an optional host-failure capability. Runtime Host uses it
+// to invalidate active capacity when a supervised process crashes; ordinary
+// lease callers do not depend on this lifecycle operation.
+type LeaseRevoker interface {
+	RevokeModelLeases(models.RuntimeScopeRef, string)
+}

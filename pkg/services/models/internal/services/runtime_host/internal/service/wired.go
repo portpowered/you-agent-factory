@@ -20,6 +20,7 @@ func NewWired(
 	hostClock modelseffects.HostClock,
 	hostLogger modelseffects.HostDiagnosticLogger,
 	hostMetrics modelseffects.HostMetricsRecorder,
+	options ...runtimehost.Options,
 ) (runtimehost.Service, error) {
 	adapter := &slotFactsAdapter{}
 	leases, err := leaseswire.NewService(hostClock, adapter)
@@ -35,6 +36,7 @@ func NewWired(
 		hostClock,
 		hostLogger,
 		hostMetrics,
+		options...,
 	).(*service)
 	adapter.host = host
 	return host, nil

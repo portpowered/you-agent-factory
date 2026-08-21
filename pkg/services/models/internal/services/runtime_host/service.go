@@ -3,9 +3,22 @@ package runtimehost
 
 import (
 	"context"
+	"time"
 
 	models "github.com/portpowered/infinite-you/pkg/services/models"
+	modelseffects "github.com/portpowered/infinite-you/pkg/services/models/internal/effects"
 )
+
+// Options supplies explicit host policy and backend effects to Runtime Host.
+// Zero values preserve the characterized legacy HTTP host behavior; managed
+// LocalAI backends require the pinned protocol and compatibility effects.
+type Options struct {
+	Platform             models.AssetHostPlatform
+	ProtocolNegotiator   modelseffects.HostProtocolNegotiator
+	CompatibilityChecker modelseffects.HostCompatibilityChecker
+	IdleUnloadAfter      time.Duration
+	MaxLoadedRuntimes    int
+}
 
 // Service supervises scoped model-host capacity behind the singular Models root.
 // Peers reach supervise, health, reuse, and unload behavior only through the

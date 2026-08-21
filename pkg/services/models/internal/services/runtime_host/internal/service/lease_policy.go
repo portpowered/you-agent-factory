@@ -38,7 +38,12 @@ func (s *service) releaseSlotCapacityLocked(slotKey string) {
 
 func (s *service) cancelIdleUnloadLocked(slotKey string) {
 	if timer, ok := s.idleUnloadTimers[slotKey]; ok {
-		timer.Stop()
+		if timer != nil && timer.timer != nil {
+			timer.timer.Stop()
+		}
+		if timer != nil && timer.cancel != nil {
+			close(timer.cancel)
+		}
 		delete(s.idleUnloadTimers, slotKey)
 	}
 }
@@ -50,19 +55,50 @@ func (s *service) scheduleIdleUnloadIfIdle(
 	if s.idleUnloadAfter <= 0 {
 		return
 	}
+	if identity.LoadPolicy == string(models.LoadPolicyKeepWarm) {
+		return
+	}
 	if s.slotHasActiveHoldersLocked(slotKey) {
+		return
+	}
+	if s.hostClock == nil {
 		return
 	}
 	s.cancelIdleUnloadLocked(slotKey)
 	identityCopy := identity
-	s.idleUnloadTimers[slotKey] = time.AfterFunc(s.idleUnloadAfter, func() {
-		s.runIdleUnload(identityCopy, slotKey)
-	})
+	timer := s.hostClock.NewTimer(s.idleUnloadAfter)
+	if timer == nil {
+		return
+	}
+	entry := &idleUnload{timer: timer, cancel: make(chan struct{})}
+	s.idleUnloadTimers[slotKey] = entry
+	go s.awaitIdleUnload(identityCopy, slotKey, entry)
 }
 
-func (s *service) runIdleUnload(identity supervisedIdentity, slotKey string) {
+func (s *service) awaitIdleUnload(
+	identity supervisedIdentity,
+	slotKey string,
+	entry *idleUnload,
+) {
+	select {
+	case <-entry.timer.C():
+		s.runIdleUnload(identity, slotKey, entry)
+	case <-entry.cancel:
+	}
+}
+
+func (s *service) runIdleUnload(
+	identity supervisedIdentity,
+	slotKey string,
+	entry *idleUnload,
+) {
 	s.mu.Lock()
+	if current := s.idleUnloadTimers[slotKey]; current != entry {
+		s.mu.Unlock()
+		return
+	}
 	if s.slotHasActiveHoldersLocked(slotKey) {
+		delete(s.idleUnloadTimers, slotKey)
 		s.mu.Unlock()
 		return
 	}

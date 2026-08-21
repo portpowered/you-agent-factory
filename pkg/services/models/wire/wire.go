@@ -28,6 +28,7 @@ import (
 	catalogwire "github.com/portpowered/infinite-you/pkg/services/models/internal/services/catalog/wire"
 	inference "github.com/portpowered/infinite-you/pkg/services/models/internal/services/inference"
 	inferencewire "github.com/portpowered/infinite-you/pkg/services/models/internal/services/inference/wire"
+	runtimehost "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_host"
 	runtimehostwire "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_host/wire"
 	runtimescopeswire "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_scopes/wire"
 	"go.uber.org/zap"
@@ -199,6 +200,7 @@ func composeModelsService(
 	runtimeHost, err := runtimehostwire.NewService(
 		runtimeScopes, assetService, processLauncher, hostHTTP, hostClock,
 		hostLogger, hostMetrics,
+		runtimehost.Options{Platform: assetPlatform},
 	)
 	if err != nil {
 		return nil, err

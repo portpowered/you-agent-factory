@@ -144,6 +144,9 @@ type LoadPolicy string
 const (
 	// LoadPolicyOnDemand keeps the model unloaded until an invocation needs it.
 	LoadPolicyOnDemand LoadPolicy = "ON_DEMAND"
+	// LoadPolicyKeepWarm retains a ready backend after its last lease until
+	// explicit stop or resource pressure requires eviction.
+	LoadPolicyKeepWarm LoadPolicy = "KEEP_WARM"
 )
 
 const (
