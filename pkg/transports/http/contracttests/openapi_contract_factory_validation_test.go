@@ -10,12 +10,12 @@ func TestOpenAPIContract_WorkerSessionObservationPublishesOptionalResolvedFacts(
 	observation := schemaObject(t, schemas, "WorkerSessionObservation")
 	properties := schemaProperties(t, observation, "WorkerSessionObservation")
 
-	assertSchemaPropertiesPresent(t, properties, "WorkerSessionObservation", "model", "reasoningEffort")
+	assertSchemaPropertiesPresent(t, properties, "WorkerSessionObservation", "model", "reasoningEffort", "workId", "workName")
 	required, ok := observation["required"].([]any)
 	if !ok {
 		t.Fatalf("WorkerSessionObservation.required is missing")
 	}
-	for _, field := range []string{"model", "reasoningEffort"} {
+	for _, field := range []string{"model", "reasoningEffort", "workId", "workName"} {
 		if containsString(required, field) {
 			t.Fatalf("WorkerSessionObservation.%s must remain optional", field)
 		}
@@ -27,6 +27,12 @@ func TestOpenAPIContract_WorkerSessionObservationPublishesOptionalResolvedFacts(
 			t.Fatalf("WorkerSessionObservation.%s description is missing", field)
 		}
 	}
+	for _, field := range []string{"workId", "workName"} {
+		property := properties[field].(map[string]any)
+		if nullable, ok := property["nullable"].(bool); !ok || !nullable {
+			t.Fatalf("WorkerSessionObservation.%s nullable = %#v, want true", field, property["nullable"])
+		}
+	}
 
 	listResponse := schemaObject(t, schemas, "ListWorkerSessionsResponse")
 	listProperties := schemaProperties(t, listResponse, "ListWorkerSessionsResponse")
@@ -34,6 +40,27 @@ func TestOpenAPIContract_WorkerSessionObservationPublishesOptionalResolvedFacts(
 	items := sessions["items"].(map[string]any)
 	if items["$ref"] != "#/components/schemas/WorkerSessionObservation" {
 		t.Fatalf("ListWorkerSessionsResponse.sessions.items = %#v, want WorkerSessionObservation", items["$ref"])
+	}
+
+	paths, ok := doc["paths"].(map[string]any)
+	if !ok {
+		t.Fatalf("paths object is missing")
+	}
+	listOperation := pathOperation(t, paths, "/worker-sessions", "get")
+	parameters, ok := listOperation["parameters"].([]any)
+	if !ok {
+		t.Fatalf("top-level Worker Session list parameters are missing")
+	}
+	assertParameterRef(t, parameters, "#/components/parameters/WorkerSessionLimit")
+	for _, raw := range parameters {
+		parameter, ok := raw.(map[string]any)
+		if !ok || parameter["name"] != "scope" {
+			continue
+		}
+		schema, ok := parameter["schema"].(map[string]any)
+		if !ok || schema["default"] != "all" {
+			t.Fatalf("top-level scope default = %#v, want all", parameter["schema"])
+		}
 	}
 }
 

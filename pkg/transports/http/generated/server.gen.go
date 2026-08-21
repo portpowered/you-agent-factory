@@ -8418,8 +8418,14 @@ type WorkerSessionObservation struct {
 	// TurnUsage Provider-neutral per-turn context projection derived from supported cumulative input counters. Absence means the transcript cannot support these metrics.
 	TurnUsage *WorkerSessionTurnUsage `json:"turnUsage,omitempty"`
 
+	// WorkId Stable primary Work identity associated with this Worker Session. The complete correlation set remains available in workIds.
+	WorkId *string `json:"workId"`
+
 	// WorkIds Work identities correlated with this Worker Session attempt.
 	WorkIds []string `json:"workIds"`
+
+	// WorkName Display name of the primary associated Work when Work can be resolved.
+	WorkName *string `json:"workName"`
 
 	// WorkerSessionId Stable Worker Session identity.
 	WorkerSessionId string `json:"workerSessionId"`
@@ -9028,6 +9034,9 @@ type WorkerSessionAfterPosition = int64
 // WorkerSessionID defines model for WorkerSessionID.
 type WorkerSessionID = string
 
+// WorkerSessionLimit defines model for WorkerSessionLimit.
+type WorkerSessionLimit = int
+
 // WorkerSessionStreamGenerationID defines model for WorkerSessionStreamGenerationID.
 type WorkerSessionStreamGenerationID = string
 
@@ -9310,7 +9319,7 @@ type GetProviderSessionDetailsParams struct {
 
 // ListWorkerSessionsParams defines parameters for ListWorkerSessions.
 type ListWorkerSessionsParams struct {
-	// Scope Origin scope to inspect. Direct is the safe default.
+	// Scope Origin scope to inspect. Omit for the fleet-wide view.
 	Scope *ListWorkerSessionsParamsScope `form:"scope,omitempty" json:"scope,omitempty"`
 
 	// State Optional repeated Worker Session lifecycle state filters.
@@ -9318,6 +9327,9 @@ type ListWorkerSessionsParams struct {
 
 	// MaxResults Optional positive page size. Omit to use the default page size; non-positive values fall back to the default after successful integer binding.
 	MaxResults *MaxResults `form:"maxResults,omitempty" json:"maxResults,omitempty"`
+
+	// Limit Optional positive result bound applied after state and origin filters. Omit to use the default page size of 50. Zero and negative values are invalid.
+	Limit *WorkerSessionLimit `form:"limit,omitempty" json:"limit,omitempty"`
 
 	// NextToken Optional base64-encoded token ID cursor.
 	NextToken *NextToken `form:"nextToken,omitempty" json:"nextToken,omitempty"`
@@ -14827,6 +14839,14 @@ func (siw *ServerInterfaceWrapper) ListWorkerSessions(w http.ResponseWriter, r *
 	err = runtime.BindQueryParameter("form", true, false, "maxResults", r.URL.Query(), &params.MaxResults)
 	if err != nil {
 		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "maxResults", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "limit", r.URL.Query(), &params.Limit)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
 		return
 	}
 

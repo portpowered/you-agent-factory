@@ -551,9 +551,30 @@ func ListWorkerSessionsResponseToAPI(result workersessions.ListObservationsResul
 // ListWorkerSessionObservationsResponseToAPI maps the bounded top-level
 // identity query, including its opaque pagination context.
 func ListWorkerSessionObservationsResponseToAPI(result workersessions.ListWorkerSessionObservationsResult) factoryapi.ListWorkerSessionsResponse {
+	return listWorkerSessionObservationsResponseToAPI(result, nil)
+}
+
+type workerSessionWorkAttribution struct {
+	WorkID   string
+	WorkName string
+}
+
+func listWorkerSessionObservationsResponseToAPI(
+	result workersessions.ListWorkerSessionObservationsResult,
+	attribution map[string]workerSessionWorkAttribution,
+) factoryapi.ListWorkerSessionsResponse {
 	sessions := make([]factoryapi.WorkerSessionObservation, 0, len(result.Observations))
 	for _, observation := range result.Observations {
-		sessions = append(sessions, WorkerSessionObservationToAPI(observation))
+		mapped := WorkerSessionObservationToAPI(observation)
+		if work, ok := attribution[observation.WorkerSessionID]; ok {
+			if work.WorkID != "" {
+				mapped.WorkId = stringPtr(work.WorkID)
+			}
+			if work.WorkName != "" {
+				mapped.WorkName = stringPtr(work.WorkName)
+			}
+		}
+		sessions = append(sessions, mapped)
 	}
 	response := factoryapi.ListWorkerSessionsResponse{Sessions: sessions}
 	if result.MaxResults > 0 {
@@ -620,6 +641,9 @@ func WorkerSessionObservationToAPI(observation workersessions.Observation) facto
 	}
 	if observation.FactorySessionID != "" {
 		result.FactorySessionId = stringPtr(observation.FactorySessionID)
+	}
+	if len(observation.WorkIDs) > 0 && strings.TrimSpace(observation.WorkIDs[0]) != "" {
+		result.WorkId = stringPtr(observation.WorkIDs[0])
 	}
 	if observation.Model != nil {
 		result.Model = cloneString(observation.Model)

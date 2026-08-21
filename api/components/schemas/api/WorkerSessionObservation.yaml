@@ -24,6 +24,16 @@ properties:
   factorySessionId:
     type: string
     description: Explicit Factory Session scope used for this observation.
+  workId:
+    type: string
+    nullable: true
+    description: >-
+      Stable primary Work identity associated with this Worker Session. The
+      complete correlation set remains available in workIds.
+  workName:
+    type: string
+    nullable: true
+    description: Display name of the primary associated Work when Work can be resolved.
   providerSession:
     $ref: './WorkerSessionProviderSessionRef.yaml'
     nullable: true

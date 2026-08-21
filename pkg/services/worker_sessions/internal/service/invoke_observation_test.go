@@ -239,6 +239,12 @@ func TestInvokeRetryAndObservationBoundaryGuards(t *testing.T) {
 	if got := registry.observations["worker-1"].attemptID; got != "attempt-1" {
 		t.Fatalf("ensureObservation() overwrote existing attempt = %q", got)
 	}
+	registry.sessions["worker-factory"] = workersessions.Session{ID: "worker-factory", State: workersessions.StateRunning}
+	registry.ensureObservationWithFactorySession("worker-factory", "attempt-factory", "turn-factory", []string{"work-factory"}, false, " session-factory ")
+	projectedFactory := baseObservation("worker-factory", registry.sessions["worker-factory"], registry.observations["worker-factory"])
+	if projectedFactory.FactorySessionID != "session-factory" {
+		t.Fatalf("Factory Session attribution = %q, want trimmed session-factory", projectedFactory.FactorySessionID)
+	}
 
 	supervision := newSupervision("dispatch-1", "turn-1")
 	if _, prepared := registry.prepareRetryAttempt("missing", supervision); prepared {
@@ -324,7 +330,7 @@ func TestInvokeObservationProjectionAndTranscriptOutcomes(t *testing.T) {
 	}
 }
 
-func TestListWorkerSessionObservationsUsesDirectDefaultFiltersAndCursor(t *testing.T) {
+func TestListWorkerSessionObservationsUsesFleetDefaultFiltersAndCursor(t *testing.T) {
 	registry := newObservationRegistry(nil, nil)
 	registry.sessions["direct-a"] = workersessions.Session{ID: "direct-a", State: workersessions.StateCompleted}
 	metadataA := observationMetadata()
@@ -338,11 +344,20 @@ func TestListWorkerSessionObservationsUsesDirectDefaultFiltersAndCursor(t *testi
 	registry.observations["factory-a"] = observationMetadata()
 
 	first, err := registry.ListWorkerSessionObservations(context.Background(), workersessions.ListWorkerSessionObservationsRequest{MaxResults: 1})
-	assertObservationListPage(t, "direct first", first, err, "direct-a", true, true)
-	second, err := registry.ListWorkerSessionObservations(context.Background(), workersessions.ListWorkerSessionObservationsRequest{NextToken: first.NextToken})
-	assertObservationListPage(t, "direct second", second, err, "direct-b", true, false)
+	assertObservationListPage(t, "fleet first", first, err, "direct-a", true, true)
+	second, err := registry.ListWorkerSessionObservations(context.Background(), workersessions.ListWorkerSessionObservationsRequest{MaxResults: 1, NextToken: first.NextToken})
+	assertObservationListPage(t, "fleet second", second, err, "direct-b", true, true)
+	third, err := registry.ListWorkerSessionObservations(context.Background(), workersessions.ListWorkerSessionObservationsRequest{MaxResults: 1, NextToken: second.NextToken})
+	assertObservationListPage(t, "fleet third", third, err, "factory-a", false, false)
 	factory, err := registry.ListWorkerSessionObservations(context.Background(), workersessions.ListWorkerSessionObservationsRequest{Scope: workersessions.ObservationScopeFactory, States: []workersessions.State{workersessions.StateCompleted}})
 	assertObservationListPage(t, "factory filtered", factory, err, "factory-a", false, false)
+	filtered, err := registry.ListWorkerSessionObservations(context.Background(), workersessions.ListWorkerSessionObservationsRequest{
+		States:     []workersessions.State{workersessions.StateRunning, workersessions.StateCompleted},
+		MaxResults: 2,
+	})
+	if err != nil || len(filtered.Observations) != 2 || filtered.Observations[0].WorkerSessionID != "direct-a" || filtered.Observations[1].WorkerSessionID != "direct-b" || filtered.NextToken == "" {
+		t.Fatalf("OR-filtered fleet page = %#v, %v, want first two matching IDs and a cursor", filtered, err)
+	}
 	if _, err := registry.ListWorkerSessionObservations(context.Background(), workersessions.ListWorkerSessionObservationsRequest{NextToken: "not-base64"}); !errors.Is(err, workersessions.ErrInvalidObservationPagination) {
 		t.Fatalf("invalid cursor error = %v, want ErrInvalidObservationPagination", err)
 	}

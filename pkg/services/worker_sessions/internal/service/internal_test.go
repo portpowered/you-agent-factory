@@ -2994,6 +2994,7 @@ func TestObservationScopeAndCursorHelpersRemainDeterministic(t *testing.T) {
 		want   bool
 	}{
 		{direct: true, scope: "", want: true},
+		{direct: false, scope: "", want: true},
 		{direct: true, scope: workersessions.ObservationScopeDirect, want: true},
 		{direct: false, scope: workersessions.ObservationScopeDirect, want: false},
 		{direct: false, scope: workersessions.ObservationScopeFactory, want: true},

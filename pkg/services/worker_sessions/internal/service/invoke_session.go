@@ -381,15 +381,26 @@ func retryableDispatchResult(result workers.WorkstationDispatchResult) bool {
 // its own exact resumability fact; resolved provider identity is carried by
 // the lifecycle record's provenance instead.
 type observation struct {
-	workIDs   []string
-	turnID    string
-	attemptID string
-	direct    bool
-	startedAt time.Time
-	endedAt   *time.Time
+	workIDs          []string
+	turnID           string
+	attemptID        string
+	direct           bool
+	factorySessionID string
+	startedAt        time.Time
+	endedAt          *time.Time
 }
 
 func (r *registry) ensureObservation(id, attemptID, turnID string, workIDs []string, direct ...bool) time.Time {
+	directValue := len(direct) > 0 && direct[0]
+	return r.ensureObservationWithFactorySession(id, attemptID, turnID, workIDs, directValue, "")
+}
+
+func (r *registry) ensureObservationWithFactorySession(
+	id, attemptID, turnID string,
+	workIDs []string,
+	direct bool,
+	factorySessionID string,
+) time.Time {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if current, exists := r.observations[id]; exists {
@@ -397,11 +408,12 @@ func (r *registry) ensureObservation(id, attemptID, turnID string, workIDs []str
 	}
 	startedAt := r.clock.Now()
 	r.observations[id] = &observation{
-		workIDs:   append([]string(nil), workIDs...),
-		turnID:    turnID,
-		attemptID: attemptID,
-		direct:    len(direct) > 0 && direct[0],
-		startedAt: startedAt,
+		workIDs:          append([]string(nil), workIDs...),
+		turnID:           turnID,
+		attemptID:        attemptID,
+		direct:           direct,
+		factorySessionID: strings.TrimSpace(factorySessionID),
+		startedAt:        startedAt,
 	}
 	return startedAt
 }

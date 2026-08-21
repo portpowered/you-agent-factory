@@ -8392,8 +8392,14 @@ type WorkerSessionObservation struct {
 	// TurnUsage Provider-neutral per-turn context projection derived from supported cumulative input counters. Absence means the transcript cannot support these metrics.
 	TurnUsage *WorkerSessionTurnUsage `json:"turnUsage,omitempty"`
 
+	// WorkId Stable primary Work identity associated with this Worker Session. The complete correlation set remains available in workIds.
+	WorkId *string `json:"workId"`
+
 	// WorkIds Work identities correlated with this Worker Session attempt.
 	WorkIds []string `json:"workIds"`
+
+	// WorkName Display name of the primary associated Work when Work can be resolved.
+	WorkName *string `json:"workName"`
 
 	// WorkerSessionId Stable Worker Session identity.
 	WorkerSessionId string `json:"workerSessionId"`
@@ -9001,6 +9007,9 @@ type WorkerSessionAfterPosition = int64
 
 // WorkerSessionID defines model for WorkerSessionID.
 type WorkerSessionID = string
+
+// WorkerSessionLimit defines model for WorkerSessionLimit.
+type WorkerSessionLimit = int
 
 // WorkerSessionStreamGenerationID defines model for WorkerSessionStreamGenerationID.
 type WorkerSessionStreamGenerationID = string

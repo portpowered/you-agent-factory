@@ -114,7 +114,14 @@ func (h *Handler) ListWorkerSessions(
 		}
 	}
 	var maxResults *int
-	if params.MaxResults != nil {
+	if params.Limit != nil {
+		value := int(*params.Limit)
+		if value <= 0 {
+			h.writeMappedError(w, workersessions.ErrInvalidObservationPagination)
+			return
+		}
+		maxResults = &value
+	} else if params.MaxResults != nil {
 		value := *params.MaxResults
 		maxResults = &value
 	}
