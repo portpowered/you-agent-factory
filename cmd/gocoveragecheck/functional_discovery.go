@@ -10,10 +10,17 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
+)
+
+const (
+	functionalDiscoveryParallelThreshold = 8
+	functionalDiscoveryMaxJobs           = 4
 )
 
 type functionalGoListPackage struct {
@@ -27,18 +34,22 @@ type functionalGoListPackage struct {
 // sets as the source of truth. Parsing those files avoids compiling and
 // linking every functional test binary merely to enumerate its top-level
 // tests.
-func discoverFunctionalTestInventory(packages []string, _ time.Duration, _ bool, _ int, repoRoot string) (functionalTestInventory, error) {
+func discoverFunctionalTestInventory(packages []string, _ time.Duration, _ bool, jobs int, repoRoot string) (functionalTestInventory, error) {
 	requestedPackages := sortedUniqueStrings(packages)
-	return discoverFunctionalTestInventoryWithPatterns(requestedPackages, requestedPackages, repoRoot)
+	return discoverFunctionalTestInventoryWithPatternsAndJobs(requestedPackages, requestedPackages, jobs, repoRoot)
 }
 
 func discoverFunctionalTestInventoryWithPatterns(listPatterns, packages []string, repoRoot string) (functionalTestInventory, error) {
+	return discoverFunctionalTestInventoryWithPatternsAndJobs(listPatterns, packages, defaultCoverageJobs, repoRoot)
+}
+
+func discoverFunctionalTestInventoryWithPatternsAndJobs(listPatterns, packages []string, jobs int, repoRoot string) (functionalTestInventory, error) {
 	requestedPackages := sortedUniqueStrings(packages)
 	if len(requestedPackages) == 0 {
 		return functionalTestInventory{}, errors.New("discover functional tests: no packages were selected")
 	}
 
-	listedPackages, err := listFunctionalTestPackages(listPatterns, repoRoot)
+	listedPackages, err := listFunctionalTestPackages(listPatterns, requestedPackages, jobs, repoRoot)
 	if err != nil {
 		return functionalTestInventory{}, err
 	}
@@ -63,7 +74,65 @@ func discoverFunctionalTestInventoryWithPatterns(listPatterns, packages []string
 	return inventory, nil
 }
 
-func listFunctionalTestPackages(packages []string, repoRoot string) ([]functionalGoListPackage, error) {
+func listFunctionalTestPackages(listPatterns, requestedPackages []string, jobs int, repoRoot string) ([]functionalGoListPackage, error) {
+	patterns := sortedUniqueStrings(listPatterns)
+	batches := functionalDiscoveryListBatches(patterns, requestedPackages, jobs)
+	if len(batches) == 1 {
+		listed, err := listFunctionalTestPackageBatch(batches[0], repoRoot)
+		if err != nil {
+			return nil, fmt.Errorf("discover functional tests: go list batch %q: %w", strings.Join(batches[0], " "), err)
+		}
+		return mergeFunctionalGoListPackages(listed)
+	}
+	results := make([]functionalGoListBatchResult, len(batches))
+	var waitGroup sync.WaitGroup
+	for index, batch := range batches {
+		waitGroup.Add(1)
+		go func(index int, batch []string) {
+			defer waitGroup.Done()
+			listed, err := listFunctionalTestPackageBatch(batch, repoRoot)
+			results[index] = functionalGoListBatchResult{packages: listed, err: err, requested: batch}
+		}(index, batch)
+	}
+	waitGroup.Wait()
+
+	listedPackages := make([]functionalGoListPackage, 0)
+	for _, result := range results {
+		if result.err != nil {
+			return nil, fmt.Errorf("discover functional tests: go list batch %q: %w", strings.Join(result.requested, " "), result.err)
+		}
+		listedPackages = append(listedPackages, result.packages...)
+	}
+	return mergeFunctionalGoListPackages(listedPackages)
+}
+
+type functionalGoListBatchResult struct {
+	packages  []functionalGoListPackage
+	err       error
+	requested []string
+}
+
+func functionalDiscoveryListBatches(listPatterns, requestedPackages []string, jobs int) [][]string {
+	if len(requestedPackages) < functionalDiscoveryParallelThreshold || !slices.Equal(listPatterns, requestedPackages) {
+		return [][]string{listPatterns}
+	}
+	parallelism := maxFunctionalDiscoveryJobs(jobs)
+	if parallelism > functionalDiscoveryMaxJobs {
+		parallelism = functionalDiscoveryMaxJobs
+	}
+	if parallelism > len(requestedPackages) {
+		parallelism = len(requestedPackages)
+	}
+	batchSize := (len(requestedPackages) + parallelism - 1) / parallelism
+	batches := make([][]string, 0, parallelism)
+	for start := 0; start < len(requestedPackages); start += batchSize {
+		end := min(start+batchSize, len(requestedPackages))
+		batches = append(batches, append([]string(nil), requestedPackages[start:end]...))
+	}
+	return batches
+}
+
+func listFunctionalTestPackageBatch(packages []string, repoRoot string) ([]functionalGoListPackage, error) {
 	// The inventory only needs package locations and build-selected test file
 	// names. -find keeps go list from resolving imports and dependencies for
 	// every functional package; the AST parser below remains responsible for
@@ -83,13 +152,17 @@ func listFunctionalTestPackages(packages []string, repoRoot string) ([]functiona
 		return nil, fmt.Errorf("discover functional tests: go list: %w", err)
 	}
 
+	return decodeFunctionalGoListPackages(stdout)
+}
+
+func decodeFunctionalGoListPackages(stdout string) ([]functionalGoListPackage, error) {
 	decoder := json.NewDecoder(strings.NewReader(stdout))
-	byImportPath := make(map[string]functionalGoListPackage)
+	packages := make([]functionalGoListPackage, 0)
 	for {
 		var pkg functionalGoListPackage
 		if err := decoder.Decode(&pkg); err != nil {
 			if errors.Is(err, io.EOF) {
-				break
+				return packages, nil
 			}
 			return nil, fmt.Errorf("discover functional tests: decode go list package: %w", err)
 		}
@@ -99,6 +172,13 @@ func listFunctionalTestPackages(packages []string, repoRoot string) ([]functiona
 		if strings.TrimSpace(pkg.Dir) == "" {
 			return nil, fmt.Errorf("discover functional tests: go list package %q did not include a directory", pkg.ImportPath)
 		}
+		packages = append(packages, pkg)
+	}
+}
+
+func mergeFunctionalGoListPackages(packages []functionalGoListPackage) ([]functionalGoListPackage, error) {
+	byImportPath := make(map[string]functionalGoListPackage)
+	for _, pkg := range packages {
 		if previous, exists := byImportPath[pkg.ImportPath]; exists {
 			if filepath.Clean(previous.Dir) != filepath.Clean(pkg.Dir) {
 				return nil, fmt.Errorf("discover functional tests: go list returned package %q with conflicting directories %q and %q", pkg.ImportPath, previous.Dir, pkg.Dir)

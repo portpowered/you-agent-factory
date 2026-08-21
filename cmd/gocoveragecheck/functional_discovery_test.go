@@ -7,7 +7,9 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -103,6 +105,54 @@ func TestSelected(t *testing.T) {}
 	}
 	if gotInvocation.name != "go" || gotInvocation.dir != repoRoot || !slices.Equal(gotInvocation.args, []string{"list", "-json", "-find", "./tests/functional/..."}) {
 		t.Fatalf("discovery invocation = %+v, want one current-tree go list -find pattern", gotInvocation)
+	}
+}
+
+func TestDiscoverFunctionalTestInventoryParallelizesConcretePackageBatches(t *testing.T) {
+	const packageCount = 8
+	repoRoot := t.TempDir()
+	packages := make([]string, 0, packageCount)
+	for index := 0; index < packageCount; index++ {
+		packages = append(packages, modulePath+"/tests/functional/batch"+strconv.Itoa(index))
+	}
+
+	originalRunner := commandRunner
+	t.Cleanup(func() { commandRunner = originalRunner })
+	var mu sync.Mutex
+	var invocations [][]string
+	commandRunner = func(invocation commandInvocation) (string, string, error) {
+		mu.Lock()
+		invocations = append(invocations, append([]string(nil), invocation.args...))
+		mu.Unlock()
+		var output strings.Builder
+		for _, packagePath := range invocation.args[3:] {
+			output.WriteString(marshalFunctionalGoListPackage(t, functionalGoListPackage{ImportPath: packagePath, Dir: repoRoot}))
+			output.WriteByte('\n')
+		}
+		return output.String(), "", nil
+	}
+
+	inventory, err := discoverFunctionalTestInventory(packages, 0, false, 4, repoRoot)
+	if err != nil {
+		t.Fatalf("discoverFunctionalTestInventory() error = %v", err)
+	}
+	if !slices.Equal(inventory.Packages, packages) || functionalTestCount(inventory) != 0 {
+		t.Fatalf("inventory = %+v, want all %d concrete packages and no tests", inventory, packageCount)
+	}
+	if len(invocations) != 4 {
+		t.Fatalf("go list invocations = %d, want four bounded batches: %+v", len(invocations), invocations)
+	}
+	seen := make(map[string]struct{}, packageCount)
+	for _, invocation := range invocations {
+		if !slices.Equal(invocation[:3], []string{"list", "-json", "-find"}) {
+			t.Fatalf("go list invocation = %v, want metadata flags", invocation)
+		}
+		for _, packagePath := range invocation[3:] {
+			seen[packagePath] = struct{}{}
+		}
+	}
+	if len(seen) != packageCount {
+		t.Fatalf("go list package coverage = %d, want %d: %v", len(seen), packageCount, seen)
 	}
 }
 
