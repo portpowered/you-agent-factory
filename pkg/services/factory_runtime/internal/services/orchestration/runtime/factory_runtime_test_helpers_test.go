@@ -158,6 +158,7 @@ type testFactoryConfig struct {
 	runtimeMode               interfaces.RuntimeMode
 	logger                    logging.Logger
 	clock                     factory.Clock
+	restoredWorldState        *interfaces.FactoryWorldState
 	inlineDispatch            bool
 	eventHistory              recordings.RuntimeEventLedger
 	submissionHooks           []factory.SubmissionHook
@@ -189,7 +190,8 @@ func newTestFactory(opts ...testFactoryOption) (factoryhost.Engine, error) {
 	runtime, err := New(
 		cfg.net, cfg.scheduler, workerService, workerSessionsService, cfg.runtimeConfig, nil, nil,
 		cfg.workflowContext, cfg.runtimeMode, cfg.logger, cfg.clock,
-		cfg.inlineDispatch, cfg.eventHistory, "runtime-test-recording-id", "runtime-test-id", nil, unavailableProviderSessions{},
+		cfg.inlineDispatch, cfg.eventHistory, "runtime-test-recording-id", "runtime-test-id", nil,
+		cfg.restoredWorldState, unavailableProviderSessions{},
 		nil, nil, cfg.submissionHooks,
 		cfg.dispatchRecorder, cfg.completionRecorder, cfg.petriMutationRecorder,
 		cfg.completionDeliveryPlanner,
@@ -712,6 +714,10 @@ func withLogger(value logging.Logger) testFactoryOption {
 
 func withClock(value factory.Clock) testFactoryOption {
 	return func(cfg *testFactoryConfig) { cfg.clock = value }
+}
+
+func withRestoredWorldState(value *interfaces.FactoryWorldState) testFactoryOption {
+	return func(cfg *testFactoryConfig) { cfg.restoredWorldState = value }
 }
 
 func withInlineDispatch() testFactoryOption {

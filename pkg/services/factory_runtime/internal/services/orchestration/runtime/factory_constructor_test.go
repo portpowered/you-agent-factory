@@ -2,6 +2,7 @@ package runtime
 
 import (
 	"context"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -13,6 +14,7 @@ import (
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/orchestrators/petri"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/scheduler"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/state"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
@@ -29,6 +31,205 @@ func TestNew_RequiresClock(t *testing.T) {
 	_, err := newTestFactory(withNet(buildSimpleNet()), withClock(nil))
 	if err == nil || !strings.Contains(err.Error(), "Factory Runtime clock is required") {
 		t.Fatalf("New() error = %v, want required clock error", err)
+	}
+}
+
+func TestNew_WithoutRestoredStateUsesFreshResourceMarking(t *testing.T) {
+	base := time.Date(2026, time.April, 10, 12, 0, 0, 0, time.UTC)
+	net := buildSimpleNet()
+	resource := &state.ResourceDef{ID: "gpu-slot", Name: "GPU slot", Capacity: 2}
+	place, expectedTokens := state.GenerateResourcePlaces(resource, base)
+	net.Resources = map[string]*state.ResourceDef{resource.ID: resource}
+	net.Places[place.ID] = place
+
+	f, err := newTestFactory(
+		withNet(net),
+		withClock(platformclock.NewDeterministic(base, time.Second)),
+	)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	snapshot, err := f.GetEngineStateSnapshot(context.Background())
+	if err != nil {
+		t.Fatalf("GetEngineStateSnapshot: %v", err)
+	}
+	if snapshot.Marking.WorkflowID != net.ID {
+		t.Fatalf("marking workflow ID = %q, want %q", snapshot.Marking.WorkflowID, net.ID)
+	}
+	if got := len(snapshot.Marking.Tokens); got != len(expectedTokens) {
+		t.Fatalf("initial token count = %d, want %d resource tokens", got, len(expectedTokens))
+	}
+	if got := len(snapshot.Marking.PlaceTokens[place.ID]); got != len(expectedTokens) {
+		t.Fatalf("initial tokens at %q = %d, want %d", place.ID, got, len(expectedTokens))
+	}
+	if got := len(snapshot.Marking.PlaceTokens["task:init"]); got != 0 {
+		t.Fatalf("initial Work tokens at task:init = %d, want none", got)
+	}
+
+	for _, expected := range expectedTokens {
+		actual, ok := snapshot.Marking.Tokens[expected.ID]
+		if !ok {
+			t.Fatalf("initial marking is missing resource token %q", expected.ID)
+		}
+		if actual.PlaceID != expected.PlaceID {
+			t.Errorf("resource token %q place = %q, want %q", actual.ID, actual.PlaceID, expected.PlaceID)
+		}
+		if actual.Color.WorkID != expected.Color.WorkID || actual.Color.WorkTypeID != expected.Color.WorkTypeID {
+			t.Errorf("resource token %q identity = (%q, %q), want (%q, %q)", actual.ID, actual.Color.WorkID, actual.Color.WorkTypeID, expected.Color.WorkID, expected.Color.WorkTypeID)
+		}
+		if actual.Color.DataType != expected.Color.DataType {
+			t.Errorf("resource token %q data type = %q, want %q", actual.ID, actual.Color.DataType, expected.Color.DataType)
+		}
+		if !actual.CreatedAt.Equal(base) || !actual.EnteredAt.Equal(base) {
+			t.Errorf("resource token %q timestamps = (%s, %s), want (%s, %s)", actual.ID, actual.CreatedAt, actual.EnteredAt, base, base)
+		}
+	}
+}
+
+func TestNew_WithExplicitEmptyRestoredStateUsesFreshResourceMarking(t *testing.T) {
+	base := time.Date(2026, time.April, 10, 12, 0, 0, 0, time.UTC)
+	newFactory := func(restored *interfaces.FactoryWorldState) *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net] {
+		net := buildSimpleNet()
+		resource := &state.ResourceDef{ID: "gpu-slot", Name: "GPU slot", Capacity: 2}
+		place, _ := state.GenerateResourcePlaces(resource, base)
+		net.Resources = map[string]*state.ResourceDef{resource.ID: resource}
+		net.Places[place.ID] = place
+		f, err := newTestFactory(
+			withNet(net),
+			withClock(platformclock.NewDeterministic(base, time.Second)),
+			withRestoredWorldState(restored),
+		)
+		if err != nil {
+			t.Fatalf("New: %v", err)
+		}
+		snapshot, err := f.GetEngineStateSnapshot(context.Background())
+		if err != nil {
+			t.Fatalf("GetEngineStateSnapshot: %v", err)
+		}
+		return snapshot
+	}
+
+	fresh := newFactory(nil)
+	empty := newFactory(&interfaces.FactoryWorldState{})
+	if !reflect.DeepEqual(fresh.Marking, empty.Marking) {
+		t.Fatalf("empty restored marking = %#v, fresh marking = %#v; want identical markings", empty.Marking, fresh.Marking)
+	}
+}
+
+func TestNew_WithRestoredWorldStateSeedsWorkAndKeepsCurrentResourcesAuthoritative(t *testing.T) {
+	base := time.Date(2026, time.April, 10, 12, 0, 0, 0, time.UTC)
+	net := buildSimpleNet()
+	resource := &state.ResourceDef{ID: "gpu-slot", Name: "GPU slot", Capacity: 2}
+	resourcePlace, expectedResources := state.GenerateResourcePlaces(resource, base)
+	net.Resources = map[string]*state.ResourceDef{resource.ID: resource}
+	net.Places[resourcePlace.ID] = resourcePlace
+	restored := restoredWorldStateFixture(base, resourcePlace.ID)
+
+	f, err := newTestFactory(
+		withNet(net),
+		withClock(platformclock.NewDeterministic(base, time.Second)),
+		withRestoredWorldState(restored),
+	)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	snapshot, err := f.GetEngineStateSnapshot(context.Background())
+	if err != nil {
+		t.Fatalf("GetEngineStateSnapshot: %v", err)
+	}
+	if got := len(snapshot.Marking.Tokens); got != len(expectedResources)+1 {
+		t.Fatalf("initial token count = %d, want %d current resources plus restored Work", got, len(expectedResources)+1)
+	}
+	assertCurrentRestoredResourceTokens(t, snapshot, resourcePlace.ID, expectedResources)
+	token := restoredWorkTokenFromSnapshot(t, snapshot)
+	assertRestoredWorkToken(t, token, restored.WorkItemsByID["work-restored"])
+}
+
+func assertCurrentRestoredResourceTokens(
+	t *testing.T,
+	snapshot *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net],
+	placeID string,
+	expectedResources []*workerexecution.Token,
+) {
+	t.Helper()
+	wantIDs := []string{expectedResources[0].ID, expectedResources[1].ID}
+	if got := snapshot.Marking.PlaceTokens[placeID]; !reflect.DeepEqual(got, wantIDs) {
+		t.Fatalf("resource token IDs = %#v, want current generated IDs %#v", got, wantIDs)
+	}
+}
+
+func restoredWorkTokenFromSnapshot(
+	t *testing.T,
+	snapshot *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net],
+) *workerexecution.Token {
+	t.Helper()
+	workTokenIDs := snapshot.Marking.PlaceTokens["task:done"]
+	if len(workTokenIDs) != 1 {
+		t.Fatalf("restored Work token IDs = %#v, want one token", workTokenIDs)
+	}
+	token := snapshot.Marking.Tokens[workTokenIDs[0]]
+	if token == nil {
+		t.Fatalf("restored Work token %q is missing from marking", workTokenIDs[0])
+	}
+	return token
+}
+
+func assertRestoredWorkToken(
+	t *testing.T,
+	token *workerexecution.Token,
+	item work.FactoryWorkItem,
+) {
+	t.Helper()
+	if token.ID != "work-restored" || token.Color.WorkID != "work-restored" || token.Color.WorkTypeID != "task" {
+		t.Fatalf("restored Work identity = (%q, %q, %q), want work-restored/task", token.ID, token.Color.WorkID, token.Color.WorkTypeID)
+	}
+	if token.Color.RequestID != "request-restored" || token.Color.TraceID != "trace-restored" || token.Color.ParentID != "parent-restored" {
+		t.Fatalf("restored Work lineage = %#v, want recorded request/trace/parent", token.Color)
+	}
+	if token.Color.Name != "Restored work" || !reflect.DeepEqual(token.Color.Tags, map[string]string{"priority": "high"}) {
+		t.Fatalf("restored Work presentation = %#v, want recorded name and tags", token.Color)
+	}
+	assertRestoredWorkPayload(t, token, item)
+	if len(token.Color.Relations) != 1 || token.Color.Relations[0].TargetWorkID != "dependency-restored" {
+		t.Fatalf("restored Work relations = %#v, want dependency-restored", token.Color.Relations)
+	}
+}
+
+func assertRestoredWorkPayload(t *testing.T, token *workerexecution.Token, item work.FactoryWorkItem) {
+	t.Helper()
+	if !reflect.DeepEqual(token.Color.Content, item.Content) ||
+		!reflect.DeepEqual(token.Color.StructuredResult, item.StructuredResult) {
+		t.Fatalf("restored Work payload = %#v, want recorded content and structured result", token.Color)
+	}
+}
+
+func restoredWorldStateFixture(base time.Time, resourcePlaceID string) *interfaces.FactoryWorldState {
+	return &interfaces.FactoryWorldState{
+		EventTime: base.Add(-time.Minute),
+		WorkItemsByID: map[string]work.FactoryWorkItem{
+			"work-restored": {
+				ID: "work-restored", WorkTypeID: "task", State: "done", DisplayName: "Restored work",
+				ChainingTraceDepth: 2, CurrentChainingTraceID: "chain-current",
+				PreviousChainingTraceIDs: []string{"chain-previous"}, TraceID: "trace-restored",
+				ParentID: "parent-restored", PlaceID: "task:done",
+				Content: []work.WorkContentPart{{Type: work.WorkContentPartTypeText, Text: "recorded content"}},
+				Tags:    map[string]string{"priority": "high"}, StructuredResult: map[string]any{"answer": "recorded"},
+			},
+			// This item is retained in the historical Work index but is not
+			// present in current occupancy; it must not become a live token.
+			"work-not-on-board": {ID: "work-not-on-board", WorkTypeID: "task", State: "init", PlaceID: "task:init"},
+		},
+		WorkRequestsByID: map[string]interfaces.WorkRequestPayload{
+			"request-restored": {RequestID: "request-restored", WorkItems: []work.FactoryWorkItem{{ID: "work-restored"}}},
+		},
+		RelationsByWorkID: map[string][]work.FactoryRelation{
+			"work-restored": {{Type: string(work.WorkRelationDependsOn), TargetWorkID: "dependency-restored", RequiredState: "done"}},
+		},
+		PlaceOccupancyByID: map[string]interfaces.FactoryPlaceOccupancy{
+			"task:done":     {PlaceID: "task:done", WorkItemIDs: []string{"work-restored"}, ResourceTokenIDs: []string{"old-gpu-token-1", "old-gpu-token-2", "old-gpu-token-3"}},
+			resourcePlaceID: {PlaceID: resourcePlaceID, ResourceTokenIDs: []string{"recorded-resource-token"}},
+		},
 	}
 }
 

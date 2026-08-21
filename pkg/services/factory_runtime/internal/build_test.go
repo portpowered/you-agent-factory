@@ -51,7 +51,7 @@ func TestBuild_ConstructsRecordingsRootLedgerAndHostingCapabilities(t *testing.T
 		factoryinternal.RuntimeFileLoggingPolicyDisabled,
 		factoryinternal.RuntimeMetricsPolicyDisabled, "", factory.RuntimeMetricsStorageConfig{},
 		loaded, "runtime-recordings-root", "", clockwork.NewFakeClock(),
-		"/recordings/session.json", nil, nil, nil, nil, nil,
+		"/recordings/session.json", nil, nil, nil, nil, nil, nil,
 		runtimeOpening,
 		testRuntimeWorkers{},
 		testRuntimeWorkerSessionsFactory(t),
@@ -88,7 +88,7 @@ func TestBuild_ConstructsRunnableBundleWithoutRootService(t *testing.T) {
 		"", factory.RuntimeLogStorageConfig{},
 		factoryinternal.RuntimeFileLoggingPolicyDisabled,
 		factoryinternal.RuntimeMetricsPolicyDisabled, "", factory.RuntimeMetricsStorageConfig{},
-		loaded, "runtime-test", "", clockwork.NewFakeClock(), "", nil, nil, nil, nil,
+		loaded, "runtime-test", "", clockwork.NewFakeClock(), "", nil, nil, nil, nil, nil,
 		nil,
 		testRuntimeOpening(newTestRuntimeLedger),
 		testRuntimeWorkers{},
@@ -138,7 +138,7 @@ func TestBuild_FinalizesRecordingBeforeClosingRuntimeSinksOnPartialFailure(t *te
 		"", interfaces.RuntimeModeBatch, false, nil, false, nil, nil,
 		logDir, factory.RuntimeLogStorageConfig{},
 		"", "", metricsDir, factory.RuntimeMetricsStorageConfig{},
-		loaded, "partial-runtime", "", clockwork.NewFakeClock(), "recording.json", nil, nil, nil, nil, nil,
+		loaded, "partial-runtime", "", clockwork.NewFakeClock(), "recording.json", nil, nil, nil, nil, nil, nil,
 		runtimeOpening,
 		testRuntimeWorkers{}, failingRuntimeWorkerSessionsFactory(), nil,
 	)
@@ -165,7 +165,7 @@ func TestBuild_ProductionObservabilityPoliciesEnableRuntimeSinksByDefault(t *tes
 		"", interfaces.RuntimeModeBatch, false, nil, false, nil, nil,
 		logDir, factory.RuntimeLogStorageConfig{},
 		"", "", metricsDir, factory.RuntimeMetricsStorageConfig{},
-		loaded, "runtime-observability", "", clockwork.NewFakeClock(), "", nil, nil, nil, nil,
+		loaded, "runtime-observability", "", clockwork.NewFakeClock(), "", nil, nil, nil, nil, nil,
 		nil,
 		testRuntimeOpening(newTestRuntimeLedger),
 		testRuntimeWorkers{},
@@ -204,7 +204,7 @@ func TestBuild_ProductionObservabilityPoliciesEnableRuntimeSinksByDefault(t *tes
 		factoryinternal.RuntimeFileLoggingPolicyDisabled,
 		factoryinternal.RuntimeMetricsPolicyDisabled,
 		metricsDir, factory.RuntimeMetricsStorageConfig{},
-		loaded, "runtime-disabled", "", clockwork.NewFakeClock(), "", nil, nil, nil, nil,
+		loaded, "runtime-disabled", "", clockwork.NewFakeClock(), "", nil, nil, nil, nil, nil,
 		nil,
 		testRuntimeOpening(newTestRuntimeLedger),
 		testRuntimeWorkers{},
@@ -444,6 +444,13 @@ func (opening *testRuntimeOpeningStub) OpenRuntime(
 }
 
 func (*testRuntimeOpeningStub) Projection() recordings.ProjectionService { return nil }
+
+func (*testRuntimeOpeningStub) ReconstructCanonicalFactoryWorldState(
+	[]interfaces.FactoryEvent,
+	int,
+) (recordings.FactoryWorldState, error) {
+	return recordings.FactoryWorldState{}, nil
+}
 
 func (*testRuntimeOpeningStub) ReplayClock(*recordings.ReplayArtifact) recordings.Clock { return nil }
 

@@ -37,6 +37,10 @@ type SessionBuildSpec struct {
 	ProviderOverride      providers.Service
 	ProviderCommandRunner workers.CommandRunner
 	CommandRunnerOverride workers.CommandRunner
+	// RestoredWorldState is an optional detached state reconstructed by
+	// Recordings. Factory Runtime converts only its recorded Work placement;
+	// current-definition resources are always generated during construction.
+	RestoredWorldState *factorydefinitions.FactoryWorldState
 	// ReplayCommandRunner is kept separate from the selected production
 	// command edge so direct Workers execution can reproduce recorded script
 	// effects even when normal composition supplied a host runner.

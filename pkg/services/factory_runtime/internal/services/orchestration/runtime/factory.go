@@ -101,6 +101,7 @@ type runtimeConfig struct {
 	recordingID                string // optional Worker recording target propagated to Worker Sessions
 	runtimeID                  string // stable runtime-instance identity used for attempt correlation
 	worldStateProjector        factory.WorldStateProjector
+	restoredWorldState         *interfaces.FactoryWorldState
 	providerSessions           providersessions.Service
 	submissionRecorder         recordings.SubmissionRecorder
 	factoryEventRecorder       factory.FactoryEventRecorder
@@ -145,6 +146,7 @@ func New(
 	recordingID string,
 	runtimeID string,
 	worldStateProjector factory.WorldStateProjector,
+	restoredWorldState *interfaces.FactoryWorldState,
 	providerSessions providersessions.Service,
 	submissionRecorder recordings.SubmissionRecorder,
 	factoryEventRecorder factory.FactoryEventRecorder,
@@ -208,6 +210,7 @@ func New(
 		recordingID:                strings.TrimSpace(recordingID),
 		runtimeID:                  strings.TrimSpace(runtimeID),
 		worldStateProjector:        worldStateProjector,
+		restoredWorldState:         restoredWorldState,
 		providerSessions:           providerSessions,
 		submissionRecorder:         submissionRecorder,
 		factoryEventRecorder:       factoryEventRecorder,
@@ -362,11 +365,26 @@ func firstDecisionEnvelopeService(
 
 func buildRuntimeMarking(cfg *runtimeConfig) *petri.Marking {
 	marking := petri.NewMarking(cfg.net.ID)
+	resourcePlaceIDs := make(map[string]struct{}, len(cfg.net.Resources))
+	var constructionNow time.Time
+	hasConstructionNow := false
 	for _, rd := range cfg.net.Resources {
-		_, tokens := state.GenerateResourcePlaces(rd, cfg.clock.Now())
+		now := cfg.clock.Now()
+		if !hasConstructionNow {
+			constructionNow = now
+			hasConstructionNow = true
+		}
+		place, tokens := state.GenerateResourcePlaces(rd, now)
+		resourcePlaceIDs[place.ID] = struct{}{}
 		for _, tok := range tokens {
 			marking.AddToken(tok)
 		}
+	}
+	if restoredWorkCount(cfg.restoredWorldState) > 0 {
+		if !hasConstructionNow {
+			constructionNow = cfg.clock.Now()
+		}
+		seedRestoredWork(marking, cfg.net, cfg.restoredWorldState, constructionNow, resourcePlaceIDs)
 	}
 	return marking
 }
