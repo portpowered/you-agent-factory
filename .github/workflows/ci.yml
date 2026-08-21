@@ -248,6 +248,14 @@ jobs:
           FUNCTIONAL_QUARANTINE_EVIDENCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
           FUNCTIONAL_QUARANTINE_EVIDENCE_OUTPUT: .artifacts/functional-test-viz/quarantine-package-evidence.txt
           FUNCTIONAL_QUARANTINE_EVIDENCE_TIMEOUT: 15m
+      - name: Upload Linux quarantine package evidence
+        if: always() && matrix.suite == 'functional'
+        uses: actions/upload-artifact@v4
+        with:
+          name: functional-quarantine-package-evidence
+          path: .artifacts/functional-test-viz/quarantine-package-evidence.txt
+          if-no-files-found: error
+          retention-days: 14
       - name: Run backend coverage
         if: matrix.suite == 'unit'
         run: make test-unit-coverage
