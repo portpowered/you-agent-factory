@@ -40,6 +40,7 @@ import (
 	factorysessionmcp "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/mcp"
 	factorysessionwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire"
 	factoryvisualization "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
+	factoryvisualizationhttp "github.com/portpowered/infinite-you/pkg/services/factory_visualization/transports/http"
 	factoryvisualizationwire "github.com/portpowered/infinite-you/pkg/services/factory_visualization/wire"
 	modelshttp "github.com/portpowered/infinite-you/pkg/services/models/transports/http"
 	modelswire "github.com/portpowered/infinite-you/pkg/services/models/wire"
@@ -855,9 +856,8 @@ func provideDirectJavaScriptSyncRunner() factorysessionwire.DirectJavaScriptSync
 // binder or central mapping graph is involved.
 type httpRuntimeBinding func(factorysessionwire.OpenedApplicationRuntime) (http.Handler, error)
 
-// provideHTTPRuntimeBinding is the single Wire-owned live HTTP composition
-// path. It builds each owner adapter for the opened runtime and hands the
-// generated route shell only those prebuilt adapters.
+// provideHTTPRuntimeBinding is retained for focused legacy composition tests
+// that exercise only the pre-metrics runtime shell.
 func provideHTTPRuntimeBinding(
 	factoryStatusProjector factoryruntime.FactoryStatusProjector,
 	providerSessionsHTTP *providersessionshttp.Handler,
@@ -867,11 +867,30 @@ func provideHTTPRuntimeBinding(
 	sessionRequests factorysessionshttp.RequestPreparation,
 	costsQuery costs.CostsQuery,
 ) (httpRuntimeBinding, error) {
-	if factoryStatusProjector == nil || providerSessionsHTTP == nil || modelsContent == nil || validation == nil || invocationWorkType == nil || sessionRequests == nil || costsQuery == nil {
+	return provideHTTPRuntimeBindingWithMetrics(
+		factoryStatusProjector, providerSessionsHTTP, modelsContent, validation,
+		invocationWorkType, sessionRequests, nil, costsQuery,
+	)
+}
+
+// provideHTTPRuntimeBindingWithMetrics is the production Wire-owned live HTTP
+// composition path. It builds each owner adapter for the opened runtime and
+// hands the generated route shell only those prebuilt adapters.
+func provideHTTPRuntimeBindingWithMetrics(
+	factoryStatusProjector factoryruntime.FactoryStatusProjector,
+	providerSessionsHTTP *providersessionshttp.Handler,
+	modelsContent work.ContentPreparation,
+	validation factorydefinitions.SubmittedDefinitionValidationOperation,
+	invocationWorkType factorydefinitions.InvocationWorkTypeService,
+	sessionRequests factorysessionshttp.RequestPreparation,
+	metricsQuery factoryvisualization.RuntimeMetricsQuery,
+	costsQuery costs.CostsQuery,
+) (httpRuntimeBinding, error) {
+	if factoryStatusProjector == nil || providerSessionsHTTP == nil || modelsContent == nil || validation == nil || invocationWorkType == nil || sessionRequests == nil || metricsQuery == nil || costsQuery == nil {
 		return nil, errors.New("construct HTTP runtime binding: owner adapters and boundary policies are required")
 	}
 	return func(opened factorysessionwire.OpenedApplicationRuntime) (http.Handler, error) {
-		return newHTTPRuntimeHandler(opened, factoryStatusProjector, providerSessionsHTTP, modelsContent, validation, invocationWorkType, sessionRequests, costsQuery)
+		return newHTTPRuntimeHandlerWithMetrics(opened, factoryStatusProjector, providerSessionsHTTP, modelsContent, validation, invocationWorkType, sessionRequests, metricsQuery, costsQuery)
 	}, nil
 }
 
@@ -883,6 +902,23 @@ func newHTTPRuntimeHandler(
 	validation factorydefinitions.SubmittedDefinitionValidationOperation,
 	invocationWorkType factorydefinitions.InvocationWorkTypeService,
 	sessionRequests factorysessionshttp.RequestPreparation,
+	costsQuery costs.CostsQuery,
+) (http.Handler, error) {
+	return newHTTPRuntimeHandlerWithMetrics(
+		opened, factoryStatusProjector, providerSessionsHTTP, modelsContent, validation,
+		invocationWorkType, sessionRequests, nil, costsQuery,
+	)
+}
+
+func newHTTPRuntimeHandlerWithMetrics(
+	opened factorysessionwire.OpenedApplicationRuntime,
+	factoryStatusProjector factoryruntime.FactoryStatusProjector,
+	providerSessionsHTTP *providersessionshttp.Handler,
+	modelsContent work.ContentPreparation,
+	validation factorydefinitions.SubmittedDefinitionValidationOperation,
+	invocationWorkType factorydefinitions.InvocationWorkTypeService,
+	sessionRequests factorysessionshttp.RequestPreparation,
+	metricsQuery factoryvisualization.RuntimeMetricsQuery,
 	costsQuery costs.CostsQuery,
 ) (http.Handler, error) {
 	if opened.FactoryRuntime == nil || opened.FactoryDefinitions == nil || opened.FactorySessions == nil || opened.LiveControl == nil {
@@ -963,9 +999,24 @@ func newHTTPRuntimeHandler(
 	if costsHandler == nil {
 		return nil, errors.New("bind HTTP runtime: Costs query and runtime paths are required")
 	}
-	return transporthttp.NewServerWithRecordingsAndCosts(
+	if metricsQuery == nil {
+		return transporthttp.NewServerWithRecordingsAndCosts(
+			recordingsAdapter, sessionsHandler, workHandler, modelsHandler, providerSessionsHTTP,
+			factoryDefinitionsHandler, opened.Logger, costsHandler, workerSessionsHandler,
+		).Handler(), nil
+	}
+	metricsAdapter := factoryvisualizationhttp.NewMetricsAdapter(
+		metricsQuery,
+		newMetricsFactorySessionScopeResolver(opened.FactorySessions),
+		opened.Resources.Diagnostics.MetricsRootDir,
+	)
+	metricsHandler := factoryvisualizationhttp.NewMetricsHandler(metricsAdapter, opened.Logger)
+	if metricsHandler == nil {
+		return nil, errors.New("bind HTTP runtime: Visualization metrics query and runtime paths are required")
+	}
+	return transporthttp.NewServerWithRecordingsAndMetricsAndCosts(
 		recordingsAdapter, sessionsHandler, workHandler, modelsHandler, providerSessionsHTTP,
-		factoryDefinitionsHandler, opened.Logger, costsHandler, workerSessionsHandler,
+		factoryDefinitionsHandler, opened.Logger, metricsHandler, costsHandler, workerSessionsHandler,
 	).Handler(), nil
 }
 

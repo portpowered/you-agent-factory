@@ -38,10 +38,16 @@ func (query RuntimeMetricsQuery) QueryRuntimeMetrics(
 }
 
 // RuntimeMetricsQueryRequest identifies the artifact root and optional runtime
-// scope filters. When both identifiers are supplied they are intersected.
+// scope filters. SessionIDs is authoritative when supplied; SessionID remains
+// the single-identity compatibility filter when no candidate set is present.
 type RuntimeMetricsQueryRequest struct {
-	MetricsRoot       string
-	SessionID         string
+	MetricsRoot string
+	SessionID   string
+	// SessionIDs is an optional resolved retained-scope set. It is used by
+	// transport adapters when one public Factory Session maps to more than
+	// one canonical identity across live/runtime artifact generations. When it
+	// is empty, SessionID remains the direct legacy filter.
+	SessionIDs        []string
 	RuntimeInstanceID string
 }
 

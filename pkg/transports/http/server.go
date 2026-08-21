@@ -15,6 +15,7 @@ import (
 	costshttp "github.com/portpowered/infinite-you/pkg/services/costs/transports/http"
 	factorydefinitionshttp "github.com/portpowered/infinite-you/pkg/services/factory_definitions/transports/http"
 	factorysessionshttp "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/http"
+	factoryvisualizationhttp "github.com/portpowered/infinite-you/pkg/services/factory_visualization/transports/http"
 	modelshttp "github.com/portpowered/infinite-you/pkg/services/models/transports/http"
 	providersessionshttp "github.com/portpowered/infinite-you/pkg/services/provider_sessions/transports/http"
 	recordingshttp "github.com/portpowered/infinite-you/pkg/services/recordings/transports/http"
@@ -38,6 +39,7 @@ type Server struct {
 	modelsHTTP             *modelshttp.Handler
 	providerSessionsHTTP   *providersessionshttp.Handler
 	workerSessionsHTTP     *workersessionshttp.Handler
+	metricsHTTP            *factoryvisualizationhttp.MetricsHandler
 	costsHTTP              *costshttp.Handler
 	logger                 *zap.Logger
 	router                 *mux.Router
@@ -58,7 +60,7 @@ func NewServer(
 	logger *zap.Logger,
 	workerSessions ...*workersessionshttp.Handler,
 ) *Server {
-	return newServer(nil, factorySessionsHTTP, workHTTP, modelsHTTP, providerSessionsHTTP, factoryDefinitionsHTTP, logger, nil, workerSessions...)
+	return newServer(nil, factorySessionsHTTP, workHTTP, modelsHTTP, providerSessionsHTTP, factoryDefinitionsHTTP, logger, nil, nil, workerSessions...)
 }
 
 // NewServerWithRecordings composes the generated route shell with the
@@ -74,7 +76,7 @@ func NewServerWithRecordings(
 	logger *zap.Logger,
 	workerSessions ...*workersessionshttp.Handler,
 ) *Server {
-	return newServer(recordingsHTTP, factorySessionsHTTP, workHTTP, modelsHTTP, providerSessionsHTTP, factoryDefinitionsHTTP, logger, nil, workerSessions...)
+	return newServer(recordingsHTTP, factorySessionsHTTP, workHTTP, modelsHTTP, providerSessionsHTTP, factoryDefinitionsHTTP, logger, nil, nil, workerSessions...)
 }
 
 // NewServerWithRecordingsAndCosts composes the generated route shell with the
@@ -92,7 +94,26 @@ func NewServerWithRecordingsAndCosts(
 	costsHTTP *costshttp.Handler,
 	workerSessions ...*workersessionshttp.Handler,
 ) *Server {
-	return newServer(recordingsHTTP, factorySessionsHTTP, workHTTP, modelsHTTP, providerSessionsHTTP, factoryDefinitionsHTTP, logger, costsHTTP, workerSessions...)
+	return newServer(recordingsHTTP, factorySessionsHTTP, workHTTP, modelsHTTP, providerSessionsHTTP, factoryDefinitionsHTTP, logger, nil, costsHTTP, workerSessions...)
+}
+
+// NewServerWithRecordingsAndMetricsAndCosts composes the generated route shell
+// with the canonical Visualization metrics and Costs owner adapters for a
+// live runtime. The older constructors remain available for focused
+// transport fixtures that do not need these routes.
+func NewServerWithRecordingsAndMetricsAndCosts(
+	recordingsHTTP *recordingshttp.Adapter,
+	factorySessionsHTTP *factorysessionshttp.Handler,
+	workHTTP *workhttp.Adapter,
+	modelsHTTP *modelshttp.Handler,
+	providerSessionsHTTP *providersessionshttp.Handler,
+	factoryDefinitionsHTTP *factorydefinitionshttp.Handler,
+	logger *zap.Logger,
+	metricsHTTP *factoryvisualizationhttp.MetricsHandler,
+	costsHTTP *costshttp.Handler,
+	workerSessions ...*workersessionshttp.Handler,
+) *Server {
+	return newServer(recordingsHTTP, factorySessionsHTTP, workHTTP, modelsHTTP, providerSessionsHTTP, factoryDefinitionsHTTP, logger, metricsHTTP, costsHTTP, workerSessions...)
 }
 
 func newServer(
@@ -103,6 +124,7 @@ func newServer(
 	providerSessionsHTTP *providersessionshttp.Handler,
 	factoryDefinitionsHTTP *factorydefinitionshttp.Handler,
 	logger *zap.Logger,
+	metricsHTTP *factoryvisualizationhttp.MetricsHandler,
 	costsHTTP *costshttp.Handler,
 	workerSessions ...*workersessionshttp.Handler,
 ) *Server {
@@ -115,7 +137,8 @@ func newServer(
 		recordingsHTTP:         recordingsHTTP,
 		factoryDefinitionsHTTP: factoryDefinitionsHTTP,
 		modelsHTTP:             modelsHTTP, providerSessionsHTTP: providerSessionsHTTP, logger: logger,
-		costsHTTP: costsHTTP,
+		metricsHTTP: metricsHTTP,
+		costsHTTP:   costsHTTP,
 	}
 	if len(workerSessions) > 0 {
 		srv.workerSessionsHTTP = workerSessions[0]
@@ -395,6 +418,20 @@ func (s *Server) GetProviderSessionDetails(
 	params factoryapi.GetProviderSessionDetailsParams,
 ) {
 	s.providerSessionsHTTP.GetProviderSessionDetails(w, r, params)
+}
+
+// GetMetrics forwards the generated operation to the Factory Visualization
+// metrics owner handler. The top-level transport owns only route composition.
+func (s *Server) GetMetrics(
+	w http.ResponseWriter,
+	r *http.Request,
+	params factoryapi.GetMetricsParams,
+) {
+	if s == nil || s.metricsHTTP == nil {
+		s.writeError(w, http.StatusInternalServerError, "Visualization metrics handler is unavailable", "INTERNAL_ERROR")
+		return
+	}
+	s.metricsHTTP.GetMetrics(w, r, params)
 }
 
 // GetMetricsCosts forwards the generated operation to the Costs owner

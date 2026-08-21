@@ -27,6 +27,7 @@ import (
 	sessioncli "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/cli/session"
 	factorysessionwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire"
 	factoryvisualization "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
+	visualizationcli "github.com/portpowered/infinite-you/pkg/services/factory_visualization/transports/cli"
 	modelservice "github.com/portpowered/infinite-you/pkg/services/models"
 	modelscli "github.com/portpowered/infinite-you/pkg/services/models/transports/cli"
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
@@ -85,6 +86,15 @@ func provideStandardCLIHTTPProtocol() (standardCLIHTTPProtocol, error) {
 
 func provideCostsCLI() costscli.Operation {
 	return costscli.NewOperation(func(server string) (costscli.Client, error) {
+		return generatedhttpclient.NewClientWithResponses(
+			server,
+			generatedhttpclient.WithHTTPClient(&http.Client{Timeout: standardCLIHTTPTimeout}),
+		)
+	})
+}
+
+func provideMetricsCLI() visualizationcli.Operation {
+	return visualizationcli.NewOperation(func(server string) (visualizationcli.Client, error) {
 		return generatedhttpclient.NewClientWithResponses(
 			server,
 			generatedhttpclient.WithHTTPClient(&http.Client{Timeout: standardCLIHTTPTimeout}),

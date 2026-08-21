@@ -1,15 +1,19 @@
 package runtime_metrics_test
 
 import (
+	"context"
 	"encoding/json"
-	"os"
-	"path/filepath"
+	"net/http/httptest"
 	"strings"
 	"testing"
 
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	factoryvisualization "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
+	factoryvisualizationhttp "github.com/portpowered/infinite-you/pkg/services/factory_visualization/transports/http"
+	transporthttp "github.com/portpowered/infinite-you/pkg/transports/http"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
+	"go.uber.org/zap"
 )
 
 // TestMetricsInvalidGroupThroughRootProcessPreservesCodedDiagnostic proves
@@ -41,16 +45,30 @@ func TestMetricsInvalidGroupThroughRootProcessPreservesCodedDiagnostic(t *testin
 func TestMetricsSuccessThroughRootProcessRendersQueryCostAvailability(t *testing.T) {
 	t.Parallel()
 
-	homeDir := t.TempDir()
-	if err := os.MkdirAll(filepath.Join(homeDir, ".you-agent-factory", "metrics"), 0o755); err != nil {
-		t.Fatalf("create metrics root: %v", err)
-	}
+	query := factoryvisualization.RuntimeMetricsQuery(func(context.Context, factoryvisualization.RuntimeMetricsQueryRequest) (factoryvisualization.RuntimeMetricsQueryResult, error) {
+		return factoryvisualization.RuntimeMetricsQueryResult{
+			Cost: factoryvisualization.RuntimeMetricsCost{
+				Availability: factoryvisualization.RuntimeMetricsCostUnavailable,
+			},
+		}, nil
+	})
+	metricsHandler := factoryvisualizationhttp.NewMetricsHandler(
+		factoryvisualizationhttp.NewMetricsAdapter(query, nil, t.TempDir()),
+		zap.NewNop(),
+	)
+	apiServer := transporthttp.NewServerWithRecordingsAndMetricsAndCosts(
+		nil, nil, nil, nil, nil, nil, zap.NewNop(), metricsHandler, nil,
+	)
+	server := httptest.NewServer(apiServer.Handler())
+	t.Cleanup(server.Close)
+
 	process := support.BuildProcess(t, serviceedges.Edges{})
 	support.CleanupProcess(t, process)
-	env := []string{"HOME=" + homeDir, "USERPROFILE=" + homeDir}
+	env := []string{"HOME=" + t.TempDir(), "USERPROFILE=" + t.TempDir()}
 
-	human := support.FakeInputs(t.Context(), []string{"you", "metrics"})
+	human := support.FakeInputs(t.Context(), []string{"you", "--server", server.URL, "metrics"})
 	human.Input.Env = env
+	human.Input.WorkingDirectory = t.TempDir()
 	if err := process.Execute(human.Input); err != nil {
 		t.Fatalf("Process.Execute(metrics human) error = %v\nstdout:\n%s\nstderr:\n%s", err, human.Stdout(), human.Stderr())
 	}
@@ -58,8 +76,9 @@ func TestMetricsSuccessThroughRootProcessRendersQueryCostAvailability(t *testing
 		t.Fatalf("human metrics output = %q, stderr = %q", human.Stdout(), human.Stderr())
 	}
 
-	machine := support.FakeInputs(t.Context(), []string{"you", "--json", "metrics"})
+	machine := support.FakeInputs(t.Context(), []string{"you", "--json", "--server", server.URL, "metrics"})
 	machine.Input.Env = env
+	machine.Input.WorkingDirectory = t.TempDir()
 	if err := process.Execute(machine.Input); err != nil {
 		t.Fatalf("Process.Execute(metrics JSON) error = %v\nstdout:\n%s\nstderr:\n%s", err, machine.Stdout(), machine.Stderr())
 	}

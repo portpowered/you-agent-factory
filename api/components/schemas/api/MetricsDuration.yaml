@@ -1,0 +1,19 @@
+type: object
+additionalProperties: false
+required:
+  - unit
+  - samples
+properties:
+  unit:
+    type: string
+  samples:
+    type: integer
+    minimum: 0
+  p50:
+    type: number
+    format: double
+    nullable: true
+  p95:
+    type: number
+    format: double
+    nullable: true

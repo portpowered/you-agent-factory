@@ -23,6 +23,7 @@ import (
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	sessioncli "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/cli/session"
 	factoryvisualization "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
+	factoryvisualizationcli "github.com/portpowered/infinite-you/pkg/services/factory_visualization/transports/cli"
 	modelscli "github.com/portpowered/infinite-you/pkg/services/models/transports/cli"
 	operatorconfig "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	"github.com/portpowered/infinite-you/pkg/services/operator_settings/transports/cli/initsetup"
@@ -183,6 +184,7 @@ type CommandOperations struct {
 	ACP                               acpcli.Operations
 	ACPServer                         acp.Server
 	RuntimeMetricsQuery               factoryvisualization.RuntimeMetricsQuery
+	MetricsCLI                        factoryvisualizationcli.Operation
 	CostsCLI                          costscli.Operation
 }
 
@@ -258,6 +260,7 @@ type CommandFactory struct {
 	acp                        acpcli.Operations
 	acpServer                  acp.Server
 	runtimeMetricsQuery        factoryvisualization.RuntimeMetricsQuery
+	metricsCLI                 factoryvisualizationcli.Operation
 	costsCLI                   costscli.Operation
 }
 
@@ -329,6 +332,7 @@ func NewCommandFactory(operations CommandOperations) CommandFactory {
 		acp:                               operations.ACP,
 		acpServer:                         operations.ACPServer,
 		runtimeMetricsQuery:               operations.RuntimeMetricsQuery,
+		metricsCLI:                        operations.MetricsCLI,
 		costsCLI:                          operations.CostsCLI,
 	}
 }

@@ -544,7 +544,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	if err != nil {
 		return nil, err
 	}
-	wireHttpRuntimeBinding, err := provideHTTPRuntimeBinding(factoryStatusProjector, handler, contentPreparation, v71, invocationWorkTypeService, requestPreparation, costsQuery)
+	wireHttpRuntimeBinding, err := provideHTTPRuntimeBindingWithMetrics(factoryStatusProjector, handler, contentPreparation, v71, invocationWorkTypeService, requestPreparation, runtimeMetricsQuery, costsQuery)
 	if err != nil {
 		return nil, err
 	}
@@ -604,7 +604,8 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 		return nil, err
 	}
 	server := provideACPServer(loggingLogger, chatsessionsService, factoryTargetCatalogService, targetExecutionService, eventsService, wireAcpServerResolveHomeDir, responseBridge, v92)
-	operation := provideCostsCLI()
+	operation := provideMetricsCLI()
+	cliOperation := provideCostsCLI()
 	commandOperations := cli.CommandOperations{
 		ObserveCLI:                        cliObserver,
 		NamedFactoryCatalog:               v,
@@ -671,7 +672,8 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 		ACP:                               operations,
 		ACPServer:                         server,
 		RuntimeMetricsQuery:               runtimeMetricsQuery,
-		CostsCLI:                          operation,
+		MetricsCLI:                        operation,
+		CostsCLI:                          cliOperation,
 	}
 	commandFactory := provideCLICommandFactory(commandOperations)
 	stdioRunnerBuilder, err := application.NewStdioRunnerBuilder(managedRunnerFactory)
@@ -829,7 +831,7 @@ func BuildMockStatelessWorkers(ctx context.Context, edges2 edges.Edges, mockWork
 
 var platformSet = wire5.NewSet(logging.NewDefaultLogger)
 
-var apiSet = wire5.NewSet(http.NewAdapter, http.NewHandler, stdio.NewOpener, provideHTTPRuntimeBinding)
+var apiSet = wire5.NewSet(http.NewAdapter, http.NewHandler, stdio.NewOpener, provideHTTPRuntimeBindingWithMetrics)
 
 var servicesSet = wire5.NewSet(
 	provideProvidersService,
@@ -1089,6 +1091,7 @@ var cliCommandOperationsSet = wire5.NewSet(
 	provideSubmitPayloadReader,
 	provideOperatorDefaultsResolver,
 	provideStandardCLIHTTPProtocol,
+	provideMetricsCLI,
 	provideCostsCLI,
 	provideRemoteInvocationOperation,
 	provideExtendedCLIHTTPProtocol,

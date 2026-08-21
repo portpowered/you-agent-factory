@@ -64,6 +64,9 @@ properties:
       - WORKER_SESSION_TRANSCRIPT_ACTIVE
       - WORKER_SESSION_TRANSCRIPT_UNAVAILABLE
       - WORKER_SESSION_TRANSCRIPT_PROJECTION_UNAVAILABLE
+      - METRICS_INVALID_REQUEST
+      - METRICS_SESSION_NOT_FOUND
+      - METRICS_SESSION_SCOPE_UNAVAILABLE
       - NOT_FOUND
       - INTERNAL_ERROR
     x-enum-descriptions:
@@ -115,6 +118,9 @@ properties:
       - The requested Worker Session has not reached a terminal state.
       - The finished Worker Session has no normalized transcript available.
       - Provider Sessions could not project the normalized Worker Session transcript.
+      - The metrics request could not be interpreted by the canonical metrics route.
+      - The requested live Factory Session identity was not discoverable.
+      - The live Factory Session was discoverable, but no retained metrics scope was available.
       - The requested resource does not exist.
       - The server failed while handling an otherwise valid request.
   targets:

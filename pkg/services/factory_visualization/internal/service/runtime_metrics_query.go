@@ -57,6 +57,7 @@ func (q *metricsQuery) QueryRuntimeMetrics(
 	}
 
 	sessionID := strings.TrimSpace(request.SessionID)
+	sessionIDs := normalizedMetricsSessionIDs(request.SessionIDs)
 	runtimeID := strings.TrimSpace(request.RuntimeInstanceID)
 	q.logger.Info(
 		"Factory Runtime metrics query started",
@@ -87,7 +88,7 @@ func (q *metricsQuery) QueryRuntimeMetrics(
 		if err := ctx.Err(); err != nil {
 			return RuntimeMetricsQueryResult{}, err
 		}
-		if !runtimeMetricRecordMatches(record, sessionID, runtimeID) {
+		if !runtimeMetricRecordMatches(record, sessionID, sessionIDs, runtimeID) {
 			continue
 		}
 		recognized, err := q.addRecord(accumulator, record, root)
@@ -529,8 +530,13 @@ func cloneFloatMap(values map[string]float64) map[string]float64 {
 	return clone
 }
 
-func runtimeMetricRecordMatches(record RuntimeMetricRecord, sessionID, runtimeID string) bool {
-	if sessionID != "" {
+func runtimeMetricRecordMatches(record RuntimeMetricRecord, sessionID string, sessionIDs []string, runtimeID string) bool {
+	if len(sessionIDs) > 0 {
+		value, ok := recordString(record, "session_id")
+		if !ok || !containsMetricSessionID(sessionIDs, value) {
+			return false
+		}
+	} else if sessionID != "" {
 		value, ok := recordString(record, "session_id")
 		if !ok || value != sessionID {
 			return false
@@ -543,6 +549,35 @@ func runtimeMetricRecordMatches(record RuntimeMetricRecord, sessionID, runtimeID
 		}
 	}
 	return true
+}
+
+func normalizedMetricsSessionIDs(values []string) []string {
+	if len(values) == 0 {
+		return nil
+	}
+	seen := make(map[string]struct{}, len(values))
+	ids := make([]string, 0, len(values))
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value == "" {
+			continue
+		}
+		if _, ok := seen[value]; ok {
+			continue
+		}
+		seen[value] = struct{}{}
+		ids = append(ids, value)
+	}
+	return ids
+}
+
+func containsMetricSessionID(values []string, value string) bool {
+	for _, candidate := range values {
+		if candidate == value {
+			return true
+		}
+	}
+	return false
 }
 
 func recordString(record RuntimeMetricRecord, key string) (string, bool) {

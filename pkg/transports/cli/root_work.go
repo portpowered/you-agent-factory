@@ -72,7 +72,9 @@ func newRootCommandWithGeneratedRepresentativeFamily(options CommandFactory) *co
 		panic(fmt.Sprintf("build providers command: %v", err))
 	}
 	metricsCmd := visualizationcli.NewMetricsCommand(visualizationcli.MetricsCommandConfig{
-		Query: options.runtimeMetricsQuery, HomeDir: options.homeDir,
+		Operation: options.metricsCLI,
+		Server:    func() string { return globals.server },
+		Query:     options.runtimeMetricsQuery, HomeDir: options.homeDir,
 		JSON: func() bool { return globals != nil && globals.json },
 		Costs: costscli.NewCostsCommand(costscli.CostsCommandConfig{
 			Operation: options.costsCLI,

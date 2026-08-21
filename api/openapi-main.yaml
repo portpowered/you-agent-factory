@@ -30,6 +30,40 @@ tags:
   - name: Workflows
     description: Stored workflow inspection.
 paths:
+  /metrics:
+    get:
+      tags:
+        - Metrics
+      operationId: getMetrics
+      summary: Get canonical runtime metrics
+      description: >-
+        Reads the canonical Factory Visualization metrics projection. The
+        default scope covers all retained Factory Sessions. When session_id is
+        supplied, the server resolves that public live Factory Session ID
+        through Factory Sessions before reading retained metrics; it never
+        guesses a scope from the current working directory or definition.
+        A valid resolved scope with no retained facts returns an explicit empty
+        report.
+      parameters:
+        - name: session_id
+          in: query
+          required: false
+          description: Optional discoverable live Factory Session identity.
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Canonical runtime metrics for the selected scope.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MetricsReport'
+        '400':
+          $ref: './components/responses/BadRequest.yaml'
+        '404':
+          $ref: './components/responses/NotFound.yaml'
+        '503':
+          $ref: './components/responses/MetricsSessionScopeUnavailable.yaml'
   /metrics/costs:
     get:
       tags:
@@ -2536,6 +2570,20 @@ components:
       $ref: './components/schemas/api/CostsProviderModelRollup.yaml'
     CostsReport:
       $ref: './components/schemas/api/CostsReport.yaml'
+    MetricsScope:
+      $ref: './components/schemas/api/MetricsScope.yaml'
+    MetricsCost:
+      $ref: './components/schemas/api/MetricsCost.yaml'
+    MetricsDuration:
+      $ref: './components/schemas/api/MetricsDuration.yaml'
+    MetricsAggregate:
+      $ref: './components/schemas/api/MetricsAggregate.yaml'
+    MetricsBreakdown:
+      $ref: './components/schemas/api/MetricsBreakdown.yaml'
+    MetricsUsageRow:
+      $ref: './components/schemas/api/MetricsUsageRow.yaml'
+    MetricsReport:
+      $ref: './components/schemas/api/MetricsReport.yaml'
     WorkerSessionProviderSessionRef:
       $ref: './components/schemas/api/WorkerSessionProviderSessionRef.yaml'
     WorkerSessionFailure:

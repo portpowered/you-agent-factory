@@ -234,6 +234,7 @@ func TestRuntimeMetricsQueryAppliesIndependentAndCombinedFilters(t *testing.T) {
 		wantGroups      int
 	}{
 		{name: "session", request: factoryvisualization.RuntimeMetricsQueryRequest{MetricsRoot: root, SessionID: "session-a"}, wantInputTokens: 30, wantGroups: 2},
+		{name: "resolved session candidates", request: factoryvisualization.RuntimeMetricsQueryRequest{MetricsRoot: root, SessionID: "public-live-id", SessionIDs: []string{"session-a", "session-b"}}, wantInputTokens: 60, wantGroups: 3},
 		{name: "runtime", request: factoryvisualization.RuntimeMetricsQueryRequest{MetricsRoot: root, RuntimeInstanceID: "runtime-a"}, wantInputTokens: 40, wantGroups: 2},
 		{name: "intersection", request: factoryvisualization.RuntimeMetricsQueryRequest{MetricsRoot: root, SessionID: "session-a", RuntimeInstanceID: "runtime-a"}, wantInputTokens: 10, wantGroups: 1},
 	}
