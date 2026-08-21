@@ -285,64 +285,17 @@ func writeFunctionalDiscoveryFixture(t *testing.T, dir, name, source string) {
 
 func TestFunctionalDiscoveryFiltersDeclarationsByTestContract(t *testing.T) {
 	packagePath := modulePath + "/tests/functional/fixture"
-	repoRoot := t.TempDir()
-	packageDir := filepath.Join(repoRoot, "fixture")
-	if err := os.MkdirAll(packageDir, 0o755); err != nil {
-		t.Fatalf("create fixture package: %v", err)
-	}
-	writeFunctionalDiscoveryFixture(t, packageDir, "eligible_test.go", `package fixture
-
-import (
-	"testing"
-	testingAlias "testing"
-)
-
-func TestValid(t *testing.T) {}
-func TestAlias(t *testingAlias.T) {}
-func TestNoParameter() {}
-func TestWrongType(t testing.TB) {}
-func TestTwoParameters(t, other *testing.T) {}
-func TestReturn(t *testing.T) bool { return true }
-func TestGeneric[T any](t *testing.T) {}
-func Test() {}
-func TestExample(t *testing.T) {}
-
-type fixture struct{}
-
-func (fixture) TestMethod(t *testing.T) {}
-`)
-	writeFunctionalDiscoveryFixture(t, packageDir, "dot_import_test.go", `package fixture
-
-import . "testing"
-
-func TestDot(t *T) {}
-`)
-	writeFunctionalDiscoveryFixture(t, packageDir, "functionallong_test.go", `//go:build functionallong
-
-package fixture
-
-import "testing"
-
-func TestBuildTagExcluded(t *testing.T) {}
-`)
-	ignoredDir := filepath.Join(packageDir, "testdata")
-	if err := os.MkdirAll(ignoredDir, 0o755); err != nil {
-		t.Fatalf("create testdata fixture: %v", err)
-	}
-	writeFunctionalDiscoveryFixture(t, ignoredDir, "ignored_test.go", `package ignored
-
-import "testing"
-
-func TestTestdataExcluded(t *testing.T) {}
-`)
+	repoRoot := functionalDiscoveryFixtureRoot(t)
+	packageDir := filepath.Join(repoRoot, "cmd", "gocoveragecheck", "testdata", "functional-discovery")
 
 	originalRunner := commandRunner
 	t.Cleanup(func() { commandRunner = originalRunner })
 	commandRunner = func(invocation commandInvocation) (string, string, error) {
 		return marshalFunctionalGoListPackage(t, functionalGoListPackage{
-			ImportPath:  packagePath,
-			Dir:         packageDir,
-			TestGoFiles: []string{"eligible_test.go", "dot_import_test.go"},
+			ImportPath:   packagePath,
+			Dir:          packageDir,
+			TestGoFiles:  []string{"in_package_test.go", "dot_import_test.go"},
+			XTestGoFiles: []string{"external_test.go"},
 		}), "", nil
 	}
 
@@ -350,14 +303,24 @@ func TestTestdataExcluded(t *testing.T) {}
 	if err != nil {
 		t.Fatalf("discoverFunctionalTestInventory() error = %v", err)
 	}
-	want := []string{"TestAlias", "TestDot", "TestExample", "TestValid"}
+	want := []string{"TestAlias", "TestDot", "TestExample", "TestExternal", "TestValid"}
 	if !slices.Equal(inventory.Tests[packagePath], want) {
 		t.Fatalf("discovered tests = %v, want %v", inventory.Tests[packagePath], want)
 	}
 }
 
+func functionalDiscoveryFixtureRoot(t *testing.T) string {
+	t.Helper()
+	root, err := repoRootDir()
+	if err != nil {
+		t.Fatalf("resolve repository root: %v", err)
+	}
+	return root
+}
+
 func TestFunctionalDiscoveryFailsClosedForGoListAndFileErrors(t *testing.T) {
 	packagePath := modulePath + "/tests/functional/fixture"
+	fixtureDir := filepath.Join(functionalDiscoveryFixtureRoot(t), "cmd", "gocoveragecheck", "testdata", "functional-discovery")
 	tests := []struct {
 		name       string
 		setup      func(*testing.T, string) string
@@ -387,10 +350,9 @@ func TestFunctionalDiscoveryFailsClosedForGoListAndFileErrors(t *testing.T) {
 			name: "parse failure",
 			setup: func(t *testing.T, root string) string {
 				t.Helper()
-				writeFunctionalDiscoveryFixture(t, root, "broken_test.go", "package fixture\nfunc TestBroken(\n")
 				return marshalFunctionalGoListPackage(t, functionalGoListPackage{
 					ImportPath:  packagePath,
-					Dir:         root,
+					Dir:         fixtureDir,
 					TestGoFiles: []string{"broken_test.go"},
 				})
 			},
