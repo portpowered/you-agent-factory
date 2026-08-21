@@ -137,6 +137,7 @@ func ruleGuards(cfg *factorydefinitions.FactoryConfig) []Finding {
 						Rule:    "guard-visit-count-max-visits",
 					})
 				}
+				findings = append(findings, validateLogicalRoundTrip(path, g, validWorkstations)...)
 			case factorydefinitions.GuardTypeMatchesFields:
 				if g.MatchConfig == nil || strings.TrimSpace(g.MatchConfig.InputKey) == "" {
 					findings = append(findings, Finding{

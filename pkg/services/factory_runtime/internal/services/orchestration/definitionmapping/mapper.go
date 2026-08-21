@@ -549,11 +549,21 @@ func (cm *Mapper) addCronTimeInputArc(ws interfaces.FactoryWorkstationConfig, t 
 func (cm *Mapper) resolveGuard(g interfaces.GuardConfig) petri.Guard {
 	switch g.Type {
 	case interfaces.GuardTypeVisitCount:
-		return &petri.VisitCountGuard{
+		guard := &petri.VisitCountGuard{
 			TransitionID:      g.Workstation, // workstation name == transition ID
 			MaxVisits:         g.MaxVisits,
 			MaxVisitsArgument: g.MaxVisitsArgument,
 		}
+		if g.LogicalRoundTrip != nil && len(g.LogicalRoundTrip.Workstations) == 2 {
+			guard.LogicalRoundTrip = &petri.LogicalRoundTripPolicy{
+				Transitions: [2]string{
+					strings.TrimSpace(g.LogicalRoundTrip.Workstations[0]),
+					strings.TrimSpace(g.LogicalRoundTrip.Workstations[1]),
+				},
+				MaxRawVisits: g.LogicalRoundTrip.MaxRawVisits,
+			}
+		}
+		return guard
 	default:
 		return nil
 	}

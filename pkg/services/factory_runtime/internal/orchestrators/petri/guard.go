@@ -1,6 +1,7 @@
 package petri
 
 import (
+	"fmt"
 	"strconv"
 	"strings"
 	"time"
@@ -224,29 +225,114 @@ func (g *MatchesFieldsGuard) Evaluate(candidates []factorytoken.Token, bindings 
 	return matched, len(matched) > 0
 }
 
+// LogicalRoundTripPolicy describes the two workstation transitions whose raw
+// visit counts form one logical review cycle. The pair is compiled only after
+// Factory validation has established that it contains exactly two distinct
+// workstation IDs.
+type LogicalRoundTripPolicy struct {
+	Transitions  [2]string
+	MaxRawVisits int
+}
+
+// VisitCountLimit identifies the limit that made a visit-count guard match.
+type VisitCountLimit string
+
+const (
+	VisitCountLimitLogical VisitCountLimit = "logical_visit_limit"
+	VisitCountLimitRaw     VisitCountLimit = "absolute_raw_visit_limit"
+)
+
+// VisitCountDecision is the pure result of evaluating one token against a
+// visit-count policy. Counts are retained so callers can report the selected
+// limit without consulting mutable runtime state.
+type VisitCountDecision struct {
+	Matched       bool
+	RawVisits     int
+	LogicalVisits int
+	MaxVisits     int
+	MaxRawVisits  int
+	Limit         VisitCountLimit
+}
+
 // VisitCountGuard checks that a candidate token's visit count for a specific
 // transition has reached or exceeded a threshold. Used by EXHAUSTION transitions
 // to route tokens that have been retried too many times.
 type VisitCountGuard struct {
-	TransitionID      string // which transition's visit count to check
-	MaxVisits         int    // fixed ceiling for the threshold
-	MaxVisitsArgument string // optional invocation argument that tightens the ceiling
+	TransitionID      string                  // which transition's visit count to check
+	MaxVisits         int                     // fixed ceiling for the threshold
+	MaxVisitsArgument string                  // optional invocation argument that tightens the ceiling
+	LogicalRoundTrip  *LogicalRoundTripPolicy // optional paired logical-cycle policy
 }
 
 var _ Guard = (*VisitCountGuard)(nil)
 
-// Evaluate returns all candidates whose TotalVisits for the configured transition
-// meets or exceeds MaxVisits.
+// Evaluate returns all candidates whose visit-count policy is exhausted.
 func (g *VisitCountGuard) Evaluate(candidates []factorytoken.Token, _ map[string]*factorytoken.Token, _ *MarkingSnapshot) ([]factorytoken.Token, bool) {
 	var matched []factorytoken.Token
 	for _, c := range candidates {
-		visits := c.History.TotalVisits[g.TransitionID]
-		if visits >= g.effectiveMaxVisits(c) {
+		if g.Decision(c).Matched {
 			matched = append(matched, c)
 		}
 	}
 
 	return matched, len(matched) > 0
+}
+
+// Decision evaluates one token without mutating the guard or token. In
+// logical round-trip mode the smaller paired count is the number of completed
+// logical cycles; the raw count remains the sum of both sides for the hard
+// backstop. The logical limit wins when both limits are met on the same
+// transition because the raw limit is the independent safety backstop.
+func (g *VisitCountGuard) Decision(candidate factorytoken.Token) VisitCountDecision {
+	maximum := g.effectiveMaxVisits(candidate)
+	if g.LogicalRoundTrip == nil {
+		visits := candidate.History.TotalVisits[g.TransitionID]
+		return VisitCountDecision{
+			Matched:       visits >= maximum,
+			RawVisits:     visits,
+			LogicalVisits: visits,
+			MaxVisits:     maximum,
+		}
+	}
+
+	first := candidate.History.TotalVisits[g.LogicalRoundTrip.Transitions[0]]
+	second := candidate.History.TotalVisits[g.LogicalRoundTrip.Transitions[1]]
+	rawVisits := first + second
+	logicalVisits := first
+	if second < logicalVisits {
+		logicalVisits = second
+	}
+	decision := VisitCountDecision{
+		RawVisits:     rawVisits,
+		LogicalVisits: logicalVisits,
+		MaxVisits:     maximum,
+		MaxRawVisits:  g.LogicalRoundTrip.MaxRawVisits,
+	}
+	if logicalVisits >= maximum {
+		decision.Matched = true
+		decision.Limit = VisitCountLimitLogical
+		return decision
+	}
+	if rawVisits >= g.LogicalRoundTrip.MaxRawVisits {
+		decision.Matched = true
+		decision.Limit = VisitCountLimitRaw
+	}
+	return decision
+}
+
+// LimitReason returns a stable, actionable reason for a matched visit-count
+// decision. It returns an empty string while the policy remains below both
+// thresholds.
+func (g *VisitCountGuard) LimitReason(candidate factorytoken.Token) string {
+	decision := g.Decision(candidate)
+	switch decision.Limit {
+	case VisitCountLimitLogical:
+		return fmt.Sprintf("logical visit limit reached: %d >= %d", decision.LogicalVisits, decision.MaxVisits)
+	case VisitCountLimitRaw:
+		return fmt.Sprintf("absolute raw-visit backstop reached: %d >= %d", decision.RawVisits, decision.MaxRawVisits)
+	default:
+		return ""
+	}
 }
 
 func (g *VisitCountGuard) effectiveMaxVisits(candidate factorytoken.Token) int {

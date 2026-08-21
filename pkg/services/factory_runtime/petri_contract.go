@@ -19,6 +19,7 @@ type (
 	PetriSameTraceIDGuard       = petri.SameTraceIDGuard
 	PetriAllGuard               = petri.AllGuard
 	PetriMatchesFieldsGuard     = petri.MatchesFieldsGuard
+	PetriLogicalRoundTripPolicy = petri.LogicalRoundTripPolicy
 	PetriVisitCountGuard        = petri.VisitCountGuard
 	PetriAllWithParentGuard     = petri.AllWithParentGuard
 	PetriAnyWithParentGuard     = petri.AnyWithParentGuard

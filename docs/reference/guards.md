@@ -63,6 +63,37 @@ stay disabled until the watched workstation has been visited enough times:
 If the guard is false, the token stays in its current place until another
 workstation can consume it.
 
+## Logical round-trip `VISIT_COUNT`
+
+Use `logicalRoundTrip` when a process and review pair should share one logical
+budget:
+
+```json
+{
+  "type": "VISIT_COUNT",
+  "workstation": "process",
+  "maxVisits": 12,
+  "logicalRoundTrip": {
+    "workstations": ["process", "review"],
+    "maxRawVisits": 24
+  }
+}
+```
+
+The containing `maxVisits` is the inclusive logical cycle limit. The logical
+count is the smaller raw visit count across the two named workstations.
+Therefore, one process visit and one review visit consume one logical cycle.
+
+`maxRawVisits` is an absolute ceiling across both workstations. It remains
+active when the route is imbalanced or one stage repeats without its pair.
+The ceiling must be greater than the containing `maxVisits` value.
+
+Attach matching paired guards to loop-breaker routes for both reachable loop
+states. Each route can then move over-limit Work to its explicit failed state.
+
+Omit `logicalRoundTrip` to preserve legacy behavior. In omitted mode,
+`maxVisits` counts raw visits for the watched workstation only.
+
 ## Workstation-Level `MATCHES_FIELDS`
 
 Use `MATCHES_FIELDS` when the workstation should consume only candidate input

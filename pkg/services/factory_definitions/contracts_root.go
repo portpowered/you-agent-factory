@@ -67,6 +67,7 @@ type WorkstationLimits = contracts.WorkstationLimits
 type Workstation = contracts.Workstation
 type ExpectedArtifactConfig = contracts.ExpectedArtifactConfig
 type GuardMatchConfig = contracts.GuardMatchConfig
+type LogicalRoundTripConfig = contracts.LogicalRoundTripConfig
 type GuardType = contracts.GuardType
 type InputGuardConfig = contracts.InputGuardConfig
 type InputTypeConfig = contracts.InputTypeConfig
