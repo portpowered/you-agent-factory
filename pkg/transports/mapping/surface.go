@@ -65,6 +65,15 @@ func FactoryEventToAPI(event interfaces.FactoryEvent) (factoryapi.FactoryEvent, 
 // Workers never regains that metadata shape.
 func factoryEventPayloadToAPI(event interfaces.FactoryEvent) ([]byte, error) {
 	switch event.Type {
+	case interfaces.FactoryEventTypeDispatchWorkerSessionAssoc:
+		var payload factoryapi.DispatchWorkerSessionAssociationEventPayload
+		if err := json.Unmarshal(event.Payload, &payload); err != nil {
+			return nil, err
+		}
+		if payload.WorkerSessionId == "" {
+			return nil, errors.New("association payload workerSessionId is required")
+		}
+		return json.Marshal(payload)
 	case interfaces.FactoryEventTypeInferenceResponse, interfaces.FactoryEventTypeModelResponse:
 	default:
 		return nil, nil

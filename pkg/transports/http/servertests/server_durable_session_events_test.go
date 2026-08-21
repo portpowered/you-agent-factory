@@ -8,7 +8,9 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/getkin/kin-openapi/openapi3"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorysessionexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
@@ -312,6 +314,97 @@ func TestGetFactorySessionEvents_LivePetriSessionRemainsCompatible(t *testing.T)
 	streamed := readAPISSEFactoryEvent(t, bufio.NewReader(rec.Body))
 	if streamed.Id != "event-1" {
 		t.Fatalf("streamed event id = %q, want event-1", streamed.Id)
+	}
+}
+
+func TestGetFactorySessionEvents_LiveAssociationProjectsStrictPublicPayload(t *testing.T) {
+	closed := make(chan interfaces.FactoryEvent)
+	close(closed)
+	canonical := interfaces.FactoryEvent{
+		Context: interfaces.FactoryEventContext{
+			DispatchID: strPtr("dispatch-actual-7"),
+			EventTime:  time.Date(2026, 8, 4, 16, 30, 0, 0, time.UTC),
+			Sequence:   17,
+			Tick:       8,
+		},
+		Id:            "factory-event/dispatch-worker-session-association/dispatch-actual-7",
+		Payload:       json.RawMessage(`{"workerSessionId":"worker-session-actual-11","model":"gpt-5.6-luna","reasoningEffort":"high"}`),
+		SchemaVersion: interfaces.FactoryEventSchemaVersionV1,
+		Type:          interfaces.FactoryEventTypeDispatchWorkerSessionAssoc,
+	}
+	srv := newWorkAPITestServer(liveFactoryEventWorkAPI{stream: &interfaces.FactoryEventStream{
+		History: []interfaces.FactoryEvent{canonical},
+		Events:  closed,
+	}})
+	server := httptest.NewServer(srv.Handler())
+	defer server.Close()
+
+	response, err := http.Get(server.URL + "/factory-sessions/session-beta/events")
+	if err != nil {
+		t.Fatalf("GET Factory Events route: %v", err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("GET Factory Events route status = %d, want 200: %s", response.StatusCode, readBody(t, response))
+	}
+
+	events := readAllSSEFactoryEvents(t, bufio.NewReader(response.Body))
+	if len(events) != 1 {
+		t.Fatalf("served event count = %d, want 1", len(events))
+	}
+	served := events[0]
+	if served.Id != canonical.Id || served.Type != factoryapi.FactoryEventTypeDispatchWorkerSessionAssociation {
+		t.Fatalf("served association identity = %#v, want id %q and association type", served, canonical.Id)
+	}
+	if served.Context.DispatchId == nil || *served.Context.DispatchId != "dispatch-actual-7" {
+		t.Fatalf("served context.dispatchId = %#v, want dispatch-actual-7", served.Context.DispatchId)
+	}
+
+	publicPayload, err := json.Marshal(served.Payload)
+	if err != nil {
+		t.Fatalf("marshal served association payload: %v", err)
+	}
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(publicPayload, &fields); err != nil {
+		t.Fatalf("decode served association payload: %v", err)
+	}
+	if len(fields) != 1 {
+		t.Fatalf("served association payload fields = %v, want only workerSessionId", fields)
+	}
+	var workerSessionID string
+	if err := json.Unmarshal(fields["workerSessionId"], &workerSessionID); err != nil {
+		t.Fatalf("decode served workerSessionId: %v", err)
+	}
+	if workerSessionID != "worker-session-actual-11" {
+		t.Fatalf("served workerSessionId = %q, want worker-session-actual-11", workerSessionID)
+	}
+	if string(canonical.Payload) != `{"workerSessionId":"worker-session-actual-11","model":"gpt-5.6-luna","reasoningEffort":"high"}` {
+		t.Fatalf("canonical association payload changed to %s", canonical.Payload)
+	}
+
+	assertServedFactoryEventMatchesBundledSchema(t, served)
+}
+
+func assertServedFactoryEventMatchesBundledSchema(t *testing.T, event factoryapi.FactoryEvent) {
+	t.Helper()
+	loader := openapi3.NewLoader()
+	doc, err := loader.LoadFromFile("../../../../api/openapi.yaml")
+	if err != nil {
+		t.Fatalf("load bundled OpenAPI contract: %v", err)
+	}
+	if err := doc.Validate(context.Background()); err != nil {
+		t.Fatalf("validate bundled OpenAPI contract: %v", err)
+	}
+	encoded, err := json.Marshal(event)
+	if err != nil {
+		t.Fatalf("marshal served Factory Event: %v", err)
+	}
+	var document map[string]any
+	if err := json.Unmarshal(encoded, &document); err != nil {
+		t.Fatalf("decode served Factory Event: %v", err)
+	}
+	if err := doc.Components.Schemas["FactoryEvent"].Value.VisitJSON(document); err != nil {
+		t.Fatalf("served Factory Event does not validate against bundled schema: %v", err)
 	}
 }
 
