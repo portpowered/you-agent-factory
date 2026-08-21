@@ -11,6 +11,7 @@ import (
 
 	runtimefixtures "github.com/portpowered/infinite-you/internal/testutil/runtimefixtures"
 	workerconfig "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	work "github.com/portpowered/infinite-you/pkg/services/work"
 	workers "github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
@@ -393,6 +394,10 @@ func TestRejectResultNilConfigDefaultsToExitCodeOne(t *testing.T) {
 }
 
 func TestCommandRequestInputsProjectToMockInputTokens(t *testing.T) {
+	if tokens := commandRequestInputTokens(workers.CommandRequest{}); tokens != nil {
+		t.Fatalf("empty projected tokens = %#v, want nil", tokens)
+	}
+
 	tokens := commandRequestInputTokens(workers.CommandRequest{
 		Inputs: []workers.WorkInput{
 			{Kind: string(workers.DataTypeWork), State: "init", WorkID: "work-1", WorkTypeID: "task"},
@@ -405,6 +410,86 @@ func TestCommandRequestInputsProjectToMockInputTokens(t *testing.T) {
 	}
 	if tokens[0].ID != "input-0" || tokens[0].State != "init" || tokens[1].State != "ready" {
 		t.Fatalf("projected tokens = %#v, want ordered state facts", tokens)
+	}
+}
+
+func TestMockWorkInputSelectorMatchesPublicInputsAndSerializedTokens(t *testing.T) {
+	payload := []byte("payload")
+	sum := sha256.Sum256(payload)
+	input := workers.WorkInput{
+		Kind:       string(workers.DataTypeWork),
+		State:      "ready",
+		InputNames: []string{"work"},
+		WorkID:     "work-1",
+		WorkTypeID: "task",
+		Content:    []work.WorkContentPart{{Type: work.WorkContentPartTypeText, Text: string(payload)}},
+		Tags:       map[string]string{"channel": "chat"},
+		Lineage:    workers.WorkLineage{TraceID: "trace-1"},
+	}
+	selector := MockWorkInputSelector{
+		WorkID:      "work-1",
+		WorkType:    "task",
+		State:       "ready",
+		InputName:   "work",
+		TraceID:     "trace-1",
+		Channel:     "chat",
+		PayloadHash: "sha256:" + hex.EncodeToString(sum[:]),
+	}
+
+	if !mockWorkInputSelectorMatches(selector, []workers.WorkInput{
+		{Kind: string(workers.DataTypeResource)},
+		input,
+	}, nil) {
+		t.Fatal("selector should match the public work input after skipping a resource")
+	}
+	if mockWorkInputSelectorMatches(selector, []workers.WorkInput{{Kind: string(workers.DataTypeResource)}}, nil) {
+		t.Fatal("selector matched a resource-only input list")
+	}
+
+	mismatches := []MockWorkInputSelector{
+		{WorkID: "other"},
+		{WorkType: "other"},
+		{State: "other"},
+		{InputName: "other"},
+		{TraceID: "other"},
+		{Channel: "other"},
+		{PayloadHash: "sha256:other"},
+	}
+	for _, mismatch := range mismatches {
+		if mockWorkInputSelectorMatches(mismatch, []workers.WorkInput{input}, nil) {
+			t.Fatalf("selector %#v unexpectedly matched public work input", mismatch)
+		}
+	}
+
+	rawTokens := []map[string]any{{
+		"id":    "token-1",
+		"state": "ready",
+		"color": map[string]any{
+			"work_id":      "work-1",
+			"work_type_id": "task",
+			"data_type":    string(workers.DataTypeWork),
+			"trace_id":     "trace-1",
+			"tags":         map[string]string{"channel": "chat"},
+			"payload":      payload,
+		},
+	}}
+	if !mockWorkInputSelectorMatches(selector, rawTokens, map[string][]string{"work": {"token-1"}}) {
+		t.Fatal("selector should match serialized token input")
+	}
+	if mockWorkInputSelectorMatches(selector, func() {}, nil) {
+		t.Fatal("selector matched an unencodable token input")
+	}
+}
+
+func TestDecodeTokenRejectsMalformedBoundaryValues(t *testing.T) {
+	if _, ok := decodeToken(func() {}); ok {
+		t.Fatal("decodeToken accepted an unencodable value")
+	}
+	if _, ok := decodeToken("not a token"); ok {
+		t.Fatal("decodeToken accepted a non-object JSON value")
+	}
+	if got := tokenState("not a token"); got != "" {
+		t.Fatalf("tokenState = %q, want empty state for malformed token", got)
 	}
 }
 
