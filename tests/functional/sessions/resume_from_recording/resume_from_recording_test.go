@@ -1,13 +1,8 @@
 package resume_from_recording_test
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
-	"fmt"
-	"io"
-	"net/http"
-	"net/url"
 	"os"
 	"path/filepath"
 	"sync"
@@ -16,44 +11,51 @@ import (
 
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
 const (
-	resumeFromRecordingWorkflowName = "resume-from-recording-two-step"
-	resumeFromRecordingTimeout      = 15 * time.Second
+	resumeFromRecordingTimeout = 15 * time.Second
 )
 
 // TestKilledFactorySessionResumesOriginalDispatchesAfterRestart proves that a
-// durable multi-dispatch session can be interrupted at a deterministic
-// provider boundary, observed after a fresh public process lifetime, and
-// resumed without re-admitting the session or repeating its completed child.
-// The command runner is installed through edges.Edges so the scenario still
-// crosses the real Workers, Factory Runtime, and Factory Sessions paths.
+// real two-stage Work item survives a process boundary through the public
+// recording resume surface. The command runner is installed through
+// edges.Edges, so the scenario still crosses the real Workers, Factory Runtime,
+// Factory Sessions, Work, and Recordings paths.
 func TestKilledFactorySessionResumesOriginalDispatchesAfterRestart(t *testing.T) {
 	t.Parallel()
 
 	scenario := newResumeFromRecordingScenario(t)
 	t.Cleanup(scenario.runner.ReleaseRemainingDispatch)
 	first := scenario.startProcess(t, "first")
-	started := startResumeFromRecordingSession(t, first.URL())
-	if started.SessionId == "" {
-		t.Fatal("durable session start returned an empty session id")
+	submitted := support.SubmitDefaultSessionWork(t, first.URL(), factoryapi.SubmitWorkRequest{
+		Name:         stringPointer("resume-from-recording-work"),
+		Payload:      map[string]any{"subject": "resume-from-recording"},
+		WorkTypeName: "task",
+	})
+	if submitted.Accepted != true || submitted.WorkId == nil || *submitted.WorkId == "" {
+		t.Fatalf("public Work submission = %#v, want one accepted Work identity", submitted)
 	}
-	scenario.sessionID = started.SessionId
+	scenario.workID = *submitted.WorkId
+	scenario.requestID = submitted.RequestId
 	scenario.awaitKillBoundary(t)
-	boundary := scenario.interruptAndCapture(t, first.URL())
+	boundary := scenario.captureAtKillBoundary(t, first.URL())
 
 	// Stop joins the first root-built process before the replacement is
-	// constructed. The interrupted durable session is the public recovery
-	// handle; this test never edits or finalizes its persisted state.
+	// constructed. The recording is left naturally unfinalized by cancellation;
+	// this test never edits or finalizes its persisted state.
 	first.Stop(t)
 	select {
 	case <-first.Done():
 	default:
 		t.Fatal("first process stop returned before its command joined")
 	}
+	scenario.runner.wait(t, scenario.runner.secondCanceled, "canceled second provider dispatch")
+	assertResumeFromRecordingUnfinalizedRecording(t, scenario.recordingPath)
 
 	second := scenario.startProcess(t, "successor")
 	scenario.assertRestored(t, second.URL(), boundary)
@@ -61,16 +63,20 @@ func TestKilledFactorySessionResumesOriginalDispatchesAfterRestart(t *testing.T)
 }
 
 type resumeFromRecordingScenario struct {
-	projectRoot string
-	home        string
-	env         []string
-	sessionID   string
-	runner      *resumeFromRecordingCommandRunner
+	projectRoot   string
+	home          string
+	env           []string
+	recordingPath string
+	successorPath string
+	workID        string
+	requestID     string
+	runner        *resumeFromRecordingCommandRunner
 }
 
 type resumeFromRecordingBoundary struct {
-	completed   factoryapi.FactorySessionDispatchSummary
-	interrupted factoryapi.FactorySessionDispatchSummary
+	work        factoryapi.Work
+	session     factoryapi.FactorySession
+	completedID string
 	events      []factoryapi.FactoryEvent
 	cursor      factoryapi.FactoryEvent
 }
@@ -79,10 +85,12 @@ func newResumeFromRecordingScenario(t *testing.T) *resumeFromRecordingScenario {
 	t.Helper()
 	home := t.TempDir()
 	return &resumeFromRecordingScenario{
-		projectRoot: setupResumeFromRecordingFixture(t),
-		home:        home,
-		env:         []string{"HOME=" + home, "USERPROFILE=" + home},
-		runner:      newResumeFromRecordingCommandRunner(),
+		projectRoot:   setupResumeFromRecordingFixture(t),
+		home:          home,
+		env:           []string{"HOME=" + home, "USERPROFILE=" + home},
+		recordingPath: filepath.Join(home, "killed.recording.json"),
+		successorPath: filepath.Join(home, "resumed.recording.json"),
+		runner:        newResumeFromRecordingCommandRunner(),
 	}
 }
 
@@ -95,9 +103,16 @@ func (scenario *resumeFromRecordingScenario) startProcess(
 		FactoryDir:                scenario.projectRoot,
 		WaitForServiceModeRuntime: true,
 		Env:                       scenario.env,
-		Args:                      []string{"--record", filepath.Join(scenario.home, name+".recording.json")},
+		Args:                      scenario.recordingArgs(name),
 		Edges:                     serviceedges.Edges{ProviderCommandRunner: scenario.runner},
 	})
+}
+
+func (scenario *resumeFromRecordingScenario) recordingArgs(name string) []string {
+	if name == "successor" {
+		return []string{"--resume", scenario.recordingPath, "--record", scenario.successorPath}
+	}
+	return []string{"--record", scenario.recordingPath}
 }
 
 func (scenario *resumeFromRecordingScenario) awaitKillBoundary(t *testing.T) {
@@ -109,34 +124,29 @@ func (scenario *resumeFromRecordingScenario) awaitKillBoundary(t *testing.T) {
 	}
 }
 
-func (scenario *resumeFromRecordingScenario) interruptAndCapture(
+func (scenario *resumeFromRecordingScenario) captureAtKillBoundary(
 	t *testing.T,
 	baseURL string,
 ) resumeFromRecordingBoundary {
 	t.Helper()
-	interruptResumeFromRecordingDispatch(t, baseURL, scenario.sessionID)
-	scenario.runner.wait(t, scenario.runner.secondCanceled, "canceled second provider dispatch")
-	beforeRestart := waitForResumeFromRecordingSession(t, baseURL, scenario.sessionID, func(session factoryapi.FactorySessionDurableReadModel) bool {
-		return session.Status == factoryapi.FactorySessionDurableLifecycleStatusInterrupted
-	})
-	if beforeRestart.Progress == nil || valueOrZero(beforeRestart.Progress.CompletedDispatches) != 1 {
-		t.Fatalf("pre-restart progress = %#v, want one completed dispatch", beforeRestart.Progress)
+	listed := support.ListDefaultSessionWork(t, baseURL)
+	work := requireResumeFromRecordingWork(t, listed, scenario.workID)
+	if got := support.WorkItemCustomerLocation(work); got != support.WorkCustomerLocation("task", "processing") {
+		t.Fatalf("pre-kill Work location = %q, want task:processing", got)
 	}
-	listed := listResumeFromRecordingDispatches(t, baseURL, scenario.sessionID)
-	events := support.GetFactoryEventsForSessionAt(t, baseURL, scenario.sessionID)
+	session := support.GetDefaultSession(t, baseURL)
+	if session.Runtime.Progress.Categories.Initial != 0 || session.Runtime.Progress.Categories.Processing != 1 {
+		t.Fatalf("pre-kill board progress = %+v, want one processing Work", session.Runtime.Progress.Categories)
+	}
+	events := support.GetFactoryEventsForSessionAt(t, baseURL, factorysessions.DefaultSessionID)
 	assertResumeFromRecordingFactoryEvents(t, "before restart", events)
+	completedID := requireResumeFromRecordingCompletedDispatchID(t, events)
 	return resumeFromRecordingBoundary{
-		completed: requireResumeFromRecordingDispatch(t, listed, "dispatch-1", factoryapi.FactoryDispatchStatusCOMPLETED),
-		interrupted: requireResumeFromRecordingDispatch(
-			t, listed, "dispatch-2", factoryapi.FactoryDispatchStatusINTERRUPTED, factoryapi.FactoryDispatchStatusRUNNING,
-		),
-		events: events,
-		cursor: requireResumeFromRecordingFactoryEvent(
-			t,
-			events,
-			factoryapi.FactoryEventTypeDispatchReconciled,
-			"dispatch-1",
-		),
+		work:        work,
+		session:     session,
+		completedID: completedID,
+		events:      events,
+		cursor:      requireResumeFromRecordingFactoryEvent(t, events, factoryapi.FactoryEventTypeDispatchReconciled, completedID),
 	}
 }
 
@@ -146,24 +156,26 @@ func (scenario *resumeFromRecordingScenario) assertRestored(
 	boundary resumeFromRecordingBoundary,
 ) {
 	t.Helper()
-	read := waitForResumeFromRecordingSession(t, baseURL, scenario.sessionID, func(session factoryapi.FactorySessionDurableReadModel) bool {
-		return session.Status == factoryapi.FactorySessionDurableLifecycleStatusInterrupted
-	})
-	if read.SessionId != scenario.sessionID {
-		t.Fatalf("post-restart session id = %q, want %q", read.SessionId, scenario.sessionID)
+	scenario.runner.wait(t, scenario.runner.thirdEntered, "resumed second provider dispatch")
+	listed := support.ListDefaultSessionWork(t, baseURL)
+	work := requireResumeFromRecordingWork(t, listed, scenario.workID)
+	if work.Name != boundary.work.Name || support.StringPointerValue(work.WorkId) != support.StringPointerValue(boundary.work.WorkId) {
+		t.Fatalf("post-restart Work identity changed: %#v -> %#v", boundary.work, work)
 	}
-	if read.Progress == nil || valueOrZero(read.Progress.CompletedDispatches) != 1 {
-		t.Fatalf("post-restart progress = %#v, want restored one completed dispatch", read.Progress)
+	if got := support.WorkItemCustomerLocation(work); got != support.WorkCustomerLocation("task", "processing") {
+		t.Fatalf("post-restart Work location = %q, want restored task:processing", got)
 	}
-	listed := listResumeFromRecordingDispatches(t, baseURL, scenario.sessionID)
-	completed := requireResumeFromRecordingDispatch(t, listed, "dispatch-1", factoryapi.FactoryDispatchStatusCOMPLETED)
-	interrupted := requireResumeFromRecordingDispatch(t, listed, "dispatch-2", factoryapi.FactoryDispatchStatusINTERRUPTED, factoryapi.FactoryDispatchStatusRUNNING)
-	if completed.Id != boundary.completed.Id || interrupted.Id != boundary.interrupted.Id {
-		t.Fatalf("dispatch identities changed across restart: completed %q/%q, interrupted %q/%q", boundary.completed.Id, completed.Id, boundary.interrupted.Id, interrupted.Id)
+	session := support.GetDefaultSession(t, baseURL)
+	if session.Runtime.Progress.Categories.Initial != 0 || session.Runtime.Progress.Categories.Processing != 1 {
+		t.Fatalf("post-restart board progress = %+v, want restored one processing Work", session.Runtime.Progress.Categories)
 	}
-	restartedEvents := support.GetFactoryEventsForSessionAt(t, baseURL, scenario.sessionID)
+	restartedEvents := support.GetFactoryEventsForSessionAt(t, baseURL, factorysessions.DefaultSessionID)
 	assertResumeFromRecordingFactoryEvents(t, "after restart", restartedEvents)
 	assertResumeFromRecordingFactoryEventIDsPresent(t, boundary.events, restartedEvents)
+	support.AssertSingleWorkRequestEvent(t, restartedEvents, scenario.requestID, scenario.workID, "task")
+	if got := countResumeFromRecordingDispatchEvents(restartedEvents, factoryapi.FactoryEventTypeDispatchReconciled, boundary.completedID); got != 1 {
+		t.Fatalf("completed dispatch reconciled events after restart = %d, want 1", got)
+	}
 }
 
 func (scenario *resumeFromRecordingScenario) resumeAndFinish(
@@ -172,34 +184,29 @@ func (scenario *resumeFromRecordingScenario) resumeAndFinish(
 	boundary resumeFromRecordingBoundary,
 ) {
 	t.Helper()
-	resume := postResumeFromRecordingJSON[factoryapi.FactorySessionLifecycleControlResponse](
-		t,
-		baseURL+"/factory-sessions/"+url.PathEscape(scenario.sessionID)+"/resume",
-		factoryapi.FactorySessionLifecycleControlRequest{},
-	)
-	if resume.Outcome != factoryapi.FactorySessionLifecycleControlOutcomeAccepted {
-		t.Fatalf("resume outcome = %q, want ACCEPTED", resume.Outcome)
-	}
-	scenario.runner.wait(t, scenario.runner.thirdEntered, "resumed second provider dispatch")
 	scenario.runner.ReleaseRemainingDispatch()
-	finished := waitForResumeFromRecordingSession(t, baseURL, scenario.sessionID, func(session factoryapi.FactorySessionDurableReadModel) bool {
-		return session.Status == factoryapi.FactorySessionDurableLifecycleStatusSucceeded
-	})
-	if finished.Progress == nil || valueOrZero(finished.Progress.CompletedDispatches) != 2 {
-		t.Fatalf("post-resume progress = %#v, want two completed dispatches", finished.Progress)
+	support.WaitForTerminalStatus(t, baseURL, resumeFromRecordingTimeout)
+	finalWork := support.ListDefaultSessionWork(t, baseURL)
+	if got := support.CountWorkAtCustomerState(finalWork, support.WorkCustomerLocation("task", "complete")); got != 1 {
+		t.Fatalf("post-resume completed Work count = %d, want 1; listed=%#v", got, finalWork.Results)
+	}
+	if got := support.CountWorkAtCustomerState(finalWork, support.WorkCustomerLocation("task", "processing")); got != 0 {
+		t.Fatalf("post-resume processing Work count = %d, want 0", got)
+	}
+	finished := support.GetDefaultSession(t, baseURL)
+	if finished.Runtime.Progress.Categories.Terminal != 1 || finished.Runtime.Progress.Categories.Processing != 0 || finished.Runtime.Progress.Categories.Failed != 0 {
+		t.Fatalf("post-resume board progress = %+v, want one terminal Work and no failed/processing Work", finished.Runtime.Progress.Categories)
 	}
 	if got := scenario.runner.CallCount(); got != 3 {
 		t.Fatalf("provider command calls after resume = %d, want exactly 3", got)
 	}
-	final := listResumeFromRecordingDispatches(t, baseURL, scenario.sessionID)
-	completed := requireResumeFromRecordingDispatch(t, final, "dispatch-1", factoryapi.FactoryDispatchStatusCOMPLETED)
-	if completed.Id != boundary.completed.Id {
-		t.Fatalf("completed dispatch was replaced after resume: %q -> %q", boundary.completed.Id, completed.Id)
-	}
-	requireResumeFromRecordingDispatch(t, final, "dispatch-2", factoryapi.FactoryDispatchStatusCOMPLETED)
-	finalEvents := support.GetFactoryEventsForSessionAt(t, baseURL, scenario.sessionID)
+	finalEvents := support.GetFactoryEventsForSessionAt(t, baseURL, factorysessions.DefaultSessionID)
 	assertResumeFromRecordingFactoryEvents(t, "after resume", finalEvents)
 	assertResumeFromRecordingFactoryEventIDsPresent(t, boundary.events, finalEvents)
+	support.AssertSingleWorkRequestEvent(t, finalEvents, scenario.requestID, scenario.workID, "task")
+	if got := countResumeFromRecordingDispatchEvents(finalEvents, factoryapi.FactoryEventTypeDispatchReconciled, boundary.completedID); got != 1 {
+		t.Fatalf("completed dispatch reconciled events after resume = %d, want 1", got)
+	}
 	assertResumeFromRecordingFactoryCursorReplay(t, baseURL, scenario, boundary, finalEvents)
 }
 
@@ -277,7 +284,7 @@ func assertResumeFromRecordingFactoryCursorReplay(
 	replayed := support.GetFactoryEventsAfterForSessionAt(
 		t,
 		baseURL,
-		scenario.sessionID,
+		factorysessions.DefaultSessionID,
 		support.FactoryEventReadCursor{AfterEventID: boundary.cursor.Id},
 	)
 	if len(replayed) != wantCount {
@@ -351,173 +358,126 @@ func indexResumeFromRecordingFactoryEvent(
 func setupResumeFromRecordingFixture(t *testing.T) string {
 	t.Helper()
 
-	projectRoot := support.ScaffoldSingleStepFactory(t, "resume-from-recording")
-	workflowDir := filepath.Join(projectRoot, ".claude", "workflows")
-	if err := os.MkdirAll(workflowDir, 0o755); err != nil {
-		t.Fatalf("create workflow directory: %v", err)
-	}
-	fixturePath := support.AgentFactoryPath(
-		t,
-		"tests/fixtures/javascript_runtime/resumable-two-step-fake-children.workflow.js",
-	)
-	source, err := os.ReadFile(fixturePath)
-	if err != nil {
-		t.Fatalf("read workflow fixture: %v", err)
-	}
-	if err := os.WriteFile(
-		filepath.Join(workflowDir, resumeFromRecordingWorkflowName+".js"),
-		source,
-		0o600,
-	); err != nil {
-		t.Fatalf("write workflow fixture: %v", err)
+	projectRoot := support.ScaffoldFactory(t, map[string]any{
+		"name": "resume-from-recording",
+		"workTypes": []map[string]any{{
+			"name": "task",
+			"states": []map[string]string{
+				{"name": "init", "type": "INITIAL"},
+				{"name": "processing", "type": "PROCESSING"},
+				{"name": "complete", "type": "TERMINAL"},
+				{"name": "failed", "type": "FAILED"},
+			},
+		}},
+		"workers": []map[string]string{
+			{"name": "worker-a"},
+			{"name": "worker-b"},
+		},
+		"workstations": []map[string]any{
+			{
+				"name":      "step-one",
+				"worker":    "worker-a",
+				"inputs":    []map[string]string{{"workType": "task", "state": "init"}},
+				"outputs":   []map[string]string{{"workType": "task", "state": "processing"}},
+				"onFailure": []map[string]string{{"workType": "task", "state": "failed"}},
+			},
+			{
+				"name":      "step-two",
+				"worker":    "worker-b",
+				"inputs":    []map[string]string{{"workType": "task", "state": "processing"}},
+				"outputs":   []map[string]string{{"workType": "task", "state": "complete"}},
+				"onFailure": []map[string]string{{"workType": "task", "state": "failed"}},
+			},
+		},
+	})
+	for _, worker := range []string{"worker-a", "worker-b"} {
+		support.WriteAgentConfig(
+			t,
+			projectRoot,
+			worker,
+			support.BuildModelWorkerConfig(modelprovider.ProviderCodex, "gpt-5-codex"),
+		)
 	}
 	return projectRoot
 }
 
-func startResumeFromRecordingSession(
-	t *testing.T,
-	baseURL string,
-) factoryapi.FactorySessionExecutionResponse {
+func assertResumeFromRecordingUnfinalizedRecording(t *testing.T, path string) {
 	t.Helper()
-	workflowName := resumeFromRecordingWorkflowName
-	return postResumeFromRecordingJSON[factoryapi.FactorySessionExecutionResponse](
-		t,
-		baseURL+"/factory-sessions/async",
-		factoryapi.FactorySessionExecutionRequest{
-			RequestId: "resume-from-recording-start-001",
-			Source: factoryapi.FactorySessionExecutionSource{
-				Kind:         factoryapi.FactorySessionExecutionSourceKindWorkflowName,
-				WorkflowName: &workflowName,
-			},
-			Args: &map[string]interface{}{"subject": "resume-from-recording"},
-		},
-	)
-}
-
-func interruptResumeFromRecordingDispatch(t *testing.T, baseURL, sessionID string) {
-	t.Helper()
-	reason := "kill-and-resume functional boundary"
-	response := postResumeFromRecordingJSON[factoryapi.FactorySessionLifecycleControlResponse](
-		t,
-		baseURL+"/factory-sessions/"+url.PathEscape(sessionID)+"/interrupt-dispatch",
-		factoryapi.FactorySessionInterruptDispatchRequest{
-			DispatchId: "dispatch-2",
-			Reason:     &reason,
-		},
-	)
-	if response.Outcome != factoryapi.FactorySessionLifecycleControlOutcomeAccepted {
-		t.Fatalf("interrupt outcome = %q, want ACCEPTED", response.Outcome)
-	}
-}
-
-func readResumeFromRecordingSession(
-	t *testing.T,
-	baseURL, sessionID string,
-) (factoryapi.FactorySessionDurableReadModel, error) {
-	t.Helper()
-	response := support.GetJSON[factoryapi.FactorySessionGetResponse](
-		t,
-		baseURL+"/factory-sessions/"+url.PathEscape(sessionID),
-	)
-	read, err := response.AsFactorySessionDurableReadModel()
+	raw, err := os.ReadFile(path)
 	if err != nil {
-		return factoryapi.FactorySessionDurableReadModel{}, fmt.Errorf("decode durable session: %w", err)
+		t.Fatalf("read naturally unfinalized recording %q: %v", path, err)
 	}
-	return read, nil
-}
-
-func waitForResumeFromRecordingSession(
-	t *testing.T,
-	baseURL, sessionID string,
-	accept func(factoryapi.FactorySessionDurableReadModel) bool,
-) factoryapi.FactorySessionDurableReadModel {
-	t.Helper()
-	read, err := support.WaitForObservation(
-		resumeFromRecordingTimeout,
-		func() (factoryapi.FactorySessionDurableReadModel, error) {
-			return readResumeFromRecordingSession(t, baseURL, sessionID)
-		},
-		accept,
-	)
-	if err != nil {
-		t.Fatalf("wait for durable session %q: %v", sessionID, err)
+	var artifact struct {
+		Events []struct {
+			Payload json.RawMessage `json:"payload"`
+		} `json:"events"`
 	}
-	return read
-}
-
-func listResumeFromRecordingDispatches(
-	t *testing.T,
-	baseURL, sessionID string,
-) factoryapi.ListFactorySessionDispatchesResponse {
-	t.Helper()
-	return support.GetJSON[factoryapi.ListFactorySessionDispatchesResponse](
-		t,
-		baseURL+"/factory-sessions/"+url.PathEscape(sessionID)+"/dispatches",
-	)
-}
-
-func requireResumeFromRecordingDispatch(
-	t *testing.T,
-	listed factoryapi.ListFactorySessionDispatchesResponse,
-	id string,
-	allowed ...factoryapi.FactoryDispatchStatus,
-) factoryapi.FactorySessionDispatchSummary {
-	t.Helper()
-	for _, dispatch := range listed.Dispatches {
-		if dispatch.Id != id {
+	if err := json.Unmarshal(raw, &artifact); err != nil {
+		t.Fatalf("decode naturally unfinalized recording %q: %v", path, err)
+	}
+	for _, event := range artifact.Events {
+		var envelope struct {
+			WallClock *struct {
+				FinishedAt *time.Time `json:"finishedAt,omitempty"`
+			} `json:"wallClock,omitempty"`
+		}
+		if err := json.Unmarshal(event.Payload, &envelope); err != nil {
 			continue
 		}
-		for _, status := range allowed {
-			if dispatch.Status == status {
-				return dispatch
-			}
+		if envelope.WallClock != nil && envelope.WallClock.FinishedAt != nil {
+			t.Fatalf("recording %q was finalized before resume at %s", path, envelope.WallClock.FinishedAt)
 		}
-		t.Fatalf("dispatch %q status = %q, want one of %#v", id, dispatch.Status, allowed)
 	}
-	t.Fatalf("dispatch %q missing from %#v", id, listed.Dispatches)
-	return factoryapi.FactorySessionDispatchSummary{}
 }
 
-func valueOrZero(value *int) int {
-	if value == nil {
-		return 0
-	}
-	return *value
-}
-
-func postResumeFromRecordingJSON[T any](t *testing.T, endpoint string, request any) T {
+func requireResumeFromRecordingWork(
+	t *testing.T,
+	listed factoryapi.ListWorkResponse,
+	workID string,
+) factoryapi.Work {
 	t.Helper()
-	payload, err := json.Marshal(request)
-	if err != nil {
-		t.Fatalf("marshal %s request: %v", endpoint, err)
+	for _, work := range listed.Results {
+		if support.StringPointerValue(work.WorkId) == workID {
+			return work
+		}
 	}
-	httpRequest, err := http.NewRequestWithContext(
-		t.Context(),
-		http.MethodPost,
-		endpoint,
-		bytes.NewReader(payload),
-	)
-	if err != nil {
-		t.Fatalf("build POST %s: %v", endpoint, err)
+	t.Fatalf("public Work listing is missing %q: %#v", workID, listed.Results)
+	return factoryapi.Work{}
+}
+
+func requireResumeFromRecordingCompletedDispatchID(
+	t *testing.T,
+	events []factoryapi.FactoryEvent,
+) string {
+	t.Helper()
+	for _, event := range events {
+		if event.Type != factoryapi.FactoryEventTypeDispatchReconciled {
+			continue
+		}
+		if dispatchID := support.StringPointerValue(event.Context.DispatchId); dispatchID != "" {
+			return dispatchID
+		}
 	}
-	httpRequest.Header.Set("Content-Type", "application/json")
-	response, err := http.DefaultClient.Do(httpRequest)
-	if err != nil {
-		t.Fatalf("POST %s: %v", endpoint, err)
+	t.Fatal("public Factory Events contain no completed dispatch reconciliation")
+	return ""
+}
+
+func countResumeFromRecordingDispatchEvents(
+	events []factoryapi.FactoryEvent,
+	eventType factoryapi.FactoryEventType,
+	dispatchID string,
+) int {
+	count := 0
+	for _, event := range events {
+		if event.Type == eventType && support.StringPointerValue(event.Context.DispatchId) == dispatchID {
+			count++
+		}
 	}
-	defer response.Body.Close()
-	body, err := io.ReadAll(response.Body)
-	if err != nil {
-		t.Fatalf("read POST %s: %v", endpoint, err)
-	}
-	if response.StatusCode < http.StatusOK || response.StatusCode >= http.StatusMultipleChoices {
-		t.Fatalf("POST %s status = %d: %s", endpoint, response.StatusCode, body)
-	}
-	var decoded T
-	if err := json.Unmarshal(body, &decoded); err != nil {
-		t.Fatalf("decode POST %s: %v\n%s", endpoint, err, body)
-	}
-	return decoded
+	return count
+}
+
+func stringPointer(value string) *string {
+	return &value
 }
 
 type resumeFromRecordingCommandRunner struct {
