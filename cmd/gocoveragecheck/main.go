@@ -89,6 +89,8 @@ type config struct {
 	functionalQuarantine         string
 	validateFunctionalQuarantine bool
 	jobs                         int
+	testJobsOverride             int
+	testJobsOverrideSet          bool
 	generateManifest             string
 	updateManifest               string
 	updateProfiles               string
@@ -224,6 +226,7 @@ func parseConfig() config {
 	flag.StringVar(&cfg.functionalQuarantine, "functional-quarantine", "", "strict functional quarantine JSON manifest; discovers and subtracts its package/test selectors")
 	flag.BoolVar(&cfg.validateFunctionalQuarantine, "validate-functional-quarantine", false, "validate a functional quarantine manifest and its selectors without running coverage")
 	flag.IntVar(&cfg.jobs, "jobs", 0, "maximum concurrent go test packages; defaults to runtime CPU count for non-Windows unit coverage, 1 for Windows unit coverage, and 2 for functional coverage")
+	flag.IntVar(&cfg.testJobsOverride, "test-jobs", 0, "positive instrumented go test -p override; omitted uses -jobs (functional subprocess I/O wait can benefit from controlled oversubscription)")
 	flag.StringVar(&cfg.generateManifest, "generate-manifest", "", "create a deterministic package-minimum manifest from this lane's coverage profile")
 	flag.StringVar(&cfg.updateManifest, "update-manifest", "", "update an existing package-minimum manifest from a complete compatible profile sample set")
 	flag.StringVar(&cfg.updateProfiles, "update-profiles", "", "comma-separated complete coverage profiles for -update-manifest; requires at least five compatible profiles")
@@ -248,12 +251,20 @@ func parseConfig() config {
 	flag.DurationVar(&cfg.timeout, "timeout", 5*time.Minute, "go test timeout")
 	flag.BoolVar(&cfg.totalOnly, "total-only", false, "disable package-local coverage gates while retaining per-package reporting")
 	flag.Parse()
+	flag.Visit(func(visited *flag.Flag) {
+		if visited.Name == "test-jobs" {
+			cfg.testJobsOverrideSet = true
+		}
+	})
 	return cfg
 }
 
 func validateConfig(cfg config) error {
 	if policy := cfg.packageFloorPolicyValue(); policy != coverageFloorPolicyBlocking && policy != coverageFloorPolicyAdvisory {
 		return fmt.Errorf("configure go coverage: -package-floor-policy must be %q or %q (got %q)", coverageFloorPolicyBlocking, coverageFloorPolicyAdvisory, cfg.packageFloorPolicy)
+	}
+	if cfg.testJobsOverride < 0 || (cfg.testJobsOverride == 0 && cfg.testJobsOverrideSet) {
+		return fmt.Errorf("configure go coverage: -test-jobs must be a positive integer (got %d)", cfg.testJobsOverride)
 	}
 	manifestOperations := 0
 	for _, value := range []string{cfg.generateManifest, cfg.updateManifest, cfg.packageManifest} {
@@ -438,7 +449,6 @@ func runCoverageProfile(cfg config, targetOS string, logicalCPUs int, profilePat
 	}); err != nil {
 		return coverageResult{}, err
 	}
-
 	var prepared preparedCoverageRun
 	if err := cfg.measureCoveragePhase(coveragePhasePlan, func() error {
 		prepared, err = prepareCoverageProfileRun(
@@ -545,6 +555,16 @@ func (cfg config) testJobs(targetOS string, logicalCPUs int) int {
 		// usable count. runtime.NumCPU normally guarantees a positive value.
 	}
 	return defaultCoverageJobs
+}
+
+// instrumentedTestJobs keeps the instrumented test window independently
+// tunable: functional subprocesses spend time waiting on I/O, so controlled
+// oversubscription can reduce wall time without changing discovery's jobs.
+func (cfg config) instrumentedTestJobs(targetOS string, logicalCPUs int) int {
+	if cfg.testJobsOverride > 0 {
+		return cfg.testJobsOverride
+	}
+	return cfg.testJobs(targetOS, logicalCPUs)
 }
 
 func packageCoverageBaselinePackages(cfg config, repoRoot string) (map[string]struct{}, error) {
