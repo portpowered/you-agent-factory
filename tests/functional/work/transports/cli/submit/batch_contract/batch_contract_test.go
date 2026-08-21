@@ -309,6 +309,16 @@ func TestCLISubmitBatchRelationEndpointDiagnosticIsActionableAndAtomic(t *testin
 		t.Fatalf("valid relation batch output missing work count:\n%s", validStdout)
 	}
 
+	runRelationEndpointCases(t, process, server.URL())
+
+	listed := support.ListDefaultSessionWork(t, server.URL())
+	if len(listed.Results) != 3 {
+		t.Fatalf("invalid relation batches admitted partial Work: %#v", listed.Results)
+	}
+}
+
+func runRelationEndpointCases(t *testing.T, process support.Process, serverURL string) {
+	t.Helper()
 	for _, test := range []struct {
 		name        string
 		json        bool
@@ -344,19 +354,18 @@ func TestCLISubmitBatchRelationEndpointDiagnosticIsActionableAndAtomic(t *testin
 			},
 		},
 		{
-			name:      "dry-run previously submitted target",
-			json:      true,
-			dryRun:    true,
-			batch:     relationEndpointBatchJSON("batch-relation-previously-submitted-target", "new-work", "new-work", "parent"),
-			value:     "parent",
-			source:    "new-work",
-			wantError: false,
+			name:   "dry-run previously submitted target",
+			json:   true,
+			dryRun: true,
+			batch:  relationEndpointBatchJSON("batch-relation-previously-submitted-target", "new-work", "new-work", "parent"),
+			value:  "parent",
+			source: "new-work",
 		},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			args := []string{"you", "--server", server.URL(), "submit", "batch"}
+			args := []string{"you", "--server", serverURL, "submit", "batch"}
 			if test.json {
-				args = []string{"you", "--server", server.URL(), "--json", "submit", "batch"}
+				args = []string{"you", "--server", serverURL, "--json", "submit", "batch"}
 			}
 			if test.dryRun {
 				args = []string{"you", "--server", "http://127.0.0.1:1", "--json", "submit", "batch", "--dry-run"}
@@ -386,11 +395,6 @@ func TestCLISubmitBatchRelationEndpointDiagnosticIsActionableAndAtomic(t *testin
 				t.Fatalf("relation endpoint submission emitted success stdout: %q", stdout)
 			}
 		})
-	}
-
-	listed := support.ListDefaultSessionWork(t, server.URL())
-	if len(listed.Results) != 3 {
-		t.Fatalf("invalid relation batches admitted partial Work: %#v", listed.Results)
 	}
 }
 

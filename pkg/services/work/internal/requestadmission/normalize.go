@@ -485,40 +485,63 @@ func resolveBatchRelationTarget(
 
 	byName := relationTargetCandidates(workIndex, existing, targetName, "name")
 	byID := relationTargetCandidates(workIndex, existing, targetID, "id")
-	if targetName != "" && len(byName) == 0 && targetID == "" {
-		return normalizedBatchWork{}, unknownRelationTargetError(i, rel, "targetWorkName", rel.TargetWorkName)
-	}
-	if targetName != "" && targetID == "" && len(byName) > 1 {
-		return normalizedBatchWork{}, ambiguousRelationTargetNameError(i, rel)
-	}
-	if targetID != "" && len(byID) == 0 {
-		return normalizedBatchWork{}, unknownRelationTargetError(i, rel, "targetWorkId", rel.TargetWorkID)
-	}
-	if targetID != "" && len(byID) > 1 {
-		return normalizedBatchWork{}, fmt.Errorf(
-			"work_request: relations[%d] targetWorkId=%q identifies multiple Work items on this Factory Session board",
-			i,
-			rel.TargetWorkID,
-		)
+	if err := validateRelationTargetCandidates(i, rel, targetName, targetID, byName, byID); err != nil {
+		return normalizedBatchWork{}, err
 	}
 
 	if targetName != "" && targetID != "" {
-		for _, candidate := range byName {
-			if candidate.id == byID[0].id {
-				return byID[0], nil
-			}
-		}
-		return normalizedBatchWork{}, fmt.Errorf(
-			"work_request: relations[%d] targetWorkName=%q and targetWorkId=%q identify different Work items; provide matching references",
-			i,
-			rel.TargetWorkName,
-			rel.TargetWorkID,
-		)
+		return resolveRelationTargetByBoth(i, rel, byName, byID[0])
 	}
 	if targetName != "" {
 		return byName[0], nil
 	}
 	return byID[0], nil
+}
+
+func validateRelationTargetCandidates(
+	i int,
+	rel WorkRelation,
+	targetName string,
+	targetID string,
+	byName []normalizedBatchWork,
+	byID []normalizedBatchWork,
+) error {
+	if targetName != "" && len(byName) == 0 && targetID == "" {
+		return unknownRelationTargetError(i, rel, "targetWorkName", rel.TargetWorkName)
+	}
+	if targetName != "" && targetID == "" && len(byName) > 1 {
+		return ambiguousRelationTargetNameError(i, rel)
+	}
+	if targetID != "" && len(byID) == 0 {
+		return unknownRelationTargetError(i, rel, "targetWorkId", rel.TargetWorkID)
+	}
+	if targetID != "" && len(byID) > 1 {
+		return fmt.Errorf(
+			"work_request: relations[%d] targetWorkId=%q identifies multiple Work items on this Factory Session board",
+			i,
+			rel.TargetWorkID,
+		)
+	}
+	return nil
+}
+
+func resolveRelationTargetByBoth(
+	i int,
+	rel WorkRelation,
+	byName []normalizedBatchWork,
+	byID normalizedBatchWork,
+) (normalizedBatchWork, error) {
+	for _, candidate := range byName {
+		if candidate.id == byID.id {
+			return byID, nil
+		}
+	}
+	return normalizedBatchWork{}, fmt.Errorf(
+		"work_request: relations[%d] targetWorkName=%q and targetWorkId=%q identify different Work items; provide matching references",
+		i,
+		rel.TargetWorkName,
+		rel.TargetWorkID,
+	)
 }
 
 func relationTargetCandidates(
