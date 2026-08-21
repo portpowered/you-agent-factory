@@ -1,18 +1,19 @@
 # Record and Replay
 
-Use record and replay when you want to capture a live factory run as a
-replay-compatible artifact, locate the saved file after shutdown, or re-run
-from a saved history without dispatching live workers again.
+Use recording when you need a durable Factory Event history. Use replay for
+historical inspection. Use resume to continue live Factory execution from a
+recoverable recording and write a new successor recording.
 
-`you docs record-replay` is the canonical guide for `--record`, `--replay`, and
-`--no-record`, including JavaScript-orchestrated Factory Sessions. See `you docs
+`you docs record-replay` is the canonical guide for `--record`, `--replay`,
+`--resume`, and `--no-record`, including their flag conflicts. See `you docs
 javascript-workflows` for the supported JavaScript authoring contract and `you
 docs authoring-factories` for the full factory setup workflow.
 
 ## Default Recording On Live Runs
 
 Normal live `you run` invocations record a replay-compatible artifact by default
-when you do not pass `--record` or `--replay`.
+when you do not pass `--no-record` or `--replay`. A resume invocation uses a
+generated path for its new successor recording unless you pass `--record`.
 
 The generated artifact root is:
 
@@ -39,14 +40,21 @@ Recording saved: <path>
 That message makes the artifact easy to find after a failure or an unexpected
 run.
 
-## Record Mode vs Replay Mode
+## Record, Replay, and Resume Modes
 
 **Record mode** starts a live run and writes the observed runtime history to a
 replay artifact. Use the default generated path, `--record <path>`, or rely on
 default recording without extra flags.
 
 **Replay mode** reads an existing artifact and uses the recorded runtime history
-instead of dispatching live workers again. Pass `--replay <path>`.
+instead of dispatching live workers again. Pass `--replay <path>`. Replay is
+historical and read-only: it does not continue Work or write a successor
+recording.
+
+**Resume mode** reads a recoverable Factory Event recording, reconstructs its
+last valid Factory world state, and opens a new live Factory Session from that
+state. Pass `--resume <path>`. Resume can dispatch eligible Work again and
+writes a successor recording.
 
 ## Run Controls
 
@@ -56,6 +64,7 @@ instead of dispatching live workers again. Pass `--replay <path>`.
 | `--no-record` | Skip the default recording for one invocation |
 | `--record <path>` | Write the replay artifact to an explicit path you own |
 | `--replay <path>` | Replay an existing artifact instead of starting a live run |
+| `--resume <path>` | Continue live Factory execution from a recoverable recording |
 
 ### Incompatible Combinations
 
@@ -63,9 +72,57 @@ These flag pairs are rejected for the same invocation:
 
 - `--record` with `--replay`
 - `--no-record` with `--record`
+- `--resume` with `--replay`
+- `--resume` with `--no-record`
 
-A flag validation failure happens before a new Factory Session starts, so there
-is no new session, Dispatch, FactoryArtifact, or FactoryEvent to inspect.
+`--resume` and `--replay` are mutually exclusive. Replay is historical and
+read-only; resume opens live Factory execution.
+
+`--resume` with `--record` is allowed. The explicit path names the new
+successor recording. A flag validation failure happens before a new Factory
+Session starts, so there is no new session, Dispatch, FactoryArtifact, or
+FactoryEvent to inspect.
+
+## Resume Semantics
+
+Resume reads the source recording without modifying it. It reconstructs the
+last valid Factory world state, then opens a new live Factory Session. The
+source and successor are separate recordings.
+
+When `--record` is omitted, resume writes the successor to the generated
+recording directory described above. Choose the successor path explicitly:
+
+```bash
+you run --resume ./recordings/source.json \
+  --record ./recordings/successor.json
+```
+
+Resume restores Work from the recovered world state with these boundaries:
+
+- Work in a terminal state is not dispatched again.
+- Queued Work is restored and can become eligible for dispatch.
+- Nonterminal Work that was in flight can receive a new live attempt after
+  resume.
+- A provider effect that completed before its completion event was recorded can
+  run again. Use idempotent provider-side operations when duplicate attempts
+  would matter.
+
+This is not an exactly-once provider-effect guarantee. The recorded terminal
+state prevents duplicate dispatch of completed Work, while an incomplete
+provider attempt can be retried after recovery.
+
+The runtime accepts an unfinalized recording when it has a valid complete event
+prefix. It can also skip a truncated final event-stream block after earlier
+complete events. Corruption in the middle of the stream, or a source with no
+valid complete event, is rejected. Resume does not recover arbitrary damaged
+JSON or reconstruct an in-memory provider process.
+
+Resume requires a Factory Event recording with the Factory Definition needed to
+open the live runtime. A portable JavaScript recording is an inspection and
+replay artifact. It does not contain the JavaScript VM stack, closures, timers,
+module state, or provider process, so `--resume` cannot continue that VM. Use
+the live Factory Session resume controls and checkpoint state for a supported
+JavaScript continuation.
 
 ## JavaScript Recording Overview
 
@@ -118,10 +175,9 @@ their events actually contain.
 
 Replay never dispatches live child work and the portable envelope does not
 contain a child-dispatch list. Replay therefore does not contact model
-providers, rerun script workers, or resume a JavaScript VM. A replayed paused
-session is historical and cannot be resumed. To continue from checkpoint
-application state, use the original live Factory Session while it is available;
-to reproduce fresh live work, start a new Factory Session.
+providers, rerun script workers, or resume a JavaScript VM. A portable replay
+recording cannot be passed to `--resume`; use the live Factory Session resume
+controls when a supported checkpoint continuation is available.
 
 ## Example Commands
 
@@ -199,9 +255,9 @@ curl http://localhost:7437/factory-sessions/<session-id>/results?mode=final
 
 These reads expose the recorded public status, ordered `FactoryEvent`
 summaries, `FactoryArtifact` summaries, and partial or final result
-availability. A paused recording remains historical: it cannot be resumed or
-treated as a live Factory Session. Use live durable-session inspection when you
-need child-dispatch details or resumable checkpoint state.
+availability. A portable recording remains historical and cannot be passed to
+`--resume` or treated as a live Factory Session. Use live durable-session
+inspection when you need child-dispatch details or resumable checkpoint state.
 
 ## JavaScript Recording Contract
 

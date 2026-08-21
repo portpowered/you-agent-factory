@@ -1,6 +1,6 @@
 ---
 author: Agent Factory Team
-last-modified: 2026-08-12
+last-modified: 2026-08-21
 doc-id: agent-factory/guides/operations
 ---
 
@@ -425,33 +425,53 @@ reload behavior is covered by the functional prompt hot-reload check.
 ## Recover after a process restart
 
 The live Factory Session queue is process-local and in memory. Restarting the
-process loses queued and in-flight live session state; there is no storage
-engine available that reconstructs that queue. Recordings, runtime logs,
-artifacts, and files already written to a worktree can still be useful for
-inspection, but they are evidence for recovery, not a durable session queue or
-automatic replay guarantee.
+process loses the live queue, but a retained Factory Event recording can seed a
+new live Factory Session with `you run --resume <recording>`. Resume reads the
+source without overwriting it and writes a successor recording by default. Use
+`--record <successor-path>` to choose that path.
+
+Resume restores the last valid Factory world state. Terminal Work is not
+dispatched again. Queued Work can become eligible, and nonterminal Work can
+receive a new live attempt. A provider effect may run again when its completion
+event was not recorded before the process stopped, so provider-side operations
+that matter should be idempotent.
+
+Portable JavaScript recordings remain replay and inspection artifacts. They do
+not contain a JavaScript VM or provider process and cannot be passed to
+`--resume`. Unfinalized recordings with a valid complete event prefix are
+supported. A truncated final event-stream block can be skipped after earlier
+complete events. Mid-stream corruption and recordings without a valid complete
+event are rejected.
 
 Use this recovery sequence:
 
 1. Inspect any durable artifacts first: the existing worktree, generated
    outputs, runtime logs, and any recording that was explicitly retained.
-2. Start a new Factory Session with the continuous server shape above.
-3. Resubmit the intended Work through the normal Work ingress, preserving each
+2. If the recording contains recoverable Factory Event history, run
+   `you run --resume <recording>` and inspect the successor recording path.
+   Continue at step 6.
+3. If resume is unavailable, start a new Factory Session with the continuous
+   server shape above.
+4. For that new session, resubmit the intended Work through the normal Work
+   ingress, preserving each
    Work's authored `name`. Do not invent a new name just because the old
    process stopped.
-4. Let the workstation's worktree template render from that same name. For a
+5. For that new session, let the workstation's worktree template render from
+   that same name. For a
    template such as
    `.claude/worktrees/{{ (index .Inputs 0).Name }}`, the resumed dispatch
    targets the existing named artifact directory; valid existing worktrees are
    reusable when the runtime's worktree rules allow it.
-5. Verify the resumed Work reaches an explicit terminal or failed state. A
-   successful resubmission proves only that this recovery worked for that
-   Work; it does not make the original in-memory queue durable.
+6. Verify the resumed Work reaches an explicit terminal or failed state. A
+   successful recovery proves only that this recovery worked for that Work; it
+   does not make the original in-memory queue durable.
 
 The six production recoveries recorded on 2026-08-08/09 are operational
 evidence that this inspect → restart → same-name resubmit procedure worked in
 those cases. They are not a durability guarantee, restart replay contract, or
-promise that every provider dispatch can be resumed automatically.
+promise that every provider dispatch can be resumed automatically. Prefer
+`--resume` when the retained recording has the Factory Event history required
+for live continuation.
 
 ## Related topics
 
