@@ -432,8 +432,8 @@ func mutationRecordsForDispatch(
 			Reason:       mutation.Reason,
 		}
 		if mutation.NewToken != nil {
-		runtimeToken := factorytoken.FromWorker(*mutation.NewToken)
-		record.Token = workerTokenPointer(&runtimeToken)
+			runtimeToken := factorytoken.FromWorker(*mutation.NewToken)
+			record.Token = workerTokenPointer(&runtimeToken)
 			if record.TokenID == "" {
 				record.TokenID = mutation.NewToken.ID
 			}
@@ -1009,11 +1009,19 @@ func (t *TransitionerSubsystem) releaseResourceTokens(consumedTokens []factoryto
 		mutations = append(mutations, interfaces.MarkingMutation{
 			Type:     interfaces.MutationCreate,
 			ToPlace:  consumed.PlaceID,
-			NewToken: resourceToken,
+			NewToken: workerTokenPointer(resourceToken),
 			Reason:   fmt.Sprintf("release resource %s for transition %s", consumed.PlaceID, transitionID),
 		})
 	}
 	return mutations
+}
+
+func workerTokenPointer(value *factorytoken.Token) *workerexecution.Token {
+	if value == nil {
+		return nil
+	}
+	projected := factorytoken.ToWorker(*value)
+	return &projected
 }
 
 func tokenColorsFromTokens(tokens []factorytoken.Token) []factorytoken.Color {
