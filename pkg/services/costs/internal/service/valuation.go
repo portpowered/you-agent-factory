@@ -367,11 +367,11 @@ func providerRollups(groups map[string]*summary) ([]costs.ProviderModelRollup, e
 	result := make([]costs.ProviderModelRollup, 0, len(keys))
 	for _, key := range keys {
 		group := groups[key]
-		rollup, err := group.rollup(key)
+		pair := group.pairs[key]
+		rollup, err := group.rollup(publicProviderModelKey(pair.provider, pair.model))
 		if err != nil {
 			return nil, err
 		}
-		pair := group.pairs[key]
 		result = append(result, costs.ProviderModelRollup{Provider: pair.provider, Model: pair.model, Rollup: rollup})
 	}
 	return result, nil
@@ -416,6 +416,10 @@ func cloneInt64(value *int64) *int64 {
 func providerModelKey(provider, model string) string {
 	provider = canonicalProvider(provider)
 	return provider + "\x00" + strings.TrimSpace(model)
+}
+
+func publicProviderModelKey(provider, model string) string {
+	return canonicalProvider(provider) + "/" + strings.TrimSpace(model)
 }
 
 func canonicalProvider(provider string) string {

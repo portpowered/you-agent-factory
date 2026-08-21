@@ -52,24 +52,6 @@ func NewProcess(
 	return newProcess(commandFactory, initializer, providers, lifecycle, acpServer, workerReader, detachedOps, runtimeMetrics, executionOpen, nil)
 }
 
-// NewProcessWithRuntimeCosts constructs the application process with the
-// optional stateless Costs capability in addition to runtime metrics. The
-// separate constructor preserves the existing process construction contract
-// for embedders that do not select the Costs operation.
-func NewProcessWithRuntimeCosts(
-	commandFactory processcontract.CommandFactory,
-	initializer processcontract.Initializer,
-	providers ProviderRegistry,
-	lifecycle ProcessLifecycle,
-	acpServer processcontract.ACPServer,
-	workerReader processcontract.WorkerRecordingReader,
-	detachedOps processcontract.DetachedOperationsCapability,
-	runtimeMetrics processcontract.RuntimeMetricsQueryCapability,
-	runtimeCosts processcontract.RuntimeCostsQueryCapability,
-) (*Process, error) {
-	return newProcess(commandFactory, initializer, providers, lifecycle, acpServer, workerReader, detachedOps, runtimeMetrics, nil, runtimeCosts)
-}
-
 // NewProcessWithRuntimeCostsAndExecution constructs the canonical process
 // with both the Costs query and durable Factory Session opening capabilities.
 func NewProcessWithRuntimeCostsAndExecution(

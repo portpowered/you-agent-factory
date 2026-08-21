@@ -725,10 +725,6 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	if err != nil {
 		return nil, err
 	}
-	costsQuery, err := provideCostsQuery(operatorsettingsService, runtimeMetricsQuery, loggingLogger)
-	if err != nil {
-		return nil, err
-	}
 	processRuntimeCostsQueryCapability, err := provideCostsQueryCapability(costsQuery)
 	if err != nil {
 		return nil, err
@@ -1166,5 +1162,5 @@ var BundleSet = wire5.NewSet(
 	provideDirectJavaScriptHostAdapter, wire.NewDirectJavaScriptRunOperation, application.NewInitializer, wire.NewExecutionServiceBuilder, provideCLIExecutionServiceBuilder,
 	provideRunInvocationOperation,
 	provideModelsCLIInvocationOperation,
-	provideCLICommandFactory, application.NewProcessWithRuntimeCosts, wire5.Bind(new(process.Initializer), new(*application.Initializer)), wire5.Bind(new(process.CommandFactory), new(cli.CommandFactory)),
+	provideCLICommandFactory, application.NewProcessWithRuntimeCostsAndExecution, wire5.Bind(new(process.Initializer), new(*application.Initializer)), wire5.Bind(new(process.CommandFactory), new(cli.CommandFactory)),
 )

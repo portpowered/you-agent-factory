@@ -1687,7 +1687,7 @@ type CostsProviderModelRollup struct {
 	Coverage          CostsCoverage `json:"coverage"`
 	InputTokens       *int64        `json:"input_tokens,omitempty"`
 
-	// Key Stable provider/model pair key.
+	// Key Stable public provider/model pair key in the form provider/model.
 	Key string `json:"key"`
 
 	// Model Exact resolved model identity, when known.

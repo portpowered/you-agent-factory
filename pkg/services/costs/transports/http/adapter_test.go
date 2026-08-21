@@ -79,7 +79,7 @@ func assertMappedReportProviderRollup(t *testing.T, got factoryapi.CostsReport) 
 	if got.LineItems[1].PricedAmount != nil || got.LineItems[1].Reason == nil || *got.LineItems[1].Reason != "no configured price" {
 		t.Fatalf("unpriced line item = %#v", got.LineItems[1])
 	}
-	if len(got.ProviderModels) != 1 || got.ProviderModels[0].PricedSubtotal == nil || *got.ProviderModels[0].PricedSubtotal != "123456789.000001" {
+	if len(got.ProviderModels) != 1 || got.ProviderModels[0].Key != "provider/known" || got.ProviderModels[0].PricedSubtotal == nil || *got.ProviderModels[0].PricedSubtotal != "123456789.000001" {
 		t.Fatalf("provider rollups = %#v", got.ProviderModels)
 	}
 }
@@ -93,6 +93,9 @@ func assertMappedReportOptionalJSON(t *testing.T, got factoryapi.CostsReport) {
 	jsonText := string(encoded)
 	if strings.Contains(jsonText, `"priced_amount":""`) || strings.Contains(jsonText, `"reason":""`) {
 		t.Fatalf("mapped JSON contains empty optional values: %s", jsonText)
+	}
+	if !strings.Contains(jsonText, `"key":"provider/known"`) || strings.Contains(jsonText, "\\u0000") {
+		t.Fatalf("mapped JSON provider/model key is not public: %s", jsonText)
 	}
 }
 

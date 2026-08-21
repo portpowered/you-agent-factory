@@ -201,6 +201,7 @@ func TestRootUpdatePriceTablePersistsAndPreservesUnrelatedSettings(t *testing.T)
 	initial := `{
   "backendScopeID": "local-11111111-1111-4111-8111-111111111111",
   "defaults": {"workerModelProvider": "CODEX", "workerModel": "gpt-5"},
+  "models": {"llm": {"source": "hf://custom/gemma"}},
   "runtime": {"logging": {"maxSizeMB": 11}, "metrics": {"maxSizeMB": 12}},
   "workers": {"acp": {"integrations": [{"id":"entry-1","name":"cursor-acp","transport":"stdio","command":"cursor-agent acp"}]}},
   "workerPresets": [{"id":"build","modelProvider":"CODEX","model":"gpt-5"}]
@@ -220,7 +221,10 @@ func TestRootUpdatePriceTablePersistsAndPreservesUnrelatedSettings(t *testing.T)
 	if err != nil {
 		t.Fatalf("UpdatePriceTable() = %v", err)
 	}
-	if updated.Currency != operatorsettings.PriceTableCurrencyUSD || len(updated.Models) != 1 || updated.Models[0].Provider != "CODEX" {
+	if updated.Currency != operatorsettings.PriceTableCurrencyUSD {
+		t.Fatalf("updated price table currency = %q, want USD", updated.Currency)
+	}
+	if len(updated.Models) != 1 || updated.Models[0].Provider != "CODEX" {
 		t.Fatalf("updated price table = %#v, want normalized replacement", updated)
 	}
 
@@ -228,17 +232,24 @@ func TestRootUpdatePriceTablePersistsAndPreservesUnrelatedSettings(t *testing.T)
 	if err != nil {
 		t.Fatalf("LoadDocument() = %v", err)
 	}
-	if loaded.Document.BackendScopeID != "local-11111111-1111-4111-8111-111111111111" ||
-		loaded.Document.Defaults.WorkerModel != "gpt-5" ||
-		loaded.Document.Runtime.Logging.MaxSizeMB != 11 ||
-		len(loaded.Document.WorkerPresets) != 1 ||
-		len(loaded.Document.Workers.ACP.Integrations) != 1 {
-		t.Fatalf("unrelated settings changed after update: %#v", loaded.Document)
+	assertPreservedPriceTableSettings(t, loaded.Document)
+}
+
+func assertPreservedPriceTableSettings(t *testing.T, document operatorsettings.Document) {
+	t.Helper()
+	if document.BackendScopeID != "local-11111111-1111-4111-8111-111111111111" || document.Defaults.WorkerModel != "gpt-5" {
+		t.Fatalf("identity/defaults changed after update: %#v", document)
 	}
-	if loaded.Document.PriceTable.Models[0].InputPerMillionTokens != "1.25" ||
-		loaded.Document.PriceTable.Models[0].CachedInputPerMillionTokens == nil ||
-		*loaded.Document.PriceTable.Models[0].CachedInputPerMillionTokens != "0" {
-		t.Fatalf("persisted price table = %#v, want exact rates", loaded.Document.PriceTable)
+	model := document.Models["llm"]
+	if model.Source == nil || *model.Source != "hf://custom/gemma" {
+		t.Fatalf("model overlay changed after update: %#v", document.Models)
+	}
+	if document.Runtime.Logging.MaxSizeMB != 11 || len(document.WorkerPresets) != 1 || len(document.Workers.ACP.Integrations) != 1 {
+		t.Fatalf("unrelated settings changed after update: %#v", document)
+	}
+	price := document.PriceTable.Models[0]
+	if price.InputPerMillionTokens != "1.25" || price.CachedInputPerMillionTokens == nil || *price.CachedInputPerMillionTokens != "0" {
+		t.Fatalf("persisted price table = %#v, want exact rates", document.PriceTable)
 	}
 }
 

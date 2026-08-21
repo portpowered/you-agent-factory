@@ -9,7 +9,9 @@ import (
 	"testing"
 
 	platformmetrics "github.com/portpowered/infinite-you/pkg/platform/metrics"
+	"github.com/portpowered/infinite-you/pkg/root"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	cligenerated "github.com/portpowered/infinite-you/pkg/transports/cli/generated"
 	generatedclient "github.com/portpowered/infinite-you/pkg/transports/http/client"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 	"github.com/portpowered/infinite-you/tests/internal/functionalevidence"
@@ -25,7 +27,6 @@ func TestMetricsCostsCLITraversesProductionHTTPRoute(t *testing.T) {
 	environment := append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
 	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir:                factoryDir,
-		UseMockWorkers:            true,
 		WaitForServiceModeRuntime: true,
 		Env:                       environment,
 	})
@@ -33,6 +34,20 @@ func TestMetricsCostsCLITraversesProductionHTTPRoute(t *testing.T) {
 
 	process := support.BuildProcess(t, serviceedges.Edges{})
 	support.CleanupProcess(t, process)
+	if root.CostsQueryFromProcess(process) == nil ||
+		root.RuntimeMetricsQueryFromProcess(process) == nil ||
+		root.DetachedOperationsFromProcess(process) == nil ||
+		root.ExecutionRuntimeOpeningFromProcess(process) == nil {
+		t.Fatal("root process did not expose all canonical metrics, costs, detached, and execution capabilities")
+	}
+	manifest, err := cligenerated.MetricsFamilyManifest()
+	if err != nil {
+		t.Fatalf("load generated metrics command manifest: %v", err)
+	}
+	command, err := manifest.CommandByID("you.metrics.costs")
+	if err != nil || command.Path != "you metrics costs" {
+		t.Fatalf("generated costs command = %#v, error = %v", command, err)
+	}
 	inputs := support.FakeInputs(context.Background(), []string{
 		"you", "--json", "--server", server.URL(), "metrics", "costs", "--session", sessionID,
 	})

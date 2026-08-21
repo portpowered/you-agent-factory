@@ -439,7 +439,7 @@ var BundleSet = wire.NewSet(
 	provideRunInvocationOperation,
 	provideModelsCLIInvocationOperation,
 	provideCLICommandFactory,
-	initializerapplication.NewProcessWithRuntimeCosts,
+	initializerapplication.NewProcessWithRuntimeCostsAndExecution,
 	wire.Bind(new(processcontract.Initializer), new(*initializerapplication.Initializer)),
 	wire.Bind(new(processcontract.CommandFactory), new(cli.CommandFactory)),
 )

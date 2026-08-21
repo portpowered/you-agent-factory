@@ -2,13 +2,14 @@ package host_test
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 	"time"
 
+	"github.com/portpowered/infinite-you/internal/testutil/recordingfixtures"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factoryhost "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/host"
-	recordingswire "github.com/portpowered/infinite-you/pkg/services/recordings/wire"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
@@ -56,8 +57,19 @@ func TestScriptMetricHelpers_PreferFailureMetadataAndDiagnostics(t *testing.T) {
 func TestRecordCompletionMetricsUsesCanonicalWorkerSessionAssociation(t *testing.T) {
 	t.Parallel()
 
-	ledger := recordingswire.NewRuntimeLedger(nil, time.Now, "metrics-worker-session", nil)
-	ledger.RecordDispatchWorkerSessionAssociation(1, "dispatch-1", "worker-session-1", "request-1", time.Now())
+	dispatchID := "dispatch-1"
+	payload, err := json.Marshal(interfaces.DispatchWorkerSessionAssociationEventPayload{WorkerSessionID: "worker-session-1"})
+	if err != nil {
+		t.Fatalf("marshal worker-session association: %v", err)
+	}
+	ledger := &recordingfixtures.ScriptedRuntimeLedger{
+		GenerationID: "metrics-worker-session",
+		Events: []interfaces.FactoryEvent{{
+			Type:    interfaces.FactoryEventTypeDispatchWorkerSessionAssoc,
+			Payload: payload,
+			Context: interfaces.FactoryEventContext{DispatchID: &dispatchID},
+		}},
+	}
 	sink := &hostMetricsSinkFake{}
 	bundle := &factoryhost.Bundle{EventHistory: ledger, MetricsSink: sink}
 	bundle.RecordCompletionMetrics(interfaces.FactoryCompletionRecord{

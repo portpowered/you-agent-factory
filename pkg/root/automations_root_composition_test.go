@@ -96,12 +96,12 @@ func TestCostsQueryFromProcessResolvesTypedCapability(t *testing.T) {
 	want := costs.CostsQuery(func(context.Context, costs.QueryRequest) (costs.Report, error) {
 		return costs.Report{Status: costs.StatusNoUsage}, nil
 	})
-	process, err := initializerapplication.NewProcessWithRuntimeCosts(
-		nil, nil, rootWorkerProcessRegistry{}, rootWorkerProcessLifecycle{}, nil, nil, nil, nil,
+	process, err := initializerapplication.NewProcessWithRuntimeCostsAndExecution(
+		nil, nil, rootWorkerProcessRegistry{}, rootWorkerProcessLifecycle{}, nil, nil, nil, nil, nil,
 		rootRuntimeCostsQueryCapabilityProbe{query: want},
 	)
 	if err != nil {
-		t.Fatalf("NewProcessWithRuntimeCosts() error = %v", err)
+		t.Fatalf("NewProcessWithRuntimeCostsAndExecution() error = %v", err)
 	}
 	got := CostsQueryFromProcess(process)
 	if got == nil {
@@ -111,12 +111,12 @@ func TestCostsQueryFromProcessResolvesTypedCapability(t *testing.T) {
 		t.Fatalf("CostsQueryFromProcess() result = %#v, error = %v", result, err)
 	}
 
-	wrongType, err := initializerapplication.NewProcessWithRuntimeCosts(
-		nil, nil, rootWorkerProcessRegistry{}, rootWorkerProcessLifecycle{}, nil, nil, nil, nil,
+	wrongType, err := initializerapplication.NewProcessWithRuntimeCostsAndExecution(
+		nil, nil, rootWorkerProcessRegistry{}, rootWorkerProcessLifecycle{}, nil, nil, nil, nil, nil,
 		rootRuntimeCostsQueryCapabilityProbe{query: struct{}{}},
 	)
 	if err != nil {
-		t.Fatalf("NewProcessWithRuntimeCosts(wrong type) error = %v", err)
+		t.Fatalf("NewProcessWithRuntimeCostsAndExecution(wrong type) error = %v", err)
 	}
 	if got := CostsQueryFromProcess(wrongType); got != nil {
 		t.Fatalf("CostsQueryFromProcess(wrong type) = %#v, want nil", got)

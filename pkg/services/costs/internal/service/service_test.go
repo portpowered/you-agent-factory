@@ -89,6 +89,9 @@ func assertExactRollups(t *testing.T, report costs.Report) {
 	if len(report.ProviderModels) != 4 || report.ProviderModels[0].Model != "gpt-5" {
 		t.Fatalf("provider/model rollups = %#v, want four sorted pairs", report.ProviderModels)
 	}
+	if report.ProviderModels[0].Key != "CODEX/gpt-5" || strings.Contains(report.ProviderModels[0].Key, "\x00") {
+		t.Fatalf("provider/model rollup key = %q, want public CODEX/gpt-5", report.ProviderModels[0].Key)
+	}
 	if len(report.FactorySessions) != 3 {
 		t.Fatalf("Factory Session rollups = %#v, want three sessions", report.FactorySessions)
 	}

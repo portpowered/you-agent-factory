@@ -447,6 +447,7 @@ func documentConfig(document operatorsettings.Document) operatorsettings.Config 
 			WorkerModel:         document.Defaults.WorkerModel,
 		},
 		PriceTable: document.PriceTable.Clone(),
+		Models:     cloneModelConfigs(document.Models),
 		Runtime: operatorsettings.RuntimeSettings{
 			Logging: operatorsettings.RuntimeArtifactSettings(document.Runtime.Logging),
 			Metrics: operatorsettings.RuntimeArtifactSettings(document.Runtime.Metrics),
@@ -483,6 +484,17 @@ func workerPresetsFromDocument(presets []operatorsettings.DocumentWorkerPreset) 
 	return converted
 }
 
+func cloneModelConfigs(values map[string]operatorsettings.ModelConfig) map[string]operatorsettings.ModelConfig {
+	if values == nil {
+		return nil
+	}
+	cloned := make(map[string]operatorsettings.ModelConfig, len(values))
+	for name, config := range values {
+		cloned[name] = config.Clone()
+	}
+	return cloned
+}
+
 func normalizedDocument(config operatorsettings.Config) (operatorsettings.Document, error) {
 	normalized, err := config.Normalize()
 	if err != nil {
@@ -495,6 +507,7 @@ func normalizedDocument(config operatorsettings.Config) (operatorsettings.Docume
 			WorkerModel:         normalized.Defaults.WorkerModel,
 		},
 		PriceTable: normalized.PriceTable.Clone(),
+		Models:     cloneModelConfigs(normalized.Models),
 		Runtime: operatorsettings.DocumentRuntimeSettings{
 			Logging: operatorsettings.DocumentRuntimeArtifactSettings(normalized.Runtime.Logging),
 			Metrics: operatorsettings.DocumentRuntimeArtifactSettings(normalized.Runtime.Metrics),

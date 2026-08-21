@@ -1878,7 +1878,7 @@ export interface components {
       provider: string;
       /** @description Exact resolved model identity, when known. */
       model: string;
-      /** @description Stable provider/model pair key. */
+      /** @description Stable public provider/model pair key in the form provider/model. */
       key: string;
       /** Format: int64 */
       input_tokens?: number;

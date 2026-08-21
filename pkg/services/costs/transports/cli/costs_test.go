@@ -72,39 +72,49 @@ func TestCostsCommandJSONIsTheAPIReportAndIsDeterministic(t *testing.T) {
 	t.Parallel()
 
 	report := costsReportForCLI()
-	newCommand := func() *bytes.Buffer {
-		command := costscli.NewCostsCommand(costscli.CostsCommandConfig{
-			Operation: costscli.NewOperation(func(string) (costscli.Client, error) {
-				return &costsClientStub{response: &generatedclient.GetMetricsCostsClientResponse{JSON200: &report}}, nil
-			}),
-			Server: func() string { return "https://factory.example" },
-			JSON:   func() bool { return true },
-		})
-		output := &bytes.Buffer{}
-		command.SetOut(output)
-		command.SetErr(io.Discard)
-		if err := command.ExecuteContext(context.Background()); err != nil {
-			t.Fatalf("execute JSON costs command: %v", err)
-		}
-		return output
-	}
-	first := newCommand().String()
-	second := newCommand().String()
+	first := runJSONCostsCommand(t, report)
+	second := runJSONCostsCommand(t, report)
 	if first != second {
 		t.Fatalf("JSON output is not deterministic:\nfirst: %s\nsecond: %s", first, second)
 	}
+	assertJSONCostsReport(t, first)
+}
+
+func runJSONCostsCommand(t *testing.T, report generatedclient.CostsReport) string {
+	t.Helper()
+	command := costscli.NewCostsCommand(costscli.CostsCommandConfig{
+		Operation: costscli.NewOperation(func(string) (costscli.Client, error) {
+			return &costsClientStub{response: &generatedclient.GetMetricsCostsClientResponse{JSON200: &report}}, nil
+		}),
+		Server: func() string { return "https://factory.example" },
+		JSON:   func() bool { return true },
+	})
+	output := &bytes.Buffer{}
+	command.SetOut(output)
+	command.SetErr(io.Discard)
+	if err := command.ExecuteContext(context.Background()); err != nil {
+		t.Fatalf("execute JSON costs command: %v", err)
+	}
+	return output.String()
+}
+
+func assertJSONCostsReport(t *testing.T, output string) {
+	t.Helper()
 	var decoded generatedclient.CostsReport
-	if err := json.Unmarshal([]byte(first), &decoded); err != nil {
-		t.Fatalf("decode API-shaped JSON: %v\n%s", err, first)
+	if err := json.Unmarshal([]byte(output), &decoded); err != nil {
+		t.Fatalf("decode API-shaped JSON: %v\n%s", err, output)
 	}
-	if decoded.PricedSubtotal == nil || *decoded.PricedSubtotal != "12.345678" ||
-		decoded.Coverage.PricedRows != 1 || len(decoded.LineItems) != 2 ||
-		len(decoded.WorkItems) != 1 || len(decoded.WorkerSessions) != 1 ||
-		len(decoded.ProviderModels) != 1 || len(decoded.FactorySessions) != 1 {
-		t.Fatalf("decoded report = %#v, want complete API report", decoded)
+	if decoded.PricedSubtotal == nil || *decoded.PricedSubtotal != "12.345678" {
+		t.Fatalf("decoded subtotal = %#v, want exact amount", decoded.PricedSubtotal)
 	}
-	if strings.Contains(first, "group_by") || strings.Contains(first, "totals") {
-		t.Fatalf("JSON output used the legacy metrics envelope:\n%s", first)
+	if decoded.Coverage.PricedRows != 1 || len(decoded.LineItems) != 2 || len(decoded.WorkItems) != 1 || len(decoded.WorkerSessions) != 1 {
+		t.Fatalf("decoded report dimensions = %#v, want complete API report", decoded)
+	}
+	if len(decoded.ProviderModels) != 1 || decoded.ProviderModels[0].Key != "openai/mystery" || len(decoded.FactorySessions) != 1 {
+		t.Fatalf("decoded provider/session rollups = %#v, want complete API report", decoded)
+	}
+	if strings.Contains(output, "group_by") || strings.Contains(output, "totals") || strings.Contains(output, "\\u0000") {
+		t.Fatalf("JSON output used the legacy metrics envelope:\n%s", output)
 	}
 }
 

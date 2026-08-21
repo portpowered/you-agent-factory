@@ -15,7 +15,7 @@ properties:
     description: Exact resolved model identity, when known.
   key:
     type: string
-    description: Stable provider/model pair key.
+    description: Stable public provider/model pair key in the form provider/model.
   input_tokens:
     type: integer
     format: int64
