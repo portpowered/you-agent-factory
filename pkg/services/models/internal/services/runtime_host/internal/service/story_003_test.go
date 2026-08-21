@@ -128,12 +128,23 @@ func TestManagedLocalAIUsesPinnedProtocolAndKeepsPrivateRuntimeDetailsPrivate(t 
 	if err != nil {
 		t.Fatalf("EnsureModelHost: %v", err)
 	}
+	assertManagedHostReady(t, result)
+	assertManagedProcess(t, launcher)
+	assertManagedProtocolCall(t, protocol)
+}
+
+func assertManagedHostReady(t *testing.T, result models.EnsureModelHostResult) {
+	t.Helper()
 	if result.Outcome != models.HostEnsureBecameReady || result.Host.ReadinessState != models.ReadinessStateReady {
 		t.Fatalf("EnsureModelHost result = %#v, want newly ready host", result)
 	}
 	if result.Host.Diagnostics["endpoint"] != "" || result.Host.Diagnostics["cachePath"] != "" {
 		t.Fatalf("public host diagnostics = %#v, want no endpoint or cache path", result.Host.Diagnostics)
 	}
+}
+
+func assertManagedProcess(t *testing.T, launcher *controlledProcessLauncher) {
+	t.Helper()
 	if launcher.startCount() != 1 {
 		t.Fatalf("process starts = %d, want 1", launcher.startCount())
 	}
@@ -147,6 +158,10 @@ func TestManagedLocalAIUsesPinnedProtocolAndKeepsPrivateRuntimeDetailsPrivate(t 
 	if containsArg(spec.Args, "--grpc-endpoint") || containsArg(spec.Args, "grpc://127.0.0.1:50051") {
 		t.Fatalf("process args = %#v, want endpoint consumed by host adapter", spec.Args)
 	}
+}
+
+func assertManagedProtocolCall(t *testing.T, protocol *testProtocolNegotiator) {
+	t.Helper()
 	call := protocol.call()
 	if call.endpoint != "grpc://127.0.0.1:50051" || call.request.ProtocolVersion != modelseffects.PinnedHostProtocolVersion {
 		t.Fatalf("protocol call = %#v, want pinned endpoint/version", call)
