@@ -1,6 +1,7 @@
 package batch_contract_test
 
 import (
+	"context"
 	"strings"
 	"testing"
 	"time"
@@ -229,9 +230,7 @@ func TestCLISubmitBatchAtAndBelowLimitDispatchThroughProviderCommandRunner(t *te
 		"gpt-5-codex",
 	))
 	support.WriteWorkstationConfig(t, factoryDir, "process-task", "---\ntype: MODEL_WORKSTATION\n---\n{{ (index .Inputs 0).Payload }}\n")
-	runner := support.NewShapedProviderCommandRunner(platformprocess.CommandResult{
-		Stdout: []byte("boundary dispatch COMPLETE"),
-	})
+	runner := support.NewRecordingCommandRunner("boundary dispatch COMPLETE")
 	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir:                factoryDir,
 		WaitForServiceModeRuntime: true,
@@ -263,11 +262,13 @@ func TestCLISubmitBatchAtAndBelowLimitDispatchThroughProviderCommandRunner(t *te
 		}
 
 		wantCalls := index + 1
-		if _, err := support.WaitForObservation(
-			15*time.Second,
-			func() (int, error) { return runner.CallCount(), nil },
-			func(callCount int) bool { return callCount >= wantCalls },
-		); err != nil {
+		// The provider dispatch is scheduled after the HTTP response and the
+		// injected command edge exposes a deterministic completion signal. Wait
+		// on that edge instead of polling a public projection for call count.
+		waitCtx, cancel := context.WithTimeout(t.Context(), 15*time.Second)
+		err := runner.WaitForCall(waitCtx, wantCalls)
+		cancel()
+		if err != nil {
 			t.Fatalf("waiting for %s provider dispatch: %v", test.name, err)
 		}
 		request := runner.LastRequest()

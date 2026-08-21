@@ -91,21 +91,28 @@ func (s requestPreparationService) PrepareWorkRequest(
 	}
 	applyDefaultBatchWorkTypes(&request, input.DefaultWorkTypeID)
 	applyStableWorkRequestLineage(&request)
+	if err := s.prepareWorkItems(ctx, &request); err != nil {
+		return Request{}, err
+	}
+	return request, nil
+}
+
+func (s requestPreparationService) prepareWorkItems(ctx context.Context, request *Request) error {
 	for index := range request.Works {
 		request.Works[index].Name = strings.TrimSpace(request.Works[index].Name)
 		if request.Works[index].Name == "" {
 			if request.RequestID == "" && len(request.Works) == 1 {
-				return Request{}, requestPreparationError(errors.New("name is required"))
+				return requestPreparationError(errors.New("name is required"))
 			}
-			return Request{}, requestPreparationError(fmt.Errorf(
+			return requestPreparationError(fmt.Errorf(
 				"work_request: works[%d] is missing required name", index,
 			))
 		}
 		if strings.TrimSpace(request.Works[index].WorkTypeID) == "" {
 			if request.RequestID == "" && len(request.Works) == 1 {
-				return Request{}, requestPreparationError(errors.New("workTypeName is required"))
+				return requestPreparationError(errors.New("workTypeName is required"))
 			}
-			return Request{}, requestPreparationError(fmt.Errorf(
+			return requestPreparationError(fmt.Errorf(
 				"work_request: works[%d] (%q) is missing workTypeName",
 				index,
 				request.Works[index].Name,
@@ -113,7 +120,7 @@ func (s requestPreparationService) PrepareWorkRequest(
 		}
 		content, err := s.content.PrepareWorkContent(ctx, request.Works[index].Content)
 		if err != nil {
-			return Request{}, requestPreparationError(fmt.Errorf(
+			return requestPreparationError(fmt.Errorf(
 				"works[%d].%s", index, err.Error(),
 			))
 		}
@@ -123,7 +130,7 @@ func (s requestPreparationService) PrepareWorkRequest(
 			request.Works[index].Payload,
 		)
 		if err != nil {
-			return Request{}, requestPreparationError(fmt.Errorf(
+			return requestPreparationError(fmt.Errorf(
 				"works[%d].payload: %w", index, err,
 			))
 		}
@@ -132,10 +139,10 @@ func (s requestPreparationService) PrepareWorkRequest(
 			request.Works[index].WorkID,
 			payload,
 		); err != nil {
-			return Request{}, requestPreparationError(err)
+			return requestPreparationError(err)
 		}
 	}
-	return request, nil
+	return nil
 }
 
 type publicWorkRequestSubmissionShape struct {

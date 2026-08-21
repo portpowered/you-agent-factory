@@ -61,63 +61,90 @@ func NormalizeWorkRequest(req Request, opts NormalizeOptions) ([]SubmitRequest, 
 	}
 
 	traceID := batchTraceID(req)
+	return normalizeBatchWorks(req, opts, workIndex, relIndex, traceID)
+}
+
+func normalizeBatchWorks(
+	req Request,
+	opts NormalizeOptions,
+	workIndex map[string]normalizedBatchWork,
+	relIndex map[string][]Relation,
+	traceID string,
+) ([]SubmitRequest, error) {
 	normalized := make([]SubmitRequest, 0, len(req.Works))
 	for i, work := range req.Works {
-		workTypeID := work.WorkTypeID
-		if workTypeID == "" {
-			workTypeID = opts.DefaultWorkTypeID
-		}
-		content, payload, err := normalizeWorkContent(work.Content, work.Payload)
+		normalizedWork, err := normalizeBatchWork(req, opts, workIndex, relIndex, traceID, i, work)
 		if err != nil {
-			return nil, fmt.Errorf("work_request: works[%d] (%q) has invalid content/payload: %w", i, work.Name, err)
-		}
-		if err := validateWorkPayloadSize(work.Name, workIndex[work.Name].id, payload); err != nil {
 			return nil, err
 		}
+		normalized = append(normalized, normalizedWork)
 
-		itemCurrentChainingTraceID := ResolveWorkRequestCurrentChainingTraceID(work.CurrentChainingTraceID, work.TraceID)
-		if itemCurrentChainingTraceID == "" {
-			itemCurrentChainingTraceID = ResolveWorkRequestCurrentChainingTraceID(req.CurrentChainingTraceID, traceID)
-		}
-		itemTraceID := work.TraceID
-		if itemTraceID == "" {
-			itemTraceID = itemCurrentChainingTraceID
-		}
-		itemRequestID := work.RequestID
-		if itemRequestID == "" {
-			itemRequestID = req.RequestID
-		}
-
-		tags := make(map[string]string, len(work.Tags)+3)
-		maps.Copy(tags, work.Tags)
-		tags["_work_name"] = work.Name
-		tags["_work_type"] = workTypeID
-		if work.ExecutionID != "" {
-			tags["_execution_id"] = work.ExecutionID
-		}
-
-		normalized = append(normalized, SubmitRequest{
-			RequestID:                itemRequestID,
-			WorkID:                   workIndex[work.Name].id,
-			Name:                     work.Name,
-			WorkTypeID:               workTypeID,
-			ChainingTraceDepth:       normalizeSubmitChainingTraceDepth(work.ChainingTraceDepth, itemCurrentChainingTraceID, itemTraceID),
-			CurrentChainingTraceID:   itemCurrentChainingTraceID,
-			PreviousChainingTraceIDs: lineagegraph.CanonicalChainingTraceIDs(work.PreviousChainingTraceIDs),
-			TraceID:                  itemTraceID,
-			Content:                  content,
-			Payload:                  payload,
-			Tags:                     tags,
-			TargetState:              work.State,
-			ExecutionID:              work.ExecutionID,
-			Relations: appendUniquePetriRelations(
-				cloneRelations(relIndex[work.Name]),
-				work.RuntimeRelations,
-			),
-			InvocationArguments: cloneInvocationArguments(work.InvocationArguments),
-		})
 	}
 	return normalized, nil
+}
+
+func normalizeBatchWork(
+	req Request,
+	opts NormalizeOptions,
+	workIndex map[string]normalizedBatchWork,
+	relIndex map[string][]Relation,
+	traceID string,
+	index int,
+	work Work,
+) (SubmitRequest, error) {
+	workTypeID := work.WorkTypeID
+	if workTypeID == "" {
+		workTypeID = opts.DefaultWorkTypeID
+	}
+	content, payload, err := normalizeWorkContent(work.Content, work.Payload)
+	if err != nil {
+		return SubmitRequest{}, fmt.Errorf("work_request: works[%d] (%q) has invalid content/payload: %w", index, work.Name, err)
+	}
+	if err := validateWorkPayloadSize(work.Name, workIndex[work.Name].id, payload); err != nil {
+		return SubmitRequest{}, err
+	}
+
+	itemCurrentChainingTraceID := ResolveWorkRequestCurrentChainingTraceID(work.CurrentChainingTraceID, work.TraceID)
+	if itemCurrentChainingTraceID == "" {
+		itemCurrentChainingTraceID = ResolveWorkRequestCurrentChainingTraceID(req.CurrentChainingTraceID, traceID)
+	}
+	itemTraceID := work.TraceID
+	if itemTraceID == "" {
+		itemTraceID = itemCurrentChainingTraceID
+	}
+	itemRequestID := work.RequestID
+	if itemRequestID == "" {
+		itemRequestID = req.RequestID
+	}
+
+	tags := make(map[string]string, len(work.Tags)+3)
+	maps.Copy(tags, work.Tags)
+	tags["_work_name"] = work.Name
+	tags["_work_type"] = workTypeID
+	if work.ExecutionID != "" {
+		tags["_execution_id"] = work.ExecutionID
+	}
+
+	return SubmitRequest{
+		RequestID:                itemRequestID,
+		WorkID:                   workIndex[work.Name].id,
+		Name:                     work.Name,
+		WorkTypeID:               workTypeID,
+		ChainingTraceDepth:       normalizeSubmitChainingTraceDepth(work.ChainingTraceDepth, itemCurrentChainingTraceID, itemTraceID),
+		CurrentChainingTraceID:   itemCurrentChainingTraceID,
+		PreviousChainingTraceIDs: lineagegraph.CanonicalChainingTraceIDs(work.PreviousChainingTraceIDs),
+		TraceID:                  itemTraceID,
+		Content:                  content,
+		Payload:                  payload,
+		Tags:                     tags,
+		TargetState:              work.State,
+		ExecutionID:              work.ExecutionID,
+		Relations: appendUniquePetriRelations(
+			cloneRelations(relIndex[work.Name]),
+			work.RuntimeRelations,
+		),
+		InvocationArguments: cloneInvocationArguments(work.InvocationArguments),
+	}, nil
 }
 
 func SubmitResultFromNormalized(requestID string, normalized []SubmitRequest) SubmitResult {

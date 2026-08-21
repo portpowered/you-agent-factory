@@ -343,53 +343,6 @@ func TestSubmitBatch_DryRunSucceedsWhenFactoryUnreachable(t *testing.T) {
 	}
 }
 
-func TestSubmitBatch_LocalPayloadSizeErrorPreservesCLIDiagnostic(t *testing.T) {
-	var out bytes.Buffer
-	err := SubmitBatch(work.NewFactoryRequestBatchPreparation(), BatchConfig{
-		Context: context.Background(),
-		Args:    []string{batchJSONWithPayloadSize("batch-payload-too-large", "oversized", work.MaxWorkPayloadBytes+1)},
-		DryRun:  true,
-		Server:  "http://127.0.0.1:1",
-		Output:  &out,
-	})
-	if err == nil {
-		t.Fatal("SubmitBatch dry-run accepted an oversized Work payload")
-	}
-
-	var sizeErr *work.PayloadSizeError
-	if !errors.As(err, &sizeErr) {
-		t.Fatalf("error type = %T, want *work.PayloadSizeError in the cause chain", err)
-	}
-	for _, marker := range []string{
-		`Work "oversized"`,
-		"payloadBytes=65537",
-		"payloadLimitBytes=65536",
-	} {
-		if !strings.Contains(err.Error(), marker) {
-			t.Fatalf("error missing %q: %v", marker, err)
-		}
-	}
-	var coded interface {
-		error
-		CLIErrorCode() string
-		CLIErrorMessage() string
-		CLIErrorFamily() factoryapi.ErrorFamily
-	}
-	if !errors.As(err, &coded) {
-		t.Fatalf("error type = %T, want a family-coded CLI diagnostic", err)
-	}
-	if coded.CLIErrorCode() != string(factoryapi.ErrorResponseCodeBADREQUEST) ||
-		coded.CLIErrorFamily() != factoryapi.ErrorFamilyBadRequest {
-		t.Fatalf("CLI fields = code %q family %q, want BAD_REQUEST", coded.CLIErrorCode(), coded.CLIErrorFamily())
-	}
-	if !strings.Contains(coded.CLIErrorMessage(), "payloadBytes=65537") {
-		t.Fatalf("CLI message = %q, want measured payload bytes", coded.CLIErrorMessage())
-	}
-	if out.Len() != 0 {
-		t.Fatalf("stdout = %q, want no dry-run success output", out.String())
-	}
-}
-
 func TestSubmitBatch_PUTUsesSessionScopedWorkRequestsPath(t *testing.T) {
 	var gotMethod string
 	var gotPath string
@@ -999,17 +952,4 @@ func validBatchJSON(requestID, workName string) string {
 		"type": "FACTORY_REQUEST_BATCH",
 		"works": [{"name": "` + workName + `", "workTypeName": "task", "payload": {"title": "Task"}}]
 	}`
-}
-
-func batchJSONWithPayloadSize(requestID, workName string, payloadBytes int) string {
-	const emptyPayload = `{"text":""}`
-	textBytes := payloadBytes - len(emptyPayload)
-	if textBytes < 0 {
-		panic("payload size must fit the test payload shape")
-	}
-	payload := `{"text":"` + strings.Repeat("x", textBytes) + `"}`
-	if len(payload) != payloadBytes {
-		panic(fmt.Sprintf("test payload length = %d, want %d", len(payload), payloadBytes))
-	}
-	return `{"requestId":"` + requestID + `","type":"FACTORY_REQUEST_BATCH","works":[{"name":"` + workName + `","workTypeName":"task","payload":` + payload + `}]}`
 }

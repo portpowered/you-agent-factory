@@ -8,6 +8,9 @@ import (
 	"strings"
 	"testing"
 
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
+	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -27,11 +30,7 @@ const (
 // contract preserves the Work admission diagnostic and emits no request or
 // dispatch observation for a mixed batch that contains an oversized Work.
 func TestAPIBatchUpsertRejectsOversizedWorkAtomically(t *testing.T) {
-	factoryDir := support.ScaffoldFactory(t, batchInputsFactoryConfig())
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir:     factoryDir,
-		UseMockWorkers: true,
-	})
+	server := startPayloadSizeHTTPServer(t)
 	defer server.Stop(t)
 
 	baseline := support.ListDefaultSessionWork(t, server.URL())
@@ -83,11 +82,7 @@ func TestAPIBatchUpsertRejectsOversizedWorkAtomically(t *testing.T) {
 // payload of exactly 65,536 bytes reaches the public session-scoped Work and
 // Factory Event observations.
 func TestAPIBatchUpsertAcceptsPayloadAtInclusiveLimit(t *testing.T) {
-	factoryDir := support.ScaffoldFactory(t, batchInputsFactoryConfig())
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir:     factoryDir,
-		UseMockWorkers: true,
-	})
+	server := startPayloadSizeHTTPServer(t)
 	defer server.Stop(t)
 
 	body := marshalHTTPBatch(t, httpPayloadSizeBoundaryRequestID, []map[string]any{
@@ -122,6 +117,32 @@ func TestAPIBatchUpsertAcceptsPayloadAtInclusiveLimit(t *testing.T) {
 		httpPayloadSizeBoundaryWorkID,
 		batchInputsWorkType,
 	)
+}
+
+func startPayloadSizeHTTPServer(t *testing.T) *support.FunctionalAPIServer {
+	t.Helper()
+	factoryDir := support.ScaffoldFactory(t, payloadSizeHTTPFactoryConfig())
+	support.WriteAgentConfig(t, factoryDir, "provider-worker", support.BuildModelWorkerConfig(
+		modelprovider.ProviderCodex,
+		"gpt-5-codex",
+	))
+	runner := support.NewShapedProviderCommandRunner(platformprocess.CommandResult{
+		Stdout: []byte("payload size HTTP dispatch COMPLETE"),
+	})
+	return support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir:                factoryDir,
+		WaitForServiceModeRuntime: true,
+		Edges:                     serviceedges.Edges{ProviderCommandRunner: runner},
+	})
+}
+
+func payloadSizeHTTPFactoryConfig() map[string]any {
+	config := batchInputsFactoryConfig()
+	config["workers"] = []map[string]string{{"name": "provider-worker"}}
+	workstations := config["workstations"].([]map[string]any)
+	workstations[0]["worker"] = "provider-worker"
+	config["workstations"] = workstations
+	return config
 }
 
 func httpBatchWork(t *testing.T, name, workID string, payload json.RawMessage) map[string]any {
