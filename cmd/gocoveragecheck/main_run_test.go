@@ -321,7 +321,7 @@ func TestExecuteDoesNotReportPackageSummariesWhenMeasurementFails(t *testing.T) 
 	if err == nil {
 		t.Fatal("execute() unexpectedly succeeded")
 	}
-	if stdout.Len() != 0 {
+	if strings.Contains(stdout.String(), "\tcoverage:") || strings.Contains(stdout.String(), "total: (statements)") {
 		t.Fatalf("execute() stdout = %q, want no package summaries without a valid measurement", stdout.String())
 	}
 	if got := stderr.String(); !strings.Contains(got, "coverage not evaluated") || !strings.Contains(got, "package floors were NOT checked") {

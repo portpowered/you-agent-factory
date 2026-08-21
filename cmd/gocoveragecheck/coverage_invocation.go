@@ -306,14 +306,25 @@ func windowsCommandLineArgLength(arg string) int {
 	return 2 + len(arg) + strings.Count(arg, `\`) + 2*strings.Count(arg, `"`)
 }
 
+// planGoTestCoverageLane builds the coverage invocation once on short command
+// lines, or in deterministic test-package batches when Windows needs it.
+func planGoTestCoverageLane(commonArgs []string, testPackages []string, profilePath string, cfg config, targetOS string, compactPackageArgs ...[]string) (coverageInvocationPlan, error) {
+	jsonEventsEnabled := strings.TrimSpace(cfg.timingOutput) != "" || cfg.stream
+	return buildCoverageInvocationPlan(commonArgs, testPackages, profilePath, jsonEventsEnabled, targetOS, compactPackageArgs...)
+}
+
+func planGoTestCoverageLaneWithSelection(commonArgs []string, profilePath string, cfg config, targetOS string, selection functionalCoverageSelection) (coverageInvocationPlan, error) {
+	jsonEventsEnabled := strings.TrimSpace(cfg.timingOutput) != "" || cfg.stream
+	return buildFunctionalCoverageInvocationPlan(commonArgs, selection.Groups, profilePath, jsonEventsEnabled, targetOS)
+}
+
 // runGoTestCoverageLane runs the coverage invocation once on short command
 // lines, or in deterministic test-package batches when Windows needs it. When
 // timing capture or streaming is enabled, it combines every batch's -json
 // stdout before writing the timing summary, so a failed or crashed lane still
 // leaves trustworthy (possibly incomplete) diagnostics on disk.
 func runGoTestCoverageLane(cfg config, commonArgs []string, testPackages []string, profilePath string, repoRoot string, coverPackages []string, targetOS string, failurePrefix string, compactPackageArgs ...[]string) error {
-	jsonEventsEnabled := strings.TrimSpace(cfg.timingOutput) != "" || cfg.stream
-	plan, err := buildCoverageInvocationPlan(commonArgs, testPackages, profilePath, jsonEventsEnabled, targetOS, compactPackageArgs...)
+	plan, err := planGoTestCoverageLane(commonArgs, testPackages, profilePath, cfg, targetOS, compactPackageArgs...)
 	if err != nil {
 		return err
 	}
@@ -321,8 +332,7 @@ func runGoTestCoverageLane(cfg config, commonArgs []string, testPackages []strin
 }
 
 func runGoTestCoverageLaneWithSelection(cfg config, commonArgs []string, testPackages []string, profilePath string, repoRoot string, coverPackages []string, targetOS string, failurePrefix string, selection functionalCoverageSelection) error {
-	jsonEventsEnabled := strings.TrimSpace(cfg.timingOutput) != "" || cfg.stream
-	plan, err := buildFunctionalCoverageInvocationPlan(commonArgs, selection.Groups, profilePath, jsonEventsEnabled, targetOS)
+	plan, err := planGoTestCoverageLaneWithSelection(commonArgs, profilePath, cfg, targetOS, selection)
 	if err != nil {
 		return err
 	}

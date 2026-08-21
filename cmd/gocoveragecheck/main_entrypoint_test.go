@@ -217,7 +217,7 @@ func TestMainReportsSkippedPackageFloorsWhenCoverageTestsFail(t *testing.T) {
 	if exitCode != 1 {
 		t.Fatalf("main() exit code = %d, want 1", exitCode)
 	}
-	if stdout != "" {
+	if strings.Contains(stdout, "\tcoverage:") || strings.Contains(stdout, "total: (statements)") {
 		t.Fatalf("main() stdout = %q, want no coverage summaries without a valid measurement", stdout)
 	}
 	for _, want := range []string{
