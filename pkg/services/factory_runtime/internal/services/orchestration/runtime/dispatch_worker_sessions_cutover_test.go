@@ -357,6 +357,12 @@ func newResolvedWorkerDefinitionRuntime(t *testing.T) (*factoryImpl, *recordingR
 	if !ok {
 		t.Fatalf("factory type = %T, want *factoryImpl", runtime)
 	}
+	impl.cfg.worldStateProjector = func(_ []interfaces.FactoryEvent, _ int) (interfaces.FactoryWorldState, error) {
+		// The read assertion only needs the association fact; supplying a
+		// projector ensures WorkerSessionsObservation exercises its recorded
+		// decorator instead of falling back to the raw live service.
+		return interfaces.FactoryWorldState{}, nil
+	}
 	return impl, execution
 }
 
