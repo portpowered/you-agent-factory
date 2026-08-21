@@ -18,16 +18,16 @@ const (
 )
 
 // PrivateNDJSONRecordTypes are retired CLI response-stream JSON recordType values.
-var PrivateNDJSONRecordTypes = []string{"progress", "compaction", "primary_result"}
+var PrivateNDJSONRecordTypes = []string{"progress", "compaction", "stream_gap", "primary_result"}
 
 // PublicNDJSONRecordTypes are the only supported CLI response-stream recordType values.
-var PublicNDJSONRecordTypes = []string{"response_event", "invocation_result"}
+var PublicNDJSONRecordTypes = []string{"factory_event", "invocation_result"}
 
 var docsTopicRequiredMarkers = map[string][]string{
 	"run": {
-		"recordType=response_event",
+		"recordType=factory_event",
 		"recordType=invocation_result",
-		"FactoryResponseEvent",
+		"FactoryEvent",
 	},
 	"sessions": {
 		"FactoryResponseEvent",

@@ -56,6 +56,30 @@ func TestAssertReleaseNotesMigrationMapping_RejectsIncompleteNotes(t *testing.T)
 	}
 }
 
+func TestAssertReleaseNotesMigrationMapping_RejectsStaleResponseEventShape(t *testing.T) {
+	canonicalRoot := testutil.MustRepoRoot(t)
+	canonicalPath := filepath.Join(canonicalRoot, filepath.FromSlash(removalgate.ReleaseNotesMigrationRelativePath))
+	canonical, err := os.ReadFile(canonicalPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	stale := strings.Replace(string(canonical), `"recordType": "factory_event"`, `"recordType": "response_event"`, 1)
+	stale += "\n\"recordType\": \"factory_event\"\n"
+
+	repoRoot := t.TempDir()
+	notesDir := filepath.Join(repoRoot, "docs", "release-notes")
+	if err := os.MkdirAll(notesDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(notesDir, "response-stream-private-ndjson-removal.md")
+	if err := os.WriteFile(path, []byte(stale), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := removalgate.AssertReleaseNotesMigrationMapping(repoRoot); err == nil || !strings.Contains(err.Error(), "stale migration marker") {
+		t.Fatalf("expected stale response-event marker error, got %v", err)
+	}
+}
+
 func TestAssertLegacyCompatMapperDeleted_RejectsEmptyRepoRoot(t *testing.T) {
 	if err := removalgate.AssertLegacyCompatMapperDeleted(""); err == nil {
 		t.Fatal("expected empty repo root to fail")
