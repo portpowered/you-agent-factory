@@ -247,50 +247,73 @@ func TestMetricsCommand_QueryFailureDoesNotWritePartialOutput(t *testing.T) {
 	}
 }
 
+type metricsJSONDocument struct {
+	Scope struct {
+		Kind             string  `json:"kind"`
+		FactorySessionID *string `json:"factory_session_id"`
+	} `json:"scope"`
+	GroupBy string `json:"group_by"`
+	Units   struct {
+		Tokens  string `json:"tokens"`
+		Counts  string `json:"counts"`
+		Latency string `json:"latency"`
+	} `json:"units"`
+	Cost struct {
+		Availability string `json:"availability"`
+	} `json:"cost"`
+	Totals struct {
+		InputTokens         float64            `json:"input_tokens"`
+		OutputTokens        float64            `json:"output_tokens"`
+		CompletedDispatches float64            `json:"completed_dispatches"`
+		FailuresByReason    map[string]float64 `json:"failures_by_reason"`
+	} `json:"totals"`
+	Groups []struct {
+		Key string `json:"key"`
+	} `json:"groups"`
+}
+
 func assertMetricsJSONOutput(t *testing.T, output, groupBy, groupKey, sessionID string) {
 	t.Helper()
-	var document struct {
-		Scope struct {
-			Kind             string  `json:"kind"`
-			FactorySessionID *string `json:"factory_session_id"`
-		} `json:"scope"`
-		GroupBy string `json:"group_by"`
-		Units   struct {
-			Tokens  string `json:"tokens"`
-			Counts  string `json:"counts"`
-			Latency string `json:"latency"`
-		} `json:"units"`
-		Cost struct {
-			Availability string `json:"availability"`
-		} `json:"cost"`
-		Totals struct {
-			InputTokens         float64            `json:"input_tokens"`
-			OutputTokens        float64            `json:"output_tokens"`
-			CompletedDispatches float64            `json:"completed_dispatches"`
-			FailuresByReason    map[string]float64 `json:"failures_by_reason"`
-		} `json:"totals"`
-		Groups []struct {
-			Key string `json:"key"`
-		} `json:"groups"`
-	}
+	var document metricsJSONDocument
 	if err := json.Unmarshal([]byte(output), &document); err != nil {
 		t.Fatalf("decode JSON output: %v\n%s", err, output)
 	}
+	assertMetricsJSONGrouping(t, document, groupBy, groupKey)
+	assertMetricsJSONTotals(t, document)
+	assertMetricsJSONMetadata(t, output, document)
+	assertMetricsJSONScope(t, document, sessionID)
+	assertMetricsJSONBreakdown(t, output)
+}
+
+func assertMetricsJSONGrouping(t *testing.T, document metricsJSONDocument, groupBy, groupKey string) {
+	t.Helper()
 	if document.GroupBy != groupBy || len(document.Groups) != 1 || document.Groups[0].Key != groupKey {
 		t.Fatalf("JSON grouping = %q with groups %#v, want %q and only %q", document.GroupBy, document.Groups, groupBy, groupKey)
 	}
+}
+
+func assertMetricsJSONTotals(t *testing.T, document metricsJSONDocument) {
+	t.Helper()
 	if document.Totals.InputTokens != 12 || document.Totals.OutputTokens != 8 || document.Totals.CompletedDispatches != 3 {
 		t.Fatalf("JSON totals = %#v, want input 12, output 8, dispatches 3", document.Totals)
 	}
 	if document.Totals.FailuresByReason["timeout"] != 2 {
 		t.Fatalf("JSON failures = %#v, want timeout 2", document.Totals.FailuresByReason)
 	}
+}
+
+func assertMetricsJSONMetadata(t *testing.T, output string, document metricsJSONDocument) {
+	t.Helper()
 	if document.Units.Tokens != "tokens" || document.Units.Counts != "count" || document.Units.Latency != "milliseconds" {
 		t.Fatalf("JSON units = %#v, want token/count/millisecond units", document.Units)
 	}
 	if document.Cost.Availability != "unavailable" || strings.Contains(output, "price") {
 		t.Fatalf("JSON cost = %#v or contains a numeric price:\n%s", document.Cost, output)
 	}
+}
+
+func assertMetricsJSONScope(t *testing.T, document metricsJSONDocument, sessionID string) {
+	t.Helper()
 	if sessionID == "" {
 		if document.Scope.Kind != "all_factory_sessions" || document.Scope.FactorySessionID != nil {
 			t.Fatalf("JSON unscoped value = %#v, want all_factory_sessions with null session", document.Scope)
@@ -298,6 +321,10 @@ func assertMetricsJSONOutput(t *testing.T, output, groupBy, groupKey, sessionID 
 	} else if document.Scope.Kind != "factory_session" || document.Scope.FactorySessionID == nil || *document.Scope.FactorySessionID != sessionID {
 		t.Fatalf("JSON session scope = %#v, want Factory Session %q", document.Scope, sessionID)
 	}
+}
+
+func assertMetricsJSONBreakdown(t *testing.T, output string) {
+	t.Helper()
 	for _, omitted := range []string{"workstations", "worker_types", "providers"} {
 		if strings.Contains(output, `"`+omitted+`"`) {
 			t.Fatalf("JSON output included unrequested breakdown field %q:\n%s", omitted, output)
