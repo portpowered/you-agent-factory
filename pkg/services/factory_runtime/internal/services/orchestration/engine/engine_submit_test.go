@@ -348,14 +348,14 @@ func TestSubmitWorkRequest_DependsOnResolvesActiveDispatchWork(t *testing.T) {
 	eng := newTestFactoryEngine(n, petri.NewMarking("test-wf"), nil)
 	eng.runtimeState.Dispatches["dispatch-existing"] = &interfaces.DispatchEntry{
 		DispatchID: "dispatch-existing",
-		ConsumedTokens: []factorytoken.Token{{
+		ConsumedTokens: factorytoken.ToWorkerSlice([]factorytoken.Token{{
 			Color: factorytoken.Color{
 				Name:       "active-existing",
 				WorkID:     "active-work",
 				WorkTypeID: "task",
 				DataType:   factorytoken.DataTypeWork,
 			},
-		}},
+		}}),
 	}
 
 	result, err := eng.SubmitWorkRequest(context.Background(), work.WorkRequest{

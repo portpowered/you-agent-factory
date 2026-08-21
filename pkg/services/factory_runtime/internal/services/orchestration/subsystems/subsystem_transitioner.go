@@ -787,8 +787,9 @@ func calculateArcs(currentTransition *petri.Transition, outcome workerexecution.
 
 func (t *TransitionerSubsystem) createFanoutGuardToken(inputColors []factorytoken.Color, transitionID string, expectedCount int, now time.Time) []interfaces.MarkingMutation {
 	mutations := []interfaces.MarkingMutation{}
-	if expectedCount > 0 || t.hasFanoutGroup(transitionID) {
-		if countPlaceID, ok := t.netDefinition.FanoutGroups[transitionID]; ok {
+	countPlaceID, hasFanoutGroup := t.netDefinition.FanoutGroups[transitionID]
+	if expectedCount > 0 || hasFanoutGroup {
+		if hasFanoutGroup {
 			parentWorkID := ""
 			if first := firstNonResourceInput(inputColors); first != nil {
 				parentWorkID = first.WorkID
@@ -982,46 +983,6 @@ func cloneHistoryForIntermittentFailureRequeue(
 		Attempt:      history.TotalVisits[result.transitionID],
 	})
 	return cloned
-}
-
-// hasFanoutGroup checks if a transition has a fanout group configured.
-func (t *TransitionerSubsystem) hasFanoutGroup(transitionID string) bool {
-	if t.netDefinition.FanoutGroups == nil {
-		return false
-	}
-	_, ok := t.netDefinition.FanoutGroups[transitionID]
-	return ok
-}
-
-// releaseResourceTokens returns consumed resource tokens back to their original resource places.
-func (t *TransitionerSubsystem) releaseResourceTokens(consumedTokens []factorytoken.Token, alreadyCovered map[string]int, transitionID string, now time.Time) []interfaces.MarkingMutation {
-	var mutations []interfaces.MarkingMutation
-	for i := range consumedTokens {
-		consumed := consumedTokens[i]
-		if consumed.Color.DataType != factorytoken.DataTypeResource {
-			continue
-		}
-		if alreadyCovered[consumed.PlaceID] > 0 {
-			alreadyCovered[consumed.PlaceID]--
-			continue
-		}
-		resourceToken := t.transformer.ReleasedResourceToken(consumed, consumed.PlaceID, now)
-		mutations = append(mutations, interfaces.MarkingMutation{
-			Type:     interfaces.MutationCreate,
-			ToPlace:  consumed.PlaceID,
-			NewToken: workerTokenPointer(resourceToken),
-			Reason:   fmt.Sprintf("release resource %s for transition %s", consumed.PlaceID, transitionID),
-		})
-	}
-	return mutations
-}
-
-func workerTokenPointer(value *factorytoken.Token) *workerexecution.Token {
-	if value == nil {
-		return nil
-	}
-	projected := factorytoken.ToWorker(*value)
-	return &projected
 }
 
 func tokenColorsFromTokens(tokens []factorytoken.Token) []factorytoken.Color {
