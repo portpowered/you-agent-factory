@@ -33,6 +33,7 @@ concept owners below when you need the complete customer-facing contract.
 | `operations` | Real-pipeline lifetime, finite-drain classification, and same-name restart recovery | [Operations](operations.md) |
 | `work` | Submitted work: session-scoped work routes, tags, and batch cross-links | [Submitted work](work.md) |
 | `sessions` | Session list, session show, pause and resume, factory query, status API, dashboard, and run modes | [Sessions](sessions.md) |
+| `metrics` | Factory Runtime token, dispatch, failure, and latency metrics with deterministic grouping and Factory Session scope | [Metrics](metrics.md) |
 | `orchestrators` | Factory orchestrator identity, FactorySession runtime nouns, dispatch/artifact/event aliases | [Orchestrators](orchestrators.md) |
 | `javascript-workflows` | Supported JavaScript authoring, equivalent CLI/API/MCP execution, worker presets, host boundaries, and runnable examples | [JavaScript workflows](javascript-workflows.md) |
 | `mcp` | `you mcp serve` host setup, backing modes, first-use smoke, and troubleshooting | [MCP host setup](mcp.md) |
@@ -86,6 +87,8 @@ filesystem work around that invocation.
 - [Sessions](sessions.md) owns live session discovery, session show, pause and
   resume, factory query, status API fields, dashboard URL, and `--server` /
   `--session` routing for HTTP client commands.
+- [Metrics](metrics.md) owns the `you metrics` command output contract,
+  grouping, Factory Session scope, units, and cost availability.
 - [Orchestrators](orchestrators.md) owns `Factory`, `FactoryOrchestrator`,
   `FactorySession`, `Dispatch`, `FactoryArtifact`, `FactoryEvent`, and accepted
   dynamic workflow aliases.
