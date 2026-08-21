@@ -602,6 +602,8 @@ func recordedObservationFromFact(fact recordedDispatchObservation, clock factory
 	}
 	observation := workersessions.Observation{
 		WorkerSessionID:          fact.workerSessionID,
+		Model:                    cloneRecordedString(fact.model),
+		ReasoningEffort:          cloneRecordedString(fact.reasoningEffort),
 		ProviderSessionAvailable: fact.provider != nil && fact.provider.ID != "",
 		WorkIDs:                  append([]string(nil), fact.workIDs...),
 		TurnID:                   fact.turnID,
@@ -814,6 +816,12 @@ func mergeLiveObservation(recorded *workersessions.Observation, live workersessi
 	if live.StartedAt != nil {
 		started := *live.StartedAt
 		recorded.StartedAt = &started
+	}
+	if live.Model != nil && strings.TrimSpace(*live.Model) != "" {
+		recorded.Model = cloneRecordedString(live.Model)
+	}
+	if live.ReasoningEffort != nil && strings.TrimSpace(*live.ReasoningEffort) != "" {
+		recorded.ReasoningEffort = cloneRecordedString(live.ReasoningEffort)
 	}
 	if live.ProviderSessionAvailable {
 		recorded.ProviderSession = live.ProviderSession.Clone()

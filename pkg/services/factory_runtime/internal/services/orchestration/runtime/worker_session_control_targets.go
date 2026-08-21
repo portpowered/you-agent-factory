@@ -41,11 +41,16 @@ func (f *factoryImpl) BeginWorkerAttempt(
 	initialSessionID := runtimeWorkerSessionID(f.cfg, request, executeRequest, false)
 	allowRetry := terminalWorkerSessionRequiresRetry(ctx, f.cfg.workerSessions, initialSessionID)
 	sessionID := runtimeWorkerSessionID(f.cfg, request, executeRequest, allowRetry)
-	f.eventHistory.RecordDispatchWorkerSessionAssociation(
+	recordDispatchWorkerSessionAssociation(
+		f.eventHistory,
 		f.currentTick(),
 		dispatchID,
 		sessionID,
 		executeRequest.Correlation.RequestID,
+		recordings.DispatchWorkerSessionExecutionFacts{
+			Model:           executeRequest.Target.Model.Name,
+			ReasoningEffort: executeRequest.Target.Model.ReasoningEffort,
+		},
 		f.cfg.clock.Now(),
 	)
 	prepare := runtimeAttemptPreparation(f.cfg, request, executeRequest, allowRetry)

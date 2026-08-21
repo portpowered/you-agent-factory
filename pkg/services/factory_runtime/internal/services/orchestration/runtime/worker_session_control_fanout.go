@@ -936,6 +936,14 @@ func cloneRecordedString(value *string) *string {
 	return &clone
 }
 
+func recordedOptionalString(value string) *string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return nil
+	}
+	return &value
+}
+
 func cloneRecordedTime(value *time.Time) *time.Time {
 	if value == nil {
 		return nil
@@ -949,6 +957,8 @@ type recordedDispatchObservation struct {
 	dispatchID      string
 	turnID          string
 	workIDs         []string
+	model           *string
+	reasoningEffort *string
 	startedAt       time.Time
 	endedAt         *time.Time
 	state           workersessions.State
@@ -959,6 +969,8 @@ type recordedDispatchObservation struct {
 type recordedDispatchAssociation struct {
 	workerSessionID string
 	turnID          string
+	model           *string
+	reasoningEffort *string
 	eventTime       time.Time
 }
 

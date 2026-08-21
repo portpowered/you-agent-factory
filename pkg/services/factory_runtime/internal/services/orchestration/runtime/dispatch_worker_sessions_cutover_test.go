@@ -43,6 +43,45 @@ func newBlockingAssociationLedger() *blockingAssociationLedger {
 	}
 }
 
+type resolvedModelAssociationLedger struct {
+	*recordingfixtures.ScriptedRuntimeLedger
+}
+
+func (l *resolvedModelAssociationLedger) RecordDispatchWorkerSessionAssociationWithExecution(
+	tick int,
+	dispatchID string,
+	workerSessionID string,
+	requestID string,
+	facts recordings.DispatchWorkerSessionExecutionFacts,
+	eventTime time.Time,
+) {
+	l.ScriptedRuntimeLedger.RecordDispatchWorkerSessionAssociation(tick, dispatchID, workerSessionID, requestID, eventTime)
+	payload, err := json.Marshal(struct {
+		WorkerSessionID string `json:"workerSessionId"`
+		Model           string `json:"model,omitempty"`
+		ReasoningEffort string `json:"reasoningEffort,omitempty"`
+	}{
+		WorkerSessionID: workerSessionID,
+		Model:           facts.Model,
+		ReasoningEffort: facts.ReasoningEffort,
+	})
+	if err != nil {
+		panic(err)
+	}
+	l.ScriptedRuntimeLedger.AppendRecordedEvent(interfaces.FactoryEvent{
+		Context: interfaces.FactoryEventContext{
+			Tick:       tick,
+			EventTime:  eventTime,
+			DispatchID: stringPointerForRecordedTest(dispatchID),
+			RequestID:  stringPointerForRecordedTest(requestID),
+		},
+		Id:            "factory-event/dispatch-worker-session-association/" + dispatchID,
+		Payload:       payload,
+		SchemaVersion: interfaces.FactoryEventSchemaVersionV1,
+		Type:          interfaces.FactoryEventTypeDispatchWorkerSessionAssoc,
+	})
+}
+
 func (l *blockingAssociationLedger) RecordDispatchWorkerSessionAssociation(
 	tick int,
 	dispatchID string,
@@ -238,7 +277,11 @@ func TestFactoryImpl_PlanDispatchExecutesThroughWorkerSessionsStart(t *testing.T
 }
 
 func TestFactoryImpl_PlanDispatchCapturesResolvedWorkerDefinitionFactsInObservation(t *testing.T) {
-	impl, execution, workerSessions := newResolvedWorkerDefinitionRuntime(t)
+	impl, execution := newResolvedWorkerDefinitionRuntime(t)
+	// This focused factory has no durable Worker recording reader; leave the
+	// optional health sidecar disabled so the decorator exercises its canonical
+	// association projection directly.
+	impl.cfg.recordingID = ""
 	impl.state = interfaces.FactoryStateRunning
 	plan := factory.PlanDispatchRequest{
 		DispatchID: "resolved-model-dispatch", CorrelationID: "resolved-model-correlation",
@@ -255,7 +298,11 @@ func TestFactoryImpl_PlanDispatchCapturesResolvedWorkerDefinitionFactsInObservat
 		t.Fatal("Workers Execute request was not recorded")
 	}
 	assertResolvedWorkerRequest(t, plan, request)
-	observation, err := workerSessions.GetObservationByWorkerSessionID(
+	observationService := impl.WorkerSessionsObservation()
+	if observationService == nil {
+		t.Fatal("WorkerSessionsObservation() returned nil")
+	}
+	observation, err := observationService.GetObservationByWorkerSessionID(
 		t.Context(),
 		workersessions.GetObservationByWorkerSessionIDRequest{WorkerSessionID: plan.DispatchID},
 	)
@@ -263,7 +310,7 @@ func TestFactoryImpl_PlanDispatchCapturesResolvedWorkerDefinitionFactsInObservat
 	assertResolvedWorkerObservation(t, plan, request, observation)
 }
 
-func newResolvedWorkerDefinitionRuntime(t *testing.T) (*factoryImpl, *recordingRootExecutionService, workersessions.Service) {
+func newResolvedWorkerDefinitionRuntime(t *testing.T) (*factoryImpl, *recordingRootExecutionService) {
 	t.Helper()
 	execution := &recordingRootExecutionService{testWorkstationBoundary: &testWorkstationBoundary{}}
 	events, err := eventswire.NewService(logging.NoopLogger{})
@@ -277,11 +324,13 @@ func newResolvedWorkerDefinitionRuntime(t *testing.T) (*factoryImpl, *recordingR
 		nil,
 	)
 	requireNoRootErr(t, err, "New Worker Sessions service")
-	runtime, _, err := newTestFactoryWithScriptedLedger(
+	ledger := &resolvedModelAssociationLedger{ScriptedRuntimeLedger: &recordingfixtures.ScriptedRuntimeLedger{}}
+	runtime, err := newTestFactory(
 		withNet(buildSimpleNet()),
 		withInlineDispatch(),
 		withWorkerService(execution),
 		withWorkerSessions(workerSessions),
+		withFactoryEventHistory(ledger),
 		withRuntimeConfig(runtimefixtures.RuntimeDefinitionLookupFixture{
 			Workstations: map[string]*interfaces.FactoryWorkstationConfig{
 				"t-process": {
@@ -308,7 +357,7 @@ func newResolvedWorkerDefinitionRuntime(t *testing.T) (*factoryImpl, *recordingR
 	if !ok {
 		t.Fatalf("factory type = %T, want *factoryImpl", runtime)
 	}
-	return impl, execution, workerSessions
+	return impl, execution
 }
 
 func assertResolvedWorkerRequest(t *testing.T, plan factory.PlanDispatchRequest, request workers.ExecuteRequest) {
@@ -847,6 +896,32 @@ func TestRecordedDispatchFactsBranches(t *testing.T) {
 	if len(fallbackRequests["dispatch-input"].workIDs) != 1 || fallbackRequests["dispatch-input"].workIDs[0] != "work-from-input" {
 		t.Fatalf("recordedDispatchFacts(payload fallback) = %#v", fallbackRequests)
 	}
+	modelEvents := []interfaces.FactoryEvent{{
+		Context: interfaces.FactoryEventContext{
+			DispatchID: stringPointerForRecordedTest("dispatch-model"),
+			EventTime:  base,
+		},
+		Type: interfaces.FactoryEventTypeDispatchWorkerSessionAssoc,
+		Payload: mustMarshalRecordedTest(t, struct {
+			WorkerSessionID string `json:"workerSessionId"`
+			Model           string `json:"model"`
+			ReasoningEffort string `json:"reasoningEffort"`
+		}{
+			WorkerSessionID: "worker-model",
+			Model:           "gpt-5.6-luna",
+			ReasoningEffort: "high",
+		}),
+	}}
+	modelAssociations, _ := recordedDispatchFacts(modelEvents)
+	modelAssociation := modelAssociations["dispatch-model"]
+	if modelAssociation.model == nil || *modelAssociation.model != "gpt-5.6-luna" || modelAssociation.reasoningEffort == nil || *modelAssociation.reasoningEffort != "high" {
+		t.Fatalf("recordedDispatchFacts(model) = %#v, want resolved execution facts", modelAssociation)
+	}
+	modelFact := recordedDispatchFact("dispatch-model", modelAssociation, nil, nil, nil, nil, nil)
+	modelObservation := recordedObservationFromFact(modelFact, nil)
+	if modelObservation.Model == nil || *modelObservation.Model != "gpt-5.6-luna" || modelObservation.ReasoningEffort == nil || *modelObservation.ReasoningEffort != "high" {
+		t.Fatalf("recordedObservationFromFact(model) = %#v, want resolved execution facts", modelObservation)
+	}
 }
 
 func TestRecordedDispatchTimingBranches(t *testing.T) {
@@ -949,6 +1024,54 @@ func TestRecordedObservationMergeBranches(t *testing.T) {
 	}
 	if got := mergeRecordedObservations(nil, []workersessions.Observation{liveObservation}); len(got) != 1 || got[0].WorkerSessionID != liveObservation.WorkerSessionID {
 		t.Fatalf("mergeRecordedObservations(empty recorded) = %#v, want live observation", got)
+	}
+}
+
+func TestRecordedObservationMergePreservesExecutionFacts(t *testing.T) {
+	recordedModel := "recorded-model"
+	recordedEffort := "medium"
+	liveModel := "live-model"
+	liveEffort := "high"
+	merged := mergeRecordedObservations(
+		[]workersessions.Observation{
+			{WorkerSessionID: "recorded-only", Model: &recordedModel, ReasoningEffort: &recordedEffort},
+			{WorkerSessionID: "overlapping"},
+		},
+		[]workersessions.Observation{
+			{WorkerSessionID: "live-only", Model: &liveModel, ReasoningEffort: &liveEffort},
+			{WorkerSessionID: "overlapping", Model: &liveModel, ReasoningEffort: &liveEffort},
+		},
+	)
+	byID := make(map[string]workersessions.Observation, len(merged))
+	for _, observation := range merged {
+		byID[observation.WorkerSessionID] = observation
+	}
+	if len(merged) != 3 || byID["recorded-only"].Model == nil || *byID["recorded-only"].Model != recordedModel || byID["recorded-only"].ReasoningEffort == nil || *byID["recorded-only"].ReasoningEffort != recordedEffort {
+		t.Fatalf("recorded-only execution facts = %#v, want preserved facts", byID["recorded-only"])
+	}
+	if byID["live-only"].Model == nil || *byID["live-only"].Model != liveModel || byID["live-only"].ReasoningEffort == nil || *byID["live-only"].ReasoningEffort != liveEffort {
+		t.Fatalf("live-only execution facts = %#v, want live facts", byID["live-only"])
+	}
+	if byID["overlapping"].Model == nil || *byID["overlapping"].Model != liveModel || byID["overlapping"].ReasoningEffort == nil || *byID["overlapping"].ReasoningEffort != liveEffort {
+		t.Fatalf("overlapping execution facts = %#v, want live facts", byID["overlapping"])
+	}
+
+	legacy := mergeRecordedObservations(
+		[]workersessions.Observation{{WorkerSessionID: "legacy"}},
+		[]workersessions.Observation{{WorkerSessionID: "legacy"}},
+	)
+	if legacy[0].Model != nil || legacy[0].ReasoningEffort != nil {
+		t.Fatalf("legacy execution facts = %#v, want absent", legacy[0])
+	}
+
+	emptyModel := ""
+	emptyEffort := ""
+	retained := mergeRecordedObservations(
+		[]workersessions.Observation{{WorkerSessionID: "retained", Model: &recordedModel, ReasoningEffort: &recordedEffort}},
+		[]workersessions.Observation{{WorkerSessionID: "retained", Model: &emptyModel, ReasoningEffort: &emptyEffort}},
+	)
+	if retained[0].Model == nil || *retained[0].Model != recordedModel || retained[0].ReasoningEffort == nil || *retained[0].ReasoningEffort != recordedEffort {
+		t.Fatalf("empty live execution facts = %#v, want recorded facts preserved", retained[0])
 	}
 }
 

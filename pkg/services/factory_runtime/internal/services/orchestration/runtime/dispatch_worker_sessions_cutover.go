@@ -19,6 +19,32 @@ import (
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
+func recordDispatchWorkerSessionAssociation(
+	ledger recordings.RuntimeLedger,
+	tick int,
+	dispatchID string,
+	workerSessionID string,
+	requestID string,
+	facts recordings.DispatchWorkerSessionExecutionFacts,
+	eventTime time.Time,
+) {
+	if ledger == nil {
+		return
+	}
+	if recorder, ok := ledger.(recordings.DispatchWorkerSessionAssociationRecorder); ok {
+		recorder.RecordDispatchWorkerSessionAssociationWithExecution(
+			tick,
+			dispatchID,
+			workerSessionID,
+			requestID,
+			facts,
+			eventTime,
+		)
+		return
+	}
+	ledger.RecordDispatchWorkerSessionAssociation(tick, dispatchID, workerSessionID, requestID, eventTime)
+}
+
 // startThroughWorkerSessions is the W4 Runtime dispatch cutover seam. For
 // every resolved dispatch it reserves one stable, control-addressable Worker
 // Session identity, commits
@@ -54,11 +80,16 @@ func startThroughWorkerSessions(
 	); err != nil {
 		return err
 	}
-	eventHistory.RecordDispatchWorkerSessionAssociation(
+	recordDispatchWorkerSessionAssociation(
+		eventHistory,
 		request.Execution.Dispatch.Execution.DispatchCreatedTick,
 		dispatchID,
 		sessionID,
 		request.Execution.Dispatch.Execution.RequestID,
+		recordings.DispatchWorkerSessionExecutionFacts{
+			Model:           request.Execution.Model,
+			ReasoningEffort: request.Execution.ReasoningEffort,
+		},
 		cfg.clock.Now(),
 	)
 	execute := func() {
@@ -366,6 +397,8 @@ func recordedDispatchFact(
 		workerSessionID: association.workerSessionID,
 		dispatchID:      dispatchID,
 		turnID:          association.turnID,
+		model:           cloneRecordedString(association.model),
+		reasoningEffort: cloneRecordedString(association.reasoningEffort),
 		startedAt:       association.eventTime,
 		state:           workersessions.StateStarting,
 	}
@@ -436,12 +469,18 @@ func recordedDispatchFacts(events []interfaces.FactoryEvent) (map[string]recorde
 			if dispatchID == "" {
 				continue
 			}
-			var payload interfaces.DispatchWorkerSessionAssociationEventPayload
+			var payload struct {
+				WorkerSessionID string `json:"workerSessionId"`
+				Model           string `json:"model"`
+				ReasoningEffort string `json:"reasoningEffort"`
+			}
 			if json.Unmarshal(event.Payload, &payload) != nil || payload.WorkerSessionID == "" {
 				continue
 			}
 			associations[dispatchID] = recordedDispatchAssociation{
 				workerSessionID: payload.WorkerSessionID,
+				model:           recordedOptionalString(payload.Model),
+				reasoningEffort: recordedOptionalString(payload.ReasoningEffort),
 				turnID:          stringPointerValue(event.Context.RequestID),
 				eventTime:       event.Context.EventTime.UTC(),
 			}
