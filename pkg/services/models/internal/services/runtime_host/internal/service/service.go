@@ -437,7 +437,9 @@ func (s *service) runtimeSlot(
 }
 
 func (s *service) revokeHostLeases(scope models.RuntimeScopeRef, modelName string) {
-	revoker, ok := s.leases.(hostleases.LeaseRevoker)
+	revoker, ok := s.leases.(interface {
+		RevokeModelLeases(models.RuntimeScopeRef, string)
+	})
 	if !ok || revoker == nil {
 		return
 	}
