@@ -221,9 +221,6 @@ jobs:
       - name: Compile functionallong test packages
         if: matrix.suite == 'unit'
         run: make test-functional-long-compile
-      - name: Build backend
-        if: matrix.suite == 'unit'
-        run: make build
       - name: Select functional runner parallelism
         if: matrix.suite == 'functional'
         id: functional-parallelism
