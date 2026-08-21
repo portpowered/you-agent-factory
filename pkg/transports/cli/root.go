@@ -1,7 +1,5 @@
 // Package cli defines Cobra commands for the agent-factory CLI.
 // Commands contain only flag parsing and delegate to command-specific packages.
-// backendsizecheck:ignore-file pre-existing baseline debt recorded 2026-08-08; split this oversized code into focused units and remove this exemption
-// pkgmaintcheck:ignore-file-lines pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption
 package cli
 
 import (
