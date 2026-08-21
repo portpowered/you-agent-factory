@@ -91,6 +91,9 @@ properties:
   tokenUsage:
     $ref: './ProviderSessionTokenUsage.yaml'
     nullable: true
+  turnUsage:
+    $ref: './WorkerSessionTurnUsage.yaml'
+    nullable: true
   transcript:
     type: string
     enum:

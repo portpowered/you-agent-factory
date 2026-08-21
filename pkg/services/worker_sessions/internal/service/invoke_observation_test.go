@@ -193,6 +193,19 @@ func TestInvokeObservationDiagnosticsAndTranscriptHelpers(t *testing.T) {
 	}
 }
 
+func TestObservationTurnUsageDiffersCumulativeInputCounters(t *testing.T) {
+	got := observationTurnUsage([]int{100, 250, 700})
+	if got == nil || got.TurnCount != 3 || got.FinalContextTokens != 450 || got.PeakContextTokens != 450 {
+		t.Fatalf("observationTurnUsage() = %#v, want three turns with final/peak 450", got)
+	}
+	if observationTurnUsage(nil) != nil {
+		t.Fatal("observationTurnUsage(nil) returned a value")
+	}
+	if observationTurnUsage([]int{100, 90}) != nil {
+		t.Fatal("observationTurnUsage(decreasing counters) returned a value")
+	}
+}
+
 func TestInvokeSafeDiagnosticMessages(t *testing.T) {
 	for _, test := range []struct {
 		input string
@@ -299,7 +312,7 @@ func TestInvokeObservationProjectionAndTranscriptOutcomes(t *testing.T) {
 	text := "hello"
 	providerResult := providersessions.ProjectResult{Detail: providersessions.Detail{
 		Transcript: []providersessions.TranscriptEntry{{Order: 0, Type: providersessions.TranscriptAssistantMessage, Text: &text}},
-		Parse:      providersessions.ParseSummary{EventCount: 1},
+		Parse:      providersessions.ParseSummary{EventCount: 1, CumulativeInputTokens: []int{100, 250, 700}},
 	}}
 	provider := observationProjectorFake{result: providerResult}
 	registry := newObservationRegistry(provider, nil)
@@ -322,6 +335,9 @@ func TestInvokeObservationProjectionAndTranscriptOutcomes(t *testing.T) {
 	got, err := registry.GetObservation(context.Background(), workersessions.GetObservationRequest{ProviderSession: ref})
 	if err != nil || got.WorkerSessionID != "worker-1" || got.Transcript != workersessions.TranscriptAvailabilityAvailable {
 		t.Fatalf("GetObservation() = %#v, %v", got, err)
+	}
+	if got.TurnUsage == nil || got.TurnUsage.TurnCount != 3 || got.TurnUsage.FinalContextTokens != 450 || got.TurnUsage.PeakContextTokens != 450 {
+		t.Fatalf("GetObservation() turn usage = %#v, want derived cumulative deltas", got.TurnUsage)
 	}
 	assertWorkerObservationLookups(t, registry, got, canceled)
 	if _, err := registry.GetObservation(context.Background(), workersessions.GetObservationRequest{ProviderSession: providers.SessionRef{Provider: providers.IDCodex, Kind: providers.SessionIDKind, ID: "missing"}}); !errors.Is(err, workersessions.ErrObservationSessionNotFound) {

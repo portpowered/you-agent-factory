@@ -666,6 +666,13 @@ func WorkerSessionObservationToAPI(observation workersessions.Observation) facto
 			TotalTokens:           cloneInt(observation.TokenUsage.TotalTokens),
 		}
 	}
+	if observation.TurnUsage != nil {
+		result.TurnUsage = &factoryapi.WorkerSessionTurnUsage{
+			TurnCount:          observation.TurnUsage.TurnCount,
+			FinalContextTokens: observation.TurnUsage.FinalContextTokens,
+			PeakContextTokens:  observation.TurnUsage.PeakContextTokens,
+		}
+	}
 	if observation.Failure != nil {
 		result.Failure = &factoryapi.WorkerSessionFailure{
 			Kind:                            string(observation.Failure.Kind),

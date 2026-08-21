@@ -33,6 +33,7 @@ func TestListJSONUsesStableSessionDocumentAndNullOptionals(t *testing.T) {
 				Transcript:     factoryapi.WorkerSessionObservationTranscript("AVAILABLE"),
 				DurationMillis: int64Ptr(2500),
 				TokenUsage:     &factoryapi.ProviderSessionTokenUsage{TotalTokens: intPtr(17)},
+				TurnUsage:      &factoryapi.WorkerSessionTurnUsage{TurnCount: 3, FinalContextTokens: 450, PeakContextTokens: 450},
 				Failure:        &factoryapi.WorkerSessionFailure{Kind: "INCOMPLETE_OUTPUT", Detail: "safe incomplete-output detail"},
 			},
 			{
@@ -74,6 +75,9 @@ func TestListJSONUsesStableSessionDocumentAndNullOptionals(t *testing.T) {
 			t.Fatalf("session 2 %s = %s, want explicit null", key, got)
 		}
 	}
+	if _, ok := document.Sessions[1]["turnUsage"]; ok {
+		t.Fatalf("session 2 turnUsage = %s, want field omitted without supported evidence", document.Sessions[1]["turnUsage"])
+	}
 	if got := string(document.Sessions[0]["model"]); got != `"gpt-5.6-luna"` {
 		t.Fatalf("session 1 model = %s, want gpt-5.6-luna", got)
 	}
@@ -85,6 +89,9 @@ func TestListJSONUsesStableSessionDocumentAndNullOptionals(t *testing.T) {
 	}
 	if got := string(document.Sessions[0]["tokenUsage"]); !strings.Contains(got, `"totalTokens":17`) {
 		t.Fatalf("session 1 tokenUsage = %s, want totalTokens 17", got)
+	}
+	if got := string(document.Sessions[0]["turnUsage"]); got != `{"turnCount":3,"finalContextTokens":450,"peakContextTokens":450}` {
+		t.Fatalf("session 1 turnUsage = %s, want derived values", got)
 	}
 	if got := string(document.Sessions[0]["failure"]); !strings.Contains(got, `"kind":"INCOMPLETE_OUTPUT"`) {
 		t.Fatalf("session 1 failure = %s, want INCOMPLETE_OUTPUT", got)

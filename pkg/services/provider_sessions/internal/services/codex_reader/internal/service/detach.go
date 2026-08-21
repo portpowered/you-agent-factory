@@ -32,16 +32,17 @@ func detachSourceMetadata(source providersessions.SourceMetadata) providersessio
 
 func detachParseSummary(summary providersessions.ParseSummary) providersessions.ParseSummary {
 	return providersessions.ParseSummary{
-		EventCount:         summary.EventCount,
-		FunctionCalls:      detachFunctionCalls(summary.FunctionCalls),
-		LineCount:          summary.LineCount,
-		MalformedLineCount: summary.MalformedLineCount,
-		ParseErrors:        detachLineErrors(summary.ParseErrors),
-		Reasoning:          detachReasoningSummaries(summary.Reasoning),
-		TokenUsage:         detachTokenUsage(summary.TokenUsage),
-		Turns:              detachTurnSummaries(summary.Turns),
-		UnknownEventCount:  summary.UnknownEventCount,
-		UnknownEvents:      detachUnknownEvents(summary.UnknownEvents),
+		EventCount:            summary.EventCount,
+		FunctionCalls:         detachFunctionCalls(summary.FunctionCalls),
+		LineCount:             summary.LineCount,
+		MalformedLineCount:    summary.MalformedLineCount,
+		ParseErrors:           detachLineErrors(summary.ParseErrors),
+		Reasoning:             detachReasoningSummaries(summary.Reasoning),
+		TokenUsage:            detachTokenUsage(summary.TokenUsage),
+		CumulativeInputTokens: append([]int(nil), summary.CumulativeInputTokens...),
+		Turns:                 detachTurnSummaries(summary.Turns),
+		UnknownEventCount:     summary.UnknownEventCount,
+		UnknownEvents:         detachUnknownEvents(summary.UnknownEvents),
 	}
 }
 

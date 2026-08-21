@@ -582,6 +582,7 @@ func (r *registry) enrichWithProviderSessionsProjection(ctx context.Context, pro
 	}
 	projected.Transcript = workersessions.TranscriptAvailabilityAvailable
 	projected.TokenUsage = observationTokenUsage(result.Detail.Parse.TokenUsage)
+	projected.TurnUsage = observationTurnUsage(result.Detail.Parse.CumulativeInputTokens)
 	projected.Parse = observationParseDiagnostics(result.Detail.Parse)
 	return projected, nil
 }

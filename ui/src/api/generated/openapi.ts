@@ -1675,6 +1675,7 @@ export interface components {
       /** @enum {string} */
       durationBasis: WorkerSessionObservationDurationBasis;
       tokenUsage?: components["schemas"]["ProviderSessionTokenUsage"];
+      turnUsage?: components["schemas"]["WorkerSessionTurnUsage"];
       /** @enum {string} */
       transcript: WorkerSessionObservationTranscript;
       failure?: components["schemas"]["WorkerSessionFailure"];
@@ -6621,6 +6622,14 @@ export interface components {
      * @enum {string}
      */
     RelationType: RelationType;
+    WorkerSessionTurnUsage: {
+      /** @description Number of supported provider usage turns represented by the cumulative input counters. */
+      turnCount: number;
+      /** @description Derived input tokens for the final supported turn, calculated by differencing cumulative input counters. */
+      finalContextTokens: number;
+      /** @description Largest derived per-turn input token count among supported turns; this is not a price or cost calculation. */
+      peakContextTokens: number;
+    };
     /** @description Canonical content reference for file-backed parts. Supported schemes are file://, http://, https://, data:, and you-artifact:// for session-scoped factory artifact refs. */
     WorkContentURLProperty: string;
     /** @description Deprecated host-local file path. Use url instead. Legacy values may be normalized to url at ingest during migration. */

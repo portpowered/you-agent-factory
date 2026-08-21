@@ -8132,7 +8132,8 @@ type WorkerSessionObservation struct {
 	Transcript            WorkerSessionObservationTranscript `json:"transcript"`
 
 	// TurnId Optional turn correlation identifier.
-	TurnId *string `json:"turnId"`
+	TurnId    *string                 `json:"turnId"`
+	TurnUsage *WorkerSessionTurnUsage `json:"turnUsage,omitempty"`
 
 	// WorkIds Work identities correlated with this Worker Session attempt.
 	WorkIds []string `json:"workIds"`
@@ -8307,6 +8308,18 @@ type WorkerSessionTranscriptResponse struct {
 
 	// WorkerSessionId Stable Worker Session identity.
 	WorkerSessionId string `json:"workerSessionId"`
+}
+
+// WorkerSessionTurnUsage defines model for WorkerSessionTurnUsage.
+type WorkerSessionTurnUsage struct {
+	// FinalContextTokens Derived input tokens for the final supported turn, calculated by differencing cumulative input counters.
+	FinalContextTokens int `json:"finalContextTokens"`
+
+	// PeakContextTokens Largest derived per-turn input token count among supported turns; this is not a price or cost calculation.
+	PeakContextTokens int `json:"peakContextTokens"`
+
+	// TurnCount Number of supported provider usage turns represented by the cumulative input counters.
+	TurnCount int `json:"turnCount"`
 }
 
 // WorkerType Worker implementation families supported by the public factory-config contract.

@@ -21,6 +21,7 @@ import (
 func TestListWorkerSessionsBySessionIDProjectsPopulatedObservation(t *testing.T) {
 	total := 17
 	duration := 2500 * time.Millisecond
+	turnCount, finalContext, peakContext := 3, 450, 450
 	observations := []workersessions.Observation{
 		{
 			WorkerSessionID:          "worker-session-1",
@@ -35,6 +36,7 @@ func TestListWorkerSessionsBySessionIDProjectsPopulatedObservation(t *testing.T)
 			Duration:                 &duration,
 			DurationBasis:            workersessions.DurationBasisRecordedTimestamps,
 			TokenUsage:               &workersessions.TokenUsage{TotalTokens: &total},
+			TurnUsage:                &workersessions.TurnUsage{TurnCount: turnCount, FinalContextTokens: finalContext, PeakContextTokens: peakContext},
 			Transcript:               workersessions.TranscriptAvailabilityAvailable,
 		},
 	}
@@ -140,6 +142,7 @@ func assertPopulatedListResponse(t *testing.T, payload []byte, total int) {
 	assertListObservationIdentity(t, got)
 	assertListObservationProvider(t, got)
 	assertListObservationUsage(t, got, total)
+	assertListObservationTurnUsage(t, got, 3, 450, 450)
 	assertListObservationTiming(t, got)
 	assertListObservationTurn(t, got)
 	assertListObservationExecutionFacts(t, got)
@@ -163,6 +166,14 @@ func assertListObservationUsage(t *testing.T, observation factoryapi.WorkerSessi
 	t.Helper()
 	if observation.TokenUsage == nil || observation.TokenUsage.TotalTokens == nil || *observation.TokenUsage.TotalTokens != total {
 		t.Fatalf("token usage = %#v, want total %d", observation.TokenUsage, total)
+	}
+}
+
+func assertListObservationTurnUsage(t *testing.T, observation factoryapi.WorkerSessionObservation, turnCount, finalContext, peakContext int) {
+	t.Helper()
+	if observation.TurnUsage == nil || observation.TurnUsage.TurnCount != turnCount ||
+		observation.TurnUsage.FinalContextTokens != finalContext || observation.TurnUsage.PeakContextTokens != peakContext {
+		t.Fatalf("turn usage = %#v, want count/final/peak %d/%d/%d", observation.TurnUsage, turnCount, finalContext, peakContext)
 	}
 }
 

@@ -139,9 +139,14 @@ type ParseSummary struct {
 	ParseErrors        []LineError
 	Reasoning          []ReasoningSummary
 	TokenUsage         *TokenUsage
-	Turns              []TurnSummary
-	UnknownEventCount  int
-	UnknownEvents      []UnknownEvent
+	// CumulativeInputTokens contains the supported cumulative input counters
+	// observed in provider usage events, in transcript order. Worker Sessions
+	// uses these already-parsed counters to derive per-turn context values;
+	// providers that do not expose this evidence leave the slice empty.
+	CumulativeInputTokens []int
+	Turns                 []TurnSummary
+	UnknownEventCount     int
+	UnknownEvents         []UnknownEvent
 }
 
 type FunctionCallSummary struct {
