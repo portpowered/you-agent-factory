@@ -86,7 +86,7 @@ func resolveFunctionalCoverageSelectionWithMetadata(path string, listPatterns, p
 	if listedPackages == nil {
 		inventory, err = discoverFunctionalTestInventoryWithPatternsAndJobs(listPatterns, packages, jobs, repoRoot)
 	} else {
-		inventory, err = discoverFunctionalTestInventoryFromListedPackages(packages, listedPackages)
+		inventory, err = discoverFunctionalTestInventoryFromListedPackagesWithJobs(packages, listedPackages, jobs)
 	}
 	if err != nil {
 		return functionalCoverageSelection{}, functionalQuarantine{}, err
