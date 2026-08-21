@@ -4,15 +4,15 @@
   "entries": [
     {
       "file": "acceptance/harness_smoke_test.go",
-      "name": "TestBuiltCLIHarness_IsolatesHomeAndLogDirectoriesAcrossSessions"
+      "name": "TestRootProcessHarness_IsolatesHomeAndLogDirectoriesAcrossSessions"
     },
     {
       "file": "acceptance/harness_smoke_test.go",
-      "name": "TestBuiltCLIHarness_NonZeroExitIncludesDiagnostics"
+      "name": "TestRootProcessHarness_NonZeroExitIncludesDiagnostics"
     },
     {
       "file": "acceptance/harness_smoke_test.go",
-      "name": "TestBuiltCLIHarness_WithNoExternalServerReservesUnusedPort"
+      "name": "TestRootProcessHarness_WithNoExternalServerReservesUnusedPort"
     },
     {
       "file": "acceptance/invalid_quiet_outcomes_test.go",
@@ -32,15 +32,15 @@
     },
     {
       "file": "acceptance/provider_outcomes_test.go",
-      "name": "TestProviderPosture_Absent_UnresolvedDefaultRejectsWithDocumentedGuidance"
-    },
-    {
-      "file": "acceptance/provider_outcomes_test.go",
       "name": "TestProviderPosture_Configured_ExplicitHomeConfigEnablesNamedGoalSuccessPath"
     },
     {
       "file": "acceptance/provider_outcomes_test.go",
       "name": "TestProviderPosture_Discovered_EnvDefaultResolvesWithoutFileProvider"
+    },
+    {
+      "file": "acceptance/provider_outcomes_test.go",
+      "name": "TestProviderPosture_RemovedDefaultProviderFlagIsRejected"
     },
     {
       "file": "automations/filesystem_watcher_root_composition_test.go",
@@ -152,6 +152,10 @@
     },
     {
       "file": "cli/input_contract/canonical_input_contract_test.go",
+      "name": "TestGenericRequiredFlagValidationIsObservableThroughApplicationRoot"
+    },
+    {
+      "file": "cli/input_contract/canonical_input_contract_test.go",
       "name": "TestGenericSessionProjectionCoversProductionCommandShapes"
     },
     {
@@ -161,6 +165,10 @@
     {
       "file": "cli/input_contract/canonical_input_contract_test.go",
       "name": "TestGenericSessionProjectionParsesVariadicInputsThroughApplicationRoot"
+    },
+    {
+      "file": "cli/input_contract/canonical_input_contract_test.go",
+      "name": "TestWorkerSessionProjectionAcceptsDirectListAndOptionalWorkID"
     },
     {
       "file": "cli/input_contract/generic_constructor_contract_test.go",
@@ -256,6 +264,10 @@
     },
     {
       "file": "cli/named_invocation/named_invocation_test.go",
+      "name": "TestFactoryBuilderIsListedAndNamedHelpResolvesWithoutExecution"
+    },
+    {
+      "file": "cli/named_invocation/named_invocation_test.go",
       "name": "TestRun_NamedGoalHermeticInvocationSucceedsWithoutListeningServer"
     },
     {
@@ -285,6 +297,110 @@
     {
       "file": "cli/session_resume/resume_smoke_test.go",
       "name": "TestCLIResumeSmoke_TerminalSessionResumeReturnsTypedRejectionAndPreservesSessionRead"
+    },
+    {
+      "file": "events/response_events/terminal_outcomes_test.go",
+      "name": "TestReadResponseEventStreamUntilTerminalRunOutcomes"
+    },
+    {
+      "file": "factory/batch/batch_characterization_test.go",
+      "name": "TestBTRCP0BatchPartialFailureCharacterization"
+    },
+    {
+      "file": "factory/batch/batch_characterization_test.go",
+      "name": "TestBTRCP0BatchSuccessCharacterization"
+    },
+    {
+      "file": "factory/definitions/factory_validation_docs_test.go",
+      "name": "TestFactoryValidationDocsCommandDescribesStaticGate"
+    },
+    {
+      "file": "factory/invocation/btrc_p0_cancellation_characterization_test.go",
+      "name": "TestBTRCOneShotCanceledEventOrderForcesModelResponseInterleavings"
+    },
+    {
+      "file": "factory/packaged/classify/invocation_test.go",
+      "name": "TestPackagedClassifyInvalidLabelFailsWithoutExecutingLane"
+    },
+    {
+      "file": "factory/packaged/classify/invocation_test.go",
+      "name": "TestPackagedClassifyRoleProviderAndModelSelections"
+    },
+    {
+      "file": "factory/packaged/classify/invocation_test.go",
+      "name": "TestPackagedClassifyRoutesSmallMediumAndLarge"
+    },
+    {
+      "file": "factory/packaged/full_flow/invocation_test.go",
+      "name": "TestPackagedFullFlowBoundsImplementationContinueLoopAndFailsProject"
+    },
+    {
+      "file": "factory/packaged/full_flow/invocation_test.go",
+      "name": "TestPackagedFullFlowEnforcesCallerSelectedCycleBound"
+    },
+    {
+      "file": "factory/packaged/full_flow/invocation_test.go",
+      "name": "TestPackagedFullFlowEnforcesCallerSelectedTaskBound"
+    },
+    {
+      "file": "factory/packaged/full_flow/invocation_test.go",
+      "name": "TestPackagedFullFlowRunsParallelWorktreesMergesAndReplansToCompletion"
+    },
+    {
+      "file": "factory/packaged/javascript_families/invocation_test.go",
+      "name": "TestPackagedSpawnPlansExactCountRunsChildrenAndMergesThroughCodexCommandRunner"
+    },
+    {
+      "file": "factory/packaged/javascript_families/invocation_test.go",
+      "name": "TestPackagedTournamentRunsOneOnOneBracketThroughCodexCommandRunner"
+    },
+    {
+      "file": "factory/packaged/loop/invocation_test.go",
+      "name": "TestPackagedLoopRejectsInvalidDurationBeforeWorkAdmission"
+    },
+    {
+      "file": "factory/packaged/loop/invocation_test.go",
+      "name": "TestPackagedLoopUsesInvocationDurationAndSkipsOverlap"
+    },
+    {
+      "file": "factory/packaged/plan_parallel/invocation_test.go",
+      "name": "TestPackagedPlanParallelChildFailureFansInWithoutMerge"
+    },
+    {
+      "file": "factory/packaged/plan_parallel/invocation_test.go",
+      "name": "TestPackagedPlanParallelExecutesReadyDAGConcurrentlyAndMerges"
+    },
+    {
+      "file": "factory/packaged/plan_parallel/invocation_test.go",
+      "name": "TestPackagedPlanParallelExecutorEffortCanBeOverridden"
+    },
+    {
+      "file": "factory/packaged/plan_parallel/invocation_test.go",
+      "name": "TestPackagedPlanParallelMergerReceivesEveryUniqueCompletedChildResult"
+    },
+    {
+      "file": "factory/packaged/plan_parallel/invocation_test.go",
+      "name": "TestPackagedPlanParallelRejectsPlannerBatchAboveCeilingAtomically"
+    },
+    {
+      "file": "factory/packaged/plan_parallel/invocation_test.go",
+      "name": "TestPackagedPlanParallelRejectsUnsupportedEffortBeforeExecutorProviderExecution"
+    },
+    {
+      "file": "factory/packaged/subagent/invocation_test.go",
+      "name": "TestPackagedSubagentOmittedReasoningEffortPreservesProviderDefault"
+    },
+    {
+      "file": "factory/packaged/subagent/invocation_test.go",
+      "name": "TestPackagedSubagentPropagatesLunaXHighReasoningEffort"
+    },
+    {
+      "file": "factory/pending_approval/human_approval_test.go",
+      "name": "TestHumanApprovalPendingReadAndReplayPreserveOneDurableClaim"
+    },
+    {
+      "file": "guards/batch/all_children_complete_test.go",
+      "name": "TestAllChildrenCompleteWaitsForLastTerminalChild"
     },
     {
       "file": "guards_batch/concurrency_limit_long_test.go",
@@ -347,44 +463,212 @@
       "name": "TestResourceGated_DispatchTokenName"
     },
     {
+      "file": "models/model_invoke/cli_test.go",
+      "name": "TestProcessModelsInvokeFailureKeepsStreamsSafeAndReleasesCapacity"
+    },
+    {
+      "file": "observability/verification/script_environment_contract_test.go",
+      "name": "TestRunScriptEnvironment_IsolatesAmbientContractVariables"
+    },
+    {
       "file": "operator_settings/configcore/operator_config_core_test.go",
       "name": "TestOperatorConfigCore_PromptedAndPresuppliedUpdatesShareAtomicBehavior"
     },
     {
-      "file": "operator_settings/servicewire/servicewire_composition_test.go",
-      "name": "TestRegisterDefaultsResolutionFromHomeRestoresAdapterOwnership"
-    },
-    {
-      "file": "operator_settings/servicewire/servicewire_composition_test.go",
-      "name": "TestResolveFromHomeFallbackPreservesAcceptedSemantics"
-    },
-    {
-      "file": "operator_settings/servicewire/servicewire_composition_test.go",
+      "file": "operator_settings/root_composition/wire_composition_coverage_test.go",
       "name": "TestResolveFromHomeRejectsMissingFilesystemPorts"
     },
     {
-      "file": "operator_settings/servicewire/servicewire_composition_test.go",
+      "file": "operator_settings/root_composition/wire_composition_coverage_test.go",
       "name": "TestResolveFromHomeUsesSettingsAdapterOwnershipPath"
     },
     {
-      "file": "operator_settings/servicewire/servicewire_composition_test.go",
-      "name": "TestServiceFromConfigDocumentConstructsFromDocumentPorts"
+      "file": "operator_settings/root_composition/wire_composition_coverage_test.go",
+      "name": "TestWireCompositionFromConfigDocumentConstructsFromDocumentPorts"
     },
     {
-      "file": "operator_settings/servicewire/servicewire_composition_test.go",
-      "name": "TestServiceFromConfigDocumentRejectsMissingDocumentPorts"
+      "file": "operator_settings/root_composition/wire_composition_coverage_test.go",
+      "name": "TestWireCompositionFromConfigDocumentRejectsMissingDocumentPorts"
     },
     {
-      "file": "operator_settings/servicewire/servicewire_composition_test.go",
-      "name": "TestServiceFromHomePortsConstructsSettingsRoot"
+      "file": "operator_settings/root_composition/wire_composition_coverage_test.go",
+      "name": "TestWireCompositionFromHomePortsConstructsSettingsRoot"
     },
     {
-      "file": "operator_settings/servicewire/servicewire_composition_test.go",
-      "name": "TestServiceFromHomePortsRejectsMissingPorts"
+      "file": "operator_settings/root_composition/wire_composition_coverage_test.go",
+      "name": "TestWireCompositionFromHomePortsRejectsMissingPorts"
     },
     {
-      "file": "operator_settings/servicewire/servicewire_composition_test.go",
-      "name": "TestServiceWireCompositionRootServesDocumentAndResolutionOperations"
+      "file": "operator_settings/root_composition/wire_composition_coverage_test.go",
+      "name": "TestWireCompositionRegisterDefaultsResolutionFromHomeRestoresAdapterOwnership"
+    },
+    {
+      "file": "provider_sessions/cli/stream_abort_test.go",
+      "name": "TestBuiltWorkerSessionsStreamAbortExitsNonZero"
+    },
+    {
+      "file": "provider_sessions/cli/stream_abort_test.go",
+      "name": "TestBuiltWorkerSessionsStreamCancellationExits130"
+    },
+    {
+      "file": "provider_sessions/cli/stream_abort_test.go",
+      "name": "TestWorkerSessionsStreamAbortReturnsTypedDiagnosticThroughRootProcess"
+    },
+    {
+      "file": "provider_sessions/rollout/large_rollout_test.go",
+      "name": "TestLargeRolloutHelperProcess"
+    },
+    {
+      "file": "providers/acp/acp_error_test.go",
+      "name": "TestACPFailureRedactsConfiguredSecretsFromStderr"
+    },
+    {
+      "file": "providers/acp/acp_error_test.go",
+      "name": "TestUnavailableACPExecutableFailsBeforeStartWithMissingExecutableClass"
+    },
+    {
+      "file": "providers/acp/acp_provider_events_test.go",
+      "name": "TestACPAuthenticationRequiredMapsToCanonicalWorkerFailure"
+    },
+    {
+      "file": "providers/acp/acp_provider_events_test.go",
+      "name": "TestACPFailurePublishesTerminalErrorEvent"
+    },
+    {
+      "file": "providers/acp/acp_provider_events_test.go",
+      "name": "TestACPModelIsAppliedOnlyThroughAdvertisedSessionConfig"
+    },
+    {
+      "file": "providers/acp/acp_provider_events_test.go",
+      "name": "TestACPReceivesCanonicalWorkResourceAsSDKResourceLink"
+    },
+    {
+      "file": "providers/acp/acp_provider_events_test.go",
+      "name": "TestACPUpdatesPublishExistingFactorySessionResponseEventsInOrder"
+    },
+    {
+      "file": "providers/acp/basic_factory_run_test.go",
+      "name": "TestACPAgentHelperProcess"
+    },
+    {
+      "file": "providers/acp/basic_factory_run_test.go",
+      "name": "TestFactoryRunProjectsOperatorConfiguredACPIntegrationIntoInvocationCatalog"
+    },
+    {
+      "file": "providers/acp/basic_factory_run_test.go",
+      "name": "TestFactoryRunRetainsLegacyNamedExecutorProviderCompatibility"
+    },
+    {
+      "file": "providers/acp/basic_factory_run_test.go",
+      "name": "TestFactoryRunRoutesExecutorProviderThroughACPAdapter"
+    },
+    {
+      "file": "providers/acp/basic_factory_run_test.go",
+      "name": "TestRootConstructionDoesNotStartACPProcess"
+    },
+    {
+      "file": "providers/acp/basic_factory_run_test.go",
+      "name": "TestScriptWrapExecutorProviderRetainsLegacyProviderRoute"
+    },
+    {
+      "file": "providers/acp/basic_factory_run_test.go",
+      "name": "TestUnknownExecutorProviderFailsBeforeACPProcessStart"
+    },
+    {
+      "file": "providers/acp/btrc_p0_characterization_test.go",
+      "name": "TestBTRCP0ACPTargetProtocolFailureCharacterization"
+    },
+    {
+      "file": "providers/acp/btrc_p0_characterization_test.go",
+      "name": "TestBTRCP0ACPTargetSuccessCharacterization"
+    },
+    {
+      "file": "providers/acp/catalog_cli_negative_test.go",
+      "name": "TestRootBuiltACPCommandsRejectInvalidMutationsWithoutPersistingSettings"
+    },
+    {
+      "file": "providers/acp/catalog_cli_test.go",
+      "name": "TestRootBuiltACPCommandsAddDeleteAndUnifiedListOneSettingsBackedCatalogEntry"
+    },
+    {
+      "file": "providers/acp/catalog_cli_test.go",
+      "name": "TestYouInitMaterializesPackagedACPDefaultsAndPreservesCustomEntries"
+    },
+    {
+      "file": "providers/acp/daemon_concurrency_test.go",
+      "name": "TestProvidersACPSerializesConcurrentPromptsOnOneStdioConnection"
+    },
+    {
+      "file": "providers/acp/daemon_crash_recovery_test.go",
+      "name": "TestProvidersACPRestartsAfterCrashWithoutReplayingUncertainPrompt"
+    },
+    {
+      "file": "providers/acp/daemon_crash_recovery_test.go",
+      "name": "TestProvidersACPRetiresDisconnectedConnectionBeforeReuse"
+    },
+    {
+      "file": "providers/acp/daemon_reuse_test.go",
+      "name": "TestProvidersACPRejectsIncompatibleProtocolVersionAtStdioBoundary"
+    },
+    {
+      "file": "providers/acp/daemon_reuse_test.go",
+      "name": "TestProvidersACPRetainsOneOSProcessAndConnectionAcrossExecutions"
+    },
+    {
+      "file": "providers/acp/daemon_shutdown_test.go",
+      "name": "TestProvidersShutdownCancelsActivePromptAndJoinsACPProcess"
+    },
+    {
+      "file": "providers/acp/golden_fixture_test.go",
+      "name": "TestPinnedACPSDKGoldenManifestIsCompleteAndParseable"
+    },
+    {
+      "file": "providers/acp/golden_rpc_peer_test.go",
+      "name": "TestACPGoldenRPCPeerProcess"
+    },
+    {
+      "file": "providers/acp/javascript_factory_run_test.go",
+      "name": "TestJavaScriptFactoryAgentRunRoutesExecutorProviderThroughACP"
+    },
+    {
+      "file": "providers/acp/javascript_factory_run_test.go",
+      "name": "TestJavaScriptMockWorkersRemainFakeWhenACPProviderIsSelected"
+    },
+    {
+      "file": "providers/acp/mixed_provider_factory_test.go",
+      "name": "TestFactoryMixesACPAndScriptWrapWorkersWithoutCrossRouting"
+    },
+    {
+      "file": "providers/acp/packaged_conformance_test.go",
+      "name": "TestPackagedACPUnexpectedCommand"
+    },
+    {
+      "file": "providers/acp/packaged_spawn_test.go",
+      "name": "TestPackagedSpawnRunsPlannerChildrenAndMergerThroughPersistentACPStdio"
+    },
+    {
+      "file": "providers/acp/packaged_tournament_test.go",
+      "name": "TestPackagedTournamentRunsCompetitorsAndJudgeThroughPersistentACPStdio"
+    },
+    {
+      "file": "providers/acp/run_failure_diagnostics_test.go",
+      "name": "TestYouRunMapsGoldenSessionAndConfigRPCFailuresToTerminalWork"
+    },
+    {
+      "file": "providers/acp/run_parameters_content_test.go",
+      "name": "TestYouRunSendsInputWorkContentAsACPText"
+    },
+    {
+      "file": "providers/acp/run_parameters_content_test.go",
+      "name": "TestYouRunUsesPinnedACPWireGoldensAndProjectsTerminalOutput"
+    },
+    {
+      "file": "providers/acp/run_permissions_test.go",
+      "name": "TestYouRunMapsSkipPermissionsToSDKGoldenPermissionSelection"
+    },
+    {
+      "file": "providers/acp/run_unsupported_capabilities_test.go",
+      "name": "TestYouRunReturnsUnsupportedFilesystemAndTerminalRPCsAtTheACPBoundary"
     },
     {
       "file": "providers/cli_script_executor_test.go",
@@ -447,10 +731,6 @@
       "name": "TestTemplateTests_ScriptWrapCodexResolvesWorkstationExecutionTemplates"
     },
     {
-      "file": "providers/cli_template_resolution_long_test.go",
-      "name": "TestTemplateTests_ScriptWrapCursorResolvesWorkstationExecutionTemplates"
-    },
-    {
       "file": "providers/cli_timeout_cleanup_smoke_test.go",
       "name": "TestIntegrationSmoke_ProcessTreeHelper"
     },
@@ -461,6 +741,10 @@
     {
       "file": "providers/cli_timeout_cleanup_smoke_test.go",
       "name": "TestIntegrationSmoke_TimeoutRequeuesWorkAndSucceedsOnLaterAttempt"
+    },
+    {
+      "file": "providers/discovery/discovery_test.go",
+      "name": "TestPackagedACPProjectionRejectsInvalidRuntimeBindings"
     },
     {
       "file": "providers/mock_workers_agent_test.go",
@@ -509,6 +793,10 @@
     {
       "file": "providers/packaged_script_runtime_test.go",
       "name": "TestPackagedScriptRuntime_NonZeroExitUsesStandardFailureOutcome"
+    },
+    {
+      "file": "providers/permission/permission_bypass_test.go",
+      "name": "TestProviderPermissionBypassFunctionalContract"
     },
     {
       "file": "providers/runtime_logging_smoke_test.go",
@@ -577,6 +865,10 @@
     {
       "file": "runtime_api/api_cleanup_smoke_test.go",
       "name": "TestCleanupSmoke_BackendDashboardAndCanonicalEventsExposeOnlyCleanedFactorySurfaces"
+    },
+    {
+      "file": "runtime_api/api_event_replay_smoke_test.go",
+      "name": "TestAPIEventReplaySmoke_PublicEventsAndSessionProjectionExposeActiveAndCompletedTimeline"
     },
     {
       "file": "runtime_api/api_functional_server_override_regression_test.go",
@@ -827,6 +1119,38 @@
       "name": "TestNormalizers_RejectEveryMissingRequiredScalarFact"
     },
     {
+      "file": "sessions/execution/drain_test.go",
+      "name": "TestHostedContinuousRunsStayLiveWhileIdle"
+    },
+    {
+      "file": "sessions/execution/drain_test.go",
+      "name": "TestHostedFiniteRunsKeepEmptyAndTerminalSuccess"
+    },
+    {
+      "file": "sessions/root_composition/detached_operations_contract_test.go",
+      "name": "TestDetachedOperationsFunctionalValidation"
+    },
+    {
+      "file": "sessions/root_composition/process_reuse_inert_test.go",
+      "name": "TestRootProcessReportsDirectJavaScriptTransportStartFailure"
+    },
+    {
+      "file": "sessions/standalone/fixture_characterization_test.go",
+      "name": "TestBTRCP0StandaloneFixtureFailureCharacterization"
+    },
+    {
+      "file": "sessions/standalone/fixture_characterization_test.go",
+      "name": "TestBTRCP0StandaloneFixtureRunsRemainIsolated"
+    },
+    {
+      "file": "sessions/standalone/fixture_characterization_test.go",
+      "name": "TestBTRCP0StandaloneFixtureSuccessCharacterization"
+    },
+    {
+      "file": "smoke/cli_docs_smoke_test.go",
+      "name": "TestDocsCommandSmoke_AuthoringFactoriesDescribesFactoryBuilder"
+    },
+    {
       "file": "smoke/cli_docs_smoke_test.go",
       "name": "TestDocsCommandSmoke_AuthoringFactoriesDescribesMinimalGoalRepeater"
     },
@@ -867,12 +1191,124 @@
       "name": "TestServiceLifecycle_WorkFileSubmissionCompletesTwoStagePipeline"
     },
     {
+      "file": "transport/acp/realclient/pinned_acpx_process_test.go",
+      "name": "TestRunBoundedCommandTerminatesDescendantsAfterNonZeroExit"
+    },
+    {
+      "file": "transport/acp/realclient/pinned_acpx_process_test.go",
+      "name": "TestRunBoundedCommandTerminatesScenarioDescendants"
+    },
+    {
+      "file": "transport/acp/stdio/cli_serve_acp_wire_log_test.go",
+      "name": "TestServeACPDoesNotRecordFailedOutboundFrame"
+    },
+    {
+      "file": "transport/cli/commands/human_approval_wiring_test.go",
+      "name": "TestCLIWorkApprovalListAndShowExposePendingApprovalAndSafeEmptyErrors"
+    },
+    {
+      "file": "transport/cli/process/context_cancellation_test.go",
+      "name": "TestContextCancellationPIDReadinessIgnoresPartialPublication"
+    },
+    {
+      "file": "transport/cli/process/hard_kill_successor_process_nonwindows_lifecycle_test.go",
+      "name": "TestNewHardKillProcessControlCoordinatesCompetingTerminalOperations"
+    },
+    {
+      "file": "transport/cli/process/hard_kill_successor_process_nonwindows_lifecycle_test.go",
+      "name": "TestNewHardKillProcessControlReleasesAfterFirstTerminalOperation"
+    },
+    {
+      "file": "transport/cli/process/hard_kill_successor_process_nonwindows_lifecycle_test.go",
+      "name": "TestNewHardKillProcessControlReleasesAfterInitialStopFailure"
+    },
+    {
+      "file": "transport/http/server/routing_test.go",
+      "name": "TestAPIDashboardRoutesServeEmbeddedShellAssetAndFallback"
+    },
+    {
+      "file": "transport/run_scoped_server/run_scoped_server_test.go",
+      "name": "TestRunScopedServerRejectsUnavailableExactListenAddress"
+    },
+    {
+      "file": "workers/inference/structured_result_test.go",
+      "name": "TestDetachedStructuredResultReachesDispatchResponse"
+    },
+    {
+      "file": "workers/invoke_continue/worker_sessions_invoke_continue_test.go",
+      "name": "TestDirectWorkerSessionContinueStaleProviderSessionDoesNotFreshStart"
+    },
+    {
+      "file": "workers/invoke_continue/worker_sessions_invoke_continue_test.go",
+      "name": "TestDirectWorkerSessionContinueUnassociatedSourceRejectsWithoutProviderContinuation"
+    },
+    {
+      "file": "workers/invoke_continue/worker_sessions_invoke_continue_test.go",
+      "name": "TestDirectWorkerSessionContinueUnknownSourceReturnsNotFoundWithoutProviderCall"
+    },
+    {
+      "file": "workers/invoke_continue/worker_sessions_invoke_continue_test.go",
+      "name": "TestDirectWorkerSessionInvokeContinueLocalPreservesSessionAndLineage"
+    },
+    {
+      "file": "workers/invoke_continue/worker_sessions_invoke_continue_test.go",
+      "name": "TestDirectWorkerSessionRemoteContinueProviderFailuresDoNotFallback"
+    },
+    {
+      "file": "workers/invoke_continue/worker_sessions_invoke_continue_test.go",
+      "name": "TestDirectWorkerSessionRemoteControlsUseExactRoutesWithoutFallback"
+    },
+    {
+      "file": "workers/invoke_continue/worker_sessions_invoke_continue_test.go",
+      "name": "TestDirectWorkerSessionRemoteInterruptUsesExactRouteAndAdmissionSnapshots"
+    },
+    {
+      "file": "workers/invoke_continue/worker_sessions_invoke_continue_test.go",
+      "name": "TestDirectWorkerSessionRemoteInvokeCallerCancellationThroughRootProcess"
+    },
+    {
+      "file": "workers/invoke_continue/worker_sessions_invoke_continue_test.go",
+      "name": "TestDirectWorkerSessionRemoteInvokeStreamSourceFailureThroughRootProcess"
+    },
+    {
+      "file": "workers/mock/plain_batch_drain_test.go",
+      "name": "TestPlainBatchDrainPreservesFiniteAndContinuousCounterexamples"
+    },
+    {
+      "file": "workers/mock/plain_batch_drain_test.go",
+      "name": "TestPlainBatchDrainRejectsCancellationBeforeRuntimeActivation"
+    },
+    {
+      "file": "workers/mock/plain_batch_drain_test.go",
+      "name": "TestPlainBatchDrainStopsAfterWorkerActivationCancellation"
+    },
+    {
+      "file": "workers/transports/http/worker_sessions_lifecycle_test.go",
+      "name": "TestWorkerSessionHTTPControlRoutesReportUnavailableFromTopLevelServer"
+    },
+    {
+      "file": "workers/transports/http/worker_sessions_lifecycle_test.go",
+      "name": "TestWorkerSessionHTTPDisconnectKeepsAdmittedWorkerAlive"
+    },
+    {
+      "file": "workers/transports/http/worker_sessions_lifecycle_test.go",
+      "name": "TestWorkerSessionHTTPInterruptRejectsUnassociatedActiveSource"
+    },
+    {
+      "file": "workers/transports/http/worker_sessions_lifecycle_test.go",
+      "name": "TestWorkerSessionHTTPShutdownJoinsAdmittedWorker"
+    },
+    {
       "file": "workflow/config_driven_retry_loop_breaker_test.go",
       "name": "TestConfigDrivenRetryLoopBreaker_SucceedsBeforeLimit"
     },
     {
       "file": "workflow/config_driven_retry_loop_breaker_test.go",
       "name": "TestConfigDrivenRetryLoopBreaker_TerminatesAfterMaxRetries"
+    },
+    {
+      "file": "workflow/config_driven_retry_loop_breaker_test.go",
+      "name": "TestConfigDrivenRetryLoopBreaker_TripsAfterThreeProcessFailures"
     },
     {
       "file": "workflow/review_retry_exhaustion_long_test.go",
@@ -885,6 +1321,18 @@
     {
       "file": "workflow/review_retry_exhaustion_long_test.go",
       "name": "TestReviewRetryLoopBreaker_TerminatesAfterMaxRetries"
+    },
+    {
+      "file": "workstations/poller/hosted_characterization_test.go",
+      "name": "TestBTRCP0HostedServiceExecutionFailureCharacterization"
+    },
+    {
+      "file": "workstations/poller/hosted_characterization_test.go",
+      "name": "TestBTRCP0HostedServiceSourceFailureStopsAndIsolates"
+    },
+    {
+      "file": "workstations/poller/hosted_characterization_test.go",
+      "name": "TestBTRCP0HostedServiceSuccessCharacterization"
     }
   ]
 }
