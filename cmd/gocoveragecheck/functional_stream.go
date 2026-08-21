@@ -104,9 +104,10 @@ func (writer *functionalStreamWriter) writeLineLocked(line []byte) error {
 			// Streaming it once per package buries the actionable verdict.
 			return nil
 		}
+		output := compactSuccessfulCoverageOutputLine(event.Output)
 		// Keep the child failure text readable in the job log while the
 		// command runner retains the original JSON bytes for timing parsing.
-		return writer.reporter.writeSink([]byte(event.Output))
+		return writer.reporter.writeSink([]byte(output))
 	case timingOutcomePass, timingOutcomeFail, timingOutcomeSkip:
 		if event.Test != "" {
 			return nil
@@ -142,6 +143,51 @@ func (writer *functionalStreamWriter) writeLineLocked(line []byte) error {
 func isRedundantCoverageOutputLine(output string) bool {
 	trimmed := strings.TrimSpace(output)
 	return strings.HasPrefix(trimmed, "coverage: ") && strings.Contains(trimmed, "% of statements")
+}
+
+// compactSuccessfulCoverageOutputLine removes the repeated -coverpkg import
+// list from one successful go test package-result line. It deliberately
+// accepts only a single line beginning with "ok": a failing package, panic,
+// or test-produced diagnostic keeps its original bytes even when its text
+// mentions coverage.
+func compactSuccessfulCoverageOutputLine(output string) string {
+	line, lineEnding, ok := singleFunctionalOutputLine(output)
+	if !ok || (!strings.HasPrefix(line, "ok ") && !strings.HasPrefix(line, "ok\t")) {
+		return output
+	}
+
+	const coveragePrefix = "coverage: "
+	const coveragePackageListSuffix = "% of statements in "
+	coverageStart := strings.Index(line, coveragePrefix)
+	if coverageStart < 0 {
+		return output
+	}
+	suffixStart := strings.Index(line[coverageStart+len(coveragePrefix):], coveragePackageListSuffix)
+	if suffixStart < 0 {
+		return output
+	}
+	suffixStart += coverageStart + len(coveragePrefix)
+	return line[:suffixStart+len("% of statements")] + lineEnding
+}
+
+// singleFunctionalOutputLine separates a complete output line from its line
+// ending. Multi-line events are left alone because their later bytes may be a
+// failure or diagnostic that the stream must preserve exactly.
+func singleFunctionalOutputLine(output string) (line, lineEnding string, ok bool) {
+	newline := strings.IndexByte(output, '\n')
+	if newline < 0 {
+		return output, "", true
+	}
+	if newline != len(output)-1 {
+		return "", "", false
+	}
+	line = output[:newline]
+	lineEnding = output[newline:]
+	if strings.HasSuffix(line, "\r") {
+		line = strings.TrimSuffix(line, "\r")
+		lineEnding = "\r" + lineEnding
+	}
+	return line, lineEnding, true
 }
 
 func (writer *lockedFunctionalStreamWriter) Write(data []byte) (int, error) {

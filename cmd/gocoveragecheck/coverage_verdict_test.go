@@ -265,7 +265,7 @@ func TestFunctionalStreamKeepsNonCoverageOutputLines(t *testing.T) {
 		"coverage: 42.7% of statements in " + modulePath + "/pkg/config\n",
 		"--- FAIL: TestSomething (0.12s)\n",
 		"panic: test timed out after 10m0s\n",
-		"ok  \t" + modulePath + "/tests/functional/alpha\t1.234s\tcoverage: 42.7% of statements\n",
+		"FAIL\t" + modulePath + "/tests/functional/alpha\tcoverage: 42.7% of statements in " + modulePath + "/pkg/config\n",
 	}
 	for _, output := range streamed {
 		event, err := json.Marshal(goTestTimingEvent{
@@ -286,13 +286,15 @@ func TestFunctionalStreamKeepsNonCoverageOutputLines(t *testing.T) {
 		"=== RUN   TestSomething\n",
 		"--- FAIL: TestSomething (0.12s)\n",
 		"panic: test timed out after 10m0s\n",
-		"ok  \t" + modulePath + "/tests/functional/alpha\t1.234s\tcoverage: 42.7% of statements\n",
+		"FAIL\t" + modulePath + "/tests/functional/alpha\tcoverage: 42.7% of statements in " + modulePath + "/pkg/config\n",
 	} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("functional stream dropped %q:\n%s", want, got)
 		}
 	}
-	if strings.Contains(got, "coverage: 42.7% of statements in ") {
-		t.Fatalf("functional stream forwarded the standalone per-package coverage line:\n%s", got)
+	for _, line := range strings.Split(got, "\n") {
+		if strings.HasPrefix(line, "coverage: 42.7% of statements in ") {
+			t.Fatalf("functional stream forwarded the standalone per-package coverage line:\n%s", got)
+		}
 	}
 }

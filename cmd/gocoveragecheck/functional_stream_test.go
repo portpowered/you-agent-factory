@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"io"
 	"os"
 	"os/exec"
@@ -24,8 +25,17 @@ func TestFunctionalStreamReportsPackageBeforeChildCompletes(t *testing.T) {
 	liveOutput, resultCh, releaseWriter, rawOutput := startFunctionalStreamChild(t, functionalStreamPassMode)
 	waitForFunctionalStreamMarker(t, liveOutput, "Functional package result: package="+functionalStreamChildPkg)
 
-	if got := liveOutput.String(); !strings.Contains(got, "outcome=pass") || !strings.Contains(got, "elapsed=0.125s") {
+	got := liveOutput.String()
+	if !strings.Contains(got, "outcome=pass") || !strings.Contains(got, "elapsed=0.125s") {
 		t.Fatalf("live functional output = %q, want package outcome and elapsed duration", got)
+	}
+	if strings.Contains(got, " of statements in ") {
+		t.Fatalf("live functional output retained the repeated coverpkg suffix: %q", got)
+	}
+	for _, line := range strings.Split(strings.TrimSuffix(got, "\n"), "\n") {
+		if len(line) > 1024 {
+			t.Fatalf("live functional output line length = %d, want <= 1024: %q", len(line), line)
+		}
 	}
 	select {
 	case result := <-resultCh:
@@ -40,6 +50,30 @@ func TestFunctionalStreamReportsPackageBeforeChildCompletes(t *testing.T) {
 	}
 	if result.stdout != rawOutput {
 		t.Fatalf("captured functional JSON = %q, want unchanged %q", result.stdout, rawOutput)
+	}
+}
+
+func TestFunctionalStreamCompactsSuccessfulPackageCoverageList(t *testing.T) {
+	var sink bytes.Buffer
+	reporter := newFunctionalStreamReporter(&sink)
+	writer := reporter.stdoutWriter()
+	packageName := modulePath + "/tests/functional/streaming"
+	input := "ok  " + packageName + "\t1.234s\tcoverage: 42.7% of statements in a, b, c\n"
+	event, err := json.Marshal(goTestTimingEvent{
+		Action:  "output",
+		Package: packageName,
+		Output:  input,
+	})
+	if err != nil {
+		t.Fatalf("marshal stream event: %v", err)
+	}
+	if _, err := writer.Write(append(event, '\n')); err != nil {
+		t.Fatalf("stream reporter write error = %v", err)
+	}
+
+	want := "ok  " + packageName + "\t1.234s\tcoverage: 42.7% of statements\n"
+	if got := sink.String(); got != want {
+		t.Fatalf("compacted successful coverage output = %q, want %q", got, want)
 	}
 }
 
@@ -208,11 +242,26 @@ func functionalStreamChildEvents(mode string) []goTestTimingEvent {
 			Output:  "panic: test timed out\ngoroutine 123 [running]:\n\tcreated by TestHung in goroutine 1\n",
 		}}
 	}
-	return []goTestTimingEvent{{
-		Action:  timingOutcomePass,
-		Elapsed: 0.125,
-		Package: functionalStreamChildPkg,
-	}}
+	return []goTestTimingEvent{
+		{
+			Action:  "output",
+			Package: functionalStreamChildPkg,
+			Output:  functionalStreamCoverageResultOutput(),
+		},
+		{
+			Action:  timingOutcomePass,
+			Elapsed: 0.125,
+			Package: functionalStreamChildPkg,
+		},
+	}
+}
+
+func functionalStreamCoverageResultOutput() string {
+	coverPackages := make([]string, 530)
+	for index := range coverPackages {
+		coverPackages[index] = fmt.Sprintf("%s/pkg/cover%03d", modulePath, index)
+	}
+	return "ok  " + functionalStreamChildPkg + "\t0.125s\tcoverage: 71.4% of statements in " + strings.Join(coverPackages, ", ") + "\n"
 }
 
 func marshalFunctionalStreamEvent(event goTestTimingEvent) []byte {
