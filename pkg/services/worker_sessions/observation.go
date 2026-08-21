@@ -38,8 +38,8 @@ type ListObservationsResult struct {
 }
 
 // ObservationScope selects which Worker Session origin a top-level list may
-// return. Direct is the safe zero-value default; Factory and All are explicit
-// compatibility/diagnostic choices.
+// return. The zero value is the fleet-wide view; Direct and Factory remain
+// explicit origin filters for callers that need one origin only.
 type ObservationScope string
 
 const (
@@ -59,7 +59,7 @@ func (s ObservationScope) Valid() bool {
 
 func (s ObservationScope) Normalized() ObservationScope {
 	if s == "" {
-		return ObservationScopeDirect
+		return ObservationScopeAll
 	}
 	return s
 }
@@ -249,9 +249,9 @@ type Observation struct {
 	Model           *string
 	ReasoningEffort *string
 	Direct          bool
-	// FactorySessionID is the explicit Factory Session scope selected by the
-	// transport. Worker Sessions does not derive or authorize this value; the
-	// runtime-bound projection supplies it at the public boundary.
+	// FactorySessionID is the Factory Session that admitted this observation,
+	// when the runtime supplied one. Worker Sessions records the correlation but
+	// does not authorize or resolve a caller-selected scope here.
 	FactorySessionID         string
 	ProviderSession          providers.SessionRef
 	ProviderSessionAvailable bool

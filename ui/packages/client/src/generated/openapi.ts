@@ -19,7 +19,7 @@ export interface paths {
     };
     /**
      * List top-level Worker Session observations
-     * @description Lists Worker Session observations through their stable top-level identity. The default scope is direct Worker Sessions admitted through this API; Factory-originated observations require an explicit scope. Results are deterministically ordered by Worker Session identity and use an opaque cursor for bounded pagination. State filters compose with the selected origin scope.
+     * @description Lists Worker Session observations through their stable top-level identity across the process. With no scope parameter, the fleet-wide view includes direct and Factory-originated observations. Explicit direct or factory scope filters remain available. Results are deterministically ordered by Worker Session identity and use an opaque cursor for bounded pagination. State filters compose with the selected origin scope, and limit is applied after filtering.
      */
     get: operations["listWorkerSessions"];
     put?: never;
@@ -1654,6 +1654,10 @@ export interface components {
       direct: boolean;
       /** @description Explicit Factory Session scope used for this observation. */
       factorySessionId?: string;
+      /** @description Stable primary Work identity associated with this Worker Session. The complete correlation set remains available in workIds. */
+      workId?: string | null;
+      /** @description Display name of the primary associated Work when Work can be resolved. */
+      workName?: string | null;
       providerSession?: components["schemas"]["WorkerSessionProviderSessionRef"];
       /** @description Model identifier resolved for the provider invocation, when recorded. */
       model?: string;
@@ -7448,6 +7452,8 @@ export interface components {
     ResourceID: string;
     /** @description Optional positive page size. Omit to use the default page size; non-positive values fall back to the default after successful integer binding. */
     MaxResults: number;
+    /** @description Optional positive result bound applied after state and origin filters. Omit to use the default page size of 50. Zero and negative values are invalid. */
+    WorkerSessionLimit: number;
     /** @description Optional base64-encoded token ID cursor. */
     NextToken: string;
     /** @description Optional current work state name filter. */
@@ -7512,12 +7518,14 @@ export interface operations {
   listWorkerSessions: {
     parameters: {
       query?: {
-        /** @description Origin scope to inspect. Direct is the safe default. */
+        /** @description Origin scope to inspect. Omit for the fleet-wide view. */
         scope?: PathsWorkerSessionsGetParametersQueryScope;
         /** @description Optional repeated Worker Session lifecycle state filters. */
         state?: PathsWorkerSessionsGetParametersQueryState[];
         /** @description Optional positive page size. Omit to use the default page size; non-positive values fall back to the default after successful integer binding. */
         maxResults?: components["parameters"]["MaxResults"];
+        /** @description Optional positive result bound applied after state and origin filters. Omit to use the default page size of 50. Zero and negative values are invalid. */
+        limit?: components["parameters"]["WorkerSessionLimit"];
         /** @description Optional base64-encoded token ID cursor. */
         nextToken?: components["parameters"]["NextToken"];
       };

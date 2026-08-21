@@ -11,6 +11,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
@@ -641,10 +642,20 @@ func (a *Adapter) ListWorkerSessions(
 	if err != nil {
 		return factoryapi.ListWorkerSessionsResponse{}, fmt.Errorf("resolve Factory Session scope: %w", err)
 	}
-	if _, err := a.work.GetWork(ctx, sessionID, workID); err != nil {
+	workModel, err := a.work.GetWork(ctx, sessionID, workID)
+	if err != nil {
 		return factoryapi.ListWorkerSessionsResponse{}, err
 	}
 
+	return a.listWorkerSessionsForWork(ctx, scope, workID, workModel.Name)
+}
+
+func (a *Adapter) listWorkerSessionsForWork(
+	ctx context.Context,
+	scope workerSessionScope,
+	workID string,
+	workName string,
+) (factoryapi.ListWorkerSessionsResponse, error) {
 	observations := a.observationsForScope(scope)
 	if observations == nil {
 		return factoryapi.ListWorkerSessionsResponse{}, errors.New("Worker Sessions service is required")
@@ -662,12 +673,22 @@ func (a *Adapter) ListWorkerSessions(
 			return factoryapi.ListWorkerSessionsResponse{}, fmt.Errorf("scope Worker Session observation: %w", err)
 		}
 	}
-	return ListWorkerSessionsResponseToAPI(result), nil
+	attribution := make(map[string]workerSessionWorkAttribution, len(result.Observations))
+	for _, observation := range result.Observations {
+		attribution[observation.WorkerSessionID] = workerSessionWorkAttribution{
+			WorkID:   workID,
+			WorkName: workName,
+		}
+	}
+	return listWorkerSessionObservationsResponseToAPI(
+		workersessions.ListWorkerSessionObservationsResult{Observations: result.Observations},
+		attribution,
+	), nil
 }
 
 // ListTopLevelWorkerSessions returns bounded observations through the stable
 // Worker Session identity surface. The Worker Sessions service owns the
-// default direct scope, lifecycle validation, ordering, and cursor semantics.
+// fleet-wide default scope, lifecycle validation, ordering, and cursor semantics.
 func (a *Adapter) ListTopLevelWorkerSessions(
 	ctx context.Context,
 	scope string,
@@ -701,7 +722,45 @@ func (a *Adapter) ListTopLevelWorkerSessions(
 	if err != nil {
 		return factoryapi.ListWorkerSessionsResponse{}, fmt.Errorf("list top-level Worker Session observations: %w", err)
 	}
-	return ListWorkerSessionObservationsResponseToAPI(result), nil
+	attribution, err := a.resolveWorkAttribution(ctx, result.Observations)
+	if err != nil {
+		return factoryapi.ListWorkerSessionsResponse{}, err
+	}
+	return listWorkerSessionObservationsResponseToAPI(result, attribution), nil
+}
+
+// resolveWorkAttribution enriches a Worker Session list without making Work
+// state part of the Worker Sessions service contract. A missing Work read is
+// an unavailable optional fact: the stable Work ID remains visible and the
+// list continues. Context cancellation remains authoritative.
+func (a *Adapter) resolveWorkAttribution(
+	ctx context.Context,
+	observations []workersessions.Observation,
+) (map[string]workerSessionWorkAttribution, error) {
+	attribution := make(map[string]workerSessionWorkAttribution, len(observations))
+	for _, observation := range observations {
+		if len(observation.WorkIDs) == 0 || strings.TrimSpace(observation.WorkIDs[0]) == "" {
+			continue
+		}
+		workID := strings.TrimSpace(observation.WorkIDs[0])
+		sessionID := strings.TrimSpace(observation.FactorySessionID)
+		if sessionID == "" {
+			sessionID = workers.DefaultSessionID
+		}
+		workModel, err := a.work.GetWork(ctx, sessionID, workID)
+		if err != nil {
+			if ctx.Err() != nil {
+				return nil, ctx.Err()
+			}
+			attribution[observation.WorkerSessionID] = workerSessionWorkAttribution{WorkID: workID}
+			continue
+		}
+		attribution[observation.WorkerSessionID] = workerSessionWorkAttribution{
+			WorkID:   workID,
+			WorkName: workModel.Name,
+		}
+	}
+	return attribution, nil
 }
 
 // GetTopLevelWorkerSessionObservation resolves one Worker Session using only

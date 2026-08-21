@@ -34,19 +34,19 @@ paths:
         - Worker Sessions
       operationId: listWorkerSessions
       summary: List top-level Worker Session observations
-      description: Lists Worker Session observations through their stable top-level identity. The default scope is direct Worker Sessions admitted through this API; Factory-originated observations require an explicit scope. Results are deterministically ordered by Worker Session identity and use an opaque cursor for bounded pagination. State filters compose with the selected origin scope.
+      description: Lists Worker Session observations through their stable top-level identity across the process. With no scope parameter, the fleet-wide view includes direct and Factory-originated observations. Explicit direct or factory scope filters remain available. Results are deterministically ordered by Worker Session identity and use an opaque cursor for bounded pagination. State filters compose with the selected origin scope, and limit is applied after filtering.
       parameters:
         - name: scope
           in: query
           required: false
-          description: Origin scope to inspect. Direct is the safe default.
+          description: Origin scope to inspect. Omit for the fleet-wide view.
           schema:
             type: string
             enum:
               - direct
               - factory
               - all
-            default: direct
+            default: all
         - name: state
           in: query
           required: false
@@ -67,6 +67,7 @@ paths:
                 - CANCELED
                 - TERMINATED
         - $ref: '#/components/parameters/MaxResults'
+        - $ref: '#/components/parameters/WorkerSessionLimit'
         - $ref: '#/components/parameters/NextToken'
       responses:
         '200':
@@ -2011,6 +2012,15 @@ components:
         type: integer
         minimum: 1
         default: 50
+    WorkerSessionLimit:
+      name: limit
+      in: query
+      required: false
+      description: Optional positive result bound applied after state and origin filters. Omit to use the default page size of 50. Zero and negative values are invalid.
+      schema:
+        type: integer
+        minimum: 1
+        default: 50
     NextToken:
       name: nextToken
       in: query
@@ -3548,6 +3558,14 @@ components:
         factorySessionId:
           type: string
           description: Explicit Factory Session scope used for this observation.
+        workId:
+          type: string
+          nullable: true
+          description: Stable primary Work identity associated with this Worker Session. The complete correlation set remains available in workIds.
+        workName:
+          type: string
+          nullable: true
+          description: Display name of the primary associated Work when Work can be resolved.
         providerSession:
           $ref: '#/components/schemas/WorkerSessionProviderSessionRef'
           nullable: true

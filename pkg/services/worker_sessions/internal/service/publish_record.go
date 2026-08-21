@@ -247,12 +247,13 @@ func (r *registry) prepareInvocation(
 		r.logger.Info("worker session start rejected", fields...)
 		return invocationPreparation{}, err
 	}
-	startedAt := r.ensureObservation(
+	startedAt := r.ensureObservationWithFactorySession(
 		req.ID,
 		attemptID,
 		req.Execution.Execution.Dispatch.Execution.RequestID,
 		req.Execution.Execution.Dispatch.Execution.WorkIDs,
 		options.direct,
+		req.Execution.Execution.FactorySessionID,
 	)
 	workerRecording, err := r.startWorkerRecording(ctx, req)
 	if err != nil {

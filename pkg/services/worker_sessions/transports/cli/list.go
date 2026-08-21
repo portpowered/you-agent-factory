@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"text/tabwriter"
 	"time"
 
 	"github.com/portpowered/infinite-you/pkg/services/workers"
@@ -22,21 +23,24 @@ import (
 
 // ListConfig holds parameters for the Worker Sessions list command.
 type ListConfig struct {
-	Context      context.Context
-	Server       string
-	SessionID    string
-	WorkID       string
-	Scope        string
-	States       []string
-	MaxResults   int
-	NextToken    string
-	OutputFormat string
-	JSON         bool
-	Verbose      bool
-	Debug        bool
-	Output       io.Writer
-	Diagnostics  io.Writer
-	HTTP         clihttp.Protocol
+	Context       context.Context
+	Server        string
+	SessionID     string
+	WorkID        string
+	Scope         string
+	States        []string
+	Limit         int
+	LimitSet      bool
+	MaxResults    int
+	MaxResultsSet bool
+	NextToken     string
+	OutputFormat  string
+	JSON          bool
+	Verbose       bool
+	Debug         bool
+	Output        io.Writer
+	Diagnostics   io.Writer
+	HTTP          clihttp.Protocol
 }
 
 // NewList returns the composition-facing list operation bound to one HTTP
@@ -65,7 +69,7 @@ func list(config ListConfig) error {
 		return emitCLIError(config, jsonOutput, err)
 	}
 	jsonOutput = config.JSON || format == "json"
-	endpoint, err := workerSessionsEndpoint(config.Server, config.SessionID, config.WorkID, config.Scope, config.States, config.MaxResults, config.NextToken)
+	endpoint, err := workerSessionsEndpoint(config.Server, config.SessionID, config.WorkID, config.Scope, config.States, config.Limit, config.LimitSet, config.MaxResults, config.NextToken)
 	if err != nil {
 		return err
 	}
@@ -133,9 +137,36 @@ func validateListConfig(config ListConfig) error {
 	if config.HTTP == nil {
 		return fmt.Errorf("CLI HTTP protocol is required")
 	}
+	if err := validateListBounds(config); err != nil {
+		return err
+	}
+	if err := validateListScopeAndStates(config); err != nil {
+		return err
+	}
+	if strings.TrimSpace(config.WorkID) != "" && scopedListHasTopLevelFilters(config) {
+		return newCLIError(
+			"WORKER_SESSION_SCOPED_FILTER_UNSUPPORTED",
+			"--state, --limit, --max-results, and --next-token require fleet-wide listing; omit --work-id or use the Work-scoped list without those filters",
+			nil,
+		)
+	}
+	return nil
+}
+
+func validateListBounds(config ListConfig) error {
 	if config.MaxResults < 0 {
 		return newCLIError("MAX_RESULTS_INVALID", "--max-results must not be negative", nil)
 	}
+	if config.LimitSet && config.Limit <= 0 {
+		return newCLIError("LIMIT_INVALID", "--limit must be positive", nil)
+	}
+	if !config.LimitSet && config.Limit < 0 {
+		return newCLIError("LIMIT_INVALID", "--limit must be positive", nil)
+	}
+	return nil
+}
+
+func validateListScopeAndStates(config ListConfig) error {
 	if config.Scope != "" && config.Scope != "direct" && config.Scope != "factory" && config.Scope != "all" {
 		return newCLIError("WORKER_SESSION_SCOPE_INVALID", fmt.Sprintf("unsupported --scope value %q; supported values are direct, factory, and all", config.Scope), nil)
 	}
@@ -145,6 +176,10 @@ func validateListConfig(config ListConfig) error {
 		}
 	}
 	return nil
+}
+
+func scopedListHasTopLevelFilters(config ListConfig) bool {
+	return len(config.States) > 0 || config.LimitSet || config.Limit != 0 || config.MaxResultsSet || config.MaxResults != 0 || strings.TrimSpace(config.NextToken) != ""
 }
 
 func validWorkerSessionState(state string) bool {
@@ -165,25 +200,30 @@ type listJSONResponse struct {
 }
 
 type listJSONObservation struct {
-	AttemptID                string                                           `json:"attemptId"`
-	Direct                   bool                                             `json:"direct"`
-	DurationBasis            factoryapi.WorkerSessionObservationDurationBasis `json:"durationBasis"`
-	DurationMillis           *int64                                           `json:"durationMillis"`
-	EndedAt                  *time.Time                                       `json:"endedAt"`
-	Failure                  *factoryapi.WorkerSessionFailure                 `json:"failure"`
-	Model                    *string                                          `json:"model"`
-	Parse                    factoryapi.WorkerSessionParseDiagnostics         `json:"parse"`
-	ProviderSession          *factoryapi.WorkerSessionProviderSessionRef      `json:"providerSession"`
-	ProviderSessionAvailable bool                                             `json:"providerSessionAvailable"`
-	ReasoningEffort          *string                                          `json:"reasoningEffort"`
-	StartedAt                *time.Time                                       `json:"startedAt"`
-	State                    factoryapi.WorkerSessionObservationState         `json:"state"`
-	TokenUsage               *listJSONTokenUsage                              `json:"tokenUsage"`
-	TurnUsage                *listJSONTurnUsage                               `json:"turnUsage,omitempty"`
-	Transcript               factoryapi.WorkerSessionObservationTranscript    `json:"transcript"`
-	TurnID                   *string                                          `json:"turnId"`
-	WorkIDs                  []string                                         `json:"workIds"`
-	WorkerSessionID          string                                           `json:"workerSessionId"`
+	AttemptID                string                                              `json:"attemptId"`
+	Direct                   bool                                                `json:"direct"`
+	DurationBasis            factoryapi.WorkerSessionObservationDurationBasis    `json:"durationBasis"`
+	DurationMillis           *int64                                              `json:"durationMillis"`
+	EndedAt                  *time.Time                                          `json:"endedAt"`
+	FactorySessionID         *string                                             `json:"factorySessionId"`
+	Failure                  *factoryapi.WorkerSessionFailure                    `json:"failure"`
+	Model                    *string                                             `json:"model"`
+	Parse                    factoryapi.WorkerSessionParseDiagnostics            `json:"parse"`
+	ProviderSession          *factoryapi.WorkerSessionProviderSessionRef         `json:"providerSession"`
+	ProviderSessionAvailable bool                                                `json:"providerSessionAvailable"`
+	ReasoningEffort          *string                                             `json:"reasoningEffort"`
+	RecordingHealth          *factoryapi.WorkerSessionObservationRecordingHealth `json:"recordingHealth"`
+	RecordingHealthReason    *string                                             `json:"recordingHealthReason"`
+	StartedAt                *time.Time                                          `json:"startedAt"`
+	State                    factoryapi.WorkerSessionObservationState            `json:"state"`
+	TokenUsage               *listJSONTokenUsage                                 `json:"tokenUsage"`
+	TurnUsage                *listJSONTurnUsage                                  `json:"turnUsage,omitempty"`
+	Transcript               factoryapi.WorkerSessionObservationTranscript       `json:"transcript"`
+	TurnID                   *string                                             `json:"turnId"`
+	WorkID                   *string                                             `json:"workId"`
+	WorkIDs                  []string                                            `json:"workIds"`
+	WorkName                 *string                                             `json:"workName"`
+	WorkerSessionID          string                                              `json:"workerSessionId"`
 }
 
 type listJSONTokenUsage struct {
@@ -209,9 +249,9 @@ func encodeListJSON(output io.Writer, result factoryapi.ListWorkerSessionsRespon
 	return json.NewEncoder(output).Encode(listJSONResponse{Sessions: sessions, PaginationContext: result.PaginationContext})
 }
 
-func workerSessionsEndpoint(server, sessionID, workID, scope string, states []string, maxResults int, nextToken string) (url.URL, error) {
+func workerSessionsEndpoint(server, sessionID, workID, scope string, states []string, limit int, limitSet bool, maxResults int, nextToken string) (url.URL, error) {
 	if strings.TrimSpace(workID) == "" {
-		return topLevelWorkerSessionsEndpoint(server, scope, states, maxResults, nextToken)
+		return topLevelWorkerSessionsEndpoint(server, scope, states, limit, limitSet, maxResults, nextToken)
 	}
 	endpointURL, err := cliserver.RequestURL(server, sessionpath.WorkerSessionsCollectionPath(sessionID))
 	if err != nil {
@@ -227,7 +267,7 @@ func workerSessionsEndpoint(server, sessionID, workID, scope string, states []st
 	return *endpoint, nil
 }
 
-func topLevelWorkerSessionsEndpoint(server, scope string, states []string, maxResults int, nextToken string) (url.URL, error) {
+func topLevelWorkerSessionsEndpoint(server, scope string, states []string, limit int, limitSet bool, maxResults int, nextToken string) (url.URL, error) {
 	endpointURL, err := cliserver.RequestURL(server, sessionpath.TopLevelWorkerSessionsCollectionPath())
 	if err != nil {
 		return url.URL{}, err
@@ -243,7 +283,9 @@ func topLevelWorkerSessionsEndpoint(server, scope string, states []string, maxRe
 	for _, state := range states {
 		query.Add("state", state)
 	}
-	if maxResults > 0 {
+	if limitSet || limit > 0 {
+		query.Set("limit", strconv.Itoa(limit))
+	} else if maxResults > 0 {
 		query.Set("maxResults", strconv.Itoa(maxResults))
 	}
 	if nextToken != "" {
@@ -380,56 +422,59 @@ func renderList(output io.Writer, result factoryapi.ListWorkerSessionsResponse) 
 		_, err := fmt.Fprintln(output, "No worker sessions found.")
 		return err
 	}
-	if _, err := fmt.Fprintln(output, "DIRECT\tPROVIDER\tKIND\tSESSION ID\tWORK ID\tATTEMPT\tSTATE\tTOKENS\tDURATION\tFAILURE\tMODEL\tREASONING EFFORT"); err != nil {
+	table := tabwriter.NewWriter(output, 0, 4, 2, ' ', 0)
+	if _, err := fmt.Fprintln(table, "WORK NAME\tWORK ID\tWORKER SESSION ID\tPROVIDER\tKIND\tPROVIDER SESSION ID\tSTATE\tSTARTED\tDURATION\tEXIT/FAILURE KIND"); err != nil {
 		return err
 	}
 	for _, session := range result.Sessions {
-		provider, kind, sessionID := "-", "-", "-"
+		provider, kind, providerSessionID := "-", "-", "-"
 		if session.ProviderSession != nil && session.ProviderSessionAvailable {
 			provider = session.ProviderSession.Provider
 			kind = session.ProviderSession.Kind
-			sessionID = session.ProviderSession.Id
+			providerSessionID = session.ProviderSession.Id
 		}
-		workIDs := "-"
-		if len(session.WorkIds) > 0 {
-			workIDs = strings.Join(session.WorkIds, ",")
-		}
-		attempt := session.AttemptId
-		if attempt == "" {
-			attempt = "-"
-		}
-		state := string(session.State)
-		if state == "" {
-			state = "-"
-		}
-		failure := "-"
-		if session.Failure != nil {
-			if class := safeAgentRunFailureClass(session.Failure.AgentRunFailureClass); class != nil {
-				failure = *class
-			} else if session.Failure.Kind != "" {
-				failure = session.Failure.Kind
-			}
+		workID := stringOrDash(session.WorkId)
+		if workID == "-" && len(session.WorkIds) > 0 {
+			workID = strings.Join(session.WorkIds, ",")
 		}
 		if _, err := fmt.Fprintf(
-			output,
-			"%t\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
-			session.Direct,
+			table,
+			"%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
+			stringOrDash(session.WorkName),
+			workID,
+			stringOrDashPtr(session.WorkerSessionId),
 			provider,
 			kind,
-			sessionID,
-			workIDs,
-			attempt,
-			state,
-			formatTokens(session.TokenUsage),
+			providerSessionID,
+			stringOrDashPtr(string(session.State)),
+			formatTime(session.StartedAt),
 			formatDuration(session.DurationMillis),
-			failure,
-			stringOrDash(session.Model),
-			stringOrDash(session.ReasoningEffort),
+			listFailureKind(session.Failure),
 		); err != nil {
 			return err
 		}
 	}
-	return nil
+	return table.Flush()
+}
+
+func listFailureKind(failure *factoryapi.WorkerSessionFailure) string {
+	if failure == nil {
+		return "-"
+	}
+	if kind := strings.TrimSpace(failure.Kind); kind != "" {
+		return kind
+	}
+	for _, value := range []*string{
+		failure.ProviderFailureKind,
+		failure.ProviderContinuationFailureKind,
+		failure.ProviderContinuationOutcome,
+		failure.AgentRunFailureClass,
+	} {
+		if value != nil && strings.TrimSpace(*value) != "" {
+			return *value
+		}
+	}
+	return "-"
 }
 
 func safeAgentRunFailureClass(value *string) *string {

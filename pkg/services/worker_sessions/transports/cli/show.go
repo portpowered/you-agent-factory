@@ -212,11 +212,12 @@ func observationJSON(session factoryapi.WorkerSessionObservation) listJSONObserv
 	}
 	return listJSONObservation{
 		AttemptID: session.AttemptId, Direct: session.Direct, DurationBasis: session.DurationBasis, DurationMillis: session.DurationMillis,
-		EndedAt: session.EndedAt, Failure: session.Failure, Model: session.Model, Parse: session.Parse,
+		EndedAt: session.EndedAt, FactorySessionID: session.FactorySessionId, Failure: session.Failure, Model: session.Model, Parse: session.Parse,
 		ProviderSession: session.ProviderSession, ProviderSessionAvailable: session.ProviderSessionAvailable,
-		ReasoningEffort: session.ReasoningEffort, StartedAt: session.StartedAt, State: session.State, TokenUsage: tokenUsage,
+		ReasoningEffort: session.ReasoningEffort, RecordingHealth: session.RecordingHealth, RecordingHealthReason: session.RecordingHealthReason,
+		StartedAt: session.StartedAt, State: session.State, TokenUsage: tokenUsage,
 		TurnUsage:  turnUsageJSON(session.TurnUsage),
-		Transcript: session.Transcript, TurnID: session.TurnId, WorkIDs: session.WorkIds,
+		Transcript: session.Transcript, TurnID: session.TurnId, WorkID: session.WorkId, WorkIDs: session.WorkIds, WorkName: session.WorkName,
 		WorkerSessionID: session.WorkerSessionId,
 	}
 }

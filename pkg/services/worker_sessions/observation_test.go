@@ -101,8 +101,8 @@ func TestObservationRequests_ValidateIdentityAndBounds(t *testing.T) {
 			}
 		})
 	}
-	if got := (ObservationScope("")).Normalized(); got != ObservationScopeDirect {
-		t.Fatalf("empty ObservationScope.Normalized() = %q, want %q", got, ObservationScopeDirect)
+	if got := (ObservationScope("")).Normalized(); got != ObservationScopeAll {
+		t.Fatalf("empty ObservationScope.Normalized() = %q, want %q", got, ObservationScopeAll)
 	}
 	if got := ObservationScopeFactory.Normalized(); got != ObservationScopeFactory {
 		t.Fatalf("factory ObservationScope.Normalized() = %q, want unchanged factory scope", got)

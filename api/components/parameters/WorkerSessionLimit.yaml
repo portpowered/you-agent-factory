@@ -1,0 +1,10 @@
+name: limit
+in: query
+required: false
+description: >-
+  Optional positive result bound applied after state and origin filters. Omit
+  to use the default page size of 50. Zero and negative values are invalid.
+schema:
+  type: integer
+  minimum: 1
+  default: 50

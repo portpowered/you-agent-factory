@@ -8,13 +8,13 @@ import (
 
 	startupcli "github.com/portpowered/infinite-you/pkg/initializer/process"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
+	workersessionscli "github.com/portpowered/infinite-you/pkg/services/worker_sessions/transports/cli/worker_sessions"
 	acpcli "github.com/portpowered/infinite-you/pkg/transports/cli/acp"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifestcobra"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/cliserver"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/commandregistry"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/generated"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/resolvedinput"
-	workersessionscli "github.com/portpowered/infinite-you/pkg/services/worker_sessions/transports/cli/worker_sessions"
 	"github.com/spf13/cobra"
 )
 
@@ -658,6 +658,10 @@ func executeGeneratedWorkerSessionsListWithValues(
 	if err != nil {
 		return err
 	}
+	limit, err := commandInputValue[int](values, "you.worker-sessions.list.flag.limit")
+	if err != nil {
+		return err
+	}
 	maxResults, err := commandInputValue[int](values, "you.worker-sessions.list.flag.max-results")
 	if err != nil {
 		return err
@@ -677,7 +681,7 @@ func executeGeneratedWorkerSessionsListWithValues(
 	jsonOutput := globals.json || strings.EqualFold(strings.TrimSpace(outputFormat), "json")
 	return list(workersessionscli.ListConfig{
 		Context: cmd.Context(), Server: globals.server, SessionID: sessionID,
-		WorkID: workID, Scope: scope, States: states, MaxResults: maxResults, NextToken: nextToken,
+		WorkID: workID, Scope: scope, States: states, Limit: limit, LimitSet: cmd.Flags().Changed("limit"), MaxResults: maxResults, MaxResultsSet: cmd.Flags().Changed("max-results"), NextToken: nextToken,
 		OutputFormat: outputFormat, JSON: jsonOutput,
 		Output: cmd.OutOrStdout(), Diagnostics: diagnostics.writer(cmd),
 		Verbose: diagnostics.verboseEnabled(), Debug: diagnostics.debug,

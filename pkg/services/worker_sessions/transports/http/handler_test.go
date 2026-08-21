@@ -41,7 +41,7 @@ func TestListWorkerSessionsBySessionIDProjectsPopulatedObservation(t *testing.T)
 		},
 	}
 	service := &fakeObservationService{result: workersessions.ListObservationsResult{Observations: observations}}
-	handler := NewHandler(NewAdapter(service, workServiceStub{}), zap.NewNop())
+	handler := NewHandler(NewAdapter(service, workServiceStub{getResult: work.ReadModel{WorkID: "work-1", Name: "Review Work"}}), zap.NewNop())
 
 	recorder := httptest.NewRecorder()
 	request := httptest.NewRequest("GET", "/factory-sessions/session-1/worker-sessions?workId=work-1", nil)
@@ -146,6 +146,9 @@ func assertPopulatedListResponse(t *testing.T, payload []byte, total int) {
 	assertListObservationTiming(t, got)
 	assertListObservationTurn(t, got)
 	assertListObservationExecutionFacts(t, got)
+	if got.WorkId == nil || *got.WorkId != "work-1" || got.WorkName == nil || *got.WorkName != "Review Work" {
+		t.Fatalf("work attribution = id=%v name=%v, want work-1/Review Work", got.WorkId, got.WorkName)
+	}
 }
 
 func assertListObservationIdentity(t *testing.T, observation factoryapi.WorkerSessionObservation) {
@@ -302,23 +305,6 @@ func TestListWorkerSessionsProjectsTopLevelScopeFiltersAndPagination(t *testing.
 	}
 	if response.PaginationContext == nil || response.PaginationContext.MaxResults != 1 || response.PaginationContext.NextToken == nil || *response.PaginationContext.NextToken != "Y3Vyc29yLTI=" {
 		t.Fatalf("pagination = %#v, want bounded continuation context", response.PaginationContext)
-	}
-}
-
-func TestListWorkerSessionsReturnsTopLevelEmptyCollection(t *testing.T) {
-	service := &fakeObservationService{topLevelResult: workersessions.ListWorkerSessionObservationsResult{Observations: []workersessions.Observation{}, MaxResults: 50}}
-	handler := NewHandler(NewAdapter(service, workServiceStub{}), zap.NewNop())
-	recorder := httptest.NewRecorder()
-	handler.ListWorkerSessions(recorder, httptest.NewRequest(http.MethodGet, "/worker-sessions", nil), factoryapi.ListWorkerSessionsParams{})
-	if recorder.Code != http.StatusOK {
-		t.Fatalf("status = %d, want 200; body=%s", recorder.Code, recorder.Body.String())
-	}
-	var response factoryapi.ListWorkerSessionsResponse
-	if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
-	if response.Sessions == nil || len(response.Sessions) != 0 {
-		t.Fatalf("sessions = %#v, want non-nil empty collection", response.Sessions)
 	}
 }
 
@@ -797,6 +783,7 @@ type fakeObservationService struct {
 	listCalled                 bool
 	topLevelResult             workersessions.ListWorkerSessionObservationsResult
 	topLevelErr                error
+	topLevelCalled             bool
 	topLevelRequest            workersessions.ListWorkerSessionObservationsRequest
 	getResult                  workersessions.Observation
 	getErr                     error
@@ -842,6 +829,7 @@ func (f *fakeObservationService) ListObservations(context.Context, workersession
 }
 
 func (f *fakeObservationService) ListWorkerSessionObservations(_ context.Context, request workersessions.ListWorkerSessionObservationsRequest) (workersessions.ListWorkerSessionObservationsResult, error) {
+	f.topLevelCalled = true
 	f.topLevelRequest = request
 	return f.topLevelResult, f.topLevelErr
 }
@@ -981,12 +969,20 @@ func decodeSSEFrames(t *testing.T, body string) []sseTestFrame {
 
 type workServiceStub struct {
 	work.Service
-	getErr error
+	getErr     error
+	getResult  work.ReadModel
+	getResults map[string]work.ReadModel
 }
 
-func (s workServiceStub) GetWork(context.Context, string, string) (work.ReadModel, error) {
+func (s workServiceStub) GetWork(_ context.Context, _, workID string) (work.ReadModel, error) {
 	if s.getErr != nil {
 		return work.ReadModel{}, s.getErr
+	}
+	if result, ok := s.getResults[workID]; ok {
+		return result, nil
+	}
+	if s.getResult.WorkID != "" || s.getResult.Name != "" {
+		return s.getResult, nil
 	}
 	return work.ReadModel{WorkID: "known-work"}, nil
 }

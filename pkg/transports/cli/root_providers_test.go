@@ -12,8 +12,8 @@ import (
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
 	providerscli "github.com/portpowered/infinite-you/pkg/services/providers/transports/cli"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
-	"github.com/portpowered/infinite-you/pkg/transports/cli/generated"
 	workersessionscli "github.com/portpowered/infinite-you/pkg/services/worker_sessions/transports/cli/worker_sessions"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/generated"
 	"github.com/spf13/cobra"
 )
 
@@ -91,13 +91,16 @@ func TestProductionWorkerSessionsUsesResolvedOwnerInputs(t *testing.T) {
 	root.SetArgs([]string{
 		"--server", "https://factory.example",
 		"--json",
-		"worker-sessions", "list", "--work-id", "work-1", "--scope", "all",
+		"worker-sessions", "list", "--work-id", "work-1", "--scope", "all", "--limit", "7",
 	})
 	if err := root.Execute(); err != nil {
 		t.Fatalf("execute resolved worker-sessions list: %v", err)
 	}
 	if got.WorkID != "work-1" || got.Scope != "all" {
 		t.Fatalf("worker-sessions list config = %+v, want resolved work and scope", got)
+	}
+	if got.Limit != 7 || !got.LimitSet {
+		t.Fatalf("worker-sessions list limit config = %d/%t, want 7/true", got.Limit, got.LimitSet)
 	}
 	if got.Server != "https://factory.example" || !got.JSON {
 		t.Fatalf("worker-sessions list globals = server %q json %t, want resolved values", got.Server, got.JSON)
@@ -291,90 +294,81 @@ func TestWorkerSessionsInvokeAndContinueReadersReportTypedInputErrors(t *testing
 func TestWorkerSessionsGeneratedHandlersRejectMissingResolvedValues(t *testing.T) {
 	globals := &cliGlobalOptions{}
 	diagnostics := &cliDiagnosticsOptions{}
-	tests := []struct {
-		name   string
-		values map[string]any
-		call   func(*cobra.Command, map[string]any) error
-	}{
-		{
-			name:   "list missing scope",
-			values: map[string]any{"you.worker-sessions.list.flag.work-id": "work-1"},
-			call: func(cmd *cobra.Command, values map[string]any) error {
-				return executeGeneratedWorkerSessionsListWithValues(cmd, globals, diagnostics, func(workersessionscli.ListConfig) error { return nil }, values)
-			},
-		},
-		{
-			name: "list missing max results",
-			values: map[string]any{
-				"you.worker-sessions.list.flag.work-id": "work-1",
-				"you.worker-sessions.list.flag.scope":   "all",
-				"you.worker-sessions.list.flag.state":   []string{"RUNNING"},
-			},
-			call: func(cmd *cobra.Command, values map[string]any) error {
-				return executeGeneratedWorkerSessionsListWithValues(cmd, globals, diagnostics, func(workersessionscli.ListConfig) error { return nil }, values)
-			},
-		},
-		{
-			name: "show missing output",
-			values: map[string]any{
-				"you.worker-sessions.show.flag.provider":          "codex",
-				"you.worker-sessions.show.flag.worker-session-id": "worker-1",
-				"you.worker-sessions.show.flag.kind":              "session_id",
-				"you.worker-sessions.show.flag.id":                "provider-1",
-				"you.worker-sessions.show.flag.session":           "session-1",
-			},
-			call: func(cmd *cobra.Command, values map[string]any) error {
-				return executeGeneratedWorkerSessionsShowWithValues(cmd, globals, diagnostics, func(workersessionscli.ShowConfig) error { return nil }, values)
-			},
-		},
-		{
-			name: "stream missing follow",
-			values: map[string]any{
-				"you.worker-sessions.stream.flag.provider":          "codex",
-				"you.worker-sessions.stream.flag.worker-session-id": "worker-1",
-				"you.worker-sessions.stream.flag.kind":              "session_id",
-				"you.worker-sessions.stream.flag.id":                "provider-1",
-				"you.worker-sessions.stream.flag.session":           "session-1",
-				"you.worker-sessions.stream.flag.output":            "json",
-				"you.worker-sessions.stream.flag.replay-only":       false,
-			},
-			call: func(cmd *cobra.Command, values map[string]any) error {
-				return executeGeneratedWorkerSessionsStreamWithValues(cmd, globals, diagnostics, func(workersessionscli.StreamConfig) error { return nil }, values)
-			},
-		},
-		{
-			name: "read missing output",
-			values: map[string]any{
-				"you.worker-sessions.read.flag.provider":          "codex",
-				"you.worker-sessions.read.flag.worker-session-id": "worker-1",
-				"you.worker-sessions.read.flag.kind":              "session_id",
-				"you.worker-sessions.read.flag.id":                "provider-1",
-				"you.worker-sessions.read.flag.session":           "session-1",
-			},
-			call: func(cmd *cobra.Command, values map[string]any) error {
-				return executeGeneratedWorkerSessionsReadWithValues(cmd, globals, diagnostics, func(workersessionscli.ReadConfig) error { return nil }, values)
-			},
-		},
-		{
-			name:   "control missing output",
-			values: map[string]any{"you.worker-sessions.cancel.arg.0": "worker-1"},
-			call: func(cmd *cobra.Command, values map[string]any) error {
-				return executeGeneratedWorkerSessionsControlWithValues(cmd, globals, diagnostics, func(workersessionscli.ControlConfig) error { return nil }, nil, workersessions.ControlActionCancel, values)
-			},
-		},
-	}
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			cmd := commandWithResolvedCLIInputs(test.values)
+	for _, testCase := range workerSessionMissingResolvedInputCases(globals, diagnostics) {
+		t.Run(testCase.name, func(t *testing.T) {
+			cmd := commandWithResolvedCLIInputs(testCase.values)
 			values, err := generatedCommandInputs(cmd)
 			if err != nil {
 				t.Fatalf("resolve test worker-session inputs: %v", err)
 			}
-			err = test.call(cmd, values)
+			err = testCase.call(cmd, values)
 			if err == nil || !strings.Contains(err.Error(), "resolved CLI input") {
-				t.Fatalf("%s error = %v, want missing resolved CLI input", test.name, err)
+				t.Fatalf("%s error = %v, want missing resolved CLI input", testCase.name, err)
 			}
 		})
+	}
+}
+
+type workerSessionMissingResolvedInputCase struct {
+	name   string
+	values map[string]any
+	call   func(*cobra.Command, map[string]any) error
+}
+
+func workerSessionMissingResolvedInputCases(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOptions) []workerSessionMissingResolvedInputCase {
+	return append(workerSessionMissingResolvedListCases(globals, diagnostics), workerSessionMissingResolvedDetailCases(globals, diagnostics)...)
+}
+
+func workerSessionMissingResolvedListCases(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOptions) []workerSessionMissingResolvedInputCase {
+	list := func(cmd *cobra.Command, values map[string]any) error {
+		return executeGeneratedWorkerSessionsListWithValues(cmd, globals, diagnostics, func(workersessionscli.ListConfig) error { return nil }, values)
+	}
+	return []workerSessionMissingResolvedInputCase{
+		{name: "list missing scope", values: map[string]any{"you.worker-sessions.list.flag.work-id": "work-1"}, call: list},
+		{name: "list missing limit", values: map[string]any{
+			"you.worker-sessions.list.flag.work-id": "work-1",
+			"you.worker-sessions.list.flag.scope":   "all",
+			"you.worker-sessions.list.flag.state":   []string{"RUNNING"},
+		}, call: list},
+		{name: "list missing max results", values: map[string]any{
+			"you.worker-sessions.list.flag.work-id": "work-1",
+			"you.worker-sessions.list.flag.scope":   "all",
+			"you.worker-sessions.list.flag.state":   []string{"RUNNING"},
+			"you.worker-sessions.list.flag.limit":   5,
+		}, call: list},
+	}
+}
+
+func workerSessionMissingResolvedDetailCases(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOptions) []workerSessionMissingResolvedInputCase {
+	identity := func(prefix string) map[string]any {
+		return map[string]any{
+			"you.worker-sessions." + prefix + ".flag.provider":          "codex",
+			"you.worker-sessions." + prefix + ".flag.worker-session-id": "worker-1",
+			"you.worker-sessions." + prefix + ".flag.kind":              "session_id",
+			"you.worker-sessions." + prefix + ".flag.id":                "provider-1",
+			"you.worker-sessions." + prefix + ".flag.session":           "session-1",
+		}
+	}
+	show := func(cmd *cobra.Command, values map[string]any) error {
+		return executeGeneratedWorkerSessionsShowWithValues(cmd, globals, diagnostics, func(workersessionscli.ShowConfig) error { return nil }, values)
+	}
+	read := func(cmd *cobra.Command, values map[string]any) error {
+		return executeGeneratedWorkerSessionsReadWithValues(cmd, globals, diagnostics, func(workersessionscli.ReadConfig) error { return nil }, values)
+	}
+	stream := func(cmd *cobra.Command, values map[string]any) error {
+		return executeGeneratedWorkerSessionsStreamWithValues(cmd, globals, diagnostics, func(workersessionscli.StreamConfig) error { return nil }, values)
+	}
+	control := func(cmd *cobra.Command, values map[string]any) error {
+		return executeGeneratedWorkerSessionsControlWithValues(cmd, globals, diagnostics, func(workersessionscli.ControlConfig) error { return nil }, nil, workersessions.ControlActionCancel, values)
+	}
+	streamValues := identity("stream")
+	streamValues["you.worker-sessions.stream.flag.output"] = "json"
+	streamValues["you.worker-sessions.stream.flag.replay-only"] = false
+	return []workerSessionMissingResolvedInputCase{
+		{name: "show missing output", values: identity("show"), call: show},
+		{name: "stream missing follow", values: streamValues, call: stream},
+		{name: "read missing output", values: identity("read"), call: read},
+		{name: "control missing output", values: map[string]any{"you.worker-sessions.cancel.arg.0": "worker-1"}, call: control},
 	}
 }
 

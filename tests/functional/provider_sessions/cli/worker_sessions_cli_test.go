@@ -84,6 +84,10 @@ func TestWorkerSessionsCLI(t *testing.T) {
 	waitForWorkerSession(t, ctx, process, env, factoryDir, baseURL, failureWorkID)
 	streamWorkerSession(t, ctx, process, env, factoryDir, baseURL, workerSessionsCodexFailureID, "FAILED")
 	assertFailedWorkerSession(t, ctx, process, env, factoryDir, baseURL, failureWorkID)
+	assertFleetWorkerSessionList(t, ctx, process, env, factoryDir, baseURL, map[string]string{
+		successWorkID: "worker-session-cli-success",
+		failureWorkID: "worker-session-cli-failure",
+	}, true)
 	assertMissingWorkerSessionOutcomes(t, ctx, process, env, factoryDir, baseURL)
 	assertMissingWorkerSessionInputs(t, ctx, process, env, factoryDir, baseURL)
 
@@ -114,7 +118,7 @@ func assertWorkerSessionsCLIHelp(t *testing.T, ctx context.Context, process supp
 		"Usage:",
 		"continue    Continue a Worker Session",
 		"invoke      Invoke a direct Worker",
-		"list        List direct or Factory Worker Sessions",
+		"list        List fleet-wide or Work-scoped Worker Sessions",
 		"read        Read a finished Worker Session",
 		"show        Show one Worker Session",
 		"stream      Stream one Worker Session",
@@ -126,6 +130,12 @@ func assertWorkerSessionsCLIHelp(t *testing.T, ctx context.Context, process supp
 	explicitHelpInputs := executeCLI(t, ctx, process, env, factoryDir, "worker-sessions", "--help")
 	if !strings.Contains(explicitHelpInputs.Stdout(), "Usage:") {
 		t.Fatalf("worker-sessions --help omitted usage:\n%s", explicitHelpInputs.Stdout())
+	}
+	listHelpInputs := executeCLI(t, ctx, process, env, factoryDir, "worker-sessions", "list", "--help")
+	for _, marker := range []string{"--work-id", "--state", "--limit", "fleet-wide", "provider-session"} {
+		if !strings.Contains(strings.ToLower(listHelpInputs.Stdout()), strings.ToLower(marker)) {
+			t.Fatalf("worker-sessions list help omitted %q:\n%s", marker, listHelpInputs.Stdout())
+		}
 	}
 	unknownInputs, unknownErr := executeCLIExpectError(t, ctx, process, env, factoryDir, "worker-sessions", "--unknown")
 	if unknownErr == nil {
@@ -493,10 +503,13 @@ type workerSessionJSON struct {
 	DurationBasis   string               `json:"durationBasis"`
 	Failure         json.RawMessage      `json:"failure"`
 	ProviderSession *providerSessionJSON `json:"providerSession"`
+	StartedAt       *time.Time           `json:"startedAt"`
 	State           string               `json:"state"`
 	TokenUsage      *tokenUsageJSON      `json:"tokenUsage"`
 	Transcript      string               `json:"transcript"`
+	WorkID          *string              `json:"workId"`
 	WorkIDs         []string             `json:"workIds"`
+	WorkName        *string              `json:"workName"`
 	WorkerSessionID string               `json:"workerSessionId"`
 }
 
