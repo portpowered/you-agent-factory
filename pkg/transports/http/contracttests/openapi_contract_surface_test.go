@@ -460,7 +460,7 @@ func assertRemovedPaths(t *testing.T, paths map[string]any) {
 func assertPublishedSurfaceSchemas(t *testing.T, schemas map[string]any) {
 	t.Helper()
 	for _, schema := range []string{
-		"SubmitWorkRequest", "SubmitWorkResponse", "InvocationInputSourceKind", "InvocationRequest", "InvocationResponse", "InvocationTerminalStatus", "StageSubmitWorkFileRequest", "StageSubmitWorkFileResponse", "UpsertWorkRequestResponse", "UpsertWorkRequestSubmittedWork", "WorkRequest", "Work", "WorkContent",
+		"SubmitWorkRequest", "SubmitWorkResponse", "InvocationInputSourceKind", "InvocationRequest", "InvocationResponse", "InvocationTerminalStatus", "StageSubmitWorkFileRequest", "StageSubmitWorkFileResponse", "UpsertWorkRequestResponse", "UpsertWorkRequestSubmittedWork", "WorkRequest", "WorkRequestRelation", "Work", "WorkContent",
 		"WorkContentPart", "WorkContentPartType", "WorkTextContentPart", "WorkImageContentPart", "Relation", "ListWorkResponse",
 		"TokenResponse", "ErrorFamily", "ErrorResponse", "FactoryName", "StatusCategories", "StatusResponse", "ListModelsResponse", "ManagedRuntime", "ManagedRuntimeLifecycleState", "ManagedRuntimePullOutcome", "ManagedRuntimePullResult", "ManagedRuntimeReadinessState", "ManagedRuntimeSourceDiagnostics", "ModelSummary", "ModelDetail", "ModelReference", "ModelInvocationInput", "ModelInvocationOutput", "ModelInvocationArtifact", "ModelInvocationParameter", "ModelInvocationOutputMode", "ModelInvocationFailureClass", "ModelInvocationFailure", "GenericModelInvocationRequest", "GenericModelInvocationResponse", "ModelInvocationRequest", "ModelInvocationOptions", "ModelInvocationResponseMode", "ModelInvocationResponse", "ModelPullResponse", "ModelPullOutcome", "ModelPullDownloadedFile", "ResolvedModelOperationBinding", "ResolvedModelOperationBindingSource", "ModelCapability", "ModelResourceSummary", "ModelStatus", "ModelLoadState", "Factory", "InvocationReturn", "InvocationReturnPolicy", "FactoryValidationResult", "FactoryValidationTarget", "FactoryValidationSubject", "FactoryValidationSeverity", "FactoryValidationSubjectType", "FactoryValidationSubjectLocation", "Workstation", "WorkstationKind",
 	} {
@@ -589,30 +589,6 @@ func TestOpenAPIContract_MoveWorkRequestSchema(t *testing.T) {
 	assertRequiredFields(t, moveWorkRequestSchema, "stateName")
 	moveWorkRequestProperties := schemaProperties(t, moveWorkRequestSchema, "MoveWorkRequest")
 	assertSchemaPropertiesPresent(t, moveWorkRequestProperties, "MoveWorkRequest", "stateName", "requestId")
-}
-
-func assertWorkRequestSurfaceSchemas(t *testing.T, schemas map[string]any) {
-	t.Helper()
-	workRequestSchema := schemaObject(t, schemas, "WorkRequest")
-	assertRequiredFields(t, workRequestSchema, "requestId", "type")
-	workRequestProperties := schemaProperties(t, workRequestSchema, "WorkRequest")
-	assertSchemaPropertiesPresent(t, workRequestProperties, "WorkRequest", "requestId", "currentChainingTraceId", "type")
-	workRequestType := schemaObject(t, schemas, "WorkRequestType")
-	assertEnumValues(t, workRequestType, "WorkRequestType", []string{"FACTORY_REQUEST_BATCH"})
-	workRequestTypeVarNames, ok := workRequestType["x-enum-varnames"].([]any)
-	if !ok {
-		t.Fatalf("components.schemas.WorkRequestType.x-enum-varnames is missing")
-	}
-	if containsString(workRequestTypeVarNames, "WorkRequestTypeDefault") {
-		t.Fatalf("components.schemas.WorkRequestType must not advertise legacy DEFAULT request type")
-	}
-
-	workSchema := schemaObject(t, schemas, "Work")
-	workProperties := schemaProperties(t, workSchema, "Work")
-	assertSchemaPropertiesPresent(t, workProperties, "Work", "name", "workId", "requestId", "workTypeName", "state", "currentChainingTraceId", "previousChainingTraceIds", "traceId", "content", "payload", "tags", "relations")
-	assertPropertyRef(t, workProperties, "content", "#/components/schemas/WorkContent")
-	assertArrayItemRef(t, workProperties, "relations", "#/components/schemas/Relation")
-	assertPropertiesAbsent(t, workProperties, "Work", "work_type_id", "target_state")
 }
 
 func assertWorkContentSurfaceSchemas(t *testing.T, schemas map[string]any) {

@@ -3356,6 +3356,8 @@ components:
     # ==== Raw data types here =======
     WorkRequest:
       $ref: './components/schemas/api/WorkRequest.yaml'
+    WorkRequestRelation:
+      $ref: './components/schemas/api/WorkRequestRelation.yaml'
     WorkRequestType:
       $ref: './components/schemas/api/WorkRequestType.yaml'
     Work:

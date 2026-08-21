@@ -7890,8 +7890,8 @@ type WorkRequest struct {
 	// CurrentChainingTraceId Optional default chaining-trace identifier applied to submitted work items that omit it.
 	CurrentChainingTraceId *string `json:"currentChainingTraceId,omitempty"`
 
-	// Relations Relationships between various work items.
-	Relations *[]Relation `json:"relations,omitempty"`
+	// Relations Relationships between submitted or already-boarded work items.
+	Relations *[]WorkRequestRelation `json:"relations,omitempty"`
 
 	// RequestId Stable client-provided request identifier used for idempotent batch submission.
 	RequestId string `json:"requestId"`
@@ -7913,6 +7913,28 @@ type WorkRequestEventPayload struct {
 	Type  WorkRequestType `json:"type"`
 	Works *[]Work         `json:"works,omitempty"`
 }
+
+// WorkRequestRelation Relationship declared while admitting a Work Request. A target may be identified by its exact board name, stable Work ID, or both. When both are supplied they must resolve to the same Work.
+type WorkRequestRelation struct {
+	RequiredState  *string `json:"requiredState,omitempty"`
+	SourceWorkName string  `json:"sourceWorkName"`
+
+	// TargetWorkId Stable Work ID on the selected Factory Session board.
+	TargetWorkId *string `json:"targetWorkId,omitempty"`
+
+	// TargetWorkName Exact Work name on the selected Factory Session board.
+	TargetWorkName *string `json:"targetWorkName,omitempty"`
+
+	// Type Relationship category between two pieces of work.
+	Type  RelationType `json:"type"`
+	union json.RawMessage
+}
+
+// WorkRequestRelation0 defines model for .
+type WorkRequestRelation0 = interface{}
+
+// WorkRequestRelation1 defines model for .
+type WorkRequestRelation1 = interface{}
 
 // WorkRequestType Kind of work request accepted by the factory.
 type WorkRequestType string
@@ -12153,6 +12175,155 @@ func (t WorkContentPart) MarshalJSON() ([]byte, error) {
 
 func (t *WorkContentPart) UnmarshalJSON(b []byte) error {
 	err := t.union.UnmarshalJSON(b)
+	return err
+}
+
+// AsWorkRequestRelation0 returns the union data inside the WorkRequestRelation as a WorkRequestRelation0
+func (t WorkRequestRelation) AsWorkRequestRelation0() (WorkRequestRelation0, error) {
+	var body WorkRequestRelation0
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromWorkRequestRelation0 overwrites any union data inside the WorkRequestRelation as the provided WorkRequestRelation0
+func (t *WorkRequestRelation) FromWorkRequestRelation0(v WorkRequestRelation0) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeWorkRequestRelation0 performs a merge with any union data inside the WorkRequestRelation, using the provided WorkRequestRelation0
+func (t *WorkRequestRelation) MergeWorkRequestRelation0(v WorkRequestRelation0) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsWorkRequestRelation1 returns the union data inside the WorkRequestRelation as a WorkRequestRelation1
+func (t WorkRequestRelation) AsWorkRequestRelation1() (WorkRequestRelation1, error) {
+	var body WorkRequestRelation1
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromWorkRequestRelation1 overwrites any union data inside the WorkRequestRelation as the provided WorkRequestRelation1
+func (t *WorkRequestRelation) FromWorkRequestRelation1(v WorkRequestRelation1) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeWorkRequestRelation1 performs a merge with any union data inside the WorkRequestRelation, using the provided WorkRequestRelation1
+func (t *WorkRequestRelation) MergeWorkRequestRelation1(v WorkRequestRelation1) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+func (t WorkRequestRelation) MarshalJSON() ([]byte, error) {
+	b, err := t.union.MarshalJSON()
+	if err != nil {
+		return nil, err
+	}
+	object := make(map[string]json.RawMessage)
+	if t.union != nil {
+		err = json.Unmarshal(b, &object)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	if t.RequiredState != nil {
+		object["requiredState"], err = json.Marshal(t.RequiredState)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'requiredState': %w", err)
+		}
+	}
+
+	object["sourceWorkName"], err = json.Marshal(t.SourceWorkName)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling 'sourceWorkName': %w", err)
+	}
+
+	if t.TargetWorkId != nil {
+		object["targetWorkId"], err = json.Marshal(t.TargetWorkId)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'targetWorkId': %w", err)
+		}
+	}
+
+	if t.TargetWorkName != nil {
+		object["targetWorkName"], err = json.Marshal(t.TargetWorkName)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'targetWorkName': %w", err)
+		}
+	}
+
+	object["type"], err = json.Marshal(t.Type)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling 'type': %w", err)
+	}
+
+	b, err = json.Marshal(object)
+	return b, err
+}
+
+func (t *WorkRequestRelation) UnmarshalJSON(b []byte) error {
+	err := t.union.UnmarshalJSON(b)
+	if err != nil {
+		return err
+	}
+	object := make(map[string]json.RawMessage)
+	err = json.Unmarshal(b, &object)
+	if err != nil {
+		return err
+	}
+
+	if raw, found := object["requiredState"]; found {
+		err = json.Unmarshal(raw, &t.RequiredState)
+		if err != nil {
+			return fmt.Errorf("error reading 'requiredState': %w", err)
+		}
+	}
+
+	if raw, found := object["sourceWorkName"]; found {
+		err = json.Unmarshal(raw, &t.SourceWorkName)
+		if err != nil {
+			return fmt.Errorf("error reading 'sourceWorkName': %w", err)
+		}
+	}
+
+	if raw, found := object["targetWorkId"]; found {
+		err = json.Unmarshal(raw, &t.TargetWorkId)
+		if err != nil {
+			return fmt.Errorf("error reading 'targetWorkId': %w", err)
+		}
+	}
+
+	if raw, found := object["targetWorkName"]; found {
+		err = json.Unmarshal(raw, &t.TargetWorkName)
+		if err != nil {
+			return fmt.Errorf("error reading 'targetWorkName': %w", err)
+		}
+	}
+
+	if raw, found := object["type"]; found {
+		err = json.Unmarshal(raw, &t.Type)
+		if err != nil {
+			return fmt.Errorf("error reading 'type': %w", err)
+		}
+	}
+
 	return err
 }
 

@@ -141,9 +141,48 @@ func TestReplaySubmissionsFromEventDecodesWorkOwnedPayload(t *testing.T) {
 	if !reflect.DeepEqual(got.request.Works[0].Content, []work.WorkContentPart{{Type: work.WorkContentPartTypeText, Text: "hello"}}) {
 		t.Fatalf("content = %#v", got.request.Works[0].Content)
 	}
-	wantRelations := []work.WorkRelation{{Type: work.WorkRelationDependsOn, SourceWorkName: "source", TargetWorkName: "target", RequiredState: "done"}}
+	wantRelations := []work.WorkRelation{{Type: work.WorkRelationDependsOn, SourceWorkName: "source", TargetWorkID: "work-2", TargetWorkName: "target", RequiredState: "done"}}
 	if !reflect.DeepEqual(got.request.Relations, wantRelations) {
 		t.Fatalf("relations = %#v, want %#v", got.request.Relations, wantRelations)
+	}
+}
+
+func TestReplaySubmissionsFromEventPreservesIDOnlyCrossBatchDependency(t *testing.T) {
+	payload, err := json.Marshal(work.WorkRequestEventPayload{
+		Source: "api",
+		Type:   work.WorkRequestTypeFactoryRequestBatch,
+		Works: []work.WorkRequestEventWork{{
+			Name:       "dependent",
+			WorkID:     "work-dependent",
+			WorkTypeID: "task",
+			State:      &work.WorkEventState{Name: "queued"},
+		}},
+		Relations: []work.WorkRequestEventRelation{{
+			Type:           work.WorkRelationDependsOn,
+			SourceWorkName: "dependent",
+			TargetWorkID:   "work-prior",
+			TargetWorkName: "work-prior",
+			RequiredState:  "complete",
+		}},
+	})
+	if err != nil {
+		t.Fatalf("marshal cross-batch ID-only payload: %v", err)
+	}
+	event := interfaces.FactoryEvent{
+		Id:      "event-cross-batch-id-only",
+		Payload: payload,
+	}
+
+	submissions, err := replaySubmissionsFromEvent(event)
+	if err != nil {
+		t.Fatalf("replaySubmissionsFromEvent: %v", err)
+	}
+	if len(submissions) != 1 || len(submissions[0].request.Relations) != 1 {
+		t.Fatalf("replayed submissions = %#v, want one request with one relation", submissions)
+	}
+	relation := submissions[0].request.Relations[0]
+	if relation.TargetWorkID != "work-prior" || relation.TargetWorkName != "" {
+		t.Fatalf("replayed ID-only relation = %#v, want target ID with no authored target name", relation)
 	}
 }
 

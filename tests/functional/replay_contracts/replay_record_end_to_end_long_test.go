@@ -264,10 +264,10 @@ func recordReplayExternalBatchWorkRequest() factoryapi.WorkRequest {
 				Payload:      "external fanout",
 			},
 		},
-		Relations: &[]factoryapi.Relation{{
+		Relations: &[]factoryapi.WorkRequestRelation{{
 			Type:           factoryapi.RelationTypeDependsOn,
 			SourceWorkName: "external-fanout",
-			TargetWorkName: "external-first",
+			TargetWorkName: strPtr("external-first"),
 		}},
 	}
 }

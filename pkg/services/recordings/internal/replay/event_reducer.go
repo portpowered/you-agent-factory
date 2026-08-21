@@ -444,14 +444,23 @@ func replayWorkRequestRelations(works []work.WorkRequestEventWork, relations []w
 		targetName := relation.TargetWorkName
 		if targetName == "" {
 			targetName = namesByID[relation.TargetWorkID]
+		} else if relation.TargetWorkID != "" && targetName == relation.TargetWorkID {
+			// Event history uses the target ID as the required public name
+			// fallback when an ID-only relation is recorded. Do not replay that
+			// fallback as an authored name: a later admission must resolve the
+			// canonical ID against the selected session board.
+			targetName = namesByID[relation.TargetWorkID]
 		}
-		if targetName == "" {
-			targetName = relation.TargetWorkID
-		}
-		if sourceName == "" || targetName == "" {
+		if sourceName == "" || (targetName == "" && relation.TargetWorkID == "") {
 			continue
 		}
-		out = append(out, work.WorkRelation{Type: relation.Type, SourceWorkName: sourceName, TargetWorkName: targetName, RequiredState: relation.RequiredState})
+		out = append(out, work.WorkRelation{
+			Type:           relation.Type,
+			SourceWorkName: sourceName,
+			TargetWorkID:   relation.TargetWorkID,
+			TargetWorkName: targetName,
+			RequiredState:  relation.RequiredState,
+		})
 	}
 	return out
 }

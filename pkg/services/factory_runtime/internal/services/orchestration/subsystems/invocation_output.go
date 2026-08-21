@@ -3,11 +3,13 @@ package subsystems
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/portpowered/infinite-you/pkg/platform/jsonvalue"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorytoken "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/token"
 	"github.com/portpowered/infinite-you/pkg/services/work"
+	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
 func applyPackagedTTSInvocationMetadata(
@@ -172,4 +174,34 @@ func applyRecordedOutputWorkStructuredResult(token *factorytoken.Token, recorded
 		token.Color.StructuredResult = jsonvalue.Clone(recorded.StructuredResult)
 		token.Color.StructuredResultPresent = true
 	}
+}
+
+// releaseResourceTokens returns consumed resource tokens to their original places.
+func (t *TransitionerSubsystem) releaseResourceTokens(consumedTokens []factorytoken.Token, alreadyCovered map[string]int, transitionID string, now time.Time) []factorydefinitions.MarkingMutation {
+	var mutations []factorydefinitions.MarkingMutation
+	for _, consumed := range consumedTokens {
+		if consumed.Color.DataType != factorytoken.DataTypeResource {
+			continue
+		}
+		if alreadyCovered[consumed.PlaceID] > 0 {
+			alreadyCovered[consumed.PlaceID]--
+			continue
+		}
+		resourceToken := t.transformer.ReleasedResourceToken(consumed, consumed.PlaceID, now)
+		mutations = append(mutations, factorydefinitions.MarkingMutation{
+			Type:     factorydefinitions.MutationCreate,
+			ToPlace:  consumed.PlaceID,
+			NewToken: workerTokenPointer(resourceToken),
+			Reason:   fmt.Sprintf("release resource %s for transition %s", consumed.PlaceID, transitionID),
+		})
+	}
+	return mutations
+}
+
+func workerTokenPointer(value *factorytoken.Token) *workerexecution.Token {
+	if value == nil {
+		return nil
+	}
+	projected := factorytoken.ToWorker(*value)
+	return &projected
 }

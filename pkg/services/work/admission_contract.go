@@ -422,6 +422,7 @@ func workRelationToAdmission(rel WorkRelation) requestadmission.WorkRelation {
 	return requestadmission.WorkRelation{
 		Type:           requestadmission.WorkRelationType(rel.Type),
 		SourceWorkName: rel.SourceWorkName,
+		TargetWorkID:   rel.TargetWorkID,
 		TargetWorkName: rel.TargetWorkName,
 		RequiredState:  rel.RequiredState,
 	}
@@ -431,6 +432,7 @@ func workRelationFromAdmission(rel requestadmission.WorkRelation) WorkRelation {
 	return WorkRelation{
 		Type:           WorkRelationType(rel.Type),
 		SourceWorkName: rel.SourceWorkName,
+		TargetWorkID:   rel.TargetWorkID,
 		TargetWorkName: rel.TargetWorkName,
 		RequiredState:  rel.RequiredState,
 	}
@@ -504,7 +506,23 @@ func normalizeOptionsToAdmission(opts WorkRequestNormalizeOptions) requestadmiss
 		ValidWorkTypes:    opts.ValidWorkTypes,
 		ValidStatesByType: opts.ValidStatesByType,
 		IDGenerator:       requestadmission.IDGenerator(opts.IDGenerator),
+		ExistingWorks:     existingWorksToAdmission(opts.ExistingWorks),
 	}
+}
+
+func existingWorksToAdmission(values []ExistingWork) []requestadmission.ExistingWork {
+	if len(values) == 0 {
+		return nil
+	}
+	converted := make([]requestadmission.ExistingWork, len(values))
+	for i, value := range values {
+		converted[i] = requestadmission.ExistingWork{
+			WorkID:     value.WorkID,
+			Name:       value.Name,
+			WorkTypeID: value.WorkTypeID,
+		}
+	}
+	return converted
 }
 
 func generatedSubmissionBatchToAdmission(batch GeneratedSubmissionBatch) requestadmission.GeneratedSubmissionBatch {

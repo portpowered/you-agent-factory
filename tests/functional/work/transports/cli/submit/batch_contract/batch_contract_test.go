@@ -287,8 +287,8 @@ func TestCLISubmitBatchAtAndBelowLimitDispatchThroughProviderCommandRunner(t *te
 // TestCLISubmitBatchRelationEndpointDiagnosticIsActionableAndAtomic proves
 // relation endpoints resolve only through the submitted works[] names. A
 // valid batch preserves both supported relation types; missing source/target
-// endpoints are rejected in live human, live structured, and dry-run modes,
-// including when the target name belongs to an earlier submission.
+// endpoints are rejected during live admission, while dry-run accepts the
+// shape because board lookup is only available to the live session.
 func TestCLISubmitBatchRelationEndpointDiagnosticIsActionableAndAtomic(t *testing.T) {
 	factoryDir := support.ScaffoldFactory(t, successSubmitBatchFactoryConfig())
 	runner := testutil.NewProviderCommandRunner()
@@ -309,73 +309,92 @@ func TestCLISubmitBatchRelationEndpointDiagnosticIsActionableAndAtomic(t *testin
 		t.Fatalf("valid relation batch output missing work count:\n%s", validStdout)
 	}
 
+	runRelationEndpointCases(t, process, server.URL())
+
+	listed := support.ListDefaultSessionWork(t, server.URL())
+	if len(listed.Results) != 3 {
+		t.Fatalf("invalid relation batches admitted partial Work: %#v", listed.Results)
+	}
+}
+
+func runRelationEndpointCases(t *testing.T, process support.Process, serverURL string) {
+	t.Helper()
 	for _, test := range []struct {
-		name       string
-		json       bool
-		dryRun     bool
-		batch      string
-		endpoint   string
-		value      string
-		source     string
-		target     string
-		additional string
+		name        string
+		json        bool
+		dryRun      bool
+		batch       string
+		value       string
+		source      string
+		wantError   bool
+		wantMarkers []string
 	}{
 		{
-			name:     "live missing source human",
-			batch:    relationEndpointBatchJSON("batch-relation-missing-source-human", "target", "missing-source", "target"),
-			endpoint: "sourceWorkName",
-			value:    "missing-source",
-			source:   "missing-source",
-			target:   "target",
+			name:      "live missing source human",
+			batch:     relationEndpointBatchJSON("batch-relation-missing-source-human", "target", "missing-source", "target"),
+			value:     "missing-source",
+			source:    "missing-source",
+			wantError: true,
+			wantMarkers: []string{
+				`endpoint sourceWorkName="missing-source"`,
+				"missing from this batch",
+			},
 		},
 		{
-			name:     "live missing target structured",
-			json:     true,
-			batch:    relationEndpointBatchJSON("batch-relation-missing-target-structured", "source", "source", "missing-target"),
-			endpoint: "targetWorkName",
-			value:    "missing-target",
-			source:   "source",
-			target:   "missing-target",
+			name:      "live missing target structured",
+			json:      true,
+			batch:     relationEndpointBatchJSON("batch-relation-missing-target-structured", "source", "source", "missing-target"),
+			value:     "missing-target",
+			source:    "source",
+			wantError: true,
+			wantMarkers: []string{
+				`unknown targetWorkName="missing-target"`,
+				"does not identify a Work on this Factory Session board",
+				"correct targetWorkName or provide targetWorkId",
+			},
 		},
 		{
-			name:       "dry-run previously submitted target",
-			json:       true,
-			dryRun:     true,
-			batch:      relationEndpointBatchJSON("batch-relation-previously-submitted-target", "new-work", "new-work", "parent"),
-			endpoint:   "targetWorkName",
-			value:      "parent",
-			source:     "new-work",
-			target:     "parent",
-			additional: "not previously submitted Work",
+			name:   "dry-run previously submitted target",
+			json:   true,
+			dryRun: true,
+			batch:  relationEndpointBatchJSON("batch-relation-previously-submitted-target", "new-work", "new-work", "parent"),
+			value:  "parent",
+			source: "new-work",
 		},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			args := []string{"you", "--server", server.URL(), "submit", "batch"}
+			args := []string{"you", "--server", serverURL, "submit", "batch"}
 			if test.json {
-				args = []string{"you", "--server", server.URL(), "--json", "submit", "batch"}
+				args = []string{"you", "--server", serverURL, "--json", "submit", "batch"}
 			}
 			if test.dryRun {
 				args = []string{"you", "--server", "http://127.0.0.1:1", "--json", "submit", "batch", "--dry-run"}
 			}
 			args = append(args, test.batch)
 			stdout, stderr, err := executeSubmitBatchCLIExpectError(t, process, args)
+			if !test.wantError {
+				if err != nil {
+					t.Fatalf("dry-run relation shape validation error = %v\nstderr:\n%s", err, stderr)
+				}
+				if !strings.Contains(stdout, `"dryRun":true`) {
+					t.Fatalf("dry-run relation shape output missing dryRun marker: %q", stdout)
+				}
+				return
+			}
 			if err == nil {
 				t.Fatal("relation endpoint submission succeeded")
 			}
 			diagnostic := err.Error() + "\n" + stderr
-			assertRelationEndpointDiagnostic(t, diagnostic, test.endpoint, test.value, test.source, test.target)
-			if test.additional != "" && !strings.Contains(diagnostic, test.additional) {
-				t.Fatalf("diagnostic missing %q:\n%s", test.additional, diagnostic)
+			assertRelationEndpointDiagnostic(t, diagnostic, test.value, test.source)
+			for _, marker := range test.wantMarkers {
+				if !strings.Contains(diagnostic, marker) {
+					t.Fatalf("diagnostic missing %q:\n%s", marker, diagnostic)
+				}
 			}
 			if stdout != "" {
 				t.Fatalf("relation endpoint submission emitted success stdout: %q", stdout)
 			}
 		})
-	}
-
-	listed := support.ListDefaultSessionWork(t, server.URL())
-	if len(listed.Results) != 3 {
-		t.Fatalf("invalid relation batches admitted partial Work: %#v", listed.Results)
 	}
 }
 

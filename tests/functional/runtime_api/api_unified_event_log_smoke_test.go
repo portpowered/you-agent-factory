@@ -127,10 +127,10 @@ func assertUnifiedEventLogUpsert(t *testing.T, server *functionalAPIServer, fixt
 				Payload:      map[string]string{"title": "review unified event log smoke"},
 			},
 		},
-		Relations: &[]factoryapi.Relation{{
+		Relations: &[]factoryapi.WorkRequestRelation{{
 			Type:           factoryapi.RelationTypeDependsOn,
 			SourceWorkName: "review",
-			TargetWorkName: "draft",
+			TargetWorkName: stringPointer("draft"),
 			RequiredState:  &requiredState,
 		}},
 	})

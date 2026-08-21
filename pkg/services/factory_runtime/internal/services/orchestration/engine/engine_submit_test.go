@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/orchestrators/petri"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/subsystems"
 	factorytoken "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/token"
@@ -263,11 +264,9 @@ func TestSubmitWorkRequest_MissingRelationEndpointFailureQueuesNoPartialWork(t *
 		"relations[0]",
 		`relation type "DEPENDS_ON"`,
 		`sourceWorkName "new-work"`,
-		`targetWorkName "previously-submitted"`,
-		`endpoint targetWorkName="previously-submitted"`,
-		"missing from this batch",
-		"relation endpoints must name Work declared in this batch",
-		"add the named Work to works[] or correct targetWorkName",
+		`targetWorkName="previously-submitted"`,
+		"does not identify a Work on this Factory Session board",
+		"correct targetWorkName or provide targetWorkId",
 	} {
 		if !strings.Contains(err.Error(), marker) {
 			t.Fatalf("relation endpoint diagnostic missing %q: %v", marker, err)
@@ -281,6 +280,196 @@ func TestSubmitWorkRequest_MissingRelationEndpointFailureQueuesNoPartialWork(t *
 	}
 	if len(eng.GetMarking().Tokens) != 0 {
 		t.Fatalf("tokens after missing relation endpoint batch = %d, want 0", len(eng.GetMarking().Tokens))
+	}
+}
+
+func TestSubmitWorkRequest_DependsOnResolvesExistingBoardWorkByNameAndID(t *testing.T) {
+	for _, tc := range []struct {
+		name       string
+		targetID   string
+		targetName string
+	}{
+		{name: "name", targetName: "existing"},
+		{name: "id", targetID: "existing-work"},
+		{name: "both", targetID: "existing-work", targetName: "existing"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			n := buildTestNet()
+			marking := petri.NewMarking("test-wf")
+			marking.AddToken(&factorytoken.Token{
+				ID:      "existing-token",
+				PlaceID: "task:complete",
+				Color: factorytoken.Color{
+					Name:       "existing",
+					WorkID:     "existing-work",
+					WorkTypeID: "task",
+					DataType:   factorytoken.DataTypeWork,
+				},
+			})
+			eng := newTestFactoryEngine(n, marking, nil)
+
+			result, err := eng.SubmitWorkRequest(context.Background(), work.WorkRequest{
+				RequestID: "request-existing-" + tc.name,
+				Type:      work.WorkRequestTypeFactoryRequestBatch,
+				Works:     []work.Work{{Name: "new-work", WorkTypeID: "task"}},
+				Relations: []work.WorkRelation{{
+					Type:           work.WorkRelationDependsOn,
+					SourceWorkName: "new-work",
+					TargetWorkID:   tc.targetID,
+					TargetWorkName: tc.targetName,
+				}},
+			})
+			if err != nil || !result.Accepted {
+				t.Fatalf("SubmitWorkRequest() = (%#v, %v), want accepted", result, err)
+			}
+			if err := eng.Tick(context.Background()); err != nil {
+				t.Fatalf("Tick: %v", err)
+			}
+
+			var newWork *factorytoken.Token
+			for _, token := range eng.GetMarking().Tokens {
+				if token.Color.Name == "new-work" {
+					newWork = token
+					break
+				}
+			}
+			if newWork == nil {
+				t.Fatal("new Work token is missing")
+			}
+			if len(newWork.Color.Relations) != 1 || newWork.Color.Relations[0].TargetWorkID != "existing-work" {
+				t.Fatalf("new Work relations = %#v, want canonical existing-work target", newWork.Color.Relations)
+			}
+		})
+	}
+}
+
+func TestSubmitWorkRequest_DependsOnResolvesActiveDispatchWork(t *testing.T) {
+	n := buildTestNet()
+	eng := newTestFactoryEngine(n, petri.NewMarking("test-wf"), nil)
+	eng.runtimeState.Dispatches["dispatch-existing"] = &interfaces.DispatchEntry{
+		DispatchID: "dispatch-existing",
+		ConsumedTokens: factorytoken.ToWorkerSlice([]factorytoken.Token{{
+			Color: factorytoken.Color{
+				Name:       "active-existing",
+				WorkID:     "active-work",
+				WorkTypeID: "task",
+				DataType:   factorytoken.DataTypeWork,
+			},
+		}}),
+	}
+
+	result, err := eng.SubmitWorkRequest(context.Background(), work.WorkRequest{
+		RequestID: "request-active-existing",
+		Type:      work.WorkRequestTypeFactoryRequestBatch,
+		Works:     []work.Work{{Name: "new-work", WorkTypeID: "task"}},
+		Relations: []work.WorkRelation{{
+			Type:           work.WorkRelationDependsOn,
+			SourceWorkName: "new-work",
+			TargetWorkName: "active-existing",
+		}},
+	})
+	if err != nil || !result.Accepted {
+		t.Fatalf("SubmitWorkRequest() = (%#v, %v), want accepted", result, err)
+	}
+	if err := eng.Tick(context.Background()); err != nil {
+		t.Fatalf("Tick: %v", err)
+	}
+	var newWork *factorytoken.Token
+	for _, token := range eng.GetMarking().Tokens {
+		if token.Color.Name == "new-work" {
+			newWork = token
+			break
+		}
+	}
+	if newWork == nil || len(newWork.Color.Relations) != 1 || newWork.Color.Relations[0].TargetWorkID != "active-work" {
+		t.Fatalf("new Work token = %#v, want relation to active-work", newWork)
+	}
+}
+
+func TestSubmitWorkRequest_DependsOnResolvesFailedBoardWork(t *testing.T) {
+	n := buildTestNet()
+	marking := petri.NewMarking("test-wf")
+	marking.AddToken(&factorytoken.Token{
+		ID: "failed-token", PlaceID: "task:failed", Color: factorytoken.Color{
+			Name: "failed-existing", WorkID: "failed-work", WorkTypeID: "task", DataType: factorytoken.DataTypeWork,
+		},
+	})
+	eng := newTestFactoryEngine(n, marking, nil)
+
+	result, err := eng.SubmitWorkRequest(context.Background(), work.WorkRequest{
+		RequestID: "request-failed-existing",
+		Type:      work.WorkRequestTypeFactoryRequestBatch,
+		Works:     []work.Work{{Name: "new-work", WorkTypeID: "task"}},
+		Relations: []work.WorkRelation{{
+			Type: work.WorkRelationDependsOn, SourceWorkName: "new-work", TargetWorkName: "failed-existing",
+		}},
+	})
+	if err != nil || !result.Accepted {
+		t.Fatalf("SubmitWorkRequest() = (%#v, %v), want accepted", result, err)
+	}
+	if err := eng.Tick(context.Background()); err != nil {
+		t.Fatalf("Tick: %v", err)
+	}
+	for _, token := range eng.GetMarking().Tokens {
+		if token.Color.Name == "new-work" {
+			if len(token.Color.Relations) != 1 || token.Color.Relations[0].TargetWorkID != "failed-work" {
+				t.Fatalf("new Work relations = %#v, want canonical failed-work target", token.Color.Relations)
+			}
+			return
+		}
+	}
+	t.Fatal("new Work token is missing")
+}
+
+func TestSubmitWorkRequest_RejectsConflictingOrAmbiguousBoardReferencesAtomically(t *testing.T) {
+	n := buildTestNet()
+	marking := petri.NewMarking("test-wf")
+	marking.AddToken(&factorytoken.Token{
+		ID: "existing-a", PlaceID: "task:complete", Color: factorytoken.Color{
+			Name: "duplicate", WorkID: "existing-a", WorkTypeID: "task", DataType: factorytoken.DataTypeWork,
+		},
+	})
+	marking.AddToken(&factorytoken.Token{
+		ID: "existing-b", PlaceID: "task:failed", Color: factorytoken.Color{
+			Name: "duplicate", WorkID: "existing-b", WorkTypeID: "task", DataType: factorytoken.DataTypeWork,
+		},
+	})
+	eng := newTestFactoryEngine(n, marking, nil)
+
+	for _, tc := range []struct {
+		name     string
+		relation work.WorkRelation
+		want     string
+	}{
+		{
+			name: "ambiguous name",
+			relation: work.WorkRelation{
+				Type: work.WorkRelationDependsOn, SourceWorkName: "new-work", TargetWorkName: "duplicate",
+			},
+			want: "use targetWorkId",
+		},
+		{
+			name: "conflicting references",
+			relation: work.WorkRelation{
+				Type: work.WorkRelationDependsOn, SourceWorkName: "new-work", TargetWorkName: "duplicate", TargetWorkID: "missing",
+			},
+			want: "targetWorkId=\"missing\" does not identify a Work",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := eng.SubmitWorkRequest(context.Background(), work.WorkRequest{
+				RequestID: "request-invalid-board-ref-" + tc.name,
+				Type:      work.WorkRequestTypeFactoryRequestBatch,
+				Works:     []work.Work{{Name: "new-work", WorkTypeID: "task"}},
+				Relations: []work.WorkRelation{tc.relation},
+			})
+			if err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("error = %v, want substring %q", err, tc.want)
+			}
+			if len(eng.workRequests) != 0 || len(eng.submissionHook.batches) != 0 {
+				t.Fatalf("failed batch was admitted: requests=%d queued=%d", len(eng.workRequests), len(eng.submissionHook.batches))
+			}
+		})
 	}
 }
 

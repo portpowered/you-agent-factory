@@ -491,7 +491,8 @@ func WorkRequestFromUpsertAPI(req factoryapi.UpsertWorkRequestBySessionIdJSONReq
 			workRequest.Relations = append(workRequest.Relations, work.WorkRelation{
 				Type:           work.WorkRelationType(relation.Type),
 				SourceWorkName: relation.SourceWorkName,
-				TargetWorkName: relation.TargetWorkName,
+				TargetWorkID:   stringValue(relation.TargetWorkId),
+				TargetWorkName: stringValue(relation.TargetWorkName),
 				RequiredState:  stringValue(relation.RequiredState),
 			})
 		}

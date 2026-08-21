@@ -73,11 +73,11 @@ type InvocationArgumentSource struct {
 }
 
 type Request struct {
-	RequestID              string          `json:"requestId"`
-	CurrentChainingTraceID string          `json:"currentChainingTraceId,omitempty"`
-	Type                   RequestType     `json:"type"`
-	Works                  []Work          `json:"works,omitempty"`
-	Relations              []WorkRelation  `json:"relations,omitempty"`
+	RequestID              string         `json:"requestId"`
+	CurrentChainingTraceID string         `json:"currentChainingTraceId,omitempty"`
+	Type                   RequestType    `json:"type"`
+	Works                  []Work         `json:"works,omitempty"`
+	Relations              []WorkRelation `json:"relations,omitempty"`
 }
 
 type Work struct {
@@ -101,8 +101,15 @@ type Work struct {
 type WorkRelation struct {
 	Type           WorkRelationType `json:"type"`
 	SourceWorkName string           `json:"sourceWorkName"`
-	TargetWorkName string           `json:"targetWorkName"`
+	TargetWorkID   string           `json:"targetWorkId,omitempty"`
+	TargetWorkName string           `json:"targetWorkName,omitempty"`
 	RequiredState  string           `json:"requiredState,omitempty"`
+}
+
+type ExistingWork struct {
+	WorkID     string
+	Name       string
+	WorkTypeID string
 }
 
 type Relation struct {
@@ -134,14 +141,15 @@ type NormalizeOptions struct {
 	ValidWorkTypes    map[string]bool
 	ValidStatesByType map[string]map[string]bool
 	IDGenerator       IDGenerator
+	ExistingWorks     []ExistingWork
 }
 
 type IDGenerator func() string
 
 type GeneratedSubmissionBatch struct {
-	Request     Request                      `json:"request"`
+	Request     Request                          `json:"request"`
 	Metadata    GeneratedSubmissionBatchMetadata `json:"metadata"`
-	Submissions []SubmitRequest              `json:"submissions"`
+	Submissions []SubmitRequest                  `json:"submissions"`
 }
 
 type GeneratedSubmissionBatchMetadata struct {

@@ -22,6 +22,6 @@ properties:
       $ref: '../data-models/Work.yaml'
   relations:
     type: array
-    description: Relationships between various work items.
+    description: Relationships between submitted or already-boarded work items.
     items:
-      $ref: '../data-models/Relation.yaml'
+      $ref: './WorkRequestRelation.yaml'
