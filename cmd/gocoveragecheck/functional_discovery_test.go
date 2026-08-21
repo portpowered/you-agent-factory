@@ -258,6 +258,7 @@ func TestTwo(t *testing.T) {}
 		config{functionalQuarantine: quarantinePath, timeout: time.Minute},
 		[]string{packagePath},
 		"linux",
+		4,
 		repoRoot,
 	)
 	if err != nil {
@@ -310,6 +311,7 @@ func TestPrepareFunctionalCoverageRunReportsFailedDiscoveryEnd(t *testing.T) {
 		config{functionalQuarantine: quarantinePath, timeout: time.Minute},
 		[]string{packagePath},
 		"linux",
+		4,
 		repoRoot,
 	)
 	if err == nil || !strings.Contains(err.Error(), "go list") {
