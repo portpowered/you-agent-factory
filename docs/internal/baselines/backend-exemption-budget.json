@@ -3,12 +3,6 @@
   "entries": [
     {
       "rule": "backendsizecheck:ignore-file",
-      "target": "cmd/pkgboundarycheck/main.go",
-      "owner": "backend-maintainers",
-      "removalReason": "service-ownership migration preserves this consolidated surface until a dedicated responsibility split removes the exemption."
-    },
-    {
-      "rule": "backendsizecheck:ignore-file",
       "target": "cmd/pkgboundarycheck/main_test.go",
       "owner": "backend-maintainers",
       "removalReason": "service-ownership migration preserves this consolidated surface until a dedicated responsibility split removes the exemption."
