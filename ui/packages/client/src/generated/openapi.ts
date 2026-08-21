@@ -7121,6 +7121,13 @@ export interface components {
      * @enum {string}
      */
     WorkstationGuardType: WorkstationGuardType;
+    /** @description Optional paired workstation policy for charging one logical visit per process/review round trip. */
+    LogicalRoundTrip: {
+      /** @description Exactly two workstation names whose visits form one logical round trip. */
+      workstations: string[];
+      /** @description Absolute raw-visit ceiling across both paired workstations; it must exceed the containing guard's maxVisits. */
+      maxRawVisits: number;
+    };
     /** @description Guard attached to a workstation as a whole. */
     WorkstationGuard: {
       /** @description Guard condition to evaluate for this workstation-level attachment. */
@@ -7131,6 +7138,8 @@ export interface components {
       maxVisits?: number;
       /** @description Optional invocation argument whose positive integer value tightens the fixed visit ceiling. */
       maxVisitsArgument?: string;
+      /** @description Optional paired process/review policy. When present, the containing maxVisits is the logical cycle budget and maxRawVisits is the absolute raw-visit backstop. */
+      logicalRoundTrip?: components["schemas"]["LogicalRoundTrip"];
       /** @description For `MATCHES_FIELDS` guards, the field-selector configuration used to compare candidate inputs. */
       matchConfig?: components["schemas"]["GuardMatchConfig"];
       /** @description For parent-aware input guards, the parent workType name from another input in the same workstation. */
