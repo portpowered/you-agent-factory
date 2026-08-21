@@ -2,6 +2,7 @@ package subsystems_test
 
 import (
 	"context"
+	"fmt"
 	"sort"
 	"strings"
 	"testing"
@@ -25,8 +26,144 @@ type mockScheduler struct {
 	decisions []interfaces.FiringDecision
 }
 
+type replayDispatchResolver struct {
+	recorded bool
+}
+
+func (r replayDispatchResolver) DispatchIDForDispatch(work.WorkDispatch) (string, bool) {
+	if !r.recorded {
+		return "", false
+	}
+	return "recorded-dispatch", true
+}
+
 func (m *mockScheduler) Select(_ []interfaces.EnabledTransition, _ *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]) []interfaces.FiringDecision {
 	return m.decisions
+}
+
+func TestDispatcherSeededReplayDispatchPolicy(t *testing.T) {
+	tests := []struct {
+		name             string
+		seededWorkIDs    map[string]struct{}
+		recordedDispatch bool
+		workIDs          []string
+		wantDispatches   int
+		wantMutations    int
+		wantDispatchID   string
+	}{
+		{
+			name:           "all seeded unrecorded dispatch is suppressed without consuming Work",
+			seededWorkIDs:  map[string]struct{}{"work-1": {}},
+			workIDs:        []string{"work-1"},
+			wantDispatches: 0,
+			wantMutations:  0,
+		},
+		{
+			name:             "recorded dispatch still dispatches seeded Work",
+			seededWorkIDs:    map[string]struct{}{"work-1": {}},
+			recordedDispatch: true,
+			workIDs:          []string{"work-1"},
+			wantDispatches:   1,
+			wantMutations:    1,
+			wantDispatchID:   "recorded-dispatch",
+		},
+		{
+			name:           "mixed seeded and unseeded Work is not suppressed",
+			seededWorkIDs:  map[string]struct{}{"work-1": {}},
+			workIDs:        []string{"work-1", "work-2"},
+			wantDispatches: 1,
+			wantMutations:  2,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			n := seededReplayDispatcherNet(len(test.workIDs))
+			consumeTokens := make([]string, len(test.workIDs))
+			for index := range consumeTokens {
+				consumeTokens[index] = fmt.Sprintf("token-%d", index+1)
+			}
+			scheduler := &mockScheduler{decisions: []interfaces.FiringDecision{{
+				TransitionID:  "t1",
+				ConsumeTokens: consumeTokens,
+				WorkerType:    "script",
+			}}}
+			dispatcher := subsystems.NewDispatcherWithSeededReplay(
+				n,
+				scheduler,
+				nil,
+				nil,
+				nil,
+				time.Now,
+				testDispatchID,
+				replayDispatchResolver{recorded: test.recordedDispatch},
+				test.seededWorkIDs,
+			)
+			tokens := make(map[string]*factorytoken.Token, len(test.workIDs))
+			for index, workID := range test.workIDs {
+				tokenID := fmt.Sprintf("token-%d", index+1)
+				tokens[tokenID] = &factorytoken.Token{
+					ID:      tokenID,
+					PlaceID: "p-init",
+					Color: factorytoken.Color{
+						WorkID:     workID,
+						WorkTypeID: "task",
+						DataType:   factorytoken.DataTypeWork,
+					},
+				}
+			}
+
+			result, err := dispatcher.Execute(context.Background(), &interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
+				Marking: makeDispatcherSnapshot(tokens),
+			})
+			if err != nil {
+				t.Fatalf("dispatcher.Execute: %v", err)
+			}
+			if result == nil {
+				if test.wantDispatches != 0 || test.wantMutations != 0 {
+					t.Fatalf("dispatcher result is nil, want %d dispatches and %d mutations", test.wantDispatches, test.wantMutations)
+				}
+				return
+			}
+			if got := len(result.Dispatches); got != test.wantDispatches {
+				t.Fatalf("dispatch count = %d, want %d", got, test.wantDispatches)
+			}
+			if got := len(result.Mutations); got != test.wantMutations {
+				t.Fatalf("mutation count = %d, want %d", got, test.wantMutations)
+			}
+			if test.wantDispatchID != "" && result.Dispatches[0].Dispatch.DispatchID != test.wantDispatchID {
+				t.Fatalf("dispatch ID = %q, want recorded ID %q", result.Dispatches[0].Dispatch.DispatchID, test.wantDispatchID)
+			}
+		})
+	}
+}
+
+func seededReplayDispatcherNet(inputCount int) *state.Net {
+	inputArcs := make([]petri.Arc, 0, inputCount)
+	for index := 0; index < inputCount; index++ {
+		inputArcs = append(inputArcs, petri.Arc{
+			ID:          fmt.Sprintf("input-%d", index),
+			Name:        fmt.Sprintf("work-%d", index),
+			PlaceID:     "p-init",
+			Direction:   petri.ArcInput,
+			Cardinality: petri.ArcCardinality{Mode: petri.CardinalityOne},
+		})
+	}
+	return &state.Net{
+		Places: map[string]*petri.Place{
+			"p-init": {ID: "p-init"},
+			"p-done": {ID: "p-done"},
+		},
+		Transitions: map[string]*petri.Transition{
+			"t1": {
+				ID:         "t1",
+				Name:       "do-work",
+				WorkerType: "script",
+				InputArcs:  inputArcs,
+				OutputArcs: []petri.Arc{{ID: "output", Name: "done", PlaceID: "p-done", Direction: petri.ArcOutput}},
+			},
+		},
+	}
 }
 
 type recordingScheduler struct {

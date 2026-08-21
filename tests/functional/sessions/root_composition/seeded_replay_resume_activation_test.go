@@ -1,12 +1,16 @@
 package root_composition_test
 
 import (
+	"context"
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/portpowered/infinite-you/internal/testutil"
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/work"
@@ -37,27 +41,22 @@ func TestSeededReplayResumeMaterializesRecordedWorkOnceThroughAssembledSession(t
 				t.Fatalf("write replay artifact: %v", err)
 			}
 			server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-				FactoryDir:                factoryDir,
-				UseMockWorkers:            true,
-				WaitForServiceModeRuntime: true,
-				Args:                      []string{"--replay", artifactPath, "--no-record"},
+				FactoryDir: factoryDir,
+				Args:       []string{"--provider", "CODEX", "--model", "gpt-5-codex", "--replay", artifactPath, "--no-record"},
 				Edges: serviceedges.Edges{
 					FactorySessionReplayRecordingReader: func(string) ([]byte, error) {
 						return append([]byte(nil), artifactPayload...), nil
 					},
+					ProviderCommandRunner: testutil.NewProviderCommandRunner(platformprocess.CommandResult{
+						Stdout: support.CodexSuccessStdout("unexpected replay dispatch COMPLETE"),
+					}),
 				},
 			})
 			t.Cleanup(func() { server.Stop(t) })
 
-			status := support.WaitForStatus(t, server.URL(), 15*time.Second, func(status factoryapi.StatusResponse) bool {
-				if status.TotalTokens != 1 {
-					return false
-				}
-				if test.finished {
-					return status.Categories.Terminal == 1 && status.Categories.Initial == 0
-				}
-				return status.Categories.Initial == 1 && status.Categories.Processing == 0
-			})
+			stream := support.OpenFactoryEventStreamAt(t, support.DefaultSessionEventsURL(server.URL()))
+			waitForSeededReplayRuntimeStart(t, stream)
+			status := support.GetJSON[factoryapi.StatusResponse](t, strings.TrimSuffix(server.URL(), "/")+"/status")
 
 			if status.TotalTokens != 1 {
 				t.Fatalf("replayed status totalTokens = %d, want one Work token", status.TotalTokens)
@@ -88,6 +87,18 @@ func TestSeededReplayResumeMaterializesRecordedWorkOnceThroughAssembledSession(t
 				}
 			}
 		})
+	}
+}
+
+func waitForSeededReplayRuntimeStart(t *testing.T, stream *support.FactoryEventStream) {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(t.Context(), 15*time.Second)
+	defer cancel()
+	for {
+		event := stream.NextEventContext(ctx)
+		if event.Type == factoryapi.FactoryEventTypeFactoryStateResponse {
+			return
+		}
 	}
 }
 
