@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
@@ -217,6 +218,86 @@ func TestSecond(t *testing.T) {}
 		if invocation.name != "go" || invocation.dir != repoRoot {
 			t.Fatalf("go list invocation = %+v, want repo-root go command", invocation)
 		}
+	}
+}
+
+func TestResolveFunctionalTestPackagesWithMetadataBatchesCurrentTreeCandidates(t *testing.T) {
+	originalRunner := commandRunner
+	t.Cleanup(func() { commandRunner = originalRunner })
+
+	const packageCount = 9
+	repoRoot := t.TempDir()
+	packages := make([]string, 0, packageCount)
+	var packageDirs = make(map[string]string, packageCount)
+	for index := 0; index < packageCount; index++ {
+		name := "candidate" + strconv.Itoa(index)
+		packagePath := modulePath + "/tests/functional/" + name
+		packageDir := filepath.Join(repoRoot, "tests", "functional", name)
+		if err := os.MkdirAll(packageDir, 0o755); err != nil {
+			t.Fatalf("create package directory %s: %v", name, err)
+		}
+		writeFunctionalDiscoveryFixture(t, packageDir, "candidate_test.go", "package candidate\n")
+		packages = append(packages, packagePath)
+		packageDirs[packagePath] = packageDir
+	}
+
+	var mu sync.Mutex
+	var invocations [][]string
+	var runnerErr error
+	commandRunner = func(invocation commandInvocation) (string, string, error) {
+		mu.Lock()
+		defer mu.Unlock()
+		invocations = append(invocations, append([]string(nil), invocation.args...))
+		if invocation.name != "go" || invocation.dir != repoRoot || len(invocation.args) < 5 {
+			runnerErr = fmt.Errorf("unexpected invocation: %+v", invocation)
+			return "", "", runnerErr
+		}
+		var output strings.Builder
+		for _, packagePath := range invocation.args[4:] {
+			packageDir, ok := packageDirs[packagePath]
+			if !ok {
+				runnerErr = fmt.Errorf("unexpected package %q in invocation %+v", packagePath, invocation.args)
+				return "", "", runnerErr
+			}
+			data, err := json.Marshal(functionalGoListPackage{
+				ImportPath:  packagePath,
+				Dir:         packageDir,
+				TestGoFiles: []string{"candidate_test.go"},
+			})
+			if err != nil {
+				runnerErr = err
+				return "", "", runnerErr
+			}
+			output.Write(data)
+			output.WriteByte('\n')
+		}
+		return output.String(), "", nil
+	}
+
+	gotPackages, listed, err := resolveFunctionalTestPackagesWithMetadata(config{suite: "functional"}, repoRoot)
+	if err != nil {
+		t.Fatalf("resolveFunctionalTestPackagesWithMetadata() error = %v", err)
+	}
+	if runnerErr != nil {
+		t.Fatal(runnerErr)
+	}
+	if !slices.Equal(gotPackages, packages) || len(listed) != packageCount {
+		t.Fatalf("packages/listed = %v/%d, want %v/%d", gotPackages, len(listed), packages, packageCount)
+	}
+	if len(invocations) != functionalDiscoveryMaxJobs {
+		t.Fatalf("go list invocations = %d, want %d: %+v", len(invocations), functionalDiscoveryMaxJobs, invocations)
+	}
+	seen := make(map[string]struct{}, packageCount)
+	for _, invocation := range invocations {
+		if !slices.Equal(invocation[:4], []string{"list", functionalGoListErrorFlag, functionalGoListJSONFields, "-find"}) {
+			t.Fatalf("go list invocation = %v, want concrete metadata flags", invocation)
+		}
+		for _, packagePath := range invocation[4:] {
+			seen[packagePath] = struct{}{}
+		}
+	}
+	if len(seen) != packageCount {
+		t.Fatalf("go list package coverage = %d, want %d: %v", len(seen), packageCount, seen)
 	}
 }
 
