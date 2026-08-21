@@ -16,6 +16,7 @@ type Field = RetiredFieldAlias
 func RetiredFactoryFieldAliases() []RetiredFieldAlias {
 	return []RetiredFieldAlias{
 		{Key: "project", Replacement: "use id"},
+		{Key: "work_types", Replacement: "use workTypes"},
 		{Key: "factoryDir", Replacement: "use factoryDirectory"},
 		{Key: "factory_dir", Replacement: "use factoryDirectory"},
 		{Key: "resourceManifest", Replacement: "use supportingFiles"},

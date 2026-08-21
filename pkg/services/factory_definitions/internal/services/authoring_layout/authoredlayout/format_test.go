@@ -82,6 +82,52 @@ examples:
 	}
 }
 
+func TestFactorySourceLoaderProducesEquivalentFutureFieldDiagnostics(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	jsonPath := filepath.Join(dir, "future.json")
+	yamlPath := filepath.Join(dir, "future.yaml")
+	writeTestSource(t, jsonPath, `{
+  "name": "future",
+  "logicalRoundTrip": {"mode": "v2"},
+  "workers": [{"name": "worker", "futurePolicy": {"mode": "v2"}}]
+}`)
+	writeTestSource(t, yamlPath, `name: future
+logicalRoundTrip:
+  mode: v2
+workers:
+  - name: worker
+    futurePolicy:
+      mode: v2
+`)
+
+	load := NewFactorySourceLoader(localTestFileSystem{})
+	jsonSource, err := load(jsonPath)
+	if err != nil {
+		t.Fatalf("load JSON: %v", err)
+	}
+	yamlSource, err := load(yamlPath)
+	if err != nil {
+		t.Fatalf("load YAML: %v", err)
+	}
+	_, jsonDiagnostics, err := factoryconfig.DecodeAuthoredFactoryAPIWithDiagnostics(jsonSource.Data)
+	if err != nil {
+		t.Fatalf("decode JSON: %v", err)
+	}
+	_, yamlDiagnostics, err := factoryconfig.DecodeAuthoredFactoryAPIWithDiagnostics(yamlSource.Data)
+	if err != nil {
+		t.Fatalf("decode YAML: %v", err)
+	}
+	want := []string{"$.logicalRoundTrip", "$.workers[0].futurePolicy"}
+	if !reflect.DeepEqual(jsonDiagnostics.Paths(), want) {
+		t.Fatalf("JSON diagnostics = %#v, want %#v", jsonDiagnostics.Paths(), want)
+	}
+	if !reflect.DeepEqual(yamlDiagnostics.Paths(), want) {
+		t.Fatalf("YAML diagnostics = %#v, want %#v", yamlDiagnostics.Paths(), want)
+	}
+}
+
 func TestFactorySourceLoaderRejectsUnsafeOrInvalidYAML(t *testing.T) {
 	t.Parallel()
 

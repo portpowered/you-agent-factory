@@ -131,6 +131,7 @@ const (
 	InvocationReturnPolicyExplicit              = contracts.InvocationReturnPolicyExplicit
 
 	FactoryAgentsFileName                 = contracts.FactoryAgentsFileName
+	FactoryConfigIgnoredFieldWarningCode  = contracts.FactoryConfigIgnoredFieldWarningCode
 	WorkersDir                            = contracts.WorkersDir
 	WorkstationsDir                       = contracts.WorkstationsDir
 	BundledFileTypeRootHelper             = contracts.BundledFileTypeRootHelper

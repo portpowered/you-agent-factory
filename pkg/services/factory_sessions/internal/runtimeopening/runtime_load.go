@@ -136,6 +136,15 @@ func loadRuntime(
 			"runtime config load replaced portable bundled files",
 			loaded.PortableBundledFileReplacements(),
 		)
+		if config := loaded.FactoryConfig(); config != nil {
+			if paths := config.IgnoredJSONPaths(); len(paths) > 0 {
+				logger.Warn(
+					"ignored unknown Factory Definition fields",
+					zap.String("code", factorydefinitions.FactoryConfigIgnoredFieldWarningCode),
+					zap.Strings("ignored_json_paths", paths),
+				)
+			}
+		}
 	}
 	reportRuntimeReplayMetadata(
 		dir,

@@ -234,7 +234,7 @@ func TestCanonicalWritersRejectInvalidFactoryMetadata(t *testing.T) {
 	}
 }
 
-func TestFactoryEntityDescriptionsKeepStrictUnknownFieldRejection(t *testing.T) {
+func TestFactoryEntityDescriptionsReportUnknownFieldPaths(t *testing.T) {
 	mapper := NewFactoryConfigMapper()
 	payloads := []string{
 		`{"name":"strict","description":{"type":"LOCALIZABLE_ASSET","value":"Factory","unexpected":true},"workTypes":[],"workers":[],"workstations":[]}`,
@@ -242,10 +242,19 @@ func TestFactoryEntityDescriptionsKeepStrictUnknownFieldRejection(t *testing.T) 
 		`{"name":"strict","workTypes":[],"workers":[{"name":"worker","description":{"type":"LOCALIZABLE_ASSET","value":"Worker","unexpected":true}}],"workstations":[]}`,
 		`{"name":"strict","workTypes":[],"workers":[],"workstations":[{"name":"station","worker":"worker","description":{"type":"LOCALIZABLE_ASSET","value":"Station","unexpected":true},"inputs":[]}]}`,
 	}
-	for _, payload := range payloads {
-		_, err := mapper.Expand([]byte(payload))
-		if err == nil || !strings.Contains(err.Error(), `json: unknown field "unexpected"`) {
-			t.Fatalf("Expand(%s) error = %v, want unknown-field rejection", payload, err)
+	wantPaths := []string{
+		"$.description.unexpected",
+		"$.workTypes[0].description.unexpected",
+		"$.workers[0].description.unexpected",
+		"$.workstations[0].description.unexpected",
+	}
+	for index, payload := range payloads {
+		_, diagnostics, err := mapper.ExpandWithDiagnostics([]byte(payload))
+		if err != nil {
+			t.Fatalf("ExpandWithDiagnostics(%s) error = %v", payload, err)
+		}
+		if got := diagnostics.Paths(); len(got) != 1 || got[0] != wantPaths[index] {
+			t.Fatalf("ignored JSON paths = %#v, want %#v", got, []string{wantPaths[index]})
 		}
 	}
 }

@@ -19,6 +19,7 @@ func CloneFactoryConfig(cfg *FactoryConfig) (*FactoryConfig, error) {
 	if err := json.Unmarshal(data, &cloned); err != nil {
 		return nil, fmt.Errorf("decode Factory definition clone: %w", err)
 	}
+	cloned.SetIgnoredJSONPaths(cfg.IgnoredJSONPaths())
 	for index := range cloned.Workers {
 		if index < len(cfg.Workers) {
 			cloned.Workers[index].PromptSourcePath = cfg.Workers[index].PromptSourcePath

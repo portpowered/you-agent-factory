@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	pathpkg "path"
+	"sort"
 	"strings"
 	"text/template"
 	"time"
@@ -183,6 +184,47 @@ type FactoryConfig struct {
 	Layout              *FactoryLayoutConfig            `json:"layout,omitempty"`
 	Workers             []workerconfig.Config           `json:"workers"`
 	Workstations        []FactoryWorkstationConfig      `json:"workstations"`
+	ignoredJSONPaths    []string                        `json:"-"`
+}
+
+// FactoryConfigIgnoredFieldWarningCode identifies a forward-compatible field
+// that was ignored while decoding a customer-authored Factory Definition.
+const FactoryConfigIgnoredFieldWarningCode = "FACTORY_CONFIG_UNKNOWN_FIELDS_IGNORED"
+
+// SetIgnoredJSONPaths retains the deterministic paths of customer-authored
+// fields that were ignored while decoding this Factory Definition. The paths
+// are operational diagnostics and are deliberately excluded from persisted
+// Factory configuration.
+func (cfg *FactoryConfig) SetIgnoredJSONPaths(paths []string) {
+	if cfg == nil {
+		return
+	}
+	unique := make(map[string]struct{}, len(paths))
+	for _, path := range paths {
+		path = strings.TrimSpace(path)
+		if path == "" {
+			continue
+		}
+		unique[path] = struct{}{}
+	}
+	if len(unique) == 0 {
+		cfg.ignoredJSONPaths = nil
+		return
+	}
+	cfg.ignoredJSONPaths = make([]string, 0, len(unique))
+	for path := range unique {
+		cfg.ignoredJSONPaths = append(cfg.ignoredJSONPaths, path)
+	}
+	sort.Strings(cfg.ignoredJSONPaths)
+}
+
+// IgnoredJSONPaths returns a detached, sorted copy of compatibility paths
+// collected while decoding this Factory Definition.
+func (cfg *FactoryConfig) IgnoredJSONPaths() []string {
+	if cfg == nil || len(cfg.ignoredJSONPaths) == 0 {
+		return nil
+	}
+	return append([]string(nil), cfg.ignoredJSONPaths...)
 }
 
 // FactoryVersion is the durable optimistic-concurrency metadata stored with a
