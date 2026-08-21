@@ -379,7 +379,7 @@ func TestRootDelegatesAssetPreparation(t *testing.T) {
 	if err != nil {
 		t.Fatalf("PrepareModelAssets: %v", err)
 	}
-	if !reflect.DeepEqual(got, want) || privateAssets.request != request {
+	if !reflect.DeepEqual(got, want) || !reflect.DeepEqual(privateAssets.request, request) {
 		t.Fatalf("PrepareModelAssets = %#v request %#v, want %#v / %#v", got, privateAssets.request, want, request)
 	}
 }

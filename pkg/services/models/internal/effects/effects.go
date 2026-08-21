@@ -98,6 +98,7 @@ type AssetHTTPDoer interface {
 type AssetMakeDirectories func(string, os.FileMode) error
 type AssetInspectPath func(string) (os.FileInfo, error)
 type AssetResolveHomeDirectory func() (string, error)
+type AssetResolveEnvironment func(string) string
 type AssetWriteFile func(string, []byte, os.FileMode) error
 type AssetRenamePath func(string, string) error
 type AssetRemovePath func(string) error

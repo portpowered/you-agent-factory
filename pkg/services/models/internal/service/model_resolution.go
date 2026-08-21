@@ -317,28 +317,11 @@ func parseModelSource(value string) (modelSourceReference, bool, error) {
 func parseHuggingFaceSource(value string) modelSourceReference {
 	invalid := modelSourceReference{Kind: models.ModelReferenceSourceHuggingFace}
 	rest := strings.TrimSpace(value[len("hf://"):])
-	if rest == "" || strings.ContainsAny(rest, "\x00?#\\") {
+	if !validHuggingFaceReference(rest) {
 		return invalid
 	}
-	revision := ""
-	base := rest
-	hasRevision := false
-	if at := strings.LastIndex(rest, "@"); at >= 0 {
-		hasRevision = true
-		base, revision = rest[:at], strings.TrimSpace(rest[at+1:])
-	}
+	base, revision, _ := splitHuggingFaceReference(rest)
 	parts := strings.Split(base, "/")
-	if len(parts) < 2 || strings.TrimSpace(parts[0]) == "" || strings.TrimSpace(parts[1]) == "" || hasRevision && revision == "" {
-		return invalid
-	}
-	for _, part := range parts {
-		if strings.TrimSpace(part) == "" || part == "." || part == ".." || strings.ContainsAny(part, " \t\r\n@") {
-			return invalid
-		}
-	}
-	if strings.ContainsAny(revision, "\x00?#\\@ \t\r\n") {
-		return invalid
-	}
 	owner, repository := strings.TrimSpace(parts[0]), strings.TrimSpace(parts[1])
 	file := strings.Join(parts[2:], "/")
 	safe := "hf://" + owner + "/" + repository
@@ -353,6 +336,40 @@ func parseHuggingFaceSource(value string) modelSourceReference {
 		SafeSource: safe,
 		Owner:      owner, Repository: repository, File: file, Revision: revision,
 	}
+}
+
+func validHuggingFaceReference(rest string) bool {
+	if rest == "" || strings.ContainsAny(rest, "\x00?#\\") {
+		return false
+	}
+	base, revision, hasRevision := splitHuggingFaceReference(rest)
+	parts := strings.Split(base, "/")
+	if len(parts) < 2 || strings.TrimSpace(parts[0]) == "" || strings.TrimSpace(parts[1]) == "" {
+		return false
+	}
+	if hasRevision && revision == "" {
+		return false
+	}
+	for _, part := range parts {
+		if invalidHuggingFacePathPart(part) {
+			return false
+		}
+	}
+	return !strings.ContainsAny(revision, "\x00?#\\@ \t\r\n")
+}
+
+func splitHuggingFaceReference(rest string) (base, revision string, hasRevision bool) {
+	base = rest
+	if at := strings.LastIndex(rest, "@"); at >= 0 {
+		hasRevision = true
+		base, revision = rest[:at], strings.TrimSpace(rest[at+1:])
+	}
+	return base, revision, hasRevision
+}
+
+func invalidHuggingFacePathPart(part string) bool {
+	return strings.TrimSpace(part) == "" || part == "." || part == ".." ||
+		strings.ContainsAny(part, " \t\r\n@")
 }
 
 func parseFileSource(value string) modelSourceReference {

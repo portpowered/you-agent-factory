@@ -27,6 +27,7 @@ func NewService(
 	readDirectory modelseffects.AssetReadDirectory,
 	createFile modelseffects.AssetCreateFile,
 	openFile modelseffects.AssetOpenFile,
+	options ...assets.ConstructionOptions,
 ) (assets.Service, error) {
 	if scopes == nil {
 		return nil, fmt.Errorf("Models Assets runtime scopes service is required")
@@ -58,6 +59,7 @@ func NewService(
 		readDirectory,
 		createFile,
 		openFile,
+		options...,
 	), nil
 }
 

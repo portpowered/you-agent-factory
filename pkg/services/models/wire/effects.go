@@ -15,6 +15,7 @@ type AssetHTTPDoer = effects.AssetHTTPDoer
 type AssetMakeDirectories = effects.AssetMakeDirectories
 type AssetInspectPath = effects.AssetInspectPath
 type AssetResolveHomeDirectory = effects.AssetResolveHomeDirectory
+type AssetResolveEnvironment = effects.AssetResolveEnvironment
 type AssetWriteFile = effects.AssetWriteFile
 type AssetRenamePath = effects.AssetRenamePath
 type AssetRemovePath = effects.AssetRemovePath

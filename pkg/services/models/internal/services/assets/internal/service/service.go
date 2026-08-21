@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
 
 	models "github.com/portpowered/infinite-you/pkg/services/models"
 	modelseffects "github.com/portpowered/infinite-you/pkg/services/models/internal/effects"
@@ -19,20 +20,25 @@ import (
 const metadataFileName = ".managed-cache.json"
 
 type service struct {
-	scopes        runtimescopes.Service
-	platform      models.AssetHostPlatform
-	client        modelseffects.AssetHTTPDoer
-	endpoints     models.RuntimeAssetEndpoints
-	makeDirectory modelseffects.AssetMakeDirectories
-	inspectPath   modelseffects.AssetInspectPath
-	resolveHome   modelseffects.AssetResolveHomeDirectory
-	writeFile     modelseffects.AssetWriteFile
-	renamePath    modelseffects.AssetRenamePath
-	removePath    modelseffects.AssetRemovePath
-	readFile      modelseffects.AssetReadFile
-	readDirectory modelseffects.AssetReadDirectory
-	createFile    modelseffects.AssetCreateFile
-	openFile      modelseffects.AssetOpenFile
+	scopes             runtimescopes.Service
+	platform           models.AssetHostPlatform
+	client             modelseffects.AssetHTTPDoer
+	endpoints          models.RuntimeAssetEndpoints
+	makeDirectory      modelseffects.AssetMakeDirectories
+	inspectPath        modelseffects.AssetInspectPath
+	resolveHome        modelseffects.AssetResolveHomeDirectory
+	writeFile          modelseffects.AssetWriteFile
+	renamePath         modelseffects.AssetRenamePath
+	removePath         modelseffects.AssetRemovePath
+	readFile           modelseffects.AssetReadFile
+	readDirectory      modelseffects.AssetReadDirectory
+	createFile         modelseffects.AssetCreateFile
+	openFile           modelseffects.AssetOpenFile
+	resolveEnvironment modelseffects.AssetResolveEnvironment
+	resolveRevision    func(context.Context, string) (string, error)
+
+	cacheMu  sync.Mutex
+	inflight map[string]*assetCacheCall
 }
 
 type assetSpec struct {
@@ -72,22 +78,39 @@ func New(
 	readDirectory modelseffects.AssetReadDirectory,
 	createFile modelseffects.AssetCreateFile,
 	openFile modelseffects.AssetOpenFile,
+	options ...assets.ConstructionOptions,
 ) assets.Service {
+	resolveEnvironment := modelseffects.AssetResolveEnvironment(os.Getenv)
+	var resolveRevision func(context.Context, string) (string, error)
+	if len(options) > 0 {
+		if options[0].ResolveEnvironment != nil {
+			resolveEnvironment = options[0].ResolveEnvironment
+		}
+		resolveRevision = options[0].ResolveRevision
+	}
+	if resolveRevision == nil {
+		resolveRevision = func(context.Context, string) (string, error) {
+			return "", models.ErrModelRevisionUnresolved
+		}
+	}
 	return &service{
-		scopes:        scopes,
-		platform:      platform,
-		client:        client,
-		endpoints:     endpoints,
-		makeDirectory: makeDirectory,
-		inspectPath:   inspectPath,
-		resolveHome:   resolveHome,
-		writeFile:     writeFile,
-		renamePath:    renamePath,
-		removePath:    removePath,
-		readFile:      readFile,
-		readDirectory: readDirectory,
-		createFile:    createFile,
-		openFile:      openFile,
+		scopes:             scopes,
+		platform:           platform,
+		client:             client,
+		endpoints:          endpoints,
+		makeDirectory:      makeDirectory,
+		inspectPath:        inspectPath,
+		resolveHome:        resolveHome,
+		writeFile:          writeFile,
+		renamePath:         renamePath,
+		removePath:         removePath,
+		readFile:           readFile,
+		readDirectory:      readDirectory,
+		createFile:         createFile,
+		openFile:           openFile,
+		resolveEnvironment: resolveEnvironment,
+		resolveRevision:    resolveRevision,
+		inflight:           make(map[string]*assetCacheCall),
 	}
 }
 
@@ -241,7 +264,19 @@ func (s *service) resolveScope(
 	return models.RuntimeScopeConfig{
 		CacheDirectory: binding.CacheDirectory,
 		Runtime:        *runtimeConfig,
+		OperatorModels: cloneModelOverlays(binding.OperatorModels),
 	}.Clone(), nil
+}
+
+func cloneModelOverlays(overlays map[string]models.ModelOverlay) map[string]models.ModelOverlay {
+	if overlays == nil {
+		return nil
+	}
+	cloned := make(map[string]models.ModelOverlay, len(overlays))
+	for name, overlay := range overlays {
+		cloned[name] = overlay.Clone()
+	}
+	return cloned
 }
 
 func (s *service) resolveSource(
@@ -522,9 +557,25 @@ func assetContextError(ctx context.Context) error {
 	if ctx == nil || ctx.Err() == nil {
 		return nil
 	}
-	return fmt.Errorf(
-		"%w: %w",
-		models.ErrAssetCancelled,
-		errors.Join(ctx.Err(), context.Cause(ctx)),
-	)
+	return &assetCancellationError{
+		cause: errors.Join(ctx.Err(), context.Cause(ctx)),
+	}
+}
+
+type assetCancellationError struct {
+	cause error
+}
+
+func (failure *assetCancellationError) Error() string {
+	if failure == nil {
+		return ""
+	}
+	return models.ErrAssetCancelled.Error()
+}
+
+func (failure *assetCancellationError) Unwrap() error {
+	if failure == nil {
+		return nil
+	}
+	return errors.Join(models.ErrAssetCancelled, failure.cause)
 }

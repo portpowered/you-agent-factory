@@ -11,6 +11,7 @@ import (
 	"context"
 	"encoding/hex"
 	"fmt"
+	"os"
 	"reflect"
 	"time"
 
@@ -180,6 +181,10 @@ func composeModelsService(
 		runtimeScopes, assetPlatform, assetHTTP, resolvedEndpoints,
 		assetMkdirAll, assetStat, assetHome, assetWriteFile, assetRename,
 		assetRemove, assetReadFile, assetReadDir, assetCreate, assetOpen,
+		scopedassets.ConstructionOptions{
+			ResolveEnvironment: os.Getenv,
+			ResolveRevision:    firstRevisionResolver(revisionResolvers),
+		},
 	)
 	if err != nil {
 		return nil, err
