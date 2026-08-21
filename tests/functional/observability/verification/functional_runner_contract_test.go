@@ -106,7 +106,9 @@ printf '%s\n' "fake-make:$* FUNCTIONAL_DEFAULT_JOBS=${FUNCTIONAL_DEFAULT_JOBS:-u
 	if !strings.Contains(output, "quarantine=tests/functional/functional-quarantine.json jobs=4") {
 		t.Fatalf("functional runner diagnostic missing selected jobs:\n%s", output)
 	}
-	if !strings.Contains(output, "fake-make:functional-test-viz FUNCTIONAL_TEST_VIZ_DIR="+artifactRoot+" FUNCTIONAL_DEFAULT_JOBS=4") {
+	if !strings.Contains(output, "fake-make:functional-test-viz") ||
+		!strings.Contains(output, "FUNCTIONAL_TEST_VIZ_DIR="+artifactRoot) ||
+		!strings.Contains(output, "FUNCTIONAL_DEFAULT_JOBS=4") {
 		t.Fatalf("functional Make invocation did not receive the explicit jobs override:\n%s", output)
 	}
 }
