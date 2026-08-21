@@ -1,8 +1,13 @@
 import type { GraphSemanticIconKind } from "./semantic-icon.js";
 export declare const FACTORY_GRAPH_WORK_STATE_TYPES: readonly ["INITIAL", "PROCESSING", "TERMINAL", "FAILED"];
 export type FactoryGraphWorkStateType = (typeof FACTORY_GRAPH_WORK_STATE_TYPES)[number];
+/** Canonical work-state categories may grow without requiring a UI release. */
+export type FactoryGraphWorkStateTypeValue = FactoryGraphWorkStateType | (string & {});
 export declare const WORK_STATE_PHASE_LEGEND_ORDER: readonly ["INITIAL", "PROCESSING", "TERMINAL", "FAILED"];
 export declare function workStatePhaseSwatchClassName(workStateType: FactoryGraphWorkStateType): string;
-export declare function workStatePhaseSurfaceClassName(workStateType: FactoryGraphWorkStateType | undefined): string;
-export declare function workStatePhaseSemanticIconKind(workStateType: FactoryGraphWorkStateType | undefined): GraphSemanticIconKind;
-export declare function workStatePhaseSemanticIconClassName(workStateType: FactoryGraphWorkStateType | undefined): string;
+export declare function workStatePhaseSurfaceClassName(workStateType: FactoryGraphWorkStateTypeValue | undefined): string;
+export declare function workStatePhaseSemanticIconKind(workStateType: FactoryGraphWorkStateTypeValue | undefined): GraphSemanticIconKind;
+export declare function workStatePhaseSemanticIconClassName(workStateType: FactoryGraphWorkStateTypeValue | undefined): string;
+export declare function isFactoryGraphKnownWorkStateType(workStateType: FactoryGraphWorkStateTypeValue | undefined): workStateType is FactoryGraphWorkStateType;
+/** Returns an unfamiliar category unchanged for a neutral raw-value label. */
+export declare function factoryGraphUnknownWorkStateType(workStateType: FactoryGraphWorkStateTypeValue | undefined): string | undefined;

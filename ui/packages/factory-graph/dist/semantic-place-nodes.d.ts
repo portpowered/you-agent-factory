@@ -3,10 +3,10 @@ import type { FactoryGraphNodeInteractionOverlay } from "./node-interaction-over
 import type { FactoryGraphNodeResizeControlsProps } from "./node-resize-controls.js";
 import { type FactoryGraphNodeHandle } from "./semantic-node-shell.js";
 import type { FactoryGraphPlaceRef } from "./semantic-support-nodes.js";
-import { type FactoryGraphWorkStateType } from "./work-state-presentation.js";
+import { type FactoryGraphWorkStateTypeValue } from "./work-state-presentation.js";
 export interface FactoryGraphSemanticPlaceRef extends FactoryGraphPlaceRef {
     kind: "constraint" | "limit" | "resource" | "work_state" | (string & {});
-    state_category?: FactoryGraphWorkStateType;
+    state_category?: FactoryGraphWorkStateTypeValue;
 }
 export interface FactoryGraphBasePlaceNodeData extends Record<string, unknown> {
     activeFlow: boolean;

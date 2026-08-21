@@ -115,7 +115,6 @@ export function FactoryGraphWorkerNodeView({
     data.workerType,
     data.runnerId,
   );
-  const isExpanded = data.expanded === true;
   const selectable = data.onSelectWorker !== undefined;
   const selected = data.selectedWorker || reactFlowSelected;
   const visualState = resolveFactoryGraphVisualState({
@@ -171,7 +170,7 @@ export function FactoryGraphWorkerNodeView({
           </strong>
         </span>
       </span>
-      {isExpanded ? (
+      {data.expanded === true ? (
         <FactoryGraphNodeExpandedContent family="worker">
           <span data-factory-graph-expanded-field="worker-type">
             {data.workerType ?? workerLabel}

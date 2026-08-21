@@ -7,7 +7,7 @@ import { FactoryGraphPlaceTokenCount } from "./semantic-place-token-count.js";
 import { FactoryGraphWorkProgressMarker } from "./semantic-work-progress-marker.js";
 import { resolveFactoryGraphVisualState } from "./visual-state.js";
 import { factoryGraphWorkProgressMode } from "./work-progress-presentation.js";
-import { workStatePhaseSurfaceClassName, } from "./work-state-presentation.js";
+import { factoryGraphUnknownWorkStateType, isFactoryGraphKnownWorkStateType, workStatePhaseSurfaceClassName, } from "./work-state-presentation.js";
 const CONTENT_CLASS = "flex min-w-0 w-full flex-col gap-0.5 overflow-hidden";
 export function FactoryGraphStatePositionNodeView(props) {
     return _jsx(FactoryGraphPlaceNodeView, { ...props });
@@ -26,6 +26,9 @@ function FactoryGraphPlaceNodeView({ data, selected: reactFlowSelected, }) {
         : data.place.kind === "resource"
             ? "resource"
             : "constraint";
+    const canonicalWorkStateType = stateNode && isFactoryGraphKnownWorkStateType(data.place.state_category)
+        ? data.place.state_category
+        : undefined;
     const className = classNames(placeNodeClassName(data.place), factoryGraphNodeHoverClassName({
         activeFlow: data.activeFlow,
         muted: data.muted,
@@ -42,7 +45,7 @@ function FactoryGraphPlaceNodeView({ data, selected: reactFlowSelected, }) {
                 ? "resource"
                 : "constraint",
         focused: data.focused,
-        lifecycle: stateNode ? data.place.state_category : undefined,
+        lifecycle: canonicalWorkStateType,
         muted: data.muted,
         selected,
         validation: data.validationError,
@@ -52,18 +55,19 @@ function FactoryGraphPlaceNodeView({ data, selected: reactFlowSelected, }) {
             activeFlow: data.activeFlow,
             activeWork: holdsWork,
             focused: data.focused,
-            lifecycle: stateNode ? data.place.state_category : undefined,
+            lifecycle: canonicalWorkStateType,
             muted: data.muted,
             selected,
             validation: data.validationError,
-        }, children: selectable ? (_jsx(GraphNodeButton, { "aria-invalid": data.validationError ? true : undefined, "aria-label": data.validationMessage ?? selectStateLabel(placeLabel, data.locale), "aria-pressed": selected, className: CONTENT_CLASS, "data-selected-state": selected ? "true" : undefined, title: data.validationMessage, onClick: (event) => {
+        }, children: selectable ? (_jsx(GraphNodeButton, { "aria-invalid": data.validationError ? true : undefined, "aria-label": selectStateLabelWithValidation(placeLabel, data.locale, data.place.state_category, data.validationMessage), "aria-pressed": selected, className: CONTENT_CLASS, "data-selected-state": selected ? "true" : undefined, title: data.validationMessage, onClick: (event) => {
                 event.stopPropagation();
                 data.onSelectStateNode?.(data.place.place_id);
             }, children: content })) : (content) }));
 }
 function FactoryGraphStatePositionContent({ activeItemLabels, expanded, locale, place, tokenCount, visualState, }) {
     const label = factoryGraphPlaceLabel(place);
-    return (_jsxs(_Fragment, { children: [_jsxs("span", { className: "grid min-h-6 min-w-0 grid-cols-[auto_minmax(0,1fr)] items-start gap-1.5 overflow-hidden", "data-state-label-zone": true, children: [_jsx(FactoryGraphPlaceSemanticIcon, { locale: locale, place: place, visualState: visualState }), _jsx(FactoryGraphPlaceLabelText, { dataPrefix: "state", place: place })] }), _jsx("span", { className: "flex min-h-5 w-full shrink-0 items-center justify-center overflow-hidden", "data-state-marker-zone": true, title: label, children: stateMarkers(tokenCount, locale, visualState) ?? (_jsx("span", { className: "sr-only", children: activeItemCountLabel(tokenCount, locale) })) }), expanded ? (_jsx(FactoryGraphNodeExpandedContent, { family: "work-state", children: _jsx("span", { "data-factory-graph-expanded-field": "active-items", children: activeItemLabels.length > 0
+    const unknownWorkStateType = factoryGraphUnknownWorkStateType(place.state_category);
+    return (_jsxs(_Fragment, { children: [_jsxs("span", { className: "grid min-h-6 min-w-0 grid-cols-[auto_minmax(0,1fr)] items-start gap-1.5 overflow-hidden", "data-state-label-zone": true, children: [_jsx(FactoryGraphPlaceSemanticIcon, { locale: locale, place: place, visualState: visualState }), _jsxs("span", { className: "grid min-w-0 gap-px overflow-hidden", children: [unknownWorkStateType ? (_jsx("span", { className: "block overflow-hidden text-[0.62rem] font-bold uppercase leading-none text-on-surface-variant", "data-state-category-label": true, title: unknownWorkStateType, children: unknownWorkStateType })) : null, _jsx(FactoryGraphPlaceLabelText, { dataPrefix: "state", place: place })] })] }), _jsx("span", { className: "flex min-h-5 w-full shrink-0 items-center justify-center overflow-hidden", "data-state-marker-zone": true, title: label, children: stateMarkers(tokenCount, locale, visualState) ?? (_jsx("span", { className: "sr-only", children: activeItemCountLabel(tokenCount, locale) })) }), expanded ? (_jsx(FactoryGraphNodeExpandedContent, { family: "work-state", children: _jsx("span", { "data-factory-graph-expanded-field": "active-items", children: activeItemLabels.length > 0
                         ? activeItemLabels.join(", ")
                         : activeItemCountLabel(tokenCount, locale) }) })) : null] }));
 }
@@ -96,6 +100,16 @@ function activeItemCountLabel(count, locale) {
 }
 function selectStateLabel(label, locale) {
     return locale === "zh-CN" ? `选择 ${label} 状态` : `Select ${label} state`;
+}
+function selectStateLabelWithValidation(label, locale, stateCategory, validationMessage) {
+    const unknownWorkStateType = factoryGraphUnknownWorkStateType(stateCategory);
+    const selectionLabel = selectStateLabel(label, locale);
+    const compatibilityLabel = unknownWorkStateType
+        ? `${selectionLabel} (${unknownWorkStateType})`
+        : selectionLabel;
+    return validationMessage
+        ? `${validationMessage} · ${compatibilityLabel}`
+        : compatibilityLabel;
 }
 function tokenCountLabel(place, count, locale) {
     if (locale === "zh-CN")
