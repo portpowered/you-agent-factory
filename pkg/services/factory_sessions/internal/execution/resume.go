@@ -61,6 +61,14 @@ func (s *JavaScriptRuntimeService) ResumeInterruptedSession(
 	resumed.events = rebuildRuntimeSessionCanonicalEvents(&resumed)
 	s.sessions[id] = &resumed
 	s.mu.Unlock()
+	if err := s.ensureSessionResponseEventsIfNeeded(&resumed); err != nil {
+		s.mu.Lock()
+		if active, ok := s.sessions[id]; ok && active == &resumed {
+			delete(s.sessions, id)
+		}
+		s.mu.Unlock()
+		return AsyncStartResult{}, err
+	}
 
 	normalized := *state.startRequest
 	resolved := state.resolvedSource

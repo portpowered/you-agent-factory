@@ -111,6 +111,31 @@ func (s *Service) ResumeInterruptedSession(
 	}
 	return result, err
 }
+
+// SubscribeResponseEvents keeps the response-event read surface behind the
+// replay wall until the explicit resume handoff succeeds. Once handed off,
+// the cursor is served by the already-composed durable owner.
+func (s *Service) SubscribeResponseEvents(
+	ctx context.Context,
+	sessionID string,
+	request factorysessions.ResponseEventSubscriptionRequest,
+) (*factorysessions.ResponseEventCursor, error) {
+	if err := s.session(sessionID); err != nil {
+		return nil, err
+	}
+	owner, handedOff := s.handedOffOwnerForSession(sessionID)
+	if !handedOff {
+		return nil, ErrNonLiveReplay
+	}
+	subscriber, ok := owner.(interface {
+		SubscribeResponseEvents(context.Context, string, factorysessions.ResponseEventSubscriptionRequest) (*factorysessions.ResponseEventCursor, error)
+	})
+	if !ok {
+		return nil, factorysessions.ErrRuntimeNotAvailable
+	}
+	return subscriber.SubscribeResponseEvents(ctx, sessionID, request)
+}
+
 func (s *Service) GetSession(ctx context.Context, id string) (fse.SessionReadResult, error) {
 	if err := s.session(id); err != nil {
 		return fse.SessionReadResult{}, err

@@ -68,6 +68,25 @@ func (owner *portableReplayDurableOwner) HasRestorableState(
 	return true, nil
 }
 
+// SubscribeResponseEvents forwards the optional response-event capability
+// through the replay owner wrapper after the explicit handoff.
+func (owner *portableReplayDurableOwner) SubscribeResponseEvents(
+	ctx context.Context,
+	sessionID string,
+	request factorysessions.ResponseEventSubscriptionRequest,
+) (*factorysessions.ResponseEventCursor, error) {
+	if owner == nil || owner.Service == nil {
+		return nil, factorysessions.ErrRuntimeNotAvailable
+	}
+	subscriber, ok := owner.Service.(interface {
+		SubscribeResponseEvents(context.Context, string, factorysessions.ResponseEventSubscriptionRequest) (*factorysessions.ResponseEventCursor, error)
+	})
+	if !ok {
+		return nil, factorysessions.ErrRuntimeNotAvailable
+	}
+	return subscriber.SubscribeResponseEvents(ctx, sessionID, request)
+}
+
 type portableReplayRuntimeCleanup struct {
 	mu       sync.Mutex
 	runtime  runtimeports.RuntimeInstance

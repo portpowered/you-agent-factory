@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -63,6 +64,9 @@ type FunctionalAPIServer struct {
 	process         *ProcessCommand
 	api             *ProcessAPIServer
 	url             string
+	closeProcess    func(context.Context) error
+	closeOnce       sync.Once
+	closeErr        error
 	recordingReader recordings.WorkerRecordingReader
 }
 
@@ -92,6 +96,10 @@ func StartFunctionalAPIServer(t *testing.T, cfg FunctionalAPIServerConfig) *Func
 	api := NewProcessAPIServer()
 	edges.APIServerStarter = api.Start
 	process, recordingReader := BuildProcessWithRecordingReader(t, edges)
+	var closeProcess func(context.Context) error
+	if closer, ok := process.(interface{ Close(context.Context) error }); ok {
+		closeProcess = closer.Close
+	}
 
 	args := append([]string{"you", "run"}, functionalRunArgs(t, cfg)...)
 	inputs := FakeInputs(context.Background(), args)
@@ -110,14 +118,13 @@ func StartFunctionalAPIServer(t *testing.T, cfg FunctionalAPIServerConfig) *Func
 	} else {
 		inputs.Env = append([]string(nil), cfg.Env...)
 	}
-	if closer, ok := process.(interface{ Close(context.Context) error }); ok {
-		t.Cleanup(func() {
-			closeCtx, cancelClose := context.WithTimeout(context.Background(), processCommandStopTimeout)
-			defer cancelClose()
-			if err := closer.Close(closeCtx); err != nil {
-				t.Errorf("close application process: %v", err)
-			}
-		})
+	server := &FunctionalAPIServer{
+		api:             api,
+		closeProcess:    closeProcess,
+		recordingReader: recordingReader,
+	}
+	if closeProcess != nil {
+		t.Cleanup(func() { server.Close(t) })
 	}
 	if cfg.BeforeStart != nil {
 		cfg.BeforeStart(t, process, inputs.Input)
@@ -134,7 +141,7 @@ func StartFunctionalAPIServer(t *testing.T, cfg FunctionalAPIServerConfig) *Func
 		}
 	})
 	command := StartProcessCommand(t, process, inputs.Input)
-	server := &FunctionalAPIServer{process: command, api: api, recordingReader: recordingReader}
+	server.process = command
 	readyTimeout := functionalServerReadyTimeout
 	if cfg.ServerReadyTimeout > 0 {
 		readyTimeout = cfg.ServerReadyTimeout
@@ -150,6 +157,24 @@ func StartFunctionalAPIServer(t *testing.T, cfg FunctionalAPIServerConfig) *Func
 		})
 	}
 	return server
+}
+
+// Close releases the root process resources after Stop has canceled its
+// customer invocation. Tests that need to reuse durable project state can
+// call it before opening another process against the same directory.
+func (fs *FunctionalAPIServer) Close(t testing.TB) {
+	t.Helper()
+	if fs == nil || fs.closeProcess == nil {
+		return
+	}
+	fs.closeOnce.Do(func() {
+		closeCtx, cancelClose := context.WithTimeout(context.Background(), processCommandStopTimeout)
+		defer cancelClose()
+		fs.closeErr = fs.closeProcess(closeCtx)
+	})
+	if fs.closeErr != nil {
+		t.Errorf("close application process: %v", fs.closeErr)
+	}
 }
 
 func withFunctionalEnvironment(environment []string, name, value string) []string {
