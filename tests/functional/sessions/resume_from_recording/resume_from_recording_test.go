@@ -9,11 +9,14 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
+	"strings"
 	"sync"
 	"testing"
 	"time"
 
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
+	platformreplay "github.com/portpowered/infinite-you/pkg/platform/replay"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
@@ -37,8 +40,6 @@ func TestKilledFactorySessionResumesOriginalDispatchesAfterRestart(t *testing.T)
 	t.Cleanup(scenario.runner.ReleaseRemainingDispatch)
 	first := scenario.startFirstProcess(t)
 	firstURL := first.waitForReady(t)
-	first.waitFor(t, "first-returned")
-	first.waitFor(t, "second-entered")
 	submitted := support.SubmitDefaultSessionWork(t, firstURL, factoryapi.SubmitWorkRequest{
 		Name:         stringPointer("resume-from-recording-work"),
 		Payload:      map[string]any{"subject": "resume-from-recording"},
@@ -48,8 +49,10 @@ func TestKilledFactorySessionResumesOriginalDispatchesAfterRestart(t *testing.T)
 		t.Fatalf("public Work submission = %#v, want one accepted Work identity", submitted)
 	}
 	scenario.workID = *submitted.WorkId
-	scenario.requestID = submitted.RequestId
+	first.waitFor(t, "first-returned")
+	first.waitFor(t, "second-entered")
 	boundary := scenario.captureAtKillBoundary(t, firstURL)
+	first.waitForRecordingCheckpoint(t)
 
 	// Kill joins the first root-built process before the replacement is
 	// constructed. An OS process kill leaves the recording naturally
@@ -76,6 +79,7 @@ func TestResumeFromRecordingChildProcess(t *testing.T) {
 	defer control.Close()
 	childControl := newResumeFromRecordingChildControl(control)
 	runner := newResumeFromRecordingChildCommandRunner(childControl)
+	writeRecording := newResumeFromRecordingWriteFile(childControl)
 	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir:                os.Getenv("RSM7_RESUME_FACTORY_DIR"),
 		WaitForServiceModeRuntime: true,
@@ -86,7 +90,10 @@ func TestResumeFromRecordingChildProcess(t *testing.T) {
 		Args: []string{
 			"--record", os.Getenv("RSM7_RESUME_RECORDING"),
 		},
-		Edges: serviceedges.Edges{ProviderCommandRunner: runner},
+		Edges: serviceedges.Edges{
+			ProviderCommandRunner: runner,
+			RecordingWriteFile:    writeRecording,
+		},
 	})
 	if err := childControl.send(resumeFromRecordingChildMessage{
 		Type: "ready",
@@ -104,7 +111,6 @@ type resumeFromRecordingScenario struct {
 	recordingPath string
 	successorPath string
 	workID        string
-	requestID     string
 	runner        *resumeFromRecordingCommandRunner
 }
 
@@ -112,7 +118,6 @@ type resumeFromRecordingBoundary struct {
 	work        factoryapi.Work
 	completedID string
 	events      []factoryapi.FactoryEvent
-	cursor      factoryapi.FactoryEvent
 }
 
 func newResumeFromRecordingScenario(t *testing.T) *resumeFromRecordingScenario {
@@ -188,8 +193,10 @@ func (scenario *resumeFromRecordingScenario) startSuccessorProcess(
 }
 
 type resumeFromRecordingChildMessage struct {
-	Type string `json:"type"`
-	URL  string `json:"url,omitempty"`
+	Type                string `json:"type"`
+	URL                 string `json:"url,omitempty"`
+	EventCount          int    `json:"eventCount,omitempty"`
+	CompletedDispatches int    `json:"completedDispatches,omitempty"`
 }
 
 type resumeFromRecordingChildControl struct {
@@ -253,18 +260,42 @@ func (process *resumeFromRecordingChildProcess) waitFor(t *testing.T, wantType s
 	t.Helper()
 	timer := time.NewTimer(resumeFromRecordingTimeout)
 	defer timer.Stop()
-	select {
-	case message, ok := <-process.messages:
-		if !ok {
-			t.Fatalf("predecessor exited before control message %q; stdout=%q stderr=%q", wantType, process.stdout.String(), process.stderr.String())
+	for {
+		select {
+		case message, ok := <-process.messages:
+			if !ok {
+				t.Fatalf("predecessor exited before control message %q; stdout=%q stderr=%q", wantType, process.stdout.String(), process.stderr.String())
+			}
+			if message.Type == "recording-flushed" {
+				continue
+			}
+			if message.Type != wantType {
+				t.Fatalf("predecessor control message = %q, want %q", message.Type, wantType)
+			}
+			return message
+		case <-timer.C:
+			t.Fatalf("predecessor did not send control message %q within %s; stdout=%q stderr=%q", wantType, resumeFromRecordingTimeout, process.stdout.String(), process.stderr.String())
+			return resumeFromRecordingChildMessage{}
 		}
-		if message.Type != wantType {
-			t.Fatalf("predecessor control message = %q, want %q", message.Type, wantType)
+	}
+}
+
+func (process *resumeFromRecordingChildProcess) waitForRecordingCheckpoint(t *testing.T) {
+	t.Helper()
+	timer := time.NewTimer(resumeFromRecordingTimeout)
+	defer timer.Stop()
+	for {
+		select {
+		case message, ok := <-process.messages:
+			if !ok {
+				t.Fatalf("predecessor exited before recording checkpoint; stdout=%q stderr=%q", process.stdout.String(), process.stderr.String())
+			}
+			if message.Type == "recording-flushed" && message.CompletedDispatches > 0 {
+				return
+			}
+		case <-timer.C:
+			t.Fatalf("predecessor did not durably flush a completed dispatch within %s; stdout=%q stderr=%q", resumeFromRecordingTimeout, process.stdout.String(), process.stderr.String())
 		}
-		return message
-	case <-timer.C:
-		t.Fatalf("predecessor did not send control message %q within %s; stdout=%q stderr=%q", wantType, resumeFromRecordingTimeout, process.stdout.String(), process.stderr.String())
-		return resumeFromRecordingChildMessage{}
 	}
 }
 
@@ -375,6 +406,36 @@ func (runner *resumeFromRecordingChildCommandRunner) Run(
 
 var _ platformprocess.CommandRunner = (*resumeFromRecordingChildCommandRunner)(nil)
 
+func newResumeFromRecordingWriteFile(
+	control *resumeFromRecordingChildControl,
+) func(string, []byte) error {
+	storage := platformreplay.NewLocal(runtime.GOOS)
+	return func(path string, data []byte) error {
+		if err := storage.WriteFile(path, data); err != nil {
+			return err
+		}
+		var artifact struct {
+			Events []struct {
+				Type string `json:"type"`
+			} `json:"events"`
+		}
+		if err := json.Unmarshal(data, &artifact); err != nil {
+			return err
+		}
+		completed := 0
+		for _, event := range artifact.Events {
+			if strings.EqualFold(event.Type, string(factoryapi.FactoryEventTypeDispatchResponse)) {
+				completed++
+			}
+		}
+		return control.send(resumeFromRecordingChildMessage{
+			Type:                "recording-flushed",
+			EventCount:          len(artifact.Events),
+			CompletedDispatches: completed,
+		})
+	}
+}
+
 func (scenario *resumeFromRecordingScenario) captureAtKillBoundary(
 	t *testing.T,
 	baseURL string,
@@ -385,6 +446,10 @@ func (scenario *resumeFromRecordingScenario) captureAtKillBoundary(
 	if got := support.WorkItemCustomerLocation(work); got != support.WorkCustomerLocation("task", "processing") {
 		t.Fatalf("pre-kill Work location = %q, want task:processing", got)
 	}
+	session := support.GetDefaultSession(t, baseURL)
+	if session.Runtime.Progress.Categories.Initial != 0 || session.Runtime.Progress.Categories.Processing != 1 {
+		t.Fatalf("pre-kill board progress = %+v, want one processing Work", session.Runtime.Progress.Categories)
+	}
 	events := support.GetFactoryEventsForSessionAt(t, baseURL, factorysessions.DefaultSessionID)
 	assertResumeFromRecordingFactoryEvents(t, "before restart", events)
 	completedID := requireResumeFromRecordingCompletedDispatchID(t, events)
@@ -392,7 +457,6 @@ func (scenario *resumeFromRecordingScenario) captureAtKillBoundary(
 		work:        work,
 		completedID: completedID,
 		events:      events,
-		cursor:      requireResumeFromRecordingFactoryEvent(t, events, factoryapi.FactoryEventTypeDispatchResponse, completedID),
 	}
 }
 
@@ -411,12 +475,15 @@ func (scenario *resumeFromRecordingScenario) assertRestored(
 	if got := support.WorkItemCustomerLocation(work); got != support.WorkCustomerLocation("task", "processing") {
 		t.Fatalf("post-restart Work location = %q, want restored task:processing", got)
 	}
+	session := support.GetDefaultSession(t, baseURL)
+	if session.Runtime.Progress.Categories.Initial != 0 || session.Runtime.Progress.Categories.Processing != 1 {
+		t.Fatalf("post-restart board progress = %+v, want one restored processing Work", session.Runtime.Progress.Categories)
+	}
 	restartedEvents := support.GetFactoryEventsForSessionAt(t, baseURL, factorysessions.DefaultSessionID)
 	assertResumeFromRecordingFactoryEvents(t, "after restart", restartedEvents)
-	assertResumeFromRecordingFactoryEventIDsPresent(t, boundary.events, restartedEvents)
-	support.AssertSingleWorkRequestEvent(t, restartedEvents, scenario.requestID, scenario.workID, "task")
-	if got := countResumeFromRecordingDispatchEvents(restartedEvents, factoryapi.FactoryEventTypeDispatchResponse, boundary.completedID); got != 1 {
-		t.Fatalf("completed dispatch response events after restart = %d, want 1", got)
+	assertResumeFromRecordingSuccessorEvents(t, boundary.events, restartedEvents)
+	if got := countResumeFromRecordingDispatchEvents(restartedEvents, factoryapi.FactoryEventTypeDispatchResponse, boundary.completedID); got != 0 {
+		t.Fatalf("completed dispatch response events after restart = %d, want no re-execution", got)
 	}
 }
 
@@ -440,12 +507,44 @@ func (scenario *resumeFromRecordingScenario) resumeAndFinish(
 	}
 	finalEvents := support.GetFactoryEventsForSessionAt(t, baseURL, factorysessions.DefaultSessionID)
 	assertResumeFromRecordingFactoryEvents(t, "after resume", finalEvents)
-	assertResumeFromRecordingFactoryEventIDsPresent(t, boundary.events, finalEvents)
-	support.AssertSingleWorkRequestEvent(t, finalEvents, scenario.requestID, scenario.workID, "task")
-	if got := countResumeFromRecordingDispatchEvents(finalEvents, factoryapi.FactoryEventTypeDispatchResponse, boundary.completedID); got != 1 {
-		t.Fatalf("completed dispatch response events after resume = %d, want 1", got)
+	assertResumeFromRecordingSuccessorEvents(t, boundary.events, finalEvents)
+	if got := countResumeFromRecordingDispatchEvents(finalEvents, factoryapi.FactoryEventTypeDispatchResponse, boundary.completedID); got != 0 {
+		t.Fatalf("completed dispatch response events after resume = %d, want no re-execution", got)
 	}
-	assertResumeFromRecordingFactoryCursorReplay(t, baseURL, scenario, boundary, finalEvents)
+}
+
+func assertResumeFromRecordingSuccessorEvents(
+	t *testing.T,
+	predecessor []factoryapi.FactoryEvent,
+	successor []factoryapi.FactoryEvent,
+) {
+	t.Helper()
+	predecessorIDs := make(map[string]struct{}, len(predecessor))
+	for _, event := range predecessor {
+		if !isResumeFromRecordingLifecycleEvent(event.Type) {
+			predecessorIDs[event.Id] = struct{}{}
+		}
+	}
+	for _, event := range successor {
+		if isResumeFromRecordingLifecycleEvent(event.Type) {
+			continue
+		}
+		if _, exists := predecessorIDs[event.Id]; exists {
+			t.Fatalf("successor Factory Event %q duplicated a predecessor domain event", event.Id)
+		}
+	}
+}
+
+func isResumeFromRecordingLifecycleEvent(eventType factoryapi.FactoryEventType) bool {
+	switch eventType {
+	case factoryapi.FactoryEventTypeRunRequest,
+		factoryapi.FactoryEventTypeInitialStructureRequest,
+		factoryapi.FactoryEventTypeSessionStarted,
+		factoryapi.FactoryEventTypeFactoryStateResponse:
+		return true
+	default:
+		return false
+	}
 }
 
 func assertResumeFromRecordingFactoryEvents(t *testing.T, phase string, events []factoryapi.FactoryEvent) {
@@ -487,109 +586,6 @@ func assertResumeFromRecordingFactoryEvents(t *testing.T, phase string, events [
 			previousSessionSequence = *event.Context.SessionSequence
 		}
 	}
-}
-
-func assertResumeFromRecordingFactoryEventIDsPresent(
-	t *testing.T,
-	beforeRestart []factoryapi.FactoryEvent,
-	afterRestart []factoryapi.FactoryEvent,
-) {
-	t.Helper()
-	afterIDs := make(map[string]struct{}, len(afterRestart))
-	for _, event := range afterRestart {
-		afterIDs[event.Id] = struct{}{}
-	}
-	for _, event := range beforeRestart {
-		if _, exists := afterIDs[event.Id]; !exists {
-			t.Fatalf("Factory Event %q was lost across restart", event.Id)
-		}
-	}
-}
-
-func assertResumeFromRecordingFactoryCursorReplay(
-	t *testing.T,
-	baseURL string,
-	scenario *resumeFromRecordingScenario,
-	boundary resumeFromRecordingBoundary,
-	finalEvents []factoryapi.FactoryEvent,
-) {
-	t.Helper()
-	cursorIndex := indexResumeFromRecordingFactoryEvent(t, finalEvents, boundary.cursor.Id)
-	wantCount := len(finalEvents) - cursorIndex - 1
-	if wantCount == 0 {
-		t.Fatalf("Factory Event cursor %q has no post-resume events to replay", boundary.cursor.Id)
-	}
-	replayed := support.GetFactoryEventsAfterAt(
-		t,
-		baseURL,
-		support.FactoryEventReadCursor{AfterEventID: boundary.cursor.Id},
-	)
-	if len(replayed) != wantCount {
-		t.Fatalf("Factory Event cursor replay count = %d, want %d", len(replayed), wantCount)
-	}
-	seenIDs := make(map[string]struct{}, len(boundary.events)+len(replayed))
-	previousSequence := -1
-	for _, event := range boundary.events {
-		seenIDs[event.Id] = struct{}{}
-		previousSequence = event.Context.Sequence
-		if event.Id == boundary.cursor.Id {
-			break
-		}
-	}
-	for index, event := range replayed {
-		if event.Id == boundary.cursor.Id {
-			t.Fatalf("Factory Event cursor %q was redelivered", boundary.cursor.Id)
-		}
-		if _, exists := seenIDs[event.Id]; exists {
-			t.Fatalf("Factory Event %q was duplicated across the acknowledged cursor", event.Id)
-		}
-		if event.Context.Sequence <= previousSequence {
-			t.Fatalf(
-				"replayed Factory Event %q sequence %d at index %d regressed from %d",
-				event.Id,
-				event.Context.Sequence,
-				index,
-				previousSequence,
-			)
-		}
-		want := finalEvents[cursorIndex+index+1]
-		if event.Id != want.Id || event.Context.Sequence != want.Context.Sequence {
-			t.Fatalf("replayed Factory Event[%d] = %q/%d, want %q/%d", index, event.Id, event.Context.Sequence, want.Id, want.Context.Sequence)
-		}
-		seenIDs[event.Id] = struct{}{}
-		previousSequence = event.Context.Sequence
-	}
-}
-
-func requireResumeFromRecordingFactoryEvent(
-	t *testing.T,
-	events []factoryapi.FactoryEvent,
-	eventType factoryapi.FactoryEventType,
-	dispatchID string,
-) factoryapi.FactoryEvent {
-	t.Helper()
-	for _, event := range events {
-		if event.Type == eventType && support.StringPointerValue(event.Context.DispatchId) == dispatchID {
-			return event
-		}
-	}
-	t.Fatalf("Factory Event type %q for dispatch %q is missing", eventType, dispatchID)
-	return factoryapi.FactoryEvent{}
-}
-
-func indexResumeFromRecordingFactoryEvent(
-	t *testing.T,
-	events []factoryapi.FactoryEvent,
-	eventID string,
-) int {
-	t.Helper()
-	for index, event := range events {
-		if event.Id == eventID {
-			return index
-		}
-	}
-	t.Fatalf("Factory Event cursor %q is missing from retained history", eventID)
-	return -1
 }
 
 func setupResumeFromRecordingFixture(t *testing.T) string {

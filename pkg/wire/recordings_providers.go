@@ -28,9 +28,13 @@ func provideRecordingsRoot(
 	logger logging.Logger,
 ) (recordings.Service, error) {
 	makeDirectories, createTemporaryFile, removePath, renamePath, readFile := provideRecordingFilesystemEffects(edges)
+	writeFile := storage.WriteFile
+	if edges.RecordingWriteFile != nil {
+		writeFile = edges.RecordingWriteFile
+	}
 	return recordingswire.NewRuntimeRoot(
 		targets,
-		storage.WriteFile,
+		writeFile,
 		makeDirectories,
 		createTemporaryFile,
 		removePath,
