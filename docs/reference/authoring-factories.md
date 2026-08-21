@@ -1,6 +1,6 @@
 ---
 author: Agent Factory Team
-last-modified: 2026-08-09
+last-modified: 2026-08-21
 doc-id: agent-factory/authoring-factories
 ---
 
@@ -392,10 +392,11 @@ The command loads the selected JSON or YAML definition, resolves the split
 listening server.
 
 Live runs record a replay-compatible artifact by default. Use `--no-record`,
-`--record <path>`, or `--replay <path>` when you need to override capture or
-playback. Run `you docs record-replay` for generated paths, incompatible flag
-combinations, sensitivity warnings, and copy-pasteable record and replay
-examples.
+`--record <path>`, `--replay <path>`, or `--resume <recording>` when you need to
+override capture, playback, or continuation. Resume writes a successor
+recording by default. Use `--record <path>` to select its path. Run `you docs
+record-replay` for generated paths, incompatible flag combinations, sensitivity
+warnings, and copy-pasteable record, replay, and resume examples.
 
 Run `you docs mock-workers` for the `--with-mock-workers` JSON contract,
 selection fields, and deterministic outcome examples beyond this quick start.

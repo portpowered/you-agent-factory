@@ -162,9 +162,11 @@ or control the same durable `FactorySession`.
 - Keep the matrix narrow. It is meant to revalidate one already supported
   durable JavaScript session path, not to inventory every route or dashboard
   widget.
-- Do not treat replay-resume, broader live-provider bridge parity, or broader
-  MCP host parity as required outcomes for this proof. Those remain explicit
-  follow-up scope outside the shipped operator slice.
+- Do not treat portable JavaScript recording resume, broader live-provider
+  bridge parity, or broader MCP host parity as required outcomes for this
+  proof. See `you docs record-replay` for the supported Factory Event resume
+  path and portable recording limits. This matrix covers durable JavaScript
+  session reads and controls.
 - If the chosen session is already terminal, start another supported durable
   JavaScript session before attempting lifecycle-control confirmation so the
   control outcome remains observable on the same session path.
@@ -197,8 +199,8 @@ you use this proof for closeout review.
 
 ### Explicitly out of scope for this slice
 
-- Replay-resume or persistence-semantics expansion beyond the already shipped
-  durable session reads
+- Portable JavaScript recording resume and persistence-semantics expansion
+  beyond the already shipped durable session reads
 - Broader live-provider bridge parity than the current bounded dispatch,
   artifact, and result inspection path
 - Broader MCP host parity follow-up beyond the currently documented

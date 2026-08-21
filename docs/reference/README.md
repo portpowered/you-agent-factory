@@ -29,8 +29,8 @@ concept owners below when you need the complete customer-facing contract.
 | `config` | Operator initialization plus Factory validation, transformation, and minimum authoring contract | [Config](config.md) and [Author factories](authoring-factories.md) |
 | `factory-validation` | Required pre-run static gate, current validation checks, exact source commands, and validation limits | [Factory validation](factory-validation.md) |
 | `mock-workers` | `--with-mock-workers` and the `mockWorkers` JSON contract | [Mock workers](mock-workers.md) |
-| `record-replay` | Default recording, `--record`, `--replay`, and `--no-record` | [Record and replay](record-replay.md) |
-| `operations` | Real-pipeline lifetime, finite-drain classification, and same-name restart recovery | [Operations](operations.md) |
+| `record-replay` | Default recording, `--record`, `--replay`, `--resume`, and `--no-record` | [Record, replay, and resume](record-replay.md) |
+| `operations` | Real-pipeline lifetime, finite-drain classification, and recorded-state restart recovery | [Operations](operations.md) |
 | `work` | Submitted work: session-scoped work routes, tags, and batch cross-links | [Submitted work](work.md) |
 | `sessions` | Session list, session show, pause and resume, factory query, status API, dashboard, and run modes | [Sessions](sessions.md) |
 | `metrics` | Factory Runtime metrics and exact operator-configured cost rollups with deterministic grouping, coverage, and Factory Session scope | [Metrics](metrics.md) |
@@ -135,9 +135,9 @@ Use these canonical concept owners when you need the current contract.
   full variable inventory, and the JSON-versus-Markdown quoting rules.
 - [Mock workers](mock-workers.md) owns `--with-mock-workers`, the
   `mockWorkers` JSON contract, selection fields, and `runType` outcomes.
-- [Record and replay](record-replay.md) owns default recording, generated
-  artifact paths, `--record`, `--replay`, `--no-record`, and incompatible flag
-  combinations.
+- [Record, replay, and resume](record-replay.md) owns default recording,
+  generated artifact paths, `--record`, `--replay`, `--resume`, `--no-record`,
+  successor recordings, and incompatible flag combinations.
 - [Author factories](authoring-factories.md) keeps factory sequencing, quick-start
   run commands, reusable [`docs/examples/`](../examples/README.md) inputs, and
   links to the dedicated mock-worker and record/replay guides.

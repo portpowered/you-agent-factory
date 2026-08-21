@@ -1,6 +1,6 @@
 ---
 author: Agent Factory Team
-last-modified: 2026-07-30
+last-modified: 2026-08-21
 doc-id: agent-factory/guides/javascript-workflows
 ---
 
@@ -297,7 +297,7 @@ VM internals part of the inspection contract.
 | Non-JSON checkpoint, artifact, log fields, or final value | Execution fails with a bounded `must be JSON-compatible` diagnostic. | The session, earlier dispatches/artifacts/events, and any approved checkpoint references remain inspectable; the rejected value is not promised as an artifact. | Convert the value to JSON data without functions, cycles, or host objects. |
 | Result not ready | Result reads return `resultStatus: NOT_READY` with availability reason `RESULT_NOT_READY`; this is retryable while the session is running. | Status, partial result when present, dispatches, artifacts, and events remain inspectable. | Poll status/events and retry the result read after progress or a terminal transition. |
 | Factory Session not found | CLI reports `SESSION_NOT_FOUND`; REST uses `NOT_FOUND`; MCP returns its Factory Session not-found error envelope. | Nothing is inspectable for that identifier. | Reuse the exact `sessionId` returned by start and confirm the same runtime/storage scope. |
-| Recording flag conflict | `--record` with `--replay`, or `--no-record` with `--record`, is rejected before execution. | No new session or session-owned facts. | Choose one recording mode; see `you docs record-replay`. |
+| Recording flag conflict | `--record` with `--replay`, `--no-record` with `--record`, `--resume` with `--replay`, or `--resume` with `--no-record` is rejected before execution. | No new session or session-owned facts. | Choose one recording mode; see `you docs record-replay`. |
 | Missing, malformed, or incompatible replay | Replay load fails before reconstruction; unsupported artifacts report `unsupported replay artifact schemaVersion`. | No reconstructed session is created from the rejected file; the file itself remains unchanged. | Use an artifact with the supported schema, regenerate it with a compatible `you` version, or run live to create a new recording. |
 
 A successful final result has `resultStatus: FINAL`. A running session can be
@@ -312,4 +312,4 @@ Use the session lifecycle status together with result status and availability.
 - `you docs sessions` — session discovery and inspection
 - `you docs mcp` — fixture-backed and runtime-backed MCP host setup
 - `you docs config` — worker preset and operator-default configuration
-- `you docs record-replay` — recording and replay modes
+- `you docs record-replay` — recording, replay, and resume modes

@@ -1,6 +1,6 @@
 ---
 author: Agent Factory Team
-last-modified: 2026-08-10
+last-modified: 2026-08-21
 doc-id: agent-factory/guides/run
 ---
 
@@ -29,6 +29,7 @@ sources.
 | Keep a local Factory Session alive while idle | Add `--continuously` |
 | Replace live worker dispatch with deterministic outcomes | Add `--with-mock-workers [config.json]` |
 | Run worker dispatches in an isolated Git checkout | Add `--worktree <name>` |
+| Continue recoverable recorded Factory execution | `you run --resume <recording>` |
 | Serve an API only for the run lifetime | Add `--with-server` |
 | Serve the embedded dashboard and open it once | Add `--with-site` |
 | Select an exact local listener | Add `--listen <host:port>` to `--with-server` or `--with-site` |

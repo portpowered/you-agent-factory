@@ -1,6 +1,6 @@
 ---
 author: Agent Factory Team
-last-modified: 2026-08-12
+last-modified: 2026-08-21
 doc-id: agent-factory/guides/operations
 ---
 
@@ -418,40 +418,65 @@ This includes the worker and workstation `AGENTS.md` files in the split
 layout, plus a workstation `promptFile` when one is configured. Save an edit
 before the next dispatch and that next dispatch uses the new prompt. An
 already-running dispatch keeps the prompt snapshot it already received;
-editing a file does not mutate an in-flight dispatch, restore lost Work, or
-restore the in-memory Factory Session queue after a restart. The dispatch-time
-reload behavior is covered by the functional prompt hot-reload check.
+editing a file does not mutate an in-flight dispatch or by itself restore a
+stopped session. Use the record/replay/resume path for recorded Work after a
+restart. The dispatch-time reload behavior is covered by the functional prompt
+hot-reload check.
 
 ## Recover after a process restart
 
-The live Factory Session queue is process-local and in memory. Restarting the
-process loses queued and in-flight live session state; there is no storage
-engine available that reconstructs that queue. Recordings, runtime logs,
-artifacts, and files already written to a worktree can still be useful for
-inspection, but they are evidence for recovery, not a durable session queue or
-automatic replay guarantee.
+The live Factory Session queue is process-local and in memory, but its admitted
+Work and dispatch lifecycle are represented in the Factory Event recording.
+Restarting the process loses the running queue and provider process.
+It does not make recorded Work unrecoverable. A retained recording can
+reconstruct the recorded Factory state in a new live Factory Session with
+`you run --resume <recording>`. Resume reads the source without overwriting it
+and writes a successor recording by default. Use `--record <successor-path>` to
+choose that path.
+
+Resume re-admits recorded non-terminal Work, including Work that was queued or
+in flight at the stop boundary. Terminal Work represented by the recording is
+not dispatched again, and a completed dispatch remains one completed dispatch
+in the successor. A dispatch without a recorded completion can run again after
+resume. This is not an exactly-once provider-effect guarantee.
+A provider may have performed an effect before the process stopped.
+Make provider-side operations idempotent when duplicate attempts matter.
+
+Work that never reached a durable Factory Event is not recoverable from that
+recording. Portable JavaScript recordings remain replay and inspection
+artifacts. They do not contain a JavaScript VM or provider process and cannot be
+passed to `--resume`. Unfinalized recordings with a valid complete event prefix
+are supported. A truncated final event-stream block can be skipped after
+earlier complete events. Mid-stream corruption and recordings without a valid
+complete event are rejected.
 
 Use this recovery sequence:
 
 1. Inspect any durable artifacts first: the existing worktree, generated
    outputs, runtime logs, and any recording that was explicitly retained.
-2. Start a new Factory Session with the continuous server shape above.
-3. Resubmit the intended Work through the normal Work ingress, preserving each
-   Work's authored `name`. Do not invent a new name just because the old
-   process stopped.
-4. Let the workstation's worktree template render from that same name. For a
-   template such as
-   `.claude/worktrees/{{ (index .Inputs 0).Name }}`, the resumed dispatch
-   targets the existing named artifact directory; valid existing worktrees are
-   reusable when the runtime's worktree rules allow it.
-5. Verify the resumed Work reaches an explicit terminal or failed state. A
-   successful resubmission proves only that this recovery worked for that
-   Work; it does not make the original in-memory queue durable.
+2. If the recording contains recoverable Factory Event history, run
+   `you run --resume <recording> --record <successor-path>` and inspect both
+   recording paths. Confirm that recorded terminal Work was not dispatched
+   again and that recorded non-terminal Work was re-admitted.
+3. If Work was never admitted into the recording, start a new Factory Session.
+   Use the continuous server shape above.
+   Resubmit the Work through the normal Work ingress with its authored `name`.
+   Do not invent a new name because the old process stopped.
+   This is the same-name resubmit fallback. It applies only to Work absent from
+   the recoverable recording.
+4. Use the same name in the Workstation worktree template.
+   For `.claude/worktrees/{{ (index .Inputs 0).Name }}`, runtime rules can
+   target the existing named artifact directory.
+5. Verify resumed or resubmitted Work reaches an explicit terminal or failed
+   state. A successful recovery proves only that this recovery worked for that
+   Work. Provider-side exactly-once effects still require idempotency.
 
-The six production recoveries recorded on 2026-08-08/09 are operational
-evidence that this inspect → restart → same-name resubmit procedure worked in
-those cases. They are not a durability guarantee, restart replay contract, or
-promise that every provider dispatch can be resumed automatically.
+The six production recoveries recorded on 2026-08-08/09 remain historical
+operational evidence for the same-name fallback. They are not a durability
+guarantee or a substitute for inspecting the source and successor recordings.
+
+For a copyable record → kill → resume journey with a fresh binary and isolated
+temporary directory, use the procedure in `you docs record-replay`.
 
 ## Related topics
 
