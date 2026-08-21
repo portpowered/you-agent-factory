@@ -124,6 +124,14 @@ type DetachedOperationsCapability interface {
 	DetachedOperations() any
 }
 
+// RuntimeMetricsQueryCapability is the neutral process handoff for the
+// read-only Factory Runtime metrics query. The initializer retains the
+// selected capability without importing the Factory Visualization service;
+// pkg/root reifies the opaque value at the caller-facing boundary.
+type RuntimeMetricsQueryCapability interface {
+	RuntimeMetricsQuery() any
+}
+
 // ACPServer is the neutral application-process capability for serving the ACP
 // protocol. The transport package supplies the concrete implementation at the
 // composition root; the initializer only retains the protocol operation.

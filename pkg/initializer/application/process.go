@@ -33,6 +33,7 @@ type Process struct {
 	acpServer      processcontract.ACPServer
 	workerReader   processcontract.WorkerRecordingReader
 	detachedOps    processcontract.DetachedOperationsCapability
+	runtimeMetrics processcontract.RuntimeMetricsQueryCapability
 }
 
 func NewProcess(
@@ -43,6 +44,7 @@ func NewProcess(
 	acpServer processcontract.ACPServer,
 	workerReader processcontract.WorkerRecordingReader,
 	detachedOps processcontract.DetachedOperationsCapability,
+	runtimeMetrics processcontract.RuntimeMetricsQueryCapability,
 ) (*Process, error) {
 	if providers == nil {
 		return nil, fmt.Errorf("construct application process: provider registry is required")
@@ -58,6 +60,7 @@ func NewProcess(
 		acpServer:      acpServer,
 		workerReader:   workerReader,
 		detachedOps:    detachedOps,
+		runtimeMetrics: runtimeMetrics,
 	}, nil
 }
 
@@ -107,6 +110,16 @@ func (p *Process) DetachedOperations() processcontract.DetachedOperationsCapabil
 		return nil
 	}
 	return p.detachedOps
+}
+
+// RuntimeMetricsQuery returns the opaque read-only Factory Runtime metrics
+// query composed for this process. The root package owns its typed public
+// projection.
+func (p *Process) RuntimeMetricsQuery() processcontract.RuntimeMetricsQueryCapability {
+	if p == nil {
+		return nil
+	}
+	return p.runtimeMetrics
 }
 
 // Execute constructs and runs one fresh command tree using invocation-local

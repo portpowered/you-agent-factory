@@ -175,6 +175,7 @@ func TestWorkerRecordingReaderFromProcessUsesComposedReader(t *testing.T) {
 		nil,
 		nil,
 		nil,
+		nil,
 	)
 	if err != nil {
 		t.Fatalf("NewProcess(without reader) error = %v", err)
@@ -184,6 +185,9 @@ func TestWorkerRecordingReaderFromProcessUsesComposedReader(t *testing.T) {
 	}
 	if operations := DetachedOperationsFromProcess(processWithoutReader); operations != nil {
 		t.Fatalf("DetachedOperationsFromProcess(without capability) = %#v, want nil", operations)
+	}
+	if query := RuntimeMetricsQueryFromProcess(processWithoutReader); query != nil {
+		t.Fatalf("RuntimeMetricsQueryFromProcess(without capability) = %#v, want nil", query)
 	}
 
 	readerWriter := &rootWorkerRecordingReaderProbe{}
@@ -205,7 +209,6 @@ func TestWorkerRecordingReaderFromProcessUsesComposedReader(t *testing.T) {
 	if operations := DetachedOperationsFromProcess(process); operations == nil {
 		t.Fatal("DetachedOperationsFromProcess(composed process) returned nil, want the composed view")
 	}
-
 	writeOnlyProcess, err := BuildProcess(context.Background(), serviceedges.Edges{
 		WorkerRecordingWriter: recordings.WorkerRecordingWriterFunc(func(context.Context, recordings.WorkerRecordingRecord) error {
 			return nil
@@ -231,6 +234,7 @@ func TestDetachedOperationsFromProcessResolvesTypedCapability(t *testing.T) {
 		nil,
 		nil,
 		rootDetachedOperationsCapabilityProbe{operations: want},
+		nil,
 	)
 	if err != nil {
 		t.Fatalf("NewProcess(detached capability) error = %v", err)
@@ -247,6 +251,7 @@ func TestDetachedOperationsFromProcessResolvesTypedCapability(t *testing.T) {
 		nil,
 		nil,
 		rootDetachedOperationsCapabilityProbe{operations: struct{}{}},
+		nil,
 	)
 	if err != nil {
 		t.Fatalf("NewProcess(wrong-type capability) error = %v", err)
@@ -267,6 +272,7 @@ func TestWorkerRecordingReaderFromProcessPropagatesReaderError(t *testing.T) {
 		rootWorkerProcessLifecycle{},
 		nil,
 		rootWorkerProcessReader{err: wantErr},
+		nil,
 		nil,
 	)
 	if err != nil {
@@ -292,6 +298,7 @@ func TestWorkerRecordingReaderFromProcessRejectsMalformedSnapshot(t *testing.T) 
 		rootWorkerProcessLifecycle{},
 		nil,
 		rootWorkerProcessReader{payload: json.RawMessage(`{"recordingId":`)},
+		nil,
 		nil,
 	)
 	if err != nil {

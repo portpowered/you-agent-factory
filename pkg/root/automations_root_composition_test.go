@@ -4,8 +4,10 @@ import (
 	"context"
 	"testing"
 
+	initializerapplication "github.com/portpowered/infinite-you/pkg/initializer/application"
 	"github.com/portpowered/infinite-you/pkg/services/automations"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	factoryvisualization "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
 )
 
 func TestAutomationsRootFromEdgesComposesPublishedRoot(t *testing.T) {
@@ -50,4 +52,96 @@ func TestAutomationsRootFromEdgesComposesPublishedRoot(t *testing.T) {
 			automations.ConvergenceStatusConverged,
 		)
 	}
+}
+
+func TestBuildProcessComposesRuntimeMetricsQuery(t *testing.T) {
+	t.Parallel()
+
+	process, err := BuildProcess(context.Background(), serviceedges.Edges{
+		WorkerRecordingWriter: &rootWorkerRecordingReaderProbe{},
+	})
+	if err != nil {
+		t.Fatalf("BuildProcess() error = %v", err)
+	}
+	query := RuntimeMetricsQueryFromProcess(process)
+	if query == nil {
+		t.Fatal("RuntimeMetricsQueryFromProcess(composed process) returned nil")
+	}
+	result, err := query.QueryRuntimeMetrics(t.Context(), factoryvisualization.RuntimeMetricsQueryRequest{
+		MetricsRoot: t.TempDir(),
+	})
+	if err != nil {
+		t.Fatalf("RuntimeMetricsQueryFromProcess.QueryRuntimeMetrics() error = %v", err)
+	}
+	if result.Cost.Availability != factoryvisualization.RuntimeMetricsCostUnavailable {
+		t.Fatalf("RuntimeMetricsQueryFromProcess result cost = %#v, want unavailable", result.Cost)
+	}
+	if len(result.Workstations) != 0 || len(result.WorkerTypes) != 0 || len(result.Providers) != 0 {
+		t.Fatalf("RuntimeMetricsQueryFromProcess empty result groups = (%d, %d, %d), want empty",
+			len(result.Workstations), len(result.WorkerTypes), len(result.Providers))
+	}
+}
+
+func TestRuntimeMetricsQueryFromProcessResolvesTypedCapability(t *testing.T) {
+	t.Parallel()
+
+	if query := RuntimeMetricsQueryFromProcess(nil); query != nil {
+		t.Fatalf("RuntimeMetricsQueryFromProcess(nil) = %#v, want nil", query)
+	}
+	var typedNil *initializerapplication.Process
+	if query := RuntimeMetricsQueryFromProcess(typedNil); query != nil {
+		t.Fatalf("RuntimeMetricsQueryFromProcess(typed nil) = %#v, want nil", query)
+	}
+
+	want := factoryvisualization.RuntimeMetricsQuery(func(
+		context.Context,
+		factoryvisualization.RuntimeMetricsQueryRequest,
+	) (factoryvisualization.RuntimeMetricsQueryResult, error) {
+		return factoryvisualization.RuntimeMetricsQueryResult{}, nil
+	})
+	process, err := initializerapplication.NewProcess(
+		nil,
+		nil,
+		rootWorkerProcessRegistry{},
+		rootWorkerProcessLifecycle{},
+		nil,
+		nil,
+		nil,
+		rootRuntimeMetricsQueryCapabilityProbe{query: want},
+	)
+	if err != nil {
+		t.Fatalf("NewProcess(runtime metrics query capability) error = %v", err)
+	}
+	got := RuntimeMetricsQueryFromProcess(process)
+	if got == nil {
+		t.Fatal("RuntimeMetricsQueryFromProcess() returned nil query")
+	}
+	if _, err := got.QueryRuntimeMetrics(context.Background(), factoryvisualization.RuntimeMetricsQueryRequest{}); err != nil {
+		t.Fatalf("RuntimeMetricsQueryFromProcess() query error = %v, want nil", err)
+	}
+
+	wrongType, err := initializerapplication.NewProcess(
+		nil,
+		nil,
+		rootWorkerProcessRegistry{},
+		rootWorkerProcessLifecycle{},
+		nil,
+		nil,
+		nil,
+		rootRuntimeMetricsQueryCapabilityProbe{query: struct{}{}},
+	)
+	if err != nil {
+		t.Fatalf("NewProcess(wrong runtime metrics query capability) error = %v", err)
+	}
+	if got := RuntimeMetricsQueryFromProcess(wrongType); got != nil {
+		t.Fatalf("RuntimeMetricsQueryFromProcess(wrong type) = %#v, want nil", got)
+	}
+}
+
+type rootRuntimeMetricsQueryCapabilityProbe struct {
+	query any
+}
+
+func (probe rootRuntimeMetricsQueryCapabilityProbe) RuntimeMetricsQuery() any {
+	return probe.query
 }
