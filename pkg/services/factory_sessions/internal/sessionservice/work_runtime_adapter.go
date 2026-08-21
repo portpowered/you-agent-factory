@@ -97,22 +97,36 @@ func (a workRuntimeAdapter) ReadWorkSnapshot(ctx context.Context) (work.ReadSnap
 		item.StopSummary = runtimeWorkStopSummary(sessionprojection.ProjectWorkStopSummary(a.sessionID, snapshot, token, sessionSummary))
 		result.Items = append(result.Items, item)
 	}
-	if a.ingress != nil {
-		historyContext := ctx
-		if historyContext == nil {
-			historyContext = context.Background()
-		}
-		historyContext, cancelHistory := context.WithCancel(historyContext)
-		defer cancelHistory()
-		if stream, historyErr := a.ingress.SubscribeFactoryEvents(
-			historyContext,
-			nil,
-			factorydefinitions.FactoryEventReconnectScope{SessionID: a.sessionID},
-		); historyErr == nil && stream != nil {
-			result.Admissions = workAdmissionsFromFactoryEvents(a.sessionID, stream.History)
-		}
+	admissions, err := a.readWorkAdmissions(ctx)
+	if err != nil {
+		return work.ReadSnapshot{}, err
 	}
+	result.Admissions = admissions
 	return result, nil
+}
+
+func (a workRuntimeAdapter) readWorkAdmissions(ctx context.Context) ([]work.WorkAdmission, error) {
+	if a.ingress == nil {
+		return nil, errors.New("Factory Runtime Work admission history is required")
+	}
+	historyContext := ctx
+	if historyContext == nil {
+		historyContext = context.Background()
+	}
+	historyContext, cancelHistory := context.WithCancel(historyContext)
+	defer cancelHistory()
+	stream, err := a.ingress.SubscribeFactoryEvents(
+		historyContext,
+		nil,
+		factorydefinitions.FactoryEventReconnectScope{SessionID: a.sessionID},
+	)
+	if err != nil {
+		return nil, fmt.Errorf("subscribe Work admission history: %w", err)
+	}
+	if stream == nil {
+		return nil, errors.New("subscribe Work admission history: stream is unavailable")
+	}
+	return workAdmissionsFromFactoryEvents(a.sessionID, stream.History), nil
 }
 
 func workAdmissionsFromFactoryEvents(
