@@ -13,6 +13,7 @@ const laneNames = [
 	"Backend",
 	"Backend Test Stability",
 	"Backend Lint",
+	"Workflow Lint",
 	"UI Backend Integration",
 	"API Package",
 	"Packaged Factories Package",
@@ -137,6 +138,24 @@ test("changed-test stability passes when selected, accepts a classifier-driven s
 		assert.ok(
 			evaluation.failures.some((failure) => /Backend Test Stability was selected/.test(failure)),
 		);
+	}
+});
+
+test("required Workflow Lint fails the policy when its hosted job is skipped or fails", () => {
+	for (const result of ["skipped", "cancelled", "timed_out", "failure"]) {
+		const evaluation = evaluateVerificationPolicy(
+			policy({
+				lanes: [
+					...laneNames.filter((name) => name !== "Workflow Lint").map((name) => lane(name)),
+					lane("Workflow Lint", true, result, {
+						reason: "Every repository workflow must pass schema-aware lint.",
+					}),
+				],
+			}),
+		);
+
+		assert.equal(evaluation.ok, false, `${result} must fail the required workflow lint lane`);
+		assert.ok(evaluation.failures.some((failure) => /Workflow Lint was selected/.test(failure)));
 	}
 });
 
