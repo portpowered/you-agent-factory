@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -595,8 +596,7 @@ func joinedAssetReference(
 	reference models.ModelReference,
 	resolved models.ResolvedModelReference,
 ) models.ModelReference {
-	if resolved.Provenance.Kind == models.ModelReferenceSourceHuggingFace &&
-		resolved.Definition.Source != "" {
+	if strings.HasPrefix(strings.ToLower(strings.TrimSpace(resolved.Definition.Source)), "hf://") {
 		return models.ModelReference{NameOrURI: resolved.Definition.Source}
 	}
 	return reference
