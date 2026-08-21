@@ -196,6 +196,43 @@ func TestNew_WithRestoredWorldStateSeedsWorkAndKeepsCurrentResourcesAuthoritativ
 	assertRestoredWorkToken(t, token, restored.WorkItemsByID["work-restored"])
 }
 
+func TestNew_WithRestoredActiveDispatchUsesRecordedWorkPlacement(t *testing.T) {
+	restored := &interfaces.FactoryWorldState{
+		WorkItemsByID: map[string]work.FactoryWorkItem{
+			"work-active": {
+				ID: "work-active", WorkTypeID: "task", State: "done", PlaceID: "task:done",
+			},
+		},
+		ActiveDispatches: map[string]interfaces.FactoryWorldDispatch{
+			"dispatch-active": {DispatchID: "dispatch-active", WorkItemIDs: []string{"work-active"}},
+		},
+		// An in-flight dispatch has consumed the Work token, so the
+		// reconstructed occupancy is intentionally empty.
+		PlaceOccupancyByID: map[string]interfaces.FactoryPlaceOccupancy{},
+	}
+
+	f, err := newTestFactory(
+		withNet(buildSimpleNet()),
+		withClock(platformclock.NewDeterministic(time.Unix(0, 0).UTC(), time.Second)),
+		withRestoredWorldState(restored),
+	)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	snapshot, err := f.GetEngineStateSnapshot(context.Background())
+	if err != nil {
+		t.Fatalf("GetEngineStateSnapshot: %v", err)
+	}
+	tokens := snapshot.Marking.PlaceTokens["task:done"]
+	if len(tokens) != 1 {
+		t.Fatalf("restored active Work token IDs = %#v, want one token at task:done", tokens)
+	}
+	token := snapshot.Marking.Tokens[tokens[0]]
+	if token == nil || token.Color.WorkID != "work-active" {
+		t.Fatalf("restored active Work token = %#v, want work-active", token)
+	}
+}
+
 func assertCurrentRestoredResourceTokens(
 	t *testing.T,
 	snapshot *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net],
