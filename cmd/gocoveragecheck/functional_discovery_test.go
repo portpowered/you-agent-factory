@@ -247,7 +247,7 @@ func TestFunctionalQuarantineRuntimeVerificationScopesListingToTestSelectors(t *
 		t.Fatalf("runtime listing invocations = %d, want one for test-level selectors only", len(invocations))
 	}
 	invocation := invocations[0]
-	wantArgs := []string{"test", "-list=^Test", "-json", "-p=4", "-count=1", "-short", "-timeout=2m0s", testLevel}
+	wantArgs := []string{"test", "-vet=off", "-list=^Test", "-json", "-p=4", "-count=1", "-short", "-timeout=2m0s", testLevel}
 	if invocation.name != "go" || !slices.Equal(invocation.args, wantArgs) {
 		t.Fatalf("runtime listing invocation = %+v, want only test-level package %q with retained list flags", invocation, testLevel)
 	}

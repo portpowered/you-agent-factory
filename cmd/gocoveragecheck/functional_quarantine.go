@@ -585,7 +585,11 @@ func discoverFunctionalTestInventoryByRuntimeList(packages []string, timeout tim
 		return functionalTestInventory{}, errors.New("discover functional tests: no packages were selected for runtime verification")
 	}
 
-	args := []string{"test", "-list=^Test", "-json", fmt.Sprintf("-p=%d", maxFunctionalDiscoveryJobs(jobs)), "-count=1"}
+	// This retained runtime path verifies test registration for quarantine
+	// selectors only; the coverage and lint lanes own vet execution. Skipping
+	// the redundant vet pass keeps selector verification bounded without
+	// weakening the runtime listing or its fail-closed parsing checks.
+	args := []string{"test", "-vet=off", "-list=^Test", "-json", fmt.Sprintf("-p=%d", maxFunctionalDiscoveryJobs(jobs)), "-count=1"}
 	if short {
 		args = append(args, "-short")
 	}
