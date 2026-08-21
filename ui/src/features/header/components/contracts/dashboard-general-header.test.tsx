@@ -1,17 +1,17 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
-import type { DashboardSessionTabsState } from "../hooks/use-dashboard-session-tabs-state";
-import { getHeaderControlsMessages } from "../messages/header-controls";
-import { DashboardGeneralHeader } from "./dashboard-general-header";
+import type { DashboardSessionTabsState } from "../../hooks/use-dashboard-session-tabs-state";
+import { getHeaderControlsMessages } from "../../messages/header-controls";
+import { DashboardGeneralHeader } from "../dashboard-general-header";
 
-vi.mock("./dashboard-header-color-palette-controls", () => ({
+vi.mock("../dashboard-header-color-palette-controls", () => ({
   DashboardHeaderColorPaletteControls: () => (
     <div data-testid="dashboard-header-color-palette-controls" />
   ),
 }));
 
-vi.mock("./dashboard-session-tabs", () => ({
+vi.mock("../dashboard-session-tabs", () => ({
   DashboardSessionTabs: () => <div data-testid="dashboard-session-tabs" />,
 }));
 
