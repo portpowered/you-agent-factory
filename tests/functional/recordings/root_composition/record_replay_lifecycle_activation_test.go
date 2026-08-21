@@ -81,6 +81,43 @@ func TestRecordReplayLifecycleActivatesThroughRootBuildProcessAfterLifecycle(t *
 	if recordingsActivationLiveEventCount(replayedEvents, factoryapi.FactoryEventTypeDispatchResponse) == 0 {
 		t.Fatal("replayed session missing dispatch response events")
 	}
+
+	resumeArtifactPath := filepath.Join(t.TempDir(), "fun-recordings-resume-successor.replay.json")
+	resumeServer := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir:                dir,
+		Args:                      []string{"--resume", artifactPath, "--record", resumeArtifactPath},
+		UseMockWorkers:            true,
+		WaitForServiceModeRuntime: true,
+	})
+	t.Cleanup(func() { resumeServer.Stop(t) })
+
+	resumedSession := support.GetDefaultSession(t, resumeServer.URL())
+	if resumedSession.Id == "" {
+		t.Fatal("resumed session missing default session identity")
+	}
+	resumedWork := support.ListDefaultSessionWork(t, resumeServer.URL())
+	if got := support.CountWorkAtCustomerState(resumedWork, "task:complete"); got != 1 {
+		t.Fatalf(
+			"resumed work at task:complete = %d, want recorded terminal work; listed=%#v",
+			got,
+			resumedWork.Results,
+		)
+	}
+
+	resumeServer.Stop(t)
+	resumedArtifact, err := os.ReadFile(resumeArtifactPath)
+	if err != nil {
+		t.Fatalf("read live resume successor recording: %v", err)
+	}
+	var resumedRecording struct {
+		Events []factoryapi.FactoryEvent `json:"events"`
+	}
+	if err := json.Unmarshal(resumedArtifact, &resumedRecording); err != nil {
+		t.Fatalf("decode live resume successor recording: %v", err)
+	}
+	if len(resumedRecording.Events) == 0 {
+		t.Fatal("live resume successor recording has no Factory Events")
+	}
 }
 
 func recordingsLifecycleActivationFactoryConfig() map[string]any {
