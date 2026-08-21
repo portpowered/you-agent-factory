@@ -13028,6 +13028,9 @@ components:
       description: A processing step in the factory graph. Workstations consume authored work states, run a worker or logical move, and emit the next work states.
       type: object
       additionalProperties: true
+      not:
+        required:
+          - join
       required:
         - name
         - inputs

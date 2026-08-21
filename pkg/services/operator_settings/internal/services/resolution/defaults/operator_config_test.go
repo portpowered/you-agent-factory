@@ -52,7 +52,6 @@ func TestDefaultRuntimeSettingsMatchProductionArtifactPolicies(t *testing.T) {
 // pkgmaintcheck:ignore-cyclomatic-complexity pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption
 func decodeTestConfig(data []byte) (operatorsettings.Config, error) {
 	decoder := json.NewDecoder(bytes.NewReader(data))
-	decoder.DisallowUnknownFields()
 	var generated *factoryapi.GlobalConfig
 	if err := decoder.Decode(&generated); err != nil {
 		return operatorsettings.Config{}, err
@@ -349,15 +348,19 @@ func controlledProviderCatalog(value string) (string, bool) {
 	}
 }
 
-func TestLoadConfigDocument_InvalidContentFailsBeforeMutation(t *testing.T) {
+func TestLoadConfigDocument_InvalidContentFailsBeforeMutationAndUnknownFieldsPreserveKnownValues(t *testing.T) {
 	t.Parallel()
 	service := testConfigDocumentService()
 	service.Files = testFiles
-	for _, test := range []struct{ name, data string }{
-		{name: "malformed", data: `{"defaults":`},
-		{name: "trailing", data: `{} {}`},
-		{name: "unknown", data: `{"unexpected":true}`},
-		{name: "null", data: `null`},
+	for _, test := range []struct {
+		name    string
+		data    string
+		wantErr bool
+	}{
+		{name: "malformed", data: `{"defaults":`, wantErr: true},
+		{name: "trailing", data: `{} {}`, wantErr: true},
+		{name: "unknown", data: `{"defaults":{"workerModelProvider":"codex"},"unexpected":true}`},
+		{name: "null", data: `null`, wantErr: true},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			path := filepath.Join(t.TempDir(), "config.json")
@@ -368,7 +371,16 @@ func TestLoadConfigDocument_InvalidContentFailsBeforeMutation(t *testing.T) {
 			if err != nil {
 				t.Fatalf("ReadFile before: %v", err)
 			}
-			_, err = service.Load(path)
+			loaded, err := service.Load(path)
+			if !test.wantErr {
+				if err != nil {
+					t.Fatalf("LoadConfigDocument() error = %v, want unknown fields tolerated", err)
+				}
+				if got := loaded.FileConfig().Defaults.WorkerModelProvider; got != "codex" {
+					t.Fatalf("known provider = %q, want codex", got)
+				}
+				return
+			}
 			if err == nil || !strings.Contains(err.Error(), path) {
 				t.Fatalf("LoadConfigDocument() error = %v, want invalid config error naming path", err)
 			}

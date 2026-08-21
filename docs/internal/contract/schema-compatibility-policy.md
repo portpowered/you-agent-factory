@@ -22,6 +22,9 @@ Open schema properties are compatibility-only. A future value in a known
 field is still rejected when that field violates its type, enum, required-field,
 or other documented constraint. Unknown fields are never used to bypass
 runtime validation, and exact-one-document checks remain strict.
+Open objects may also carry targeted `not` exclusions for documented retired
+fields, such as `workstations[].join`; those exclusions preserve the retired
+field rejection without closing the rest of the evolving object.
 
 ## Intentionally closed boundaries
 

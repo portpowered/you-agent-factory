@@ -2305,6 +2305,11 @@
     "Workstation": {
       "additionalProperties": true,
       "description": "A processing step in the factory graph. Workstations consume authored work states, run a worker or logical move, and emit the next work states.",
+      "not": {
+        "required": [
+          "join"
+        ]
+      },
       "properties": {
         "behavior": {
           "allOf": [

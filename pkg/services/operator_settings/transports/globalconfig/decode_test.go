@@ -472,6 +472,28 @@ func TestDecodeWithDiagnostics_IgnoresUnknownFieldsAndReportsSortedPaths(t *test
 	}
 }
 
+func TestDecodeWithDiagnostics_PreservesCaseInsensitiveKnownFields(t *testing.T) {
+	config, diagnostics, err := globalconfig.DecodeWithDiagnostics([]byte(`{
+		"backendScopeId": "scope-existing",
+		"Defaults": {
+			"WorkerModelProvider": "codex",
+			"futureDefault": true
+		}
+	}`))
+	if err != nil {
+		t.Fatalf("DecodeWithDiagnostics() error = %v", err)
+	}
+	if config.BackendScopeID != "scope-existing" {
+		t.Fatalf("backend scope ID = %q, want scope-existing", config.BackendScopeID)
+	}
+	if config.Defaults.WorkerModelProvider != "codex" {
+		t.Fatalf("worker model provider = %q, want codex", config.Defaults.WorkerModelProvider)
+	}
+	if got, want := diagnostics.Paths(), []string{"$.Defaults.futureDefault"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("ignored JSON paths = %#v, want %#v", got, want)
+	}
+}
+
 func TestLoadFileConfig_PartialDocumentParticipatesInDocumentedPrecedence(t *testing.T) {
 	path := writeConfig(t, `{"defaults":{"workerModelProvider":"codex","workerModel":"file-model"}}`)
 	fileConfig, err := operatorsettings.LoadFileConfig(platformfilesystem.Local{}, globalconfig.Decode, path)

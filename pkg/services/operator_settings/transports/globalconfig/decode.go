@@ -34,8 +34,17 @@ func DecodeWithDiagnostics(
 ) (operatorsettings.Config, operatorsettings.ConfigDecodeDiagnostics, error) {
 	decoder := json.NewDecoder(bytes.NewReader(data))
 
+	var raw json.RawMessage
+	if err := decoder.Decode(&raw); err != nil {
+		return operatorsettings.Config{}, operatorsettings.ConfigDecodeDiagnostics{}, fmt.Errorf("decode generated global config: %w", err)
+	}
+	normalized, err := canonicalizeKnownJSONFieldNames(raw)
+	if err != nil {
+		return operatorsettings.Config{}, operatorsettings.ConfigDecodeDiagnostics{}, fmt.Errorf("decode generated global config: %w", err)
+	}
+
 	var generated *factoryapi.GlobalConfig
-	if err := decoder.Decode(&generated); err != nil {
+	if err := json.Unmarshal(normalized, &generated); err != nil {
 		return operatorsettings.Config{}, operatorsettings.ConfigDecodeDiagnostics{}, fmt.Errorf("decode generated global config: %w", err)
 	}
 	if generated == nil {
@@ -72,6 +81,90 @@ func requireEOF(decoder *json.Decoder) error {
 }
 
 var globalConfigRawMessageType = reflect.TypeOf(json.RawMessage{})
+
+type jsonField struct {
+	name string
+	typ  reflect.Type
+}
+
+// canonicalizeKnownJSONFieldNames restores encoding/json's case-insensitive
+// struct-field matching before handing the value to generated models whose
+// AdditionalProperties codecs use exact map keys. This keeps legacy customer
+// spellings such as backendScopeId equivalent to backendScopeID while leaving
+// unknown keys untouched for diagnostics and generated-model tolerance.
+func canonicalizeKnownJSONFieldNames(raw json.RawMessage) ([]byte, error) {
+	decoder := json.NewDecoder(bytes.NewReader(raw))
+	decoder.UseNumber()
+	var value any
+	if err := decoder.Decode(&value); err != nil {
+		return nil, err
+	}
+	value = canonicalizeKnownJSONFieldNamesForType(value, reflect.TypeOf(factoryapi.GlobalConfig{}))
+	return json.Marshal(value)
+}
+
+func canonicalizeKnownJSONFieldNamesForType(value any, typ reflect.Type) any {
+	if value == nil || typ == nil {
+		return value
+	}
+	typ = dereferenceJSONType(typ)
+	if typ == globalConfigRawMessageType {
+		return value
+	}
+
+	switch typ.Kind() {
+	case reflect.Map:
+		return canonicalizeKnownJSONFieldNamesForMap(value, typ)
+	case reflect.Slice, reflect.Array:
+		return canonicalizeKnownJSONFieldNamesForSequence(value, typ)
+	case reflect.Struct:
+		return canonicalizeKnownJSONFieldNamesForStruct(value, typ)
+	default:
+		return value
+	}
+}
+
+func canonicalizeKnownJSONFieldNamesForMap(value any, typ reflect.Type) any {
+	object, ok := value.(map[string]any)
+	if !ok || typ.Key().Kind() != reflect.String {
+		return value
+	}
+	normalized := make(map[string]any, len(object))
+	for key, child := range object {
+		normalized[key] = canonicalizeKnownJSONFieldNamesForType(child, typ.Elem())
+	}
+	return normalized
+}
+
+func canonicalizeKnownJSONFieldNamesForSequence(value any, typ reflect.Type) any {
+	values, ok := value.([]any)
+	if !ok {
+		return value
+	}
+	normalized := make([]any, len(values))
+	for index, item := range values {
+		normalized[index] = canonicalizeKnownJSONFieldNamesForType(item, typ.Elem())
+	}
+	return normalized
+}
+
+func canonicalizeKnownJSONFieldNamesForStruct(value any, typ reflect.Type) any {
+	object, ok := value.(map[string]any)
+	if !ok {
+		return value
+	}
+	fields := jsonFields(typ)
+	normalized := make(map[string]any, len(object))
+	for key, child := range object {
+		field, known := fields[strings.ToLower(key)]
+		if !known {
+			normalized[key] = child
+			continue
+		}
+		normalized[field.name] = canonicalizeKnownJSONFieldNamesForType(child, field.typ)
+	}
+	return normalized
+}
 
 func collectUnknownJSONPaths(data []byte) ([]string, error) {
 	value, err := decodeOneJSONValue(data)
@@ -164,7 +257,16 @@ func collectUnknownJSONPathsForStruct(value any, typ reflect.Type, path string, 
 }
 
 func jsonFieldTypes(typ reflect.Type) map[string]reflect.Type {
-	fields := make(map[string]reflect.Type)
+	fields := jsonFields(typ)
+	types := make(map[string]reflect.Type, len(fields))
+	for key, field := range fields {
+		types[key] = field.typ
+	}
+	return types
+}
+
+func jsonFields(typ reflect.Type) map[string]jsonField {
+	fields := make(map[string]jsonField)
 	for index := 0; index < typ.NumField(); index++ {
 		field := typ.Field(index)
 		if field.PkgPath != "" {
@@ -178,7 +280,7 @@ func jsonFieldTypes(typ reflect.Type) map[string]reflect.Type {
 		if name == "" {
 			name = field.Name
 		}
-		fields[strings.ToLower(name)] = field.Type
+		fields[strings.ToLower(name)] = jsonField{name: name, typ: field.Type}
 	}
 	return fields
 }

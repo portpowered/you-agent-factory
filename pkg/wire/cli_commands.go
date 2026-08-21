@@ -26,6 +26,7 @@ import (
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	sessioncli "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/cli/session"
 	factorysessionwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire"
+	factoryvisualization "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
 	modelservice "github.com/portpowered/infinite-you/pkg/services/models"
 	modelscli "github.com/portpowered/infinite-you/pkg/services/models/transports/cli"
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
@@ -843,5 +844,26 @@ func provideCLIExecutionServiceBuilder(
 ) cli.ExecutionServiceBuilder {
 	return func(ctx context.Context, provider, projectRoot, fixtureCatalogPath, childExecutorMode string) (cli.OwnedExecutionService, error) {
 		return build(ctx, provider, projectRoot, fixtureCatalogPath, childExecutorMode)
+	}
+}
+
+func provideRunOpener(
+	prepareWorkTarget work.SingleWorkTargetPreparation,
+	loadMockWorkers workers.MockWorkersConfigDiagnosticsLoader,
+	buildRuntimeRequest runcli.RuntimeOpeningRequestFactory,
+	presentations factorysessions.OpeningPresentationOwner,
+	visualizations factoryvisualization.RuntimeSinkOwner,
+) runcli.Opener {
+	return func(
+		ctx context.Context,
+		cfg runcli.RunConfig,
+		buildRunner runcli.RuntimeRunnerBuilder,
+		invocation runcli.InvocationOperation,
+		presentation factoryvisualization.ResponsePresentation,
+	) (*runcli.Operation, error) {
+		return runcli.OpenWithVisualizationOwnerAndDiagnostics(
+			ctx, cfg, buildRunner, invocation, presentation,
+			prepareWorkTarget, nil, loadMockWorkers, buildRuntimeRequest, presentations, visualizations,
+		)
 	}
 }
