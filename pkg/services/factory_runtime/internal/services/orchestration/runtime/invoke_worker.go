@@ -237,64 +237,6 @@ func startStatelessAttemptWithRequestMode(
 	)
 }
 
-func runtimeAttemptPreparation(
-	cfg *runtimeConfig,
-	request workers.WorkstationDispatchRequest,
-	executeRequest workers.ExecuteRequest,
-	allowRetry bool,
-) attemptPreparation {
-	if cfg == nil || cfg.workerSessions == nil {
-		return nil
-	}
-	recorder, ok := cfg.workerSessions.(interface {
-		BeginRuntimeAttempt(context.Context, workersessions.RuntimeAttemptRequest) (workersessions.RuntimeAttempt, error)
-	})
-	if !ok || recorder == nil {
-		return nil
-	}
-	return func(ctx context.Context, _ *workers.ExecuteRequest) (attemptTerminalFunc, error) {
-		sessionID := runtimeWorkerSessionID(cfg, request, executeRequest, allowRetry)
-		attempt, err := recorder.BeginRuntimeAttempt(
-			context.WithoutCancel(ctx),
-			workersessions.RuntimeAttemptRequest{
-				ID:        sessionID,
-				AttemptID: executeRequest.Correlation.AttemptID,
-				Execution: request,
-			},
-		)
-		if err != nil {
-			return nil, err
-		}
-		return func(callbackCtx context.Context, _ workers.ExecuteRequest, result workers.ExecuteResult, executeErr error) {
-			result = normalizeDetachedExecutionResult(cfg, executeRequest, result)
-			dispatchResult, dispatchErr := workstationDispatchResultFromExecute(
-				workstationDispatchRequestForResult(request, executeRequest),
-				result,
-				executeErr,
-			)
-			_ = attempt.Complete(callbackCtx, dispatchResult, dispatchErr)
-		}, nil
-	}
-}
-
-func runtimeWorkerSessionID(
-	cfg *runtimeConfig,
-	request workers.WorkstationDispatchRequest,
-	executeRequest workers.ExecuteRequest,
-	allowRetry bool,
-) string {
-	if allowRetry && strings.TrimSpace(executeRequest.Correlation.AttemptID) != "" {
-		return strings.TrimSpace(executeRequest.Correlation.AttemptID)
-	}
-	sessionID := strings.TrimSpace(executeRequest.Correlation.DispatchID)
-	if resolver, ok := cfg.completionDeliveryPlanner.(factory.ReplayWorkerSessionIDResolver); ok {
-		if recordedSessionID, found := resolver.WorkerSessionIDForDispatch(request.Execution.Dispatch); found {
-			sessionID = recordedSessionID
-		}
-	}
-	return sessionID
-}
-
 func cancelStatelessAttempt(
 	ctx context.Context,
 	cfg *runtimeConfig,
