@@ -621,6 +621,12 @@ func WorkerSessionObservationToAPI(observation workersessions.Observation) facto
 	if observation.FactorySessionID != "" {
 		result.FactorySessionId = stringPtr(observation.FactorySessionID)
 	}
+	if observation.Model != nil {
+		result.Model = cloneString(observation.Model)
+	}
+	if observation.ReasoningEffort != nil {
+		result.ReasoningEffort = cloneString(observation.ReasoningEffort)
+	}
 	if observation.RecordingHealth != "" {
 		health := factoryapi.WorkerSessionObservationRecordingHealth(observation.RecordingHealth)
 		result.RecordingHealth = &health

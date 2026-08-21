@@ -24,6 +24,8 @@ func TestListWorkerSessionsBySessionIDProjectsPopulatedObservation(t *testing.T)
 	observations := []workersessions.Observation{
 		{
 			WorkerSessionID:          "worker-session-1",
+			Model:                    stringPtr("gpt-5.6-luna"),
+			ReasoningEffort:          stringPtr("high"),
 			ProviderSession:          providers.SessionRef{Provider: providers.IDCodex, Kind: providers.SessionIDKind, ID: "provider-session-1"},
 			ProviderSessionAvailable: true,
 			WorkIDs:                  []string{"work-1"},
@@ -140,6 +142,7 @@ func assertPopulatedListResponse(t *testing.T, payload []byte, total int) {
 	assertListObservationUsage(t, got, total)
 	assertListObservationTiming(t, got)
 	assertListObservationTurn(t, got)
+	assertListObservationExecutionFacts(t, got)
 }
 
 func assertListObservationIdentity(t *testing.T, observation factoryapi.WorkerSessionObservation) {
@@ -174,6 +177,14 @@ func assertListObservationTurn(t *testing.T, observation factoryapi.WorkerSessio
 	t.Helper()
 	if observation.TurnId == nil || *observation.TurnId != "turn-1" {
 		t.Fatalf("turnId = %#v, want turn-1", observation.TurnId)
+	}
+}
+
+func assertListObservationExecutionFacts(t *testing.T, observation factoryapi.WorkerSessionObservation) {
+	t.Helper()
+	if observation.Model == nil || *observation.Model != "gpt-5.6-luna" ||
+		observation.ReasoningEffort == nil || *observation.ReasoningEffort != "high" {
+		t.Fatalf("execution facts = model:%#v reasoningEffort:%#v, want gpt-5.6-luna/high", observation.Model, observation.ReasoningEffort)
 	}
 }
 
@@ -327,6 +338,8 @@ func TestGetWorkerSessionObservationBySessionIDProjectsFailureDiagnostics(t *tes
 	}
 	service := &fakeObservationService{getResult: workersessions.Observation{
 		WorkerSessionID:          "worker-session-1",
+		Model:                    stringPtr("gpt-5.6-luna"),
+		ReasoningEffort:          stringPtr("medium"),
 		ProviderSession:          providers.SessionRef{Provider: providers.IDCodex, Kind: providers.SessionIDKind, ID: "provider-session-1"},
 		ProviderSessionAvailable: true,
 		WorkIDs:                  []string{"work-1"}, TurnID: "turn-1", AttemptID: "attempt-1",
@@ -360,6 +373,7 @@ func assertFailureObservationResponse(t *testing.T, payload []byte, service *fak
 	assertFailureObservationCause(t, response)
 	assertFailureObservationUsage(t, response, total, duration)
 	assertFailureObservationParse(t, response)
+	assertFailureObservationExecutionFacts(t, response)
 	assertFailureObservationRequest(t, service)
 }
 
@@ -390,6 +404,14 @@ func assertFailureObservationParse(t *testing.T, response factoryapi.WorkerSessi
 	t.Helper()
 	if response.Parse.EventCount != 4 || len(response.Parse.Errors) != 1 {
 		t.Fatalf("parse = %#v, want event and parse diagnostics", response.Parse)
+	}
+}
+
+func assertFailureObservationExecutionFacts(t *testing.T, response factoryapi.WorkerSessionObservation) {
+	t.Helper()
+	if response.Model == nil || *response.Model != "gpt-5.6-luna" ||
+		response.ReasoningEffort == nil || *response.ReasoningEffort != "medium" {
+		t.Fatalf("execution facts = model:%#v reasoningEffort:%#v, want gpt-5.6-luna/medium", response.Model, response.ReasoningEffort)
 	}
 }
 
