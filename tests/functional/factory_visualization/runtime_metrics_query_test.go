@@ -13,9 +13,17 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/root"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
-	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factoryvisualization "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
+)
+
+const (
+	runtimeDispatchComplete     = "dispatch.completed"
+	runtimeDispatchDuration     = "dispatch.duration"
+	runtimeProviderDuration     = "provider.duration"
+	runtimeProviderFailed       = "provider.failed"
+	runtimeProviderInputTokens  = "provider.input_tokens"
+	runtimeProviderOutputTokens = "provider.output_tokens"
 )
 
 // TestRuntimeMetricsQueryReadsDurableArtifactsThroughCanonicalProcess proves
@@ -47,7 +55,7 @@ func TestRuntimeMetricsQueryReadsDurableArtifactsThroughCanonicalProcess(t *test
 		"2026", "08", "20",
 		"120000.000000000-runtime-metrics-session-metrics-functional-runtime-metrics-functional-2026-08-20T12-01-00.000.log",
 	), false, []map[string]any{
-		common(factoryruntime.RuntimeProviderInputTokens, 12),
+		common(runtimeProviderInputTokens, 12),
 	})
 
 	writeRuntimeMetricsArtifact(t, filepath.Join(
@@ -55,9 +63,9 @@ func TestRuntimeMetricsQueryReadsDurableArtifactsThroughCanonicalProcess(t *test
 		"2026", "08", "20",
 		"120000.000000000-runtime-metrics-session-metrics-functional-runtime-metrics-functional-2026-08-20T12-02-00.000-1.log.gz",
 	), true, []map[string]any{
-		common(factoryruntime.RuntimeProviderOutputTokens, 34),
+		common(runtimeProviderOutputTokens, 34),
 		{
-			"metric_name":         factoryruntime.RuntimeProviderInputTokens,
+			"metric_name":         runtimeProviderInputTokens,
 			"value":               900,
 			"unit":                "tokens",
 			"session_id":          "neighbor-session",
@@ -69,13 +77,13 @@ func TestRuntimeMetricsQueryReadsDurableArtifactsThroughCanonicalProcess(t *test
 	})
 
 	activeRecords := []map[string]any{
-		common(factoryruntime.RuntimeDispatchComplete, 1),
-		common(factoryruntime.RuntimeDispatchDuration, 40),
-		common(factoryruntime.RuntimeDispatchDuration, 60),
-		common(factoryruntime.RuntimeProviderDuration, 20),
-		common(factoryruntime.RuntimeProviderDuration, 80),
+		common(runtimeDispatchComplete, 1),
+		common(runtimeDispatchDuration, 40),
+		common(runtimeDispatchDuration, 60),
+		common(runtimeProviderDuration, 20),
+		common(runtimeProviderDuration, 80),
 		{
-			"metric_name":         factoryruntime.RuntimeProviderFailed,
+			"metric_name":         runtimeProviderFailed,
 			"value":               1,
 			"unit":                "count",
 			"reason":              "timeout",
