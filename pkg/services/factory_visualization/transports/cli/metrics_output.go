@@ -32,10 +32,17 @@ func renderHumanMetrics(
 	breakdowns := metricsBreakdowns(groupBy, result)
 	fmt.Fprintf(&output, "Breakdown by %s: %d rows\n", groupBy, len(breakdowns))
 	for _, breakdown := range breakdowns {
-		fmt.Fprintf(&output, "  %s:\n", breakdown.Key)
+		fmt.Fprintf(&output, "  %s:\n", metricsBreakdownDisplayKey(breakdown.Key))
 		renderMetricsAggregate(&output, "    ", breakdown.Aggregate)
 	}
 	return output.String()
+}
+
+func metricsBreakdownDisplayKey(key string) string {
+	if key == factoryvisualization.RuntimeMetricsUnavailableProviderKey {
+		return factoryvisualization.RuntimeMetricsUnavailableProviderLabel
+	}
+	return key
 }
 
 type metricsJSONDocument struct {

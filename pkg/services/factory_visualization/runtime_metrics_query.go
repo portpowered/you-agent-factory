@@ -59,6 +59,13 @@ const (
 	// RuntimeMetricsCostUnavailable is the only cost state exposed by this
 	// query. No price or numeric cost value is represented.
 	RuntimeMetricsCostUnavailable RuntimeMetricsCostAvailability = "UNAVAILABLE"
+
+	// RuntimeMetricsUnavailableProviderKey is the stable machine key used when
+	// retained metric facts cannot be attributed to one concrete provider.
+	RuntimeMetricsUnavailableProviderKey = "unavailable"
+	// RuntimeMetricsUnavailableProviderLabel explains the unavailable machine
+	// key in human-oriented metrics output.
+	RuntimeMetricsUnavailableProviderLabel = "Unavailable (provider attribution not proven)"
 )
 
 // RuntimeMetricsCost is an explicit non-numeric cost representation.

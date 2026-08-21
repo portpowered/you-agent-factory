@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"strings"
 	"time"
 )
 
@@ -159,11 +160,19 @@ func (s *projectedRuntimeMetricsSink) emit(
 		Workstation:       fields.Workstation,
 		WorkerType:        fields.WorkerType,
 		WorkerSessionID:   fields.WorkerSessionID,
-		Provider:          fields.Provider,
+		Provider:          normalizedRuntimeMetricProvider(fields.Provider),
 		Model:             fields.Model,
 		Outcome:           fields.Outcome,
 		Reason:            fields.Reason,
 	})
+}
+
+func normalizedRuntimeMetricProvider(provider string) string {
+	provider = strings.TrimSpace(provider)
+	if provider == "" || strings.Contains(provider, "${") {
+		return ""
+	}
+	return provider
 }
 
 func (s *projectedRuntimeMetricsSink) Path() string                     { return s.artifact.Path }

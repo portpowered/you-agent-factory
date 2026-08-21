@@ -10,10 +10,12 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factoryvisualization "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
 	factoryvisualizationcli "github.com/portpowered/infinite-you/pkg/services/factory_visualization/transports/cli"
 	factoryvisualizationhttp "github.com/portpowered/infinite-you/pkg/services/factory_visualization/transports/http"
+	factoryvisualizationwire "github.com/portpowered/infinite-you/pkg/services/factory_visualization/wire"
 	transporthttp "github.com/portpowered/infinite-you/pkg/transports/http"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"go.uber.org/zap"
@@ -206,6 +208,139 @@ func TestMetricsProductionRouteAndCLIThroughBuildProcess(t *testing.T) {
 	if len(requests) < 5 {
 		t.Fatalf("metrics query requests = %d, want unscoped, mapped, empty, and route coverage", len(requests))
 	}
+}
+
+func TestMetricsProductionRouteAndCLIReportReconciledProviderGroups(t *testing.T) {
+	t.Parallel()
+
+	query, err := factoryvisualizationwire.NewRuntimeMetricsQuery(
+		rootMetricsReader{records: []factoryvisualization.RuntimeMetricRecord{
+			{"metric_name": "dispatch.completed", "value": 1.0, "session_id": "retained-live-id", "dispatch_id": "dispatch-codex"},
+			{"metric_name": "provider.input_tokens", "value": 4.0, "session_id": "retained-live-id", "dispatch_id": "dispatch-codex", "provider": "codex", "unit": "tokens"},
+			{"metric_name": "dispatch.duration", "value": 10.0, "session_id": "retained-live-id", "dispatch_id": "dispatch-codex", "unit": "ms"},
+			{"metric_name": "dispatch.completed", "value": 1.0, "session_id": "retained-live-id", "dispatch_id": "dispatch-claude"},
+			{"metric_name": "provider.completed", "value": 1.0, "session_id": "retained-live-id", "dispatch_id": "dispatch-claude", "provider": "claude"},
+			{"metric_name": "provider.input_tokens", "value": 3.0, "session_id": "retained-live-id", "dispatch_id": "dispatch-claude", "provider": "${workerProvider}", "unit": "tokens"},
+			{"metric_name": "provider.duration", "value": 6.0, "session_id": "retained-live-id", "dispatch_id": "dispatch-claude", "unit": "ms"},
+		}},
+		logging.NoopLogger{},
+	)
+	if err != nil {
+		t.Fatalf("NewRuntimeMetricsQuery() error = %v", err)
+	}
+	resolver := rootMetricsScopeResolver(func(
+		_ context.Context,
+		sessionID string,
+	) (factoryvisualizationhttp.MetricsSessionScope, error) {
+		if sessionID != "live-public-id" {
+			return factoryvisualizationhttp.MetricsSessionScope{},
+				factoryvisualizationhttp.NewMetricsSessionNotFoundError(sessionID, nil)
+		}
+		return factoryvisualizationhttp.MetricsSessionScope{
+			RequestedID: sessionID,
+			RetainedIDs: []string{"retained-live-id"},
+		}, nil
+	})
+	metricsHandler := factoryvisualizationhttp.NewMetricsHandler(
+		factoryvisualizationhttp.NewMetricsAdapter(query, resolver, t.TempDir()),
+		zap.NewNop(),
+	)
+	apiServer := transporthttp.NewServerWithRecordingsAndMetricsAndCosts(
+		nil, nil, nil, nil, nil, nil, zap.NewNop(), metricsHandler, nil,
+	)
+	server := httptest.NewServer(apiServer.Handler())
+	t.Cleanup(server.Close)
+
+	response, err := http.Get(server.URL + "/metrics?session_id=live-public-id")
+	if err != nil {
+		t.Fatalf("GET /metrics: %v", err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("GET /metrics status = %d", response.StatusCode)
+	}
+	var routeReport factoryapi.MetricsReport
+	if err := json.NewDecoder(response.Body).Decode(&routeReport); err != nil {
+		t.Fatalf("decode route report: %v", err)
+	}
+	assertReconciledMetricsReport(t, routeReport)
+
+	process, err := BuildProcess(context.Background(), serviceedges.Edges{})
+	if err != nil {
+		t.Fatalf("BuildProcess() error = %v", err)
+	}
+	t.Cleanup(func() { _ = process.Close(context.Background()) })
+	var cliJSON bytes.Buffer
+	if err := process.Execute(rootMetricsProcessInput(
+		t.TempDir(), t.TempDir(), server.URL, &cliJSON,
+		"--json", "metrics", "--group-by", "provider", "--session", "live-public-id",
+	)); err != nil {
+		t.Fatalf("BuildProcess CLI metrics: %v", err)
+	}
+	var cliReport struct {
+		GroupBy string `json:"group_by"`
+		Totals  struct {
+			InputTokens         float64 `json:"input_tokens"`
+			CompletedDispatches float64 `json:"completed_dispatches"`
+		} `json:"totals"`
+		Groups []struct {
+			Key       string `json:"key"`
+			Aggregate struct {
+				InputTokens         float64 `json:"input_tokens"`
+				CompletedDispatches float64 `json:"completed_dispatches"`
+			} `json:"aggregate"`
+		} `json:"groups"`
+	}
+	if err := json.Unmarshal(cliJSON.Bytes(), &cliReport); err != nil {
+		t.Fatalf("decode CLI report: %v\n%s", err, cliJSON.String())
+	}
+	if cliReport.GroupBy != "provider" || cliReport.Totals.InputTokens != 7 || cliReport.Totals.CompletedDispatches != 2 {
+		t.Fatalf("CLI totals = %#v, want provider grouping with seven input tokens and two completions", cliReport)
+	}
+	if len(cliReport.Groups) != 2 {
+		t.Fatalf("CLI provider groups = %#v, want codex and claude", cliReport.Groups)
+	}
+	for _, group := range cliReport.Groups {
+		if group.Aggregate.CompletedDispatches != 1 {
+			t.Fatalf("CLI provider group = %#v, want one completion", group)
+		}
+		if (group.Key == "codex" && group.Aggregate.InputTokens != 4) ||
+			(group.Key == "claude" && group.Aggregate.InputTokens != 3) {
+			t.Fatalf("CLI provider group = %#v, want codex=4 and claude=3 input tokens", group)
+		}
+	}
+}
+
+func assertReconciledMetricsReport(t *testing.T, report factoryapi.MetricsReport) {
+	t.Helper()
+	if report.Totals.CompletedDispatches != 2 || report.Totals.InputTokens != 7 {
+		t.Fatalf("metrics totals = %#v, want two completions and seven input tokens", report.Totals)
+	}
+	if len(report.Providers) != 2 {
+		t.Fatalf("provider groups = %#v, want codex and claude", report.Providers)
+	}
+	for _, breakdown := range report.Providers {
+		if breakdown.Aggregate.CompletedDispatches != 1 {
+			t.Fatalf("provider breakdown = %#v, want one completion per provider", breakdown)
+		}
+		if breakdown.Key == "codex" && breakdown.Aggregate.InputTokens != 4 {
+			t.Fatalf("codex breakdown = %#v, want four input tokens", breakdown)
+		}
+		if breakdown.Key == "claude" && breakdown.Aggregate.InputTokens != 3 {
+			t.Fatalf("claude breakdown = %#v, want three input tokens", breakdown)
+		}
+		if strings.Contains(breakdown.Key, "${") {
+			t.Fatalf("provider breakdown leaked template key: %#v", breakdown)
+		}
+	}
+}
+
+type rootMetricsReader struct {
+	records []factoryvisualization.RuntimeMetricRecord
+}
+
+func (reader rootMetricsReader) Read(context.Context, string) ([]factoryvisualization.RuntimeMetricRecord, error) {
+	return append([]factoryvisualization.RuntimeMetricRecord(nil), reader.records...), nil
 }
 
 type rootMetricsScopeResolver func(context.Context, string) (factoryvisualizationhttp.MetricsSessionScope, error)

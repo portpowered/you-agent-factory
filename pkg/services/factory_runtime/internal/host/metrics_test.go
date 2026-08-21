@@ -91,6 +91,62 @@ func TestRecordCompletionMetricsUsesCanonicalWorkerSessionAssociation(t *testing
 	t.Fatalf("metric names = %#v, want dispatch.completed", sink.names)
 }
 
+func TestRecordCompletionMetricsUsesResolvedProviderForDispatchFacts(t *testing.T) {
+	t.Parallel()
+
+	sink := &hostMetricsSinkFake{}
+	bundle := &factoryhost.Bundle{MetricsSink: sink}
+	bundle.RecordCompletionMetrics(interfaces.FactoryCompletionRecord{
+		DispatchID: "dispatch-provider",
+		Result: workerexecution.WorkResult{
+			DispatchID: "dispatch-provider",
+			Outcome:    workerexecution.OutcomeAccepted,
+			Diagnostics: &workerexecution.WorkDiagnostics{
+				Provider: &workerexecution.ProviderDiagnostic{Provider: "codex"},
+			},
+		},
+	})
+
+	for _, name := range []string{"dispatch.completed", "dispatch.duration"} {
+		found := false
+		for index, emittedName := range sink.names {
+			if emittedName != name {
+				continue
+			}
+			found = true
+			if sink.fields[index].Provider != "codex" {
+				t.Fatalf("%s provider = %q, want resolved codex", name, sink.fields[index].Provider)
+			}
+		}
+		if !found {
+			t.Fatalf("metric names = %#v, want %s", sink.names, name)
+		}
+	}
+}
+
+func TestRecordCompletionMetricsDoesNotPersistUnresolvedProvider(t *testing.T) {
+	t.Parallel()
+
+	sink := &hostMetricsSinkFake{}
+	bundle := &factoryhost.Bundle{MetricsSink: sink}
+	bundle.RecordCompletionMetrics(interfaces.FactoryCompletionRecord{
+		DispatchID: "dispatch-placeholder",
+		Result: workerexecution.WorkResult{
+			DispatchID: "dispatch-placeholder",
+			Outcome:    workerexecution.OutcomeAccepted,
+			Diagnostics: &workerexecution.WorkDiagnostics{
+				Provider: &workerexecution.ProviderDiagnostic{Provider: "${executorProvider}"},
+			},
+		},
+	})
+
+	for index, provider := range sink.fields {
+		if provider.Provider != "" {
+			t.Fatalf("metric %s provider = %q, want omitted unresolved provider", sink.names[index], provider.Provider)
+		}
+	}
+}
+
 type hostMetricsSinkFake struct {
 	names  []string
 	fields []factoryruntime.Fields

@@ -98,3 +98,22 @@ func TestRuntimeMetricsSinkProjectsCounterAndGaugeKinds(t *testing.T) {
 		t.Fatalf("records = %#v, want counter then gauge", writer.records)
 	}
 }
+
+func TestRuntimeMetricsSinkOmitsUnresolvedProviderTemplates(t *testing.T) {
+	t.Parallel()
+
+	writer := &runtimeMetricWriterFake{}
+	sink, err := NewRuntimeMetricsSink(
+		writer, RuntimeMetricsScope{}, func() time.Time { return time.Unix(0, 0) },
+		RuntimeMetricsArtifact{},
+	)
+	if err != nil {
+		t.Fatalf("NewRuntimeMetricsSink: %v", err)
+	}
+	if err := sink.Counter(context.Background(), RuntimeDispatchComplete, 1, Fields{Provider: "${branchProvider}"}); err != nil {
+		t.Fatalf("Counter: %v", err)
+	}
+	if got := writer.records[0].(RuntimeMetricRecord).Provider; got != "" {
+		t.Fatalf("provider = %q, want unresolved provider omitted", got)
+	}
+}

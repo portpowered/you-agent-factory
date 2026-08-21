@@ -67,6 +67,12 @@ func (r *Bundle) RecordCompletionMetrics(record interfaces.FactoryCompletionReco
 	}
 	metricFields.WorkerSessionID = r.workerSessionIDForDispatch(record.DispatchID)
 	metricFields.Outcome = string(record.Result.Outcome)
+	workerDef, _ := r.runtimeWorkerDefinition(metricFields.WorkerType)
+	resolvedProvider := providerMetricProvider(record.Result, workerDef)
+	if resolvedProvider == "" {
+		resolvedProvider = normalizedRuntimeMetricProvider(metricFields.Provider)
+	}
+	metricFields.Provider = resolvedProvider
 	r.emitMetricCounter(runtimeMetricDispatchComplete, 1, metricFields)
 	r.emitMetricSample(runtimeMetricDispatchDuration, float64(record.Result.Metrics.Duration.Milliseconds()), "ms", metricFields)
 	r.emitMetricSample(runtimeMetricDispatchRetries, float64(record.Result.Metrics.RetryCount), "", metricFields)
@@ -123,7 +129,7 @@ func (r *Bundle) emitProviderCompletionMetrics(
 	workerDef *interfaces.FactoryWorkerConfig,
 ) {
 	providerFields := fields
-	providerFields.Provider = normalizedRuntimeMetricProvider(providerMetricProvider(result.Diagnostics, workerDef))
+	providerFields.Provider = providerMetricProvider(result, workerDef)
 	providerFields.Model = providerMetricModel(result.Diagnostics, workerDef)
 	r.emitMetricCounter(runtimeMetricProviderComplete, 1, providerFields)
 	if result.Outcome == workerexecution.OutcomeFailed {
@@ -176,15 +182,31 @@ func (r *Bundle) runtimeWorkerDefinition(workerName string) (*interfaces.Factory
 }
 
 func normalizedRuntimeMetricProvider(provider string) string {
-	return providers.ID(strings.TrimSpace(provider)).CanonicalSessionProvider()
+	provider = strings.TrimSpace(provider)
+	if provider == "" || strings.Contains(provider, "${") {
+		return ""
+	}
+	return providers.ID(provider).CanonicalSessionProvider()
 }
 
-func providerMetricProvider(diagnostics *workerexecution.WorkDiagnostics, workerDef *interfaces.FactoryWorkerConfig) string {
-	if diagnostics != nil && diagnostics.Provider != nil && strings.TrimSpace(diagnostics.Provider.Provider) != "" {
-		return diagnostics.Provider.Provider
+func providerMetricProvider(result workerexecution.WorkResult, workerDef *interfaces.FactoryWorkerConfig) string {
+	providers := make([]string, 0, 4)
+	if result.Diagnostics != nil && result.Diagnostics.Provider != nil {
+		providers = append(providers, result.Diagnostics.Provider.Provider)
+	}
+	if result.Continuation != nil {
+		providers = append(providers, result.Continuation.Provider)
+	}
+	if result.ProviderSession != nil {
+		providers = append(providers, result.ProviderSession.Provider)
 	}
 	if workerDef != nil {
-		return workerDef.ModelProvider
+		providers = append(providers, workerDef.ModelProvider)
+	}
+	for _, provider := range providers {
+		if normalized := normalizedRuntimeMetricProvider(provider); normalized != "" {
+			return normalized
+		}
 	}
 	return ""
 }
