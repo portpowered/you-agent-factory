@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil/factorydefinitionfixtures"
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	"github.com/portpowered/infinite-you/pkg/services/automations"
 	automationinternal "github.com/portpowered/infinite-you/pkg/services/automations/internal"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
@@ -18,7 +19,7 @@ import (
 type automationFixture struct {
 	Logger            *zap.Logger
 	Clock             factory.Clock
-	CommandRunner     workers.CommandRunner
+	CommandRunner     platformprocess.CommandRunner
 	WorkflowID        string
 	DefaultFactoryDir string
 	ResolveTemplates  workers.TemplateFieldResolver

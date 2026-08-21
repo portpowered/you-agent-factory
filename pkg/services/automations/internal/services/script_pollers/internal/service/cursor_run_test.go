@@ -6,10 +6,10 @@ import (
 	"strings"
 	"testing"
 
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	automations "github.com/portpowered/infinite-you/pkg/services/automations"
 	scriptpollers "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/script_pollers"
 	"github.com/portpowered/infinite-you/pkg/services/work"
-	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
 func TestRunScriptPoller_CommitsCursorAfterSuccessfulAdvance(t *testing.T) {
@@ -24,7 +24,7 @@ func TestRunScriptPoller_CommitsCursorAfterSuccessfulAdvance(t *testing.T) {
 		"checkpoint":"checkpoint-2"
 	}`)
 	runner := &sequenceCommandRunner{
-		outcomes: []runOutcome{{result: workers.CommandResult{Stdout: stdout}}},
+		outcomes: []runOutcome{{result: platformprocess.CommandResult{Stdout: stdout}}},
 	}
 	submitted := &recordingSubmitter{}
 	recorder := scriptpollers.NewMemoryCursorRecorder()
@@ -88,7 +88,7 @@ func TestRunScriptPoller_ResumesWithCompatibleCursorInCommandEnv(t *testing.T) {
 	}
 
 	runner := &sequenceCommandRunner{
-		outcomes: []runOutcome{{result: workers.CommandResult{Stdout: []byte(`{"requestId":"noop","type":"FACTORY_REQUEST_BATCH","works":[{"name":"noop","workTypeName":"task"}]}`)}}},
+		outcomes: []runOutcome{{result: platformprocess.CommandResult{Stdout: []byte(`{"requestId":"noop","type":"FACTORY_REQUEST_BATCH","works":[{"name":"noop","workTypeName":"task"}]}`)}}},
 	}
 	svc := newScriptPollersServiceWithOptions(scriptPollersServiceOptions{
 		runner:         runner,
@@ -143,7 +143,7 @@ func TestRunScriptPoller_RejectsStaleCursorWithoutSubmit(t *testing.T) {
 	}
 
 	runner := &sequenceCommandRunner{
-		outcomes: []runOutcome{{result: workers.CommandResult{Stdout: []byte(`{"requestId":"stale","type":"FACTORY_REQUEST_BATCH","works":[{"name":"stale","workTypeName":"task"}]}`)}}},
+		outcomes: []runOutcome{{result: platformprocess.CommandResult{Stdout: []byte(`{"requestId":"stale","type":"FACTORY_REQUEST_BATCH","works":[{"name":"stale","workTypeName":"task"}]}`)}}},
 	}
 	submitted := &recordingSubmitter{}
 	svc := newScriptPollersServiceWithOptions(scriptPollersServiceOptions{
@@ -194,7 +194,7 @@ func TestRunScriptPoller_CursorPersistFailureDoesNotReportSuccess(t *testing.T) 
 		"cursor":"opaque-cursor-next"
 	}`)
 	runner := &sequenceCommandRunner{
-		outcomes: []runOutcome{{result: workers.CommandResult{Stdout: stdout}}},
+		outcomes: []runOutcome{{result: platformprocess.CommandResult{Stdout: stdout}}},
 	}
 	submitted := &recordingSubmitter{}
 	svc := newScriptPollersServiceWithOptions(scriptPollersServiceOptions{

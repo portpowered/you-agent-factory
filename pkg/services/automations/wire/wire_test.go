@@ -12,6 +12,7 @@ import (
 	"github.com/jonboulle/clockwork"
 	"github.com/portpowered/infinite-you/internal/testutil/factorydefinitionfixtures"
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	automations "github.com/portpowered/infinite-you/pkg/services/automations"
 	hostedsourceswire "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/hosted_sources/wire"
 	scriptpollers "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/script_pollers"
@@ -25,7 +26,7 @@ import (
 type constructionPorts struct {
 	logger           *zap.Logger
 	clock            clockwork.Clock
-	commandRunner    workers.CommandRunner
+	commandRunner    platformprocess.CommandRunner
 	hostedPollers    automations.HostedPollers
 	resolveTemplates workers.TemplateFieldResolver
 	executionPolicy  factorydefinitions.WorkstationExecutionPolicyService
@@ -104,15 +105,15 @@ func (ports constructionPorts) newService(t *testing.T) runtimeAutomationService
 
 type stubCommandRunner struct{}
 
-func (stubCommandRunner) Run(context.Context, workers.CommandRequest) (workers.CommandResult, error) {
-	return workers.CommandResult{}, nil
+func (stubCommandRunner) Run(context.Context, platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
+	return platformprocess.CommandResult{}, nil
 }
 
 type recordingCommandRunner struct {
 	calls *int
 }
 
-func (runner recordingCommandRunner) Run(context.Context, workers.CommandRequest) (workers.CommandResult, error) {
+func (runner recordingCommandRunner) Run(context.Context, platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
 	*runner.calls++
 	panic("command runner invoked during inert construction")
 }

@@ -15,10 +15,10 @@ import (
 
 	factorydefinitioncomposition "github.com/portpowered/infinite-you/internal/testutil/factorydefinitionfixtures"
 	"github.com/portpowered/infinite-you/internal/testutil/runtimefixtures"
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	automationinternal "github.com/portpowered/infinite-you/pkg/services/automations/internal"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/work"
-	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
 func TestWorkflowIdentityForFactoryDir_UsesConfiguredWorkflowID(t *testing.T) {
@@ -288,7 +288,7 @@ func TestService_DefaultCollaboratorsWhenConfigUnset(t *testing.T) {
 	svc := newAutomationService(automationFixture{})
 	factoryDir := t.TempDir()
 	runner := &pollerSequenceCommandRunner{
-		outcomes: []pollerRunOutcome{{result: workers.CommandResult{}}},
+		outcomes: []pollerRunOutcome{{result: platformprocess.CommandResult{}}},
 	}
 	poller := newCanonicalScriptPollerWorkstation()
 	worker := newCanonicalScriptPollerWorker()

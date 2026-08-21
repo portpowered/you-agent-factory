@@ -5,10 +5,10 @@ import (
 	"testing"
 
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	"github.com/portpowered/infinite-you/pkg/services/automations"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorydefinitionswire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire"
-	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"go.uber.org/zap"
 )
 
@@ -16,9 +16,9 @@ type automationFactoryCommandRunner struct{}
 
 func (automationFactoryCommandRunner) Run(
 	context.Context,
-	workers.CommandRequest,
-) (workers.CommandResult, error) {
-	return workers.CommandResult{}, nil
+	platformprocess.CommandRequest,
+) (platformprocess.CommandResult, error) {
+	return platformprocess.CommandResult{}, nil
 }
 
 func TestProvideAutomationsRootConstructsThroughAutomationsWire(t *testing.T) {

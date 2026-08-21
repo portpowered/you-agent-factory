@@ -538,7 +538,7 @@ func provideAutomationsRoot(
 	hostedSourceInputs automationswire.HostedSourceInputs,
 	logger *zap.Logger,
 	clock factoryruntime.Clock,
-	commandRunner factorysessionwire.ScriptCommandRunner,
+	commandRunner platformprocess.CommandRunner,
 	workstationExecution factorydefinitions.WorkstationExecutionPolicyService,
 ) (automations.Root, error) {
 	return automationswire.NewRoot(

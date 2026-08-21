@@ -143,6 +143,7 @@ var servicesSet = wire.NewSet(
 	provideWorkstationExecutionPolicyService,
 	provideTTSObservabilityService,
 	provideAutomationHostedSourceInputs,
+	provideAutomationsCommandRunner,
 	provideAutomationsRoot,
 	wire.Bind(new(automations.Service), new(automations.Root)),
 	provideFactorySessionsService,

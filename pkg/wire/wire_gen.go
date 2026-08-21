@@ -368,8 +368,12 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	if err != nil {
 		return nil, err
 	}
+	commandRunner, err := provideAutomationsCommandRunner(edges2)
+	if err != nil {
+		return nil, err
+	}
 	workstationExecutionPolicyService := provideWorkstationExecutionPolicyService(invocationPolicyPorts)
-	root, err := provideAutomationsRoot(hostedSourceInputs, logger, clock, v17, workstationExecutionPolicyService)
+	root, err := provideAutomationsRoot(hostedSourceInputs, logger, clock, commandRunner, workstationExecutionPolicyService)
 	if err != nil {
 		return nil, err
 	}
@@ -929,6 +933,7 @@ var servicesSet = wire5.NewSet(
 	provideWorkstationExecutionPolicyService,
 	provideTTSObservabilityService,
 	provideAutomationHostedSourceInputs,
+	provideAutomationsCommandRunner,
 	provideAutomationsRoot, wire5.Bind(new(automations.Service), new(automations.Root)), provideFactorySessionsService,
 	provideFactorySessionDetachedOperations,
 	provideFactoryVisualizationMetricsQuery,

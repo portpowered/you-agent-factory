@@ -14,6 +14,7 @@ import (
 	"sync"
 
 	"github.com/jonboulle/clockwork"
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	automations "github.com/portpowered/infinite-you/pkg/services/automations"
 	cron "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/cron"
 	cronwire "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/cron/wire"
@@ -39,7 +40,7 @@ type Clock = automations.Clock
 type Service struct {
 	loggerValue        *zap.Logger
 	clock              Clock
-	commandRunnerEdge  workers.CommandRunner
+	commandRunnerEdge  platformprocess.CommandRunner
 	workflowID         string
 	defaultFactoryDir  string
 	hostedPollers      automations.HostedPollers
@@ -62,7 +63,7 @@ type Service struct {
 func New(
 	logger *zap.Logger,
 	clock Clock,
-	commandRunner workers.CommandRunner,
+	commandRunner platformprocess.CommandRunner,
 	workflowID string,
 	defaultFactoryDir string,
 	hostedPollers automations.HostedPollers,
@@ -165,7 +166,7 @@ func (s *Service) newScriptPollers() scriptpollers.Service {
 func NewService(
 	logger *zap.Logger,
 	clock Clock,
-	commandRunner workers.CommandRunner,
+	commandRunner platformprocess.CommandRunner,
 	workflowID string,
 	defaultFactoryDir string,
 	hostedPollers automations.HostedPollers,
@@ -255,7 +256,7 @@ func (s *Service) logger() *zap.Logger {
 	return s.loggerValue
 }
 
-func (s *Service) commandRunner() workers.CommandRunner {
+func (s *Service) commandRunner() platformprocess.CommandRunner {
 	if s != nil && s.commandRunnerEdge != nil {
 		return s.commandRunnerEdge
 	}
@@ -264,8 +265,8 @@ func (s *Service) commandRunner() workers.CommandRunner {
 
 type unavailableCommandRunner struct{}
 
-func (unavailableCommandRunner) Run(context.Context, workers.CommandRequest) (workers.CommandResult, error) {
-	return workers.CommandResult{}, errors.New("automation command runner is required")
+func (unavailableCommandRunner) Run(context.Context, platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
+	return platformprocess.CommandResult{}, errors.New("automation command runner is required")
 }
 
 func (s *Service) supervisorClock() clockwork.Clock {
