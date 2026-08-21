@@ -32,12 +32,13 @@ func TestRecordReplayLifecycleActivatesThroughRootBuildProcessAfterLifecycle(t *
 	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title":"FUN Recordings record/replay activation"}`))
 
 	artifactPath := filepath.Join(t.TempDir(), "fun-recordings-activation.replay.json")
+	recordEdges := recorder.edges()
+	recordEdges.ProviderCommandRunner = support.NewStaticSuccessCommandRunner("recording activation provider COMPLETE")
 	recordServer := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir:                dir,
 		Args:                      []string{"--record", artifactPath},
-		UseMockWorkers:            true,
 		WaitForServiceModeRuntime: true,
-		Edges:                     recorder.edges(),
+		Edges:                     recordEdges,
 	})
 	t.Cleanup(func() { recordServer.Stop(t) })
 
@@ -82,15 +83,19 @@ func TestRecordReplayLifecycleActivatesThroughRootBuildProcessAfterLifecycle(t *
 		t.Fatal("replayed session missing dispatch response events")
 	}
 
+	support.ClearSeedInputs(t, dir)
 	resumeArtifactPath := filepath.Join(t.TempDir(), "fun-recordings-resume-successor.replay.json")
+	resumeEdges := recorder.edges()
+	resumeEdges.ProviderCommandRunner = support.NewStaticSuccessCommandRunner("resume activation provider COMPLETE")
 	resumeServer := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir:                dir,
 		Args:                      []string{"--resume", artifactPath, "--record", resumeArtifactPath},
-		UseMockWorkers:            true,
 		WaitForServiceModeRuntime: true,
+		Edges:                     resumeEdges,
 	})
 	t.Cleanup(func() { resumeServer.Stop(t) })
 
+	support.WaitForTerminalStatus(t, resumeServer.URL(), 15*time.Second)
 	resumedSession := support.GetDefaultSession(t, resumeServer.URL())
 	if resumedSession.Id == "" {
 		t.Fatal("resumed session missing default session identity")
@@ -131,10 +136,16 @@ func recordingsLifecycleActivationFactoryConfig() map[string]any {
 				{"name": "failed", "type": "FAILED"},
 			},
 		}},
-		"workers": []map[string]string{{"name": "mock-worker"}},
+		"workers": []map[string]any{{
+			"name":             "model-worker",
+			"type":             "MODEL_WORKER",
+			"modelProvider":    "CODEX",
+			"executorProvider": "SCRIPT_WRAP",
+			"model":            "gpt-5-codex",
+		}},
 		"workstations": []map[string]any{{
 			"name":      "process-task",
-			"worker":    "mock-worker",
+			"worker":    "model-worker",
 			"inputs":    []map[string]string{{"workType": "task", "state": "init"}},
 			"outputs":   []map[string]string{{"workType": "task", "state": "complete"}},
 			"onFailure": []map[string]string{{"workType": "task", "state": "failed"}},
