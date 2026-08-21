@@ -71,6 +71,8 @@ type resumeFromRecordingScenario struct {
 type resumeFromRecordingBoundary struct {
 	completed   factoryapi.FactorySessionDispatchSummary
 	interrupted factoryapi.FactorySessionDispatchSummary
+	events      []factoryapi.FactoryEvent
+	cursor      factoryapi.FactoryEvent
 }
 
 func newResumeFromRecordingScenario(t *testing.T) *resumeFromRecordingScenario {
@@ -121,10 +123,19 @@ func (scenario *resumeFromRecordingScenario) interruptAndCapture(
 		t.Fatalf("pre-restart progress = %#v, want one completed dispatch", beforeRestart.Progress)
 	}
 	listed := listResumeFromRecordingDispatches(t, baseURL, scenario.sessionID)
+	events := support.GetFactoryEventsForSessionAt(t, baseURL, scenario.sessionID)
+	assertResumeFromRecordingFactoryEvents(t, "before restart", events)
 	return resumeFromRecordingBoundary{
 		completed: requireResumeFromRecordingDispatch(t, listed, "dispatch-1", factoryapi.FactoryDispatchStatusCOMPLETED),
 		interrupted: requireResumeFromRecordingDispatch(
 			t, listed, "dispatch-2", factoryapi.FactoryDispatchStatusINTERRUPTED, factoryapi.FactoryDispatchStatusRUNNING,
+		),
+		events: events,
+		cursor: requireResumeFromRecordingFactoryEvent(
+			t,
+			events,
+			factoryapi.FactoryEventTypeDispatchReconciled,
+			"dispatch-1",
 		),
 	}
 }
@@ -150,6 +161,9 @@ func (scenario *resumeFromRecordingScenario) assertRestored(
 	if completed.Id != boundary.completed.Id || interrupted.Id != boundary.interrupted.Id {
 		t.Fatalf("dispatch identities changed across restart: completed %q/%q, interrupted %q/%q", boundary.completed.Id, completed.Id, boundary.interrupted.Id, interrupted.Id)
 	}
+	restartedEvents := support.GetFactoryEventsForSessionAt(t, baseURL, scenario.sessionID)
+	assertResumeFromRecordingFactoryEvents(t, "after restart", restartedEvents)
+	assertResumeFromRecordingFactoryEventIDsPresent(t, boundary.events, restartedEvents)
 }
 
 func (scenario *resumeFromRecordingScenario) resumeAndFinish(
@@ -183,6 +197,155 @@ func (scenario *resumeFromRecordingScenario) resumeAndFinish(
 		t.Fatalf("completed dispatch was replaced after resume: %q -> %q", boundary.completed.Id, completed.Id)
 	}
 	requireResumeFromRecordingDispatch(t, final, "dispatch-2", factoryapi.FactoryDispatchStatusCOMPLETED)
+	finalEvents := support.GetFactoryEventsForSessionAt(t, baseURL, scenario.sessionID)
+	assertResumeFromRecordingFactoryEvents(t, "after resume", finalEvents)
+	assertResumeFromRecordingFactoryEventIDsPresent(t, boundary.events, finalEvents)
+	assertResumeFromRecordingFactoryCursorReplay(t, baseURL, scenario, boundary, finalEvents)
+}
+
+func assertResumeFromRecordingFactoryEvents(t *testing.T, phase string, events []factoryapi.FactoryEvent) {
+	t.Helper()
+	if len(events) == 0 {
+		t.Fatalf("Factory Events %s = 0, want retained public history", phase)
+	}
+	seenIDs := make(map[string]struct{}, len(events))
+	previousSequence := -1
+	previousSessionSequence := -1
+	for index, event := range events {
+		if event.Id == "" {
+			t.Fatalf("Factory Event %s[%d] has an empty identity", phase, index)
+		}
+		if _, exists := seenIDs[event.Id]; exists {
+			t.Fatalf("Factory Event %s[%d] repeats identity %q", phase, index, event.Id)
+		}
+		seenIDs[event.Id] = struct{}{}
+		if event.Context.Sequence <= previousSequence {
+			t.Fatalf(
+				"Factory Event %s[%d] sequence %d does not strictly follow %d",
+				phase,
+				index,
+				event.Context.Sequence,
+				previousSequence,
+			)
+		}
+		previousSequence = event.Context.Sequence
+		if event.Context.SessionSequence != nil {
+			if *event.Context.SessionSequence <= previousSessionSequence {
+				t.Fatalf(
+					"Factory Event %s[%d] session sequence %d does not strictly follow %d",
+					phase,
+					index,
+					*event.Context.SessionSequence,
+					previousSessionSequence,
+				)
+			}
+			previousSessionSequence = *event.Context.SessionSequence
+		}
+	}
+}
+
+func assertResumeFromRecordingFactoryEventIDsPresent(
+	t *testing.T,
+	beforeRestart []factoryapi.FactoryEvent,
+	afterRestart []factoryapi.FactoryEvent,
+) {
+	t.Helper()
+	afterIDs := make(map[string]struct{}, len(afterRestart))
+	for _, event := range afterRestart {
+		afterIDs[event.Id] = struct{}{}
+	}
+	for _, event := range beforeRestart {
+		if _, exists := afterIDs[event.Id]; !exists {
+			t.Fatalf("Factory Event %q was lost across restart", event.Id)
+		}
+	}
+}
+
+func assertResumeFromRecordingFactoryCursorReplay(
+	t *testing.T,
+	baseURL string,
+	scenario *resumeFromRecordingScenario,
+	boundary resumeFromRecordingBoundary,
+	finalEvents []factoryapi.FactoryEvent,
+) {
+	t.Helper()
+	cursorIndex := indexResumeFromRecordingFactoryEvent(t, finalEvents, boundary.cursor.Id)
+	wantCount := len(finalEvents) - cursorIndex - 1
+	if wantCount == 0 {
+		t.Fatalf("Factory Event cursor %q has no post-resume events to replay", boundary.cursor.Id)
+	}
+	replayed := support.GetFactoryEventsAfterForSessionAt(
+		t,
+		baseURL,
+		scenario.sessionID,
+		support.FactoryEventReadCursor{AfterEventID: boundary.cursor.Id},
+	)
+	if len(replayed) != wantCount {
+		t.Fatalf("Factory Event cursor replay count = %d, want %d", len(replayed), wantCount)
+	}
+	seenIDs := make(map[string]struct{}, len(boundary.events)+len(replayed))
+	previousSequence := -1
+	for _, event := range boundary.events {
+		seenIDs[event.Id] = struct{}{}
+		previousSequence = event.Context.Sequence
+		if event.Id == boundary.cursor.Id {
+			break
+		}
+	}
+	for index, event := range replayed {
+		if event.Id == boundary.cursor.Id {
+			t.Fatalf("Factory Event cursor %q was redelivered", boundary.cursor.Id)
+		}
+		if _, exists := seenIDs[event.Id]; exists {
+			t.Fatalf("Factory Event %q was duplicated across the acknowledged cursor", event.Id)
+		}
+		if event.Context.Sequence <= previousSequence {
+			t.Fatalf(
+				"replayed Factory Event %q sequence %d at index %d regressed from %d",
+				event.Id,
+				event.Context.Sequence,
+				index,
+				previousSequence,
+			)
+		}
+		want := finalEvents[cursorIndex+index+1]
+		if event.Id != want.Id || event.Context.Sequence != want.Context.Sequence {
+			t.Fatalf("replayed Factory Event[%d] = %q/%d, want %q/%d", index, event.Id, event.Context.Sequence, want.Id, want.Context.Sequence)
+		}
+		seenIDs[event.Id] = struct{}{}
+		previousSequence = event.Context.Sequence
+	}
+}
+
+func requireResumeFromRecordingFactoryEvent(
+	t *testing.T,
+	events []factoryapi.FactoryEvent,
+	eventType factoryapi.FactoryEventType,
+	dispatchID string,
+) factoryapi.FactoryEvent {
+	t.Helper()
+	for _, event := range events {
+		if event.Type == eventType && support.StringPointerValue(event.Context.DispatchId) == dispatchID {
+			return event
+		}
+	}
+	t.Fatalf("Factory Event type %q for dispatch %q is missing", eventType, dispatchID)
+	return factoryapi.FactoryEvent{}
+}
+
+func indexResumeFromRecordingFactoryEvent(
+	t *testing.T,
+	events []factoryapi.FactoryEvent,
+	eventID string,
+) int {
+	t.Helper()
+	for index, event := range events {
+		if event.Id == eventID {
+			return index
+		}
+	}
+	t.Fatalf("Factory Event cursor %q is missing from retained history", eventID)
+	return -1
 }
 
 func setupResumeFromRecordingFixture(t *testing.T) string {
