@@ -95,6 +95,7 @@ func TestShow_HumanOutputRendersPetriFactorySession(t *testing.T) {
 	output := out.String()
 	for _, want := range []string{
 		"Orchestrator kind:\tPETRI",
+		"Work tokens (marking):\t1",
 		"Petri marking tokens:\t1",
 		"Enabled transition:\ttr-process (worker-a)",
 	} {
@@ -104,6 +105,12 @@ func TestShow_HumanOutputRendersPetriFactorySession(t *testing.T) {
 	}
 	if strings.Contains(output, "Dynamic workflow:") {
 		t.Fatalf("Petri output should not include dynamic workflow shorthand: %s", output)
+	}
+	if strings.Contains(output, "Total tokens:") {
+		t.Fatalf("Petri output retained ambiguous total-token label: %s", output)
+	}
+	if strings.Contains(strings.ToLower(output), "cost") {
+		t.Fatalf("human output unexpectedly contains cost text: %s", output)
 	}
 }
 
@@ -128,6 +135,32 @@ func TestShow_JSONModeEmitsFactorySession(t *testing.T) {
 	}
 	if got.Id != "session-beta" || got.Runtime.OrchestratorKind != factoryapi.JAVASCRIPT {
 		t.Fatalf("session = %#v, want JavaScript session-beta", got)
+	}
+	var payload map[string]json.RawMessage
+	if err := json.Unmarshal(out.Bytes(), &payload); err != nil {
+		t.Fatalf("decode raw JSON: %v\n%s", err, out.String())
+	}
+	var runtime map[string]json.RawMessage
+	if err := json.Unmarshal(payload["runtime"], &runtime); err != nil {
+		t.Fatalf("decode runtime JSON: %v\n%s", err, out.String())
+	}
+	var progress map[string]json.RawMessage
+	if err := json.Unmarshal(runtime["progress"], &progress); err != nil {
+		t.Fatalf("decode progress JSON: %v\n%s", err, out.String())
+	}
+	totalTokens, ok := progress["totalTokens"]
+	if !ok {
+		t.Fatalf("JSON missing runtime.progress.totalTokens: %s", out.String())
+	}
+	var gotTotalTokens int
+	if err := json.Unmarshal(totalTokens, &gotTotalTokens); err != nil {
+		t.Fatalf("decode totalTokens: %v", err)
+	}
+	if gotTotalTokens != 0 {
+		t.Fatalf("totalTokens = %d, want 0", gotTotalTokens)
+	}
+	if strings.Contains(strings.ToLower(out.String()), "cost") {
+		t.Fatalf("JSON output unexpectedly contains cost text: %s", out.String())
 	}
 }
 
