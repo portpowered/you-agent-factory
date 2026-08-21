@@ -206,7 +206,7 @@ func (a *Assembly) Assemble(
 		// The resumed ledger must expose the recorded prefix before the live
 		// successor starts emitting events; otherwise public reconnect cursors
 		// cannot cross the process boundary.
-		spec.ReplayEvents = cloneFactoryEvents(restoredEvents)
+		spec.ResumeCanonicalEvents = cloneFactoryEvents(restoredEvents)
 	}
 	spec.RestoredWorldState, err = reconstructRestoredWorldState(
 		recordingsRuntime,

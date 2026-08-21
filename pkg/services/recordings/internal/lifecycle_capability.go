@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/recordings/internal/canonical"
 	"strings"
@@ -14,6 +15,40 @@ import (
 )
 
 var _ recordings.RecordingLifecycle = (*combinedService)(nil)
+
+func (service *combinedService) openRuntimeLedger(
+	request recordings.RuntimeScopeRequest,
+	streamGenerationID string,
+) (recordings.RuntimeEventLedger, string, error) {
+	ledger := NewRuntimeLedger(
+		request.Topology,
+		request.Now,
+		streamGenerationID,
+		request.Definitions,
+	)
+	if ledger == nil {
+		return nil, "", fmt.Errorf("Recordings runtime ledger is unavailable")
+	}
+	if len(request.ReplayEvents) > 0 {
+		seeder, ok := ledger.(interface {
+			SeedCanonicalEvents([]factorydefinitions.FactoryEvent) error
+		})
+		if !ok {
+			return nil, "", fmt.Errorf("Recordings runtime ledger does not support restored event history")
+		}
+		if err := seeder.SeedCanonicalEvents(request.ReplayEvents); err != nil {
+			return nil, "", fmt.Errorf("seed restored Factory Event history: %w", err)
+		}
+	}
+	routeKey := strings.TrimSpace(request.FactorySessionID)
+	if routeKey == "" {
+		routeKey = ledger.StreamGenerationID()
+	}
+	if err := service.runtimeRouter.register(routeKey, ledger); err != nil {
+		return nil, "", err
+	}
+	return ledger, routeKey, nil
+}
 
 // LoadResumeInput keeps explicit resume classification on the Recordings root
 // while retaining the narrow pre-ledger compatibility seam used by the

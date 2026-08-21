@@ -66,6 +66,50 @@ type SessionLifecycleCompleteInput struct {
 // SessionLifecycleControlInput remains an alias for source compatibility.
 type SessionLifecycleControlInput = recordings.SessionLifecycleControlInput
 
+// SeedCanonicalEvents restores an already-recorded event prefix before the
+// runtime emits successor lifecycle events. The restored identities and
+// ordering metadata remain untouched so public reconnect cursors continue
+// across a process replacement.
+func (h *FactoryEventHistory) SeedCanonicalEvents(events []interfaces.FactoryEvent) error {
+	if h == nil {
+		return fmt.Errorf("factory event history is unavailable")
+	}
+	if len(events) == 0 {
+		return nil
+	}
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if len(h.events) > 0 {
+		return fmt.Errorf("factory event history already contains events")
+	}
+	h.events = cloneFactoryEvents(events)
+	for _, event := range h.events {
+		switch event.Type {
+		case interfaces.FactoryEventTypeInitialStructureRequest:
+			h.hasInitialStructure = true
+		case interfaces.FactoryEventTypeRunRequest:
+			h.hasRunRequest = true
+			h.runRecordedAt = interfaces.CanonicalEventTime(event.Context.EventTime)
+		case interfaces.FactoryEventTypeRunResponse:
+			h.hasRunResponse = true
+		case interfaces.FactoryEventTypeSessionStarted:
+			h.hasSessionStarted = true
+			h.sessionStartedAt = interfaces.CanonicalEventTime(event.Context.EventTime)
+		case interfaces.FactoryEventTypeSessionCompleted:
+			h.hasSessionCompleted = true
+		}
+		if event.Context.SessionID != nil {
+			if sessionID := strings.TrimSpace(*event.Context.SessionID); sessionID != "" {
+				h.sessionID = sessionID
+			}
+		}
+		if event.Context.SessionSequence != nil && *event.Context.SessionSequence >= h.nextSessionSequence {
+			h.nextSessionSequence = *event.Context.SessionSequence + 1
+		}
+	}
+	return nil
+}
+
 // RecordSessionPaused records a successful Factory Session pause lifecycle transition.
 func (h *FactoryEventHistory) RecordSessionPaused(input SessionLifecycleControlInput, eventTime time.Time) {
 	if h == nil || strings.TrimSpace(input.SessionID) == "" {

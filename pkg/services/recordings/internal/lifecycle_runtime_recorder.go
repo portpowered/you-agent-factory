@@ -537,40 +537,6 @@ func validateRuntimeOpening(
 	return nil
 }
 
-func (service *combinedService) openRuntimeLedger(
-	request recordings.RuntimeScopeRequest,
-	streamGenerationID string,
-) (recordings.RuntimeEventLedger, string, error) {
-	ledger := NewRuntimeLedger(
-		request.Topology,
-		request.Now,
-		streamGenerationID,
-		request.Definitions,
-	)
-	if ledger == nil {
-		return nil, "", fmt.Errorf("Recordings runtime ledger is unavailable")
-	}
-	if len(request.ReplayEvents) > 0 {
-		seeder, ok := ledger.(interface {
-			SeedCanonicalEvents([]factorydefinitions.FactoryEvent) error
-		})
-		if !ok {
-			return nil, "", fmt.Errorf("Recordings runtime ledger does not support restored event history")
-		}
-		if err := seeder.SeedCanonicalEvents(request.ReplayEvents); err != nil {
-			return nil, "", fmt.Errorf("seed restored Factory Event history: %w", err)
-		}
-	}
-	routeKey := strings.TrimSpace(request.FactorySessionID)
-	if routeKey == "" {
-		routeKey = ledger.StreamGenerationID()
-	}
-	if err := service.runtimeRouter.register(routeKey, ledger); err != nil {
-		return nil, "", err
-	}
-	return ledger, routeKey, nil
-}
-
 func (service *combinedService) openRuntimeRecordingScope(
 	request recordings.RuntimeScopeRequest,
 	streamGenerationID string,

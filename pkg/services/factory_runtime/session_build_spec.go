@@ -49,7 +49,11 @@ type SessionBuildSpec struct {
 	// replay. Runtime execution may re-emit events while rebuilding state, but
 	// durable Worker Session streams must retain the artifact's original cursor
 	// positions.
-	ReplayEvents          []factorydefinitions.FactoryEvent
+	ReplayEvents []factorydefinitions.FactoryEvent
+	// ResumeCanonicalEvents carries only the canonical prefix that must seed a
+	// live successor after a process replacement. It is separate from
+	// ReplayEvents because ordinary replay re-emits the artifact events.
+	ResumeCanonicalEvents []factorydefinitions.FactoryEvent
 	SubmissionHooks       []SubmissionHook
 	CompletionPlanner     CompletionDeliveryPlanner
 	PetriMutationRecorder PetriMutationRecorder
