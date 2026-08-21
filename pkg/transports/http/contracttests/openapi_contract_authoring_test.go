@@ -273,6 +273,15 @@ func TestOpenAPIAuthoring_APISchemasUseDedicatedFragments(t *testing.T) {
 		"ManagedRuntimeSourceDiagnostics":     "./components/schemas/api/ManagedRuntimeSourceDiagnostics.yaml",
 		"ModelSummary":                        "./components/schemas/api/ModelSummary.yaml",
 		"ModelDetail":                         "./components/schemas/api/ModelDetail.yaml",
+		"ModelInvocationInput":                "./components/schemas/api/ModelInvocationInput.yaml",
+		"ModelInvocationOutput":               "./components/schemas/api/ModelInvocationOutput.yaml",
+		"ModelInvocationArtifact":             "./components/schemas/api/ModelInvocationArtifact.yaml",
+		"ModelInvocationParameter":            "./components/schemas/api/ModelInvocationParameter.yaml",
+		"ModelInvocationOutputMode":           "./components/schemas/api/ModelInvocationOutputMode.yaml",
+		"ModelInvocationFailureClass":         "./components/schemas/api/ModelInvocationFailureClass.yaml",
+		"ModelInvocationFailure":              "./components/schemas/api/ModelInvocationFailure.yaml",
+		"GenericModelInvocationRequest":       "./components/schemas/api/GenericModelInvocationRequest.yaml",
+		"GenericModelInvocationResponse":      "./components/schemas/api/GenericModelInvocationResponse.yaml",
 		"ModelInvocationRequest":              "./components/schemas/api/ModelInvocationRequest.yaml",
 		"ModelInvocationOptions":              "./components/schemas/api/ModelInvocationOptions.yaml",
 		"ModelInvocationResponseMode":         "./components/schemas/api/ModelInvocationResponseMode.yaml",
@@ -329,6 +338,7 @@ func TestOpenAPIAuthoring_DataModelSchemasUseDedicatedFragments(t *testing.T) {
 		"Work":                   "./components/schemas/data-models/Work.yaml",
 		"Relation":               "./components/schemas/data-models/Relation.yaml",
 		"RelationType":           "./components/schemas/data-models/RelationType.yaml",
+		"ModelReference":         "./components/schemas/data-models/ModelReference.yaml",
 	}
 	for schemaName, wantRef := range expectedRefs {
 		assertSchemaRef(t, schemas, schemaName, wantRef)

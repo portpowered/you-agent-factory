@@ -405,3 +405,85 @@ func TestGenericOperationContractsAreDetached(t *testing.T) {
 		t.Fatalf("GenericOperationContract retained caller mutation: %#v", second)
 	}
 }
+
+func TestGenericInvocationRequestPreservesOrderedRepeatedInputs(t *testing.T) {
+	t.Parallel()
+
+	scope, err := (models.RuntimeScopeRef{}).Parse("scope-generic-001")
+	if err != nil {
+		t.Fatalf("parse scope: %v", err)
+	}
+	request := models.GenericInvocationRequest{
+		Scope:     scope,
+		Holder:    "cli",
+		Model:     models.ModelReference{NameOrURI: "llm"},
+		Operation: models.OperationOMNI,
+		Inputs: []models.InferenceInput{
+			{Name: "prompt", Modality: models.ModalityText, Content: "compare"},
+			{Name: "image", Modality: models.ModalityImage, MediaType: "image/png", Content: "first"},
+			{Name: "image", Modality: models.ModalityImage, MediaType: "image/jpeg", Content: "second"},
+		},
+		Parameters: []models.OperationParameter{{Name: "temperature", Value: map[string]any{"value": 0.2}}},
+		OutputMode: models.OutputModeJSON,
+		Offline:    true,
+	}
+	if err := request.Validate(); err != nil {
+		t.Fatalf("Validate() error = %v", err)
+	}
+	if len(request.Inputs) != 3 || request.Inputs[1].Name != "image" || request.Inputs[2].Content != "second" {
+		t.Fatalf("ordered inputs = %#v", request.Inputs)
+	}
+	if request.Parameters[0].Name != "temperature" || request.OutputMode != models.OutputModeJSON || !request.Offline {
+		t.Fatalf("generic request controls = %#v", request)
+	}
+}
+
+func TestGenericInvocationResultPreservesNamedASROutputsAndTypedFailures(t *testing.T) {
+	t.Parallel()
+
+	artifact, err := (models.InferenceArtifactRef{}).Parse("artifact:segments")
+	if err != nil {
+		t.Fatalf("parse artifact: %v", err)
+	}
+	result := models.GenericInvocationResult{
+		Outputs: []models.InferenceOutput{
+			{Name: "transcript", Modality: models.ModalityText, MediaType: "text/plain", Content: "hello"},
+			{Name: "segments", Modality: models.ModalityJSON, MediaType: "application/json", Artifact: &models.InferenceArtifact{
+				Artifact: artifact, Name: "segments.json", MediaType: "application/json", SizeBytes: 12,
+			}},
+		},
+	}
+	cloned := result.Clone()
+	cloned.Outputs[1].Artifact.Properties = map[string]string{"mutated": "true"}
+	if len(cloned.Outputs) != 2 || cloned.Outputs[0].Name != "transcript" || cloned.Outputs[1].Name != "segments" {
+		t.Fatalf("named outputs = %#v", cloned.Outputs)
+	}
+
+	classes := []models.InvocationFailureClass{
+		models.InvocationFailureClassInvalidModelReference,
+		models.InvocationFailureClassInvalidOperation,
+		models.InvocationFailureClassInvalidSlot,
+		models.InvocationFailureClassSlotArity,
+		models.InvocationFailureClassInvalidParameter,
+		models.InvocationFailureClassMediaCapability,
+		models.InvocationFailureClassConfiguration,
+		models.InvocationFailureClassOfflineCache,
+		models.InvocationFailureClassArtifact,
+		models.InvocationFailureClassBackendReadiness,
+		models.InvocationFailureClassBackendProtocol,
+		models.InvocationFailureClassCancellation,
+		models.InvocationFailureClassTimeout,
+		models.InvocationFailureClassMalformedResponse,
+	}
+	seen := make(map[models.InvocationFailureClass]struct{}, len(classes))
+	for _, class := range classes {
+		if _, duplicate := seen[class]; duplicate {
+			t.Fatalf("duplicate invocation failure class %q", class)
+		}
+		seen[class] = struct{}{}
+	}
+	var typed *models.InvocationFailure
+	if !errors.As((&models.InvocationFailure{Class: models.InvocationFailureClassTimeout, Message: "timed out"}), &typed) || typed.Class != models.InvocationFailureClassTimeout {
+		t.Fatal("typed invocation failure did not preserve class identity")
+	}
+}

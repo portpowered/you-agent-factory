@@ -92,11 +92,12 @@ const (
 type Modality string
 
 const (
-	ModalityText  Modality = "TEXT"
-	ModalityImage Modality = "IMAGE"
-	ModalityAudio Modality = "AUDIO"
-	ModalityVideo Modality = "VIDEO"
-	ModalityJSON  Modality = "JSON"
+	ModalityText   Modality = "TEXT"
+	ModalityImage  Modality = "IMAGE"
+	ModalityAudio  Modality = "AUDIO"
+	ModalityVideo  Modality = "VIDEO"
+	ModalityJSON   Modality = "JSON"
+	ModalityBinary Modality = "BINARY"
 )
 
 // OperationSlot describes one named input or output of a model operation.

@@ -820,6 +820,32 @@ const (
 	ManagedRuntimeReadinessStateUNSUPPORTED ManagedRuntimeReadinessState = "UNSUPPORTED"
 )
 
+// Defines values for ModelInvocationFailureClass.
+const (
+	ModelInvocationFailureClassArtifact              ModelInvocationFailureClass = "ARTIFACT"
+	ModelInvocationFailureClassBackendProtocol       ModelInvocationFailureClass = "BACKEND_PROTOCOL"
+	ModelInvocationFailureClassBackendReadiness      ModelInvocationFailureClass = "BACKEND_READINESS"
+	ModelInvocationFailureClassCancellation          ModelInvocationFailureClass = "CANCELLATION"
+	ModelInvocationFailureClassConfiguration         ModelInvocationFailureClass = "CONFIGURATION"
+	ModelInvocationFailureClassInvalidModelReference ModelInvocationFailureClass = "INVALID_MODEL_REFERENCE"
+	ModelInvocationFailureClassInvalidOperation      ModelInvocationFailureClass = "INVALID_OPERATION"
+	ModelInvocationFailureClassInvalidParameter      ModelInvocationFailureClass = "INVALID_PARAMETER"
+	ModelInvocationFailureClassInvalidSlot           ModelInvocationFailureClass = "INVALID_SLOT"
+	ModelInvocationFailureClassMalformedResponse     ModelInvocationFailureClass = "MALFORMED_RESPONSE"
+	ModelInvocationFailureClassMediaCapability       ModelInvocationFailureClass = "MEDIA_CAPABILITY"
+	ModelInvocationFailureClassOfflineCache          ModelInvocationFailureClass = "OFFLINE_CACHE"
+	ModelInvocationFailureClassSlotArity             ModelInvocationFailureClass = "SLOT_ARITY"
+	ModelInvocationFailureClassTimeout               ModelInvocationFailureClass = "TIMEOUT"
+)
+
+// Defines values for ModelInvocationOutputMode.
+const (
+	ModelInvocationOutputModeArtifact ModelInvocationOutputMode = "ARTIFACT"
+	ModelInvocationOutputModeAuto     ModelInvocationOutputMode = "AUTO"
+	ModelInvocationOutputModeInline   ModelInvocationOutputMode = "INLINE"
+	ModelInvocationOutputModeJSON     ModelInvocationOutputMode = "JSON"
+)
+
 // Defines values for ModelInvocationResponseMode.
 const (
 	AUDIOSTREAM ModelInvocationResponseMode = "AUDIO_STREAM"
@@ -4901,6 +4927,42 @@ type FailureDetail struct {
 	Reason WorkFailureType `json:"reason"`
 }
 
+// GenericModelInvocationRequest Provider-neutral generic model invocation request. Inputs and parameters retain authored order.
+type GenericModelInvocationRequest struct {
+	// Holder Non-empty caller identity used by the eventual capacity owner.
+	Holder string `json:"holder"`
+
+	// Inputs Ordered input values. Repeated slot names remain separate entries in this order.
+	Inputs *[]ModelInvocationInput `json:"inputs,omitempty"`
+
+	// Model Opaque model name or source URI accepted by the provider-neutral invocation contract.
+	Model ModelReference `json:"model"`
+
+	// Offline Whether resolution and preparation must remain cache-only.
+	Offline *bool `json:"offline,omitempty"`
+
+	// Operation Uppercase public operation identifier such as `TTS`, `ASR`, or `EMBED`.
+	Operation ModelOperationName `json:"operation"`
+
+	// OutputMode Provider-neutral representation requested for a generic model invocation result.
+	OutputMode *ModelInvocationOutputMode `json:"outputMode,omitempty"`
+
+	// Parameters Ordered named JSON parameters for the selected operation.
+	Parameters *[]ModelInvocationParameter `json:"parameters,omitempty"`
+
+	// Scope Opaque Models runtime-scope reference.
+	Scope string `json:"scope"`
+}
+
+// GenericModelInvocationResponse Provider-neutral generic model invocation result with ordered slot-named outputs.
+type GenericModelInvocationResponse struct {
+	// Failure Customer-safe typed failure for a generic model invocation.
+	Failure *ModelInvocationFailure `json:"failure,omitempty"`
+
+	// Outputs Ordered outputs. Distinct slots such as ASR transcript and segments remain separate entries.
+	Outputs []ModelInvocationOutput `json:"outputs"`
+}
+
 // GlobalConfig Shared operator configuration stored in .you-agent-factory/config.json.
 type GlobalConfig struct {
 	// BackendScopeID Stable identifier for the local provider-backed runtime boundary.
@@ -5589,10 +5651,106 @@ type ModelDetail struct {
 	Status ModelStatus `json:"status"`
 }
 
+// ModelInvocationArtifact defines model for ModelInvocationArtifact.
+type ModelInvocationArtifact struct {
+	// ArtifactRef Opaque Models-owned artifact reference; cache paths and storage handles are never exposed.
+	ArtifactRef string `json:"artifactRef"`
+
+	// MediaType MIME type of the materialized artifact, when known.
+	MediaType *string `json:"mediaType,omitempty"`
+
+	// Name Customer-visible artifact name, when available.
+	Name       *string    `json:"name,omitempty"`
+	Properties *StringMap `json:"properties,omitempty"`
+
+	// SizeBytes Artifact size in bytes, when known.
+	SizeBytes *int64 `json:"sizeBytes,omitempty"`
+}
+
+// ModelInvocationFailure Customer-safe typed failure for a generic model invocation.
+type ModelInvocationFailure struct {
+	// Class Stable provider-neutral failure identity for generic model invocation.
+	Class ModelInvocationFailureClass `json:"class"`
+
+	// Field Public request field associated with the failure, when known.
+	Field *string `json:"field,omitempty"`
+
+	// Message Actionable failure explanation without cache paths, backend addresses, credentials, or protocol payloads.
+	Message string `json:"message"`
+
+	// Model Opaque model name or source URI accepted by the provider-neutral invocation contract.
+	Model *ModelReference `json:"model,omitempty"`
+
+	// Operation Operation associated with the failure, when known.
+	Operation *string `json:"operation,omitempty"`
+
+	// Parameter Parameter associated with the failure, when known.
+	Parameter *string `json:"parameter,omitempty"`
+
+	// Slot Input or output slot associated with the failure, when known.
+	Slot *string `json:"slot,omitempty"`
+}
+
+// ModelInvocationFailureClass Stable provider-neutral failure identity for generic model invocation.
+type ModelInvocationFailureClass string
+
+// ModelInvocationInput One ordered value supplied to a named model-operation input slot.
+type ModelInvocationInput struct {
+	// ArtifactRef Opaque Models-owned input artifact reference when content is not inline.
+	ArtifactRef *string `json:"artifactRef,omitempty"`
+
+	// Content Inline content. JSON values are carried as their canonical JSON text.
+	Content *string `json:"content,omitempty"`
+
+	// ContentType Logical content type retained for compatibility with prepared invocation inputs.
+	ContentType *string `json:"contentType,omitempty"`
+
+	// MediaType Concrete MIME type for media or file-backed content, when known.
+	MediaType *string `json:"mediaType,omitempty"`
+
+	// Modality Uppercase content-part categories supported by worker model-operation capability slots.
+	Modality ModelOperationContentType `json:"modality"`
+
+	// Name Input slot name declared by the selected operation.
+	Name string `json:"name"`
+}
+
 // ModelInvocationOptions Optional direct-invocation controls for response shaping and transport.
 type ModelInvocationOptions struct {
 	// ResponseMode Requested direct-invocation response mode.
 	ResponseMode *ModelInvocationResponseMode `json:"responseMode,omitempty"`
+}
+
+// ModelInvocationOutput One ordered, slot-named output of a generic model invocation.
+type ModelInvocationOutput struct {
+	Artifact *ModelInvocationArtifact `json:"artifact,omitempty"`
+
+	// Content Inline output content. JSON values are carried as their canonical JSON text.
+	Content *string `json:"content,omitempty"`
+
+	// ContentType Logical content type retained for compatibility with prepared invocation outputs.
+	ContentType *string `json:"contentType,omitempty"`
+
+	// MediaType Concrete MIME type for media or file-backed output, when known.
+	MediaType *string `json:"mediaType,omitempty"`
+
+	// Modality Uppercase content-part categories supported by worker model-operation capability slots.
+	Modality ModelOperationContentType `json:"modality"`
+
+	// Name Output slot name declared by the selected operation.
+	Name string `json:"name"`
+}
+
+// ModelInvocationOutputMode Provider-neutral representation requested for a generic model invocation result.
+type ModelInvocationOutputMode string
+
+// ModelInvocationParameter One ordered named JSON parameter supplied to a model operation.
+type ModelInvocationParameter struct {
+	// Name Operation parameter name.
+	Name string `json:"name"`
+
+	// Value JSON-compatible parameter value preserved without backend-specific typing.
+	Value interface{} `json:"value"`
 }
 
 // ModelInvocationRequest defines model for ModelInvocationRequest.
@@ -5711,6 +5869,12 @@ type ModelPullResponse struct {
 
 	// Revision Managed revision identifier for the installed runtime assets. Mirrors `managedRuntimePull.revision`.
 	Revision string `json:"revision"`
+}
+
+// ModelReference Opaque model name or source URI accepted by the provider-neutral invocation contract.
+type ModelReference struct {
+	// NameOrUri Configured model name or source URI. Resolution is owned by Models.
+	NameOrUri string `json:"nameOrUri"`
 }
 
 // ModelRequestEventPayload Request details captured immediately before a model-backed worker invocation enters resource, load, and execution boundaries. FactoryEvent.context owns dispatch, request, trace, and work identity, and the matching dispatch-request event owns the transition identifier.

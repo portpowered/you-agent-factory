@@ -120,3 +120,194 @@ func derefGeneratedWorkContent(content *factoryapi.WorkContent) factoryapi.WorkC
 	}
 	return *content
 }
+
+// GenericInvocationRequestFromGenerated normalizes the additive generic HTTP
+// request into Models-owned values without resolving the model or starting any
+// runtime. Ordered slices are copied in their authored order, including
+// repeated slot names.
+func GenericInvocationRequestFromGenerated(
+	request factoryapi.GenericModelInvocationRequest,
+) (models.GenericInvocationRequest, error) {
+	scope, err := (models.RuntimeScopeRef{}).Parse(request.Scope)
+	if err != nil {
+		return models.GenericInvocationRequest{}, err
+	}
+
+	var inputs []models.InferenceInput
+	if request.Inputs != nil {
+		inputs = make([]models.InferenceInput, len(*request.Inputs))
+		for index, input := range *request.Inputs {
+			mapped, mapErr := genericInferenceInputFromGenerated(input)
+			if mapErr != nil {
+				return models.GenericInvocationRequest{}, mapErr
+			}
+			inputs[index] = mapped
+		}
+	}
+
+	var parameters []models.OperationParameter
+	if request.Parameters != nil {
+		parameters = make([]models.OperationParameter, len(*request.Parameters))
+		for index, parameter := range *request.Parameters {
+			parameters[index] = models.OperationParameter{
+				Name:  parameter.Name,
+				Value: cloneGenericJSONValue(parameter.Value),
+			}
+		}
+	}
+
+	result := models.GenericInvocationRequest{
+		Scope:      scope,
+		Holder:     request.Holder,
+		Model:      models.ModelReference{NameOrURI: request.Model.NameOrUri},
+		Operation:  request.Operation,
+		Inputs:     inputs,
+		Parameters: parameters,
+	}
+	if request.OutputMode != nil {
+		result.OutputMode = models.OutputMode(*request.OutputMode)
+	}
+	if request.Offline != nil {
+		result.Offline = *request.Offline
+	}
+	return result, nil
+}
+
+// GenericInvocationResponseToGenerated projects a detached generic Models
+// result while retaining output order and distinct slot names.
+func GenericInvocationResponseToGenerated(
+	result models.GenericInvocationResult,
+) factoryapi.GenericModelInvocationResponse {
+	outputs := make([]factoryapi.ModelInvocationOutput, len(result.Outputs))
+	for index, output := range result.Outputs {
+		outputs[index] = genericInferenceOutputToGenerated(output)
+	}
+	return factoryapi.GenericModelInvocationResponse{Outputs: outputs}
+}
+
+// GenericInvocationFailureToGenerated projects the stable typed failure
+// identity and safe coordinates without serializing its implementation cause.
+func GenericInvocationFailureToGenerated(
+	failure *models.InvocationFailure,
+) *factoryapi.ModelInvocationFailure {
+	if failure == nil {
+		return nil
+	}
+	message := failure.Message
+	if strings.TrimSpace(message) == "" {
+		message = failure.Error()
+	}
+	projected := &factoryapi.ModelInvocationFailure{
+		Class:   factoryapi.ModelInvocationFailureClass(failure.Class),
+		Message: message,
+	}
+	if !failure.Model.IsZero() {
+		projected.Model = &factoryapi.ModelReference{NameOrUri: failure.Model.NameOrURI}
+	}
+	projected.Operation = nonEmptyStringPointer(failure.Operation)
+	projected.Slot = nonEmptyStringPointer(failure.Slot)
+	projected.Parameter = nonEmptyStringPointer(failure.Parameter)
+	projected.Field = nonEmptyStringPointer(failure.Field)
+	return projected
+}
+
+func genericInferenceInputFromGenerated(
+	input factoryapi.ModelInvocationInput,
+) (models.InferenceInput, error) {
+	mapped := models.InferenceInput{
+		Name:     input.Name,
+		Modality: models.Modality(input.Modality),
+	}
+	if input.ContentType != nil {
+		mapped.ContentType = *input.ContentType
+	}
+	if input.MediaType != nil {
+		mapped.MediaType = *input.MediaType
+	}
+	if input.Content != nil {
+		mapped.Content = *input.Content
+	}
+	if input.ArtifactRef != nil {
+		artifact, err := (models.InferenceArtifactRef{}).Parse(*input.ArtifactRef)
+		if err != nil {
+			failure := newGenericMappingFailure(
+				models.InvocationFailureClassArtifact,
+				"input artifact reference is invalid",
+			)
+			return models.InferenceInput{}, failure
+		}
+		mapped.Artifact = &artifact
+	}
+	return mapped, nil
+}
+
+func genericInferenceOutputToGenerated(
+	output models.InferenceOutput,
+) factoryapi.ModelInvocationOutput {
+	projected := factoryapi.ModelInvocationOutput{
+		Name:     output.Name,
+		Modality: factoryapi.ModelOperationContentType(output.Modality),
+	}
+	projected.ContentType = nonEmptyStringPointer(output.ContentType)
+	projected.MediaType = nonEmptyStringPointer(output.MediaType)
+	projected.Content = nonEmptyStringPointer(output.Content)
+	if output.Artifact != nil && !output.Artifact.Artifact.IsZero() {
+		projected.Artifact = genericInferenceArtifactToGenerated(*output.Artifact)
+	}
+	return projected
+}
+
+func genericInferenceArtifactToGenerated(
+	artifact models.InferenceArtifact,
+) *factoryapi.ModelInvocationArtifact {
+	projected := &factoryapi.ModelInvocationArtifact{
+		ArtifactRef: artifact.Artifact.String(),
+	}
+	projected.Name = nonEmptyStringPointer(artifact.Name)
+	projected.MediaType = nonEmptyStringPointer(artifact.MediaType)
+	if artifact.SizeBytes >= 0 {
+		value := artifact.SizeBytes
+		projected.SizeBytes = &value
+	}
+	if len(artifact.Properties) > 0 {
+		properties := make(factoryapi.StringMap, len(artifact.Properties))
+		for key, value := range artifact.Properties {
+			properties[key] = value
+		}
+		projected.Properties = &properties
+	}
+	return projected
+}
+
+func cloneGenericJSONValue(value any) any {
+	switch typed := value.(type) {
+	case []any:
+		cloned := make([]any, len(typed))
+		for index, item := range typed {
+			cloned[index] = cloneGenericJSONValue(item)
+		}
+		return cloned
+	case map[string]any:
+		cloned := make(map[string]any, len(typed))
+		for key, item := range typed {
+			cloned[key] = cloneGenericJSONValue(item)
+		}
+		return cloned
+	case []string:
+		return append([]string(nil), typed...)
+	default:
+		return value
+	}
+}
+
+func nonEmptyStringPointer(value string) *string {
+	if strings.TrimSpace(value) == "" {
+		return nil
+	}
+	cloned := value
+	return &cloned
+}
+
+func newGenericMappingFailure(class models.InvocationFailureClass, message string) error {
+	return &models.InvocationFailure{Class: class, Message: message}
+}

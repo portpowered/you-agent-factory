@@ -80,6 +80,30 @@ actions:
             - ModelOperationContentTypeVideo
             - ModelOperationContentTypeJSON
             - ModelOperationContentTypeBinary
+    - target: $.components.schemas.ModelInvocationOutputMode
+      update:
+        x-enum-varnames:
+            - ModelInvocationOutputModeAuto
+            - ModelInvocationOutputModeInline
+            - ModelInvocationOutputModeJSON
+            - ModelInvocationOutputModeArtifact
+    - target: $.components.schemas.ModelInvocationFailureClass
+      update:
+        x-enum-varnames:
+            - ModelInvocationFailureClassInvalidModelReference
+            - ModelInvocationFailureClassInvalidOperation
+            - ModelInvocationFailureClassInvalidSlot
+            - ModelInvocationFailureClassSlotArity
+            - ModelInvocationFailureClassInvalidParameter
+            - ModelInvocationFailureClassMediaCapability
+            - ModelInvocationFailureClassConfiguration
+            - ModelInvocationFailureClassOfflineCache
+            - ModelInvocationFailureClassArtifact
+            - ModelInvocationFailureClassBackendReadiness
+            - ModelInvocationFailureClassBackendProtocol
+            - ModelInvocationFailureClassCancellation
+            - ModelInvocationFailureClassTimeout
+            - ModelInvocationFailureClassMalformedResponse
     - target: $.components.schemas.ProviderCatalog.properties.formatVersion
       update:
         x-enum-varnames:

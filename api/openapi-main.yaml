@@ -2525,6 +2525,26 @@ components:
       $ref: './components/schemas/api/ModelSummary.yaml'
     ModelDetail:
       $ref: './components/schemas/api/ModelDetail.yaml'
+    ModelReference:
+      $ref: './components/schemas/data-models/ModelReference.yaml'
+    ModelInvocationInput:
+      $ref: './components/schemas/api/ModelInvocationInput.yaml'
+    ModelInvocationOutput:
+      $ref: './components/schemas/api/ModelInvocationOutput.yaml'
+    ModelInvocationArtifact:
+      $ref: './components/schemas/api/ModelInvocationArtifact.yaml'
+    ModelInvocationParameter:
+      $ref: './components/schemas/api/ModelInvocationParameter.yaml'
+    ModelInvocationOutputMode:
+      $ref: './components/schemas/api/ModelInvocationOutputMode.yaml'
+    ModelInvocationFailureClass:
+      $ref: './components/schemas/api/ModelInvocationFailureClass.yaml'
+    ModelInvocationFailure:
+      $ref: './components/schemas/api/ModelInvocationFailure.yaml'
+    GenericModelInvocationRequest:
+      $ref: './components/schemas/api/GenericModelInvocationRequest.yaml'
+    GenericModelInvocationResponse:
+      $ref: './components/schemas/api/GenericModelInvocationResponse.yaml'
     ModelInvocationRequest:
       $ref: './components/schemas/api/ModelInvocationRequest.yaml'
     ModelInvocationOptions:
