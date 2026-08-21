@@ -385,6 +385,26 @@ func TestJavaScriptRuntimeService_ResumeInterruptedSession_PackageLocalCoverage(
 		sourceContent: "scripted resumable workflow",
 	}
 	state.events = rebuildRuntimeSessionCanonicalEvents(&state)
+	persistResumeCoverageSnapshot(t, store, sessionID, state)
+
+	var resumeContextCalls int
+	workflows := resumeCoverageWorkflows(t, &resumeContextCalls)
+	resumedService := newConfiguredJavaScriptRuntimeService(javaScriptRuntimeServiceConfig{
+		ProjectRoot: projectRoot,
+		Persistence: store,
+		Workflows:   workflows,
+	})
+	assertResumeCoverageEligibility(t, resumedService, sessionID)
+	completeResumeCoverage(t, resumedService, sessionID, &resumeContextCalls)
+}
+
+func persistResumeCoverageSnapshot(
+	t *testing.T,
+	store runtimepersist.Store,
+	sessionID string,
+	state runtimeSessionState,
+) {
+	t.Helper()
 	encoded, err := json.Marshal(persistedSnapshotFromRuntimeState(state))
 	if err != nil {
 		t.Fatalf("marshal interrupted snapshot: %v", err)
@@ -392,20 +412,23 @@ func TestJavaScriptRuntimeService_ResumeInterruptedSession_PackageLocalCoverage(
 	if err := store.Save(sessionID, encoded); err != nil {
 		t.Fatalf("persist interrupted snapshot: %v", err)
 	}
+}
 
-	var resumeContextCalls int
-	workflows := factoryruntimefixtures.ScriptedJavaScriptWorkflows{
+func resumeCoverageWorkflows(
+	t *testing.T,
+	resumeContextCalls *int,
+) factory.JavaScriptWorkflows {
+	t.Helper()
+	return factoryruntimefixtures.ScriptedJavaScriptWorkflows{
 		ResumeContextFunc: func(
 			summary factory.JavaScriptCompletedCheckpointSummary,
 			records []factory.JavaScriptRuntimeRecord,
 		) factory.JavaScriptResumeContext {
-			resumeContextCalls++
+			*resumeContextCalls++
 			if len(summary.CompletedDispatchIDs) != 1 || summary.CompletedDispatchIDs[0] != "dispatch-1" || len(records) != 2 {
 				t.Fatalf("resume inputs = %#v / %#v", summary, records)
 			}
-			return factory.JavaScriptResumeContext{
-				CompletedDispatchIDs: []string{"dispatch-1"},
-			}
+			return factory.JavaScriptResumeContext{CompletedDispatchIDs: []string{"dispatch-1"}}
 		},
 		RunFunc: func(
 			_ context.Context,
@@ -421,20 +444,27 @@ func TestJavaScriptRuntimeService_ResumeInterruptedSession_PackageLocalCoverage(
 			}, marshalErr
 		},
 	}
-	resumedService := newConfiguredJavaScriptRuntimeService(javaScriptRuntimeServiceConfig{
-		ProjectRoot: projectRoot,
-		Persistence: store,
-		Workflows:   workflows,
-	})
-	available, err := resumedService.HasRestorableState(context.Background(), sessionID)
+}
+
+func assertResumeCoverageEligibility(t *testing.T, service *JavaScriptRuntimeService, sessionID string) {
+	t.Helper()
+	available, err := service.HasRestorableState(context.Background(), sessionID)
 	if err != nil || !available {
 		t.Fatalf("HasRestorableState() = %t, %v, want true without mutation", available, err)
 	}
-	if read, err := resumedService.GetSession(context.Background(), sessionID); err != nil || read.Status != LifecycleStatusInterrupted {
+	if read, err := service.GetSession(context.Background(), sessionID); err != nil || read.Status != LifecycleStatusInterrupted {
 		t.Fatalf("session after HasRestorableState() = %#v, %v, want INTERRUPTED", read, err)
 	}
+}
 
-	resumed, err := resumedService.ResumeInterruptedSession(context.Background(), sessionID, ResumeSessionRequest{
+func completeResumeCoverage(
+	t *testing.T,
+	service *JavaScriptRuntimeService,
+	sessionID string,
+	resumeContextCalls *int,
+) {
+	t.Helper()
+	resumed, err := service.ResumeInterruptedSession(context.Background(), sessionID, ResumeSessionRequest{
 		RequestID: "req-package-resume-resume-001",
 	})
 	if err != nil {
@@ -443,12 +473,11 @@ func TestJavaScriptRuntimeService_ResumeInterruptedSession_PackageLocalCoverage(
 	if resumed.Status != string(LifecycleStatusResuming) && resumed.Status != string(LifecycleStatusSucceeded) {
 		t.Fatalf("resumed status = %q, want RESUMING or SUCCEEDED", resumed.Status)
 	}
-
 	if resumed.Status != string(LifecycleStatusSucceeded) {
-		waitForResumeCoverageSessionStatus(t, resumedService, sessionID, LifecycleStatusSucceeded, 5*time.Second)
+		waitForResumeCoverageSessionStatus(t, service, sessionID, LifecycleStatusSucceeded, 5*time.Second)
 	}
-	if resumeContextCalls != 1 {
-		t.Fatalf("resume context calls = %d, want 1", resumeContextCalls)
+	if *resumeContextCalls != 1 {
+		t.Fatalf("resume context calls = %d, want 1", *resumeContextCalls)
 	}
 }
 

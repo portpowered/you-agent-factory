@@ -199,66 +199,16 @@ func TestServiceResumeProbeClassifiesOwnerFailuresAndRetainsHandoff(t *testing.T
 	sessionID := projection.Session.SessionID
 
 	t.Run("typed probe failure is forwarded", func(t *testing.T) {
-		want := &fse.ResumeError{
-			Outcome:   fse.ResumeOutcomeCorruptedPersistence,
-			SessionID: sessionID,
-			Message:   "checkpoint state is unavailable",
-		}
-		service := NewService(projection, &handoffLiveOwner{probeErr: want})
-		_, err := service.Resume(context.Background(), sessionID, fse.ControlRequest{})
-		var got *fse.ResumeError
-		if !errors.As(err, &got) || got != want {
-			t.Fatalf("Resume probe error = %T %#v, want forwarded %#v", err, err, want)
-		}
-		if !service.IsNonLiveReplay() {
-			t.Fatal("probe failure made replay live")
-		}
+		testTypedProbeFailure(t, projection, sessionID)
 	})
-
 	t.Run("missing persisted state remains non-live", func(t *testing.T) {
-		service := NewService(projection, &handoffLiveOwner{probeErr: fse.ErrSessionNotFound})
-		_, err := service.ResumeInterruptedSession(context.Background(), sessionID, fse.ResumeSessionRequest{})
-		if !errors.Is(err, ErrNonLiveReplay) {
-			t.Fatalf("ResumeInterruptedSession error = %v, want ErrNonLiveReplay", err)
-		}
+		testMissingPersistedState(t, projection, sessionID)
 	})
-
 	t.Run("owner without probe remains non-live", func(t *testing.T) {
-		service := NewService(projection, &handoffOwnerWithoutProbe{})
-		_, err := service.ResumeInterruptedSession(context.Background(), sessionID, fse.ResumeSessionRequest{})
-		if !errors.Is(err, ErrNonLiveReplay) {
-			t.Fatalf("ResumeInterruptedSession error = %v, want ErrNonLiveReplay", err)
-		}
+		testOwnerWithoutProbe(t, projection, sessionID)
 	})
-
 	t.Run("successful handoff retains owner for later operations", func(t *testing.T) {
-		live := &handoffLiveOwner{
-			restorable:   true,
-			resumeResult: fse.LifecycleControlResult{SessionID: sessionID},
-			pauseResult:  fse.LifecycleControlResult{SessionID: sessionID},
-		}
-		service := NewService(projection, live)
-		if _, err := service.Pause(context.Background(), sessionID, fse.ControlRequest{}); !errors.Is(err, ErrNonLiveReplay) {
-			t.Fatalf("Pause before handoff error = %v, want ErrNonLiveReplay", err)
-		}
-		if _, err := service.Pause(context.Background(), "missing", fse.ControlRequest{}); !errors.Is(err, fse.ErrSessionNotFound) {
-			t.Fatalf("Pause for unknown session error = %v, want ErrSessionNotFound", err)
-		}
-		if _, err := service.Resume(context.Background(), sessionID, fse.ControlRequest{}); err != nil {
-			t.Fatalf("first Resume error = %v", err)
-		}
-		if _, err := service.Resume(context.Background(), sessionID, fse.ControlRequest{}); err != nil {
-			t.Fatalf("second Resume error = %v", err)
-		}
-		if _, err := service.Pause(context.Background(), sessionID, fse.ControlRequest{}); err != nil {
-			t.Fatalf("Pause after handoff error = %v", err)
-		}
-		if live.probeCalls != 1 || live.resumeCalls != 2 || live.pauseCalls != 1 {
-			t.Fatalf("live calls = probe:%d resume:%d pause:%d, want 1:2:1", live.probeCalls, live.resumeCalls, live.pauseCalls)
-		}
-		if service.IsNonLiveReplay() {
-			t.Fatal("successful handoff remains non-live")
-		}
+		testSuccessfulHandoffRetainsOwner(t, projection, sessionID)
 	})
 
 	var nilService *Service
@@ -266,6 +216,69 @@ func TestServiceResumeProbeClassifiesOwnerFailuresAndRetainsHandoff(t *testing.T
 		t.Fatalf("nil handedOffOwner() = (%v, %t), want (nil, false)", owner, handedOff)
 	}
 	nilService.markHandedOff()
+}
+
+func testTypedProbeFailure(t *testing.T, projection RecordingReplayProjection, sessionID string) {
+	want := &fse.ResumeError{
+		Outcome:   fse.ResumeOutcomeCorruptedPersistence,
+		SessionID: sessionID,
+		Message:   "checkpoint state is unavailable",
+	}
+	service := NewService(projection, &handoffLiveOwner{probeErr: want})
+	_, err := service.Resume(context.Background(), sessionID, fse.ControlRequest{})
+	var got *fse.ResumeError
+	if !errors.As(err, &got) || got != want {
+		t.Fatalf("Resume probe error = %T %#v, want forwarded %#v", err, err, want)
+	}
+	if !service.IsNonLiveReplay() {
+		t.Fatal("probe failure made replay live")
+	}
+}
+
+func testMissingPersistedState(t *testing.T, projection RecordingReplayProjection, sessionID string) {
+	service := NewService(projection, &handoffLiveOwner{probeErr: fse.ErrSessionNotFound})
+	_, err := service.ResumeInterruptedSession(context.Background(), sessionID, fse.ResumeSessionRequest{})
+	if !errors.Is(err, ErrNonLiveReplay) {
+		t.Fatalf("ResumeInterruptedSession error = %v, want ErrNonLiveReplay", err)
+	}
+}
+
+func testOwnerWithoutProbe(t *testing.T, projection RecordingReplayProjection, sessionID string) {
+	service := NewService(projection, &handoffOwnerWithoutProbe{})
+	_, err := service.ResumeInterruptedSession(context.Background(), sessionID, fse.ResumeSessionRequest{})
+	if !errors.Is(err, ErrNonLiveReplay) {
+		t.Fatalf("ResumeInterruptedSession error = %v, want ErrNonLiveReplay", err)
+	}
+}
+
+func testSuccessfulHandoffRetainsOwner(t *testing.T, projection RecordingReplayProjection, sessionID string) {
+	live := &handoffLiveOwner{
+		restorable:   true,
+		resumeResult: fse.LifecycleControlResult{SessionID: sessionID},
+		pauseResult:  fse.LifecycleControlResult{SessionID: sessionID},
+	}
+	service := NewService(projection, live)
+	if _, err := service.Pause(context.Background(), sessionID, fse.ControlRequest{}); !errors.Is(err, ErrNonLiveReplay) {
+		t.Fatalf("Pause before handoff error = %v, want ErrNonLiveReplay", err)
+	}
+	if _, err := service.Pause(context.Background(), "missing", fse.ControlRequest{}); !errors.Is(err, fse.ErrSessionNotFound) {
+		t.Fatalf("Pause for unknown session error = %v, want ErrSessionNotFound", err)
+	}
+	if _, err := service.Resume(context.Background(), sessionID, fse.ControlRequest{}); err != nil {
+		t.Fatalf("first Resume error = %v", err)
+	}
+	if _, err := service.Resume(context.Background(), sessionID, fse.ControlRequest{}); err != nil {
+		t.Fatalf("second Resume error = %v", err)
+	}
+	if _, err := service.Pause(context.Background(), sessionID, fse.ControlRequest{}); err != nil {
+		t.Fatalf("Pause after handoff error = %v", err)
+	}
+	if live.probeCalls != 1 || live.resumeCalls != 2 || live.pauseCalls != 1 {
+		t.Fatalf("live calls = probe:%d resume:%d pause:%d, want 1:2:1", live.probeCalls, live.resumeCalls, live.pauseCalls)
+	}
+	if service.IsNonLiveReplay() {
+		t.Fatal("successful handoff remains non-live")
+	}
 }
 
 type handoffOwnerWithoutProbe struct{ fse.Service }

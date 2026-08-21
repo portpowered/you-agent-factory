@@ -6,6 +6,7 @@ import (
 	"errors"
 	"os"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/portpowered/infinite-you/internal/testpath"
@@ -15,6 +16,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution/recordingreplay"
 	durableexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/durable_execution"
 	operatorconfig "github.com/portpowered/infinite-you/pkg/services/operator_settings"
+	settingswire "github.com/portpowered/infinite-you/pkg/services/operator_settings/wire"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
@@ -22,218 +24,245 @@ import (
 )
 
 func TestCheckpointPortableReplayWiresPublicDurableExecutionHandoff(t *testing.T) {
-	t.Run("ResumeInterruptedSession", func(t *testing.T) {
-		owner := &portableReplayRuntimeOwner{
-			restorable: true,
-			resumeInterruptedResult: factorysessions.AsyncStartResult{
-				SessionID: "session-js-checkpoint-001",
-				Status:    "RESUMED",
-			},
-			pauseResult: factorysessions.LifecycleControlResult{
-				SessionID: "session-js-checkpoint-001",
-				Outcome:   "PAUSED",
-			},
-		}
-		factory := newPortableCheckpointRuntimeOpeningFactory(t, owner)
-		opened, err := factory.OpenExecutionRuntime(t.Context(), portableCheckpointRuntimeOpeningRequest(t))
-		if err != nil {
-			t.Fatalf("OpenExecutionRuntime() error = %v", err)
-		}
-		var execution factorysessions.DurableExecutionService = opened.Execution
-		assertPortableReplayControlWalled(t, execution)
+	t.Run("ResumeInterruptedSession", testPortableReplayResumeInterruptedSession)
+	t.Run("Resume", testPortableReplayResume)
+	t.Run("typed restoration failure is forwarded", testPortableReplayTypedRestorationFailure)
+	t.Run("checkpoint summary without restorable state stays historical", testPortableReplayWithoutRestorableState)
+}
 
-		got, err := execution.ResumeInterruptedSession(
-			t.Context(),
-			"session-js-checkpoint-001",
-			factorysessions.ResumeSessionRequest{RequestID: "resume-1"},
-		)
-		if err != nil {
-			t.Fatalf("ResumeInterruptedSession() error = %v", err)
-		}
-		if !reflect.DeepEqual(got, owner.resumeInterruptedResult) {
-			t.Fatalf("ResumeInterruptedSession() = %#v, want %#v", got, owner.resumeInterruptedResult)
-		}
-		if owner.probeCalls != 1 || owner.resumeInterruptedCalls != 1 {
-			t.Fatalf("owner calls = probe:%d resumeInterrupted:%d, want 1:1", owner.probeCalls, owner.resumeInterruptedCalls)
-		}
-
-		if _, err := execution.Pause(t.Context(), "session-js-checkpoint-001", factorysessions.ControlRequest{RequestID: "pause-1"}); err != nil {
-			t.Fatalf("Pause() after handoff error = %v", err)
-		}
-		if owner.pauseCalls != 1 {
-			t.Fatalf("owner pause calls = %d, want 1 after handoff", owner.pauseCalls)
-		}
-	})
-
-	t.Run("Resume", func(t *testing.T) {
-		owner := &portableReplayRuntimeOwner{
-			restorable: true,
-			resumeResult: factorysessions.LifecycleControlResult{
-				SessionID: "session-js-checkpoint-001",
-				Outcome:   "RESUMED",
-			},
-		}
-		factory := newPortableCheckpointRuntimeOpeningFactory(t, owner)
-		opened, err := factory.OpenInvocationRuntime(t.Context(), portableCheckpointRuntimeOpeningRequest(t))
-		if err != nil {
-			t.Fatalf("OpenInvocationRuntime() error = %v", err)
-		}
-		var execution factorysessions.DurableExecutionService = opened.Execution
-		assertPortableReplayControlWalled(t, execution)
-
-		got, err := execution.Resume(
-			t.Context(),
-			"session-js-checkpoint-001",
-			factorysessions.ControlRequest{RequestID: "resume-2"},
-		)
-		if err != nil {
-			t.Fatalf("Resume() error = %v", err)
-		}
-		if got != owner.resumeResult {
-			t.Fatalf("Resume() = %#v, want %#v", got, owner.resumeResult)
-		}
-		if owner.probeCalls != 1 || owner.resumeCalls != 1 {
-			t.Fatalf("owner calls = probe:%d resume:%d, want 1:1", owner.probeCalls, owner.resumeCalls)
-		}
-	})
-
-	t.Run("dispatch reads follow historical and live ownership", func(t *testing.T) {
-		sessionID := "session-js-checkpoint-001"
-		owner := &portableReplayRuntimeOwner{
-			restorable: true,
-			resumeResult: factorysessions.LifecycleControlResult{
-				SessionID: sessionID,
-				Outcome:   "RESUMED",
-			},
-			listResult: factorysessions.ListDispatchesResult{
-				SessionID: sessionID,
-				Dispatches: []factorysessions.DispatchSummary{{
-					ID:     "restored-dispatch",
-					Status: factorysessions.DispatchStatus("RUNNING"),
-				}},
-			},
-			queryResult: factorysessions.ListDispatchesResult{
-				SessionID: sessionID,
-				Dispatches: []factorysessions.DispatchSummary{{
-					ID:     "filtered-restored-dispatch",
-					Status: factorysessions.DispatchStatus("COMPLETED"),
-				}},
-			},
-		}
-		factory := newPortableCheckpointRuntimeOpeningFactory(t, owner)
-		opened, err := factory.OpenExecutionRuntime(t.Context(), portableCheckpointRuntimeOpeningRequest(t))
-		if err != nil {
-			t.Fatalf("OpenExecutionRuntime() error = %v", err)
-		}
-		var execution factorysessions.DurableExecutionService = opened.Execution
-
-		historical, err := execution.ListDispatches(t.Context(), sessionID)
-		if err != nil {
-			t.Fatalf("historical ListDispatches() error = %v", err)
-		}
-		if historical.SessionID != sessionID || historical.Dispatches == nil || len(historical.Dispatches) != 0 {
-			t.Fatalf("historical ListDispatches() = %#v, want a non-nil empty result", historical)
-		}
-
-		filteredHistorical, err := execution.QueryDispatches(t.Context(), factorysessions.DispatchQueryRequest{
-			SessionID: sessionID,
-			Filters: factorysessions.DispatchFilters{
-				Phase:  "omitted-phase",
-				Status: factorysessions.DispatchStatus("COMPLETED"),
-			},
-		})
-		if err != nil {
-			t.Fatalf("historical QueryDispatches() error = %v", err)
-		}
-		if filteredHistorical.SessionID != sessionID || filteredHistorical.Dispatches == nil || len(filteredHistorical.Dispatches) != 0 {
-			t.Fatalf("historical QueryDispatches() = %#v, want a non-nil empty result", filteredHistorical)
-		}
-		if owner.listCalls != 0 || owner.queryCalls != 0 {
-			t.Fatalf("historical dispatch reads reached live owner: list=%d query=%d", owner.listCalls, owner.queryCalls)
-		}
-
-		if _, err := execution.ListDispatches(t.Context(), "missing-session"); !errors.Is(err, factorysessions.ErrDurableSessionNotFound) {
-			t.Fatalf("unknown ListDispatches() error = %v, want ErrDurableSessionNotFound", err)
-		}
-		if _, err := execution.QueryDispatches(t.Context(), factorysessions.DispatchQueryRequest{SessionID: "missing-session"}); !errors.Is(err, factorysessions.ErrDurableSessionNotFound) {
-			t.Fatalf("unknown QueryDispatches() error = %v, want ErrDurableSessionNotFound", err)
-		}
-
-		if _, err := execution.Resume(t.Context(), sessionID, factorysessions.ControlRequest{RequestID: "resume-dispatches"}); err != nil {
-			t.Fatalf("Resume() error = %v", err)
-		}
-
-		live, err := execution.ListDispatches(t.Context(), sessionID)
-		if err != nil {
-			t.Fatalf("live ListDispatches() error = %v", err)
-		}
-		if !reflect.DeepEqual(live, owner.listResult) || owner.listCalls != 1 {
-			t.Fatalf("live ListDispatches() = %#v, calls = %d, want %#v and one live call", live, owner.listCalls, owner.listResult)
-		}
-
-		queryRequest := factorysessions.DispatchQueryRequest{
-			SessionID: sessionID,
-			Filters:   factorysessions.DispatchFilters{Status: factorysessions.DispatchStatus("COMPLETED")},
-		}
-		liveFiltered, err := execution.QueryDispatches(t.Context(), queryRequest)
-		if err != nil {
-			t.Fatalf("live QueryDispatches() error = %v", err)
-		}
-		if !reflect.DeepEqual(liveFiltered, owner.queryResult) || owner.queryCalls != 1 || !reflect.DeepEqual(owner.queryRequest, queryRequest) {
-			t.Fatalf("live QueryDispatches() = %#v, calls = %d, request = %#v; want %#v, one call, and %#v", liveFiltered, owner.queryCalls, owner.queryRequest, owner.queryResult, queryRequest)
-		}
-	})
-
-	t.Run("typed restoration failure is forwarded", func(t *testing.T) {
-		want := &factorysessions.DurableResumeError{
-			Outcome:   factorysessions.DurableResumeOutcomeCorruptedPersistence,
-			Field:     "checkpointSummary",
+func testPortableReplayResumeInterruptedSession(t *testing.T) {
+	owner := &portableReplayRuntimeOwner{
+		restorable: true,
+		resumeInterruptedResult: factorysessions.AsyncStartResult{
 			SessionID: "session-js-checkpoint-001",
-			Message:   "checkpoint state is unavailable",
-		}
-		owner := &portableReplayRuntimeOwner{probeErr: want}
-		factory := newPortableCheckpointRuntimeOpeningFactory(t, owner)
-		opened, err := factory.OpenExecutionRuntime(t.Context(), portableCheckpointRuntimeOpeningRequest(t))
-		if err != nil {
-			t.Fatalf("OpenExecutionRuntime() error = %v", err)
-		}
-		var execution factorysessions.DurableExecutionService = opened.Execution
+			Status:    "RESUMED",
+		},
+		pauseResult: factorysessions.LifecycleControlResult{
+			SessionID: "session-js-checkpoint-001",
+			Outcome:   "PAUSED",
+		},
+	}
+	factory := newPortableCheckpointRuntimeOpeningFactory(t, owner)
+	opened, err := factory.OpenExecutionRuntime(t.Context(), portableCheckpointRuntimeOpeningRequest(t))
+	if err != nil {
+		t.Fatalf("OpenExecutionRuntime() error = %v", err)
+	}
+	var execution factorysessions.DurableExecutionService = opened.Execution
+	assertPortableReplayControlWalled(t, execution)
 
-		_, err = execution.ResumeInterruptedSession(
-			t.Context(),
-			"session-js-checkpoint-001",
-			factorysessions.ResumeSessionRequest{RequestID: "resume-typed"},
-		)
-		var got *factorysessions.DurableResumeError
-		if !errors.As(err, &got) || got != want {
-			t.Fatalf("ResumeInterruptedSession() error = %T %#v, want forwarded %#v", err, err, want)
-		}
-		if owner.resumeInterruptedCalls != 0 {
-			t.Fatalf("owner resume calls = %d, want 0 after probe failure", owner.resumeInterruptedCalls)
-		}
+	got, err := execution.ResumeInterruptedSession(
+		t.Context(),
+		"session-js-checkpoint-001",
+		factorysessions.ResumeSessionRequest{RequestID: "resume-1"},
+	)
+	if err != nil {
+		t.Fatalf("ResumeInterruptedSession() error = %v", err)
+	}
+	if !reflect.DeepEqual(got, owner.resumeInterruptedResult) {
+		t.Fatalf("ResumeInterruptedSession() = %#v, want %#v", got, owner.resumeInterruptedResult)
+	}
+	if owner.probeCalls != 1 || owner.resumeInterruptedCalls != 1 {
+		t.Fatalf("owner calls = probe:%d resumeInterrupted:%d, want 1:1", owner.probeCalls, owner.resumeInterruptedCalls)
+	}
+
+	if _, err := execution.Pause(t.Context(), "session-js-checkpoint-001", factorysessions.ControlRequest{RequestID: "pause-1"}); err != nil {
+		t.Fatalf("Pause() after handoff error = %v", err)
+	}
+	if owner.pauseCalls != 1 {
+		t.Fatalf("owner pause calls = %d, want 1 after handoff", owner.pauseCalls)
+	}
+}
+
+func testPortableReplayResume(t *testing.T) {
+	owner := &portableReplayRuntimeOwner{
+		restorable: true,
+		resumeResult: factorysessions.LifecycleControlResult{
+			SessionID: "session-js-checkpoint-001",
+			Outcome:   "RESUMED",
+		},
+	}
+	factory := newPortableCheckpointRuntimeOpeningFactory(t, owner)
+	opened, err := factory.OpenInvocationRuntime(t.Context(), portableCheckpointRuntimeOpeningRequest(t))
+	if err != nil {
+		t.Fatalf("OpenInvocationRuntime() error = %v", err)
+	}
+	var execution factorysessions.DurableExecutionService = opened.Execution
+	assertPortableReplayControlWalled(t, execution)
+
+	got, err := execution.Resume(
+		t.Context(),
+		"session-js-checkpoint-001",
+		factorysessions.ControlRequest{RequestID: "resume-2"},
+	)
+	if err != nil {
+		t.Fatalf("Resume() error = %v", err)
+	}
+	if got != owner.resumeResult {
+		t.Fatalf("Resume() = %#v, want %#v", got, owner.resumeResult)
+	}
+	if owner.probeCalls != 1 || owner.resumeCalls != 1 {
+		t.Fatalf("owner calls = probe:%d resume:%d, want 1:1", owner.probeCalls, owner.resumeCalls)
+	}
+}
+
+func testPortableReplayTypedRestorationFailure(t *testing.T) {
+	want := &factorysessions.DurableResumeError{
+		Outcome:   factorysessions.DurableResumeOutcomeCorruptedPersistence,
+		Field:     "checkpointSummary",
+		SessionID: "session-js-checkpoint-001",
+		Message:   "checkpoint state is unavailable",
+	}
+	owner := &portableReplayRuntimeOwner{probeErr: want}
+	factory := newPortableCheckpointRuntimeOpeningFactory(t, owner)
+	opened, err := factory.OpenExecutionRuntime(t.Context(), portableCheckpointRuntimeOpeningRequest(t))
+	if err != nil {
+		t.Fatalf("OpenExecutionRuntime() error = %v", err)
+	}
+	var execution factorysessions.DurableExecutionService = opened.Execution
+
+	_, err = execution.ResumeInterruptedSession(
+		t.Context(),
+		"session-js-checkpoint-001",
+		factorysessions.ResumeSessionRequest{RequestID: "resume-typed"},
+	)
+	var got *factorysessions.DurableResumeError
+	if !errors.As(err, &got) || got != want {
+		t.Fatalf("ResumeInterruptedSession() error = %T %#v, want forwarded %#v", err, err, want)
+	}
+	if owner.resumeInterruptedCalls != 0 {
+		t.Fatalf("owner resume calls = %d, want 0 after probe failure", owner.resumeInterruptedCalls)
+	}
+}
+
+func testPortableReplayWithoutRestorableState(t *testing.T) {
+	owner := &portableReplayRuntimeOwner{}
+	factory := newPortableCheckpointRuntimeOpeningFactory(t, owner)
+	opened, err := factory.OpenExecutionRuntime(t.Context(), portableCheckpointRuntimeOpeningRequest(t))
+	if err != nil {
+		t.Fatalf("OpenExecutionRuntime() error = %v", err)
+	}
+	var execution factorysessions.DurableExecutionService = opened.Execution
+
+	_, err = execution.ResumeInterruptedSession(
+		t.Context(),
+		"session-js-checkpoint-001",
+		factorysessions.ResumeSessionRequest{RequestID: "resume-unavailable"},
+	)
+	if !errors.Is(err, recordingreplay.ErrNonLiveReplay) {
+		t.Fatalf("ResumeInterruptedSession() error = %v, want ErrNonLiveReplay", err)
+	}
+	if owner.probeCalls != 1 || owner.resumeInterruptedCalls != 0 {
+		t.Fatalf("owner calls = probe:%d resumeInterrupted:%d, want 1:0", owner.probeCalls, owner.resumeInterruptedCalls)
+	}
+}
+
+func TestCheckpointPortableReplayWiresPublicDispatchHandoff(t *testing.T) {
+	sessionID := "session-js-checkpoint-001"
+	owner := &portableReplayRuntimeOwner{
+		restorable: true,
+		resumeResult: factorysessions.LifecycleControlResult{
+			SessionID: sessionID,
+			Outcome:   "RESUMED",
+		},
+		listResult: factorysessions.ListDispatchesResult{
+			SessionID: sessionID,
+			Dispatches: []factorysessions.DispatchSummary{{
+				ID:     "restored-dispatch",
+				Status: factorysessions.DispatchStatus("RUNNING"),
+			}},
+		},
+		queryResult: factorysessions.ListDispatchesResult{
+			SessionID: sessionID,
+			Dispatches: []factorysessions.DispatchSummary{{
+				ID:     "filtered-restored-dispatch",
+				Status: factorysessions.DispatchStatus("COMPLETED"),
+			}},
+		},
+	}
+	factory := newPortableCheckpointRuntimeOpeningFactory(t, owner)
+	opened, err := factory.OpenExecutionRuntime(t.Context(), portableCheckpointRuntimeOpeningRequest(t))
+	if err != nil {
+		t.Fatalf("OpenExecutionRuntime() error = %v", err)
+	}
+	var execution factorysessions.DurableExecutionService = opened.Execution
+	assertHistoricalDispatchReads(t, execution, owner, sessionID)
+	assertUnknownDispatchReads(t, execution)
+
+	if _, err := execution.Resume(t.Context(), sessionID, factorysessions.ControlRequest{RequestID: "resume-dispatches"}); err != nil {
+		t.Fatalf("Resume() error = %v", err)
+	}
+	assertLiveDispatchReads(t, execution, owner, sessionID)
+}
+
+func assertHistoricalDispatchReads(
+	t *testing.T,
+	execution factorysessions.DurableExecutionService,
+	owner *portableReplayRuntimeOwner,
+	sessionID string,
+) {
+	t.Helper()
+	historical, err := execution.ListDispatches(t.Context(), sessionID)
+	if err != nil {
+		t.Fatalf("historical ListDispatches() error = %v", err)
+	}
+	if historical.SessionID != sessionID || historical.Dispatches == nil || len(historical.Dispatches) != 0 {
+		t.Fatalf("historical ListDispatches() = %#v, want a non-nil empty result", historical)
+	}
+
+	filtered, err := execution.QueryDispatches(t.Context(), factorysessions.DispatchQueryRequest{
+		SessionID: sessionID,
+		Filters: factorysessions.DispatchFilters{
+			Phase:  "omitted-phase",
+			Status: factorysessions.DispatchStatus("COMPLETED"),
+		},
 	})
+	if err != nil {
+		t.Fatalf("historical QueryDispatches() error = %v", err)
+	}
+	if filtered.SessionID != sessionID || filtered.Dispatches == nil || len(filtered.Dispatches) != 0 {
+		t.Fatalf("historical QueryDispatches() = %#v, want a non-nil empty result", filtered)
+	}
+	if owner.listCalls != 0 || owner.queryCalls != 0 {
+		t.Fatalf("historical dispatch reads reached live owner: list=%d query=%d", owner.listCalls, owner.queryCalls)
+	}
+}
 
-	t.Run("checkpoint summary without restorable state stays historical", func(t *testing.T) {
-		owner := &portableReplayRuntimeOwner{}
-		factory := newPortableCheckpointRuntimeOpeningFactory(t, owner)
-		opened, err := factory.OpenExecutionRuntime(t.Context(), portableCheckpointRuntimeOpeningRequest(t))
-		if err != nil {
-			t.Fatalf("OpenExecutionRuntime() error = %v", err)
-		}
-		var execution factorysessions.DurableExecutionService = opened.Execution
+func assertUnknownDispatchReads(t *testing.T, execution factorysessions.DurableExecutionService) {
+	t.Helper()
+	if _, err := execution.ListDispatches(t.Context(), "missing-session"); !errors.Is(err, factorysessions.ErrDurableSessionNotFound) {
+		t.Fatalf("unknown ListDispatches() error = %v, want ErrDurableSessionNotFound", err)
+	}
+	if _, err := execution.QueryDispatches(t.Context(), factorysessions.DispatchQueryRequest{SessionID: "missing-session"}); !errors.Is(err, factorysessions.ErrDurableSessionNotFound) {
+		t.Fatalf("unknown QueryDispatches() error = %v, want ErrDurableSessionNotFound", err)
+	}
+}
 
-		_, err = execution.ResumeInterruptedSession(
-			t.Context(),
-			"session-js-checkpoint-001",
-			factorysessions.ResumeSessionRequest{RequestID: "resume-unavailable"},
-		)
-		if !errors.Is(err, recordingreplay.ErrNonLiveReplay) {
-			t.Fatalf("ResumeInterruptedSession() error = %v, want ErrNonLiveReplay", err)
-		}
-		if owner.probeCalls != 1 || owner.resumeInterruptedCalls != 0 {
-			t.Fatalf("owner calls = probe:%d resumeInterrupted:%d, want 1:0", owner.probeCalls, owner.resumeInterruptedCalls)
-		}
-	})
+func assertLiveDispatchReads(
+	t *testing.T,
+	execution factorysessions.DurableExecutionService,
+	owner *portableReplayRuntimeOwner,
+	sessionID string,
+) {
+	t.Helper()
+	live, err := execution.ListDispatches(t.Context(), sessionID)
+	if err != nil {
+		t.Fatalf("live ListDispatches() error = %v", err)
+	}
+	if !reflect.DeepEqual(live, owner.listResult) || owner.listCalls != 1 {
+		t.Fatalf("live ListDispatches() = %#v, calls = %d, want %#v and one live call", live, owner.listCalls, owner.listResult)
+	}
+
+	queryRequest := factorysessions.DispatchQueryRequest{
+		SessionID: sessionID,
+		Filters:   factorysessions.DispatchFilters{Status: factorysessions.DispatchStatus("COMPLETED")},
+	}
+	liveFiltered, err := execution.QueryDispatches(t.Context(), queryRequest)
+	if err != nil {
+		t.Fatalf("live QueryDispatches() error = %v", err)
+	}
+	if !reflect.DeepEqual(liveFiltered, owner.queryResult) || owner.queryCalls != 1 || !reflect.DeepEqual(owner.queryRequest, queryRequest) {
+		t.Fatalf("live QueryDispatches() = %#v, calls = %d, request = %#v; want %#v, one call, and %#v", liveFiltered, owner.queryCalls, owner.queryRequest, owner.queryResult, queryRequest)
+	}
 }
 
 func assertPortableReplayControlWalled(t *testing.T, execution factorysessions.DurableExecutionService) {
@@ -376,3 +405,28 @@ func (owner *portableReplayRuntimeOwner) QueryDispatches(
 }
 
 var _ durableexecution.Service = (*portableReplayRuntimeOwner)(nil)
+
+func TestRuntimeOpeningExposesOnlyOperationSpecificOpenedViews(t *testing.T) {
+	t.Parallel()
+
+	for _, path := range []string{"../../opened_runtime.go", "factory.go"} {
+		source, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("read %s: %v", path, err)
+		}
+		for _, forbidden := range []string{
+			"type OpenedRuntime struct",
+			") (factorysessions.OpenedRuntime, error)",
+			"func (f *Factory) OpenRuntime(",
+		} {
+			if strings.Contains(string(source), forbidden) {
+				t.Errorf("%s exposes broad runtime product %q", path, forbidden)
+			}
+		}
+	}
+}
+
+func TestMain(m *testing.M) {
+	settingswire.RegisterTestComposition()
+	m.Run()
+}
