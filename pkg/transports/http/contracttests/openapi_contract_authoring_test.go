@@ -101,6 +101,33 @@ func TestOpenAPIContract_ResponseEventStreamIsBundledWithTypedOutcomes(t *testin
 	}
 }
 
+func TestOpenAPIContract_WorkPayloadLimitIsDocumented(t *testing.T) {
+	t.Parallel()
+
+	doc := loadBundledOpenAPIDocument(t)
+	schemas := componentSchemas(t, doc)
+	for _, schemaName := range []string{"Work", "SubmitWorkRequest"} {
+		properties := schemaProperties(t, schemaObject(t, schemas, schemaName), schemaName)
+		payload, ok := properties["payload"].(map[string]any)
+		if !ok {
+			t.Fatalf("%s.properties.payload = %#v, want payload schema", schemaName, properties["payload"])
+		}
+		description, ok := payload["description"].(string)
+		if !ok {
+			t.Fatalf("%s.properties.payload.description = %#v, want string", schemaName, payload["description"])
+		}
+		for _, marker := range []string{"65,536", "compact UTF-8 JSON", "exactly 65,536 bytes", "payloadBytes"} {
+			if !strings.Contains(description, marker) {
+				t.Fatalf("%s payload description = %q, want marker %q", schemaName, description, marker)
+			}
+		}
+	}
+
+	paths := objectField(t, doc, "paths")
+	operation := pathOperation(t, paths, "/factory-sessions/{session_id}/work-requests/{request_id}", "put")
+	assertResponseRef(t, operation, "400", "#/components/responses/BadRequest")
+}
+
 func TestOpenAPIContract_WorkerSessionTurnUsageIsOptionalAndDocumented(t *testing.T) {
 	doc := loadBundledOpenAPIDocument(t)
 	schemas := componentSchemas(t, doc)
