@@ -32,6 +32,7 @@ const (
 	boardPersistenceHelperEnv        = "YOU_BOARD_PERSISTENCE_HELPER"
 	boardPersistenceReleaseEnv       = "YOU_BOARD_PERSISTENCE_RELEASE"
 	boardPersistenceHelperEnvValue   = "1"
+	boardPersistenceWorkerSentinel   = "board-persistence-worker-result:PASS"
 	boardPersistenceInitialWorkID    = "board-persistence-init"
 	boardPersistenceProcessingWorkID = "board-persistence-processing"
 	boardPersistenceAwaitingWorkID   = "board-persistence-awaiting-ci"
@@ -50,6 +51,7 @@ func TestBoardPersistenceWorkerHelper(t *testing.T) {
 	if releasePath == "" {
 		t.Fatal("board persistence worker helper release path is empty")
 	}
+	fmt.Fprintln(os.Stdout, boardPersistenceWorkerSentinel)
 
 	// A child process has no test-owned event channel back into the daemon. The
 	// bounded file observation is deliberately confined to this helper process;
@@ -184,7 +186,8 @@ func runBoardPersistenceRecoveryGeneration(t *testing.T, scenario *boardPersiste
 		StateType:      "TERMINAL",
 		TraceID:        "trace-board-processing",
 		CurrentTraceID: "trace-board-processing",
-		Content:        "PASS",
+		Content:        boardPersistenceWorkerSentinel,
+		WorkerOutput:   true,
 	}
 	waitForBoardStates(t, second.baseURL, map[string]string{
 		boardPersistenceInitialWorkID:    "init",
@@ -249,6 +252,7 @@ type boardPersistenceExpectedWork struct {
 	CurrentTraceID string
 	Content        string
 	RelationTarget string
+	WorkerOutput   bool
 }
 
 type boardPersistenceBatchWork struct {
@@ -726,8 +730,13 @@ func assertBoardWork(t *testing.T, item factoryapi.Work, want boardPersistenceEx
 		t.Fatalf("Work %q content = %#v, want one text part", want.WorkID, item.Content)
 	}
 	part, err := (*item.Content)[0].AsWorkTextContentPart()
-	if err != nil || part.Text != want.Content {
+	if err != nil {
 		t.Fatalf("Work %q content part = %#v, decode error=%v, want %q", want.WorkID, part, err, want.Content)
+	}
+	if want.WorkerOutput {
+		assertBoardPersistenceWorkerOutput(t, part.Text, want.Content)
+	} else if part.Text != want.Content {
+		t.Fatalf("Work %q content part = %#v, want %q", want.WorkID, part, want.Content)
 	}
 	if want.RelationTarget == "" {
 		if item.Relations != nil && len(*item.Relations) != 0 {
@@ -741,6 +750,14 @@ func assertBoardWork(t *testing.T, item factoryapi.Work, want boardPersistenceEx
 	relation := (*item.Relations)[0]
 	if relation.Type != factoryapi.RelationTypeParentChild || relation.SourceWorkName != want.Name || relation.TargetWorkId == nil || *relation.TargetWorkId != want.RelationTarget {
 		t.Fatalf("Work %q relation = %#v, want source=%q target=%q PARENT_CHILD", want.WorkID, relation, want.Name, want.RelationTarget)
+	}
+}
+
+func assertBoardPersistenceWorkerOutput(t *testing.T, got, sentinel string) {
+	t.Helper()
+	base := sentinel + "\nPASS"
+	if got != base && got != base+"\ncoverage: [no statements]" {
+		t.Fatalf("worker output = %q, want the sentinel plus the known Go test harness suffix", got)
 	}
 }
 
