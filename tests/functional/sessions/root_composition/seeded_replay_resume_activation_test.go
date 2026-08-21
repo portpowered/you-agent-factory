@@ -22,12 +22,13 @@ func TestSeededReplayResumeMaterializesRecordedWorkOnceThroughAssembledSession(t
 	for _, test := range []struct {
 		name     string
 		finished bool
-	}{{
-		name: "in-flight tail",
-	}, {
-		name:     "finished recording",
-		finished: true,
-	}} {
+	}{
+		{
+			name: "in-flight tail",
+		}, {
+			name:     "finished recording",
+			finished: true,
+		}} {
 		t.Run(test.name, func(t *testing.T) {
 			artifactPayload := seededReplayResumeArtifactPayload(t, test.finished)
 			factoryDir := support.ScaffoldFactory(t, seededReplayResumeFactoryConfig())
