@@ -254,12 +254,16 @@ func runtimeAttemptPreparation(
 	}
 	return func(ctx context.Context, _ *workers.ExecuteRequest) (attemptTerminalFunc, error) {
 		sessionID := runtimeWorkerSessionID(cfg, request, executeRequest, allowRetry)
+		admissionRequest := request
+		if strings.TrimSpace(request.WorkstationName) != workers.ProviderInvocationRoute {
+			admissionRequest = runtimeAttemptAdmissionRequest(request, executeRequest)
+		}
 		attempt, err := recorder.BeginRuntimeAttempt(
 			context.WithoutCancel(ctx),
 			workersessions.RuntimeAttemptRequest{
 				ID:        sessionID,
 				AttemptID: executeRequest.Correlation.AttemptID,
-				Execution: request,
+				Execution: admissionRequest,
 			},
 		)
 		if err != nil {
@@ -275,6 +279,17 @@ func runtimeAttemptPreparation(
 			_ = attempt.Complete(callbackCtx, dispatchResult, dispatchErr)
 		}, nil
 	}
+}
+
+func runtimeAttemptAdmissionRequest(
+	request workers.WorkstationDispatchRequest,
+	executeRequest workers.ExecuteRequest,
+) workers.WorkstationDispatchRequest {
+	request.Execution = workers.CloneWorkstationExecutionRequest(request.Execution)
+	request.Execution.Model = strings.TrimSpace(executeRequest.Target.Model.Name)
+	request.Execution.ModelProvider = strings.TrimSpace(executeRequest.Target.Model.Provider)
+	request.Execution.ReasoningEffort = strings.TrimSpace(executeRequest.Target.Model.ReasoningEffort)
+	return request
 }
 
 func runtimeWorkerSessionID(
