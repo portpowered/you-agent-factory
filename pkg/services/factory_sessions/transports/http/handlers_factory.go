@@ -19,7 +19,7 @@ import (
 // ValidateFactory handles POST /factory-validations using factorydefinitionentry.ValidateFactoryAPI
 // with ProfileTopology (structural checks only; no canonical JSON load).
 func (s *Server) ValidateFactory(w http.ResponseWriter, r *http.Request) {
-	req, err := decodeNamedFactoryBody(r.Body)
+	decoded, err := decodeJSONWithDiagnostics[factoryapi.Factory](r.Body)
 	if err != nil {
 		if message, ok := requestFieldValidationMessage(err); ok {
 			s.writeError(w, http.StatusBadRequest, message, "BAD_REQUEST")
@@ -28,6 +28,7 @@ func (s *Server) ValidateFactory(w http.ResponseWriter, r *http.Request) {
 		s.writeError(w, http.StatusBadRequest, "invalid request payload", "BAD_REQUEST")
 		return
 	}
+	req := decoded.Value
 
 	result, err := factorydefinitionentry.ValidateFactoryAPI(r.Context(), req, s.factoryValidation)
 	if err != nil {
@@ -39,12 +40,13 @@ func (s *Server) ValidateFactory(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	s.writeCompatibilityWarning(w, "validate_factory", decoded.Diagnostics.Paths())
 	s.writeJSON(w, http.StatusOK, apisurface.FactoryValidationResultToAPI(result))
 }
 
 // PreviewFactory handles POST /factories/preview using canonical Factory preview semantics.
 func (s *Server) PreviewFactory(w http.ResponseWriter, r *http.Request) {
-	req, err := decodeStrictJSON[factoryapi.FactoryPreviewRequest](r.Body)
+	decoded, err := decodeJSONWithDiagnostics[factoryapi.FactoryPreviewRequest](r.Body)
 	if err != nil {
 		if message, ok := requestFieldValidationMessage(err); ok {
 			s.writeError(w, http.StatusBadRequest, message, "BAD_REQUEST")
@@ -53,6 +55,7 @@ func (s *Server) PreviewFactory(w http.ResponseWriter, r *http.Request) {
 		s.writeError(w, http.StatusBadRequest, "invalid request payload", "BAD_REQUEST")
 		return
 	}
+	req := decoded.Value
 
 	previewInput, err := apisurface.FactoryPreviewInputFromAPI(req)
 	if err != nil {
@@ -75,11 +78,13 @@ func (s *Server) PreviewFactory(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	result := apisurface.FactoryPreviewResultFromPreview(preview)
+	s.writeCompatibilityWarning(w, "preview_factory", decoded.Diagnostics.Paths())
 	s.writeJSON(w, http.StatusOK, result)
 }
 
 func decodeNamedFactoryBody(body io.Reader) (factoryapi.Factory, error) {
-	return decodeStrictJSON[factoryapi.Factory](body)
+	result, err := decodeJSONWithDiagnostics[factoryapi.Factory](body)
+	return result.Value, err
 }
 
 func (s *Server) requireSessionRuntime(w http.ResponseWriter) (apisurface.LiveSessionAPI, bool) {
@@ -223,7 +228,7 @@ func (s *Server) OpenFactorySession(w http.ResponseWriter, r *http.Request) {
 		s.writeUnsupportedMediaTypeError(w)
 		return
 	}
-	req, err := decodeOpenFactorySessionRequest(r.Body)
+	decoded, err := decodeJSONWithDiagnostics[factoryapi.OpenFactorySessionJSONRequestBody](r.Body)
 	if err != nil {
 		if message, ok := requestFieldValidationMessage(err); ok {
 			s.writeError(w, http.StatusBadRequest, message, "BAD_REQUEST")
@@ -232,6 +237,7 @@ func (s *Server) OpenFactorySession(w http.ResponseWriter, r *http.Request) {
 		s.writeError(w, http.StatusBadRequest, "invalid request payload", "BAD_REQUEST")
 		return
 	}
+	req := decoded.Value
 	if strings.TrimSpace(req.FolderPath) == "" {
 		s.writeErrorWithTargets(w, http.StatusBadRequest, "folderPath is required", "BAD_REQUEST", []factoryapi.FactoryValidationTarget{
 			apisurface.FactoryValidationTargetToAPI(interfaces.FactorySessionFieldValidationTarget("required", "folderPath", "folderPath is required")),
@@ -248,6 +254,7 @@ func (s *Server) OpenFactorySession(w http.ResponseWriter, r *http.Request) {
 			s.writeOpenFactorySessionRejected(w, err)
 			return
 		}
+		s.writeCompatibilityWarning(w, "open_factory_session", decoded.Diagnostics.Paths())
 		s.writeJSON(w, http.StatusOK, factorysession.OpenResultToAPI(result))
 		return
 	}
@@ -261,6 +268,7 @@ func (s *Server) OpenFactorySession(w http.ResponseWriter, r *http.Request) {
 		s.writeOpenFactorySessionRejected(w, err)
 		return
 	}
+	s.writeCompatibilityWarning(w, "open_factory_session", decoded.Diagnostics.Paths())
 	s.writeJSON(w, http.StatusOK, response)
 }
 
@@ -335,7 +343,8 @@ func (s *Server) CloseFactorySession(w http.ResponseWriter, r *http.Request, ses
 }
 
 func decodeOpenFactorySessionBody(body io.Reader) (factoryapi.OpenFactorySessionJSONRequestBody, error) {
-	return decodeStrictJSON[factoryapi.OpenFactorySessionJSONRequestBody](body)
+	result, err := decodeJSONWithDiagnostics[factoryapi.OpenFactorySessionJSONRequestBody](body)
+	return result.Value, err
 }
 
 func (s *Server) requireDurableExecutionAPI(w http.ResponseWriter) (apisurface.DurableSessionExecutionAPI, bool) {
@@ -355,7 +364,7 @@ func (s *Server) writeDurableExecutionError(w http.ResponseWriter, err error) bo
 }
 
 func (s *Server) StartDurableFactorySessionAsync(w http.ResponseWriter, r *http.Request) {
-	raw, err := decodeStartFactorySessionRequest(r.Body, s.sessionRequests)
+	raw, diagnostics, err := decodeStartFactorySessionRequestWithDiagnostics(r.Body, s.sessionRequests)
 	if err != nil {
 		if message, ok := requestFieldValidationMessage(err); ok {
 			s.writeError(w, http.StatusBadRequest, message, "BAD_REQUEST")
@@ -381,6 +390,7 @@ func (s *Server) StartDurableFactorySessionAsync(w http.ResponseWriter, r *http.
 			s.writeSessionsRootErrorOrInternal(w, "", err, "durable factory session execution failed")
 			return
 		}
+		s.writeCompatibilityWarning(w, "start_durable_factory_session_async", diagnostics.Paths())
 		s.writeJSON(w, http.StatusOK, factorysession.AsyncStartResponseToAPI(result))
 		return
 	}
@@ -397,11 +407,12 @@ func (s *Server) StartDurableFactorySessionAsync(w http.ResponseWriter, r *http.
 		s.writeError(w, http.StatusInternalServerError, "durable factory session execution failed", "INTERNAL_ERROR")
 		return
 	}
+	s.writeCompatibilityWarning(w, "start_durable_factory_session_async", diagnostics.Paths())
 	s.writeJSON(w, http.StatusOK, response)
 }
 
 func (s *Server) StartDurableFactorySessionSync(w http.ResponseWriter, r *http.Request) {
-	raw, err := decodeStartFactorySessionRequest(r.Body, s.sessionRequests)
+	raw, diagnostics, err := decodeStartFactorySessionRequestWithDiagnostics(r.Body, s.sessionRequests)
 	if err != nil {
 		if message, ok := requestFieldValidationMessage(err); ok {
 			s.writeError(w, http.StatusBadRequest, message, "BAD_REQUEST")
@@ -427,6 +438,7 @@ func (s *Server) StartDurableFactorySessionSync(w http.ResponseWriter, r *http.R
 			s.writeSessionsRootErrorOrInternal(w, "", err, "durable factory session execution failed")
 			return
 		}
+		s.writeCompatibilityWarning(w, "start_durable_factory_session_sync", diagnostics.Paths())
 		s.writeJSON(w, http.StatusOK, factorysession.SyncStartResponseToAPI(result))
 		return
 	}
@@ -443,6 +455,7 @@ func (s *Server) StartDurableFactorySessionSync(w http.ResponseWriter, r *http.R
 		s.writeError(w, http.StatusInternalServerError, "durable factory session execution failed", "INTERNAL_ERROR")
 		return
 	}
+	s.writeCompatibilityWarning(w, "start_durable_factory_session_sync", diagnostics.Paths())
 	s.writeJSON(w, http.StatusOK, response)
 }
 

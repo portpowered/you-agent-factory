@@ -72,13 +72,6 @@ func TestSaveCurrentFactoryBySessionId_RejectsInvalidPayloadBeforeRootInvoked(t 
 
 	cases := []validationDecodeCase{
 		{
-			name:        "unknown_field",
-			body:        `{"factory":{"name":"beta"},"unknownExtra":1}`,
-			wantStatus:  http.StatusBadRequest,
-			wantCode:    "BAD_REQUEST",
-			wantMessage: "invalid request payload",
-		},
-		{
 			name:        "malformed",
 			body:        `{"factory":{"name":"beta"`,
 			wantStatus:  http.StatusBadRequest,

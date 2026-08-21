@@ -4,6 +4,7 @@ import (
 	"io"
 
 	factoryvisualization "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
+	httpcompat "github.com/portpowered/infinite-you/pkg/transports/http/compat"
 )
 
 type lifecycleHTTPDecodeError struct {
@@ -18,28 +19,26 @@ func (e lifecycleHTTPDecodeError) Unwrap() error {
 	return e.cause
 }
 
-func decodeActivateHTTPRequest(body io.Reader) (factoryvisualization.ActivateRequest, error) {
-	req, err := decodeStrictJSON[ActivateHTTPRequest](body)
+func decodeActivateHTTPRequest(body io.Reader) (factoryvisualization.ActivateRequest, httpcompat.Diagnostics, error) {
+	decoded, err := decodeJSONWithDiagnostics[ActivateHTTPRequest](body)
 	if err != nil {
-		return factoryvisualization.ActivateRequest{}, lifecycleHTTPDecodeError{cause: err}
+		return factoryvisualization.ActivateRequest{}, decoded.Diagnostics, lifecycleHTTPDecodeError{cause: err}
 	}
-	return factoryvisualization.ActivateRequest{
-		Mode: factoryvisualization.ActivateMode(req.Mode),
-	}, nil
+	return factoryvisualization.ActivateRequest{Mode: factoryvisualization.ActivateMode(decoded.Value.Mode)}, decoded.Diagnostics, nil
 }
 
-func decodeJoinHTTPRequest(body io.Reader) (factoryvisualization.JoinRequest, error) {
-	_, err := decodeOptionalJSONRequest(body, func() struct{} { return struct{}{} })
+func decodeJoinHTTPRequest(body io.Reader) (factoryvisualization.JoinRequest, httpcompat.Diagnostics, error) {
+	decoded, err := decodeOptionalJSONWithDiagnostics(body, func() struct{} { return struct{}{} })
 	if err != nil {
-		return factoryvisualization.JoinRequest{}, lifecycleHTTPDecodeError{cause: err}
+		return factoryvisualization.JoinRequest{}, decoded.Diagnostics, lifecycleHTTPDecodeError{cause: err}
 	}
-	return factoryvisualization.JoinRequest{}, nil
+	return factoryvisualization.JoinRequest{}, decoded.Diagnostics, nil
 }
 
-func decodeStopDrainHTTPRequest(body io.Reader) (factoryvisualization.StopDrainRequest, error) {
-	_, err := decodeOptionalJSONRequest(body, func() struct{} { return struct{}{} })
+func decodeStopDrainHTTPRequest(body io.Reader) (factoryvisualization.StopDrainRequest, httpcompat.Diagnostics, error) {
+	decoded, err := decodeOptionalJSONWithDiagnostics(body, func() struct{} { return struct{}{} })
 	if err != nil {
-		return factoryvisualization.StopDrainRequest{}, lifecycleHTTPDecodeError{cause: err}
+		return factoryvisualization.StopDrainRequest{}, decoded.Diagnostics, lifecycleHTTPDecodeError{cause: err}
 	}
-	return factoryvisualization.StopDrainRequest{}, nil
+	return factoryvisualization.StopDrainRequest{}, decoded.Diagnostics, nil
 }

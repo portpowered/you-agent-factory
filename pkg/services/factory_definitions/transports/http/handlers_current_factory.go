@@ -50,7 +50,7 @@ func (s *Server) SaveCurrentFactoryBySessionId(
 		return
 	}
 
-	req, err := decodeSaveCurrentFactoryBody(r.Body)
+	decoded, err := decodeJSONWithDiagnostics[factoryapi.SaveCurrentFactoryBySessionIdJSONRequestBody](r.Body)
 	if err != nil {
 		if message, ok := requestFieldValidationMessage(err); ok {
 			s.writeErrorWithTargets(
@@ -75,6 +75,7 @@ func (s *Server) SaveCurrentFactoryBySessionId(
 		)
 		return
 	}
+	req := decoded.Value
 
 	mode := factoryapi.FactorySaveModeReplaceCurrent
 	if req.Mode != nil {
@@ -89,6 +90,7 @@ func (s *Server) SaveCurrentFactoryBySessionId(
 		s.writeCurrentFactoryError(w, err, "save", zap.String("session_id", string(sessionID)))
 		return
 	}
+	s.writeCompatibilityWarning(w, "save_current_factory", decoded.Diagnostics.Paths())
 	s.writeJSON(w, http.StatusOK, saved)
 }
 
@@ -219,5 +221,6 @@ func (s *Server) writeCurrentFactoryError(
 }
 
 func decodeSaveCurrentFactoryBody(body io.Reader) (factoryapi.SaveCurrentFactoryBySessionIdJSONRequestBody, error) {
-	return decodeStrictJSON[factoryapi.SaveCurrentFactoryBySessionIdJSONRequestBody](body)
+	result, err := decodeJSONWithDiagnostics[factoryapi.SaveCurrentFactoryBySessionIdJSONRequestBody](body)
+	return result.Value, err
 }

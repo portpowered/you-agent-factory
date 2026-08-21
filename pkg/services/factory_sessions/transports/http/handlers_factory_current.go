@@ -75,7 +75,7 @@ func (s *Server) ValidateCurrentFactoryWorkstationPromptTemplateBySessionId(w ht
 		s.writeError(w, http.StatusNotFound, "Current factory workstation not found.", "NOT_FOUND")
 		return
 	}
-	req, err := decodePromptTemplateValidationRequestBody(r.Body)
+	decoded, err := decodeJSONWithDiagnostics[factoryapi.ValidateCurrentFactoryWorkstationPromptTemplateBySessionIdJSONRequestBody](r.Body)
 	if err != nil {
 		if message, ok := requestFieldValidationMessage(err); ok {
 			s.writeError(w, http.StatusBadRequest, message, "BAD_REQUEST")
@@ -84,6 +84,7 @@ func (s *Server) ValidateCurrentFactoryWorkstationPromptTemplateBySessionId(w ht
 		s.writeError(w, http.StatusBadRequest, "invalid request payload", "BAD_REQUEST")
 		return
 	}
+	req := decoded.Value
 
 	docPaths := currentFactoryBundledDocTargetPaths(namedFactory)
 	if s.workerPrompts == nil {
@@ -95,6 +96,7 @@ func (s *Server) ValidateCurrentFactoryWorkstationPromptTemplateBySessionId(w ht
 		len(workstation.Inputs),
 		docPaths,
 	)
+	s.writeCompatibilityWarning(w, "validate_prompt_template", decoded.Diagnostics.Paths())
 	s.writeJSON(w, http.StatusOK, promptTemplateValidationResultResponse(result))
 }
 
@@ -146,7 +148,7 @@ func (s *Server) SaveCurrentFactoryBySessionId(
 	if !ok {
 		return
 	}
-	req, err := decodeSaveCurrentFactoryBody(r.Body)
+	decoded, err := decodeJSONWithDiagnostics[factoryapi.SaveCurrentFactoryBySessionIdJSONRequestBody](r.Body)
 	if err != nil {
 		if message, ok := requestFieldValidationMessage(err); ok {
 			s.writeErrorWithTargets(w, http.StatusBadRequest, message, "BAD_REQUEST", []factoryapi.FactoryValidationTarget{apisurface.FactoryValidationTargetToAPI(interfaces.FormFactoryPayloadValidationTarget())})
@@ -155,6 +157,7 @@ func (s *Server) SaveCurrentFactoryBySessionId(
 		s.writeErrorWithTargets(w, http.StatusBadRequest, "invalid request payload", "BAD_REQUEST", []factoryapi.FactoryValidationTarget{apisurface.FactoryValidationTargetToAPI(interfaces.FormFactoryPayloadValidationTarget())})
 		return
 	}
+	req := decoded.Value
 
 	mode := factoryapi.FactorySaveModeReplaceCurrent
 	if req.Mode != nil {
@@ -166,6 +169,7 @@ func (s *Server) SaveCurrentFactoryBySessionId(
 		s.writeCurrentFactoryError(w, err, "save", zap.String("session_id", string(sessionID)))
 		return
 	}
+	s.writeCompatibilityWarning(w, "save_current_factory", decoded.Diagnostics.Paths())
 	s.writeJSON(w, http.StatusOK, saved)
 }
 

@@ -8,9 +8,12 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
+	httpcompat "github.com/portpowered/infinite-you/pkg/transports/http/compat"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"go.uber.org/zap"
 )
+
+const workerSessionsHTTPBoundary = "worker_sessions.http"
 
 // Handler owns request decoding, Worker Sessions root invocation, error
 // mapping, and response encoding. Route registration remains top-level.
@@ -40,16 +43,17 @@ func (h *Handler) StartWorkerSession(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "request payload is required", "BAD_REQUEST")
 		return
 	}
-	request, err := decodeWorkerSessionStartRequest(r.Body)
+	decoded, err := decodeWorkerSessionStartRequestWithDiagnostics(r.Body)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, "invalid request payload", "BAD_REQUEST")
 		return
 	}
-	response, err := h.adapter.StartWorkerSession(r.Context(), request)
+	response, err := h.adapter.StartWorkerSession(r.Context(), decoded.Value)
 	if err != nil {
 		h.writeMappedStartError(w, err)
 		return
 	}
+	h.writeCompatibilityWarning(w, "start_worker_session", decoded.Diagnostics.Paths())
 	h.writeJSON(w, http.StatusAccepted, response)
 }
 
@@ -73,17 +77,22 @@ func (h *Handler) ContinueWorkerSession(
 		writeError(w, http.StatusBadRequest, "request payload is required", "BAD_REQUEST")
 		return
 	}
-	request, err := decodeWorkerSessionContinueRequest(r.Body)
+	decoded, err := decodeWorkerSessionContinueRequestWithDiagnostics(r.Body)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, "invalid continuation request payload", "BAD_REQUEST")
 		return
 	}
-	response, err := h.adapter.ContinueWorkerSession(r.Context(), string(sourceWorkerSessionID), request)
+	response, err := h.adapter.ContinueWorkerSession(r.Context(), string(sourceWorkerSessionID), decoded.Value)
 	if err != nil {
 		h.writeMappedContinueError(w, err)
 		return
 	}
+	h.writeCompatibilityWarning(w, "continue_worker_session", decoded.Diagnostics.Paths())
 	h.writeJSON(w, http.StatusAccepted, response)
+}
+
+func (h *Handler) writeCompatibilityWarning(w http.ResponseWriter, operation string, paths []string) {
+	httpcompat.ApplyWarning(w, h.logger, workerSessionsHTTPBoundary, operation, paths)
 }
 
 // ListWorkerSessions handles the top-level Worker Session observation list.

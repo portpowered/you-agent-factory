@@ -11,8 +11,9 @@ type OpenPresentationHTTPRequest struct {
 // OpenPresentationHTTPResponse is the adapter-owned HTTP success response shape
 // for Visualization presentation open.
 type OpenPresentationHTTPResponse struct {
-	SessionID string `json:"session_id"`
-	Mode      string `json:"mode"`
+	SessionID        string   `json:"session_id"`
+	Mode             string   `json:"mode"`
+	ignoredJSONPaths []string `json:"-"`
 }
 
 // PresentProgressHTTPRequest is the adapter-owned HTTP request shape for
@@ -31,7 +32,8 @@ type ProgressRecordHTTPRequest struct {
 // PresentProgressHTTPResponse is the adapter-owned HTTP success response shape
 // for Visualization presentation progress enqueue.
 type PresentProgressHTTPResponse struct {
-	AcceptedCount int `json:"accepted_count"`
+	AcceptedCount    int      `json:"accepted_count"`
+	ignoredJSONPaths []string `json:"-"`
 }
 
 // FinalizePresentationHTTPRequest is the adapter-owned HTTP request shape for
@@ -50,8 +52,9 @@ type TerminalWriteHTTPRequest struct {
 // FinalizePresentationHTTPResponse is the adapter-owned HTTP success response
 // shape for Visualization presentation finalize.
 type FinalizePresentationHTTPResponse struct {
-	Finalized    bool `json:"finalized"`
-	ProgressSeen bool `json:"progress_seen"`
+	Finalized        bool     `json:"finalized"`
+	ProgressSeen     bool     `json:"progress_seen"`
+	ignoredJSONPaths []string `json:"-"`
 }
 
 // ClosePresentationHTTPRequest is the adapter-owned HTTP request shape for
@@ -63,5 +66,6 @@ type ClosePresentationHTTPRequest struct {
 // ClosePresentationHTTPResponse is the adapter-owned HTTP success response shape
 // for Visualization presentation close-and-drain.
 type ClosePresentationHTTPResponse struct {
-	DroppedCount int `json:"dropped_count"`
+	DroppedCount     int      `json:"dropped_count"`
+	ignoredJSONPaths []string `json:"-"`
 }

@@ -10,5 +10,6 @@ type ActivateHTTPRequest struct {
 // LifecycleHTTPResponse is the adapter-owned HTTP success response shape for
 // Visualization lifecycle operations that publish lifecycle state.
 type LifecycleHTTPResponse struct {
-	State string `json:"state"`
+	State            string   `json:"state"`
+	ignoredJSONPaths []string `json:"-"`
 }

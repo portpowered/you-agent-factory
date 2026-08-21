@@ -27,7 +27,7 @@ func (s *Server) SetFactorySessionResourceCapacity(
 		s.writeError(w, http.StatusInternalServerError, "live change service is unavailable", "INTERNAL_ERROR")
 		return
 	}
-	requestBody, err := decodeStrictJSON[factoryapi.FactorySessionResourceCapacityRequest](r.Body)
+	decoded, err := decodeJSONWithDiagnostics[factoryapi.FactorySessionResourceCapacityRequest](r.Body)
 	if err != nil {
 		if message, ok := requestFieldValidationMessage(err); ok {
 			s.writeError(w, http.StatusBadRequest, message, "BAD_REQUEST")
@@ -36,6 +36,7 @@ func (s *Server) SetFactorySessionResourceCapacity(
 		s.writeError(w, http.StatusBadRequest, "invalid request payload", "BAD_REQUEST")
 		return
 	}
+	requestBody := decoded.Value
 	source := factorysession.ResourceCapacitySourceAPI
 	if strings.EqualFold(strings.TrimSpace(r.Header.Get("X-You-Source")), factorysession.ResourceCapacitySourceCLI) {
 		source = factorysession.ResourceCapacitySourceCLI
@@ -55,6 +56,7 @@ func (s *Server) SetFactorySessionResourceCapacity(
 	}
 	response := factorysession.ResourceCapacityResponseToAPI(result)
 	response.Links = factorysession.ResourceCapacityResponseLinks(string(sessionID))
+	s.writeCompatibilityWarning(w, "set_resource_capacity", decoded.Diagnostics.Paths())
 	s.writeJSON(w, http.StatusOK, response)
 }
 

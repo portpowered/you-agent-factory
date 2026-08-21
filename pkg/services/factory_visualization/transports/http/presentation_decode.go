@@ -4,6 +4,7 @@ import (
 	"io"
 
 	factoryvisualization "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
+	httpcompat "github.com/portpowered/infinite-you/pkg/transports/http/compat"
 )
 
 type presentationHTTPDecodeError struct {
@@ -20,61 +21,61 @@ func (e presentationHTTPDecodeError) Unwrap() error {
 
 func decodeOpenPresentationHTTPRequest(
 	body io.Reader,
-) (factoryvisualization.OpenPresentationRequest, error) {
-	req, err := decodeStrictJSON[OpenPresentationHTTPRequest](body)
+) (factoryvisualization.OpenPresentationRequest, httpcompat.Diagnostics, error) {
+	decoded, err := decodeJSONWithDiagnostics[OpenPresentationHTTPRequest](body)
 	if err != nil {
-		return factoryvisualization.OpenPresentationRequest{}, presentationHTTPDecodeError{cause: err}
+		return factoryvisualization.OpenPresentationRequest{}, decoded.Diagnostics, presentationHTTPDecodeError{cause: err}
 	}
 	return factoryvisualization.OpenPresentationRequest{
-		Mode: factoryvisualization.PresentationDeliveryMode(req.Mode),
-	}, nil
+		Mode: factoryvisualization.PresentationDeliveryMode(decoded.Value.Mode),
+	}, decoded.Diagnostics, nil
 }
 
 func decodePresentProgressHTTPRequest(
 	body io.Reader,
-) (factoryvisualization.PresentProgressRequest, error) {
-	req, err := decodeStrictJSON[PresentProgressHTTPRequest](body)
+) (factoryvisualization.PresentProgressRequest, httpcompat.Diagnostics, error) {
+	decoded, err := decodeJSONWithDiagnostics[PresentProgressHTTPRequest](body)
 	if err != nil {
-		return factoryvisualization.PresentProgressRequest{}, presentationHTTPDecodeError{cause: err}
+		return factoryvisualization.PresentProgressRequest{}, decoded.Diagnostics, presentationHTTPDecodeError{cause: err}
 	}
-	records := make([]factoryvisualization.ProgressRecord, 0, len(req.Records))
-	for _, record := range req.Records {
+	records := make([]factoryvisualization.ProgressRecord, 0, len(decoded.Value.Records))
+	for _, record := range decoded.Value.Records {
 		records = append(records, factoryvisualization.ProgressRecord{
 			Payload: append([]byte(nil), record.Payload...),
 		})
 	}
 	return factoryvisualization.PresentProgressRequest{
-		SessionID: factoryvisualization.PresentationSessionID(req.SessionID),
+		SessionID: factoryvisualization.PresentationSessionID(decoded.Value.SessionID),
 		Records:   records,
-	}, nil
+	}, decoded.Diagnostics, nil
 }
 
 func decodeFinalizePresentationHTTPRequest(
 	body io.Reader,
-) (factoryvisualization.FinalizePresentationRequest, error) {
-	req, err := decodeStrictJSON[FinalizePresentationHTTPRequest](body)
+) (factoryvisualization.FinalizePresentationRequest, httpcompat.Diagnostics, error) {
+	decoded, err := decodeJSONWithDiagnostics[FinalizePresentationHTTPRequest](body)
 	if err != nil {
-		return factoryvisualization.FinalizePresentationRequest{}, presentationHTTPDecodeError{cause: err}
+		return factoryvisualization.FinalizePresentationRequest{}, decoded.Diagnostics, presentationHTTPDecodeError{cause: err}
 	}
 	rootReq := factoryvisualization.FinalizePresentationRequest{
-		SessionID: factoryvisualization.PresentationSessionID(req.SessionID),
+		SessionID: factoryvisualization.PresentationSessionID(decoded.Value.SessionID),
 	}
-	if req.Terminal != nil {
+	if decoded.Value.Terminal != nil {
 		rootReq.Terminal = &factoryvisualization.TerminalWrite{
-			Payload: append([]byte(nil), req.Terminal.Payload...),
+			Payload: append([]byte(nil), decoded.Value.Terminal.Payload...),
 		}
 	}
-	return rootReq, nil
+	return rootReq, decoded.Diagnostics, nil
 }
 
 func decodeClosePresentationHTTPRequest(
 	body io.Reader,
-) (factoryvisualization.ClosePresentationRequest, error) {
-	req, err := decodeStrictJSON[ClosePresentationHTTPRequest](body)
+) (factoryvisualization.ClosePresentationRequest, httpcompat.Diagnostics, error) {
+	decoded, err := decodeJSONWithDiagnostics[ClosePresentationHTTPRequest](body)
 	if err != nil {
-		return factoryvisualization.ClosePresentationRequest{}, presentationHTTPDecodeError{cause: err}
+		return factoryvisualization.ClosePresentationRequest{}, decoded.Diagnostics, presentationHTTPDecodeError{cause: err}
 	}
 	return factoryvisualization.ClosePresentationRequest{
-		SessionID: factoryvisualization.PresentationSessionID(req.SessionID),
-	}, nil
+		SessionID: factoryvisualization.PresentationSessionID(decoded.Value.SessionID),
+	}, decoded.Diagnostics, nil
 }

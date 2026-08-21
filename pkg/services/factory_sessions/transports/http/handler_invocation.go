@@ -16,11 +16,12 @@ func (s *Server) InvokeFactorySessionBySessionId(
 	r *http.Request,
 	sessionID factoryapi.SessionID,
 ) {
-	req, err := decodeInvocationRequestBody(r.Body)
+	decoded, err := decodeJSONWithDiagnostics[factoryapi.InvokeFactorySessionBySessionIdJSONRequestBody](r.Body)
 	if err != nil {
 		s.writeError(w, http.StatusBadRequest, "invalid request payload", "BAD_REQUEST")
 		return
 	}
+	req := decoded.Value
 	if s.invocation == nil {
 		s.writeError(w, http.StatusInternalServerError, "session invocation API is unavailable", "INTERNAL_ERROR")
 		return
@@ -46,6 +47,7 @@ func (s *Server) InvokeFactorySessionBySessionId(
 		return
 	}
 
+	s.writeCompatibilityWarning(w, "invoke_factory_session", decoded.Diagnostics.Paths())
 	s.writeJSON(w, http.StatusOK, apisurface.InvocationResponseFromResult(result))
 }
 

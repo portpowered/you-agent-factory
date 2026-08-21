@@ -1,15 +1,17 @@
 package http
 
 import (
-	"bytes"
 	"encoding/json"
 	"errors"
 	"io"
 	"net/http"
 
+	httpcompat "github.com/portpowered/infinite-you/pkg/transports/http/compat"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"go.uber.org/zap"
 )
+
+const factoryVisualizationHTTPBoundary = "factory_visualization.http"
 
 func (a *Adapter) writeJSON(w http.ResponseWriter, status int, value any) {
 	w.Header().Set("Content-Type", "application/json")
@@ -40,69 +42,32 @@ func errorFamilyForStatus(status int) factoryapi.ErrorFamily {
 	}
 }
 
-type requestFieldValidationError struct {
-	message string
-}
-
-func (e requestFieldValidationError) Error() string {
-	return e.message
-}
-
 func requestFieldValidationMessage(err error) (string, bool) {
-	var validationErr requestFieldValidationError
+	var validationErr httpcompat.RequestFieldValidationError
 	if errors.As(err, &validationErr) {
-		return validationErr.message, true
+		return validationErr.Message, true
 	}
 	return "", false
 }
 
-func ensureSingleJSONObject(dec *json.Decoder) error {
-	if err := dec.Decode(&struct{}{}); err != io.EOF {
-		if err == nil {
-			return requestFieldValidationError{message: "request payload must contain one JSON object"}
-		}
-		return err
-	}
-	return nil
+func decodeStrictJSON[T any](body io.Reader) (T, error) {
+	result, err := decodeJSONWithDiagnostics[T](body)
+	return result.Value, err
 }
 
-func decodeStrictJSON[T any](body io.Reader) (T, error) {
-	var zero T
-	data, err := io.ReadAll(body)
-	if err != nil {
-		return zero, err
-	}
-
-	decoder := json.NewDecoder(bytes.NewReader(data))
-	decoder.DisallowUnknownFields()
-
-	var req T
-	if err := decoder.Decode(&req); err != nil {
-		return zero, err
-	}
-	if err := ensureSingleJSONObject(decoder); err != nil {
-		return zero, err
-	}
-	return req, nil
+func decodeJSONWithDiagnostics[T any](body io.Reader) (httpcompat.DecodeResult[T], error) {
+	return httpcompat.Decode[T](body)
 }
 
 func decodeOptionalJSONRequest[T any](body io.Reader, zero func() T) (T, error) {
-	data, err := io.ReadAll(body)
-	if err != nil {
-		return zero(), err
-	}
-	trimmed := bytes.TrimSpace(data)
-	if len(trimmed) == 0 {
-		return zero(), nil
-	}
-	decoder := json.NewDecoder(bytes.NewReader(trimmed))
-	decoder.DisallowUnknownFields()
-	var req T
-	if err := decoder.Decode(&req); err != nil {
-		return zero(), err
-	}
-	if err := ensureSingleJSONObject(decoder); err != nil {
-		return zero(), err
-	}
-	return req, nil
+	result, err := decodeOptionalJSONWithDiagnostics(body, zero)
+	return result.Value, err
+}
+
+func decodeOptionalJSONWithDiagnostics[T any](body io.Reader, zero func() T) (httpcompat.DecodeResult[T], error) {
+	return httpcompat.DecodeOptional(body, zero)
+}
+
+func (a *Adapter) writeCompatibilityWarning(w http.ResponseWriter, operation string, paths []string) {
+	httpcompat.ApplyWarning(w, a.logger, factoryVisualizationHTTPBoundary, operation, paths)
 }

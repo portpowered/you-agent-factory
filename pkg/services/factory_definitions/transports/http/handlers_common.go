@@ -1,15 +1,17 @@
 package http
 
 import (
-	"bytes"
 	"encoding/json"
 	"errors"
 	"io"
 	"net/http"
 
+	httpcompat "github.com/portpowered/infinite-you/pkg/transports/http/compat"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"go.uber.org/zap"
 )
+
+const factoryDefinitionsHTTPBoundary = "factory_definitions.http"
 
 func (s *Server) writeJSON(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json")
@@ -54,48 +56,23 @@ func errorFamilyForStatus(status int) factoryapi.ErrorFamily {
 	}
 }
 
-type requestFieldValidationError struct {
-	message string
-}
-
-func (e requestFieldValidationError) Error() string {
-	return e.message
-}
-
 func requestFieldValidationMessage(err error) (string, bool) {
-	var validationErr requestFieldValidationError
+	var validationErr httpcompat.RequestFieldValidationError
 	if errors.As(err, &validationErr) {
-		return validationErr.message, true
+		return validationErr.Message, true
 	}
 	return "", false
 }
 
-func ensureSingleJSONObject(dec *json.Decoder) error {
-	if err := dec.Decode(&struct{}{}); err != io.EOF {
-		if err == nil {
-			return requestFieldValidationError{message: "request payload must contain one JSON object"}
-		}
-		return err
-	}
-	return nil
+func decodeStrictJSON[T any](body io.Reader) (T, error) {
+	result, err := decodeJSONWithDiagnostics[T](body)
+	return result.Value, err
 }
 
-func decodeStrictJSON[T any](body io.Reader) (T, error) {
-	var zero T
-	data, err := io.ReadAll(body)
-	if err != nil {
-		return zero, err
-	}
+func decodeJSONWithDiagnostics[T any](body io.Reader) (httpcompat.DecodeResult[T], error) {
+	return httpcompat.Decode[T](body)
+}
 
-	decoder := json.NewDecoder(bytes.NewReader(data))
-	decoder.DisallowUnknownFields()
-
-	var req T
-	if err := decoder.Decode(&req); err != nil {
-		return zero, err
-	}
-	if err := ensureSingleJSONObject(decoder); err != nil {
-		return zero, err
-	}
-	return req, nil
+func (s *Adapter) writeCompatibilityWarning(w http.ResponseWriter, operation string, paths []string) {
+	httpcompat.ApplyWarning(w, s.logger, factoryDefinitionsHTTPBoundary, operation, paths)
 }

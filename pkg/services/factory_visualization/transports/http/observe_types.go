@@ -21,7 +21,8 @@ type ObserveReconnectCursorHTTPRequest struct {
 // Visualization Observe. Plain projected-view facts are preserved from the root
 // contract outcome.
 type ObserveHTTPResponse struct {
-	View ObserveHTTPProjectedView `json:"view"`
+	View             ObserveHTTPProjectedView `json:"view"`
+	ignoredJSONPaths []string                 `json:"-"`
 }
 
 // ObserveHTTPProjectedView is the adapter-owned detached live view facts encoded

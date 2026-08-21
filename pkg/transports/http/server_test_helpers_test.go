@@ -764,13 +764,13 @@ func TestDecodeStrictJSON_ValidObject(t *testing.T) {
 	}
 }
 
-func TestDecodeStrictJSON_UnknownField(t *testing.T) {
-	_, err := decodeStrictJSON[strictJSONTestPayload](strings.NewReader(`{"name":"alpha","extra":1}`))
-	if err == nil {
-		t.Fatal("decodeStrictJSON() error = nil, want unknown field error")
+func TestDecodeStrictJSON_AcceptsUnknownField(t *testing.T) {
+	got, err := decodeStrictJSON[strictJSONTestPayload](strings.NewReader(`{"name":"alpha","extra":1}`))
+	if err != nil {
+		t.Fatalf("decodeStrictJSON() error = %v, want nil for unknown field", err)
 	}
-	if !strings.Contains(err.Error(), `json: unknown field "extra"`) {
-		t.Fatalf("decodeStrictJSON() error = %v, want unknown field message", err)
+	if got.Name != "alpha" {
+		t.Fatalf("decoded name = %q, want alpha", got.Name)
 	}
 }
 

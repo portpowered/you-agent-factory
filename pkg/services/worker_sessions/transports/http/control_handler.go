@@ -1,7 +1,6 @@
 package http
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -10,6 +9,7 @@ import (
 	"strings"
 
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
+	httpcompat "github.com/portpowered/infinite-you/pkg/transports/http/compat"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
@@ -36,18 +36,19 @@ func (h *Handler) InterruptWorkerSession(
 		})
 		return
 	}
-	request, err := decodeWorkerSessionInterruptRequest(r.Body)
+	decoded, err := decodeWorkerSessionInterruptRequestWithDiagnostics(r.Body)
 	if err != nil {
 		writeInterruptError(w, http.StatusBadRequest, "BAD_REQUEST", "invalid interrupt request payload", workersessions.InterruptPhaseValidation, workersessions.InterruptResult{
 			SourceWorkerSessionID: string(sourceWorkerSessionID),
 		})
 		return
 	}
-	response, err := h.adapter.InterruptWorkerSession(r.Context(), string(sourceWorkerSessionID), request)
+	response, err := h.adapter.InterruptWorkerSession(r.Context(), string(sourceWorkerSessionID), decoded.Value)
 	if err != nil {
-		h.writeMappedInterruptError(w, err, string(sourceWorkerSessionID), request)
+		h.writeMappedInterruptError(w, err, string(sourceWorkerSessionID), decoded.Value)
 		return
 	}
+	h.writeCompatibilityWarning(w, "interrupt_worker_session", decoded.Diagnostics.Paths())
 	h.writeJSON(w, http.StatusAccepted, response)
 }
 
@@ -114,66 +115,30 @@ func (h *Handler) controlWorkerSession(
 }
 
 func decodeWorkerSessionStartRequest(body io.Reader) (factoryapi.WorkerSessionStartRequest, error) {
-	data, err := io.ReadAll(body)
-	if err != nil {
-		return factoryapi.WorkerSessionStartRequest{}, err
-	}
-	decoder := json.NewDecoder(bytes.NewReader(data))
-	decoder.DisallowUnknownFields()
-	var request factoryapi.WorkerSessionStartRequest
-	if err := decoder.Decode(&request); err != nil {
-		return factoryapi.WorkerSessionStartRequest{}, err
-	}
-	var trailing struct{}
-	if err := decoder.Decode(&trailing); err != io.EOF {
-		if err == nil {
-			return factoryapi.WorkerSessionStartRequest{}, errors.New("request payload must contain one JSON object")
-		}
-		return factoryapi.WorkerSessionStartRequest{}, err
-	}
-	return request, nil
+	result, err := decodeWorkerSessionStartRequestWithDiagnostics(body)
+	return result.Value, err
 }
 
 func decodeWorkerSessionContinueRequest(body io.Reader) (factoryapi.WorkerSessionContinueRequest, error) {
-	data, err := io.ReadAll(body)
-	if err != nil {
-		return factoryapi.WorkerSessionContinueRequest{}, err
-	}
-	decoder := json.NewDecoder(bytes.NewReader(data))
-	decoder.DisallowUnknownFields()
-	var request factoryapi.WorkerSessionContinueRequest
-	if err := decoder.Decode(&request); err != nil {
-		return factoryapi.WorkerSessionContinueRequest{}, err
-	}
-	var trailing struct{}
-	if err := decoder.Decode(&trailing); err != io.EOF {
-		if err == nil {
-			return factoryapi.WorkerSessionContinueRequest{}, errors.New("request payload must contain one JSON object")
-		}
-		return factoryapi.WorkerSessionContinueRequest{}, err
-	}
-	return request, nil
+	result, err := decodeWorkerSessionContinueRequestWithDiagnostics(body)
+	return result.Value, err
 }
 
 func decodeWorkerSessionInterruptRequest(body io.Reader) (factoryapi.WorkerSessionInterruptRequest, error) {
-	data, err := io.ReadAll(body)
-	if err != nil {
-		return factoryapi.WorkerSessionInterruptRequest{}, err
-	}
-	decoder := json.NewDecoder(bytes.NewReader(data))
-	decoder.DisallowUnknownFields()
-	var request factoryapi.WorkerSessionInterruptRequest
-	if err := decoder.Decode(&request); err != nil {
-		return factoryapi.WorkerSessionInterruptRequest{}, err
-	}
-	var trailing struct{}
-	if err := decoder.Decode(&trailing); err != io.EOF {
-		if err == nil {
-			return factoryapi.WorkerSessionInterruptRequest{}, errors.New("request payload must contain one JSON object")
-		}
-		return factoryapi.WorkerSessionInterruptRequest{}, err
-	}
-	return request, nil
+	result, err := decodeWorkerSessionInterruptRequestWithDiagnostics(body)
+	return result.Value, err
+}
+
+func decodeWorkerSessionStartRequestWithDiagnostics(body io.Reader) (httpcompat.DecodeResult[factoryapi.WorkerSessionStartRequest], error) {
+	return httpcompat.Decode[factoryapi.WorkerSessionStartRequest](body)
+}
+
+func decodeWorkerSessionContinueRequestWithDiagnostics(body io.Reader) (httpcompat.DecodeResult[factoryapi.WorkerSessionContinueRequest], error) {
+	return httpcompat.Decode[factoryapi.WorkerSessionContinueRequest](body)
+}
+
+func decodeWorkerSessionInterruptRequestWithDiagnostics(body io.Reader) (httpcompat.DecodeResult[factoryapi.WorkerSessionInterruptRequest], error) {
+	return httpcompat.Decode[factoryapi.WorkerSessionInterruptRequest](body)
 }
 
 func (h *Handler) writeMappedInterruptError(
