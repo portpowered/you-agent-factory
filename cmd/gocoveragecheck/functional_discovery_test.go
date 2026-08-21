@@ -61,7 +61,7 @@ func TestBeta(t *testing.T) {}
 	if !slices.Equal(inventory.Tests[packageA], []string{"TestAdded", "TestAlpha"}) || !slices.Equal(inventory.Tests[packageB], []string{"TestBeta"}) {
 		t.Fatalf("inventory tests = %+v, want both package test lists", inventory.Tests)
 	}
-	if gotInvocation.name != "go" || gotInvocation.dir != repoRoot || !slices.Equal(gotInvocation.args, []string{"list", "-json", "-find", packageA, packageB}) {
+	if gotInvocation.name != "go" || gotInvocation.dir != repoRoot || !slices.Equal(gotInvocation.args, []string{"list", functionalGoListJSONFields, "-find", packageA, packageB}) {
 		t.Fatalf("discovery invocation = %+v, want go list -json -find for sorted packages", gotInvocation)
 	}
 }
@@ -103,7 +103,7 @@ func TestSelected(t *testing.T) {}
 	if !slices.Equal(inventory.Packages, []string{packagePath}) || !slices.Equal(inventory.Tests[packagePath], []string{"TestSelected"}) {
 		t.Fatalf("inventory = %+v, want selected package only", inventory)
 	}
-	if gotInvocation.name != "go" || gotInvocation.dir != repoRoot || !slices.Equal(gotInvocation.args, []string{"list", "-json", "-find", "./tests/functional/..."}) {
+	if gotInvocation.name != "go" || gotInvocation.dir != repoRoot || !slices.Equal(gotInvocation.args, []string{"list", functionalGoListJSONFields, "-find", "./tests/functional/..."}) {
 		t.Fatalf("discovery invocation = %+v, want one current-tree go list -find pattern", gotInvocation)
 	}
 }
@@ -144,7 +144,7 @@ func TestDiscoverFunctionalTestInventoryParallelizesConcretePackageBatches(t *te
 	}
 	seen := make(map[string]struct{}, packageCount)
 	for _, invocation := range invocations {
-		if !slices.Equal(invocation[:3], []string{"list", "-json", "-find"}) {
+		if !slices.Equal(invocation[:3], []string{"list", functionalGoListJSONFields, "-find"}) {
 			t.Fatalf("go list invocation = %v, want metadata flags", invocation)
 		}
 		for _, packagePath := range invocation[3:] {
@@ -197,7 +197,7 @@ func TestMetadata(t *testing.T) {}
 	if len(listed) != 1 || listed[0].ImportPath != packagePath || !slices.Equal(listed[0].TestGoFiles, []string{"metadata_test.go"}) {
 		t.Fatalf("listed metadata = %+v, want build-selected test files", listed)
 	}
-	if gotInvocation.name != "go" || gotInvocation.dir != repoRoot || !slices.Equal(gotInvocation.args, []string{"list", "-json", "-find", "./tests/functional/..."}) {
+	if gotInvocation.name != "go" || gotInvocation.dir != repoRoot || !slices.Equal(gotInvocation.args, []string{"list", functionalGoListJSONFields, "-find", "./tests/functional/..."}) {
 		t.Fatalf("go list invocation = %+v, want one current-tree metadata query", gotInvocation)
 	}
 }
@@ -432,7 +432,7 @@ func TestTwo(t *testing.T) {}
 	}
 
 	commandRunner = func(invocation commandInvocation) (string, string, error) {
-		if invocation.name != "go" || !slices.Equal(invocation.args, []string{"list", "-json", "-find", packagePath}) {
+		if invocation.name != "go" || !slices.Equal(invocation.args, []string{"list", functionalGoListJSONFields, "-find", packagePath}) {
 			t.Fatalf("discovery invocation = %+v, want go list -json -find", invocation)
 		}
 		return marshalFunctionalGoListPackage(t, functionalGoListPackage{

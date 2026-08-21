@@ -21,6 +21,7 @@ import (
 const (
 	functionalDiscoveryParallelThreshold = 8
 	functionalDiscoveryMaxJobs           = 4
+	functionalGoListJSONFields           = "-json=Dir,ImportPath,TestGoFiles,XTestGoFiles"
 )
 
 type functionalGoListPackage struct {
@@ -185,7 +186,7 @@ func listFunctionalTestPackageBatch(packages []string, repoRoot string) ([]funct
 	// names. -find keeps go list from resolving imports and dependencies for
 	// every functional package; the AST parser below remains responsible for
 	// validating the selected source files.
-	args := append([]string{"list", "-json", "-find"}, packages...)
+	args := append([]string{"list", functionalGoListJSONFields, "-find"}, packages...)
 	stdout, stderr, err := runCommand(commandInvocation{
 		name: "go",
 		args: args,
