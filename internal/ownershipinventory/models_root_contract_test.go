@@ -29,6 +29,7 @@ func TestModelsThinRootContractFiles(t *testing.T) {
 		"catalog_scope_characterization_test.go",
 		"host_contract.go",
 		"host_scope_characterization_test.go",
+		"inference_failure.go",
 		"local_execution_contract.go",
 		"managed_runtime_contract.go",
 		"presentation_port.go",
