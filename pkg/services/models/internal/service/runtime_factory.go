@@ -39,6 +39,7 @@ type Root struct {
 	runtimeHost                runtimehost.Service
 	inference                  modelinference.Service
 	resolveHuggingFaceRevision func(context.Context, string) (string, error)
+	resolveBackendArtifact     modelseffects.BackendArtifactResolver
 	runtimeMu                  sync.RWMutex
 	runtimeByScope             map[models.RuntimeScopeRef]models.Service
 	catalog                    modelcatalog.Service
@@ -124,6 +125,7 @@ func NewRoot(
 		runtimeScopes: runtimeScopes, catalog: catalogService, assets: assetService,
 		runtimeHost: runtimeHostService, inference: inferenceService,
 		resolveHuggingFaceRevision: resolveRevision,
+		resolveBackendArtifact:     process.ResolveBackendArtifact,
 		runtimeByScope:             make(map[models.RuntimeScopeRef]models.Service),
 		process:                    process,
 	}, nil
@@ -474,8 +476,12 @@ func (o *Root) prepareJoinedInvocation(
 		plan.prepared.Input = plan.prepared.Inputs[0].Clone()
 	}
 
-	if _, err := o.PrepareModelAssets(ctx, joinedAssetPreparationRequest(
-		request, plan.modelName, resolved,
+	backendArtifact, err := o.resolveJoinedBackendArtifact(ctx, resolved.Definition)
+	if err != nil {
+		return plan, "resolve_backend", err
+	}
+	if _, err := o.PrepareModelAssets(ctx, joinedAssetPreparationRequestWithBackend(
+		request, plan.modelName, resolved, backendArtifact,
 	)); err != nil {
 		return plan, "acquire_assets", err
 	}
@@ -497,6 +503,42 @@ func (o *Root) prepareJoinedInvocation(
 	}
 	plan.prepared.Lease = plan.lease
 	return plan, "invoke", nil
+}
+
+func (o *Root) resolveJoinedBackendArtifact(
+	ctx context.Context,
+	definition models.ModelDefinition,
+) (modelseffects.BackendArtifactSelection, error) {
+	if !isJoinedPinnedBackend(definition.Backend) {
+		return modelseffects.BackendArtifactSelection{}, nil
+	}
+	if o == nil || o.resolveBackendArtifact == nil {
+		return modelseffects.BackendArtifactSelection{}, fmt.Errorf(
+			"%w: pinned backend artifact selector is unavailable",
+			models.ErrHostMissingAssets,
+		)
+	}
+	selection, err := o.resolveBackendArtifact(ctx, modelseffects.BackendArtifactSelectionRequest{
+		Backend:         strings.TrimSpace(definition.Backend),
+		Platform:        o.process.BackendArtifactPlatform,
+		ProtocolVersion: modelseffects.PinnedHostProtocolVersion,
+	})
+	if err != nil {
+		return modelseffects.BackendArtifactSelection{}, fmt.Errorf(
+			"%w: pinned backend artifact selection failed",
+			models.ErrHostMissingAssets,
+		)
+	}
+	requirement := models.AssetRequirement{
+		Name: selection.Name, Bytes: selection.Bytes, SHA256: selection.SHA256,
+	}
+	if strings.TrimSpace(selection.Location) == "" || selection.Bytes <= 0 || requirement.Validate() != nil {
+		return modelseffects.BackendArtifactSelection{}, fmt.Errorf(
+			"%w: pinned backend artifact facts are invalid",
+			models.ErrHostMissingAssets,
+		)
+	}
+	return selection, nil
 }
 
 func (o *Root) executeJoinedInvocation(
@@ -604,6 +646,17 @@ func joinedAssetPreparationRequest(
 	modelName string,
 	resolved models.ResolvedModelReference,
 ) models.PrepareModelAssetsRequest {
+	return joinedAssetPreparationRequestWithBackend(
+		request, modelName, resolved, modelseffects.BackendArtifactSelection{},
+	)
+}
+
+func joinedAssetPreparationRequestWithBackend(
+	request models.InvokeModelRequest,
+	modelName string,
+	resolved models.ResolvedModelReference,
+	backendArtifact modelseffects.BackendArtifactSelection,
+) models.PrepareModelAssetsRequest {
 	assetReference := joinedAssetReference(request.Model, resolved)
 	prepared := models.PrepareModelAssetsRequest{
 		Scope:     request.Scope,
@@ -613,12 +666,25 @@ func joinedAssetPreparationRequest(
 		Backend:   strings.TrimSpace(resolved.Definition.Backend),
 		Artifacts: joinedSourceAssetRequirements(assetReference.NameOrURI),
 	}
+	if backendArtifact.Name != "" {
+		prepared.BackendReference = models.ModelReference{NameOrURI: backendArtifact.Location}
+		prepared.BackendArtifacts = []models.AssetRequirement{{
+			Name: backendArtifact.Name, Bytes: backendArtifact.Bytes, SHA256: backendArtifact.SHA256,
+		}}
+		return prepared
+	}
 	if backend := strings.TrimSpace(resolved.Definition.Backend); isJoinedSourceReference(backend) {
 		prepared.Backend = ""
 		prepared.BackendReference = models.ModelReference{NameOrURI: backend}
 		prepared.BackendArtifacts = joinedSourceAssetRequirements(backend)
 	}
 	return prepared
+}
+
+func isJoinedPinnedBackend(value string) bool {
+	canonical := strings.ToLower(strings.TrimSpace(value))
+	return strings.HasPrefix(canonical, "localai-") || canonical == "localai" ||
+		canonical == "localai_grpc" || canonical == "localai-grpc"
 }
 
 func isJoinedSourceReference(value string) bool {

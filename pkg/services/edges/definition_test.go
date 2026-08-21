@@ -590,7 +590,13 @@ func (edgeModelHostProtocol) Negotiate(
 
 type edgeModelHostGRPCDialer struct{}
 
-func (edgeModelHostGRPCDialer) Dial(context.Context, string) (ModelHostGRPCConnection, error) {
+func (edgeModelHostGRPCDialer) Dial(context.Context, string) (interface {
+	Negotiate(
+		context.Context,
+		ModelHostProtocolNegotiationRequest,
+	) (ModelHostProtocolNegotiationResult, error)
+	Close() error
+}, error) {
 	return nil, nil
 }
 

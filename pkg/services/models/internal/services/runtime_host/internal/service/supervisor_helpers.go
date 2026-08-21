@@ -133,24 +133,32 @@ func modelOverlay(
 
 func cacheInspectionFromAssets(inspection scopedassets.RuntimeCacheInspection) cacheInspection {
 	return cacheInspection{
-		Supported:          inspection.Supported,
-		Installed:          inspection.Installed,
-		Revision:           inspection.Revision,
-		CachePath:          inspection.CachePath,
-		InstalledFileCount: inspection.InstalledFileCount,
-		MissingAssets:      append([]string(nil), inspection.MissingAssets...),
-		PartialArtifacts:   inspection.PartialArtifacts,
+		Supported:             inspection.Supported,
+		Installed:             inspection.Installed,
+		Revision:              inspection.Revision,
+		CachePath:             inspection.CachePath,
+		InstalledFileCount:    inspection.InstalledFileCount,
+		MissingAssets:         append([]string(nil), inspection.MissingAssets...),
+		PartialArtifacts:      inspection.PartialArtifacts,
+		BackendRequired:       inspection.BackendRequired,
+		BackendCachePath:      inspection.BackendCachePath,
+		BackendRevision:       inspection.BackendRevision,
+		BackendInstalledFiles: inspection.BackendInstalledFiles,
 	}
 }
 
 type cacheInspection struct {
-	Supported          bool
-	Installed          bool
-	Revision           string
-	CachePath          string
-	InstalledFileCount int
-	MissingAssets      []string
-	PartialArtifacts   bool
+	Supported             bool
+	Installed             bool
+	Revision              string
+	CachePath             string
+	InstalledFileCount    int
+	MissingAssets         []string
+	PartialArtifacts      bool
+	BackendRequired       bool
+	BackendCachePath      string
+	BackendRevision       string
+	BackendInstalledFiles int
 }
 
 func defaultServerStartBuilder(
@@ -181,6 +189,16 @@ func defaultServerStartBuilder(
 	}
 	args = append([]string{"serve"}, args...)
 	args = append(args, "--cache-path", inspection.CachePath)
+	if inspection.BackendRequired {
+		if strings.TrimSpace(inspection.BackendCachePath) == "" {
+			return modelseffects.HostProcessStartSpec{}, fmt.Errorf(
+				"%w: pinned backend assets are not installed for runtime %q",
+				models.ErrHostMissingAssets,
+				identity.Name,
+			)
+		}
+		args = append(args, "--backend-cache-path", inspection.BackendCachePath)
+	}
 	return modelseffects.HostProcessStartSpec{
 		Command:        command,
 		Args:           args,
@@ -219,6 +237,16 @@ func defaultGRPCServerStartBuilder(
 	}
 	args = append([]string{"serve"}, args...)
 	args = append(args, "--cache-path", inspection.CachePath)
+	if inspection.BackendRequired {
+		if strings.TrimSpace(inspection.BackendCachePath) == "" {
+			return modelseffects.HostProcessStartSpec{}, fmt.Errorf(
+				"%w: pinned backend assets are not installed for runtime %q",
+				models.ErrHostMissingAssets,
+				identity.Name,
+			)
+		}
+		args = append(args, "--backend-cache-path", inspection.BackendCachePath)
+	}
 	return modelseffects.HostProcessStartSpec{
 		Command:        command,
 		Args:           args,

@@ -356,7 +356,7 @@ func (s *service) stageGenericArtifact(
 	switch source.kind {
 	case genericSourceLocal, genericSourceFile:
 		return s.copyLocalArtifact(ctx, localPath, target, requirement)
-	case genericSourceHF:
+	case genericSourceHF, genericSourceRelease:
 		return s.downloadGenericArtifact(ctx, source, target, requirement)
 	default:
 		return models.AssetArtifact{}, models.ErrAssetSourceUnsupported

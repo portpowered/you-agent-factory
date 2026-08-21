@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"path"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -27,19 +28,21 @@ const (
 type genericSourceKind string
 
 const (
-	genericSourceLocal genericSourceKind = "LOCAL"
-	genericSourceFile  genericSourceKind = "FILE"
-	genericSourceHF    genericSourceKind = "HUGGING_FACE"
+	genericSourceLocal   genericSourceKind = "LOCAL"
+	genericSourceFile    genericSourceKind = "FILE"
+	genericSourceHF      genericSourceKind = "HUGGING_FACE"
+	genericSourceRelease genericSourceKind = "RELEASE"
 )
 
 type genericSource struct {
-	kind       genericSourceKind
-	safe       string
-	localPath  string
-	owner      string
-	repository string
-	file       string
-	revision   string
+	kind        genericSourceKind
+	safe        string
+	localPath   string
+	owner       string
+	repository  string
+	file        string
+	revision    string
+	artifactURL string
 }
 
 type genericArtifact struct {
@@ -90,7 +93,7 @@ func shouldPrepareGenericAssets(request models.PrepareModelAssetsRequest) bool {
 func isGenericSourceReference(value string) bool {
 	lower := strings.ToLower(strings.TrimSpace(value))
 	return strings.HasPrefix(lower, "hf://") || strings.HasPrefix(lower, "file://") ||
-		looksLikeLocalPath(value)
+		strings.HasPrefix(lower, "https://") || looksLikeLocalPath(value)
 }
 
 func (s *service) prepareGenericAssets(
@@ -116,13 +119,17 @@ func (s *service) prepareGenericAssets(
 	if err := genericPreparationError(modelErr, backendErr); err != nil {
 		return genericAssetFailureResult(plan.source, modelResult, backendResult), err
 	}
-	if modelResult.snapshotPath != "" {
+	if modelResult.snapshotPath != "" || backendResult.snapshotPath != "" {
 		s.rememberPreparedRuntime(request.Scope, request.Name, scopedassets.RuntimeCacheInspection{
-			Supported:          true,
-			Installed:          true,
-			Revision:           plan.source.revision,
-			CachePath:          modelResult.snapshotPath,
-			InstalledFileCount: len(modelResult.artifacts),
+			Supported:             true,
+			Installed:             modelResult.snapshotPath != "",
+			Revision:              plan.source.revision,
+			CachePath:             modelResult.snapshotPath,
+			InstalledFileCount:    len(modelResult.artifacts),
+			BackendRequired:       len(plan.backendRequirements) > 0,
+			BackendCachePath:      backendResult.snapshotPath,
+			BackendRevision:       plan.backendSource.revision,
+			BackendInstalledFiles: len(backendResult.artifacts),
 		})
 	}
 	return genericAssetResult(plan.source, modelResult, backendResult), nil
@@ -734,6 +741,8 @@ func parseGenericSource(raw string) (genericSource, error) {
 		return parseGenericHFSource(raw)
 	case strings.HasPrefix(lower, "file://"):
 		return parseGenericFileSource(raw)
+	case strings.HasPrefix(lower, "https://"):
+		return parseGenericReleaseSource(raw)
 	case strings.Contains(raw, "://"):
 		return genericSource{}, models.ErrAssetSourceUnsupported
 	case looksLikeLocalPath(raw):
@@ -741,6 +750,24 @@ func parseGenericSource(raw string) (genericSource, error) {
 	default:
 		return genericSource{}, models.ErrAssetSourceUnsupported
 	}
+}
+
+func parseGenericReleaseSource(raw string) (genericSource, error) {
+	parsed, err := url.Parse(raw)
+	if err != nil || parsed.Scheme != "https" || parsed.Host != "github.com" ||
+		parsed.User != nil || parsed.RawQuery != "" || parsed.Fragment != "" ||
+		!strings.Contains(path.Clean(parsed.Path), "/releases/download/") {
+		return genericSource{}, models.ErrModelReferenceInvalid
+	}
+	name := path.Base(parsed.Path)
+	if name == "." || name == "/" || strings.TrimSpace(name) == "" || strings.ContainsAny(name, "\\\x00") {
+		return genericSource{}, models.ErrModelReferenceInvalid
+	}
+	checksum := sha256.Sum256([]byte(raw))
+	return genericSource{
+		kind: genericSourceRelease, safe: "release://" + hex.EncodeToString(checksum[:]),
+		artifactURL: raw, revision: hex.EncodeToString(checksum[:]),
+	}, nil
 }
 
 func parseGenericHFSource(raw string) (genericSource, error) {
@@ -843,6 +870,9 @@ func isImmutableGenericRevision(value string) bool {
 }
 
 func (s *service) genericAssetURL(source genericSource, name string) string {
+	if source.kind == genericSourceRelease {
+		return source.artifactURL
+	}
 	return strings.TrimRight(s.endpoints.BaseURL, "/") + "/" + source.owner + "/" +
 		source.repository + "/resolve/" + source.revision + "/" + url.PathEscape(name) + "?download=true"
 }
@@ -868,6 +898,9 @@ func sourceDisplayName(source genericSource) string {
 func sourceMetadata(source genericSource) models.SourceMetadata {
 	if source.kind == genericSourceHF {
 		return models.SourceMetadata{Provider: "HUGGINGFACE", Reference: source.owner + "/" + source.repository, Revision: source.revision}
+	}
+	if source.kind == genericSourceRelease {
+		return models.SourceMetadata{Provider: "PINNED_BACKEND", Reference: "pinned-backend", Revision: source.revision}
 	}
 	return models.SourceMetadata{Provider: "LOCAL", Reference: source.safe}
 }

@@ -155,6 +155,7 @@ func TestModelsJoinedInvokeConsumesGenericCacheThroughRootBuildProcess(t *testin
 
 	home := t.TempDir()
 	writeGenericBuiltinTTSCache(t, home)
+	writeGenericBuiltinTTSBackendCache(t, home)
 	rejectingNetwork := &rejectingModelAssetHTTP{}
 	hostLauncher := &recordingModelHostLauncher{endpoint: modelServer.URL}
 	protocol := &joinedProtocolNegotiator{}
@@ -186,6 +187,7 @@ func TestModelsJoinedInvokeConsumesGenericCacheThroughRootBuildProcess(t *testin
 		ModelHostProcessLauncher:       hostLauncher,
 		ModelHostProtocolNegotiator:    protocol,
 		ModelHostCompatibilityChecker:  compatibility,
+		ModelResolveBackendArtifact:    resolvePinnedTTSBackend,
 		ModelHostHTTPClient:            modelServer.Client(),
 		ModelRuntimeHTTPClient:         modelServer.Client(),
 	})
@@ -241,6 +243,7 @@ func TestModelsJoinedInvokeRejectsPinnedBackendBeforeProcessStartThroughRootBuil
 
 	home := t.TempDir()
 	writeGenericBuiltinTTSCache(t, home)
+	writeGenericBuiltinTTSBackendCache(t, home)
 	rejectingNetwork := &rejectingModelAssetHTTP{}
 	hostLauncher := &recordingModelHostLauncher{endpoint: modelServer.URL}
 	protocol := &joinedProtocolNegotiator{}
@@ -270,6 +273,7 @@ func TestModelsJoinedInvokeRejectsPinnedBackendBeforeProcessStartThroughRootBuil
 		ModelHostProcessLauncher:       hostLauncher,
 		ModelHostProtocolNegotiator:    protocol,
 		ModelHostCompatibilityChecker:  compatibility,
+		ModelResolveBackendArtifact:    resolvePinnedTTSBackend,
 		ModelHostHTTPClient:            modelServer.Client(),
 		ModelRuntimeHTTPClient:         modelServer.Client(),
 	})
@@ -349,6 +353,54 @@ func writeGenericBuiltinTTSCache(t *testing.T, home string) {
 	}
 	if err := os.WriteFile(filepath.Join(snapshot, ".you-assets.json"), metadata, 0o644); err != nil {
 		t.Fatalf("write generic model metadata: %v", err)
+	}
+}
+
+func resolvePinnedTTSBackend(
+	_ context.Context,
+	request serviceedges.ModelBackendArtifactSelectionRequest,
+) (serviceedges.ModelBackendArtifactSelection, error) {
+	if request.Backend != "localai-vibevoice" || request.ProtocolVersion != "localai-backend-v1" {
+		return serviceedges.ModelBackendArtifactSelection{}, fmt.Errorf("unexpected pinned backend selection request")
+	}
+	return pinnedTTSBackendSelection(), nil
+}
+
+func pinnedTTSBackendSelection() serviceedges.ModelBackendArtifactSelection {
+	return serviceedges.ModelBackendArtifactSelection{
+		Name:     "localai-backend-localai-vibevoice-linux-amd64-000e37282bc5bb09edc20f7047a47924122ba3a0.tar.gz",
+		Location: "https://github.com/portpowered/infinite-you/releases/download/localai-backends-v1-fixture/localai-backend-localai-vibevoice-linux-amd64-000e37282bc5bb09edc20f7047a47924122ba3a0.tar.gz",
+		Bytes:    22,
+		SHA256:   "10a84e67d02d078f711608accf13cb80b6724a4c03dc4acae5ba936831801172",
+	}
+}
+
+func writeGenericBuiltinTTSBackendCache(t *testing.T, home string) {
+	t.Helper()
+	selection := pinnedTTSBackendSelection()
+	urlHash := fmt.Sprintf("%x", sha256.Sum256([]byte(selection.Location)))
+	source := "backend://localai-vibevoice/release://" + urlHash
+	digest := selection.SHA256
+	identity := fmt.Sprintf("backend|%s|%s:%d:%s", source, selection.Name, selection.Bytes, digest)
+	identityHash := fmt.Sprintf("%x", sha256.Sum256([]byte(identity)))
+	snapshot := filepath.Join(home, ".agent-factory", "models", "backend-artifacts", ".you-content-addressed", "backend", identityHash)
+	if err := os.MkdirAll(snapshot, 0o755); err != nil {
+		t.Fatalf("create generic backend snapshot: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(snapshot, selection.Name), []byte("pinned-backend-fixture"), 0o644); err != nil {
+		t.Fatalf("write generic backend snapshot: %v", err)
+	}
+	metadata, err := json.Marshal(map[string]any{
+		"kind": "backend", "identity": identity, "source": source, "sourceKey": source,
+		"artifacts": []map[string]any{{
+			"Name": selection.Name, "Bytes": selection.Bytes, "SHA256": selection.SHA256,
+		}},
+	})
+	if err != nil {
+		t.Fatalf("marshal generic backend metadata: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(snapshot, ".you-assets.json"), metadata, 0o644); err != nil {
+		t.Fatalf("write generic backend metadata: %v", err)
 	}
 }
 

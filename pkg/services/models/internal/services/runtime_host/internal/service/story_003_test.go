@@ -10,6 +10,7 @@ import (
 
 	models "github.com/portpowered/infinite-you/pkg/services/models"
 	modelseffects "github.com/portpowered/infinite-you/pkg/services/models/internal/effects"
+	scopedassets "github.com/portpowered/infinite-you/pkg/services/models/internal/services/assets"
 	runtimehost "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_host"
 	internalservice "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_host/internal/service"
 	runtimescopes "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_scopes"
@@ -132,6 +133,44 @@ func TestManagedLocalAIUsesPinnedProtocolAndKeepsPrivateRuntimeDetailsPrivate(t 
 	assertManagedHostReady(t, result)
 	assertManagedProcess(t, launcher)
 	assertManagedProtocolCall(t, protocol)
+}
+
+func TestManagedLocalAIPassesPinnedBackendCachePathToProcess(t *testing.T) {
+	t.Parallel()
+
+	cacheDirectory := t.TempDir()
+	backendCacheDirectory := t.TempDir()
+	writeCacheFixture(t, cacheDirectory, true)
+	scopes := newScopes(t, "story-003-backend-cache")
+	ref := openScope(t, scopes, cacheDirectory, managedLocalAIConfig(models.LoadPolicyOnDemand))
+	launcher := &controlledProcessLauncher{}
+	assets := &backendRuntimeInspectionAssets{
+		Service: mustAssetsService(t, scopes),
+		inspection: scopedassets.RuntimeCacheInspection{
+			Supported: true, Installed: true, CachePath: cacheDirectory,
+			BackendRequired: true, BackendCachePath: backendCacheDirectory,
+		},
+	}
+	host := internalservice.NewWithHostTestConfig(
+		scopes, assets, launcher, http.DefaultClient, realHostClock{}, nil, nil,
+		internalservice.SupervisorTestConfig{}, internalservice.HostPolicyTestConfig{},
+		runtimehost.Options{
+			Platform:             managedHostPlatform(),
+			CompatibilityChecker: &testCompatibilityChecker{},
+			ProtocolNegotiator:   &testProtocolNegotiator{},
+		},
+	)
+	t.Cleanup(func() { _ = internalservice.ShutdownHost(context.Background(), host) })
+
+	if _, err := host.EnsureModelHost(context.Background(), models.EnsureModelHostRequest{
+		Scope: ref, Name: managedModelName,
+	}); err != nil {
+		t.Fatalf("EnsureModelHost: %v", err)
+	}
+	spec := launcher.spec(0)
+	if got := argumentValue(spec.Args, "--backend-cache-path"); got != backendCacheDirectory {
+		t.Fatalf("backend cache argument = %q, want %q; args = %#v", got, backendCacheDirectory, spec.Args)
+	}
 }
 
 func assertManagedHostReady(t *testing.T, result models.EnsureModelHostResult) {
@@ -436,6 +475,27 @@ func containsArg(args []string, want string) bool {
 		}
 	}
 	return false
+}
+
+func argumentValue(args []string, flag string) string {
+	for index, arg := range args {
+		if arg == flag && index+1 < len(args) {
+			return args[index+1]
+		}
+	}
+	return ""
+}
+
+type backendRuntimeInspectionAssets struct {
+	scopedassets.Service
+	inspection scopedassets.RuntimeCacheInspection
+}
+
+func (assets *backendRuntimeInspectionAssets) InspectRuntimeCache(
+	context.Context,
+	models.InspectModelAssetsRequest,
+) (scopedassets.RuntimeCacheInspection, error) {
+	return assets.inspection, nil
 }
 
 func boolToInt(value bool) int {

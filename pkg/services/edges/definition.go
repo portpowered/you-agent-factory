@@ -101,11 +101,21 @@ type Edges struct {
 			Stop() bool
 		}
 	}
-	ModelHostProtocolNegotiator   ModelHostProtocolNegotiator
-	ModelHostGRPCDialer           ModelHostGRPCDialer
-	ModelHostCompatibilityChecker ModelHostCompatibilityChecker
-	ModelRuntimeCommandRunner     platformprocess.CommandRunner
-	ModelRuntimeHTTPClient        interface {
+	ModelHostProtocolNegotiator interface {
+		Negotiate(context.Context, string, ModelHostProtocolNegotiationRequest) (ModelHostProtocolNegotiationResult, error)
+	}
+	ModelHostGRPCDialer interface {
+		Dial(context.Context, string) (interface {
+			Negotiate(context.Context, ModelHostProtocolNegotiationRequest) (ModelHostProtocolNegotiationResult, error)
+			Close() error
+		}, error)
+	}
+	ModelHostCompatibilityChecker interface {
+		Check(context.Context, ModelHostCompatibilityRequest) error
+	}
+	ModelResolveBackendArtifact ModelResolveBackendArtifact
+	ModelRuntimeCommandRunner   platformprocess.CommandRunner
+	ModelRuntimeHTTPClient      interface {
 		Do(*http.Request) (*http.Response, error)
 	}
 	ModelRuntimeInspectFile           RuntimeInspectFile
@@ -365,6 +375,9 @@ func Merge(defaults Edges, replacements Edges) Edges {
 	}
 	if replacements.ModelHostCompatibilityChecker != nil {
 		defaults.ModelHostCompatibilityChecker = replacements.ModelHostCompatibilityChecker
+	}
+	if replacements.ModelResolveBackendArtifact != nil {
+		defaults.ModelResolveBackendArtifact = replacements.ModelResolveBackendArtifact
 	}
 	if replacements.ModelRuntimeCommandRunner != nil {
 		defaults.ModelRuntimeCommandRunner = replacements.ModelRuntimeCommandRunner

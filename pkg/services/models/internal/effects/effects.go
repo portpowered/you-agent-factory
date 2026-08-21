@@ -89,7 +89,36 @@ type ProcessDependencies struct {
 	HostMetrics                HostMetricsRecorder
 	LocalHooks                 LocalRuntimeHooks
 	ResolveHuggingFaceRevision func(context.Context, string) (string, error)
+	ResolveBackendArtifact     BackendArtifactResolver
+	BackendArtifactPlatform    models.AssetHostPlatform
 }
+
+// BackendArtifactSelectionRequest contains only the facts needed to select a
+// pinned backend archive. The selector owns the immutable publication manifest;
+// Models receives detached archive facts and never exposes that manifest.
+type BackendArtifactSelectionRequest struct {
+	Backend         string
+	Platform        models.AssetHostPlatform
+	ProtocolVersion string
+}
+
+// BackendArtifactSelection is the provider-neutral archive identity consumed
+// by the private asset preparation seam. Location is retained only inside the
+// Models implementation and is never copied to a public result or error.
+type BackendArtifactSelection struct {
+	Name     string
+	Location string
+	Bytes    int64
+	SHA256   string
+}
+
+// BackendArtifactResolver selects one immutable backend archive for a managed
+// host. It is an injected effect so tests can use deterministic manifests and
+// production can obtain the published P3 artifact set without live probing.
+type BackendArtifactResolver func(
+	context.Context,
+	BackendArtifactSelectionRequest,
+) (BackendArtifactSelection, error)
 
 type AssetHTTPDoer interface {
 	Do(*http.Request) (*http.Response, error)

@@ -46,20 +46,27 @@ type Service interface {
 // RuntimeCacheLayout is the Models-private bridge from verified scoped assets
 // to the existing local runtime process boundary.
 type RuntimeCacheLayout struct {
-	ModelName string
-	CachePath string
-	Revision  string
-	Files     []string
+	ModelName        string
+	CachePath        string
+	Revision         string
+	Files            []string
+	BackendCachePath string
+	BackendRevision  string
+	BackendFiles     []string
 }
 
 // RuntimeCacheInspection is the Models-private cache projection used by
 // catalog and host compatibility behavior during their separate migrations.
 type RuntimeCacheInspection struct {
-	Supported          bool
-	Installed          bool
-	Revision           string
-	CachePath          string
-	InstalledFileCount int
-	MissingAssets      []string
-	PartialArtifacts   bool
+	Supported             bool
+	Installed             bool
+	Revision              string
+	CachePath             string
+	InstalledFileCount    int
+	MissingAssets         []string
+	PartialArtifacts      bool
+	BackendRequired       bool
+	BackendCachePath      string
+	BackendRevision       string
+	BackendInstalledFiles int
 }

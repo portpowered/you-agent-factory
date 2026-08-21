@@ -382,6 +382,29 @@ func TestJoinedAssetPreparationRequestKeepsNamedBackendAndRepositorySource(t *te
 	}
 }
 
+func TestJoinedAssetPreparationRequestCarriesSelectedBackendArtifact(t *testing.T) {
+	t.Parallel()
+
+	request := models.InvokeModelRequest{Model: models.ModelReference{NameOrURI: "tts"}}
+	resolved := models.ResolvedModelReference{Definition: models.ModelDefinition{
+		Name: "tts", Source: "hf://owner/repository/weights.gguf@revision-1", Backend: "localai-vibevoice",
+	}}
+	selection := modelseffects.BackendArtifactSelection{
+		Name: "localai-backend.tar.gz", Location: "https://github.com/owner/repo/releases/download/v1/localai-backend.tar.gz",
+		Bytes: 22, SHA256: "10a84e67d02d078f711608accf13cb80b6724a4c03dc4acae5ba936831801172",
+	}
+	prepared := joinedAssetPreparationRequestWithBackend(request, "tts", resolved, selection)
+	if prepared.Backend != resolved.Definition.Backend ||
+		prepared.BackendReference.NameOrURI != selection.Location || len(prepared.BackendArtifacts) != 1 {
+		t.Fatalf("backend preparation = %#v, want selected backend source and requirement", prepared)
+	}
+	if prepared.BackendArtifacts[0].Name != selection.Name ||
+		prepared.BackendArtifacts[0].Bytes != selection.Bytes ||
+		prepared.BackendArtifacts[0].SHA256 != selection.SHA256 {
+		t.Fatalf("backend requirement = %#v, want detached selected facts", prepared.BackendArtifacts[0])
+	}
+}
+
 func joinedInvocationRequest(scope models.RuntimeScopeRef) models.InvokeModelRequest {
 	return models.InvokeModelRequest{
 		Scope:  scope,

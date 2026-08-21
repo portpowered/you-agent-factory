@@ -113,6 +113,7 @@ func provideModelsService(edges serviceedges.Edges) (models.Service, error) {
 		}
 	}
 	compatibilityChecker := adaptModelHostCompatibilityChecker(edges.ModelHostCompatibilityChecker)
+	backendArtifactResolver := adaptModelBackendArtifactResolver(edges.ModelResolveBackendArtifact)
 	runtimeRunner := edges.ModelRuntimeCommandRunner
 	if runtimeRunner == nil {
 		var runnerErr error
@@ -143,7 +144,7 @@ func provideModelsService(edges serviceedges.Edges) (models.Service, error) {
 		}
 	}
 
-	return modelswire.NewService(
+	return modelswire.NewServiceWithBackendArtifactResolver(
 		assetPlatform,
 		assetHTTP,
 		assetEndpoints,
@@ -175,12 +176,37 @@ func provideModelsService(edges serviceedges.Edges) (models.Service, error) {
 		assetEnvironment,
 		protocolNegotiator,
 		compatibilityChecker,
+		backendArtifactResolver,
 		edges.ModelResolveHuggingFaceRevision,
 	)
 }
 
+func adaptModelBackendArtifactResolver(
+	next serviceedges.ModelResolveBackendArtifact,
+) modelswire.BackendArtifactResolver {
+	if next == nil {
+		return nil
+	}
+	return func(
+		ctx context.Context,
+		request modelswire.BackendArtifactSelectionRequest,
+	) (modelswire.BackendArtifactSelection, error) {
+		selection, err := next(ctx, serviceedges.ModelBackendArtifactSelectionRequest{
+			Backend:         request.Backend,
+			Platform:        request.Platform,
+			ProtocolVersion: request.ProtocolVersion,
+		})
+		return modelswire.BackendArtifactSelection{
+			Name:     selection.Name,
+			Location: selection.Location,
+			Bytes:    selection.Bytes,
+			SHA256:   selection.SHA256,
+		}, err
+	}
+}
+
 type modelHostProtocolNegotiatorAdapter struct {
-	next serviceedges.ModelHostProtocolNegotiator
+	next modelHostProtocolEdge
 }
 
 func (adapter modelHostProtocolNegotiatorAdapter) Negotiate(
@@ -203,7 +229,7 @@ func (adapter modelHostProtocolNegotiatorAdapter) Negotiate(
 }
 
 type modelHostGRPCDialerAdapter struct {
-	next serviceedges.ModelHostGRPCDialer
+	next modelHostGRPCDialerEdge
 }
 
 func (adapter modelHostGRPCDialerAdapter) Dial(
@@ -218,7 +244,7 @@ func (adapter modelHostGRPCDialerAdapter) Dial(
 }
 
 type modelHostGRPCConnectionAdapter struct {
-	next serviceedges.ModelHostGRPCConnection
+	next modelHostGRPCConnectionEdge
 }
 
 func (adapter modelHostGRPCConnectionAdapter) Negotiate(
@@ -244,7 +270,7 @@ func (adapter modelHostGRPCConnectionAdapter) Close() error {
 }
 
 type modelHostCompatibilityCheckerAdapter struct {
-	next serviceedges.ModelHostCompatibilityChecker
+	next modelHostCompatibilityEdge
 }
 
 func (adapter modelHostCompatibilityCheckerAdapter) Check(
@@ -260,7 +286,7 @@ func (adapter modelHostCompatibilityCheckerAdapter) Check(
 }
 
 func adaptModelHostProtocolNegotiator(
-	negotiator serviceedges.ModelHostProtocolNegotiator,
+	negotiator modelHostProtocolEdge,
 ) modelswire.HostProtocolNegotiator {
 	if isNilModelEdgeDependency(negotiator) {
 		return nil
@@ -269,12 +295,42 @@ func adaptModelHostProtocolNegotiator(
 }
 
 func adaptModelHostCompatibilityChecker(
-	checker serviceedges.ModelHostCompatibilityChecker,
+	checker modelHostCompatibilityEdge,
 ) modelswire.HostCompatibilityChecker {
 	if isNilModelEdgeDependency(checker) {
 		return nil
 	}
 	return modelHostCompatibilityCheckerAdapter{next: checker}
+}
+
+type modelHostProtocolEdge interface {
+	Negotiate(
+		context.Context,
+		string,
+		serviceedges.ModelHostProtocolNegotiationRequest,
+	) (serviceedges.ModelHostProtocolNegotiationResult, error)
+}
+
+type modelHostGRPCDialerEdge interface {
+	Dial(context.Context, string) (interface {
+		Negotiate(
+			context.Context,
+			serviceedges.ModelHostProtocolNegotiationRequest,
+		) (serviceedges.ModelHostProtocolNegotiationResult, error)
+		Close() error
+	}, error)
+}
+
+type modelHostGRPCConnectionEdge interface {
+	Negotiate(
+		context.Context,
+		serviceedges.ModelHostProtocolNegotiationRequest,
+	) (serviceedges.ModelHostProtocolNegotiationResult, error)
+	Close() error
+}
+
+type modelHostCompatibilityEdge interface {
+	Check(context.Context, serviceedges.ModelHostCompatibilityRequest) error
 }
 
 func providePlatformProcessCommandRunner(edges serviceedges.Edges) (platformprocess.CommandRunner, error) {

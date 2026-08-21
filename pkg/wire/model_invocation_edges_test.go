@@ -440,7 +440,13 @@ type modelEdgeGRPCDialer struct {
 	connection *modelEdgeGRPCConnection
 }
 
-func (dialer *modelEdgeGRPCDialer) Dial(context.Context, string) (serviceedges.ModelHostGRPCConnection, error) {
+func (dialer *modelEdgeGRPCDialer) Dial(context.Context, string) (interface {
+	Negotiate(
+		context.Context,
+		serviceedges.ModelHostProtocolNegotiationRequest,
+	) (serviceedges.ModelHostProtocolNegotiationResult, error)
+	Close() error
+}, error) {
 	return dialer.connection, nil
 }
 

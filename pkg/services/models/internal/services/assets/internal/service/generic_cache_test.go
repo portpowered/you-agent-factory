@@ -257,6 +257,65 @@ func TestPrepareGenericAssetsBindsPublishedSnapshotForRuntimeHost(t *testing.T) 
 	}
 }
 
+func TestPrepareGenericAssetsDownloadsPinnedBackendIntoSeparateRuntimeCache(t *testing.T) {
+	t.Parallel()
+
+	modelPath := filepath.Join(t.TempDir(), "weights.gguf")
+	modelBody := []byte("joined runtime weights")
+	backendBody := []byte("pinned backend archive")
+	if err := os.WriteFile(modelPath, modelBody, 0o644); err != nil {
+		t.Fatalf("write model fixture: %v", err)
+	}
+	backendURL := "https://github.com/owner/backend/releases/download/v1/backend.bin"
+	scopes := newScopes(t, "generic-pinned-backend")
+	scope := openScope(t, scopes, t.TempDir(), models.RuntimeConfig{})
+	service := newGenericService(t, scopes, httpDoerFunc(func(request *http.Request) (*http.Response, error) {
+		if request.URL.String() != backendURL {
+			t.Fatalf("backend download URL = %q, want %q", request.URL.String(), backendURL)
+		}
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Body:       io.NopCloser(bytes.NewReader(backendBody)),
+		}, nil
+	}), func(string) string { return "" })
+
+	result, err := service.PrepareModelAssets(context.Background(), models.PrepareModelAssetsRequest{
+		Scope:     scope,
+		Name:      "joined-model",
+		Reference: models.ModelReference{NameOrURI: modelPath},
+		Artifacts: []models.AssetRequirement{{
+			Name: filepath.Base(modelPath), Bytes: int64(len(modelBody)), SHA256: sha256Hex(modelBody),
+		}},
+		Backend:          "localai-vibevoice",
+		BackendReference: models.ModelReference{NameOrURI: backendURL},
+		BackendArtifacts: []models.AssetRequirement{{
+			Name: "backend.bin", Bytes: int64(len(backendBody)), SHA256: sha256Hex(backendBody),
+		}},
+	})
+	if err != nil {
+		t.Fatalf("PrepareModelAssets: %v", err)
+	}
+	if len(result.Asset.Artifacts) != 1 || len(result.Asset.BackendArtifacts) != 1 ||
+		result.Asset.BackendArtifacts[0].SHA256 != sha256Hex(backendBody) {
+		t.Fatalf("prepared asset snapshot = %#v, want separate verified backend artifact", result.Asset)
+	}
+	inspection, err := service.InspectRuntimeCache(context.Background(), models.InspectModelAssetsRequest{
+		Scope: scope,
+		Name:  "joined-model",
+	})
+	if err != nil {
+		t.Fatalf("InspectRuntimeCache: %v", err)
+	}
+	if !inspection.BackendRequired || inspection.BackendCachePath == "" ||
+		inspection.BackendInstalledFiles != 1 {
+		t.Fatalf("runtime inspection = %#v, want installed backend cache facts", inspection)
+	}
+	backendPath := filepath.Join(inspection.BackendCachePath, "backend.bin")
+	if body, err := os.ReadFile(backendPath); err != nil || !bytes.Equal(body, backendBody) {
+		t.Fatalf("backend cache file = (%q, %v), want verified archive", body, err)
+	}
+}
+
 func TestPrepareGenericAssetsAcceptsFileURIWithoutNetwork(t *testing.T) {
 	t.Parallel()
 
