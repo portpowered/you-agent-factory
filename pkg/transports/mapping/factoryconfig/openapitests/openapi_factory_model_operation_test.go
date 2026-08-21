@@ -64,6 +64,61 @@ func TestFactoryConfigFromOpenAPIJSON_MapsModelInvokeOperation(t *testing.T) {
 	}
 }
 
+func TestFactoryConfigModelOperationSlotsPreserveVideoAndGenericMetadata(t *testing.T) {
+	t.Parallel()
+
+	cfgJSON := []byte(`{
+		"name":"generic-factory",
+		"workTypes": [{"name":"task","states":[{"name":"init","type":"INITIAL"},{"name":"complete","type":"TERMINAL"}]}],
+		"workers": [{
+			"name":"omni-worker",
+			"type":"MODEL_WORKER",
+			"operations":[{
+				"name":"OMNI",
+				"inputs":[
+					{"name":"prompt","contentTypes":["TEXT"],"modality":"TEXT","required":true},
+					{"name":"image","contentTypes":["IMAGE"],"modality":"IMAGE","repeatable":true,"mediaTypes":["image/*"]}
+				],
+				"outputs":[{"name":"video","contentTypes":["VIDEO"],"modality":"VIDEO","repeatable":false,"mediaTypes":["video/*"]}]
+			}]
+		}],
+		"workstations": [{"name":"invoke-task","worker":"omni-worker","type":"MODEL_INVOKE","operation":"OMNI","inputs":[{"workType":"task","state":"init"}],"outputs":[{"workType":"task","state":"complete"}]}]
+	}`)
+
+	cfg, err := FactoryConfigFromOpenAPIJSON(cfgJSON)
+	if err != nil {
+		t.Fatalf("FactoryConfigFromOpenAPIJSON: %v", err)
+	}
+	slots := cfg.Workers[0].Operations[0]
+	if len(slots.Inputs) != 2 || slots.Inputs[1].Modality != interfaces.ModelOperationContentTypeImage {
+		t.Fatalf("mapped inputs = %#v, want IMAGE metadata", slots.Inputs)
+	}
+	image := slots.Inputs[1]
+	if image.Repeatable == nil || !*image.Repeatable || len(image.MediaTypes) != 1 || image.MediaTypes[0] != "image/*" {
+		t.Fatalf("mapped image slot = %#v, want repeatable image metadata", image)
+	}
+	video := slots.Outputs[0]
+	if len(video.ContentTypes) != 1 || video.ContentTypes[0] != interfaces.ModelOperationContentTypeVideo || video.Modality != interfaces.ModelOperationContentTypeVideo {
+		t.Fatalf("mapped video slot = %#v, want VIDEO content and modality", video)
+	}
+	if video.Repeatable == nil || *video.Repeatable || len(video.MediaTypes) != 1 || video.MediaTypes[0] != "video/*" {
+		t.Fatalf("mapped video slot = %#v, want explicit non-repeatable metadata", video)
+	}
+
+	encoded, err := MarshalCanonicalFactoryConfig(cfg)
+	if err != nil {
+		t.Fatalf("MarshalCanonicalFactoryConfig: %v", err)
+	}
+	roundTripped, err := FactoryConfigFromOpenAPIJSON(encoded)
+	if err != nil {
+		t.Fatalf("FactoryConfigFromOpenAPIJSON(round trip): %v", err)
+	}
+	roundTrippedVideo := roundTripped.Workers[0].Operations[0].Outputs[0]
+	if roundTrippedVideo.Modality != interfaces.ModelOperationContentTypeVideo || roundTrippedVideo.Repeatable == nil || *roundTrippedVideo.Repeatable || roundTrippedVideo.MediaTypes[0] != "video/*" {
+		t.Fatalf("round-tripped video slot = %#v, want VIDEO metadata preserved", roundTrippedVideo)
+	}
+}
+
 func TestFactoryConfigFromOpenAPIJSON_MapsTypedModelResources(t *testing.T) {
 	cfgJSON := []byte(`{
 		"name":"tts-factory",

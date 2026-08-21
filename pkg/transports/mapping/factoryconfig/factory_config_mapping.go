@@ -1349,7 +1349,10 @@ func modelOperationSlotsAPIFromInternal(slots []interfaces.ModelOperationSlot) *
 		values[i] = factoryapi.ModelOperationSlot{
 			Name:         slot.Name,
 			ContentTypes: modelOperationContentTypesAPIFromInternal(slot.ContentTypes),
+			Modality:     modelOperationContentTypePtrIfNotEmpty(slot.Modality),
 			Required:     boolPtrIfTrue(slot.Required),
+			Repeatable:   cloneBoolPointer(slot.Repeatable),
+			MediaTypes:   optional.CopiedStringsPtr(slot.MediaTypes),
 		}
 	}
 	return &values
@@ -1650,6 +1653,14 @@ func intPtrIfNonZero(value int) *int {
 
 func boolPtrIfTrue(value bool) *bool {
 	return optional.TrueBoolPtr(value)
+}
+
+func cloneBoolPointer(value *bool) *bool {
+	if value == nil {
+		return nil
+	}
+	cloned := *value
+	return &cloned
 }
 
 func stringValue(value *string) string {

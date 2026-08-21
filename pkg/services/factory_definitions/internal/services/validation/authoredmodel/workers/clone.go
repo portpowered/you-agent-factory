@@ -59,10 +59,21 @@ func cloneModelOperationSlots(slots []ModelOperationSlot) []ModelOperationSlot {
 		cloned[i] = ModelOperationSlot{
 			Name:         slot.Name,
 			ContentTypes: append([]string(nil), slot.ContentTypes...),
+			Modality:     slot.Modality,
 			Required:     slot.Required,
+			Repeatable:   cloneBoolPointer(slot.Repeatable),
+			MediaTypes:   append([]string(nil), slot.MediaTypes...),
 		}
 	}
 	return cloned
+}
+
+func cloneBoolPointer(value *bool) *bool {
+	if value == nil {
+		return nil
+	}
+	cloned := *value
+	return &cloned
 }
 
 func cloneHostedWorkerAuth(cfg *HostedWorkerAuthConfig) *HostedWorkerAuthConfig {

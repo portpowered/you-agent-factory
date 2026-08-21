@@ -86,7 +86,10 @@ func (e *ExecutionCatalogError) Error() string {
 type ResolvedModelOperationSlot struct {
 	Name         string   `json:"name"`
 	ContentTypes []string `json:"contentTypes,omitempty"`
+	Modality     string   `json:"modality,omitempty"`
 	Required     bool     `json:"required,omitempty"`
+	Repeatable   *bool    `json:"repeatable,omitempty"`
+	MediaTypes   []string `json:"mediaTypes,omitempty"`
 }
 
 // ResolvedModelOperation is a detached worker model-operation value.
