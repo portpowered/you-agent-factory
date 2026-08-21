@@ -447,8 +447,8 @@ func (scenario *resumeFromRecordingScenario) captureAtKillBoundary(
 		t.Fatalf("pre-kill Work location = %q, want task:processing", got)
 	}
 	session := support.GetDefaultSession(t, baseURL)
-	if session.Runtime.Progress.Categories.Initial != 0 || session.Runtime.Progress.Categories.Processing != 1 {
-		t.Fatalf("pre-kill board progress = %+v, want one processing Work", session.Runtime.Progress.Categories)
+	if session.Runtime.Progress.Categories.Initial != 0 || session.Runtime.Progress.InFlightCount != 1 {
+		t.Fatalf("pre-kill board progress = %+v, in-flight=%d; want one in-flight processing Work", session.Runtime.Progress.Categories, session.Runtime.Progress.InFlightCount)
 	}
 	events := support.GetFactoryEventsForSessionAt(t, baseURL, factorysessions.DefaultSessionID)
 	assertResumeFromRecordingFactoryEvents(t, "before restart", events)
@@ -476,8 +476,8 @@ func (scenario *resumeFromRecordingScenario) assertRestored(
 		t.Fatalf("post-restart Work location = %q, want restored task:processing", got)
 	}
 	session := support.GetDefaultSession(t, baseURL)
-	if session.Runtime.Progress.Categories.Initial != 0 || session.Runtime.Progress.Categories.Processing != 1 {
-		t.Fatalf("post-restart board progress = %+v, want one restored processing Work", session.Runtime.Progress.Categories)
+	if session.Runtime.Progress.Categories.Initial != 0 || session.Runtime.Progress.InFlightCount != 1 {
+		t.Fatalf("post-restart board progress = %+v, in-flight=%d; want one restored in-flight processing Work", session.Runtime.Progress.Categories, session.Runtime.Progress.InFlightCount)
 	}
 	restartedEvents := support.GetFactoryEventsForSessionAt(t, baseURL, factorysessions.DefaultSessionID)
 	assertResumeFromRecordingFactoryEvents(t, "after restart", restartedEvents)
