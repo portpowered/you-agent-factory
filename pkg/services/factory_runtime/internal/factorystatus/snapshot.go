@@ -39,7 +39,7 @@ func projectFactoryStatusTokens(marking *factory.PetriMarkingSnapshot, net *fact
 	}
 
 	for _, token := range marking.Tokens {
-		if token == nil || isSystemTimeToken(token) {
+		if token == nil || isSystemTimeToken(*token) {
 			continue
 		}
 		if token.Color.DataType == factory.RuntimeTokenDataTypeResource {
@@ -78,18 +78,15 @@ func countFactoryStatusTokens(marking *factory.PetriMarkingSnapshot) int {
 	}
 	count := 0
 	for _, token := range marking.Tokens {
-		if token != nil && !isSystemTimeToken(token) {
+		if token != nil && !isSystemTimeToken(*token) {
 			count++
 		}
 	}
 	return count
 }
 
-func isSystemTimeToken(token *factorytoken.Token) bool {
-	if token == nil {
-		return false
-	}
-	projected := factorytoken.ToWorker(*token)
+func isSystemTimeToken(token factorytoken.Token) bool {
+	projected := factorytoken.ToWorker(token)
 	return interfaces.IsSystemTimeToken(&projected)
 }
 

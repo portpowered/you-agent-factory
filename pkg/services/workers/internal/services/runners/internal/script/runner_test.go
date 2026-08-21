@@ -850,6 +850,56 @@ func TestRunnerPreservesPreCanceledContextWithoutCallingEffects(t *testing.T) {
 	}
 }
 
+func TestEngineNeutralInputAndScriptEventHelpersPreserveBoundaryFacts(t *testing.T) {
+	published := make([]workers.ProgressFragment, 0, 1)
+	observer := (&runner{
+		publish: func(fragment workers.ProgressFragment) {
+			published = append(published, fragment)
+		},
+	}).outputObserver("dispatch-1", workers.ExecutionCorrelation{FactorySessionID: "session-1"})
+	observer(platformprocess.OutputStreamStdout, nil)
+	observer(platformprocess.OutputStreamStdout, []byte("partial"))
+	if len(published) != 1 || published[0].Payload != "partial" {
+		t.Fatalf("published progress = %#v, want one non-empty fragment", published)
+	}
+
+	if got := scriptResponseEventID(""); got != "factory-event/script-response/1" {
+		t.Fatalf("scriptResponseEventID(empty) = %q, want deterministic empty-dispatch ID", got)
+	}
+	if got := scriptEventTick(work.ExecutionMetadata{CurrentTick: 7, DispatchCreatedTick: 3}); got != 7 {
+		t.Fatalf("scriptEventTick() = %d, want current tick", got)
+	}
+
+	inputs := commandInputs([]workers.Token{{
+		ID:    "token-1",
+		State: "ready",
+		Color: workers.Color{
+			DataType:   workers.DataTypeWork,
+			Payload:    []byte("payload fallback"),
+			WorkID:     "work-1",
+			WorkTypeID: "task",
+		},
+	}}, map[string][]string{"input": {"token-1"}})
+	if len(inputs) != 1 || inputs[0].State != "ready" || len(inputs[0].Content) != 1 || inputs[0].Content[0].Text != "payload fallback" ||
+		len(inputs[0].InputNames) != 1 || inputs[0].InputNames[0] != "input" {
+		t.Fatalf("command inputs = %#v, want detached state, payload, and binding facts", inputs)
+	}
+}
+
+func TestRunnerRejectsInvalidDetachedInputSnapshots(t *testing.T) {
+	scriptRunner := newTestRunner(t, Config{Command: "echo"}, &captureCommandRunner{})
+
+	request := validRequest()
+	request.InputTokens = []any{make(chan int)}
+	_, err := scriptRunner.Execute(t.Context(), request)
+	assertFailureType(t, err, workers.WorkFailureTypePermanentBadRequest)
+
+	request = validRequest()
+	request.Dispatch.InputTokens = []any{make(chan int)}
+	_, err = scriptRunner.Execute(t.Context(), request)
+	assertFailureType(t, err, workers.WorkFailureTypePermanentBadRequest)
+}
+
 func validRequest() workers.RunnerExecutionRequest {
 	token := workers.Token{Color: workers.Color{
 		Name:     "input-name",

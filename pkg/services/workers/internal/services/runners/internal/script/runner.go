@@ -610,17 +610,6 @@ func mergeStringMaps(base, override map[string]string) map[string]string {
 	return merged
 }
 
-func cloneStringSliceMap(values map[string][]string) map[string][]string {
-	if len(values) == 0 {
-		return nil
-	}
-	cloned := make(map[string][]string, len(values))
-	for key, value := range values {
-		cloned[key] = append([]string(nil), value...)
-	}
-	return cloned
-}
-
 func cloneAnyValues(values []any) ([]any, error) {
 	if len(values) == 0 {
 		return nil, nil
