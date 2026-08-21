@@ -231,6 +231,12 @@ jobs:
           GO_UNIT_COVERAGE_PROFILE: .artifacts/unit-coverage/coverage.out
           GO_UNIT_COVERAGE_JSON_OUTPUT: .artifacts/unit-coverage/coverage-summary.json
           GO_UNIT_COVERAGE_TIMING_OUTPUT: .artifacts/unit-coverage/unit-timing-summary.json
+      # This existing coverage tier intentionally selects backend packages
+      # under pkg/... through make test-unit-coverage. It does not claim to
+      # exercise ./internal/...; that tree has separate repository-maintenance
+      # baselines and fixtures, so a known-red whole-tree command must not be
+      # wired into this required coverage job until those prerequisites are
+      # repaired by their owning work.
       # Reporting only. Every unit step below is additive and runs with
       # if: always() so a failing or timed-out lane still publishes the partial
       # diagnostics it did produce. Each is fail-open: a missing or malformed
