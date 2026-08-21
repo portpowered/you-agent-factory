@@ -13560,6 +13560,8 @@ components:
           description: Stable identifier for the local provider-backed runtime boundary.
         defaults:
           $ref: '#/components/schemas/GlobalConfigDefaults'
+        priceTable:
+          $ref: '#/components/schemas/GlobalConfigPriceTable'
         runtime:
           $ref: '#/components/schemas/GlobalConfigRuntime'
         models:
@@ -13582,6 +13584,59 @@ components:
         workerModel:
           type: string
           description: Default worker model name.
+    GlobalConfigPriceTable:
+      type: object
+      additionalProperties: false
+      description: Operator-authored USD rates per one million tokens. Omit this property to use an empty table; no provider or model prices are supplied by default.
+      required:
+        - currency
+        - models
+      properties:
+        currency:
+          type: string
+          enum:
+            - USD
+          description: Currency used by every configured rate. This contract supports USD only.
+        models:
+          type: array
+          description: Deterministic provider/model price entries.
+          items:
+            $ref: '#/components/schemas/GlobalConfigPriceTableModel'
+    GlobalConfigPriceTableModel:
+      type: object
+      additionalProperties: false
+      description: Exact operator-authored rates for one provider and model identity.
+      required:
+        - provider
+        - model
+        - inputPerMillionTokens
+        - outputPerMillionTokens
+      properties:
+        provider:
+          type: string
+          minLength: 1
+          maxLength: 128
+          description: Canonical provider identity or a supported built-in alias; the Operator Settings decoder trims and canonicalizes this value.
+        model:
+          type: string
+          minLength: 1
+          description: Exact model identifier. It is trimmed but never guessed or aliased.
+        inputPerMillionTokens:
+          type: string
+          pattern: ^[0-9]+(?:\.[0-9]+)?$
+          description: Non-negative USD rate per one million uncached input tokens.
+        outputPerMillionTokens:
+          type: string
+          pattern: ^[0-9]+(?:\.[0-9]+)?$
+          description: Non-negative USD rate per one million non-reasoning output tokens.
+        cachedInputPerMillionTokens:
+          type: string
+          pattern: ^[0-9]+(?:\.[0-9]+)?$
+          description: Optional non-negative USD rate per one million cached input tokens.
+        reasoningOutputPerMillionTokens:
+          type: string
+          pattern: ^[0-9]+(?:\.[0-9]+)?$
+          description: Optional non-negative USD rate per one million reasoning output tokens.
     GlobalConfigRuntime:
       type: object
       additionalProperties: false
