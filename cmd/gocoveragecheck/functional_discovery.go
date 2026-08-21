@@ -264,10 +264,11 @@ func functionalStringBatches(values []string, maxJobs int) [][]string {
 	if maxJobs > len(values) {
 		maxJobs = len(values)
 	}
-	batches := make([][]string, maxJobs)
-	for index, value := range values {
-		batchIndex := index % maxJobs
-		batches[batchIndex] = append(batches[batchIndex], value)
+	batchSize := (len(values) + maxJobs - 1) / maxJobs
+	batches := make([][]string, 0, maxJobs)
+	for start := 0; start < len(values); start += batchSize {
+		end := min(start+batchSize, len(values))
+		batches = append(batches, append([]string(nil), values[start:end]...))
 	}
 	return batches
 }

@@ -284,8 +284,9 @@ func TestResolveFunctionalTestPackagesWithMetadataBatchesCurrentTreeCandidates(t
 	if !slices.Equal(gotPackages, packages) || len(listed) != packageCount {
 		t.Fatalf("packages/listed = %v/%d, want %v/%d", gotPackages, len(listed), packages, packageCount)
 	}
-	if len(invocations) != functionalDiscoveryMaxJobs {
-		t.Fatalf("go list invocations = %d, want %d: %+v", len(invocations), functionalDiscoveryMaxJobs, invocations)
+	wantInvocations := (packageCount + functionalDiscoveryMaxJobs - 1) / functionalDiscoveryMaxJobs
+	if len(invocations) != wantInvocations {
+		t.Fatalf("go list invocations = %d, want %d: %+v", len(invocations), wantInvocations, invocations)
 	}
 	seen := make(map[string]struct{}, packageCount)
 	for _, invocation := range invocations {
