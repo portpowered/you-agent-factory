@@ -9401,6 +9401,9 @@ components:
           $ref: '#/components/schemas/ProviderFailureMetadata'
         metrics:
           $ref: '#/components/schemas/WorkMetrics'
+        usage:
+          $ref: '#/components/schemas/FactoryDispatchUsage'
+          description: Dispatch usage derived from the completed workstation result when available.
         durationMillis:
           type: integer
           format: int64

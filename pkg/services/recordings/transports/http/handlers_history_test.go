@@ -924,3 +924,50 @@ func TestListFactorySessionDispatches_FiltersByRequestedStatus(t *testing.T) {
 		t.Fatalf("unmatched filter dispatches = %#v, want an empty list", emptyResponse.Dispatches)
 	}
 }
+
+func TestListFactorySessionDispatches_ProjectsHistoricalPetriUsage(t *testing.T) {
+	t.Parallel()
+
+	sessionID := "dur-sess-history-http-usage-001"
+	durationWithTokens := int64(1500)
+	inputTokens := int64(12)
+	outputTokens := int64(8)
+	totalTokens := int64(20)
+	durationWithoutTokens := int64(2000)
+	adapter := historicalResultTestAdapter(`{}`, []recordings.HistoricalDispatch{
+		{
+			ID: "dispatch-with-tokens", Status: recordings.FactoryDispatchStatusCompleted,
+			DispatchKind: recordings.FactoryDispatchKindPetriTransition,
+			Usage: &recordings.FactoryDispatchUsage{
+				DurationMillis: &durationWithTokens,
+				InputTokens:    &inputTokens,
+				OutputTokens:   &outputTokens,
+				TotalTokens:    &totalTokens,
+			},
+		},
+		{
+			ID: "dispatch-without-tokens", Status: recordings.FactoryDispatchStatusCompleted,
+			DispatchKind: recordings.FactoryDispatchKindPetriTransition,
+			Usage:        &recordings.FactoryDispatchUsage{DurationMillis: &durationWithoutTokens},
+		},
+	})
+
+	result := httptest.NewRecorder()
+	adapter.ListFactorySessionDispatches(
+		result,
+		httptest.NewRequest(http.MethodGet, "/factory-sessions/"+sessionID+"/dispatches", nil),
+		factoryapi.SessionID(sessionID), factoryapi.ListFactorySessionDispatchesParams{},
+	)
+	if result.Code != http.StatusOK {
+		t.Fatalf("status = %d %s, want 200", result.Code, result.Body.String())
+	}
+	var response factoryapi.ListFactorySessionDispatchesResponse
+	if err := json.Unmarshal(result.Body.Bytes(), &response); err != nil {
+		t.Fatalf("decode response %q: %v", result.Body.String(), err)
+	}
+	if len(response.Dispatches) != 2 {
+		t.Fatalf("dispatches = %#v, want two dispatches", response.Dispatches)
+	}
+	assertHistoricalHTTPUsageWithTokens(t, response.Dispatches[0].Usage, durationWithTokens, inputTokens, outputTokens, totalTokens)
+	assertHistoricalHTTPDurationOnlyUsage(t, response.Dispatches[1].Usage, durationWithoutTokens)
+}

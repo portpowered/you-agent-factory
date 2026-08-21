@@ -58,7 +58,10 @@ func FactoryEventFromCanonical(event recordings.CanonicalEvent) factorydefinitio
 		Payload: json.RawMessage(event.Payload),
 		Type:    factorydefinitions.FactoryEventType(event.Kind),
 	}
-	if !hasSourceContext && legacy.Context.SessionID == nil {
+	if sessionID != nil {
+		// The detached canonical scope is authoritative. SourceContext is
+		// retained for correlation metadata, but must not erase the session
+		// scope when the event is written back to the legacy artifact shape.
 		legacy.Context.SessionID = sessionID
 	}
 	legacy.SchemaVersion = factorydefinitions.FactoryEventSchemaVersionV1

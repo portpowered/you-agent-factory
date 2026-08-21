@@ -7,6 +7,7 @@ import (
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorysessionexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
@@ -103,6 +104,7 @@ type HistoricalDispatchInput struct {
 	ID           string
 	Status       string
 	DispatchKind string
+	Usage        *recordings.FactoryDispatchUsage
 }
 
 // HistoricalDispatchListToAPI maps detached historical dispatch facts to the
@@ -111,14 +113,19 @@ func HistoricalDispatchListToAPI(
 	sessionID string,
 	dispatches []HistoricalDispatchInput,
 ) factoryapi.ListFactorySessionDispatchesResponse {
-	summaries := make([]factorysessionexecution.DispatchSummary, 0, len(dispatches))
-	for _, dispatch := range dispatches {
-		summaries = append(summaries, historicalDispatchSummary(dispatch))
+	response := factoryapi.ListFactorySessionDispatchesResponse{
+		SessionId:  sessionID,
+		Dispatches: []factoryapi.FactorySessionDispatchSummary{},
 	}
-	return ListDispatchesResponseToAPI(factorysessionexecution.ListDispatchesResult{
-		SessionID:  sessionID,
-		Dispatches: summaries,
-	})
+	if len(dispatches) == 0 {
+		return response
+	}
+	mapped := make([]factoryapi.FactorySessionDispatchSummary, 0, len(dispatches))
+	for _, dispatch := range dispatches {
+		mapped = append(mapped, historicalDispatchSummaryToAPI(dispatch))
+	}
+	response.Dispatches = mapped
+	return response
 }
 
 // HistoricalDispatchDetailToAPI maps one detached historical dispatch fact and
@@ -128,11 +135,13 @@ func HistoricalDispatchDetailToAPI(
 	dispatch HistoricalDispatchInput,
 	orchestratorKind string,
 ) factoryapi.FactoryDispatch {
-	return DispatchDetailResponseToAPI(factorysessionexecution.DispatchDetail{
+	response := DispatchDetailResponseToAPI(factorysessionexecution.DispatchDetail{
 		DispatchSummary:  historicalDispatchSummary(dispatch),
 		SessionID:        sessionID,
 		OrchestratorKind: orchestratorKind,
 	})
+	response.Usage = historicalDispatchUsageToAPI(dispatch.Usage)
+	return response
 }
 
 func historicalDispatchSummary(dispatch HistoricalDispatchInput) factorysessionexecution.DispatchSummary {
@@ -141,6 +150,36 @@ func historicalDispatchSummary(dispatch HistoricalDispatchInput) factorysessione
 		Status:       factorysessionexecution.DispatchStatus(dispatch.Status),
 		DispatchKind: dispatch.DispatchKind,
 	}
+}
+
+func historicalDispatchSummaryToAPI(dispatch HistoricalDispatchInput) factoryapi.FactorySessionDispatchSummary {
+	response := dispatchSummaryToAPI(historicalDispatchSummary(dispatch))
+	response.Usage = historicalDispatchUsageToAPI(dispatch.Usage)
+	return response
+}
+
+func historicalDispatchUsageToAPI(usage *recordings.FactoryDispatchUsage) *factoryapi.FactoryDispatchUsage {
+	if usage == nil {
+		return nil
+	}
+	response := &factoryapi.FactoryDispatchUsage{}
+	if usage.InputTokens != nil {
+		value := *usage.InputTokens
+		response.InputTokens = &value
+	}
+	if usage.OutputTokens != nil {
+		value := *usage.OutputTokens
+		response.OutputTokens = &value
+	}
+	if usage.TotalTokens != nil {
+		value := *usage.TotalTokens
+		response.TotalTokens = &value
+	}
+	if usage.DurationMillis != nil {
+		value := *usage.DurationMillis
+		response.DurationMillis = &value
+	}
+	return response
 }
 
 // HistoricalFailureInput carries the detached failure facts of one finalized

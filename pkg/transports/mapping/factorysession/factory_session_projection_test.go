@@ -6,6 +6,7 @@ import (
 	"time"
 
 	factorysessionexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/pkg/transports/mapping/factorysession"
@@ -721,6 +722,97 @@ func TestHistoricalDispatchListToAPI_ProjectsDetachedDispatchFacts(t *testing.T)
 	}
 	if response.Dispatches[1].Id != "dispatch-2" {
 		t.Fatalf("second dispatch = %#v, want dispatch-2", response.Dispatches[1])
+	}
+}
+
+func TestHistoricalDispatchMappingPreservesPetriUsagePresence(t *testing.T) {
+	t.Parallel()
+
+	durationWithTokens := int64(1500)
+	inputTokens := int64(12)
+	outputTokens := int64(8)
+	totalTokens := int64(20)
+	durationWithoutTokens := int64(2000)
+	response := factorysession.HistoricalDispatchListToAPI("dur-sess-hist-usage-001", []factorysession.HistoricalDispatchInput{
+		{
+			ID: "dispatch-with-tokens", Status: "COMPLETED", DispatchKind: "PETRI_TRANSITION",
+			Usage: &recordings.FactoryDispatchUsage{
+				DurationMillis: &durationWithTokens,
+				InputTokens:    &inputTokens,
+				OutputTokens:   &outputTokens,
+				TotalTokens:    &totalTokens,
+			},
+		},
+		{
+			ID: "dispatch-without-tokens", Status: "COMPLETED", DispatchKind: "PETRI_TRANSITION",
+			Usage: &recordings.FactoryDispatchUsage{DurationMillis: &durationWithoutTokens},
+		},
+	})
+	if len(response.Dispatches) != 2 {
+		t.Fatalf("dispatches = %#v, want two dispatches", response.Dispatches)
+	}
+	assertHistoricalUsageWithTokens(t, response.Dispatches[0].Usage, durationWithTokens, inputTokens, outputTokens, totalTokens)
+	assertHistoricalDurationOnlyUsage(t, response.Dispatches[1].Usage, durationWithoutTokens)
+
+	detail := factorysession.HistoricalDispatchDetailToAPI(
+		"dur-sess-hist-usage-001",
+		factorysession.HistoricalDispatchInput{
+			ID: "dispatch-with-tokens", Status: "COMPLETED", DispatchKind: "PETRI_TRANSITION",
+			Usage: &recordings.FactoryDispatchUsage{
+				DurationMillis: &durationWithTokens,
+				InputTokens:    &inputTokens,
+				OutputTokens:   &outputTokens,
+				TotalTokens:    &totalTokens,
+			},
+		},
+		"PETRI",
+	)
+	if detail.Usage == nil || detail.Usage.TotalTokens == nil || *detail.Usage.TotalTokens != totalTokens {
+		t.Fatalf("detail usage = %#v, want token facts", detail.Usage)
+	}
+}
+
+func assertHistoricalUsageWithTokens(t *testing.T, usage *factoryapi.FactoryDispatchUsage, duration, input, output, total int64) {
+	t.Helper()
+	if usage == nil {
+		t.Fatal("token-present usage = nil")
+	}
+	if usage.DurationMillis == nil || *usage.DurationMillis != duration {
+		t.Fatalf("token-present duration = %#v, want %d", usage.DurationMillis, duration)
+	}
+	if usage.InputTokens == nil || *usage.InputTokens != input {
+		t.Fatalf("token-present input tokens = %#v, want %d", usage.InputTokens, input)
+	}
+	if usage.OutputTokens == nil || *usage.OutputTokens != output {
+		t.Fatalf("token-present output tokens = %#v, want %d", usage.OutputTokens, output)
+	}
+	if usage.TotalTokens == nil || *usage.TotalTokens != total {
+		t.Fatalf("token-present total tokens = %#v, want %d", usage.TotalTokens, total)
+	}
+	if usage.CostUsd != nil {
+		t.Fatalf("token-present cost = %#v, want unset", usage.CostUsd)
+	}
+}
+
+func assertHistoricalDurationOnlyUsage(t *testing.T, usage *factoryapi.FactoryDispatchUsage, duration int64) {
+	t.Helper()
+	if usage == nil {
+		t.Fatal("token-absent usage = nil")
+	}
+	if usage.DurationMillis == nil || *usage.DurationMillis != duration {
+		t.Fatalf("token-absent duration = %#v, want %d", usage.DurationMillis, duration)
+	}
+	if usage.InputTokens != nil {
+		t.Fatalf("token-absent input tokens = %#v, want nil", usage.InputTokens)
+	}
+	if usage.OutputTokens != nil {
+		t.Fatalf("token-absent output tokens = %#v, want nil", usage.OutputTokens)
+	}
+	if usage.TotalTokens != nil {
+		t.Fatalf("token-absent total tokens = %#v, want nil", usage.TotalTokens)
+	}
+	if usage.CostUsd != nil {
+		t.Fatalf("token-absent cost = %#v, want nil", usage.CostUsd)
 	}
 }
 

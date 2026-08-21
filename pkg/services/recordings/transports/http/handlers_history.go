@@ -226,6 +226,7 @@ func historicalDispatchInput(
 		ID:           dispatch.ID,
 		Status:       string(dispatch.Status),
 		DispatchKind: historicalDispatchKind(dispatch),
+		Usage:        dispatch.Usage,
 	}
 }
 

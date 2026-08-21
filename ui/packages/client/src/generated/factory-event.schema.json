@@ -520,6 +520,9 @@
         },
         "transitionId": {
           "type": "string"
+        },
+        "usage": {
+          "$ref": "#/$defs/FactoryDispatchUsage"
         }
       },
       "required": [

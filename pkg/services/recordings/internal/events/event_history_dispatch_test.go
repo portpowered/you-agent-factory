@@ -404,6 +404,80 @@ func TestFactoryEventHistory_RecordWorkstationResponse_FailedResultIncludesFailu
 	assertJSONField(t, providerFailure, "type", "throttled")
 }
 
+func TestFactoryEventHistory_RecordWorkstationResponse_RecordsDurationAndProviderTokenUsage(t *testing.T) {
+	eventTime := time.Date(2026, 4, 17, 11, 30, 0, 0, time.UTC)
+	history := newTestFactoryEventHistory(eventHistoryProjectionNet(), func() time.Time { return time.Unix(0, 0).UTC() })
+	history.RecordWorkstationResponse(9, workerexecution.WorkResult{
+		DispatchID:   "dispatch-usage-present",
+		TransitionID: "build",
+		Outcome:      workerexecution.OutcomeAccepted,
+		Metrics:      workerexecution.WorkMetrics{Duration: 99 * time.Millisecond},
+		Diagnostics: &workerexecution.WorkDiagnostics{Provider: &workerexecution.ProviderDiagnostic{
+			ResponseMetadata: map[string]string{
+				workerexecution.ProviderResponseMetadataInputTokens:  "12",
+				workerexecution.ProviderResponseMetadataOutputTokens: "8",
+			},
+		}},
+	}, interfaces.CompletedDispatch{
+		DispatchID:   "dispatch-usage-present",
+		TransitionID: "build",
+		Outcome:      workerexecution.OutcomeAccepted,
+		EndTime:      eventTime,
+		Duration:     1500 * time.Millisecond,
+	})
+
+	events := generatedHistoryEvents(t, history)
+	if len(events) != 1 || events[0].Type != factoryapi.FactoryEventTypeDispatchResponse {
+		t.Fatalf("events = %#v, want one DISPATCH_RESPONSE", events)
+	}
+	payload, err := events[0].Payload.AsDispatchResponseEventPayload()
+	if err != nil {
+		t.Fatalf("decode dispatch response payload: %v", err)
+	}
+	if payload.Usage == nil || payload.Usage.DurationMillis == nil || *payload.Usage.DurationMillis != 1500 {
+		t.Fatalf("usage duration = %#v, want 1500ms from completed dispatch", payload.Usage)
+	}
+	if payload.Usage.InputTokens == nil || *payload.Usage.InputTokens != 12 ||
+		payload.Usage.OutputTokens == nil || *payload.Usage.OutputTokens != 8 ||
+		payload.Usage.TotalTokens == nil || *payload.Usage.TotalTokens != 20 {
+		t.Fatalf("usage token facts = %#v, want input=12 output=8 total=20", payload.Usage)
+	}
+	if payload.Usage.CostUsd != nil {
+		t.Fatalf("usage cost = %#v, want unset", payload.Usage.CostUsd)
+	}
+}
+
+func TestFactoryEventHistory_RecordWorkstationResponse_LeavesTokenUsageUnsetWithoutProviderMetadata(t *testing.T) {
+	eventTime := time.Date(2026, 4, 17, 11, 45, 0, 0, time.UTC)
+	history := newTestFactoryEventHistory(eventHistoryProjectionNet(), func() time.Time { return time.Unix(0, 0).UTC() })
+	history.RecordWorkstationResponse(9, workerexecution.WorkResult{
+		DispatchID:   "dispatch-usage-absent",
+		TransitionID: "build",
+		Outcome:      workerexecution.OutcomeAccepted,
+	}, interfaces.CompletedDispatch{
+		DispatchID:   "dispatch-usage-absent",
+		TransitionID: "build",
+		Outcome:      workerexecution.OutcomeAccepted,
+		EndTime:      eventTime,
+		Duration:     2 * time.Second,
+	})
+
+	events := generatedHistoryEvents(t, history)
+	if len(events) != 1 || events[0].Type != factoryapi.FactoryEventTypeDispatchResponse {
+		t.Fatalf("events = %#v, want one DISPATCH_RESPONSE", events)
+	}
+	payload, err := events[0].Payload.AsDispatchResponseEventPayload()
+	if err != nil {
+		t.Fatalf("decode dispatch response payload: %v", err)
+	}
+	if payload.Usage == nil || payload.Usage.DurationMillis == nil || *payload.Usage.DurationMillis != 2000 {
+		t.Fatalf("usage duration = %#v, want 2000ms", payload.Usage)
+	}
+	if payload.Usage.InputTokens != nil || payload.Usage.OutputTokens != nil || payload.Usage.TotalTokens != nil || payload.Usage.CostUsd != nil {
+		t.Fatalf("usage without metadata = %#v, want only duration", payload.Usage)
+	}
+}
+
 func TestFactoryEventHistory_RecordWorkstationResponse_PreservesStructuredResult(t *testing.T) {
 	eventTime := time.Date(2026, 4, 17, 10, 30, 0, 0, time.UTC)
 	history := newTestFactoryEventHistory(eventHistoryProjectionNet(), func() time.Time { return time.Unix(0, 0).UTC() })

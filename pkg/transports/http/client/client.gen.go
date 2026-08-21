@@ -1705,8 +1705,9 @@ type DispatchResponseEventPayload struct {
 	SelectedClassificationLabel *string                  `json:"selectedClassificationLabel,omitempty"`
 
 	// StructuredResult Optional native JSON value produced when the workstation outputSchema validates the worker response. JSON null is distinct from an omitted value.
-	StructuredResult interface{} `json:"structuredResult,omitempty"`
-	TransitionId     string      `json:"transitionId"`
+	StructuredResult interface{}           `json:"structuredResult,omitempty"`
+	TransitionId     string                `json:"transitionId"`
+	Usage            *FactoryDispatchUsage `json:"usage,omitempty"`
 }
 
 // DispatchWorkerSessionAssociationEventPayload Canonical association between one Factory dispatch and the Worker Session allocated to execute it. Dispatch identity remains authoritative in FactoryEvent.context.dispatchId and is not repeated in this payload.

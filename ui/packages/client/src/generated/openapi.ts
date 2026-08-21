@@ -4442,6 +4442,8 @@ export interface components {
       failureDetail?: components["schemas"]["FailureDetail"];
       providerFailure?: components["schemas"]["ProviderFailureMetadata"];
       metrics?: components["schemas"]["WorkMetrics"];
+      /** @description Dispatch usage derived from the completed workstation result when available. */
+      usage?: components["schemas"]["FactoryDispatchUsage"];
       /** Format: int64 */
       durationMillis?: number;
       outputWork?: components["schemas"]["Work"][];
