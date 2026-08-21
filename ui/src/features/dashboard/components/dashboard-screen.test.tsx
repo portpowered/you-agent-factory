@@ -10,7 +10,7 @@ import { getDashboardRecoveryMessages } from "../messages/dashboard-recovery";
 import { DashboardScreen } from "./dashboard-screen";
 
 const EXPECTED_DASHBOARD_SHELL_CLASS =
-  "min-h-screen overflow-x-hidden p-1 md:p-2";
+  "min-h-screen overflow-x-clip p-1 md:p-2";
 const VERTICAL_SCROLL_CLASS_PATTERN =
   /(?:^|\s)(?:overflow-(?:auto|scroll)|overflow-y-(?:auto|scroll))(?:\s|$)/;
 const VIEWPORT_HEIGHT_CLAMP_CLASS_PATTERN =

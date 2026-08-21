@@ -2,10 +2,10 @@ import { Button } from "@you-agent-factory/components/primitives";
 import { useAppLocale } from "../../../i18n";
 import { DashboardBento } from "../../bento/components/dashboard-bento";
 import { useDashboardBentoStore } from "../../bento/state/dashboardBentoStore";
-import { getHeaderControlsMessages } from "../../header/messages/header-controls";
 import { DashboardExportDialog } from "../../header/components/dashboard-export-dialog";
 import { DashboardHeader } from "../../header/components/dashboard-header";
 import { DashboardStatusPanel } from "../../header/components/dashboard-status-panel";
+import { getHeaderControlsMessages } from "../../header/messages/header-controls";
 import { useDashboardSnapshot } from "../hooks/useDashboardSnapshot";
 import { useDashboardWorldView } from "../hooks/useDashboardWorldView";
 import { getDashboardRecoveryMessages } from "../messages/dashboard-recovery";
@@ -16,7 +16,7 @@ import {
 
 // Phone gutters stay within the four-CSS-pixel viewport budget. Desktop spacing
 // resumes with the dashboard's established medium breakpoint.
-const DASHBOARD_SHELL_CLASS = "min-h-screen overflow-x-hidden p-1 md:p-2";
+const DASHBOARD_SHELL_CLASS = "min-h-screen overflow-x-clip p-1 md:p-2";
 
 export interface DashboardScreenProps {
   locale?: string;
