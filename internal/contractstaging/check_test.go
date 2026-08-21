@@ -24,6 +24,10 @@ func TestCheckPassesCleanStagingAndDoesNotChangeRepositoryBytes(t *testing.T) {
 	if !drift.Empty() {
 		t.Fatalf("Check() drift = %#v, want none", drift)
 	}
+	afterCheck := checkTree(t, root)
+	if !reflect.DeepEqual(before, afterCheck) {
+		t.Fatalf("Check() changed repository bytes on clean fixture: %v", changedCheckTreePaths(before, afterCheck))
+	}
 
 	if err := contractstaging.Generate(root); err != nil {
 		t.Fatalf("Generate() error = %v", err)
