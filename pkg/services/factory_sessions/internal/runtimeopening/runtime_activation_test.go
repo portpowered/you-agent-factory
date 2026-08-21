@@ -330,6 +330,20 @@ type activationDefinitionsStub struct {
 	err      error
 }
 
+type resumeDefinitionStub struct {
+	factorydefinitions.Service
+	request  factorydefinitions.ResolveRuntimeSnapshotRequest
+	snapshot factorydefinitions.RuntimeSnapshot
+}
+
+func (stub *resumeDefinitionStub) ResolveRuntimeSnapshot(
+	_ context.Context,
+	request factorydefinitions.ResolveRuntimeSnapshotRequest,
+) (factorydefinitions.ResolveRuntimeSnapshotResult, error) {
+	stub.request = request
+	return factorydefinitions.ResolveRuntimeSnapshotResult{Snapshot: stub.snapshot}, nil
+}
+
 func (stub activationDefinitionsStub) ResolveRuntimeSnapshot(
 	context.Context,
 	factorydefinitions.ResolveRuntimeSnapshotRequest,
@@ -382,9 +396,11 @@ func TestOpenForRequestConsumesResumeSourceBeforeLiveSuccessorActivation(t *test
 	t.Parallel()
 
 	root := &resumeRoutingRoot{}
+	factorySnapshot := factorydefinitions.FactorySnapshot(`{"factoryDirectory":"/factory","name":"legacy"}`)
 	resumeInput := recordings.LoadResumeInputResult{
 		Input: recordings.LoadReplayInputResult{
 			Legacy: &factorydefinitions.ReplayArtifact{
+				Factory: &factorySnapshot,
 				Events: []factorydefinitions.FactoryEvent{{
 					Id:      "resume-event",
 					Context: factorydefinitions.FactoryEventContext{Tick: 7},
@@ -398,6 +414,9 @@ func TestOpenForRequestConsumesResumeSourceBeforeLiveSuccessorActivation(t *test
 		recordingsRuntime:         resumeRuntime,
 		generateRuntimeInstanceID: func() string { return "runtime-1" },
 		factoryDefinitions:        activationDefinitionsStub{snapshot: activationSnapshot()},
+		decodeReplayConfig: func(*factorydefinitions.FactorySnapshot) (factorydefinitions.ReplayRuntimeConfig, error) {
+			return replayRuntimeConfigStub{}, nil
+		},
 	}
 	_, err := factory.openForRequest(context.Background(), &factorysessions.RuntimeOpeningRequest{
 		FactoryDefinition: factorydefinitions.RuntimeOpeningRequest{Directory: "/factory"},
@@ -421,6 +440,67 @@ func TestOpenForRequestConsumesResumeSourceBeforeLiveSuccessorActivation(t *test
 	}
 	if root.activation.Inputs.Recordings.ResumePath != "source.recording.json" {
 		t.Fatalf("activation resume path = %q, want source.recording.json", root.activation.Inputs.Recordings.ResumePath)
+	}
+	if root.activation.Inputs.Recordings.RecordPath != "successor.recording.json" {
+		t.Fatalf("activation successor path = %q, want successor.recording.json", root.activation.Inputs.Recordings.RecordPath)
+	}
+	if root.activation.Inputs.Recordings.ReplayPath != "" {
+		t.Fatalf("activation replay path = %q, want empty for resume", root.activation.Inputs.Recordings.ReplayPath)
+	}
+}
+
+func TestOpenForRequestResumeUsesCapturedFactoryDefinition(t *testing.T) {
+	t.Parallel()
+
+	factorySnapshot := factorydefinitions.FactorySnapshot(`{"factoryDirectory":"/recorded","name":"recorded"}`)
+	resumeInput := recordings.LoadResumeInputResult{
+		Input: recordings.LoadReplayInputResult{
+			Legacy: &factorydefinitions.ReplayArtifact{
+				Factory: &factorySnapshot,
+				Events: []factorydefinitions.FactoryEvent{{
+					Id:      "resume-event",
+					Context: factorydefinitions.FactoryEventContext{Tick: 4},
+				}},
+			},
+		},
+	}
+	definitions := &resumeDefinitionStub{
+		snapshot: factorydefinitions.RuntimeSnapshot{
+			FactoryDir:     "/recorded",
+			RuntimeBaseDir: "/recorded",
+			EffectiveFactory: factorydefinitions.FactoryConfig{
+				Name: "recorded",
+			},
+		},
+	}
+	root := &resumeRoutingRoot{}
+	factory := &Factory{
+		runtimeRoot:               root,
+		recordingsRuntime:         &resumeInputRuntime{result: resumeInput},
+		generateRuntimeInstanceID: func() string { return "runtime-1" },
+		factoryDefinitions:        definitions,
+		decodeReplayConfig: func(*factorydefinitions.FactorySnapshot) (factorydefinitions.ReplayRuntimeConfig, error) {
+			return replayRuntimeConfigStub{factoryDir: "/recorded"}, nil
+		},
+	}
+
+	_, err := factory.openForRequest(context.Background(), &factorysessions.RuntimeOpeningRequest{
+		Recordings: recordings.RuntimeOpeningRequest{
+			RecordPath: "successor.recording.json",
+			ResumePath: "source.recording.json",
+		},
+	})
+	if err != nil {
+		t.Fatalf("openForRequest(bare resume) error = %v", err)
+	}
+	if string(definitions.request.Canonical) != string(factorySnapshot) {
+		t.Fatalf("resume Factory Definition canonical = %q, want captured recording definition", definitions.request.Canonical)
+	}
+	if root.activation.Snapshot.EffectiveFactory.Name != "recorded" {
+		t.Fatalf("activation Factory name = %q, want captured recording definition", root.activation.Snapshot.EffectiveFactory.Name)
+	}
+	if root.activation.Snapshot.FactoryDir != "/recorded" {
+		t.Fatalf("activation Factory directory = %q, want captured recording directory", root.activation.Snapshot.FactoryDir)
 	}
 	if root.activation.Inputs.Recordings.RecordPath != "successor.recording.json" {
 		t.Fatalf("activation successor path = %q, want successor.recording.json", root.activation.Inputs.Recordings.RecordPath)
@@ -499,13 +579,31 @@ type legacyReplayInputsStub struct {
 	calls int
 }
 
-type replayRuntimeConfigStub struct{}
-
-func (replayRuntimeConfigStub) FactoryConfig() *factorydefinitions.FactoryConfig {
-	return &factorydefinitions.FactoryConfig{Name: "legacy"}
+type replayRuntimeConfigStub struct {
+	factoryDir     string
+	runtimeBaseDir string
+	name           string
 }
-func (replayRuntimeConfigStub) FactoryDir() string     { return "/factory" }
-func (replayRuntimeConfigStub) RuntimeBaseDir() string { return "/factory" }
+
+func (stub replayRuntimeConfigStub) FactoryConfig() *factorydefinitions.FactoryConfig {
+	name := stub.name
+	if name == "" {
+		name = "legacy"
+	}
+	return &factorydefinitions.FactoryConfig{Name: name}
+}
+func (stub replayRuntimeConfigStub) FactoryDir() string {
+	if stub.factoryDir != "" {
+		return stub.factoryDir
+	}
+	return "/factory"
+}
+func (stub replayRuntimeConfigStub) RuntimeBaseDir() string {
+	if stub.runtimeBaseDir != "" {
+		return stub.runtimeBaseDir
+	}
+	return stub.FactoryDir()
+}
 func (replayRuntimeConfigStub) Worker(string) (*factorydefinitions.FactoryWorkerConfig, bool) {
 	return nil, false
 }

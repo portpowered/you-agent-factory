@@ -373,7 +373,13 @@ func (f *Factory) activationRequestWithInputs(
 		return factoryruntime.RuntimeActivationRequest{}, err
 	}
 	sessionID := sessionIDForOpening(opening)
-	resolution, err := f.resolveActivationSnapshot(ctx, opening, preloadedReplayInput, sessionID)
+	resolution, err := f.resolveActivationSnapshot(
+		ctx,
+		opening,
+		preloadedReplayInput,
+		resumeInput,
+		sessionID,
+	)
 	if err != nil {
 		return factoryruntime.RuntimeActivationRequest{}, err
 	}
@@ -437,6 +443,7 @@ func (f *Factory) resolveActivationSnapshot(
 	ctx context.Context,
 	opening factorysessions.RuntimeOpeningRequest,
 	preloadedReplayInput *recordings.LoadReplayInputResult,
+	resumeInput *recordings.LoadResumeInputResult,
 	sessionID string,
 ) (activationSnapshotResolution, error) {
 	if replaySnapshot, ok, err := f.resolveLegacyReplaySnapshot(ctx, opening, preloadedReplayInput); err != nil {
@@ -446,6 +453,15 @@ func (f *Factory) resolveActivationSnapshot(
 			snapshot:       replaySnapshot,
 			factoryDir:     strings.TrimSpace(replaySnapshot.FactoryDir),
 			runtimeBaseDir: firstNonEmptyString(opening.FactoryDefinition.ExecutionBaseDir, replaySnapshot.RuntimeBaseDir),
+		}, nil
+	}
+	if resumeSnapshot, ok, err := f.resolveLegacyResumeSnapshot(ctx, opening, resumeInput); err != nil {
+		return activationSnapshotResolution{}, err
+	} else if ok {
+		return activationSnapshotResolution{
+			snapshot:       resumeSnapshot,
+			factoryDir:     strings.TrimSpace(resumeSnapshot.FactoryDir),
+			runtimeBaseDir: firstNonEmptyString(opening.FactoryDefinition.ExecutionBaseDir, resumeSnapshot.RuntimeBaseDir),
 		}, nil
 	}
 	factoryDir, sourcePath, err := f.resolveActivationDefinitionSource(opening)
@@ -563,13 +579,50 @@ func (f *Factory) resolveLegacyReplaySnapshot(
 	if input.Portable != nil || input.Legacy == nil || input.Legacy.Factory == nil {
 		return factorydefinitions.RuntimeSnapshot{}, false, nil
 	}
-	replayConfig, err := f.decodeLegacyReplayConfig(input.Legacy.Factory)
+	snapshot, err := f.resolveLegacyFactorySnapshot(ctx, opening, input.Legacy.Factory, "replay")
 	if err != nil {
 		return factorydefinitions.RuntimeSnapshot{}, false, err
 	}
+	return snapshot, true, nil
+}
+
+func (f *Factory) resolveLegacyResumeSnapshot(
+	ctx context.Context,
+	opening factorysessions.RuntimeOpeningRequest,
+	resumeInput *recordings.LoadResumeInputResult,
+) (factorydefinitions.RuntimeSnapshot, bool, error) {
+	if resumeInput == nil {
+		return factorydefinitions.RuntimeSnapshot{}, false, nil
+	}
+	input := resumeInput.Input
+	if input.Portable != nil || input.Legacy == nil || input.Legacy.Factory == nil {
+		return factorydefinitions.RuntimeSnapshot{}, false, fmt.Errorf(
+			"open Factory Runtime: resume recording Factory Definition is required",
+		)
+	}
+	snapshot, err := f.resolveLegacyFactorySnapshot(ctx, opening, input.Legacy.Factory, "resume")
+	if err != nil {
+		return factorydefinitions.RuntimeSnapshot{}, false, err
+	}
+	return snapshot, true, nil
+}
+
+func (f *Factory) resolveLegacyFactorySnapshot(
+	ctx context.Context,
+	opening factorysessions.RuntimeOpeningRequest,
+	factoryJSON *factorydefinitions.FactorySnapshot,
+	intent string,
+) (factorydefinitions.RuntimeSnapshot, error) {
+	if f.factoryDefinitions == nil {
+		return factorydefinitions.RuntimeSnapshot{}, runtimeSnapshotResolverUnavailable()
+	}
+	replayConfig, err := f.decodeLegacyReplayConfig(factoryJSON)
+	if err != nil {
+		return factorydefinitions.RuntimeSnapshot{}, err
+	}
 	factoryDir, runtimeBaseDir := legacyReplayPaths(opening, replayConfig)
 	resolved, err := f.factoryDefinitions.ResolveRuntimeSnapshot(ctx, factorydefinitions.ResolveRuntimeSnapshotRequest{
-		Canonical:        append([]byte(nil), []byte(*input.Legacy.Factory)...),
+		Canonical:        append([]byte(nil), []byte(*factoryJSON)...),
 		ExecutionBaseDir: runtimeBaseDir,
 		Invocation: factorydefinitions.RuntimeSnapshotInvocationContext{
 			FactorySessionID: sessionIDForOpening(opening),
@@ -577,11 +630,15 @@ func (f *Factory) resolveLegacyReplaySnapshot(
 		},
 	})
 	if err != nil {
-		return factorydefinitions.RuntimeSnapshot{}, false, err
+		return factorydefinitions.RuntimeSnapshot{}, err
 	}
 	snapshot, err := resolved.Snapshot.Clone()
 	if err != nil {
-		return factorydefinitions.RuntimeSnapshot{}, false, fmt.Errorf("open Factory Runtime: detach replay Factory Definition snapshot: %w", err)
+		return factorydefinitions.RuntimeSnapshot{}, fmt.Errorf(
+			"open Factory Runtime: detach %s Factory Definition snapshot: %w",
+			intent,
+			err,
+		)
 	}
 	if strings.TrimSpace(snapshot.FactoryDir) == "" {
 		snapshot.FactoryDir = factoryDir
@@ -589,7 +646,7 @@ func (f *Factory) resolveLegacyReplaySnapshot(
 	if strings.TrimSpace(snapshot.RuntimeBaseDir) == "" {
 		snapshot.RuntimeBaseDir = runtimeBaseDir
 	}
-	return snapshot, true, nil
+	return snapshot, nil
 }
 
 func legacyReplayRequested(
