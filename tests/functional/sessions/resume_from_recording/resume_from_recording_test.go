@@ -140,7 +140,7 @@ func (scenario *resumeFromRecordingScenario) captureAtKillBoundary(
 		work:        work,
 		completedID: completedID,
 		events:      events,
-		cursor:      requireResumeFromRecordingFactoryEvent(t, events, factoryapi.FactoryEventTypeDispatchReconciled, completedID),
+		cursor:      requireResumeFromRecordingFactoryEvent(t, events, factoryapi.FactoryEventTypeDispatchResponse, completedID),
 	}
 }
 
@@ -163,8 +163,8 @@ func (scenario *resumeFromRecordingScenario) assertRestored(
 	assertResumeFromRecordingFactoryEvents(t, "after restart", restartedEvents)
 	assertResumeFromRecordingFactoryEventIDsPresent(t, boundary.events, restartedEvents)
 	support.AssertSingleWorkRequestEvent(t, restartedEvents, scenario.requestID, scenario.workID, "task")
-	if got := countResumeFromRecordingDispatchEvents(restartedEvents, factoryapi.FactoryEventTypeDispatchReconciled, boundary.completedID); got != 1 {
-		t.Fatalf("completed dispatch reconciled events after restart = %d, want 1", got)
+	if got := countResumeFromRecordingDispatchEvents(restartedEvents, factoryapi.FactoryEventTypeDispatchResponse, boundary.completedID); got != 1 {
+		t.Fatalf("completed dispatch response events after restart = %d, want 1", got)
 	}
 }
 
@@ -190,8 +190,8 @@ func (scenario *resumeFromRecordingScenario) resumeAndFinish(
 	assertResumeFromRecordingFactoryEvents(t, "after resume", finalEvents)
 	assertResumeFromRecordingFactoryEventIDsPresent(t, boundary.events, finalEvents)
 	support.AssertSingleWorkRequestEvent(t, finalEvents, scenario.requestID, scenario.workID, "task")
-	if got := countResumeFromRecordingDispatchEvents(finalEvents, factoryapi.FactoryEventTypeDispatchReconciled, boundary.completedID); got != 1 {
-		t.Fatalf("completed dispatch reconciled events after resume = %d, want 1", got)
+	if got := countResumeFromRecordingDispatchEvents(finalEvents, factoryapi.FactoryEventTypeDispatchResponse, boundary.completedID); got != 1 {
+		t.Fatalf("completed dispatch response events after resume = %d, want 1", got)
 	}
 	assertResumeFromRecordingFactoryCursorReplay(t, baseURL, scenario, boundary, finalEvents)
 }
@@ -466,14 +466,14 @@ func requireResumeFromRecordingCompletedDispatchID(
 ) string {
 	t.Helper()
 	for _, event := range events {
-		if event.Type != factoryapi.FactoryEventTypeDispatchReconciled {
+		if event.Type != factoryapi.FactoryEventTypeDispatchResponse {
 			continue
 		}
 		if dispatchID := support.StringPointerValue(event.Context.DispatchId); dispatchID != "" {
 			return dispatchID
 		}
 	}
-	t.Fatal("public Factory Events contain no completed dispatch reconciliation")
+	t.Fatal("public Factory Events contain no completed dispatch response")
 	return ""
 }
 
