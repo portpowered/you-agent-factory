@@ -34,6 +34,8 @@ const (
 	functionalCoverageOutputNormal functionalCoverageOutputMode = iota
 	functionalCoverageOutputSuppress
 	functionalCoverageOutputCompact
+	functionalCoverageOutputSuppressPending
+	functionalCoverageOutputCompactPending
 )
 
 type lockedFunctionalStreamWriter struct {
@@ -159,6 +161,19 @@ func (writer *functionalStreamWriter) writeLineLocked(line []byte) error {
 func (writer *functionalStreamWriter) filterCoverageOutput(output string) string {
 	var filtered strings.Builder
 	for {
+		if writer.coverageOutputMode == functionalCoverageOutputSuppressPending || writer.coverageOutputMode == functionalCoverageOutputCompactPending {
+			if isCoveragePackageListContinuation(output) {
+				if writer.coverageOutputMode == functionalCoverageOutputCompactPending {
+					writer.coverageOutputMode = functionalCoverageOutputCompact
+				} else {
+					writer.coverageOutputMode = functionalCoverageOutputSuppress
+				}
+				continue
+			}
+			writer.coverageOutputMode = functionalCoverageOutputNormal
+			continue
+		}
+
 		if writer.coverageOutputMode != functionalCoverageOutputNormal {
 			newline := strings.IndexByte(output, '\n')
 			if newline < 0 {
@@ -187,8 +202,13 @@ func (writer *functionalStreamWriter) filterCoverageOutput(output string) string
 
 		lineEnd := newline + 1
 		line := output[:lineEnd]
-		if !isRedundantCoverageOutputLine(line) {
+		if isRedundantCoverageOutputLine(line) {
+			writer.coverageOutputMode = functionalCoverageOutputSuppressPending
+		} else {
 			filtered.WriteString(line)
+			if isSuccessfulCoverageOutputLine(line) {
+				writer.coverageOutputMode = functionalCoverageOutputCompactPending
+			}
 		}
 		output = output[lineEnd:]
 		if output == "" {
@@ -197,12 +217,48 @@ func (writer *functionalStreamWriter) filterCoverageOutput(output string) string
 	}
 }
 
+func isSuccessfulCoverageOutputLine(output string) bool {
+	line, _, ok := singleFunctionalOutputLine(output)
+	if !ok || (!strings.HasPrefix(line, "ok ") && !strings.HasPrefix(line, "ok\t")) {
+		return false
+	}
+	return strings.Contains(line, "coverage: ") && strings.Contains(line, "% of statements")
+}
+
 func isSuccessfulCoverageOutputFragment(output string) bool {
 	line, _, ok := singleFunctionalOutputLine(output)
 	if !ok || (!strings.HasPrefix(line, "ok ") && !strings.HasPrefix(line, "ok\t")) {
 		return false
 	}
 	return strings.Contains(line, "coverage: ") && strings.Contains(line, "% of statements in ")
+}
+
+func isCoveragePackageListContinuation(output string) bool {
+	line := output
+	if newline := strings.IndexByte(line, '\n'); newline >= 0 {
+		line = line[:newline]
+	}
+	line = strings.TrimSuffix(line, "\r")
+	if strings.TrimSpace(line) == "" {
+		return false
+	}
+	trimmed := strings.TrimSpace(line)
+	for _, diagnosticPrefix := range []string{
+		"=== ",
+		"--- ",
+		"FAIL",
+		"PASS",
+		"panic:",
+		"goroutine ",
+		"coverage: ",
+		"ok ",
+		"ok\t",
+	} {
+		if strings.HasPrefix(trimmed, diagnosticPrefix) {
+			return false
+		}
+	}
+	return strings.Contains(line, modulePath+"/")
 }
 
 // isRedundantCoverageOutputLine reports whether a go test output event is the
