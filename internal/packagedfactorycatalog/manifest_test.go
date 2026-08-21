@@ -34,8 +34,8 @@ func TestGenerateManifestProjectsCompleteSortedCatalogWithExactIntegrity(t *test
 	if result.Manifest.FactorySchema != schemaIdentity {
 		t.Fatalf("factorySchema = %q, want %q", result.Manifest.FactorySchema, schemaIdentity)
 	}
-	if len(result.Manifest.Factories) != 17 {
-		t.Fatalf("factories = %d, want 17", len(result.Manifest.Factories))
+	if len(result.Manifest.Factories) != 19 {
+		t.Fatalf("factories = %d, want 19", len(result.Manifest.Factories))
 	}
 
 	names := make([]string, 0, len(result.Manifest.Factories))

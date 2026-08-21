@@ -15,6 +15,7 @@ import (
 
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -84,6 +85,35 @@ func TestPackagedFixUsesNamedWorktreeAndIndependentReview(t *testing.T) {
 	}
 	if _, err := os.Stat(unrelated); err != nil {
 		t.Fatalf("unrelated worktree was altered or removed: %v", err)
+	}
+}
+
+// TestPackagedFixUsesOperatorDefaultsWhenOptionalRoleParametersAreOmitted
+// proves the named route needs only its required request/worktree inputs and
+// resolves operator provider/model defaults for planner, iterator, and review.
+func TestPackagedFixUsesOperatorDefaultsWhenOptionalRoleParametersAreOmitted(t *testing.T) {
+	t.Setenv(operatorsettings.EnvDefaultWorkerModelProvider, "CODEX")
+	t.Setenv(operatorsettings.EnvDefaultWorkerModel, "operator-configured-model")
+	workspace := initPackagedFixGitRepository(t)
+	runner := &packagedFixCommandRunner{}
+
+	response, stderr, err := runPackagedFixCLI(
+		t,
+		runner,
+		workspace,
+		"--to", "complete Fix with operator defaults",
+		"--worktree-name", "operator-default-fix",
+	)
+	if err != nil {
+		t.Fatalf("Process.Execute(@you/fix) error = %v\nresponse = %#v\nstderr = %q", err, response, stderr)
+	}
+	if response.Status != factoryapi.InvocationTerminalStatusCompleted {
+		t.Fatalf("response status = %q, want COMPLETED: %#v", response.Status, response)
+	}
+	for index, request := range runner.Requests() {
+		if request.Command != "codex" || !packagedFixRequestIncludesModel(request, "operator-configured-model") {
+			t.Fatalf("request[%d] = command %q args %#v, want operator CODEX/operator-configured-model", index, request.Command, request.Args)
+		}
 	}
 }
 

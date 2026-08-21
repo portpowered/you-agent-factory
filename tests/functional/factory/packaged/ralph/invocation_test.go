@@ -14,6 +14,7 @@ import (
 
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -81,6 +82,37 @@ func TestPackagedRalphPlansThenIteratesToCompletionThroughNamedCLI(t *testing.T)
 	state := readPackagedRalphPlan(t, runner.PlanPath())
 	if len(state.Stories) != 1 || !state.Stories[0].Passes || state.Stories[0].Notes == "" {
 		t.Fatalf("durable Ralph plan = %#v, want one verified story with notes", state)
+	}
+}
+
+// TestPackagedRalphUsesOperatorDefaultsWhenOptionalRoleParametersAreOmitted
+// proves the named route remains invocable with only its required request and
+// resolves the operator provider/model defaults for every worker role.
+func TestPackagedRalphUsesOperatorDefaultsWhenOptionalRoleParametersAreOmitted(t *testing.T) {
+	t.Setenv(operatorsettings.EnvDefaultWorkerModelProvider, "CODEX")
+	t.Setenv(operatorsettings.EnvDefaultWorkerModel, "operator-configured-model")
+	home := t.TempDir()
+	workspace := t.TempDir()
+	support.InstallPackagedFactory(t, home, packagedRalphFactoryName)
+	runner := &packagedRalphCommandRunner{workspace: workspace}
+
+	response, stderr, err := runPackagedRalphCLI(
+		t,
+		runner,
+		home,
+		workspace,
+		"--to", "complete Ralph with operator defaults",
+	)
+	if err != nil {
+		t.Fatalf("Process.Execute(@you/ralph) error = %v\nresponse = %#v\nstderr = %q", err, response, stderr)
+	}
+	if response.Status != factoryapi.InvocationTerminalStatusCompleted {
+		t.Fatalf("response status = %q, want COMPLETED: %#v", response.Status, response)
+	}
+	for index, request := range runner.Requests() {
+		if request.Command != "codex" || !containsPackagedRalphModel(request, "operator-configured-model") {
+			t.Fatalf("request[%d] = command %q args %#v, want operator CODEX/operator-configured-model", index, request.Command, request.Args)
+		}
 	}
 }
 

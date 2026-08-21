@@ -163,8 +163,20 @@ func TestPackagedFactoriesAPI_ReturnsPublishedCatalog(t *testing.T) {
 	if len(catalog.Factories) == 0 {
 		t.Fatal("GET /packaged-factories returned no published factories")
 	}
-	if len(catalog.Factories) != 17 {
-		t.Fatalf("GET /packaged-factories count = %d, want exact published catalog count 17", len(catalog.Factories))
+	if len(catalog.Factories) != 19 {
+		t.Fatalf("GET /packaged-factories count = %d, want exact published catalog count 19", len(catalog.Factories))
+	}
+	for _, name := range []string{"@you/fix", "@you/ralph"} {
+		factory, ok := slices.BinarySearchFunc(catalog.Factories, name, func(factory factoryapi.PackagedFactoryCatalogEntry, target string) int {
+			return strings.Compare(factory.Name, target)
+		})
+		if !ok {
+			t.Fatalf("GET /packaged-factories is missing %s", name)
+		}
+		entry := catalog.Factories[factory]
+		if strings.TrimSpace(entry.Description.Value) == "" || len(entry.Examples) == 0 || !publishedPackagedFactoryHasInvocationMatrixBinding(entry) {
+			t.Fatalf("GET /packaged-factories entry %s is not customer-discoverable: %#v", name, entry)
+		}
 	}
 	for _, factory := range catalog.Factories {
 		if factory.Name == "" || factory.Project == "" || factory.Slug == "" || len(factory.Json) == 0 || factory.Yaml == "" {

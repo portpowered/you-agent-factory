@@ -23,8 +23,8 @@ func TestDiscoverReturnsCompleteSortedAuthoredInventory(t *testing.T) {
 	}
 
 	want := []string{
-		"agy-clip-qa", "agy-cold-watch", "classify", "deep-research", "factory-builder", "full-flow", "fusion", "goal", "loop",
-		"plan-execute", "plan-parallel", "quorum", "review", "spawn", "subagent",
+		"agy-clip-qa", "agy-cold-watch", "classify", "deep-research", "factory-builder", "fix", "full-flow", "fusion", "goal", "loop",
+		"plan-execute", "plan-parallel", "quorum", "ralph", "review", "spawn", "subagent",
 		"tournament", "tts",
 	}
 	if len(inventory.Entries) != len(want) {
