@@ -16,6 +16,48 @@ var _ interface {
 	BeginRuntimeAttempt(context.Context, workersessions.RuntimeAttemptRequest) (workersessions.RuntimeAttempt, error)
 } = (*registry)(nil)
 
+// transitionToStarting atomically moves id from StateReserved to
+// StateStarting. Only one caller can win this transition for a given id: a
+// concurrent Start racing to claim the same newly reserved or already
+// reserved identity, or an identity in any other state, sees
+// ErrSessionNotStartable and makes no mutation and no Workers call.
+func (r *registry) transitionToStarting(id string) (workersessions.Session, error) {
+	return r.transitionToStartingWithExecution(id, workers.WorkstationExecutionRequest{})
+}
+
+func (r *registry) transitionToStartingWithExecution(id string, execution workers.WorkstationExecutionRequest) (workersessions.Session, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	session, exists := r.sessions[id]
+	if !exists || session.State != workersessions.StateReserved {
+		return workersessions.Session{}, workersessions.ErrSessionNotStartable
+	}
+
+	session.State = workersessions.StateStarting
+	session.Result = nil
+	session.Model = optionalExecutionFact(execution.Model)
+	session.ReasoningEffort = optionalExecutionFact(execution.ReasoningEffort)
+	r.sessions[id] = session
+	return cloneSession(session), nil
+}
+
+func optionalExecutionFact(value string) *string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return nil
+	}
+	return &value
+}
+
+func cloneOptionalExecutionFact(value *string) *string {
+	if value == nil {
+		return nil
+	}
+	clone := *value
+	return &clone
+}
+
 // BeginRuntimeAttempt opens the Worker Session observation and recording
 // window, then returns control to Factory Runtime. It intentionally stops
 // before registerInvocationSupervision or any Workers boundary call: Runtime

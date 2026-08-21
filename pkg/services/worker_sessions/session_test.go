@@ -386,9 +386,12 @@ func TestSession_CloneAndContinueResultCloneDetachNestedState(t *testing.T) {
 			ID:       "provider-session-1",
 		},
 	}
+	model, reasoningEffort := "gpt-5.6-luna", "high"
 	original := workersessions.Session{
 		ID:                         "worker-1",
 		State:                      workersessions.StateFailed,
+		Model:                      &model,
+		ReasoningEffort:            &reasoningEffort,
 		Result:                     &workersessions.TerminalResult{Outcome: workersessions.TerminalOutcomeFailed, Cause: &workersessions.FailureCause{Kind: workersessions.FailureCauseExecutorPanic, Detail: "failed"}},
 		ProviderSessionAssociation: association,
 		PredecessorWorkerSessionID: "previous-worker",
@@ -403,12 +406,18 @@ func TestSession_CloneAndContinueResultCloneDetachNestedState(t *testing.T) {
 
 	clone.Result.Cause.Detail = "mutated clone"
 	clone.ProviderSessionAssociation.Reference.ID = "mutated-provider"
-	if original.Result.Cause.Detail != "failed" || original.ProviderSessionAssociation.Reference.ID != "provider-session-1" {
+	*clone.Model = "mutated-model"
+	*clone.ReasoningEffort = "mutated-effort"
+	if original.Result.Cause.Detail != "failed" || original.ProviderSessionAssociation.Reference.ID != "provider-session-1" ||
+		*original.Model != "gpt-5.6-luna" || *original.ReasoningEffort != "high" {
 		t.Fatalf("Session.Clone() shared nested state: original = %#v", original)
 	}
 	result.Session.Result.Cause.Detail = "mutated result clone"
 	result.Session.ProviderSessionAssociation.Reference.ID = "mutated-result-provider"
-	if original.Result.Cause.Detail != "failed" || original.ProviderSessionAssociation.Reference.ID != "provider-session-1" {
+	*result.Session.Model = "mutated-result-model"
+	*result.Session.ReasoningEffort = "mutated-result-effort"
+	if original.Result.Cause.Detail != "failed" || original.ProviderSessionAssociation.Reference.ID != "provider-session-1" ||
+		*original.Model != "gpt-5.6-luna" || *original.ReasoningEffort != "high" {
 		t.Fatalf("ContinueResult.Clone() shared nested state: original = %#v", original)
 	}
 }

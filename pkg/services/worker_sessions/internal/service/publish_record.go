@@ -230,7 +230,7 @@ func (r *registry) prepareInvocation(
 	}
 	r.logger.Info("worker session start accepted", acceptedFields...)
 
-	if _, err := r.transitionToStarting(req.ID); err != nil {
+	if _, err := r.transitionToStartingWithExecution(req.ID, req.Execution.Execution); err != nil {
 		if terminal, ok := r.preAdmissionControlTerminal(req.ID, attemptID); ok {
 			r.publishTerminalSnapshot(ctx, req.ID, attemptID, terminal)
 			return invocationPreparation{

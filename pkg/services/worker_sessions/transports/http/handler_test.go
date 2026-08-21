@@ -24,6 +24,8 @@ func TestListWorkerSessionsBySessionIDProjectsPopulatedObservation(t *testing.T)
 	observations := []workersessions.Observation{
 		{
 			WorkerSessionID:          "worker-session-1",
+			Model:                    stringPtr("gpt-5.6-luna"),
+			ReasoningEffort:          stringPtr("high"),
 			ProviderSession:          providers.SessionRef{Provider: providers.IDCodex, Kind: providers.SessionIDKind, ID: "provider-session-1"},
 			ProviderSessionAvailable: true,
 			WorkIDs:                  []string{"work-1"},
@@ -140,6 +142,7 @@ func assertPopulatedListResponse(t *testing.T, payload []byte, total int) {
 	assertListObservationUsage(t, got, total)
 	assertListObservationTiming(t, got)
 	assertListObservationTurn(t, got)
+	assertListObservationExecutionFacts(t, got)
 }
 
 func assertListObservationIdentity(t *testing.T, observation factoryapi.WorkerSessionObservation) {
@@ -327,6 +330,8 @@ func TestGetWorkerSessionObservationBySessionIDProjectsFailureDiagnostics(t *tes
 	}
 	service := &fakeObservationService{getResult: workersessions.Observation{
 		WorkerSessionID:          "worker-session-1",
+		Model:                    stringPtr("gpt-5.6-luna"),
+		ReasoningEffort:          stringPtr("medium"),
 		ProviderSession:          providers.SessionRef{Provider: providers.IDCodex, Kind: providers.SessionIDKind, ID: "provider-session-1"},
 		ProviderSessionAvailable: true,
 		WorkIDs:                  []string{"work-1"}, TurnID: "turn-1", AttemptID: "attempt-1",
@@ -360,6 +365,7 @@ func assertFailureObservationResponse(t *testing.T, payload []byte, service *fak
 	assertFailureObservationCause(t, response)
 	assertFailureObservationUsage(t, response, total, duration)
 	assertFailureObservationParse(t, response)
+	assertFailureObservationExecutionFacts(t, response)
 	assertFailureObservationRequest(t, service)
 }
 

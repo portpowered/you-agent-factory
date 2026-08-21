@@ -391,26 +391,6 @@ func (r *registry) reserveIfAbsent(id string) {
 	r.publications[id] = &publication{}
 }
 
-// transitionToStarting atomically moves id from StateReserved to
-// StateStarting. Only one caller can win this transition for a given id: a
-// concurrent Start racing to claim the same newly reserved or already
-// reserved identity, or an identity in any other state, sees
-// ErrSessionNotStartable and makes no mutation and no Workers call.
-func (r *registry) transitionToStarting(id string) (workersessions.Session, error) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-
-	session, exists := r.sessions[id]
-	if !exists || session.State != workersessions.StateReserved {
-		return workersessions.Session{}, workersessions.ErrSessionNotStartable
-	}
-
-	session.State = workersessions.StateStarting
-	session.Result = nil
-	r.sessions[id] = session
-	return cloneSession(session), nil
-}
-
 // commitTerminal stores the exactly-once terminal outcome for id and reports
 // whether this call is the one that committed it. The commit requires the
 // one allowed W2 predecessor state, StateStarting: a missing identity, an

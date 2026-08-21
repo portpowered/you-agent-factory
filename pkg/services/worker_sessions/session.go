@@ -12,6 +12,14 @@ import (
 type Session struct {
 	ID    string
 	State State
+	// Model is the optional model identifier resolved for the provider
+	// invocation that opened this Worker Session. A nil value is durable
+	// absence: Worker Sessions never derives it from current configuration.
+	Model *string
+	// ReasoningEffort is the optional reasoning effort resolved for the
+	// provider invocation that opened this Worker Session. It is independent
+	// from Model because providers may report either fact without the other.
+	ReasoningEffort *string
 	// Result is non-nil exactly when State is StateCompleted or StateFailed,
 	// and carries the exactly-once committed terminal outcome. Result is nil
 	// for every non-terminal state, and for the W1 CANCELED/TERMINATED
@@ -71,10 +79,13 @@ func (s Session) Validate() error {
 }
 
 // Clone returns a detached immutable snapshot. Session is otherwise a value,
-// but Result and ProviderSessionAssociation contain pointers that must not
-// alias registry-owned state across a continuation replay.
+// but Result, Model, ReasoningEffort, and ProviderSessionAssociation contain
+// pointers that must not alias registry-owned state across a continuation
+// replay.
 func (s Session) Clone() Session {
 	clone := s
+	clone.Model = cloneString(s.Model)
+	clone.ReasoningEffort = cloneString(s.ReasoningEffort)
 	if s.Result != nil {
 		result := *s.Result
 		if s.Result.Cause != nil {

@@ -243,7 +243,12 @@ type Observation struct {
 	WorkerSessionID            string
 	PredecessorWorkerSessionID string
 	SuccessorWorkerSessionID   string
-	Direct                     bool
+	// Model and ReasoningEffort are the optional resolved execution facts
+	// retained by Worker Sessions. Nil means the source record did not carry
+	// that fact; callers must not infer it from current Factory configuration.
+	Model           *string
+	ReasoningEffort *string
+	Direct          bool
 	// FactorySessionID is the explicit Factory Session scope selected by the
 	// transport. Worker Sessions does not derive or authorize this value; the
 	// runtime-bound projection supplies it at the public boundary.
@@ -378,6 +383,8 @@ func (o Observation) validateFailure() error {
 // Clone returns a detached observation snapshot.
 func (o Observation) Clone() Observation {
 	o.ProviderSession = o.ProviderSession.Clone()
+	o.Model = cloneString(o.Model)
+	o.ReasoningEffort = cloneString(o.ReasoningEffort)
 	o.WorkIDs = append([]string(nil), o.WorkIDs...)
 	if o.StartedAt != nil {
 		started := *o.StartedAt

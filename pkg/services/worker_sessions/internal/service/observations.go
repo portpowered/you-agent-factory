@@ -516,6 +516,8 @@ func baseObservation(id string, session workersessions.Session, metadata *observ
 		WorkerSessionID:            id,
 		PredecessorWorkerSessionID: session.PredecessorWorkerSessionID,
 		SuccessorWorkerSessionID:   session.SuccessorWorkerSessionID,
+		Model:                      cloneOptionalExecutionFact(session.Model),
+		ReasoningEffort:            cloneOptionalExecutionFact(session.ReasoningEffort),
 		Direct:                     metadata.direct,
 		WorkIDs:                    append([]string(nil), metadata.workIDs...),
 		TurnID:                     metadata.turnID,

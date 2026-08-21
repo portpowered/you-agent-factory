@@ -1649,6 +1649,10 @@ export interface components {
       /** @description Explicit Factory Session scope used for this observation. */
       factorySessionId?: string;
       providerSession?: components["schemas"]["WorkerSessionProviderSessionRef"];
+      /** @description Model identifier resolved for the provider invocation, when recorded. */
+      model?: string;
+      /** @description Reasoning effort resolved for the provider invocation, when recorded. */
+      reasoningEffort?: string;
       /** @description Whether a provider-session identity is available for this attempt. */
       providerSessionAvailable: boolean;
       /** @description Work identities correlated with this Worker Session attempt. */

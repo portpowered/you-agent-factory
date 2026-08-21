@@ -8080,13 +8080,19 @@ type WorkerSessionObservation struct {
 	EndedAt        *time.Time `json:"endedAt"`
 
 	// FactorySessionId Explicit Factory Session scope used for this observation.
-	FactorySessionId *string                          `json:"factorySessionId,omitempty"`
-	Failure          *WorkerSessionFailure            `json:"failure,omitempty"`
-	Parse            WorkerSessionParseDiagnostics    `json:"parse"`
-	ProviderSession  *WorkerSessionProviderSessionRef `json:"providerSession,omitempty"`
+	FactorySessionId *string               `json:"factorySessionId,omitempty"`
+	Failure          *WorkerSessionFailure `json:"failure,omitempty"`
+
+	// Model Model identifier resolved for the provider invocation, when recorded.
+	Model           *string                          `json:"model,omitempty"`
+	Parse           WorkerSessionParseDiagnostics    `json:"parse"`
+	ProviderSession *WorkerSessionProviderSessionRef `json:"providerSession,omitempty"`
 
 	// ProviderSessionAvailable Whether a provider-session identity is available for this attempt.
 	ProviderSessionAvailable bool `json:"providerSessionAvailable"`
+
+	// ReasoningEffort Reasoning effort resolved for the provider invocation, when recorded.
+	ReasoningEffort *string `json:"reasoningEffort,omitempty"`
 
 	// RecordingHealth Recordings-owned capture health, independent of Worker execution outcome.
 	RecordingHealth *WorkerSessionObservationRecordingHealth `json:"recordingHealth,omitempty"`

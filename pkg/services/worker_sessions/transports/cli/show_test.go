@@ -25,6 +25,7 @@ func TestShowJSONUsesObservationDocumentAndExactIdentity(t *testing.T) {
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(generated.WorkerSessionObservation{
 			WorkerSessionId: "worker-session-1", ProviderSessionAvailable: true,
+			Model: stringPtrForTest("gpt-5.6-luna"), ReasoningEffort: stringPtrForTest("high"),
 			ProviderSession: &generated.WorkerSessionProviderSessionRef{Provider: "codex", Kind: "session_id", Id: "provider-session-1"},
 			WorkIds:         []string{"work-1"}, TurnId: stringPtrForTest("turn-1"), AttemptId: "attempt-2",
 			State:     generated.WorkerSessionObservationStateCompleted,
@@ -57,6 +58,7 @@ func TestShowJSONUsesObservationDocumentAndExactIdentity(t *testing.T) {
 	if string(document["workerSessionId"]) != `"worker-session-1"` || string(document["attemptId"]) != `"attempt-2"` {
 		t.Fatalf("identity fields = %s/%s, want observation identity", document["workerSessionId"], document["attemptId"])
 	}
+	assertShowExecutionFacts(t, document)
 	if !strings.Contains(string(document["tokenUsage"]), `"totalTokens":12`) || string(document["durationMillis"]) != "2500" {
 		t.Fatalf("usage/duration = %s/%s, want token and timing projection", document["tokenUsage"], document["durationMillis"])
 	}
@@ -64,6 +66,13 @@ func TestShowJSONUsesObservationDocumentAndExactIdentity(t *testing.T) {
 		if _, ok := document[key]; !ok {
 			t.Fatalf("show JSON missing stable field %q: %s", key, output.String())
 		}
+	}
+}
+
+func assertShowExecutionFacts(t *testing.T, document map[string]json.RawMessage) {
+	t.Helper()
+	if string(document["model"]) != `"gpt-5.6-luna"` || string(document["reasoningEffort"]) != `"high"` {
+		t.Fatalf("execution facts = %s/%s, want gpt-5.6-luna/high", document["model"], document["reasoningEffort"])
 	}
 }
 
@@ -96,6 +105,15 @@ func TestShowByWorkerSessionIDUsesTopLevelIdentityRoute(t *testing.T) {
 	if !strings.Contains(output.String(), `"direct":true`) {
 		t.Fatalf("output = %q, want direct origin", output.String())
 	}
+	var document map[string]json.RawMessage
+	if err := json.Unmarshal(output.Bytes(), &document); err != nil {
+		t.Fatalf("decode JSON output: %v; output=%q", err, output.String())
+	}
+	for _, key := range []string{"model", "reasoningEffort"} {
+		if got, ok := document[key]; !ok || string(got) != "null" {
+			t.Fatalf("legacy show %s = %s, want explicit null", key, got)
+		}
+	}
 }
 
 func TestShowRejectsMixedIdentityModes(t *testing.T) {
@@ -115,6 +133,7 @@ func TestShowHumanRendersFailureAndParseDiagnostics(t *testing.T) {
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(generated.WorkerSessionObservation{
 			WorkerSessionId: "worker-session-1", ProviderSessionAvailable: true,
+			Model: stringPtrForTest("gpt-5.6-luna"), ReasoningEffort: stringPtrForTest("high"),
 			ProviderSession: &generated.WorkerSessionProviderSessionRef{Provider: "codex", Kind: "session_id", Id: "provider-session-1"},
 			WorkIds:         []string{"work-1"}, AttemptId: "attempt-1", State: generated.WorkerSessionObservationStateFailed,
 			DurationMillis: int64Ptr(2500), DurationBasis: generated.WorkerSessionObservationDurationBasisRECORDEDTIMESTAMPS,
@@ -132,7 +151,7 @@ func TestShowHumanRendersFailureAndParseDiagnostics(t *testing.T) {
 		t.Fatalf("Show() error = %v", err)
 	}
 	for _, want := range []string{
-		"Worker Session ID:\tworker-session-1", "Work IDs:\twork-1", "State:\tFAILED", "Duration:\t2.5s",
+		"Worker Session ID:\tworker-session-1", "Model:\tgpt-5.6-luna", "Reasoning Effort:\thigh", "Work IDs:\twork-1", "State:\tFAILED", "Duration:\t2.5s",
 		"Token usage:\tinput=- cached-input=- cache-write=- output=- reasoning=- total=17",
 		"Failure:\tkind=WORKERS_EXECUTION_FAILURE detail=safe failure detail provider-kind=dependency", "agent-run-class=agent_run_provider_failure",
 		"Parse diagnostics:\tevents=3 malformed=0 unknown=0 errors=1",
@@ -140,6 +159,29 @@ func TestShowHumanRendersFailureAndParseDiagnostics(t *testing.T) {
 	} {
 		if !strings.Contains(output.String(), want) {
 			t.Fatalf("human output %q missing %q", output.String(), want)
+		}
+	}
+}
+
+func TestShowHumanRendersAbsentExecutionFactsAsDashes(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(generated.WorkerSessionObservation{
+			WorkerSessionId: "legacy-session", AttemptId: "attempt-legacy",
+			State: generated.WorkerSessionObservationStateCompleted,
+		})
+	}))
+	defer server.Close()
+
+	var output bytes.Buffer
+	if err := NewShow(testHTTPProtocol(t))(ShowConfig{
+		Context: context.Background(), Server: server.URL, WorkerSessionID: "legacy-session", Output: &output,
+	}); err != nil {
+		t.Fatalf("Show() error = %v", err)
+	}
+	for _, want := range []string{"Model:\t-", "Reasoning Effort:\t-"} {
+		if !strings.Contains(output.String(), want) {
+			t.Fatalf("output %q missing %q", output.String(), want)
 		}
 	}
 }

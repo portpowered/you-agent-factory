@@ -3551,6 +3551,12 @@ components:
         providerSession:
           $ref: '#/components/schemas/WorkerSessionProviderSessionRef'
           nullable: true
+        model:
+          type: string
+          description: Model identifier resolved for the provider invocation, when recorded.
+        reasoningEffort:
+          type: string
+          description: Reasoning effort resolved for the provider invocation, when recorded.
         providerSessionAvailable:
           type: boolean
           description: Whether a provider-session identity is available for this attempt.

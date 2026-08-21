@@ -42,6 +42,9 @@ func TestGetWorkerSessionObservationByWorkerSessionIDProjectsProviderNeutralHist
 	if response.WorkerSessionId != "worker-no-provider" || response.ProviderSession != nil || response.ProviderSessionAvailable {
 		t.Fatalf("response = %#v, want provider-neutral Worker observation", response)
 	}
+	if response.Model != nil || response.ReasoningEffort != nil {
+		t.Fatalf("legacy execution facts = model:%#v reasoningEffort:%#v, want absent", response.Model, response.ReasoningEffort)
+	}
 	if response.FactorySessionId == nil || *response.FactorySessionId != "session-1" {
 		t.Fatalf("factory session scope = %#v, want session-1", response.FactorySessionId)
 	}
