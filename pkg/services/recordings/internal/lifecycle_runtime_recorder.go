@@ -474,6 +474,20 @@ func (service *combinedService) LoadReplayInput(
 	return service.replayInputs.LoadReplayInput(request)
 }
 
+// LoadResumeInput keeps explicit resume classification on the Recordings root
+// while retaining the narrow pre-ledger compatibility seam used by the
+// Factory Sessions opener. Resume is a separate operation even when the
+// current path-backed adapter can reuse the same detached input parser.
+func (service *combinedService) LoadResumeInput(
+	request recordings.LoadResumeInputRequest,
+) (recordings.LoadResumeInputResult, error) {
+	input, err := service.LoadReplayInput(recordings.LoadReplayInputRequest{Path: request.Path})
+	if err != nil {
+		return recordings.LoadResumeInputResult{}, err
+	}
+	return recordings.LoadResumeInputResult{Input: input}, nil
+}
+
 // OpenRuntime acquires the runtime-owned ledger and, when recording is
 // enabled, binds its recorder to this root's shared lifecycle owner.
 func (service *combinedService) OpenRuntime(

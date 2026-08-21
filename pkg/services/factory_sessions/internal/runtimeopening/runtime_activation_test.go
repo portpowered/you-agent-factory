@@ -365,6 +365,79 @@ func TestOpenForRequestRoutesLegacyReplayThroughRuntimeRoot(t *testing.T) {
 	}
 }
 
+func TestOpenForRequestConsumesResumeSourceBeforeLiveSuccessorActivation(t *testing.T) {
+	t.Parallel()
+
+	root := &resumeRoutingRoot{}
+	resumeRuntime := &resumeInputRuntime{}
+	factory := &Factory{
+		runtimeRoot:               root,
+		recordingsRuntime:         resumeRuntime,
+		generateRuntimeInstanceID: func() string { return "runtime-1" },
+		factoryDefinitions:        activationDefinitionsStub{snapshot: activationSnapshot()},
+	}
+	_, err := factory.openForRequest(context.Background(), &factorysessions.RuntimeOpeningRequest{
+		FactoryDefinition: factorydefinitions.RuntimeOpeningRequest{Directory: "/factory"},
+		Recordings: recordings.RuntimeOpeningRequest{
+			RecordPath: "successor.recording.json",
+			ResumePath: "source.recording.json",
+		},
+	})
+	if err != nil {
+		t.Fatalf("openForRequest(resume) error = %v", err)
+	}
+	if resumeRuntime.path != "source.recording.json" {
+		t.Fatalf("resume source path = %q, want source.recording.json", resumeRuntime.path)
+	}
+	if root.activation.Inputs.Recordings.ResumePath != "source.recording.json" {
+		t.Fatalf("activation resume path = %q, want source.recording.json", root.activation.Inputs.Recordings.ResumePath)
+	}
+	if root.activation.Inputs.Recordings.RecordPath != "successor.recording.json" {
+		t.Fatalf("activation successor path = %q, want successor.recording.json", root.activation.Inputs.Recordings.RecordPath)
+	}
+	if root.activation.Inputs.Recordings.ReplayPath != "" {
+		t.Fatalf("activation replay path = %q, want empty for resume", root.activation.Inputs.Recordings.ReplayPath)
+	}
+}
+
+type resumeRoutingRoot struct {
+	factoryruntime.Service
+	activation factoryruntime.RuntimeActivationRequest
+}
+
+func (root *resumeRoutingRoot) Activate(
+	_ context.Context,
+	request factoryruntime.RuntimeActivationRequest,
+) (factoryruntime.RuntimeActivationResult, error) {
+	root.activation = request
+	return factoryruntime.RuntimeActivationResult{
+		RuntimeID: "runtime-1",
+		Runtime: factoryruntime.RuntimeActivationView{
+			RuntimeID: "runtime-1",
+			Service:   &activatedRuntimeService{products: runtimeProducts{}},
+		},
+	}, nil
+}
+
+func (root *resumeRoutingRoot) Deactivate(
+	context.Context,
+	factoryruntime.RuntimeDeactivationRequest,
+) (factoryruntime.RuntimeDeactivationResult, error) {
+	return factoryruntime.RuntimeDeactivationResult{}, nil
+}
+
+type resumeInputRuntime struct {
+	recordings.RuntimeOpening
+	path string
+}
+
+func (runtime *resumeInputRuntime) LoadResumeInput(
+	request recordings.LoadResumeInputRequest,
+) (recordings.LoadResumeInputResult, error) {
+	runtime.path = request.Path
+	return recordings.LoadResumeInputResult{}, nil
+}
+
 type replayRoutingRoot struct {
 	factoryruntime.Service
 	activations int

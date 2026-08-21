@@ -141,6 +141,8 @@ type (
 	LoadReplayArtifactResult                                   = recordingcontracts.LoadReplayArtifactResult
 	LoadReplayInputRequest                                     = recordingcontracts.LoadReplayInputRequest
 	LoadReplayInputResult                                      = recordingcontracts.LoadReplayInputResult
+	LoadResumeInputRequest                                     = recordingcontracts.LoadResumeInputRequest
+	LoadResumeInputResult                                      = recordingcontracts.LoadResumeInputResult
 	LoadReplayRecordingRequest                                 = recordingcontracts.LoadReplayRecordingRequest
 	LoadReplayRecordingResult                                  = recordingcontracts.LoadReplayRecordingResult
 	LoadReplayRecordingForResumeRequest                        = recordingcontracts.LoadReplayRecordingForResumeRequest
