@@ -14,6 +14,21 @@ const supportedAccelerators = new Set(["cpu", "metal"]);
 
 const expectedBackendIds = ["localai-llamacpp", "localai-whisper", "localai-vibevoice"];
 const expectedTargetIds = ["darwin-arm64", "linux-amd64", "windows-amd64"];
+const expectedWorkflowPins = {
+	checkout: "11bd71901bbe5b1630ceea73d27597364c9af683",
+	setupNode: "49933ea5288caeca8642d1e84afbd3f7d6820020",
+	setupGo: "d35c59abb061a4a6fb18e82ac0862c26744d6ab5",
+	getCMake: "fffaaafeea488556c2c12dad60690008bc1caacb",
+	setupMsys2: "fb197b72ce45fb24f17bf3f807a388985654d1f2",
+	uploadArtifact: "ea165f8d65b6e75b540449e92b4886f43607fa02",
+	downloadArtifact: "d3f86a106a0bac45b974a628896c90dbdf5c8093",
+};
+const expectedWindowsMsysPackages = [
+	"make=4.4.1-3",
+	"mingw-w64-x86_64-binutils=2.47-3",
+	"mingw-w64-x86_64-gcc=16.2.0-3",
+	"mingw-w64-x86_64-ninja=1.13.2-1",
+];
 
 const expectedBackendFacts = {
 	"localai-llamacpp": {
@@ -21,7 +36,7 @@ const expectedBackendFacts = {
 		sourceRepository: "https://github.com/ggerganov/llama.cpp",
 		sourcePinVariable: "LLAMA_VERSION",
 		makeTarget: "package",
-		binary: "grpc-server",
+		binary: "llama-cpp-cpu-all",
 	},
 	"localai-whisper": {
 		sourcePath: "backend/go/whisper",
@@ -72,6 +87,12 @@ function validateSha(errors, value, label) {
 function validateVersion(errors, value, label) {
 	if (typeof value !== "string" || !versionPattern.test(value)) {
 		addError(errors, `${label} must be an exact numeric tool version`);
+	}
+}
+
+function validatePackageSpec(errors, value, label) {
+	if (typeof value !== "string" || !/^[A-Za-z0-9_.+-]+=[0-9][A-Za-z0-9.+:~_-]*$/.test(value)) {
+		addError(errors, `${label} must be an exact package name and version`);
 	}
 }
 
@@ -164,6 +185,51 @@ function validateTarget(errors, target) {
 	}
 }
 
+function validateWorkflowPins(errors, pins) {
+	if (!isPlainObject(pins)) {
+		addError(errors, "workflowPins must be an object");
+		return;
+	}
+	for (const [name, expected] of Object.entries(expectedWorkflowPins)) {
+		validateSha(errors, pins[name], `workflowPins.${name}`);
+		if (pins[name] !== expected) addError(errors, `workflowPins.${name} must be the repository-approved immutable action revision`);
+	}
+}
+
+function validateHostToolchain(errors, hostToolchain) {
+	if (!isPlainObject(hostToolchain)) {
+		addError(errors, "hostToolchain must be an object");
+		return;
+	}
+	const linux = hostToolchain.linux;
+	if (!isPlainObject(linux)) {
+		addError(errors, "hostToolchain.linux must be an object");
+	} else {
+		for (const key of ["gccVersion", "makeVersion", "ninjaVersion", "pkgConfigVersion"]) {
+			validateVersion(errors, linux[key], `hostToolchain.linux.${key}`);
+		}
+	}
+	const macos = hostToolchain.macos;
+	if (!isPlainObject(macos)) {
+		addError(errors, "hostToolchain.macos must be an object");
+	} else {
+		validateSha(errors, macos.makeFormulaCommit, "hostToolchain.macos.makeFormulaCommit");
+		validateVersion(errors, macos.makeVersion, "hostToolchain.macos.makeVersion");
+	}
+	const windows = hostToolchain.windows;
+	if (!isPlainObject(windows)) {
+		addError(errors, "hostToolchain.windows must be an object");
+	} else {
+		if (windows.vcpkgTriplet !== "x64-mingw-static") addError(errors, "hostToolchain.windows.vcpkgTriplet must be x64-mingw-static");
+		if (JSON.stringify(windows.msysPackages) !== JSON.stringify(expectedWindowsMsysPackages)) {
+			addError(errors, "hostToolchain.windows.msysPackages must be the pinned native build package set");
+		}
+		if (Array.isArray(windows.msysPackages)) {
+			windows.msysPackages.forEach((value, index) => validatePackageSpec(errors, value, `hostToolchain.windows.msysPackages[${index}]`));
+		}
+	}
+}
+
 export function matrixForConfig(config) {
 	return {
 		include: config.backends.flatMap((backend) =>
@@ -190,6 +256,7 @@ export function validateConfig(config) {
 	const errors = [];
 	if (!isPlainObject(config)) return { errors: ["configuration must be an object"], matrix: null };
 	if (config.schemaVersion !== 1) addError(errors, "schemaVersion must be 1");
+	validateVersion(errors, config.nodeVersion, "nodeVersion");
 	if (config.localaiRepository !== "https://github.com/mudler/LocalAI.git") {
 		addError(errors, "localaiRepository must be the repository-owned LocalAI upstream");
 	}
@@ -199,6 +266,8 @@ export function validateConfig(config) {
 	validateSha(errors, config.protocolRevision, "protocolRevision");
 	validateSha(errors, config.grpcCommit, "grpcCommit");
 	validateSha(errors, config.vcpkgCommit, "vcpkgCommit");
+	validateWorkflowPins(errors, config.workflowPins);
+	validateHostToolchain(errors, config.hostToolchain);
 
 	if (!isPlainObject(config.toolchain)) {
 		addError(errors, "toolchain must be an object");
@@ -330,6 +399,11 @@ export function buildMetadata({ config, localaiRoot, backendId, targetId }) {
 			grpcCommit: config.grpcCommit,
 			vcpkgCommit: config.vcpkgCommit,
 		},
+		buildInputs: {
+			nodeVersion: config.nodeVersion,
+			actionPins: { ...config.workflowPins },
+			hostToolchain: structuredClone(config.hostToolchain),
+		},
 		payload: {
 			binary: verified.backend.binary,
 			makeTarget: verified.backend.makeTarget,
@@ -360,17 +434,39 @@ export function verifyPayload({ packageRoot, binary, targetId }) {
 			throw new Error(`${binary} is not an amd64 Windows PE executable`);
 		}
 	} else if (targetId === "linux-amd64") {
-		if (bytes.length < 20 || bytes[0] !== 0x7f || bytes.toString("ascii", 1, 4) !== "ELF" || bytes[18] !== 0x3e) {
+		if (bytes.length < 20 || bytes[0] !== 0x7f || bytes.toString("ascii", 1, 4) !== "ELF" || bytes[4] !== 2 || bytes[5] !== 1 || bytes[18] !== 0x3e) {
 			throw new Error(`${binary} is not an amd64 Linux ELF executable`);
 		}
 	} else if (targetId === "darwin-arm64") {
-		const magic = bytes.length >= 4 ? bytes.readUInt32LE(0) : 0;
-		const cpuType = bytes.length >= 8 ? bytes.readUInt32LE(4) : 0;
-		const isArm64MachO = magic === 0xfeedfacf && cpuType === 0x0100000c;
-		const isUniversalArm64 = magic === 0xbebafeca;
-		if (!isArm64MachO && !isUniversalArm64) throw new Error(`${binary} is not an arm64 Darwin Mach-O executable`);
+		if (!isArm64MachO(bytes)) throw new Error(`${binary} is not an arm64 Darwin Mach-O executable`);
 	}
 	return { binaryPath, files, bytes: bytes.length };
+}
+
+function isArm64MachO(bytes) {
+	if (bytes.length < 8) return false;
+	const littleMagic = bytes.readUInt32LE(0);
+	const littleCPUType = bytes.readUInt32LE(4);
+	if (littleMagic === 0xfeedfacf) return littleCPUType === 0x0100000c;
+
+	const bigMagic = bytes.readUInt32BE(0);
+	const isBigEndianFat = bigMagic === 0xcafebabe || bigMagic === 0xcafebabf;
+	const isLittleEndianFat = littleMagic === 0xcafebabe || littleMagic === 0xcafebabf;
+	if (!isBigEndianFat && !isLittleEndianFat) return false;
+
+	const read = isBigEndianFat ? (offset) => bytes.readUInt32BE(offset) : (offset) => bytes.readUInt32LE(offset);
+	const isFat64 = isBigEndianFat ? bigMagic === 0xcafebabf : littleMagic === 0xcafebabf;
+	const architectureCount = read(4);
+	const architectureSize = isFat64 ? 32 : 20;
+	if (architectureCount === 0 || architectureCount > 128 || 8 + architectureCount * architectureSize > bytes.length) return false;
+	for (let index = 0; index < architectureCount; index += 1) {
+		const offset = 8 + index * architectureSize;
+		const sliceOffset = isFat64 ? Number((isBigEndianFat ? bytes.readBigUInt64BE(offset + 8) : bytes.readBigUInt64LE(offset + 8))) : read(offset + 8);
+		const sliceSize = isFat64 ? Number((isBigEndianFat ? bytes.readBigUInt64BE(offset + 16) : bytes.readBigUInt64LE(offset + 16))) : read(offset + 12);
+		if (!Number.isSafeInteger(sliceOffset) || !Number.isSafeInteger(sliceSize) || sliceSize === 0 || sliceOffset + sliceSize > bytes.length) continue;
+		if (read(offset) === 0x0100000c) return true;
+	}
+	return false;
 }
 
 function listFilesWithDirectory(root) {
@@ -402,6 +498,9 @@ function canonicalPinDocument(config) {
 		grpcCommit: config.grpcCommit,
 		vcpkgCommit: config.vcpkgCommit,
 		toolchain: Object.fromEntries(Object.entries(config.toolchain).sort(([left], [right]) => left.localeCompare(right))),
+		workflowPins: Object.fromEntries(Object.entries(config.workflowPins).sort(([left], [right]) => left.localeCompare(right))),
+		hostToolchain: config.hostToolchain,
+		nodeVersion: config.nodeVersion,
 		backends: config.backends.map(({ id, sourceRepository, sourceCommit, sourcePinVariable }) => ({ id, sourceRepository, sourceCommit, sourcePinVariable })),
 		targets: config.targets.map(({ id, os, architecture, buildType, accelerators }) => ({ id, os, architecture, buildType, accelerators })),
 	};
@@ -492,6 +591,9 @@ function validateMatrixMetadata(metadata, { config, backend, target, key }) {
 	for (const [name, expected] of Object.entries(config.toolchain)) assertMetadataField(metadata, `toolchain.${name}`, expected, `${key} metadata mismatch:`);
 	assertMetadataField(metadata, "toolchain.grpcCommit", config.grpcCommit, `${key} metadata mismatch:`);
 	assertMetadataField(metadata, "toolchain.vcpkgCommit", config.vcpkgCommit, `${key} metadata mismatch:`);
+	assertMetadataField(metadata, "buildInputs.nodeVersion", config.nodeVersion, `${key} metadata mismatch:`);
+	assertMetadataField(metadata, "buildInputs.actionPins", config.workflowPins, `${key} metadata mismatch:`);
+	assertMetadataField(metadata, "buildInputs.hostToolchain", config.hostToolchain, `${key} metadata mismatch:`);
 }
 
 function readArchiveDigest(path, label) {
@@ -640,12 +742,19 @@ function main(argv) {
 		const outputPath = argv.includes("--github-output") ? parseOption(argv, "--github-output") : "";
 		if (outputPath) {
 			appendFileSync(outputPath, `matrix=${JSON.stringify(result.matrix)}\n`);
+			appendFileSync(outputPath, `node_version=${config.nodeVersion}\n`);
 			appendFileSync(outputPath, `localai_commit=${config.localaiCommit}\n`);
 			appendFileSync(outputPath, `protocol_revision=${config.protocolRevision}\n`);
 			appendFileSync(outputPath, `grpc_commit=${config.grpcCommit}\n`);
 			appendFileSync(outputPath, `vcpkg_commit=${config.vcpkgCommit}\n`);
 			appendFileSync(outputPath, `go_version=${config.toolchain.goVersion}\n`);
 			appendFileSync(outputPath, `cmake_version=${config.toolchain.cmakeVersion}\n`);
+			appendFileSync(outputPath, `protobuf_version=${config.toolchain.protobufVersion}\n`);
+			appendFileSync(outputPath, `grpc_version=${config.toolchain.grpcVersion}\n`);
+			appendFileSync(outputPath, `macos_make_formula_commit=${config.hostToolchain.macos.makeFormulaCommit}\n`);
+			appendFileSync(outputPath, `macos_make_version=${config.hostToolchain.macos.makeVersion}\n`);
+			appendFileSync(outputPath, `windows_msys_packages=${config.hostToolchain.windows.msysPackages.join(" ")}\n`);
+			appendFileSync(outputPath, `windows_vcpkg_triplet=${config.hostToolchain.windows.vcpkgTriplet}\n`);
 		}
 		process.stdout.write(`LOCALAI_BACKEND_ARTIFACT_INPUTS_OK combinations=${result.matrix.include.length}\n`);
 		return;

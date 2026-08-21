@@ -16,15 +16,27 @@ jobs:
     runs-on: ubuntu-24.04
     outputs:
       matrix: ${{ steps.validate.outputs.matrix }}
+      node_version: ${{ steps.validate.outputs.node_version }}
       localai_commit: ${{ steps.validate.outputs.localai_commit }}
       protocol_revision: ${{ steps.validate.outputs.protocol_revision }}
       grpc_commit: ${{ steps.validate.outputs.grpc_commit }}
       vcpkg_commit: ${{ steps.validate.outputs.vcpkg_commit }}
       go_version: ${{ steps.validate.outputs.go_version }}
       cmake_version: ${{ steps.validate.outputs.cmake_version }}
+      protobuf_version: ${{ steps.validate.outputs.protobuf_version }}
+      grpc_version: ${{ steps.validate.outputs.grpc_version }}
+      macos_make_formula_commit: ${{ steps.validate.outputs.macos_make_formula_commit }}
+      macos_make_version: ${{ steps.validate.outputs.macos_make_version }}
+      windows_msys_packages: ${{ steps.validate.outputs.windows_msys_packages }}
+      windows_vcpkg_triplet: ${{ steps.validate.outputs.windows_vcpkg_triplet }}
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+      - name: Set up the pinned Node tool
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 22.14.0
 
       - name: Validate the closed matrix and immutable pins
         id: validate
@@ -45,17 +57,19 @@ jobs:
       TARGET_ID: ${{ matrix.target }}
       BUILD_TYPE: ${{ matrix.build_type }}
       GRPC_COMMIT: ${{ needs.validate-inputs.outputs.grpc_commit }}
+      PROTOBUF_VERSION: ${{ needs.validate-inputs.outputs.protobuf_version }}
+      GRPC_VERSION: ${{ needs.validate-inputs.outputs.grpc_version }}
       BACKEND_SOURCE_COMMIT: ${{ matrix.source_commit }}
       LOCALAI_ARTIFACT_CONFIG: ${{ github.workspace }}/you-agent-factory/.github/localai-backend-artifacts.json
       SOURCE_PATH: ${{ matrix.source_path }}
     steps:
       - name: Check out repository sources
-        uses: actions/checkout@v4
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           path: you-agent-factory
 
       - name: Check out pinned LocalAI
-        uses: actions/checkout@v4
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           repository: mudler/LocalAI
           ref: ${{ needs.validate-inputs.outputs.localai_commit }}
@@ -65,15 +79,20 @@ jobs:
 
       - name: Check out pinned Windows dependency manager
         if: runner.os == 'Windows'
-        uses: actions/checkout@v4
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           repository: microsoft/vcpkg
           ref: ${{ needs.validate-inputs.outputs.vcpkg_commit }}
           path: vcpkg
           fetch-depth: 1
 
+      - name: Set up the pinned Node tool
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: ${{ needs.validate-inputs.outputs.node_version }}
+
       - name: Set up Go at the pinned tool version
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5
         with:
           go-version: ${{ needs.validate-inputs.outputs.go_version }}
           cache: false
@@ -83,33 +102,25 @@ jobs:
         with:
           cmakeVersion: ${{ needs.validate-inputs.outputs.cmake_version }}
 
-      - name: Install Linux build tools
-        if: runner.os == 'Linux'
-        shell: bash
-        run: |
-          set -euo pipefail
-          sudo apt-get update
-          sudo apt-get install --no-install-recommends -y build-essential ninja-build pkg-config
-
       - name: Install GNU Make on Apple Silicon
         if: runner.os == 'macOS'
         shell: bash
         run: |
           set -euo pipefail
-          brew install make
+          export HOMEBREW_NO_AUTO_UPDATE=1
+          formula="https://raw.githubusercontent.com/Homebrew/homebrew-core/${{ needs.validate-inputs.outputs.macos_make_formula_commit }}/Formula/m/make.rb"
+          brew install "$formula"
+          observed="$(gmake --version | sed -n '1s/.* //p')"
+          test "$observed" = "${{ needs.validate-inputs.outputs.macos_make_version }}"
           echo "/opt/homebrew/opt/make/libexec/gnubin" >> "$GITHUB_PATH"
 
       - name: Set up the pinned Windows build environment
         if: runner.os == 'Windows'
-        uses: msys2/setup-msys2@v2
+        uses: msys2/setup-msys2@fb197b72ce45fb24f17bf3f807a388985654d1f2
         with:
           msystem: MINGW64
-          update: true
-          install: >-
-            make
-            mingw-w64-x86_64-cmake
-            mingw-w64-x86_64-toolchain
-            mingw-w64-x86_64-ninja
+          update: false
+          install: ${{ needs.validate-inputs.outputs.windows_msys_packages }}
 
       - name: Install pinned Windows C++ dependencies
         if: runner.os == 'Windows'
@@ -117,9 +128,10 @@ jobs:
         working-directory: vcpkg
         run: |
           .\bootstrap-vcpkg.bat -disableMetrics
-          .\vcpkg.exe install grpc:x64-mingw-dynamic protobuf:x64-mingw-dynamic abseil:x64-mingw-dynamic
+          $overlayTriplets = Join-Path (Get-Location) 'triplets\community'
+          .\vcpkg.exe install grpc:${{ needs.validate-inputs.outputs.windows_vcpkg_triplet }} protobuf:${{ needs.validate-inputs.outputs.windows_vcpkg_triplet }} abseil:${{ needs.validate-inputs.outputs.windows_vcpkg_triplet }} --overlay-triplets=$overlayTriplets
           "VCPKG_ROOT=$((Get-Location).Path)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-          "VCPKG_TRIPLET=x64-mingw-dynamic" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "VCPKG_TRIPLET=${{ needs.validate-inputs.outputs.windows_vcpkg_triplet }}" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
       - name: Verify the pinned host and source provenance
         working-directory: you-agent-factory
@@ -171,7 +183,7 @@ jobs:
           if ((Get-Item -LiteralPath $metadata).Length -le 0) { throw 'Windows backend metadata is empty' }
 
       - name: Upload one verified matrix-leg artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: localai-backend-${{ matrix.backend }}-${{ matrix.target }}-${{ matrix.source_commit }}
           path: you-agent-factory/artifacts/*
@@ -190,12 +202,12 @@ jobs:
       pin_fingerprint: ${{ steps.join.outputs.pin_fingerprint }}
     steps:
       - name: Check out repository sources
-        uses: actions/checkout@v4
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           ref: ${{ github.sha }}
 
       - name: Download every successful matrix-leg result
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
         with:
           pattern: localai-backend-*
           path: .artifacts/matrix
@@ -217,7 +229,7 @@ jobs:
             --github-output "$GITHUB_OUTPUT"
 
       - name: Upload the complete validated publication bundle
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: localai-backend-release-${{ steps.join.outputs.release_tag }}
           path: .artifacts/release/*
@@ -234,7 +246,7 @@ jobs:
       contents: write
     steps:
       - name: Download the complete validated publication bundle
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
         with:
           name: localai-backend-release-${{ needs.join.outputs.release_tag }}
           path: .artifacts/release
@@ -248,16 +260,59 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+
+          resolve_tag_target() {
+            local response object_type object_sha depth
+            response="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$1")"
+            for depth in 1 2 3 4; do
+              object_type="$(jq -r '.object.type // empty' <<<"$response")"
+              object_sha="$(jq -r '.object.sha // empty' <<<"$response")"
+              case "$object_type" in
+                commit)
+                  printf '%s\n' "$object_sha"
+                  return 0
+                  ;;
+                tag)
+                  response="$(gh api "repos/$GITHUB_REPOSITORY/git/tags/$object_sha")"
+                  ;;
+                *)
+                  return 1
+                  ;;
+              esac
+            done
+            return 1
+          }
+
           if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             echo "immutable backend release already exists: $RELEASE_TAG" >&2
             exit 1
           fi
+
+          if gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$RELEASE_TAG" >/dev/null 2>&1; then
+            if ! existing_tag_target="$(resolve_tag_target "$RELEASE_TAG")"; then
+              echo "immutable backend tag $RELEASE_TAG exists but its target could not be resolved" >&2
+              exit 1
+            fi
+            if [[ "$existing_tag_target" != "$GITHUB_SHA" ]]; then
+              echo "immutable backend tag $RELEASE_TAG points to $existing_tag_target, expected $GITHUB_SHA" >&2
+              exit 1
+            fi
+            echo "reusing existing immutable tag $RELEASE_TAG at $GITHUB_SHA"
+          fi
+
           gh release create "$RELEASE_TAG" \
             --repo "$GITHUB_REPOSITORY" \
             --target "$GITHUB_SHA" \
             --draft \
             --title "Pinned LocalAI backends $RELEASE_TAG" \
             --notes "Complete nine-platform backend publication. The release remains draft until every archive and manifest asset is uploaded."
+
+          created_tag_target="$(resolve_tag_target "$RELEASE_TAG")"
+          if [[ "$created_tag_target" != "$GITHUB_SHA" ]]; then
+            echo "release tag $RELEASE_TAG resolved to $created_tag_target after creation, expected $GITHUB_SHA" >&2
+            exit 1
+          fi
+
           gh release upload "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" .artifacts/release/*
           release_id="$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/$RELEASE_TAG" --jq '.id')"
           printf '{"draft":false}\n' | gh api --method PATCH "repos/$GITHUB_REPOSITORY/releases/$release_id" --input - >/dev/null

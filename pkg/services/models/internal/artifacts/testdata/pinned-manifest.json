@@ -17,7 +17,7 @@
     "toolchain": {
       "goVersion": "1.25.4",
       "cmakeVersion": "3.31.10",
-      "protobufVersion": "27.1",
+      "protobufVersion": "24.4",
       "grpcVersion": "1.59.0",
       "grpcCommit": "08cc1787de022069135004adfdd17938b5062319",
       "vcpkgCommit": "7f3781e19cc7d4e4882a4caec01668c6f7b5c163"

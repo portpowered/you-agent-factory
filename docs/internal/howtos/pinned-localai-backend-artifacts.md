@@ -19,7 +19,8 @@ The file contains these input groups:
 | LocalAI source | `localaiRepository`, `localaiCommit` | Identifies the immutable LocalAI checkout. |
 | Protocol | `protocolPath`, `protocolRevision` | Identifies the pinned gRPC protocol blob. |
 | Backend sources | `backends[].sourceRepository`, `backends[].sourceCommit`, `backends[].sourcePinVariable` | Identifies each backend source and its LocalAI Makefile pin. |
-| Build tools | `grpcCommit`, `vcpkgCommit`, `toolchain` | Identifies external build inputs. |
+| Build tools | `grpcCommit`, `vcpkgCommit`, `toolchain`, `nodeVersion` | Identifies external build inputs and the validation runtime. |
+| Workflow and host pins | `workflowPins`, `hostToolchain` | Pins GitHub Actions revisions and the native package/tool versions used on each runner. |
 | Targets | `targets` | Defines the closed `darwin-arm64`, `linux-amd64`, and `windows-amd64` set. |
 
 The workflow is
@@ -29,6 +30,16 @@ The workflow validates the exact three-backend by three-target matrix. It also
 checks out the pinned source, verifies the protocol blob, and checks each
 backend Makefile pin before building.
 
+The llama.cpp package contract follows the pinned LocalAI checkout: the source
+Makefile is `backend/cpp/llama-cpp/Makefile`, its gRPC dependency is
+`backend/cpp/grpc`, and the `../../grpc` recursive build path resolves to that
+directory. The CPU package target produces `llama-cpp-cpu-all`; that is the
+payload name recorded in the config and metadata. Linux uses the upstream
+package target, Darwin stages the Mach-O binary and `.dylib` files without the
+Linux-loader packaging branch, and Windows builds with the static
+`x64-mingw-static` vcpkg triplet before recursively staging and verifying its
+remaining DLL closure.
+
 ## Update procedure
 
 1. Open a dependency PR for the replacement pin.
@@ -37,8 +48,9 @@ backend Makefile pin before building.
    `.github/localai-backend-artifacts.json`.
 
 3. Use immutable 40-character lowercase commits for source and dependency
-   commit fields. Use exact numeric versions for toolchain fields. Use the
-   protocol blob SHA for `protocolRevision`.
+   commit fields and immutable full-SHA GitHub Action revisions in
+   `workflowPins`. Use exact numeric versions for toolchain and host package
+   fields. Use the protocol blob SHA for `protocolRevision`.
 
 4. Keep the backend and target identifiers unchanged. Do not add a backend,
    target, runner, or accelerator in this procedure.
@@ -54,6 +66,11 @@ backend Makefile pin before building.
 
    Confirm that validation prints
    `LOCALAI_BACKEND_ARTIFACT_INPUTS_OK combinations=9`.
+
+   Do not replace the exact Linux, macOS, or MSYS2 host versions with floating
+   package installs. The workflow verifies the Linux runner image, installs
+   the macOS GNU Make formula from its pinned Homebrew commit, and requests
+   the exact MSYS2 package versions from the manifest.
 
 6. Run the fixture-backed manifest and compatibility checks:
 

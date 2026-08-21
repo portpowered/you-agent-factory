@@ -75,11 +75,13 @@ test("each target payload verifier checks the native executable identity", async
 	const linux = Buffer.alloc(32);
 	linux[0] = 0x7f;
 	linux.write("ELF", 1, "ascii");
+	linux[4] = 2;
+	linux[5] = 1;
 	linux[18] = 0x3e;
 	const linuxRoot = join(root, "linux");
 	await mkdir(linuxRoot);
-	await writeFile(join(linuxRoot, "grpc-server"), linux);
-	assert.equal(verifyPayload({ packageRoot: linuxRoot, binary: "grpc-server", targetId: "linux-amd64" }).bytes, 32);
+	await writeFile(join(linuxRoot, "llama-cpp-cpu-all"), linux);
+	assert.equal(verifyPayload({ packageRoot: linuxRoot, binary: "llama-cpp-cpu-all", targetId: "linux-amd64" }).bytes, 32);
 
 	const darwin = Buffer.alloc(32);
 	darwin.writeUInt32LE(0xfeedfacf, 0);
@@ -88,6 +90,32 @@ test("each target payload verifier checks the native executable identity", async
 	await mkdir(darwinRoot);
 	await writeFile(join(darwinRoot, "vibevoice-cpp"), darwin);
 	assert.equal(verifyPayload({ packageRoot: darwinRoot, binary: "vibevoice-cpp", targetId: "darwin-arm64" }).bytes, 32);
+
+	const universalRoot = join(root, "darwin-universal");
+	await mkdir(universalRoot);
+	const universal = Buffer.alloc(8 + 2 * 20 + 1);
+	universal.writeUInt32BE(0xcafebabe, 0);
+	universal.writeUInt32BE(2, 4);
+	universal.writeUInt32BE(0x01000007, 8);
+	universal.writeUInt32BE(0x0100000c, 28);
+	universal.writeUInt32BE(48, 36);
+	universal.writeUInt32BE(1, 40);
+	await writeFile(join(universalRoot, "vibevoice-cpp"), universal);
+	assert.equal(verifyPayload({ packageRoot: universalRoot, binary: "vibevoice-cpp", targetId: "darwin-arm64" }).bytes, universal.length);
+
+	const x86UniversalRoot = join(root, "darwin-x86-universal");
+	await mkdir(x86UniversalRoot);
+	const x86Universal = Buffer.alloc(8 + 20 + 1);
+	x86Universal.writeUInt32BE(0xcafebabe, 0);
+	x86Universal.writeUInt32BE(1, 4);
+	x86Universal.writeUInt32BE(0x01000007, 8);
+	x86Universal.writeUInt32BE(28, 16);
+	x86Universal.writeUInt32BE(1, 20);
+	await writeFile(join(x86UniversalRoot, "vibevoice-cpp"), x86Universal);
+	assert.throws(
+		() => verifyPayload({ packageRoot: x86UniversalRoot, binary: "vibevoice-cpp", targetId: "darwin-arm64" }),
+		/arm64 Darwin Mach-O/,
+	);
 });
 
 test("the validation CLI emits a matrix output suitable for GitHub Actions", async (t) => {
@@ -100,6 +128,9 @@ test("the validation CLI emits a matrix output suitable for GitHub Actions", asy
 	const outputText = await readFile(output, "utf8");
 	assert.match(outputText, /^matrix=\{"include":\[/m);
 	assert.match(outputText, /localai_commit=b224c96db6f4b87306a33a808650bfce63b12588/);
+	assert.match(outputText, /protobuf_version=24\.4/);
+	assert.match(outputText, /windows_msys_packages=make=4\.4\.1-3/);
+	assert.match(outputText, /windows_vcpkg_triplet=x64-mingw-static/);
 	assert.match(result.stdout, /LOCALAI_BACKEND_ARTIFACT_INPUTS_OK combinations=9/);
 });
 
@@ -124,6 +155,7 @@ function metadataFixture(backend, target) {
 		},
 		protocol: { path: config.protocolPath, revision: config.protocolRevision },
 		toolchain: { ...config.toolchain, grpcCommit: config.grpcCommit, vcpkgCommit: config.vcpkgCommit },
+		buildInputs: { nodeVersion: config.nodeVersion, actionPins: config.workflowPins, hostToolchain: config.hostToolchain },
 		payload: { binary: backend.binary, makeTarget: backend.makeTarget },
 	};
 }
@@ -192,6 +224,33 @@ test("the join rejects missing and unexpected matrix results", async (t) => {
 		() => createManifest({ config, artifactDirectory: extraRoot, repository: "portpowered/infinite-you" }),
 		/exactly the nine archives and nine provenance sidecars/,
 	);
+});
+
+test("the workflow uses immutable actions, package inputs, and the pinned tag guard", async () => {
+	const workflow = await readFile(".github/workflows/localai-backend-artifacts.yml", "utf8");
+	for (const revision of Object.values(config.workflowPins)) assert.match(workflow, new RegExp(`@${revision}`));
+	assert.doesNotMatch(workflow, /uses:\s+[^\n]+@(v\d|main|master|latest)\b/);
+	assert.doesNotMatch(workflow, /update:\s*true/);
+	assert.doesNotMatch(workflow, /apt-get/);
+	assert.doesNotMatch(workflow, /brew install make\b/);
+	assert.match(workflow, /windows_vcpkg_triplet/);
+	assert.match(
+		workflow,
+		/vcpkg\.exe install grpc:\$\{\{ needs\.validate-inputs\.outputs\.windows_vcpkg_triplet \}\}[^\n]*--overlay-triplets=\$overlayTriplets/,
+	);
+	assert.match(workflow, /git\/ref\/tags/);
+	assert.match(workflow, /git\/tags/);
+	assert.match(workflow, /exists but its target could not be resolved/);
+	assert.equal(
+		config.backends.find(({ id }) => id === "localai-llamacpp").binary,
+		"llama-cpp-cpu-all",
+	);
+	const buildScript = await readFile("scripts/build-localai-backend-artifact.sh", "utf8");
+	assert.match(buildScript, /backend\/cpp\/grpc/);
+	assert.doesNotMatch(buildScript, /backend\/grpc/);
+	assert.match(buildScript, /VCPKG_OVERLAY_TRIPLETS/);
+	assert.match(buildScript, /grpc-server/);
+	assert.match(buildScript, /llama-cpp-cpu-all/);
 });
 
 test("manifest verification rejects bytes tampered after manifest creation", async (t) => {
