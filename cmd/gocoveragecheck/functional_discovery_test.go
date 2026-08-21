@@ -156,7 +156,7 @@ func TestDiscoverFunctionalTestInventoryParallelizesConcretePackageBatches(t *te
 	}
 }
 
-func TestResolveFunctionalTestPackagesWithMetadataUsesGoListIdentityAndGroupedMetadata(t *testing.T) {
+func TestResolveFunctionalTestPackagesWithMetadataUsesParallelCurrentTreeMetadata(t *testing.T) {
 	originalRunner := commandRunner
 	t.Cleanup(func() { commandRunner = originalRunner })
 
@@ -190,17 +190,11 @@ func TestSecond(t *testing.T) {}
 		mu.Lock()
 		invocations = append(invocations, invocation)
 		mu.Unlock()
-		if slices.Equal(invocation.args, []string{"list", functionalGoListErrorFlag, functionalGoListIdentityJSONFields, "-find", functionalTestPatterns[0]}) {
-			return strings.Join([]string{
-				marshalFunctionalGoListPackage(t, functionalGoListPackage{ImportPath: packagePath, Dir: packageDir}),
-				marshalFunctionalGoListPackage(t, functionalGoListPackage{ImportPath: secondPackagePath, Dir: secondPackageDir}),
-			}, "\n"), "", nil
-		}
 		if len(invocation.args) == 5 && invocation.args[0] == "list" && invocation.args[1] == functionalGoListErrorFlag && invocation.args[2] == functionalGoListJSONFields && invocation.args[3] == "-find" {
 			switch invocation.args[4] {
-			case packagePath + "/...":
+			case modulePath + "/tests/functional/metadata/...":
 				return marshalFunctionalGoListPackage(t, functionalGoListPackage{ImportPath: packagePath, Dir: packageDir, TestGoFiles: []string{"metadata_test.go"}}), "", nil
-			case secondPackagePath + "/...":
+			case modulePath + "/tests/functional/metadata-second/...":
 				return marshalFunctionalGoListPackage(t, functionalGoListPackage{ImportPath: secondPackagePath, Dir: secondPackageDir, TestGoFiles: []string{"second_test.go"}}), "", nil
 			}
 		}
@@ -218,8 +212,8 @@ func TestSecond(t *testing.T) {}
 	if len(listed) != 2 || listed[0].ImportPath != packagePath || !slices.Equal(listed[0].TestGoFiles, []string{"metadata_test.go"}) || listed[1].ImportPath != secondPackagePath || !slices.Equal(listed[1].TestGoFiles, []string{"second_test.go"}) {
 		t.Fatalf("listed metadata = %+v, want complete grouped build-selected metadata", listed)
 	}
-	if len(invocations) != 3 {
-		t.Fatalf("go list invocations = %d, want one identity and two grouped metadata queries: %+v", len(invocations), invocations)
+	if len(invocations) != 2 {
+		t.Fatalf("go list invocations = %d, want two parallel current-tree metadata queries: %+v", len(invocations), invocations)
 	}
 	for _, invocation := range invocations {
 		if invocation.name != "go" || invocation.dir != repoRoot {

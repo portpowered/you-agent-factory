@@ -132,6 +132,10 @@ func listFunctionalTestPackageMetadata(patterns []string, repoRoot string) ([]fu
 }
 
 func listFunctionalTestPackageMetadataFromPatterns(patterns []string, repoRoot string) ([]functionalGoListPackage, error) {
+	if slices.Equal(patterns, sortedUniqueStrings(functionalTestPatterns)) {
+		return listFunctionalTestPackageMetadataFromCurrentTree(repoRoot)
+	}
+
 	// Resolve package identities separately from test-file metadata. A wildcard
 	// metadata query makes one go list process inspect every test file before it
 	// returns. The identity query stays cheap; the metadata queries retain
@@ -168,6 +172,67 @@ func listFunctionalTestPackageMetadataFromPatterns(patterns []string, repoRoot s
 		return nil, err
 	}
 	return selectFunctionalPackageSet(functionalPaths, listedPackages)
+}
+
+func listFunctionalTestPackageMetadataFromCurrentTree(repoRoot string) ([]functionalGoListPackage, error) {
+	patterns, err := functionalCurrentTreeSearchPatterns(repoRoot)
+	if err != nil {
+		return nil, err
+	}
+	patternBatches := functionalCurrentTreeSearchPatternBatches(patterns, functionalDiscoveryMetadataMaxJobs)
+	listedPackages, err := listFunctionalTestPackageMetadataBatches(patternBatches, repoRoot)
+	if err != nil {
+		return nil, err
+	}
+	functionalPackages := make([]functionalGoListPackage, 0, len(listedPackages))
+	for _, pkg := range listedPackages {
+		if isFunctionalTestPackage(pkg.ImportPath) {
+			functionalPackages = append(functionalPackages, pkg)
+		}
+	}
+	if len(functionalPackages) == 0 {
+		return nil, errors.New("resolve go coverage lane: no packages matched")
+	}
+	return functionalPackages, nil
+}
+
+func functionalCurrentTreeSearchPatterns(repoRoot string) ([]string, error) {
+	functionalRoot := filepath.Join(repoRoot, "tests", "functional")
+	entries, err := os.ReadDir(functionalRoot)
+	if err != nil {
+		return nil, fmt.Errorf("resolve go coverage lane: read functional package root %q: %w", functionalRoot, err)
+	}
+
+	patterns := make([]string, 0, len(entries))
+	for _, entry := range entries {
+		if !entry.IsDir() || entry.Name() == "testdata" {
+			continue
+		}
+		patterns = append(patterns, modulePath+"/tests/functional/"+entry.Name()+"/...")
+	}
+	slices.Sort(patterns)
+	if len(patterns) == 0 {
+		return nil, errors.New("resolve go coverage lane: no functional package roots matched")
+	}
+	return patterns, nil
+}
+
+func functionalCurrentTreeSearchPatternBatches(patterns []string, maxJobs int) [][]string {
+	patterns = sortedUniqueStrings(patterns)
+	if len(patterns) == 0 || maxJobs < 1 {
+		return nil
+	}
+	if maxJobs > len(patterns) {
+		maxJobs = len(patterns)
+	}
+	batches := make([][]string, maxJobs)
+	for index, pattern := range patterns {
+		batches[index%maxJobs] = append(batches[index%maxJobs], pattern)
+	}
+	for _, batch := range batches {
+		slices.Sort(batch)
+	}
+	return batches
 }
 
 func functionalMetadataPatterns(packages []string) []string {
