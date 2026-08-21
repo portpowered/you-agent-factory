@@ -218,6 +218,10 @@
       "minimum": 86.00
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/services/costs/transports/http",
+      "minimum": 87.30
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/services/costs/wire",
       "minimum": 100.00
     },

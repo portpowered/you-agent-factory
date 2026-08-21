@@ -182,6 +182,10 @@ func openRuntime(
 			replayClose,
 		), nil
 	}
+	operatorSettingsPath, err := operatorConfigPath(configured.Session)
+	if err != nil {
+		return runtimeProducts{}, fmt.Errorf("resolve operator settings path for runtime transport: %w", err)
+	}
 	if clock == nil {
 		return runtimeProducts{}, fmt.Errorf("construct runtime scope: Factory Runtime clock is required")
 	}
@@ -478,6 +482,7 @@ func openRuntime(
 	opened.engine = startupRuntime.RuntimeService()
 	opened.application.Resources.Clock = clock
 	opened.application.Recordings = recordingsService
+	opened.application.OperatorSettingsPath = operatorSettingsPath
 	opened.execution.Recordings = recordingsService
 	return opened, nil
 }

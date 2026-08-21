@@ -1,0 +1,47 @@
+type: object
+additionalProperties: false
+required:
+  - provider
+  - model
+  - key
+  - status
+  - coverage
+properties:
+  provider:
+    type: string
+    description: Canonical provider identity, when known.
+  model:
+    type: string
+    description: Exact resolved model identity, when known.
+  key:
+    type: string
+    description: Stable provider/model pair key.
+  input_tokens:
+    type: integer
+    format: int64
+    minimum: 0
+  output_tokens:
+    type: integer
+    format: int64
+    minimum: 0
+  cached_input_tokens:
+    type: integer
+    format: int64
+    minimum: 0
+  reasoning_output_tokens:
+    type: integer
+    format: int64
+    minimum: 0
+  status:
+    type: string
+    enum:
+      - PRICED
+      - PARTIAL
+      - UNPRICED
+      - NO_USAGE
+    description: PRICED means all usage rows for this provider/model are valued; PARTIAL means some are valued; UNPRICED means usage exists but none is valued; NO_USAGE means this pair has no usage rows.
+  priced_subtotal:
+    type: string
+    description: Exact USD decimal subtotal; absent when no usage is priced.
+  coverage:
+    $ref: './CostsCoverage.yaml'

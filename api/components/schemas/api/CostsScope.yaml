@@ -1,0 +1,14 @@
+type: object
+additionalProperties: false
+required:
+  - kind
+properties:
+  kind:
+    type: string
+    enum:
+      - ALL_FACTORY_SESSIONS
+      - FACTORY_SESSION
+    description: Selection scope used to produce the report.
+  factory_session_id:
+    type: string
+    description: Selected Factory Session identity when kind is FACTORY_SESSION.

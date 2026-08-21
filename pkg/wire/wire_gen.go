@@ -532,7 +532,15 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	handler := http.NewHandler(httpAdapter, logger)
 	contentPreparation := work.NewContentPreparation()
 	requestPreparation := provideFactorySessionHTTPRequestPreparation(v69)
-	wireHttpRuntimeBinding, err := provideHTTPRuntimeBinding(factoryStatusProjector, handler, contentPreparation, v71, invocationWorkTypeService, requestPreparation)
+	runtimeMetricsQuery, err := provideFactoryVisualizationMetricsQuery(loggingLogger)
+	if err != nil {
+		return nil, err
+	}
+	costsQuery, err := provideCostsQuery(operatorsettingsService, runtimeMetricsQuery, loggingLogger)
+	if err != nil {
+		return nil, err
+	}
+	wireHttpRuntimeBinding, err := provideHTTPRuntimeBinding(factoryStatusProjector, handler, contentPreparation, v71, invocationWorkTypeService, requestPreparation, costsQuery)
 	if err != nil {
 		return nil, err
 	}
@@ -592,10 +600,6 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 		return nil, err
 	}
 	server := provideACPServer(loggingLogger, chatsessionsService, factoryTargetCatalogService, targetExecutionService, eventsService, wireAcpServerResolveHomeDir, responseBridge, v92)
-	runtimeMetricsQuery, err := provideFactoryVisualizationMetricsQuery(loggingLogger)
-	if err != nil {
-		return nil, err
-	}
 	commandOperations := cli.CommandOperations{
 		ObserveCLI:                        cliObserver,
 		NamedFactoryCatalog:               v,

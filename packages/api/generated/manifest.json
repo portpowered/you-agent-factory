@@ -228,7 +228,7 @@
         ],
         "formatVersion": "1.0.0",
         "itemId": "generated.openapi.openapi",
-        "sourceHash": "a58be3841c7469b93b8b0fa72725baba1af5f026b36cc48bb37bb86752042144",
+       "sourceHash": "a58be3841c7469b93b8b0fa72725baba1af5f026b36cc48bb37bb86752042144",
         "visibility": "public"
       },
       "family": "openapi",

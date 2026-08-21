@@ -1,0 +1,45 @@
+type: object
+additionalProperties: false
+required:
+  - status
+properties:
+  factory_session_id:
+    type: string
+  work_id:
+    type: string
+  dispatch_id:
+    type: string
+  worker_session_id:
+    type: string
+  provider:
+    type: string
+  model:
+    type: string
+  input_tokens:
+    type: integer
+    format: int64
+    minimum: 0
+  output_tokens:
+    type: integer
+    format: int64
+    minimum: 0
+  cached_input_tokens:
+    type: integer
+    format: int64
+    minimum: 0
+  reasoning_output_tokens:
+    type: integer
+    format: int64
+    minimum: 0
+  status:
+    type: string
+    enum:
+      - PRICED
+      - UNPRICED
+    description: PRICED means every measured token class has a configured rate; UNPRICED means the row is retained with its tokens but cannot be fully valued.
+  priced_amount:
+    type: string
+    description: Exact USD decimal amount; absent for UNPRICED rows and present as "0" for explicitly free usage.
+  reason:
+    type: string
+    description: Actionable reason when status is UNPRICED.

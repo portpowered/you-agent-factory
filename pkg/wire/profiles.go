@@ -26,6 +26,8 @@ import (
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	platformmetrics "github.com/portpowered/infinite-you/pkg/platform/metrics"
 	"github.com/portpowered/infinite-you/pkg/platform/runtimeartifact"
+	costs "github.com/portpowered/infinite-you/pkg/services/costs"
+	costshttp "github.com/portpowered/infinite-you/pkg/services/costs/transports/http"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorydefinitionshttp "github.com/portpowered/infinite-you/pkg/services/factory_definitions/transports/http"
@@ -880,12 +882,13 @@ func provideHTTPRuntimeBinding(
 	validation factorydefinitions.SubmittedDefinitionValidationOperation,
 	invocationWorkType factorydefinitions.InvocationWorkTypeService,
 	sessionRequests factorysessionshttp.RequestPreparation,
+	costsQuery costs.CostsQuery,
 ) (httpRuntimeBinding, error) {
-	if factoryStatusProjector == nil || providerSessionsHTTP == nil || modelsContent == nil || validation == nil || invocationWorkType == nil || sessionRequests == nil {
+	if factoryStatusProjector == nil || providerSessionsHTTP == nil || modelsContent == nil || validation == nil || invocationWorkType == nil || sessionRequests == nil || costsQuery == nil {
 		return nil, errors.New("construct HTTP runtime binding: owner adapters and boundary policies are required")
 	}
 	return func(opened factorysessionwire.OpenedApplicationRuntime) (http.Handler, error) {
-		return newHTTPRuntimeHandler(opened, factoryStatusProjector, providerSessionsHTTP, modelsContent, validation, invocationWorkType, sessionRequests)
+		return newHTTPRuntimeHandler(opened, factoryStatusProjector, providerSessionsHTTP, modelsContent, validation, invocationWorkType, sessionRequests, costsQuery)
 	}, nil
 }
 
@@ -897,6 +900,7 @@ func newHTTPRuntimeHandler(
 	validation factorydefinitions.SubmittedDefinitionValidationOperation,
 	invocationWorkType factorydefinitions.InvocationWorkTypeService,
 	sessionRequests factorysessionshttp.RequestPreparation,
+	costsQuery costs.CostsQuery,
 ) (http.Handler, error) {
 	if opened.FactoryRuntime == nil || opened.FactoryDefinitions == nil || opened.FactorySessions == nil || opened.LiveControl == nil {
 		return nil, errors.New("bind HTTP mappings: opened Factory Session roles are required")
@@ -910,7 +914,6 @@ func newHTTPRuntimeHandler(
 	if modelsHandler == nil {
 		return nil, errors.New("bind HTTP runtime: Models service, invoker, content preparation, and logger are required")
 	}
-
 	definitionMapping := factorydefinitionmapping.New(opened.FactoryDefinitions)
 	runtimeAPI := apisurface.NewRuntimeAPI(opened.FactoryRuntime, definitionMapping)
 	if _, ok := opened.FactoryRuntime.(interface {
@@ -968,9 +971,18 @@ func newHTTPRuntimeHandler(
 			), opened.Logger,
 		)
 	}
-	return transporthttp.NewServerWithRecordings(
+	costsAdapter := costshttp.NewAdapter(
+		costsQuery,
+		opened.Resources.Diagnostics.MetricsRootDir,
+		opened.OperatorSettingsPath,
+	)
+	costsHandler := costshttp.NewHandler(costsAdapter, opened.Logger)
+	if costsHandler == nil {
+		return nil, errors.New("bind HTTP runtime: Costs query and runtime paths are required")
+	}
+	return transporthttp.NewServerWithRecordingsAndCosts(
 		recordingsAdapter, sessionsHandler, workHandler, modelsHandler, providerSessionsHTTP,
-		factoryDefinitionsHandler, opened.Logger, workerSessionsHandler,
+		factoryDefinitionsHandler, opened.Logger, costsHandler, workerSessionsHandler,
 	).Handler(), nil
 }
 

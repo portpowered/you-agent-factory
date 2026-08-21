@@ -1,0 +1,39 @@
+type: object
+additionalProperties: false
+required:
+  - key
+  - status
+  - coverage
+properties:
+  key:
+    type: string
+    description: Stable dimension key for this rollup.
+  input_tokens:
+    type: integer
+    format: int64
+    minimum: 0
+  output_tokens:
+    type: integer
+    format: int64
+    minimum: 0
+  cached_input_tokens:
+    type: integer
+    format: int64
+    minimum: 0
+  reasoning_output_tokens:
+    type: integer
+    format: int64
+    minimum: 0
+  status:
+    type: string
+    enum:
+      - PRICED
+      - PARTIAL
+      - UNPRICED
+      - NO_USAGE
+    description: PRICED means all usage rows in the rollup are valued; PARTIAL means some are valued; UNPRICED means usage exists but none is valued; NO_USAGE means no canonical usage rows were encountered.
+  priced_subtotal:
+    type: string
+    description: Exact USD decimal subtotal; absent when no usage is priced.
+  coverage:
+    $ref: './CostsCoverage.yaml'

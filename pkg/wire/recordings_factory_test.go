@@ -81,7 +81,7 @@ func TestWireUsesPrecomposedRecordingsRuntimeAndMCPRoles(t *testing.T) {
 		t.Fatalf("buildServer(recordings root) = %v, %v; want owner-backed protocol server", server, err)
 	}
 
-	if _, err := provideHTTPRuntimeBinding(nil, nil, nil, nil, nil, nil); err == nil {
+	if _, err := provideHTTPRuntimeBinding(nil, nil, nil, nil, nil, nil, nil); err == nil {
 		t.Fatal("provideHTTPRuntimeBinding(nil roles) error = nil, want required-owner validation")
 	}
 }
@@ -89,7 +89,7 @@ func TestWireUsesPrecomposedRecordingsRuntimeAndMCPRoles(t *testing.T) {
 func TestHTTPRuntimeBindingRejectsMissingOpenedRoles(t *testing.T) {
 	t.Parallel()
 
-	_, err := newHTTPRuntimeHandler(factorysessionwire.OpenedApplicationRuntime{}, nil, nil, nil, nil, nil, nil)
+	_, err := newHTTPRuntimeHandler(factorysessionwire.OpenedApplicationRuntime{}, nil, nil, nil, nil, nil, nil, nil)
 	if err == nil || !strings.Contains(err.Error(), "opened Factory Session roles") {
 		t.Fatalf("newHTTPRuntimeHandler() error = %v, want missing opened roles", err)
 	}
@@ -99,7 +99,7 @@ func TestHTTPRuntimeBindingRejectsUnavailableModels(t *testing.T) {
 	t.Parallel()
 
 	opened := wireHTTPOpenedRuntime(&wireHTTPSessionsRole{})
-	_, err := newHTTPRuntimeHandler(opened, nil, nil, &wireHTTPContentRole{}, nil, nil, nil)
+	_, err := newHTTPRuntimeHandler(opened, nil, nil, &wireHTTPContentRole{}, nil, nil, nil, nil)
 	if err == nil || !strings.Contains(err.Error(), "Models service") {
 		t.Fatalf("newHTTPRuntimeHandler() error = %v, want missing Models service", err)
 	}
@@ -111,7 +111,7 @@ func TestHTTPRuntimeBindingRejectsMissingSessionStatusCapability(t *testing.T) {
 	opened := wireHTTPOpenedRuntime(&wireHTTPSessionsRole{})
 	opened.Models = &wireHTTPModelsRole{}
 	opened.ModelInvoker = &wireHTTPModelInvokerRole{}
-	_, err := newHTTPRuntimeHandler(opened, nil, nil, &wireHTTPContentRole{}, nil, nil, nil)
+	_, err := newHTTPRuntimeHandler(opened, nil, nil, &wireHTTPContentRole{}, nil, nil, nil, nil)
 	if err == nil || !strings.Contains(err.Error(), "session-scoped status observation") {
 		t.Fatalf("newHTTPRuntimeHandler() error = %v, want missing status capability", err)
 	}
@@ -123,7 +123,7 @@ func TestHTTPRuntimeBindingRejectsMissingLiveGatewayCapability(t *testing.T) {
 	opened := wireHTTPOpenedRuntime(&wireHTTPStatusOnlySessionsRole{})
 	opened.Models = &wireHTTPModelsRole{}
 	opened.ModelInvoker = &wireHTTPModelInvokerRole{}
-	_, err := newHTTPRuntimeHandler(opened, nil, nil, &wireHTTPContentRole{}, nil, nil, nil)
+	_, err := newHTTPRuntimeHandler(opened, nil, nil, &wireHTTPContentRole{}, nil, nil, nil, nil)
 	if err == nil || !strings.Contains(err.Error(), "live result gateway") {
 		t.Fatalf("newHTTPRuntimeHandler() error = %v, want missing live gateway", err)
 	}
