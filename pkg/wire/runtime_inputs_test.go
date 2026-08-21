@@ -21,6 +21,7 @@ import (
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factorysessionwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire"
 	"github.com/portpowered/infinite-you/pkg/services/work"
+	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
 	"go.uber.org/zap"
@@ -42,6 +43,39 @@ func (opening *recordingStdioOpening) OpenStdio(
 type testStdioApplication struct{}
 
 func (testStdioApplication) Run(context.Context) error { return nil }
+
+type workerSessionsObservationServiceStub struct {
+	workersessions.Service
+}
+
+type workerSessionsObservationGatewayStub struct {
+	factorysessions.Service
+	observation workersessions.ObservationService
+}
+
+func (stub *workerSessionsObservationGatewayStub) WorkerSessionsObservationForSession(
+	string,
+) workersessions.ObservationService {
+	return stub.observation
+}
+
+func TestWorkerSessionsScopeResolverForwardsObservationCapability(t *testing.T) {
+	t.Parallel()
+
+	expected := &workerSessionsObservationServiceStub{}
+	resolver := newWorkerSessionsFactorySessionScopeResolver(&workerSessionsObservationGatewayStub{
+		observation: expected,
+	})
+	provider, ok := resolver.(interface {
+		WorkerSessionsObservationForSession(string) workersessions.ObservationService
+	})
+	if !ok {
+		t.Fatal("Worker Sessions scope resolver does not expose the optional observation capability")
+	}
+	if got := provider.WorkerSessionsObservationForSession("factory-session-1"); got != expected {
+		t.Fatalf("forwarded observation service = %T, want %T", got, expected)
+	}
+}
 
 func TestStdioApplicationOpenerMapsOnlyInvocationEdgeValues(t *testing.T) {
 	t.Parallel()

@@ -571,3 +571,22 @@ func (resolver workerSessionsFactorySessionScopeResolver) ResolveWorkerSessionSc
 		IsDefault:   projection.Context.Session != nil && projection.Context.Session.IsDefault,
 	}, nil
 }
+
+// WorkerSessionsObservationForSession forwards the optional decorated read
+// capability through the composition-root adapter. The Worker Sessions HTTP
+// transport keeps only its narrow resolver contract; the Factory Sessions
+// service remains the owner of resolving an opened runtime's observation view.
+func (resolver workerSessionsFactorySessionScopeResolver) WorkerSessionsObservationForSession(
+	factorySessionID string,
+) workersessions.ObservationService {
+	if resolver.sessions == nil {
+		return nil
+	}
+	provider, ok := resolver.sessions.(interface {
+		WorkerSessionsObservationForSession(string) workersessions.ObservationService
+	})
+	if !ok {
+		return nil
+	}
+	return provider.WorkerSessionsObservationForSession(factorySessionID)
+}
