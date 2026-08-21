@@ -1,4 +1,4 @@
-package factory_visualization_test
+package runtime_metrics_test
 
 import (
 	"bytes"
