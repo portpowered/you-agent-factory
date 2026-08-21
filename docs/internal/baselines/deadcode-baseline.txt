@@ -38,16 +38,9 @@ pkg/services/factory_sessions/transports/cli/sessionexecution/run.go: unreachabl
 pkg/services/factory_sessions/transports/cli/sessionexecution/run.go: unreachable func: writeResultFailureHuman
 pkg/services/factory_sessions/transports/mcp/inventory_boundary.go: unreachable func: VerifyProjectedMCPBoundaryInventories
 pkg/services/factory_sessions/transports/mcp/registry_test.go: unreachable func: writeWorkflow
-pkg/services/models/internal/legacyhost/catalog_host.go: unreachable func: CatalogHost.InspectAssetReadiness
-pkg/services/models/internal/legacyhost/catalog_host.go: unreachable func: CatalogHost.ResolveIdentity
-pkg/services/models/internal/legacyhost/contract.go: unreachable func: cloneOperations
 pkg/services/models/internal/local/puller.go: unreachable func: NewDeferredScopedAssetPuller
 pkg/services/models/internal/services/runtime_host/internal/service/wired.go: unreachable func: LeasesOwner
 pkg/services/models/transports/cli/non_ready_invoke_test.go: unreachable func: nonReadyLocalModelFactoryConfig
-pkg/services/operator_settings/wire/wire.go: unreachable func: NewService
-pkg/services/provider_sessions/internal/services/codex_reader/internal/service/detail.go: unreachable func: ParseSummary
-pkg/services/provider_sessions/internal/services/cursor_reader/internal/cursor/inspection.go: unreachable func: inspection.canceled
-pkg/services/provider_sessions/internal/services/cursor_reader/internal/cursor/store_load.go: unreachable func: LoadSessionFromStoreDB
 pkg/services/recordings/internal/replay/event_artifact.go: unreachable func: runStartedFactorySnapshotFromEvent
 pkg/services/recordings/internal/replay/factory_snapshot.go: unreachable func: runtimeWorkersByName
 pkg/services/recordings/internal/replay/recorder.go: unreachable func: Recorder.BindRecordingLifecycle

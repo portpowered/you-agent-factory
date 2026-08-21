@@ -21,12 +21,6 @@ type ParsedDetails struct {
 	Transcript []providersessions.TranscriptEntry
 }
 
-// ParseSummary parses a Codex JSONL stream into its inspection summary.
-func ParseSummary(reader io.Reader) (providersessions.ParseSummary, error) {
-	parsed, err := parseCodexSessionDetails(context.Background(), reader)
-	return parsed.Summary, err
-}
-
 // ParseDetails parses a Codex JSONL stream into summary and transcript data.
 func ParseDetails(reader io.Reader) (ParsedDetails, error) {
 	parsed, err := parseCodexSessionDetails(context.Background(), reader)

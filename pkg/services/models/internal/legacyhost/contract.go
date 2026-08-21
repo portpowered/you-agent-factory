@@ -346,16 +346,6 @@ func mergeDiagnostics(
 	return diagnostics
 }
 
-func cloneOperations(operations []managedruntime.Operation) []managedruntime.Operation {
-	cloned := make([]managedruntime.Operation, len(operations))
-	for index, operation := range operations {
-		cloned[index] = operation
-		cloned[index].Inputs = cloneOperationSlots(operation.Inputs)
-		cloned[index].Outputs = cloneOperationSlots(operation.Outputs)
-	}
-	return cloned
-}
-
 func sourceDiagnostics(identity Identity) map[string]string {
 	if identity.SourceKind == "" {
 		return nil

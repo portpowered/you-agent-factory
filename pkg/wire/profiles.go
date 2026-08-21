@@ -284,12 +284,14 @@ func provideOperatorSettingsService(
 	providersRoot providers.Service,
 	logger logging.Logger,
 ) (operatorsettings.Service, error) {
-	return settingswire.NewService(
-		files,
-		createTemp,
-		decode,
-		encode,
-		providerCatalog,
+	return settingswire.NewServiceFromConfigDocument(
+		operatorsettings.ConfigDocumentService{
+			Files:      files,
+			CreateTemp: createTemp,
+			Providers:  providerCatalog,
+			Decoder:    decode,
+			Encoder:    encode,
+		},
 		providersRoot,
 		idGenerator,
 		logger,

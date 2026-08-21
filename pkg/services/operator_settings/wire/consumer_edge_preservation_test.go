@@ -108,14 +108,14 @@ func newPreservationWireService(t *testing.T) operatorsettings.Service {
 	t.Helper()
 
 	providersRoot := internaltestproviders.StandardCatalog()
-	service, err := settingswire.NewService(
-		platformfilesystem.Local{},
-		func(dir, pattern string) (operatorsettings.TemporaryFile, error) {
-			return os.CreateTemp(dir, pattern)
+	service, err := settingswire.NewServiceFromConfigDocument(
+		operatorsettings.ConfigDocumentService{
+			Files:      platformfilesystem.Local{},
+			CreateTemp: func(dir, pattern string) (operatorsettings.TemporaryFile, error) { return os.CreateTemp(dir, pattern) },
+			Decoder:    globalconfigmapping.Decode,
+			Encoder:    globalconfigmapping.Encode,
+			Providers:  preservationProviderCatalog,
 		},
-		globalconfigmapping.Decode,
-		globalconfigmapping.Encode,
-		preservationProviderCatalog,
 		providersRoot,
 		testIDGenerator(),
 		logging.NoopLogger{},
