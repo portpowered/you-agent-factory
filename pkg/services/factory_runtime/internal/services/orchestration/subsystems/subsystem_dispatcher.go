@@ -22,15 +22,16 @@ import (
 // DispatcherSubsystem fires transitions by consuming input tokens and producing
 // WorkDispatches for worker executors. It runs at TickGroup 5 (after Scheduler).
 type DispatcherSubsystem struct {
-	state         *state.Net
-	sched         scheduler.Scheduler
-	wfCtx         *factory_context.FactoryContext
-	logger        logging.Logger
-	evaluator     *scheduler.EnablementEvaluator
-	runtimeConfig interfaces.RuntimeDefinitionLookup
-	now           func() time.Time
-	newID         factoryruntime.IDGenerator
-	replayIDs     factoryruntime.ReplayDispatchIDResolver
+	state               *state.Net
+	sched               scheduler.Scheduler
+	wfCtx               *factory_context.FactoryContext
+	logger              logging.Logger
+	evaluator           *scheduler.EnablementEvaluator
+	runtimeConfig       interfaces.RuntimeDefinitionLookup
+	now                 func() time.Time
+	newID               factoryruntime.IDGenerator
+	replayIDs           factoryruntime.ReplayDispatchIDResolver
+	seededReplayWorkIDs map[string]struct{}
 }
 
 // NewDispatcher creates a new DispatcherSubsystem.
@@ -44,6 +45,42 @@ func NewDispatcher(
 	newID factoryruntime.IDGenerator,
 	replayIDs ...factoryruntime.ReplayDispatchIDResolver,
 ) *DispatcherSubsystem {
+	var replayIDResolver factoryruntime.ReplayDispatchIDResolver
+	if len(replayIDs) > 0 {
+		replayIDResolver = replayIDs[0]
+	}
+	return newDispatcher(n, sched, wfCtx, logger, runtimeConfig, now, newID, replayIDResolver, nil)
+}
+
+// NewDispatcherWithSeededReplay creates a dispatcher that preserves restored
+// Work at its recorded place when replay has no matching recorded dispatch.
+// The replay resolver still allows recorded dispatches, including pending
+// human-approval dispatches, to proceed normally.
+func NewDispatcherWithSeededReplay(
+	n *state.Net,
+	sched scheduler.Scheduler,
+	wfCtx *factory_context.FactoryContext,
+	logger logging.Logger,
+	runtimeConfig interfaces.RuntimeDefinitionLookup,
+	now func() time.Time,
+	newID factoryruntime.IDGenerator,
+	replayIDs factoryruntime.ReplayDispatchIDResolver,
+	seededRestoredWorkIDs map[string]struct{},
+) *DispatcherSubsystem {
+	return newDispatcher(n, sched, wfCtx, logger, runtimeConfig, now, newID, replayIDs, seededRestoredWorkIDs)
+}
+
+func newDispatcher(
+	n *state.Net,
+	sched scheduler.Scheduler,
+	wfCtx *factory_context.FactoryContext,
+	logger logging.Logger,
+	runtimeConfig interfaces.RuntimeDefinitionLookup,
+	now func() time.Time,
+	newID factoryruntime.IDGenerator,
+	replayIDs factoryruntime.ReplayDispatchIDResolver,
+	seededRestoredWorkIDs map[string]struct{},
+) *DispatcherSubsystem {
 	l := logging.EnsureLogger(logger)
 	if now == nil {
 		panic("Factory Runtime dispatcher clock is required")
@@ -52,16 +89,15 @@ func NewDispatcher(
 		panic("Factory Runtime dispatcher ID generator is required")
 	}
 	dispatcher := &DispatcherSubsystem{
-		state:         n,
-		sched:         sched,
-		wfCtx:         wfCtx,
-		logger:        l,
-		runtimeConfig: runtimeConfig,
-		now:           now,
-		newID:         newID,
-	}
-	if len(replayIDs) > 0 {
-		dispatcher.replayIDs = replayIDs[0]
+		state:               n,
+		sched:               sched,
+		wfCtx:               wfCtx,
+		logger:              l,
+		runtimeConfig:       runtimeConfig,
+		now:                 now,
+		newID:               newID,
+		replayIDs:           replayIDs,
+		seededReplayWorkIDs: cloneWorkIDSet(seededRestoredWorkIDs),
 	}
 	dispatcher.evaluator = scheduler.NewEnablementEvaluator(
 		l,
@@ -158,10 +194,53 @@ func (d *DispatcherSubsystem) dispatchRecordFromDecision(snapshot *interfaces.En
 	if !ok {
 		return interfaces.DispatchRecord{}, false
 	}
-	consumeMutations := consumeMutationsForDecision(decision.TransitionID, decision.ConsumeTokens, inputTokens, claimedTokens)
 	dispatch := d.buildWorkDispatch(snapshot, decision, tr, inputTokens)
+	if d.shouldSuppressUnrecordedSeededReplayDispatch(dispatch, inputTokens) {
+		d.logger.Info(
+			"dispatcher: preserving seeded replay Work without an unrecorded dispatch",
+			"transitionID", decision.TransitionID,
+			"workIDs", dispatch.Execution.WorkIDs,
+		)
+		return interfaces.DispatchRecord{}, false
+	}
+	consumeMutations := consumeMutationsForDecision(decision.TransitionID, decision.ConsumeTokens, inputTokens, claimedTokens)
 	d.logDispatch(decision, inputTokens, dispatch)
 	return interfaces.DispatchRecord{Dispatch: dispatch, Mutations: consumeMutations}, true
+}
+
+func (d *DispatcherSubsystem) shouldSuppressUnrecordedSeededReplayDispatch(
+	dispatch work.WorkDispatch,
+	inputTokens []factorytoken.Token,
+) bool {
+	if d.replayIDs == nil || len(d.seededReplayWorkIDs) == 0 {
+		return false
+	}
+	hasSeededWork := false
+	for _, token := range inputTokens {
+		if token.Color.DataType == workers.DataTypeResource {
+			continue
+		}
+		if _, seeded := d.seededReplayWorkIDs[token.Color.WorkID]; !seeded {
+			return false
+		}
+		hasSeededWork = true
+	}
+	if !hasSeededWork {
+		return false
+	}
+	_, recorded := d.replayIDs.DispatchIDForDispatch(dispatch)
+	return !recorded
+}
+
+func cloneWorkIDSet(values map[string]struct{}) map[string]struct{} {
+	if len(values) == 0 {
+		return nil
+	}
+	clone := make(map[string]struct{}, len(values))
+	for workID := range values {
+		clone[workID] = struct{}{}
+	}
+	return clone
 }
 
 func (d *DispatcherSubsystem) collectDecisionTokens(snapshot *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], decision interfaces.FiringDecision, claimedTokens map[string]bool) ([]factorytoken.Token, bool) {

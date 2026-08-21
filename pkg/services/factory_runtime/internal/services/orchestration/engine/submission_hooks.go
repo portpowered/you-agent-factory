@@ -96,7 +96,11 @@ func consumedTokenIDs(tokens []factorytoken.Token) []string {
 	return ids
 }
 
-func (e *FactoryEngine) processGeneratedSubmissionBatches(batches []workdomain.GeneratedSubmissionBatch, defaultSource string) (int, error) {
+func (e *FactoryEngine) processGeneratedSubmissionBatches(
+	batches []workdomain.GeneratedSubmissionBatch,
+	defaultSource string,
+	dedupeSeededReplay bool,
+) (int, error) {
 	total := 0
 	for i := range batches {
 		batch := batches[i]
@@ -108,18 +112,58 @@ func (e *FactoryEngine) processGeneratedSubmissionBatches(batches []workdomain.G
 		if e.skipGeneratedSubmissionRequest(requestID, source) {
 			continue
 		}
+		normalized, replacedSeededWorkIDs := e.dedupeSeededReplaySubmissions(normalized, dedupeSeededReplay)
 		tokens, err := e.tokensFromGeneratedSubmissions(normalized)
 		if err != nil {
 			return total, err
 		}
 		e.recordGeneratedSubmissionRequest(requestID, source, batch, normalized)
-		e.recordGeneratedSubmissionTokens(source, normalized, tokens)
+		e.recordGeneratedSubmissionTokens(source, normalized, tokens, replacedSeededWorkIDs)
 		if source == externalSubmissionHookName {
 			e.pendingProjectionRequestIDs[requestID] = struct{}{}
 		}
 		total += len(tokens)
 	}
 	return total, nil
+}
+
+// dedupeSeededReplaySubmissions removes only replay-generated Work already
+// represented by the restored marking. The replay hook keeps its recorded
+// source metadata, so hook identity—not source text—selects this rule.
+func (e *FactoryEngine) dedupeSeededReplaySubmissions(
+	normalized []workdomain.SubmitRequest,
+	dedupeSeededReplay bool,
+) ([]workdomain.SubmitRequest, map[string]struct{}) {
+	if !dedupeSeededReplay || len(e.seededRestoredWorkIDs) == 0 || len(normalized) == 0 {
+		return normalized, nil
+	}
+	kept := normalized[:0]
+	replaced := make(map[string]struct{})
+	for _, request := range normalized {
+		if _, seeded := e.seededRestoredWorkIDs[request.WorkID]; seeded {
+			if _, hasRecordedDispatch := e.replayDispatchWorkIDs[request.WorkID]; hasRecordedDispatch {
+				kept = append(kept, request)
+				replaced[request.WorkID] = struct{}{}
+			}
+			continue
+		}
+		kept = append(kept, request)
+	}
+	if len(replaced) == 0 {
+		replaced = nil
+	}
+	return kept, replaced
+}
+
+func cloneWorkIDSet(source map[string]struct{}) map[string]struct{} {
+	if len(source) == 0 {
+		return nil
+	}
+	cloned := make(map[string]struct{}, len(source))
+	for workID := range source {
+		cloned[workID] = struct{}{}
+	}
+	return cloned
 }
 
 func generatedSubmissionSource(batch workdomain.GeneratedSubmissionBatch, defaultSource string) string {
@@ -167,7 +211,7 @@ func (e *FactoryEngine) tokensFromGeneratedSubmissions(normalized []workdomain.S
 
 func (e *FactoryEngine) recordGeneratedSubmissionRequest(requestID, source string, batch workdomain.GeneratedSubmissionBatch, normalized []workdomain.SubmitRequest) {
 	e.workRequests[requestID] = workdomain.WorkRequestSubmitResultFromNormalized(requestID, normalized, true)
-	if e.recordWorkRequest == nil {
+	if e.recordWorkRequest == nil || len(normalized) == 0 {
 		return
 	}
 	record := workdomain.WorkRequestRecordFromSubmitRequests(requestID, source, normalized)
@@ -175,9 +219,21 @@ func (e *FactoryEngine) recordGeneratedSubmissionRequest(requestID, source strin
 	e.recordWorkRequest(e.runtimeState.TickCount, record)
 }
 
-func (e *FactoryEngine) recordGeneratedSubmissionTokens(source string, normalized []workdomain.SubmitRequest, tokens []*factorytoken.Token) {
+func (e *FactoryEngine) recordGeneratedSubmissionTokens(
+	source string,
+	normalized []workdomain.SubmitRequest,
+	tokens []*factorytoken.Token,
+	replacedSeededWorkIDs map[string]struct{},
+) {
 	parentIDs := make(map[string]struct{})
+	removedSeededWorkIDs := make(map[string]struct{}, len(replacedSeededWorkIDs))
 	for index, token := range tokens {
+		if _, replace := replacedSeededWorkIDs[token.Color.WorkID]; replace {
+			if _, removed := removedSeededWorkIDs[token.Color.WorkID]; !removed {
+				e.removeSeededReplayWorkToken(token.Color.WorkID)
+				removedSeededWorkIDs[token.Color.WorkID] = struct{}{}
+			}
+		}
 		e.runtimeState.Marking.RecordParentChildRegistration(token)
 		if token.Color.ParentID != "" {
 			parentIDs[token.Color.ParentID] = struct{}{}
@@ -192,5 +248,14 @@ func (e *FactoryEngine) recordGeneratedSubmissionTokens(source string, normalize
 	}
 	for parentID := range parentIDs {
 		e.runtimeState.Marking.CompleteParentChildRegistration(parentID)
+	}
+}
+
+func (e *FactoryEngine) removeSeededReplayWorkToken(workID string) {
+	for tokenID, token := range e.runtimeState.Marking.Tokens {
+		if token == nil || token.Color.DataType == factorytoken.DataTypeResource || token.Color.WorkID != workID {
+			continue
+		}
+		e.runtimeState.Marking.RemoveToken(tokenID)
 	}
 }
