@@ -290,19 +290,26 @@ func (e *FactoryEngine) WakeForPendingProcessing() {
 // SubmitWorkRequest validates and enqueues a canonical work request batch.
 // Repeated request IDs are treated as idempotent no-ops.
 func (e *FactoryEngine) SubmitWorkRequest(context context.Context, request workdomain.WorkRequest) (workdomain.WorkRequestSubmitResult, error) {
+	release, err := e.AcquireResourceCapacityAdmission(context)
+	if err != nil {
+		return workdomain.WorkRequestSubmitResult{}, err
+	}
+
 	e.mu.Lock()
 	if existing, exists := e.workRequests[request.RequestID]; exists && request.RequestID != "" {
 		e.mu.Unlock()
+		release()
 		existing.Accepted = false
 		return existing, nil
 	}
-	e.mu.Unlock()
-
 	normalized, err := workdomain.NormalizeWorkRequest(request, workdomain.WorkRequestNormalizeOptions{
 		ValidWorkTypes:    e.validWorkTypes(),
 		ValidStatesByType: state.ValidStatesByType(e.state.WorkTypes),
 		IDGenerator:       e.workRequestIDs,
+		ExistingWorks:     e.existingWorksForAdmissionLocked(),
 	})
+	e.mu.Unlock()
+	release()
 	if err != nil {
 		return workdomain.WorkRequestSubmitResult{}, err
 	}
@@ -429,6 +436,63 @@ func (e *FactoryEngine) validWorkTypes() map[string]bool {
 		valid[workTypeID] = true
 	}
 	return valid
+}
+
+// existingWorksForAdmissionLocked returns the current board identities used
+// by live relation admission. Marking tokens cover queued, terminal, and
+// failed Work; consumed dispatch tokens cover Work that is currently active
+// and therefore temporarily absent from the marking.
+//
+// The caller must hold e.mu and the admission gate must prevent a tick from
+// changing the board while this snapshot is consumed by normalization.
+func (e *FactoryEngine) existingWorksForAdmissionLocked() []workdomain.ExistingWork {
+	byID := make(map[string]workdomain.ExistingWork)
+	add := func(color factorytoken.Color) {
+		if color.DataType == factorytoken.DataTypeResource || color.WorkID == "" {
+			return
+		}
+		candidate := workdomain.ExistingWork{
+			WorkID:     color.WorkID,
+			Name:       color.Name,
+			WorkTypeID: color.WorkTypeID,
+		}
+		if current, exists := byID[candidate.WorkID]; exists {
+			if current.Name == "" {
+				current.Name = candidate.Name
+			}
+			if current.WorkTypeID == "" {
+				current.WorkTypeID = candidate.WorkTypeID
+			}
+			byID[candidate.WorkID] = current
+			return
+		}
+		byID[candidate.WorkID] = candidate
+	}
+
+	if e.runtimeState != nil && e.runtimeState.Marking != nil {
+		for _, token := range e.runtimeState.Marking.Tokens {
+			if token != nil {
+				add(token.Color)
+			}
+		}
+	}
+	if e.runtimeState != nil {
+		for _, dispatch := range e.runtimeState.Dispatches {
+			if dispatch == nil {
+				continue
+			}
+			for _, token := range dispatch.ConsumedTokens {
+				add(token.Color)
+			}
+		}
+	}
+
+	works := make([]workdomain.ExistingWork, 0, len(byID))
+	for _, candidate := range byID {
+		works = append(works, candidate)
+	}
+	sort.Slice(works, func(i, j int) bool { return works[i].WorkID < works[j].WorkID })
+	return works
 }
 
 // Run is the main execution loop. Blocks on a select over wake channels until

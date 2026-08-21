@@ -56,9 +56,6 @@ func NormalizeWorkRequest(req Request, opts NormalizeOptions) ([]SubmitRequest, 
 	if err != nil {
 		return nil, err
 	}
-	if err := rejectDependencyCycles(req.Relations); err != nil {
-		return nil, err
-	}
 
 	traceID := batchTraceID(req)
 	return normalizeBatchWorks(req, opts, workIndex, relIndex, traceID)
@@ -237,8 +234,10 @@ func SubmitWorkName(req SubmitRequest) string {
 }
 
 type normalizedBatchWork struct {
+	name       string
 	id         string
 	workTypeID string
+	batch      bool
 }
 
 func normalizedSubmissionMatch(
@@ -334,8 +333,10 @@ func validateBatchWork(req Request, opts NormalizeOptions) (map[string]normalize
 			workID = fmt.Sprintf("batch-%s-%s", req.RequestID, work.Name)
 		}
 		workIndex[work.Name] = normalizedBatchWork{
+			name:       work.Name,
 			id:         workID,
 			workTypeID: workTypeID,
+			batch:      true,
 		}
 	}
 	return workIndex, nil
@@ -360,27 +361,40 @@ func validateBatchWorkName(workNames map[string]int, index int, work Work) error
 func validateAndIndexBatchRelations(req Request, workIndex map[string]normalizedBatchWork, opts NormalizeOptions) (map[string][]Relation, error) {
 	relIndex := make(map[string][]Relation)
 	seen := map[string]int{}
-	parentTargets := make(map[string]string)
+	parentTargets := make(map[string]normalizedBatchWork)
+	dependencyGraph := make(map[string][]string)
 	for i, rel := range req.Relations {
-		targetWork, err := validateBatchRelationEndpoints(i, rel, workIndex)
+		sourceWork, err := validateBatchRelationSource(i, rel, workIndex)
 		if err != nil {
 			return nil, err
 		}
-		normalized, key, err := normalizeBatchRelation(i, rel, targetWork, opts)
+		targetWork, err := resolveBatchRelationTarget(i, rel, workIndex, opts.ExistingWorks)
+		if err != nil {
+			return nil, err
+		}
+		if rel.Type == WorkRelationParentChild && !targetWork.batch {
+			return nil, fmt.Errorf(
+				"work_request: relations[%d] PARENT_CHILD target %s=%q must be declared in this batch's works[]; PARENT_CHILD endpoints cannot reference previously submitted Work",
+				i,
+				relationTargetField(rel),
+				relationTargetValue(rel),
+			)
+		}
+		normalized, key, err := normalizeBatchRelation(i, rel, sourceWork, targetWork, opts)
 		if err != nil {
 			return nil, err
 		}
 		if rel.Type == WorkRelationParentChild {
-			if existingTarget, ok := parentTargets[rel.SourceWorkName]; ok && existingTarget != rel.TargetWorkName {
+			if existingTarget, ok := parentTargets[sourceWork.id]; ok && existingTarget.id != targetWork.id {
 				return nil, fmt.Errorf(
 					"work_request: relations[%d] assigns multiple PARENT_CHILD parents to %q (%q and %q)",
 					i,
 					rel.SourceWorkName,
-					existingTarget,
-					rel.TargetWorkName,
+					existingTarget.name,
+					targetWork.name,
 				)
 			}
-			parentTargets[rel.SourceWorkName] = rel.TargetWorkName
+			parentTargets[sourceWork.id] = targetWork
 		}
 		if original, duplicate := seen[key]; duplicate {
 			if rel.Type == WorkRelationDependsOn {
@@ -405,57 +419,215 @@ func validateAndIndexBatchRelations(req Request, workIndex map[string]normalized
 		}
 		seen[key] = i
 		relIndex[rel.SourceWorkName] = append(relIndex[rel.SourceWorkName], normalized)
+		if rel.Type == WorkRelationDependsOn {
+			dependencyGraph[sourceWork.id] = append(dependencyGraph[sourceWork.id], targetWork.id)
+		}
+	}
+	if err := rejectDependencyCycles(dependencyGraph); err != nil {
+		return nil, err
 	}
 	return relIndex, nil
 }
 
-func validateBatchRelationEndpoints(i int, rel WorkRelation, workIndex map[string]normalizedBatchWork) (normalizedBatchWork, error) {
+func validateBatchRelationSource(i int, rel WorkRelation, workIndex map[string]normalizedBatchWork) (normalizedBatchWork, error) {
 	if strings.TrimSpace(rel.SourceWorkName) == "" {
 		return normalizedBatchWork{}, missingBatchRelationEndpointError(i, rel, "sourceWorkName")
 	}
-	if strings.TrimSpace(rel.TargetWorkName) == "" {
-		return normalizedBatchWork{}, missingBatchRelationEndpointError(i, rel, "targetWorkName")
-	}
-	if _, ok := workIndex[rel.SourceWorkName]; !ok {
+	sourceWork, ok := workIndex[rel.SourceWorkName]
+	if !ok {
 		return normalizedBatchWork{}, missingBatchRelationEndpointError(i, rel, "sourceWorkName")
 	}
-	targetWork, ok := workIndex[rel.TargetWorkName]
-	if !ok {
+	return sourceWork, nil
+}
+
+// validateBatchRelationShape checks the parts that can be known without a
+// Factory Session. DEPENDS_ON target existence is deliberately deferred to
+// live admission because its target may already be on the selected board.
+func validateBatchRelationShape(i int, rel WorkRelation, workIndex map[string]normalizedBatchWork) error {
+	if _, err := validateBatchRelationSource(i, rel, workIndex); err != nil {
+		return err
+	}
+	if strings.TrimSpace(rel.TargetWorkName) == "" && strings.TrimSpace(rel.TargetWorkID) == "" {
+		return missingBatchRelationEndpointError(i, rel, "targetWorkName")
+	}
+	if rel.Type == WorkRelationParentChild {
+		if targetName := strings.TrimSpace(rel.TargetWorkName); targetName != "" {
+			if _, ok := workIndex[rel.TargetWorkName]; !ok {
+				return missingBatchRelationEndpointError(i, rel, "targetWorkName")
+			}
+		} else {
+			found := false
+			for _, work := range workIndex {
+				if work.id == strings.TrimSpace(rel.TargetWorkID) {
+					found = true
+					break
+				}
+			}
+			if !found {
+				return missingBatchRelationEndpointError(i, rel, "targetWorkId")
+			}
+		}
+	}
+	return nil
+}
+
+func resolveBatchRelationTarget(
+	i int,
+	rel WorkRelation,
+	workIndex map[string]normalizedBatchWork,
+	existing []ExistingWork,
+) (normalizedBatchWork, error) {
+	targetName := strings.TrimSpace(rel.TargetWorkName)
+	targetID := strings.TrimSpace(rel.TargetWorkID)
+	if targetName == "" && targetID == "" {
 		return normalizedBatchWork{}, missingBatchRelationEndpointError(i, rel, "targetWorkName")
 	}
-	return targetWork, nil
+
+	byName := relationTargetCandidates(workIndex, existing, targetName, "name")
+	byID := relationTargetCandidates(workIndex, existing, targetID, "id")
+	if targetName != "" && len(byName) == 0 && targetID == "" {
+		return normalizedBatchWork{}, unknownRelationTargetError(i, rel, "targetWorkName", rel.TargetWorkName)
+	}
+	if targetName != "" && targetID == "" && len(byName) > 1 {
+		return normalizedBatchWork{}, ambiguousRelationTargetNameError(i, rel)
+	}
+	if targetID != "" && len(byID) == 0 {
+		return normalizedBatchWork{}, unknownRelationTargetError(i, rel, "targetWorkId", rel.TargetWorkID)
+	}
+	if targetID != "" && len(byID) > 1 {
+		return normalizedBatchWork{}, fmt.Errorf(
+			"work_request: relations[%d] targetWorkId=%q identifies multiple Work items on this Factory Session board",
+			i,
+			rel.TargetWorkID,
+		)
+	}
+
+	if targetName != "" && targetID != "" {
+		for _, candidate := range byName {
+			if candidate.id == byID[0].id {
+				return byID[0], nil
+			}
+		}
+		return normalizedBatchWork{}, fmt.Errorf(
+			"work_request: relations[%d] targetWorkName=%q and targetWorkId=%q identify different Work items; provide matching references",
+			i,
+			rel.TargetWorkName,
+			rel.TargetWorkID,
+		)
+	}
+	if targetName != "" {
+		return byName[0], nil
+	}
+	return byID[0], nil
+}
+
+func relationTargetCandidates(
+	workIndex map[string]normalizedBatchWork,
+	existing []ExistingWork,
+	value string,
+	field string,
+) []normalizedBatchWork {
+	if value == "" {
+		return nil
+	}
+	var candidates []normalizedBatchWork
+	for _, target := range workIndex {
+		if (field == "name" && target.name == value) || (field == "id" && target.id == value) {
+			candidates = appendUniqueRelationTarget(candidates, target)
+		}
+	}
+	for _, target := range existing {
+		candidate := normalizedBatchWork{
+			name:       strings.TrimSpace(target.Name),
+			id:         strings.TrimSpace(target.WorkID),
+			workTypeID: target.WorkTypeID,
+		}
+		if candidate.id == "" || (field == "name" && candidate.name != value) || (field == "id" && candidate.id != value) {
+			continue
+		}
+		candidates = appendUniqueRelationTarget(candidates, candidate)
+	}
+	return candidates
+}
+
+func appendUniqueRelationTarget(candidates []normalizedBatchWork, candidate normalizedBatchWork) []normalizedBatchWork {
+	for _, existing := range candidates {
+		if existing.id == candidate.id {
+			return candidates
+		}
+	}
+	return append(candidates, candidate)
+}
+
+func relationTargetField(rel WorkRelation) string {
+	if strings.TrimSpace(rel.TargetWorkID) != "" {
+		return "targetWorkId"
+	}
+	return "targetWorkName"
+}
+
+func relationTargetValue(rel WorkRelation) string {
+	if strings.TrimSpace(rel.TargetWorkID) != "" {
+		return rel.TargetWorkID
+	}
+	return rel.TargetWorkName
+}
+
+func unknownRelationTargetError(i int, rel WorkRelation, field, value string) error {
+	return fmt.Errorf(
+		"work_request: relations[%d] relation type %q has sourceWorkName %q; unknown %s=%q does not identify a Work on this Factory Session board; correct %s or provide targetWorkId",
+		i,
+		rel.Type,
+		rel.SourceWorkName,
+		field,
+		value,
+		field,
+	)
+}
+
+func ambiguousRelationTargetNameError(i int, rel WorkRelation) error {
+	return fmt.Errorf(
+		"work_request: relations[%d] targetWorkName=%q is ambiguous on this Factory Session board; use targetWorkId to select one Work",
+		i,
+		rel.TargetWorkName,
+	)
 }
 
 func missingBatchRelationEndpointError(i int, rel WorkRelation, endpointField string) error {
 	endpointValue := rel.SourceWorkName
+	targetDescription := fmt.Sprintf("targetWorkName %q", rel.TargetWorkName)
 	if endpointField == "targetWorkName" {
 		endpointValue = rel.TargetWorkName
 	}
+	if endpointField == "targetWorkId" {
+		endpointValue = rel.TargetWorkID
+		targetDescription = fmt.Sprintf("targetWorkId %q", rel.TargetWorkID)
+	}
 	return fmt.Errorf(
-		"work_request: relations[%d] relation type %q has sourceWorkName %q and targetWorkName %q; endpoint %s=%q is missing from this batch; relation endpoints must name Work declared in this batch's works[] (not previously submitted Work); add the named Work to works[] or correct %s",
+		"work_request: relations[%d] relation type %q has sourceWorkName %q and %s; endpoint %s=%q is missing from this batch; relation endpoints must name Work declared in this batch's works[] (not previously submitted Work); add the named Work to works[] or correct %s",
 		i,
 		rel.Type,
 		rel.SourceWorkName,
-		rel.TargetWorkName,
+		targetDescription,
 		endpointField,
 		endpointValue,
 		endpointField,
 	)
 }
 
-func normalizeBatchRelation(i int, rel WorkRelation, targetWork normalizedBatchWork, opts NormalizeOptions) (Relation, string, error) {
+func normalizeBatchRelation(i int, rel WorkRelation, sourceWork, targetWork normalizedBatchWork, opts NormalizeOptions) (Relation, string, error) {
 	switch rel.Type {
 	case WorkRelationDependsOn:
-		return normalizeDependsOnRelation(i, rel, targetWork, opts)
+		return normalizeDependsOnRelation(i, rel, sourceWork, targetWork, opts)
 	case WorkRelationParentChild:
-		return normalizeParentChildRelation(i, rel, targetWork)
+		return normalizeParentChildRelation(i, rel, sourceWork, targetWork)
 	default:
 		return Relation{}, "", fmt.Errorf("work_request: relations[%d] has unsupported type %q", i, rel.Type)
 	}
 }
 
-func normalizeDependsOnRelation(i int, rel WorkRelation, targetWork normalizedBatchWork, opts NormalizeOptions) (Relation, string, error) {
-	if rel.SourceWorkName == rel.TargetWorkName {
+func normalizeDependsOnRelation(i int, rel WorkRelation, sourceWork, targetWork normalizedBatchWork, opts NormalizeOptions) (Relation, string, error) {
+	if sourceWork.id == targetWork.id {
 		return Relation{}, "", fmt.Errorf("work_request: relations[%d] has self-dependency on %q", i, rel.SourceWorkName)
 	}
 	requiredState := rel.RequiredState
@@ -474,11 +646,11 @@ func normalizeDependsOnRelation(i int, rel WorkRelation, targetWork normalizedBa
 		Type:          RelationDependsOn,
 		TargetWorkID:  targetWork.id,
 		RequiredState: requiredState,
-	}, relationValidationKey(rel.Type, rel.SourceWorkName, rel.TargetWorkName, requiredState), nil
+	}, relationValidationKey(rel.Type, sourceWork.id, targetWork.id, requiredState), nil
 }
 
-func normalizeParentChildRelation(i int, rel WorkRelation, targetWork normalizedBatchWork) (Relation, string, error) {
-	if rel.SourceWorkName == rel.TargetWorkName {
+func normalizeParentChildRelation(i int, rel WorkRelation, sourceWork, targetWork normalizedBatchWork) (Relation, string, error) {
+	if sourceWork.id == targetWork.id {
 		return Relation{}, "", fmt.Errorf("work_request: relations[%d] has self-parenting on %q", i, rel.SourceWorkName)
 	}
 	if rel.RequiredState != "" {
@@ -487,20 +659,14 @@ func normalizeParentChildRelation(i int, rel WorkRelation, targetWork normalized
 	return Relation{
 		Type:         RelationParentChild,
 		TargetWorkID: targetWork.id,
-	}, relationValidationKey(rel.Type, rel.SourceWorkName, rel.TargetWorkName, ""), nil
+	}, relationValidationKey(rel.Type, sourceWork.id, targetWork.id, ""), nil
 }
 
 func relationValidationKey(relType WorkRelationType, sourceWorkName string, targetWorkName string, requiredState string) string {
 	return fmt.Sprintf("%s|%s|%s|%s", relType, sourceWorkName, targetWorkName, requiredState)
 }
 
-func rejectDependencyCycles(relations []WorkRelation) error {
-	graph := make(map[string][]string)
-	for _, rel := range relations {
-		if rel.Type == WorkRelationDependsOn {
-			graph[rel.SourceWorkName] = append(graph[rel.SourceWorkName], rel.TargetWorkName)
-		}
-	}
+func rejectDependencyCycles(graph map[string][]string) error {
 	for name := range graph {
 		sort.Strings(graph[name])
 	}

@@ -141,7 +141,7 @@ func TestReplaySubmissionsFromEventDecodesWorkOwnedPayload(t *testing.T) {
 	if !reflect.DeepEqual(got.request.Works[0].Content, []work.WorkContentPart{{Type: work.WorkContentPartTypeText, Text: "hello"}}) {
 		t.Fatalf("content = %#v", got.request.Works[0].Content)
 	}
-	wantRelations := []work.WorkRelation{{Type: work.WorkRelationDependsOn, SourceWorkName: "source", TargetWorkName: "target", RequiredState: "done"}}
+	wantRelations := []work.WorkRelation{{Type: work.WorkRelationDependsOn, SourceWorkName: "source", TargetWorkID: "work-2", TargetWorkName: "target", RequiredState: "done"}}
 	if !reflect.DeepEqual(got.request.Relations, wantRelations) {
 		t.Fatalf("relations = %#v, want %#v", got.request.Relations, wantRelations)
 	}

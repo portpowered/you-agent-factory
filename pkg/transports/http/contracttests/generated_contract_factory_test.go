@@ -171,6 +171,17 @@ func generatedWorkRequestFixture() factoryapi.WorkRequest {
 		TargetWorkName: "epic",
 	}
 	workRelations := []factoryapi.Relation{relation, parentChildRelation}
+	requestRelation := factoryapi.WorkRequestRelation{
+		Type:           factoryapi.RelationTypeDependsOn,
+		SourceWorkName: "publish",
+		TargetWorkName: stringPtr("draft"),
+		RequiredState:  stringPtr("complete"),
+	}
+	requestParentChildRelation := factoryapi.WorkRequestRelation{
+		Type:           factoryapi.RelationTypeParentChild,
+		SourceWorkName: "draft",
+		TargetWorkName: stringPtr("epic"),
+	}
 	batchWork := factoryapi.Work{
 		Name:                     "draft",
 		WorkId:                   &workID,
@@ -189,7 +200,7 @@ func generatedWorkRequestFixture() factoryapi.WorkRequest {
 		CurrentChainingTraceId: stringPtr("chain-request-1"),
 		Type:                   factoryapi.WorkRequestTypeFactoryRequestBatch,
 		Works:                  &[]factoryapi.Work{batchWork},
-		Relations:              &[]factoryapi.Relation{relation, parentChildRelation},
+		Relations:              &[]factoryapi.WorkRequestRelation{requestRelation, requestParentChildRelation},
 	}
 }
 

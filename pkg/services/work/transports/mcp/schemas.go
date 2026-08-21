@@ -76,13 +76,13 @@ func workContentPartSchema() map[string]any {
 
 func workItemSchema() map[string]any {
 	return objectSchema(map[string]any{
-		"name":                     stringProperty("Customer-authored work item name within the batch."),
-		"workId":                   stringProperty("Optional stable Work identifier."),
-		"requestId":                stringProperty("Optional per-item request identifier."),
-		"workTypeName":             stringProperty("Configured work type name from the Factory definition."),
-		"state":                    stringProperty("Optional authored state name for the submitted work item."),
-		"chainingTraceDepth":       integerProperty("Optional chaining trace depth."),
-		"currentChainingTraceId":   stringProperty("Optional current chaining trace identifier."),
+		"name":                   stringProperty("Customer-authored work item name within the batch."),
+		"workId":                 stringProperty("Optional stable Work identifier."),
+		"requestId":              stringProperty("Optional per-item request identifier."),
+		"workTypeName":           stringProperty("Configured work type name from the Factory definition."),
+		"state":                  stringProperty("Optional authored state name for the submitted work item."),
+		"chainingTraceDepth":     integerProperty("Optional chaining trace depth."),
+		"currentChainingTraceId": stringProperty("Optional current chaining trace identifier."),
 		"previousChainingTraceIds": map[string]any{
 			"type":        "array",
 			"description": "Optional prior chaining trace identifiers.",
@@ -104,13 +104,18 @@ func workItemSchema() map[string]any {
 }
 
 func workRelationSchema() map[string]any {
-	return objectSchema(map[string]any{
+	schema := objectSchema(map[string]any{
 		"type":           enumStringProperty("Relationship kind between work items.", "DEPENDS_ON", "PARENT_CHILD"),
 		"sourceWorkName": stringProperty("Source work item name in the relationship."),
-		"targetWorkId":   stringProperty("Optional target work identifier."),
-		"targetWorkName": stringProperty("Target work item name in the relationship."),
+		"targetWorkId":   stringProperty("Optional stable target Work identifier on the selected Factory Session board."),
+		"targetWorkName": stringProperty("Exact target Work name in the relationship; it may identify submitted or already-boarded Work."),
 		"requiredState":  stringProperty("Optional required target state for dependency edges."),
-	}, "type", "sourceWorkName", "targetWorkName")
+	}, "type", "sourceWorkName")
+	schema["anyOf"] = []any{
+		map[string]any{"required": []string{"targetWorkName"}},
+		map[string]any{"required": []string{"targetWorkId"}},
+	}
+	return schema
 }
 
 func workRequestSchema() map[string]any {
@@ -128,7 +133,7 @@ func workRequestSchema() map[string]any {
 		},
 		"relations": map[string]any{
 			"type":        "array",
-			"description": "Relationships between submitted work items.",
+			"description": "Relationships between submitted or already-boarded work items.",
 			"items":       workRelationSchema(),
 		},
 	}, "requestId", "type")
@@ -156,13 +161,13 @@ func readModelStateSchema() map[string]any {
 
 func readModelSchema() map[string]any {
 	return objectSchema(map[string]any{
-		"CursorID":                 stringProperty("Opaque cursor identifier for stable pagination."),
-		"Name":                     stringProperty("Customer-authored work item name."),
-		"WorkID":                   stringProperty("Stable Work identifier."),
-		"WorkTypeName":             stringProperty("Configured work type name."),
-		"State":                    readModelStateSchema(),
-		"ChainingTraceDepth":       integerProperty("Chaining trace depth for the work item."),
-		"CurrentChainingTraceID":   stringProperty("Current chaining trace identifier."),
+		"CursorID":               stringProperty("Opaque cursor identifier for stable pagination."),
+		"Name":                   stringProperty("Customer-authored work item name."),
+		"WorkID":                 stringProperty("Stable Work identifier."),
+		"WorkTypeName":           stringProperty("Configured work type name."),
+		"State":                  readModelStateSchema(),
+		"ChainingTraceDepth":     integerProperty("Chaining trace depth for the work item."),
+		"CurrentChainingTraceID": stringProperty("Current chaining trace identifier."),
 		"PreviousChainingTraceIDs": map[string]any{
 			"type":        "array",
 			"description": "Prior chaining trace identifiers.",

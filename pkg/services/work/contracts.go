@@ -402,8 +402,18 @@ const (
 type WorkRelation struct {
 	Type           WorkRelationType `json:"type"`
 	SourceWorkName string           `json:"sourceWorkName"`
-	TargetWorkName string           `json:"targetWorkName"`
+	TargetWorkID   string           `json:"targetWorkId,omitempty"`
+	TargetWorkName string           `json:"targetWorkName,omitempty"`
 	RequiredState  string           `json:"requiredState,omitempty"`
+}
+
+// ExistingWork is the stable board identity used to resolve a relation target
+// during live admission. It is intentionally smaller than Work so admission
+// cannot depend on a read-model projection or transport representation.
+type ExistingWork struct {
+	WorkID     string
+	Name       string
+	WorkTypeID string
 }
 
 type WorkRequestNormalizeOptions struct {
@@ -411,6 +421,7 @@ type WorkRequestNormalizeOptions struct {
 	ValidWorkTypes    map[string]bool
 	ValidStatesByType map[string]map[string]bool
 	IDGenerator       RequestIDGenerator
+	ExistingWorks     []ExistingWork
 }
 
 // Relation defines a typed relationship between runtime work items.

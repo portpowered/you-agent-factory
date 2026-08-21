@@ -318,6 +318,7 @@ func TestOpenAPIAuthoring_APISchemasUseDedicatedFragments(t *testing.T) {
 		"ErrorFamily":                         "./components/schemas/api/ErrorFamily.yaml",
 		"ErrorResponse":                       "./components/schemas/api/ErrorResponse.yaml",
 		"WorkRequest":                         "./components/schemas/api/WorkRequest.yaml",
+		"WorkRequestRelation":                 "./components/schemas/api/WorkRequestRelation.yaml",
 		"WorkRequestType":                     "./components/schemas/api/WorkRequestType.yaml",
 		"WorkerSessionObservation":            "./components/schemas/api/WorkerSessionObservation.yaml",
 		"WorkerSessionTurnUsage":              "./components/schemas/api/WorkerSessionTurnUsage.yaml",

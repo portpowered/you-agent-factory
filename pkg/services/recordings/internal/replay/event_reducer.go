@@ -451,7 +451,13 @@ func replayWorkRequestRelations(works []work.WorkRequestEventWork, relations []w
 		if sourceName == "" || targetName == "" {
 			continue
 		}
-		out = append(out, work.WorkRelation{Type: relation.Type, SourceWorkName: sourceName, TargetWorkName: targetName, RequiredState: relation.RequiredState})
+		out = append(out, work.WorkRelation{
+			Type:           relation.Type,
+			SourceWorkName: sourceName,
+			TargetWorkID:   relation.TargetWorkID,
+			TargetWorkName: targetName,
+			RequiredState:  relation.RequiredState,
+		})
 	}
 	return out
 }

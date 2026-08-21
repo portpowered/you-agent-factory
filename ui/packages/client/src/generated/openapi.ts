@@ -6673,9 +6673,22 @@ export interface components {
       type: components["schemas"]["WorkRequestType"];
       /** @description A batch of work items to be submitted together. Each Work payload uses the compact UTF-8 JSON byte limit documented by the Work schema; a batch is rejected atomically when any Work exceeds 65,536 bytes. */
       works?: components["schemas"]["Work"][];
-      /** @description Relationships between various work items. */
-      relations?: components["schemas"]["Relation"][];
+      /** @description Relationships between submitted or already-boarded work items. */
+      relations?: components["schemas"]["WorkRequestRelation"][];
     };
+    /** @description Relationship declared while admitting a Work Request. A target may be identified by its exact board name, stable Work ID, or both. When both are supplied they must resolve to the same Work. */
+    WorkRequestRelation:
+      | {
+          type: components["schemas"]["RelationType"];
+          sourceWorkName: string;
+          /** @description Stable Work ID on the selected Factory Session board. */
+          targetWorkId?: string;
+          /** @description Exact Work name on the selected Factory Session board. */
+          targetWorkName?: string;
+          requiredState?: string;
+        }
+      | unknown
+      | unknown;
     /**
      * @description Kind of work request accepted by the factory.
      * @enum {string}

@@ -58,10 +58,14 @@ func (factoryRequestBatchPreparation) PrepareFactoryRequestBatch(
 		if err := validateWorkPayloadSize(work.Name, work.WorkID, payload); err != nil {
 			return PreparedFactoryRequestBatch{}, err
 		}
-		workIndex[work.Name] = normalizedBatchWork{}
+		workID := work.WorkID
+		if workID == "" {
+			workID = fmt.Sprintf("batch-%s-%s", request.RequestID, work.Name)
+		}
+		workIndex[work.Name] = normalizedBatchWork{name: work.Name, id: workID, batch: true}
 	}
 	for index, relation := range request.Relations {
-		if _, err := validateBatchRelationEndpoints(index, relation, workIndex); err != nil {
+		if err := validateBatchRelationShape(index, relation, workIndex); err != nil {
 			return PreparedFactoryRequestBatch{}, err
 		}
 	}

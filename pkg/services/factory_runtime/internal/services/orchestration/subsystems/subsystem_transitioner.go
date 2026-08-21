@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"maps"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -178,7 +179,7 @@ func (t *TransitionerSubsystem) mapToCorrespondingTokenMutations(ctx context.Con
 	var generatedBatches []work.GeneratedSubmissionBatch
 	generatedWorkCount := 0
 	if resolved.outcome == workerexecution.OutcomeAccepted {
-		generatedBatch, detectedBatch, batchErr := t.workerEmittedBatchWork(resolved, inputColors)
+		generatedBatch, detectedBatch, batchErr := t.workerEmittedBatchWork(resolved, inputColors, existingWorksForAdmission(snapshot))
 		if batchErr != nil {
 			resolved.outcome = workerexecution.OutcomeFailed
 			resolved.err = batchErr.Error()
@@ -509,7 +510,7 @@ func shouldRequeueIntermittentFailureResult(result resolvedWorkResult) bool {
 	return workerexecution.FailureDecisionFromMetadata(result.failureMetadata).Retryable
 }
 
-func (t *TransitionerSubsystem) workerEmittedBatchWork(result resolvedWorkResult, inputColors []factorytoken.Color) (generatedBatchWork, bool, error) {
+func (t *TransitionerSubsystem) workerEmittedBatchWork(result resolvedWorkResult, inputColors []factorytoken.Color, existingWorks []work.ExistingWork) (generatedBatchWork, bool, error) {
 	output := strings.TrimSpace(result.output)
 	if output == "" || !strings.HasPrefix(output, "{") {
 		return generatedBatchWork{}, false, nil
@@ -558,11 +559,67 @@ func (t *TransitionerSubsystem) workerEmittedBatchWork(result resolvedWorkResult
 	}
 	normalized, err := work.NormalizeGeneratedSubmissionBatch(batch, work.WorkRequestNormalizeOptions{
 		ValidWorkTypes: t.validWorkTypes(),
+		ExistingWorks:  existingWorks,
 	})
 	if err != nil {
 		return generatedBatchWork{}, true, fmt.Errorf("worker-emitted work request batch: %w", err)
 	}
 	return generatedBatchWork{request: request, submits: normalized, metadata: metadata}, true, nil
+}
+
+// existingWorksForAdmission returns the point-in-time board identities visible
+// to a worker-emitted batch. A dispatched Work is absent from Marking while it
+// is active, so consumed dispatch tokens are included alongside marking
+// tokens. The engine performs the same snapshot for external admission before
+// queueing the request.
+func existingWorksForAdmission(snapshot *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]) []work.ExistingWork {
+	if snapshot == nil {
+		return nil
+	}
+
+	byID := make(map[string]work.ExistingWork)
+	add := func(color factorytoken.Color) {
+		if color.DataType == factorytoken.DataTypeResource || color.WorkID == "" {
+			return
+		}
+		candidate := work.ExistingWork{
+			WorkID:     color.WorkID,
+			Name:       color.Name,
+			WorkTypeID: color.WorkTypeID,
+		}
+		if current, exists := byID[candidate.WorkID]; exists {
+			if current.Name == "" {
+				current.Name = candidate.Name
+			}
+			if current.WorkTypeID == "" {
+				current.WorkTypeID = candidate.WorkTypeID
+			}
+			byID[candidate.WorkID] = current
+			return
+		}
+		byID[candidate.WorkID] = candidate
+	}
+
+	for _, token := range snapshot.Marking.Tokens {
+		if token != nil {
+			add(token.Color)
+		}
+	}
+	for _, dispatch := range snapshot.Dispatches {
+		if dispatch == nil {
+			continue
+		}
+		for _, token := range dispatch.ConsumedTokens {
+			add(token.Color)
+		}
+	}
+
+	works := make([]work.ExistingWork, 0, len(byID))
+	for _, candidate := range byID {
+		works = append(works, candidate)
+	}
+	sort.Slice(works, func(i, j int) bool { return works[i].WorkID < works[j].WorkID })
+	return works
 }
 
 type workerEmittedBatchEnvelope struct {
