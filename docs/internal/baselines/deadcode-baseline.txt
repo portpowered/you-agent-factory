@@ -9,10 +9,6 @@ internal/contractguard/compatibility_alias_test.go: unreachable func: containsSt
 internal/testutil/checkpointfixtures/checkpoint_summaries.go: unreachable func: ReplayFirstChildCheckpointSummaryResult
 internal/testutil/factory_events.go: unreachable func: FactoryEvent
 internal/testutil/factory_events.go: unreachable func: FactoryEvents
-internal/testutil/factorydefinitionfixtures/decision_envelope.go: unreachable func: DecisionEnvelopeService.UsesDecisionEnvelopeOutcome
-internal/testutil/factorydefinitionfixtures/decision_envelope.go: unreachable func: DecisionEnvelopeService.UsesGoalRoutingDecisionEnvelope
-internal/testutil/factorydefinitionfixtures/decision_envelope.go: unreachable func: DecisionEnvelopeService.WorkResultFromDecisionEnvelopeJSONOrFailed
-internal/testutil/factorydefinitionfixtures/decision_envelope.go: unreachable func: DecisionEnvelopeService.WorkResultFromGoalRoutingDecisionEnvelopeJSONOrFailed
 internal/testutil/mock_factory.go: unreachable func: MockFactory.ApproveDurableFactorySession
 internal/testutil/mock_factory.go: unreachable func: MockFactory.CancelDurableFactorySession
 internal/testutil/mock_factory.go: unreachable func: MockFactory.CloseFactorySession
