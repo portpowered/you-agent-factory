@@ -182,6 +182,29 @@ build_grpc_dependencies() {
 	fi
 }
 
+generate_go_protocol() {
+	local grpc_path="${LOCALAI_ROOT}/backend/cpp/grpc"
+	local protoc_path="${grpc_path}/installed_packages/bin/protoc"
+	local protocol_output="${LOCALAI_ROOT}/pkg/grpc/proto"
+	local go_bin
+
+	go_bin="$(go env GOPATH)/bin"
+	if command -v cygpath >/dev/null 2>&1; then
+		go_bin="$(cygpath -u "$go_bin")"
+	fi
+	go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@1958fcbe2ca8bd93af633f11e97d44e567e945af
+	go install google.golang.org/protobuf/cmd/protoc-gen-go@v1.34.2
+	mkdir -p "$protocol_output"
+	PATH="$go_bin:$PATH" "$protoc_path" \
+		--experimental_allow_proto3_optional \
+		-I"${LOCALAI_ROOT}/backend" \
+		--go_out="$protocol_output" \
+		--go_opt=paths=source_relative \
+		--go-grpc_out="$protocol_output" \
+		--go-grpc_opt=paths=source_relative \
+		"${LOCALAI_ROOT}/backend/backend.proto"
+}
+
 stage_darwin_llama_package() {
 	local package_root="${backend_path}/package"
 	mkdir -p "${package_root}/lib"
@@ -274,9 +297,8 @@ stage_windows_runtime() {
 	done
 }
 
-if [[ "$BACKEND_ID" == "localai-llamacpp" ]]; then
-	build_grpc_dependencies
-fi
+build_grpc_dependencies
+generate_go_protocol
 
 os_make_args=()
 if [[ "$TARGET_ID" == "darwin-arm64" ]]; then

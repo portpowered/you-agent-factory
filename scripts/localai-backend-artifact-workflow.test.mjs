@@ -251,7 +251,10 @@ test("the workflow uses immutable actions, package inputs, and the pinned tag gu
 	assert.doesNotMatch(workflow, /uses:\s+[^\n]+@(v\d|main|master|latest)\b/);
 	assert.doesNotMatch(workflow, /update:\s*true/);
 	assert.match(workflow, /curl --fail --silent --show-error --location "\$formula" --output "\$formula_path"/);
-	assert.match(workflow, /brew install --formula "\$formula_path"/);
+	assert.match(workflow, /brew tap-new --no-git "\$tap"/);
+	assert.match(workflow, /tap_path="\$\(brew --repository "\$tap"\)"/);
+	assert.match(workflow, /cp "\$formula_path" "\$tap_path\/Formula\/make\.rb"/);
+	assert.match(workflow, /brew install --formula "\$tap\/make"/);
 	assert.match(workflow, /pacman -Sy --noconfirm/);
 	assert.match(workflow, /pacman -S --needed --noconfirm --overwrite '\*'/);
 	assert.doesNotMatch(workflow, /apt-get/);
