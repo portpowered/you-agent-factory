@@ -3,7 +3,9 @@ package cli_test
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"path/filepath"
 	"strings"
@@ -76,6 +78,117 @@ func TestMetricsCommand_SelectsEverySupportedGrouping(t *testing.T) {
 	}
 }
 
+func TestMetricsCommand_ScopesEveryGroupingInHumanAndJSON(t *testing.T) {
+	formats := []struct {
+		name string
+		json bool
+	}{
+		{name: "human", json: false},
+		{name: "json", json: true},
+	}
+	scopes := []struct {
+		name string
+		id   string
+	}{
+		{name: "unscoped", id: ""},
+		{name: "factory-session", id: "session-a"},
+	}
+	groups := []struct {
+		name string
+		key  string
+	}{
+		{name: "workstation", key: "workstation-a"},
+		{name: "worker", key: "worker-a"},
+		{name: "provider", key: "provider-a"},
+	}
+
+	for _, format := range formats {
+		for _, scope := range scopes {
+			for _, group := range groups {
+				t.Run(fmt.Sprintf("%s/%s/%s", format.name, scope.name, group.name), func(t *testing.T) {
+					var gotRequest factoryvisualization.RuntimeMetricsQueryRequest
+					query := metricsQueryStub(func(_ context.Context, request factoryvisualization.RuntimeMetricsQueryRequest) (factoryvisualization.RuntimeMetricsQueryResult, error) {
+						gotRequest = request
+						return metricsResult(), nil
+					})
+					args := []string{"--group-by", group.name}
+					if scope.id != "" {
+						args = append(args, "--session", scope.id)
+					}
+					output, err := executeMetricsCommandWithJSON(t, query, args, format.json)
+					if err != nil {
+						t.Fatalf("execute metrics: %v", err)
+					}
+					if gotRequest.SessionID != scope.id {
+						t.Fatalf("query session ID = %q, want %q", gotRequest.SessionID, scope.id)
+					}
+					if format.json {
+						assertMetricsJSONOutput(t, output, group.name, group.key, scope.id)
+						return
+					}
+					wantScope := "Scope: all Factory Sessions"
+					if scope.id != "" {
+						wantScope = "Scope: Factory Session " + scope.id
+					}
+					for _, want := range []string{
+						wantScope,
+						"Group by: " + group.name,
+						"Input tokens: 12",
+						"Output tokens: 8",
+						"Completed dispatches: 3",
+						"Failures by reason:",
+						"Dispatch latency (milliseconds): p50=30, p95=95, samples=5",
+						"Provider latency (milliseconds): p50=25, p95=75, samples=3",
+						"Breakdown by " + group.name + ": 1 rows",
+						group.key + ":",
+					} {
+						if !strings.Contains(output, want) {
+							t.Fatalf("human output missing %q:\n%s", want, output)
+						}
+					}
+				})
+			}
+		}
+	}
+}
+
+func TestMetricsCommand_JSONIsDeterministicAndPreservesMissingLatency(t *testing.T) {
+	result := metricsResult()
+	result.Totals.DispatchDuration = nil
+	result.Totals.ProviderDuration = nil
+	result.Totals.FailuresByReason = map[string]float64{"zeta": 2, "alpha": 1}
+	result.Workstations = []factoryvisualization.RuntimeMetricsBreakdown{
+		{Key: "zeta", Aggregate: factoryvisualization.RuntimeMetricsAggregate{}},
+		{Key: "alpha", Aggregate: factoryvisualization.RuntimeMetricsAggregate{}},
+	}
+	query := metricsQueryStub(func(context.Context, factoryvisualization.RuntimeMetricsQueryRequest) (factoryvisualization.RuntimeMetricsQueryResult, error) {
+		return result, nil
+	})
+
+	first, err := executeMetricsCommandWithJSON(t, query, nil, true)
+	if err != nil {
+		t.Fatalf("execute first JSON metrics: %v", err)
+	}
+	second, err := executeMetricsCommandWithJSON(t, query, nil, true)
+	if err != nil {
+		t.Fatalf("execute second JSON metrics: %v", err)
+	}
+	if first != second {
+		t.Fatalf("JSON output is not deterministic:\nfirst:  %s\nsecond: %s", first, second)
+	}
+	if !strings.Contains(first, `"failures_by_reason":{"alpha":1,"zeta":2}`) {
+		t.Fatalf("JSON failure reasons are not deterministic:\n%s", first)
+	}
+	if !strings.Contains(first, `"dispatch_latency":{"unit":"milliseconds","samples":0,"p50":null,"p95":null}`) ||
+		!strings.Contains(first, `"provider_latency":{"unit":"milliseconds","samples":0,"p50":null,"p95":null}`) {
+		t.Fatalf("JSON missing latency samples were not represented as null percentiles:\n%s", first)
+	}
+	if strings.Contains(first, `"dispatch_latency":{"unit":"milliseconds","samples":1`) ||
+		strings.Contains(first, `"provider_latency":{"unit":"milliseconds","samples":1`) {
+		t.Fatalf("JSON invented a latency observation:\n%s", first)
+	}
+}
+
 func TestMetricsCommand_EmptyResultShowsZeroCountsAndNoSamples(t *testing.T) {
 	output, err := executeMetricsCommand(t, metricsQueryStub(func(context.Context, factoryvisualization.RuntimeMetricsQueryRequest) (factoryvisualization.RuntimeMetricsQueryResult, error) {
 		return factoryvisualization.RuntimeMetricsQueryResult{
@@ -118,15 +231,77 @@ func TestMetricsCommand_RejectsUnsupportedGroupingBeforeQuery(t *testing.T) {
 }
 
 func TestMetricsCommand_QueryFailureDoesNotWritePartialOutput(t *testing.T) {
-	wantErr := errors.New("metrics artifact unavailable")
-	output, err := executeMetricsCommand(t, metricsQueryStub(func(context.Context, factoryvisualization.RuntimeMetricsQueryRequest) (factoryvisualization.RuntimeMetricsQueryResult, error) {
-		return factoryvisualization.RuntimeMetricsQueryResult{}, wantErr
-	}), nil)
-	if err == nil || !strings.Contains(err.Error(), wantErr.Error()) {
-		t.Fatalf("error = %v, want query failure", err)
+	for _, jsonOutput := range []bool{false, true} {
+		t.Run(fmt.Sprintf("json=%t", jsonOutput), func(t *testing.T) {
+			wantErr := errors.New("metrics artifact unavailable")
+			output, err := executeMetricsCommandWithJSON(t, metricsQueryStub(func(context.Context, factoryvisualization.RuntimeMetricsQueryRequest) (factoryvisualization.RuntimeMetricsQueryResult, error) {
+				return factoryvisualization.RuntimeMetricsQueryResult{}, wantErr
+			}), nil, jsonOutput)
+			if err == nil || !strings.Contains(err.Error(), wantErr.Error()) {
+				t.Fatalf("error = %v, want query failure", err)
+			}
+			if output != "" {
+				t.Fatalf("query failure wrote partial output %q", output)
+			}
+		})
 	}
-	if output != "" {
-		t.Fatalf("query failure wrote partial output %q", output)
+}
+
+func assertMetricsJSONOutput(t *testing.T, output, groupBy, groupKey, sessionID string) {
+	t.Helper()
+	var document struct {
+		Scope struct {
+			Kind             string  `json:"kind"`
+			FactorySessionID *string `json:"factory_session_id"`
+		} `json:"scope"`
+		GroupBy string `json:"group_by"`
+		Units   struct {
+			Tokens  string `json:"tokens"`
+			Counts  string `json:"counts"`
+			Latency string `json:"latency"`
+		} `json:"units"`
+		Cost struct {
+			Availability string `json:"availability"`
+		} `json:"cost"`
+		Totals struct {
+			InputTokens         float64            `json:"input_tokens"`
+			OutputTokens        float64            `json:"output_tokens"`
+			CompletedDispatches float64            `json:"completed_dispatches"`
+			FailuresByReason    map[string]float64 `json:"failures_by_reason"`
+		} `json:"totals"`
+		Groups []struct {
+			Key string `json:"key"`
+		} `json:"groups"`
+	}
+	if err := json.Unmarshal([]byte(output), &document); err != nil {
+		t.Fatalf("decode JSON output: %v\n%s", err, output)
+	}
+	if document.GroupBy != groupBy || len(document.Groups) != 1 || document.Groups[0].Key != groupKey {
+		t.Fatalf("JSON grouping = %q with groups %#v, want %q and only %q", document.GroupBy, document.Groups, groupBy, groupKey)
+	}
+	if document.Totals.InputTokens != 12 || document.Totals.OutputTokens != 8 || document.Totals.CompletedDispatches != 3 {
+		t.Fatalf("JSON totals = %#v, want input 12, output 8, dispatches 3", document.Totals)
+	}
+	if document.Totals.FailuresByReason["timeout"] != 2 {
+		t.Fatalf("JSON failures = %#v, want timeout 2", document.Totals.FailuresByReason)
+	}
+	if document.Units.Tokens != "tokens" || document.Units.Counts != "count" || document.Units.Latency != "milliseconds" {
+		t.Fatalf("JSON units = %#v, want token/count/millisecond units", document.Units)
+	}
+	if document.Cost.Availability != "unavailable" || strings.Contains(output, "price") {
+		t.Fatalf("JSON cost = %#v or contains a numeric price:\n%s", document.Cost, output)
+	}
+	if sessionID == "" {
+		if document.Scope.Kind != "all_factory_sessions" || document.Scope.FactorySessionID != nil {
+			t.Fatalf("JSON unscoped value = %#v, want all_factory_sessions with null session", document.Scope)
+		}
+	} else if document.Scope.Kind != "factory_session" || document.Scope.FactorySessionID == nil || *document.Scope.FactorySessionID != sessionID {
+		t.Fatalf("JSON session scope = %#v, want Factory Session %q", document.Scope, sessionID)
+	}
+	for _, omitted := range []string{"workstations", "worker_types", "providers"} {
+		if strings.Contains(output, `"`+omitted+`"`) {
+			t.Fatalf("JSON output included unrequested breakdown field %q:\n%s", omitted, output)
+		}
 	}
 }
 
@@ -135,10 +310,20 @@ func executeMetricsCommand(
 	query factoryvisualization.RuntimeMetricsQuery,
 	args []string,
 ) (string, error) {
+	return executeMetricsCommandWithJSON(t, query, args, false)
+}
+
+func executeMetricsCommandWithJSON(
+	t *testing.T,
+	query factoryvisualization.RuntimeMetricsQuery,
+	args []string,
+	jsonOutput bool,
+) (string, error) {
 	t.Helper()
 	command := visualizationcli.NewMetricsCommand(visualizationcli.MetricsCommandConfig{
 		Query:   query,
 		HomeDir: func() (string, error) { return "/home/operator", nil },
+		JSON:    func() bool { return jsonOutput },
 	})
 	var output bytes.Buffer
 	command.SetOut(&output)

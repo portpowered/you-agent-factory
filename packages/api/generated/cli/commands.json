@@ -14223,13 +14223,14 @@
           },
           "description": {
             "id": "you.metrics.description",
-            "canonicalEnglish": "Inspect recorded Factory Runtime metrics grouped by workstation, worker, or provider. Token and dispatch counts are reported with failure reasons and percentile latency; cost is reported as unavailable until a pricing source is configured."
+            "canonicalEnglish": "Inspect recorded Factory Runtime metrics grouped by workstation, worker, or provider. Use --session to scope one Factory Session and --json for deterministic machine-readable output. Token and dispatch counts are reported with failure reasons and percentile latency; cost is reported as unavailable until a pricing source is configured."
           }
         },
         "examples": [
           "you metrics",
           "you metrics --group-by worker",
-          "you metrics --group-by provider"
+          "you metrics --group-by provider --session session-123",
+          "you metrics --json"
         ],
         "visibility": "public",
         "sourceHash": "0000000000000000000000000000000000000000000000000000000000000000"
@@ -14245,7 +14246,7 @@
       "placement": "local-only",
       "usage": {
         "line": "metrics",
-        "example": "  # Inspect all recorded Factory Runtime metrics.\n  you metrics\n\n  # Group the same metrics by worker type.\n  you metrics --group-by worker"
+        "example": "  # Inspect all recorded Factory Runtime metrics.\n  you metrics\n\n  # Group one Factory Session by worker type.\n  you metrics --group-by worker --session session-123\n\n  # Emit deterministic JSON for automation.\n  you metrics --json"
       },
       "flags": {
         "you.metrics.flag.debug": {
@@ -14292,6 +14293,30 @@
           "lifecycle": {
             "formatVersion": "1.0.0",
             "itemId": "you.metrics.flag.group-by",
+            "state": "active",
+            "since": "1.0.0"
+          }
+        },
+        "you.metrics.flag.session": {
+          "id": "you.metrics.flag.session",
+          "long": "session",
+          "usage": "limit metrics to one Factory Session",
+          "shorthand": "",
+          "aliases": [],
+          "scope": "local",
+          "valueType": "string",
+          "required": false,
+          "default": "",
+          "changedDefault": false,
+          "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "trim",
+          "completion": "none",
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.metrics.flag.session",
             "state": "active",
             "since": "1.0.0"
           }
@@ -14426,6 +14451,11 @@
           "id": "you.metrics.output.human",
           "channel": "stdout",
           "format": "text"
+        },
+        "you.metrics.output.json": {
+          "id": "you.metrics.output.json",
+          "channel": "stdout",
+          "format": "json"
         }
       },
       "exits": {

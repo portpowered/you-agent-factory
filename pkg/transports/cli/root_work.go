@@ -68,6 +68,7 @@ func newRootCommandWithGeneratedRepresentativeFamily(options CommandFactory) *co
 	}
 	metricsCmd := visualizationcli.NewMetricsCommand(visualizationcli.MetricsCommandConfig{
 		Query: options.runtimeMetricsQuery, HomeDir: options.homeDir,
+		JSON: func() bool { return globals != nil && globals.json },
 	})
 	b12, err := newB12ProductionFamilies(globals, diagnostics, operatorDefaults, options)
 	if err != nil {

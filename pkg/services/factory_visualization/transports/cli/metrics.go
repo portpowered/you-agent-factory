@@ -23,41 +23,53 @@ const (
 type MetricsCommandConfig struct {
 	Query   factoryvisualization.RuntimeMetricsQuery
 	HomeDir func() (string, error)
+	JSON    func() bool
 }
 
-// MetricsConfig contains the resolved inputs for one metrics query and human
+// MetricsConfig contains the resolved inputs for one metrics query and output
 // rendering operation.
 type MetricsConfig struct {
-	GroupBy string
-	Output  io.Writer
-	Query   factoryvisualization.RuntimeMetricsQuery
-	HomeDir func() (string, error)
+	GroupBy   string
+	SessionID string
+	JSON      bool
+	Output    io.Writer
+	Query     factoryvisualization.RuntimeMetricsQuery
+	HomeDir   func() (string, error)
 }
 
 // NewMetricsCommand builds the public `you metrics` command.
 func NewMetricsCommand(config MetricsCommandConfig) *cobra.Command {
 	groupBy := metricsGroupByWorkstation
+	sessionID := ""
 	command := &cobra.Command{
 		Use:          "metrics",
 		Short:        "Inspect recorded Factory Runtime metrics",
 		Args:         cobra.NoArgs,
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, _ []string) error {
+			jsonOutput := false
+			if config.JSON != nil {
+				jsonOutput = config.JSON()
+			}
 			return RunMetrics(cmd.Context(), MetricsConfig{
-				GroupBy: groupBy,
-				Output:  cmd.OutOrStdout(),
-				Query:   config.Query,
-				HomeDir: config.HomeDir,
+				GroupBy:   groupBy,
+				SessionID: sessionID,
+				JSON:      jsonOutput,
+				Output:    cmd.OutOrStdout(),
+				Query:     config.Query,
+				HomeDir:   config.HomeDir,
 			})
 		},
 	}
 	command.Flags().StringVar(&groupBy, "group-by", metricsGroupByWorkstation,
 		"group metrics by workstation, worker, or provider")
+	command.Flags().StringVar(&sessionID, "session", "",
+		"limit metrics to one Factory Session")
 	return command
 }
 
-// RunMetrics queries and renders one human-readable metrics result. It builds
-// the complete output before writing so a query failure cannot leave a partial
+// RunMetrics queries and renders one metrics result. It builds the complete
+// output before writing so a query or encoding failure cannot leave a partial
 // success report on stdout.
 func RunMetrics(ctx context.Context, config MetricsConfig) error {
 	if err := validateMetricsConfig(ctx, config); err != nil {
@@ -67,6 +79,7 @@ func RunMetrics(ctx context.Context, config MetricsConfig) error {
 	if err != nil {
 		return err
 	}
+	sessionID := strings.TrimSpace(config.SessionID)
 	homeDir, err := config.HomeDir()
 	if err != nil {
 		return fmt.Errorf("resolve metrics home directory: %w", err)
@@ -76,11 +89,15 @@ func RunMetrics(ctx context.Context, config MetricsConfig) error {
 	}
 	result, err := config.Query.QueryRuntimeMetrics(ctx, factoryvisualization.RuntimeMetricsQueryRequest{
 		MetricsRoot: platformmetrics.RuntimeMetricsRoot(homeDir),
+		SessionID:   sessionID,
 	})
 	if err != nil {
 		return fmt.Errorf("query Factory Runtime metrics: %w", err)
 	}
-	output := renderHumanMetrics(groupBy, result)
+	output, err := renderMetricsOutput(groupBy, sessionID, config.JSON, result)
+	if err != nil {
+		return err
+	}
 	if _, err := io.WriteString(config.Output, output); err != nil {
 		return fmt.Errorf("write metrics output: %w", err)
 	}
