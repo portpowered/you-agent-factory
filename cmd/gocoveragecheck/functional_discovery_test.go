@@ -297,7 +297,7 @@ func TestTwo(t *testing.T) {}
 	var stdout bytes.Buffer
 	stdoutWriter = &stdout
 	_, selected, err := prepareFunctionalCoverageRun(
-		config{functionalQuarantine: quarantinePath, timeout: time.Minute, packages: packagePath},
+		config{functionalQuarantine: quarantinePath, timeout: time.Minute},
 		[]string{packagePath},
 		"linux",
 		4,

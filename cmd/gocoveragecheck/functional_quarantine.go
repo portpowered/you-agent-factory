@@ -101,10 +101,11 @@ func prepareFunctionalCoverageRun(cfg config, packages []string, targetOS string
 	}
 	discoveryStarted := time.Now()
 	fmt.Fprintf(stdoutWriter, "Functional discovery: begin requested-packages=%d\n", len(sortedUniqueStrings(packages)))
+	// resolveTestPackages already obtained this current-tree package set from
+	// go list. Querying those concrete packages again for their build-selected
+	// test files avoids making go list walk the entire wildcard tree a second
+	// time, while keeping go list authoritative for the metadata we parse.
 	listPatterns := packages
-	if strings.TrimSpace(cfg.packages) == "" {
-		listPatterns = functionalTestPatterns
-	}
 	selection, manifest, err := resolveFunctionalCoverageSelection(
 		quarantinePath,
 		listPatterns,
