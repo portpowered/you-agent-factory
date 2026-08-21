@@ -281,6 +281,7 @@ func provideOperatorSettingsService(
 	createTemp operatorsettings.CreateTemporaryFile,
 	providerCatalog operatorsettings.ProviderCatalog,
 	decode operatorsettings.ConfigDecoder,
+	diagnosticDecode operatorsettings.ConfigDiagnosticsDecoder,
 	encode operatorsettings.ConfigEncoder,
 	idGenerator operatorsettings.IDGenerator,
 	providersRoot providers.Service,
@@ -297,6 +298,7 @@ func provideOperatorSettingsService(
 		providersRoot,
 		idGenerator,
 		logger,
+		diagnosticDecode,
 	)
 }
 

@@ -12,6 +12,7 @@ import (
 func NewServiceFromHomePorts(
 	files operatorsettings.FileSystem,
 	decode operatorsettings.ConfigDecoder,
+	diagnosticDecoders ...operatorsettings.ConfigDiagnosticsDecoder,
 ) (operatorsettings.Service, error) {
 	if files == nil {
 		return nil, fmt.Errorf("operator settings filesystem is required")
@@ -19,7 +20,7 @@ func NewServiceFromHomePorts(
 	if decode == nil {
 		return nil, fmt.Errorf("operator settings decoder is required")
 	}
-	documentOwner := settingsdocumentwire.NewService(files, nil, decode, nil, nil)
+	documentOwner := settingsdocumentwire.NewService(files, nil, decode, nil, nil, diagnosticDecoders...)
 	resolutionService, err := constructResolutionService()
 	if err != nil {
 		return nil, err
@@ -32,5 +33,6 @@ func NewServiceFromHomePorts(
 		decode,
 		nil,
 		nil,
+		diagnosticDecoders...,
 	)
 }

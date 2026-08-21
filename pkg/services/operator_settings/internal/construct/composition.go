@@ -20,6 +20,7 @@ func newServiceRoot(
 	decoder operatorsettings.ConfigDecoder,
 	encoder operatorsettings.ConfigEncoder,
 	idGenerator operatorsettings.IDGenerator,
+	diagnosticDecoders ...operatorsettings.ConfigDiagnosticsDecoder,
 ) (operatorsettings.Service, error) {
 	if document == nil {
 		return nil, fmt.Errorf("operator settings document owner is required")
@@ -40,5 +41,6 @@ func newServiceRoot(
 		encoder,
 		idGenerator,
 		nil,
+		diagnosticDecoders...,
 	)
 }

@@ -34,6 +34,7 @@ func TestProvideOperatorSettingsServiceLogsThroughTheCanonicalWireLogger(t *test
 		provideOperatorSettingsCreateTemporaryFile(edges),
 		provideOperatorSettingsProviderCatalog(providersRoot),
 		provideOperatorConfigDecoder(),
+		provideOperatorConfigDiagnosticsDecoder(),
 		provideOperatorConfigEncoder(),
 		provideOperatorSettingsIDGenerator(edges),
 		providersRoot,

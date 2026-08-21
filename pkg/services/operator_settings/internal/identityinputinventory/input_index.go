@@ -13,10 +13,9 @@ func ProjectInputInventory() operatorsettings.InputInventory {
 	cases = append(cases, resolveInputCases()...)
 
 	return operatorsettings.InputInventory{
-		FormatVersion: operatorsettings.InputInventoryFormatVersion,
-		UnknownFieldPolicy: "the generated GlobalConfig decoder uses json.Decoder.DisallowUnknownFields and rejects unknown top-level keys, " +
-			"unknown nested keys, and trailing JSON values",
-		PrecedenceChain: operatorsettings.PrecedenceChain,
-		Cases:           cases,
+		FormatVersion:      operatorsettings.InputInventoryFormatVersion,
+		UnknownFieldPolicy: "unknown object fields are ignored at any nesting level and reported as sorted unique JSON paths; known-field validation and exactly one JSON document remain strict",
+		PrecedenceChain:    operatorsettings.PrecedenceChain,
+		Cases:              cases,
 	}
 }

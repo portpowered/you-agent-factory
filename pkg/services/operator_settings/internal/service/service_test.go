@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/portpowered/infinite-you/internal/testutil/testdeps"
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
@@ -17,6 +18,7 @@ import (
 	resolutionwire "github.com/portpowered/infinite-you/pkg/services/operator_settings/internal/services/resolution/wire"
 	internaltestproviders "github.com/portpowered/infinite-you/pkg/services/operator_settings/internal/testproviders"
 	globalconfigmapping "github.com/portpowered/infinite-you/pkg/services/operator_settings/transports/globalconfig"
+	"go.uber.org/zap/zapcore"
 )
 
 func TestRootDelegatesResolveEffectiveToPrivateOwner(t *testing.T) {
@@ -146,6 +148,71 @@ func TestRootEnsureLocalBackendScopeRejectsShortWriteWithoutReplacement(t *testi
 	}
 }
 
+func TestRootResolveFromHomeWithEnvironmentWarnsForIgnoredConfigFields(t *testing.T) {
+	t.Parallel()
+
+	homeDir := t.TempDir()
+	configPath := filepath.Join(homeDir, ".you-agent-factory", "config.json")
+	if err := os.MkdirAll(filepath.Dir(configPath), 0o755); err != nil {
+		t.Fatalf("MkdirAll(config): %v", err)
+	}
+	if err := os.WriteFile(configPath, []byte(`{
+		"defaults": {
+			"workerModelProvider": "codex",
+			"workerModel": "gpt-5",
+			"futureDefault": "secret-value"
+		},
+		"futureTopLevel": true
+	}`), 0o600); err != nil {
+		t.Fatalf("WriteFile(config): %v", err)
+	}
+
+	zapLogger, observed := testdeps.CapturingZapLogger(zapcore.InfoLevel)
+	root := newFilesystemRootWithOptions(t, filesystemRootOptions{
+		files:                 platformfilesystem.Local{},
+		createTemp:            testCreateTemporaryFile,
+		decode:                globalconfigmapping.Decode,
+		decodeWithDiagnostics: globalconfigmapping.DecodeWithDiagnostics,
+		encode:                globalconfigmapping.Encode,
+		logger:                logging.NewZapLogger(zapLogger, false),
+	})
+
+	resolved, err := root.ResolveFromHomeWithEnvironment(homeDir, operatorsettings.Defaults{}, operatorsettings.FlagOverrides{})
+	if err != nil {
+		t.Fatalf("ResolveFromHomeWithEnvironment() = %v", err)
+	}
+	if resolved.WorkerModelProvider != "CODEX" || resolved.WorkerModel != "gpt-5" {
+		t.Fatalf("resolved defaults = %#v, want CODEX/gpt-5", resolved)
+	}
+
+	warnings := observed.FilterMessage("operator_settings.config.unknown_fields_ignored").All()
+	if len(warnings) != 1 {
+		t.Fatalf("compatibility warnings = %d, want one: %#v", len(warnings), warnings)
+	}
+	fields := warnings[0].ContextMap()
+	if fields["operation"] != "load_file_config" {
+		t.Fatalf("warning operation = %#v, want load_file_config", fields["operation"])
+	}
+	rawPaths, ok := fields["json_paths"].([]interface{})
+	if !ok {
+		t.Fatalf("warning json_paths = %#v, want []string", fields["json_paths"])
+	}
+	paths := make([]string, len(rawPaths))
+	for index, rawPath := range rawPaths {
+		paths[index], ok = rawPath.(string)
+		if !ok {
+			t.Fatalf("warning json_paths[%d] = %#v, want string", index, rawPath)
+		}
+	}
+	wantPaths := []string{"$.defaults.futureDefault", "$.futureTopLevel"}
+	if strings.Join(paths, "\n") != strings.Join(wantPaths, "\n") {
+		t.Fatalf("warning paths = %#v, want %#v", paths, wantPaths)
+	}
+	if strings.Contains(strings.Join(paths, "\n"), "secret-value") {
+		t.Fatalf("warning paths leaked an ignored value: %#v", paths)
+	}
+}
+
 func TestRootACPConfigurationAddsDeletesAndMaterializesDefaults(t *testing.T) {
 	t.Parallel()
 
@@ -261,10 +328,11 @@ func newFilesystemRoot(t *testing.T, createTemp operatorsettings.CreateTemporary
 	t.Helper()
 
 	return newFilesystemRootWithOptions(t, filesystemRootOptions{
-		files:      platformfilesystem.Local{},
-		createTemp: createTemp,
-		decode:     globalconfigmapping.Decode,
-		encode:     globalconfigmapping.Encode,
+		files:                 platformfilesystem.Local{},
+		createTemp:            createTemp,
+		decode:                globalconfigmapping.Decode,
+		decodeWithDiagnostics: globalconfigmapping.DecodeWithDiagnostics,
+		encode:                globalconfigmapping.Encode,
 	})
 }
 
@@ -273,11 +341,12 @@ func newFilesystemRoot(t *testing.T, createTemp operatorsettings.CreateTemporary
 // observing fakes (filesystem, codec, logger) without duplicating the whole
 // construction sequence.
 type filesystemRootOptions struct {
-	files      operatorsettings.FileSystem
-	createTemp operatorsettings.CreateTemporaryFile
-	decode     operatorsettings.ConfigDecoder
-	encode     operatorsettings.ConfigEncoder
-	logger     logging.Logger
+	files                 operatorsettings.FileSystem
+	createTemp            operatorsettings.CreateTemporaryFile
+	decode                operatorsettings.ConfigDecoder
+	decodeWithDiagnostics operatorsettings.ConfigDiagnosticsDecoder
+	encode                operatorsettings.ConfigEncoder
+	logger                logging.Logger
 }
 
 func newFilesystemRootWithOptions(t *testing.T, opts filesystemRootOptions) operatorsettings.Service {
@@ -289,6 +358,7 @@ func newFilesystemRootWithOptions(t *testing.T, opts filesystemRootOptions) oper
 		opts.decode,
 		opts.encode,
 		rootTestProviderCatalog,
+		opts.decodeWithDiagnostics,
 	)
 	resolutionService, err := resolutionwire.NewService(internaltestproviders.StandardCatalog())
 	if err != nil {
@@ -303,6 +373,7 @@ func newFilesystemRootWithOptions(t *testing.T, opts filesystemRootOptions) oper
 		opts.encode,
 		func() string { return "00000000-0000-4000-8000-000000000001" },
 		opts.logger,
+		opts.decodeWithDiagnostics,
 	)
 	if err != nil {
 		t.Fatalf("operatorservice.New() = %v", err)

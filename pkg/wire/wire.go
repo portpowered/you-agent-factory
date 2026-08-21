@@ -70,6 +70,7 @@ var servicesSet = wire.NewSet(
 	provideACPServer,
 	provideACPWireRecorder,
 	provideOperatorConfigDecoder,
+	provideOperatorConfigDiagnosticsDecoder,
 	provideOperatorConfigEncoder,
 	provideSystemInitializationInspectPath,
 	provideSystemInitializationLegacyFactoryMigrationFileSystem,

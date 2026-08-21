@@ -173,6 +173,10 @@ func provideOperatorConfigDecoder() operatorsettings.ConfigDecoder {
 	return globalconfigmapping.Decode
 }
 
+func provideOperatorConfigDiagnosticsDecoder() operatorsettings.ConfigDiagnosticsDecoder {
+	return globalconfigmapping.DecodeWithDiagnostics
+}
+
 func provideOperatorConfigEncoder() operatorsettings.ConfigEncoder {
 	return globalconfigmapping.Encode
 }

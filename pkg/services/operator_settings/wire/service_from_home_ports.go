@@ -21,6 +21,7 @@ func NewServiceFromHomePorts(
 	providersRoot providers.Service,
 	idGenerator operatorsettings.IDGenerator,
 	logger logging.Logger,
+	diagnosticDecoders ...operatorsettings.ConfigDiagnosticsDecoder,
 ) (operatorsettings.Service, error) {
 	if files == nil {
 		return nil, fmt.Errorf("operator settings filesystem is required")
@@ -34,7 +35,7 @@ func NewServiceFromHomePorts(
 	if idGenerator == nil {
 		return nil, fmt.Errorf("operator settings ID generator is required")
 	}
-	document := documentwire.NewService(files, nil, decode, nil, nil)
+	document := documentwire.NewService(files, nil, decode, nil, nil, diagnosticDecoders...)
 	resolution, err := resolutionwire.NewService(providersRoot)
 	if err != nil {
 		return nil, err
@@ -48,5 +49,6 @@ func NewServiceFromHomePorts(
 		nil,
 		idGenerator,
 		logger,
+		diagnosticDecoders...,
 	)
 }

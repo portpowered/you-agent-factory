@@ -13,11 +13,12 @@ var errDocumentOwnerUnavailable = errors.New("operator settings document owner i
 // Service keeps document load/update/persist behavior behind the
 // Operator Settings-owned document capability.
 type Service struct {
-	files      operatorsettings.FileSystem
-	createTemp operatorsettings.CreateTemporaryFile
-	decoder    operatorsettings.ConfigDecoder
-	encoder    operatorsettings.ConfigEncoder
-	providers  operatorsettings.ProviderCatalog
+	files             operatorsettings.FileSystem
+	createTemp        operatorsettings.CreateTemporaryFile
+	decoder           operatorsettings.ConfigDecoder
+	encoder           operatorsettings.ConfigEncoder
+	providers         operatorsettings.ProviderCatalog
+	diagnosticDecoder operatorsettings.ConfigDiagnosticsDecoder
 }
 
 var _ settingsdocument.Service = (*Service)(nil)
@@ -31,13 +32,19 @@ func New(
 	decoder operatorsettings.ConfigDecoder,
 	encoder operatorsettings.ConfigEncoder,
 	providers operatorsettings.ProviderCatalog,
+	diagnosticDecoders ...operatorsettings.ConfigDiagnosticsDecoder,
 ) *Service {
+	var diagnosticDecoder operatorsettings.ConfigDiagnosticsDecoder
+	if len(diagnosticDecoders) > 0 {
+		diagnosticDecoder = diagnosticDecoders[0]
+	}
 	return &Service{
-		files:      files,
-		createTemp: createTemp,
-		decoder:    decoder,
-		encoder:    encoder,
-		providers:  providers,
+		files:             files,
+		createTemp:        createTemp,
+		decoder:           decoder,
+		encoder:           encoder,
+		providers:         providers,
+		diagnosticDecoder: diagnosticDecoder,
 	}
 }
 
@@ -51,8 +58,9 @@ func (service *Service) RebindDocumentOwner(
 	decoder operatorsettings.ConfigDecoder,
 	encoder operatorsettings.ConfigEncoder,
 	providers operatorsettings.ProviderCatalog,
+	diagnosticDecoders ...operatorsettings.ConfigDiagnosticsDecoder,
 ) operatorsettings.DocumentOwner {
-	return New(files, createTemp, decoder, encoder, providers)
+	return New(files, createTemp, decoder, encoder, providers, diagnosticDecoders...)
 }
 
 func (service *Service) LoadDocument(

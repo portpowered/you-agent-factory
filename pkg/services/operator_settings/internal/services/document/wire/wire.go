@@ -17,6 +17,7 @@ func NewService(
 	decoder operatorsettings.ConfigDecoder,
 	encoder operatorsettings.ConfigEncoder,
 	providers operatorsettings.ProviderCatalog,
+	diagnosticDecoders ...operatorsettings.ConfigDiagnosticsDecoder,
 ) settingsdocument.Service {
-	return internalservice.New(files, createTemp, decoder, encoder, providers)
+	return internalservice.New(files, createTemp, decoder, encoder, providers, diagnosticDecoders...)
 }

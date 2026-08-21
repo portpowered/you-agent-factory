@@ -99,6 +99,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	}
 	providerCatalog := provideOperatorSettingsProviderCatalog(service)
 	configDecoder := provideOperatorConfigDecoder()
+	configDiagnosticsDecoder := provideOperatorConfigDiagnosticsDecoder()
 	configEncoder := provideOperatorConfigEncoder()
 	idGenerator := provideOperatorSettingsIDGenerator(edges2)
 	logger, err := logging.NewDefaultLogger()
@@ -106,7 +107,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 		return nil, err
 	}
 	loggingLogger := provideOperatorSettingsLogger(logger)
-	operatorsettingsService, err := provideOperatorSettingsService(fileSystem, createTemporaryFile, providerCatalog, configDecoder, configEncoder, idGenerator, service, loggingLogger)
+	operatorsettingsService, err := provideOperatorSettingsService(fileSystem, createTemporaryFile, providerCatalog, configDecoder, configDiagnosticsDecoder, configEncoder, idGenerator, service, loggingLogger)
 	if err != nil {
 		return nil, err
 	}
@@ -856,6 +857,7 @@ var servicesSet = wire5.NewSet(
 	provideACPServer,
 	provideACPWireRecorder,
 	provideOperatorConfigDecoder,
+	provideOperatorConfigDiagnosticsDecoder,
 	provideOperatorConfigEncoder,
 	provideSystemInitializationInspectPath,
 	provideSystemInitializationLegacyFactoryMigrationFileSystem,

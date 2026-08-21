@@ -27,13 +27,14 @@ type ProviderModelUpdate struct {
 // injected ports and a private DocumentOwner; it is not the peer-facing
 // Operator Settings authority. New code should depend on Service.
 type ConfigDocumentService struct {
-	Files           FileSystem
-	CreateTemp      CreateTemporaryFile
-	Providers       ProviderCatalog
-	Decoder         ConfigDecoder
-	Encoder         ConfigEncoder
-	DocumentOwner   DocumentOwner
-	PersistenceLock sync.Locker
+	Files             FileSystem
+	CreateTemp        CreateTemporaryFile
+	Providers         ProviderCatalog
+	Decoder           ConfigDecoder
+	DiagnosticDecoder ConfigDiagnosticsDecoder
+	Encoder           ConfigEncoder
+	DocumentOwner     DocumentOwner
+	PersistenceLock   sync.Locker
 }
 
 // ErrProviderModelInputCanceled is returned by a prompt when the operator
@@ -46,7 +47,7 @@ func (service ConfigDocumentService) owner() (DocumentOwner, error) {
 		return nil, fmt.Errorf("operator settings document owner is required")
 	}
 	if rebindable, ok := service.DocumentOwner.(interface {
-		RebindDocumentOwner(FileSystem, CreateTemporaryFile, ConfigDecoder, ConfigEncoder, ProviderCatalog) DocumentOwner
+		RebindDocumentOwner(FileSystem, CreateTemporaryFile, ConfigDecoder, ConfigEncoder, ProviderCatalog, ...ConfigDiagnosticsDecoder) DocumentOwner
 	}); ok {
 		return rebindable.RebindDocumentOwner(
 			service.Files,
@@ -54,6 +55,7 @@ func (service ConfigDocumentService) owner() (DocumentOwner, error) {
 			service.Decoder,
 			service.Encoder,
 			service.Providers,
+			service.DiagnosticDecoder,
 		), nil
 	}
 	return service.DocumentOwner, nil
