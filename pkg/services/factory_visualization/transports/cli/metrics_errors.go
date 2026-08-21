@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	factoryvisualization "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
 const (
@@ -74,6 +75,19 @@ func (err *MetricsError) CLIErrorMessage() string {
 		return "metrics command failed"
 	}
 	return strings.TrimSpace(err.Message)
+}
+
+// CLIErrorFamily supplies the public response family through the shared
+// FamilyCodedError seam. Invalid command input is a bad request; local
+// artifact and environment failures remain internal failures.
+func (err *MetricsError) CLIErrorFamily() factoryapi.ErrorFamily {
+	if err == nil {
+		return ""
+	}
+	if err.CLIErrorCode() == MetricsInvalidGroupByCode {
+		return factoryapi.ErrorFamilyBadRequest
+	}
+	return factoryapi.ErrorFamilyInternalServerError
 }
 
 func newMetricsError(code, message string, cause error) *MetricsError {

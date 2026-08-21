@@ -518,6 +518,7 @@ type productionMetricsFailureCase struct {
 	home        func() (string, error)
 	queryError  error
 	wantCode    string
+	wantFamily  string
 	wantMessage string
 	wantCalls   int
 	wantCause   error
@@ -538,6 +539,7 @@ func TestProductionMetricsCommandExecuteCommandPreservesCodedFailures(t *testing
 			args:        []string{"metrics", "--group-by", "region"},
 			home:        func() (string, error) { return "operator-home", nil },
 			wantCode:    "METRICS_INVALID_GROUP_BY",
+			wantFamily:  "BAD_REQUEST",
 			wantMessage: `invalid --group-by "region": choose workstation, worker, or provider`,
 		},
 		{
@@ -545,6 +547,7 @@ func TestProductionMetricsCommandExecuteCommandPreservesCodedFailures(t *testing
 			args:        []string{"--json", "metrics", "--group-by", "region"},
 			home:        func() (string, error) { return "operator-home", nil },
 			wantCode:    "METRICS_INVALID_GROUP_BY",
+			wantFamily:  "BAD_REQUEST",
 			wantMessage: `invalid --group-by "region": choose workstation, worker, or provider`,
 		},
 		{
@@ -552,6 +555,7 @@ func TestProductionMetricsCommandExecuteCommandPreservesCodedFailures(t *testing
 			args:        []string{"metrics"},
 			home:        func() (string, error) { return "", resolverCause },
 			wantCode:    "METRICS_HOME_DIRECTORY_FAILED",
+			wantFamily:  "INTERNAL_SERVER_ERROR",
 			wantMessage: "resolve metrics home directory: home directory could not be resolved; set HOME or USERPROFILE",
 			wantCause:   resolverCause,
 		},
@@ -560,6 +564,7 @@ func TestProductionMetricsCommandExecuteCommandPreservesCodedFailures(t *testing
 			args:        []string{"metrics"},
 			home:        func() (string, error) { return "  ", nil },
 			wantCode:    "METRICS_HOME_DIRECTORY_FAILED",
+			wantFamily:  "INTERNAL_SERVER_ERROR",
 			wantMessage: "resolve metrics home directory: resolver returned an empty path; set HOME or USERPROFILE",
 		},
 		{
@@ -568,6 +573,7 @@ func TestProductionMetricsCommandExecuteCommandPreservesCodedFailures(t *testing
 			home:        func() (string, error) { return "operator-home", nil },
 			queryError:  queryError,
 			wantCode:    "METRICS_QUERY_FAILED",
+			wantFamily:  "INTERNAL_SERVER_ERROR",
 			wantMessage: "query Factory Runtime metrics: read artifacts",
 			wantCalls:   1,
 			wantCause:   queryCause,
@@ -606,7 +612,7 @@ func runProductionMetricsFailureCase(t *testing.T, test productionMetricsFailure
 	if stdout.Len() != 0 {
 		t.Fatalf("stdout = %q, want empty failure output", stdout.String())
 	}
-	assertSingleMetricsDiagnostic(t, stderr.String(), test.wantCode, test.wantMessage)
+	assertSingleMetricsDiagnostic(t, stderr.String(), test.wantCode, test.wantFamily, test.wantMessage)
 	if queryCalls != test.wantCalls {
 		t.Fatalf("metrics query calls = %d, want %d", queryCalls, test.wantCalls)
 	}
@@ -624,7 +630,7 @@ func runProductionMetricsFailureCase(t *testing.T, test productionMetricsFailure
 	}
 }
 
-func assertSingleMetricsDiagnostic(t *testing.T, output, wantCode, wantMessage string) {
+func assertSingleMetricsDiagnostic(t *testing.T, output, wantCode, wantFamily, wantMessage string) {
 	t.Helper()
 	trimmed := strings.TrimSpace(output)
 	lines := strings.Split(trimmed, "\n")
@@ -633,13 +639,14 @@ func assertSingleMetricsDiagnostic(t *testing.T, output, wantCode, wantMessage s
 	}
 	var diagnostic struct {
 		Code    string `json:"code"`
+		Family  string `json:"family"`
 		Message string `json:"message"`
 	}
 	if err := json.Unmarshal([]byte(trimmed), &diagnostic); err != nil {
 		t.Fatalf("decode central diagnostic: %v; output=%q", err, output)
 	}
-	if diagnostic.Code != wantCode || diagnostic.Message != wantMessage {
-		t.Fatalf("diagnostic = %#v, want code %q and message %q", diagnostic, wantCode, wantMessage)
+	if diagnostic.Code != wantCode || diagnostic.Family != wantFamily || diagnostic.Message != wantMessage {
+		t.Fatalf("diagnostic = %#v, want code %q, family %q, and message %q", diagnostic, wantCode, wantFamily, wantMessage)
 	}
 }
 
