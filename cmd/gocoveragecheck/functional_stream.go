@@ -23,9 +23,10 @@ type functionalStreamReporter struct {
 }
 
 type functionalStreamWriter struct {
-	reporter           *functionalStreamReporter
-	pending            []byte
-	coverageOutputMode functionalCoverageOutputMode
+	reporter                   *functionalStreamReporter
+	pending                    []byte
+	coverageOutputMode         functionalCoverageOutputMode
+	coverageContinuationBuffer []byte
 }
 
 type functionalCoverageOutputMode uint8
@@ -90,12 +91,14 @@ func (writer *functionalStreamWriter) Flush() error {
 	writer.reporter.mu.Lock()
 	defer writer.reporter.mu.Unlock()
 
-	if len(writer.pending) == 0 {
-		return nil
+	if len(writer.pending) > 0 {
+		line := append([]byte(nil), writer.pending...)
+		writer.pending = nil
+		if err := writer.writeLineLocked(line); err != nil {
+			return err
+		}
 	}
-	line := append([]byte(nil), writer.pending...)
-	writer.pending = nil
-	return writer.writeLineLocked(line)
+	return writer.flushCoverageContinuationLocked()
 }
 
 func (writer *functionalStreamWriter) writeLineLocked(line []byte) error {
@@ -105,6 +108,11 @@ func (writer *functionalStreamWriter) writeLineLocked(line []byte) error {
 	}
 	if writer.reporter.onEvent != nil {
 		writer.reporter.onEvent(event)
+	}
+	if event.Action != "output" {
+		if err := writer.flushCoverageContinuationLocked(); err != nil {
+			return err
+		}
 	}
 
 	switch event.Action {
@@ -154,36 +162,32 @@ func (writer *functionalStreamWriter) writeLineLocked(line []byte) error {
 
 // filterCoverageOutput suppresses the standalone per-package coverage line,
 // including a long line split across multiple test2json output events. It also
-// records a split successful package result so its coverpkg continuation can be
-// dropped after the compact prefix is rendered. Once a recognizable line
-// prefix has been seen without a newline, following bytes belong to that same
-// line until its newline; the next human diagnostic is then passed through.
+// records a split successful package result so its coverpkg continuation can
+// be dropped after the compact prefix is rendered. Candidate continuation
+// bytes are buffered until their line is complete, because a diagnostic can
+// begin with the same module path as a coverpkg entry. The complete line is
+// then parsed rather than classified by a broad substring match.
 func (writer *functionalStreamWriter) filterCoverageOutput(output string) string {
 	var filtered strings.Builder
 	for {
-		if writer.coverageOutputMode == functionalCoverageOutputSuppressPending || writer.coverageOutputMode == functionalCoverageOutputCompactPending {
-			if isCoveragePackageListContinuation(output) {
-				if writer.coverageOutputMode == functionalCoverageOutputCompactPending {
-					writer.coverageOutputMode = functionalCoverageOutputCompact
-				} else {
-					writer.coverageOutputMode = functionalCoverageOutputSuppress
-				}
-				continue
-			}
-			writer.coverageOutputMode = functionalCoverageOutputNormal
-			continue
-		}
-
 		if writer.coverageOutputMode != functionalCoverageOutputNormal {
 			newline := strings.IndexByte(output, '\n')
 			if newline < 0 {
+				writer.coverageContinuationBuffer = append(writer.coverageContinuationBuffer, output...)
 				return filtered.String()
 			}
+
+			candidate := append(writer.coverageContinuationBuffer, output[:newline+1]...)
+			writer.coverageContinuationBuffer = nil
 			writer.coverageOutputMode = functionalCoverageOutputNormal
-			output = output[newline+1:]
-			if output == "" {
-				return filtered.String()
+			if isCoveragePackageListLine(string(candidate)) {
+				output = output[newline+1:]
+				if output == "" {
+					return filtered.String()
+				}
+				continue
 			}
+			output = string(candidate) + output[newline+1:]
 			continue
 		}
 
@@ -191,10 +195,12 @@ func (writer *functionalStreamWriter) filterCoverageOutput(output string) string
 		if newline < 0 {
 			if isRedundantCoverageOutputLine(output) {
 				writer.coverageOutputMode = functionalCoverageOutputSuppress
+				writer.coverageContinuationBuffer = append(writer.coverageContinuationBuffer, coveragePackageListFragment(output)...)
 				return filtered.String()
 			}
 			if isSuccessfulCoverageOutputFragment(output) {
 				writer.coverageOutputMode = functionalCoverageOutputCompact
+				writer.coverageContinuationBuffer = append(writer.coverageContinuationBuffer, coveragePackageListFragment(output)...)
 			}
 			filtered.WriteString(output)
 			return filtered.String()
@@ -203,10 +209,14 @@ func (writer *functionalStreamWriter) filterCoverageOutput(output string) string
 		lineEnd := newline + 1
 		line := output[:lineEnd]
 		if isRedundantCoverageOutputLine(line) {
-			writer.coverageOutputMode = functionalCoverageOutputSuppressPending
+			if hasCoveragePackageList(line) {
+				writer.coverageOutputMode = functionalCoverageOutputNormal
+			} else {
+				writer.coverageOutputMode = functionalCoverageOutputSuppressPending
+			}
 		} else {
 			filtered.WriteString(line)
-			if isSuccessfulCoverageOutputLine(line) {
+			if isSuccessfulCoverageOutputLine(line) && !strings.Contains(line, "% of statements in ") {
 				writer.coverageOutputMode = functionalCoverageOutputCompactPending
 			}
 		}
@@ -233,32 +243,54 @@ func isSuccessfulCoverageOutputFragment(output string) bool {
 	return strings.Contains(line, "coverage: ") && strings.Contains(line, "% of statements in ")
 }
 
-func isCoveragePackageListContinuation(output string) bool {
-	line := output
-	if newline := strings.IndexByte(line, '\n'); newline >= 0 {
-		line = line[:newline]
+func hasCoveragePackageList(output string) bool {
+	return strings.Contains(output, "% of statements in ")
+}
+
+func coveragePackageListFragment(output string) string {
+	const coveragePackageListSuffix = "% of statements in "
+	start := strings.Index(output, coveragePackageListSuffix)
+	if start < 0 {
+		return ""
 	}
-	line = strings.TrimSuffix(line, "\r")
-	if strings.TrimSpace(line) == "" {
+	return output[start+len(coveragePackageListSuffix):]
+}
+
+func isCoveragePackageListLine(output string) bool {
+	line, _, ok := singleFunctionalOutputLine(output)
+	if !ok || line == "" {
 		return false
 	}
-	trimmed := strings.TrimSpace(line)
-	for _, diagnosticPrefix := range []string{
-		"=== ",
-		"--- ",
-		"FAIL",
-		"PASS",
-		"panic:",
-		"goroutine ",
-		"coverage: ",
-		"ok ",
-		"ok\t",
-	} {
-		if strings.HasPrefix(trimmed, diagnosticPrefix) {
+	for _, packagePath := range strings.Split(line, ", ") {
+		if !isCoveragePackagePath(packagePath) {
 			return false
 		}
 	}
-	return strings.Contains(line, modulePath+"/")
+	return true
+}
+
+func isCoveragePackagePath(packagePath string) bool {
+	if packagePath == modulePath {
+		return true
+	}
+	if !strings.HasPrefix(packagePath, modulePath+"/") {
+		return false
+	}
+	suffix := strings.TrimPrefix(packagePath, modulePath+"/")
+	if suffix == "" || strings.HasPrefix(suffix, "/") || strings.HasSuffix(suffix, "/") || strings.Contains(suffix, "//") {
+		return false
+	}
+	for index := 0; index < len(suffix); index++ {
+		character := suffix[index]
+		if (character >= 'a' && character <= 'z') ||
+			(character >= 'A' && character <= 'Z') ||
+			(character >= '0' && character <= '9') ||
+			character == '.' || character == '_' || character == '-' || character == '~' || character == '/' {
+			continue
+		}
+		return false
+	}
+	return true
 }
 
 // isRedundantCoverageOutputLine reports whether a go test output event is the
@@ -318,6 +350,20 @@ func singleFunctionalOutputLine(output string) (line, lineEnding string, ok bool
 		lineEnding = "\r" + lineEnding
 	}
 	return line, lineEnding, true
+}
+
+func (writer *functionalStreamWriter) flushCoverageContinuationLocked() error {
+	if len(writer.coverageContinuationBuffer) == 0 {
+		writer.coverageOutputMode = functionalCoverageOutputNormal
+		return nil
+	}
+	candidate := writer.coverageContinuationBuffer
+	writer.coverageContinuationBuffer = nil
+	writer.coverageOutputMode = functionalCoverageOutputNormal
+	if isCoveragePackageListLine(string(candidate)) {
+		return nil
+	}
+	return writer.reporter.writeSink(candidate)
 }
 
 func (writer *lockedFunctionalStreamWriter) Write(data []byte) (int, error) {
