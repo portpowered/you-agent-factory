@@ -157,6 +157,7 @@ func provideModelsService(edges serviceedges.Edges) (models.Service, error) {
 		modelswire.HostDiagnosticLogger(factorysessionwire.ModelHostDiagnosticLogger(zap.NewNop())),
 		modelswire.HostMetricsRecorder(factorysessionwire.ModelHostDiagnosticMetrics(edges.InvocationMetricsRecorder)),
 		modelLocalRuntimeHooks(workerswire.LocalRuntimeHooks()),
+		edges.ModelResolveHuggingFaceRevision,
 	)
 }
 

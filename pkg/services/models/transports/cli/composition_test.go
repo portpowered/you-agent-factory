@@ -67,6 +67,10 @@ func (stub compositionModelsRoot) GetModelReadiness(context.Context, modelinfere
 	return modelinference.GetModelReadinessResult{}, modelinference.ErrUnsupportedOperation
 }
 
+func (stub compositionModelsRoot) ResolveModelReference(context.Context, modelinference.ResolveModelReferenceRequest) (modelinference.ResolveModelReferenceResult, error) {
+	return modelinference.ResolveModelReferenceResult{}, modelinference.ErrUnsupportedOperation
+}
+
 func (stub compositionModelsRoot) PullModelForScope(ctx context.Context, request modelinference.PullModelRequest) (modelinference.PullResult, error) {
 	if stub.pullModel != nil {
 		return stub.pullModel(ctx, request.Name)

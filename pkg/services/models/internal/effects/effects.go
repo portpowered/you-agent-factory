@@ -82,12 +82,13 @@ type LocalRuntimeHooks struct {
 }
 
 type ProcessDependencies struct {
-	Logger      *zap.Logger
-	Clock       func() time.Time
-	PullMetrics PullMetricsRecorder
-	HostLogger  HostDiagnosticLogger
-	HostMetrics HostMetricsRecorder
-	LocalHooks  LocalRuntimeHooks
+	Logger                     *zap.Logger
+	Clock                      func() time.Time
+	PullMetrics                PullMetricsRecorder
+	HostLogger                 HostDiagnosticLogger
+	HostMetrics                HostMetricsRecorder
+	LocalHooks                 LocalRuntimeHooks
+	ResolveHuggingFaceRevision func(context.Context, string) (string, error)
 }
 
 type AssetHTTPDoer interface {

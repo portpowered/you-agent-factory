@@ -72,6 +72,7 @@ func NewService(
 	hostLogger HostDiagnosticLogger,
 	hostMetrics HostMetricsRecorder,
 	localHooks LocalRuntimeHooks,
+	revisionResolvers ...func(context.Context, string) (string, error),
 ) (models.Service, error) {
 	if err := validateConstructionInputs(
 		assetPlatform,
@@ -128,6 +129,7 @@ func NewService(
 		hostLogger,
 		hostMetrics,
 		localHooks,
+		revisionResolvers...,
 	)
 }
 
@@ -160,6 +162,7 @@ func composeModelsService(
 	hostLogger HostDiagnosticLogger,
 	hostMetrics HostMetricsRecorder,
 	localHooks LocalRuntimeHooks,
+	revisionResolvers ...func(context.Context, string) (string, error),
 ) (models.Service, error) {
 	resolvedEndpoints := resolveAssetEndpoints(assetEndpoints)
 	launcher, clock, createTempFile := adaptConstructionPorts(
@@ -212,8 +215,18 @@ func composeModelsService(
 		modelseffects.ProcessDependencies{
 			Logger: logger, Clock: now, PullMetrics: pullMetrics,
 			HostLogger: hostLogger, HostMetrics: hostMetrics, LocalHooks: localHooks,
+			ResolveHuggingFaceRevision: firstRevisionResolver(revisionResolvers),
 		},
 	)
+}
+
+func firstRevisionResolver(
+	resolvers []func(context.Context, string) (string, error),
+) func(context.Context, string) (string, error) {
+	if len(resolvers) == 0 {
+		return nil
+	}
+	return resolvers[0]
 }
 
 func resolveAssetEndpoints(overrides models.RuntimeAssetEndpoints) models.RuntimeAssetEndpoints {

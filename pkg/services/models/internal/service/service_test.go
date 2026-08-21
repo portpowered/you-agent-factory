@@ -822,6 +822,8 @@ func TestRootContractOnlyOperationsFailExplicitly(t *testing.T) {
 	assertContractOnlyUnsupported(t, "GetCatalogModel", err)
 	_, err = root.GetModelReadiness(ctx, models.GetModelReadinessRequest{})
 	assertContractOnlyUnsupported(t, "GetModelReadiness", err)
+	_, err = root.ResolveModelReference(ctx, models.ResolveModelReferenceRequest{})
+	assertContractOnlyUnsupported(t, "ResolveModelReference", err)
 	_, err = root.PrepareModelAssets(ctx, models.PrepareModelAssetsRequest{})
 	assertContractOnlyUnsupported(t, "PrepareModelAssets", err)
 	_, err = root.InspectModelAssets(ctx, models.InspectModelAssetsRequest{})

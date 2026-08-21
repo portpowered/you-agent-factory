@@ -28,6 +28,10 @@ type Service interface {
 	// GetModelReadiness returns current detached readiness facts for one scoped
 	// model without exposing a catalog assembler, cache, host, or runtime handle.
 	GetModelReadiness(context.Context, GetModelReadinessRequest) (GetModelReadinessResult, error)
+	// ResolveModelReference resolves one configured name or supported source
+	// reference without inspecting assets or starting a backend. The result is
+	// detached and contains only safe provenance and effective model policy.
+	ResolveModelReference(context.Context, ResolveModelReferenceRequest) (ResolveModelReferenceResult, error)
 	// PullModelForScope preserves the established pull result contract while
 	// requiring the caller to identify the opened runtime scope explicitly.
 	PullModelForScope(context.Context, PullModelRequest) (PullResult, error)
@@ -91,4 +95,5 @@ type Service interface {
 type RuntimeBinding struct {
 	CacheDirectory string
 	RuntimeConfig  RuntimeConfigLoader
+	OperatorModels map[string]ModelOverlay
 }

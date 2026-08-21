@@ -61,6 +61,10 @@ func (stub ownedCoverageModelsRoot) GetModelReadiness(context.Context, modelinfe
 	return modelinference.GetModelReadinessResult{}, modelinference.ErrUnsupportedOperation
 }
 
+func (stub ownedCoverageModelsRoot) ResolveModelReference(context.Context, modelinference.ResolveModelReferenceRequest) (modelinference.ResolveModelReferenceResult, error) {
+	return modelinference.ResolveModelReferenceResult{}, modelinference.ErrUnsupportedOperation
+}
+
 func (stub ownedCoverageModelsRoot) PullModelForScope(ctx context.Context, request modelinference.PullModelRequest) (modelinference.PullResult, error) {
 	if stub.pullModel != nil {
 		return stub.pullModel(ctx, request.Name)

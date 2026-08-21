@@ -23,22 +23,23 @@ import (
 // Root retains the process-wide external effect ports of the injected Models
 // service. It is inert until it is bound to a Factory Session runtime.
 type Root struct {
-	processLauncher modelhost.ProcessLauncher
-	hostHTTP        modelhost.HTTPDoer
-	hostClock       modelhost.Clock
-	runtimeRunner   platformprocess.CommandRunner
-	runtimeHTTP     localmodels.HTTPDoer
-	runtimeInspect  localmodels.InspectFile
-	runtimeTempDir  localmodels.TempDirectory
-	runtimeTempFile localmodels.CreateTempFile
-	runtimeScopes   runtimescopes.Service
-	assets          scopedassets.Service
-	runtimeHost     runtimehost.Service
-	inference       modelinference.Service
-	runtimeMu       sync.RWMutex
-	runtimeByScope  map[models.RuntimeScopeRef]models.Service
-	catalog         modelcatalog.Service
-	process         modelseffects.ProcessDependencies
+	processLauncher            modelhost.ProcessLauncher
+	hostHTTP                   modelhost.HTTPDoer
+	hostClock                  modelhost.Clock
+	runtimeRunner              platformprocess.CommandRunner
+	runtimeHTTP                localmodels.HTTPDoer
+	runtimeInspect             localmodels.InspectFile
+	runtimeTempDir             localmodels.TempDirectory
+	runtimeTempFile            localmodels.CreateTempFile
+	runtimeScopes              runtimescopes.Service
+	assets                     scopedassets.Service
+	runtimeHost                runtimehost.Service
+	inference                  modelinference.Service
+	resolveHuggingFaceRevision func(context.Context, string) (string, error)
+	runtimeMu                  sync.RWMutex
+	runtimeByScope             map[models.RuntimeScopeRef]models.Service
+	catalog                    modelcatalog.Service
+	process                    modelseffects.ProcessDependencies
 }
 
 var _ models.Service = (*Root)(nil)
@@ -109,14 +110,19 @@ func NewRoot(
 	if process.Clock == nil {
 		return nil, missingDependencyError("Models process clock")
 	}
+	resolveRevision := process.ResolveHuggingFaceRevision
+	if resolveRevision == nil {
+		resolveRevision = defaultHuggingFaceRevision
+	}
 	return &Root{
 		processLauncher: processLauncher, hostHTTP: hostHTTP, hostClock: hostClock,
 		runtimeRunner: runtimeRunner, runtimeHTTP: runtimeHTTP,
 		runtimeInspect: runtimeInspect, runtimeTempDir: runtimeTempDir, runtimeTempFile: runtimeTempFile,
 		runtimeScopes: runtimeScopes, catalog: catalogService, assets: assetService,
 		runtimeHost: runtimeHostService, inference: inferenceService,
-		runtimeByScope: make(map[models.RuntimeScopeRef]models.Service),
-		process:        process,
+		resolveHuggingFaceRevision: resolveRevision,
+		runtimeByScope:             make(map[models.RuntimeScopeRef]models.Service),
+		process:                    process,
 	}, nil
 }
 
@@ -160,6 +166,7 @@ func (o *Root) OpenRuntimeScope(
 	config := request.Config.Clone()
 	binding := models.RuntimeBinding{
 		CacheDirectory: config.CacheDirectory,
+		OperatorModels: cloneModelOverlays(config.OperatorModels),
 		RuntimeConfig: func() *models.RuntimeConfig {
 			runtimeConfig := config.Runtime
 			return &runtimeConfig
@@ -227,6 +234,17 @@ func (o *Root) GetModelReadiness(
 		return models.GetModelReadinessResult{}, models.ErrUnsupportedOperation
 	}
 	return o.catalog.GetModelReadiness(ctx, request)
+}
+
+func cloneModelOverlays(overlays map[string]models.ModelOverlay) map[string]models.ModelOverlay {
+	if overlays == nil {
+		return nil
+	}
+	cloned := make(map[string]models.ModelOverlay, len(overlays))
+	for name, overlay := range overlays {
+		cloned[name] = overlay.Clone()
+	}
+	return cloned
 }
 
 func runtimeScopeError(err error) error {
@@ -547,6 +565,13 @@ func (s *runtimeService) PrepareModelAssets(
 	models.PrepareModelAssetsRequest,
 ) (models.PrepareModelAssetsResult, error) {
 	return models.PrepareModelAssetsResult{}, models.ErrUnsupportedOperation
+}
+
+func (s *runtimeService) ResolveModelReference(
+	context.Context,
+	models.ResolveModelReferenceRequest,
+) (models.ResolveModelReferenceResult, error) {
+	return models.ResolveModelReferenceResult{}, models.ErrUnsupportedOperation
 }
 
 func (s *runtimeService) PullModelForScope(

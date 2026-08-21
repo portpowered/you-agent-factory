@@ -70,19 +70,20 @@ type Edges struct {
 	ModelAssetHTTPClient             interface {
 		Do(*http.Request) (*http.Response, error)
 	}
-	ModelAssetEndpoints            models.RuntimeAssetEndpoints
-	ModelAssetHostPlatform         models.AssetHostPlatform
-	ModelAssetMakeDirectories      AssetMakeDirectories
-	ModelAssetInspectPath          AssetInspectPath
-	ModelAssetResolveHomeDirectory AssetResolveHomeDirectory
-	ModelAssetWriteFile            AssetWriteFile
-	ModelAssetRenamePath           AssetRenamePath
-	ModelAssetRemovePath           AssetRemovePath
-	ModelAssetReadFile             AssetReadFile
-	ModelAssetReadDirectory        AssetReadDirectory
-	ModelAssetCreateFile           AssetCreateFile
-	ModelAssetOpenFile             AssetOpenFile
-	ModelHostProcessLauncher       interface {
+	ModelAssetEndpoints             models.RuntimeAssetEndpoints
+	ModelAssetHostPlatform          models.AssetHostPlatform
+	ModelResolveHuggingFaceRevision func(context.Context, string) (string, error)
+	ModelAssetMakeDirectories       AssetMakeDirectories
+	ModelAssetInspectPath           AssetInspectPath
+	ModelAssetResolveHomeDirectory  AssetResolveHomeDirectory
+	ModelAssetWriteFile             AssetWriteFile
+	ModelAssetRenamePath            AssetRenamePath
+	ModelAssetRemovePath            AssetRemovePath
+	ModelAssetReadFile              AssetReadFile
+	ModelAssetReadDirectory         AssetReadDirectory
+	ModelAssetCreateFile            AssetCreateFile
+	ModelAssetOpenFile              AssetOpenFile
+	ModelHostProcessLauncher        interface {
 		Start(context.Context, HostProcessStartSpec) (interface {
 			HealthEndpoint() string
 			Wait() error
@@ -306,6 +307,9 @@ func Merge(defaults Edges, replacements Edges) Edges {
 	}
 	if replacements.ModelAssetHostPlatform.Architecture != "" {
 		defaults.ModelAssetHostPlatform.Architecture = replacements.ModelAssetHostPlatform.Architecture
+	}
+	if replacements.ModelResolveHuggingFaceRevision != nil {
+		defaults.ModelResolveHuggingFaceRevision = replacements.ModelResolveHuggingFaceRevision
 	}
 	if replacements.ModelAssetMakeDirectories != nil {
 		defaults.ModelAssetMakeDirectories = replacements.ModelAssetMakeDirectories
