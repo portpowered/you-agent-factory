@@ -82,6 +82,7 @@ type Document struct {
 	Defaults       DocumentDefaults
 	Runtime        DocumentRuntimeSettings
 	WorkerPresets  []DocumentWorkerPreset
+	Models         map[string]ModelConfig
 	Workers        DocumentWorkerSettings
 }
 
@@ -93,6 +94,7 @@ func (document Document) Clone() Document {
 	if document.WorkerPresets != nil {
 		cloned.WorkerPresets = cloneDocumentWorkerPresets(document.WorkerPresets)
 	}
+	cloned.Models = cloneModelConfigs(document.Models)
 	cloned.Workers = document.Workers.Clone()
 	return cloned
 }

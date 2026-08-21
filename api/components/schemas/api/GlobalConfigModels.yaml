@@ -1,0 +1,6 @@
+type: object
+description: >-
+  Optional operator model overlays keyed by model name. A model entry may
+  override one or more built-in fields or fully describe a new model name.
+additionalProperties:
+  $ref: './GlobalConfigModel.yaml'

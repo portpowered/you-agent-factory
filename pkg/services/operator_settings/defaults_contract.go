@@ -58,6 +58,7 @@ type Config struct {
 	Runtime        RuntimeSettings
 	Workers        WorkerSettings
 	WorkerPresets  []WorkerPreset
+	Models         map[string]ModelConfig
 }
 
 type WorkerSettings struct {
@@ -141,6 +142,10 @@ func (cfg Config) Normalize() (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
+	models, err := normalizeModelConfigs(cfg.Models)
+	if err != nil {
+		return Config{}, err
+	}
 	runtime, err := cfg.Runtime.normalize()
 	if err != nil {
 		return Config{}, err
@@ -158,6 +163,7 @@ func (cfg Config) Normalize() (Config, error) {
 		Runtime:       runtime,
 		Workers:       workers,
 		WorkerPresets: presets,
+		Models:        models,
 	}, nil
 }
 

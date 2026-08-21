@@ -70,6 +70,16 @@
       "note": "Peer-facing operator-config input inventory types and ProjectInputInventory thin surface delegating to private implementation."
     },
     {
+      "file": "model_config_contract.go",
+      "classification": "thin_root_contract",
+      "note": "Peer-facing optional model overlay values, generic operation names, load policy, and typed configuration failures."
+    },
+    {
+      "file": "model_config_contract_test.go",
+      "classification": "thin_root_contract_test",
+      "note": "Observable normalization, typed-failure, clone-isolation, and complete-new-model contract coverage."
+    },
+    {
       "file": "packaged_root_shape_test.go",
       "classification": "thin_root_contract_test",
       "note": "DEL-SET story 005 seal proving Operator Settings ships only wire/, internal/, transports/, and INV-retained test-only testdata/ package directories plus thin root contract files."

@@ -9,6 +9,8 @@ properties:
     $ref: './GlobalConfigDefaults.yaml'
   runtime:
     $ref: './GlobalConfigRuntime.yaml'
+  models:
+    $ref: './GlobalConfigModels.yaml'
   workers:
     $ref: './GlobalConfigWorkers.yaml'
   workerPresets:

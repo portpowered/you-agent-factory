@@ -3333,6 +3333,14 @@ components:
       $ref: './components/schemas/api/GlobalConfigRuntime.yaml'
     GlobalConfigRuntimeArtifactSettings:
       $ref: './components/schemas/api/GlobalConfigRuntimeArtifactSettings.yaml'
+    GlobalConfigModels:
+      $ref: './components/schemas/api/GlobalConfigModels.yaml'
+    GlobalConfigModel:
+      $ref: './components/schemas/api/GlobalConfigModel.yaml'
+    GlobalConfigModelLoadPolicy:
+      $ref: './components/schemas/api/GlobalConfigModelLoadPolicy.yaml'
+    GlobalConfigModelOperation:
+      $ref: './components/schemas/api/GlobalConfigModelOperation.yaml'
     GlobalConfigWorkerPreset:
       $ref: './components/schemas/api/GlobalConfigWorkerPreset.yaml'
     GlobalConfigWorkerPresetModelProvider:

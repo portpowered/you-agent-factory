@@ -684,6 +684,19 @@ const (
 	Stdio GlobalConfigACPIntegrationTransport = "stdio"
 )
 
+// Defines values for GlobalConfigModelLoadPolicy.
+const (
+	ONDEMAND GlobalConfigModelLoadPolicy = "ON_DEMAND"
+)
+
+// Defines values for GlobalConfigModelOperation.
+const (
+	ASR   GlobalConfigModelOperation = "ASR"
+	EMBED GlobalConfigModelOperation = "EMBED"
+	OMNI  GlobalConfigModelOperation = "OMNI"
+	TTS   GlobalConfigModelOperation = "TTS"
+)
+
 // Defines values for GuardType.
 const (
 	GuardTypeAllChildrenComplete GuardType = "ALL_CHILDREN_COMPLETE"
@@ -4945,6 +4958,9 @@ type GlobalConfig struct {
 	// Defaults Operator defaults that participate independently in file, environment, and flag precedence.
 	Defaults *GlobalConfigDefaults `json:"defaults,omitempty"`
 
+	// Models Optional operator model overlays keyed by model name. A model entry may override one or more built-in fields or fully describe a new model name.
+	Models *GlobalConfigModels `json:"models,omitempty"`
+
 	// Runtime Runtime observability settings loaded from operator configuration before command-line overrides.
 	Runtime *GlobalConfigRuntime `json:"runtime,omitempty"`
 
@@ -4996,6 +5012,30 @@ type GlobalConfigDefaults struct {
 	// WorkerModelProvider Default worker model provider, including supported aliases and symbolic DEFAULT resolution.
 	WorkerModelProvider *string `json:"workerModelProvider,omitempty"`
 }
+
+// GlobalConfigModel Optional operator overlay for one model. Omitted fields preserve a built-in definition; new model names must provide every field.
+type GlobalConfigModel struct {
+	// Backend Provider-neutral backend identity selected for this model.
+	Backend *string `json:"backend,omitempty"`
+
+	// LoadPolicy Operator model load policy. Runtime activation is owned by Models.
+	LoadPolicy *GlobalConfigModelLoadPolicy `json:"loadPolicy,omitempty"`
+
+	// Operations Ordered generic operation names supported by this model.
+	Operations *[]GlobalConfigModelOperation `json:"operations,omitempty"`
+
+	// Source Model source path or provider-neutral source URI.
+	Source *string `json:"source,omitempty"`
+}
+
+// GlobalConfigModelLoadPolicy Operator model load policy. Runtime activation is owned by Models.
+type GlobalConfigModelLoadPolicy string
+
+// GlobalConfigModelOperation Generic provider-neutral operation contract name.
+type GlobalConfigModelOperation string
+
+// GlobalConfigModels Optional operator model overlays keyed by model name. A model entry may override one or more built-in fields or fully describe a new model name.
+type GlobalConfigModels map[string]GlobalConfigModel
 
 // GlobalConfigRuntime Runtime observability settings loaded from operator configuration before command-line overrides.
 type GlobalConfigRuntime struct {

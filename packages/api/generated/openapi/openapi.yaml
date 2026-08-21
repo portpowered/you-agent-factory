@@ -13495,6 +13495,8 @@ components:
           $ref: '#/components/schemas/GlobalConfigDefaults'
         runtime:
           $ref: '#/components/schemas/GlobalConfigRuntime'
+        models:
+          $ref: '#/components/schemas/GlobalConfigModels'
         workers:
           $ref: '#/components/schemas/GlobalConfigWorkers'
         workerPresets:
@@ -13554,6 +13556,45 @@ components:
           type: boolean
           default: false
           description: Whether rotated artifact files are gzip-compressed.
+    GlobalConfigModels:
+      type: object
+      description: Optional operator model overlays keyed by model name. A model entry may override one or more built-in fields or fully describe a new model name.
+      additionalProperties:
+        $ref: '#/components/schemas/GlobalConfigModel'
+    GlobalConfigModel:
+      type: object
+      additionalProperties: false
+      description: Optional operator overlay for one model. Omitted fields preserve a built-in definition; new model names must provide every field.
+      properties:
+        source:
+          type: string
+          minLength: 1
+          description: Model source path or provider-neutral source URI.
+        backend:
+          type: string
+          minLength: 1
+          description: Provider-neutral backend identity selected for this model.
+        loadPolicy:
+          $ref: '#/components/schemas/GlobalConfigModelLoadPolicy'
+        operations:
+          type: array
+          minItems: 1
+          description: Ordered generic operation names supported by this model.
+          items:
+            $ref: '#/components/schemas/GlobalConfigModelOperation'
+    GlobalConfigModelLoadPolicy:
+      type: string
+      description: Operator model load policy. Runtime activation is owned by Models.
+      enum:
+        - ON_DEMAND
+    GlobalConfigModelOperation:
+      type: string
+      description: Generic provider-neutral operation contract name.
+      enum:
+        - OMNI
+        - EMBED
+        - TTS
+        - ASR
     GlobalConfigWorkerPreset:
       type: object
       additionalProperties: false

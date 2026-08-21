@@ -6561,6 +6561,7 @@ export interface components {
       backendScopeID?: string;
       defaults?: components["schemas"]["GlobalConfigDefaults"];
       runtime?: components["schemas"]["GlobalConfigRuntime"];
+      models?: components["schemas"]["GlobalConfigModels"];
       workers?: components["schemas"]["GlobalConfigWorkers"];
       /** @description Named worker model presets loaded from the shared configuration file. */
       workerPresets?: components["schemas"]["GlobalConfigWorkerPreset"][];
@@ -6604,6 +6605,30 @@ export interface components {
        */
       compress: boolean;
     };
+    /** @description Optional operator model overlays keyed by model name. A model entry may override one or more built-in fields or fully describe a new model name. */
+    GlobalConfigModels: {
+      [key: string]: components["schemas"]["GlobalConfigModel"];
+    };
+    /** @description Optional operator overlay for one model. Omitted fields preserve a built-in definition; new model names must provide every field. */
+    GlobalConfigModel: {
+      /** @description Model source path or provider-neutral source URI. */
+      source?: string;
+      /** @description Provider-neutral backend identity selected for this model. */
+      backend?: string;
+      loadPolicy?: components["schemas"]["GlobalConfigModelLoadPolicy"];
+      /** @description Ordered generic operation names supported by this model. */
+      operations?: components["schemas"]["GlobalConfigModelOperation"][];
+    };
+    /**
+     * @description Operator model load policy. Runtime activation is owned by Models.
+     * @enum {string}
+     */
+    GlobalConfigModelLoadPolicy: GlobalConfigModelLoadPolicy;
+    /**
+     * @description Generic provider-neutral operation contract name.
+     * @enum {string}
+     */
+    GlobalConfigModelOperation: GlobalConfigModelOperation;
     /** @description Named worker model selection available to Factory Session runtime opening. */
     GlobalConfigWorkerPreset: {
       /** @description Non-empty preset identifier after surrounding whitespace is trimmed. */
@@ -11122,6 +11147,19 @@ export const FactoryValidationSubjectLocation = {
 } as const;
 export type FactoryValidationSubjectLocation =
   (typeof FactoryValidationSubjectLocation)[keyof typeof FactoryValidationSubjectLocation];
+export const GlobalConfigModelLoadPolicy = {
+  ON_DEMAND: "ON_DEMAND",
+} as const;
+export type GlobalConfigModelLoadPolicy =
+  (typeof GlobalConfigModelLoadPolicy)[keyof typeof GlobalConfigModelLoadPolicy];
+export const GlobalConfigModelOperation = {
+  OMNI: "OMNI",
+  EMBED: "EMBED",
+  TTS: "TTS",
+  ASR: "ASR",
+} as const;
+export type GlobalConfigModelOperation =
+  (typeof GlobalConfigModelOperation)[keyof typeof GlobalConfigModelOperation];
 export const WorkRequestType = {
   // Normalized request containing one or more work items and their relationships.
   WorkRequestTypeFactoryRequestBatch: "FACTORY_REQUEST_BATCH",
