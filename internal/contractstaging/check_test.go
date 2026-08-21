@@ -2,9 +2,9 @@ package contractstaging_test
 
 import (
 	"os"
-	"os/exec"
 	"path/filepath"
 	"reflect"
+	"sort"
 	"strings"
 	"testing"
 
@@ -28,10 +28,37 @@ func TestCheckPassesCleanStagingAndDoesNotChangeRepositoryBytes(t *testing.T) {
 	if err := contractstaging.Generate(root); err != nil {
 		t.Fatalf("Generate() error = %v", err)
 	}
-	after := checkTree(t, root)
-	if !reflect.DeepEqual(before, after) {
-		t.Fatal("Check() and Generate() changed repository bytes on clean fixture")
+	afterFirstGenerate := checkTree(t, root)
+	if !reflect.DeepEqual(before, afterFirstGenerate) {
+		t.Fatalf("Check() and first Generate() changed repository bytes on clean fixture: %v", changedCheckTreePaths(before, afterFirstGenerate))
 	}
+
+	if err := contractstaging.Generate(root); err != nil {
+		t.Fatalf("second Generate() error = %v", err)
+	}
+	afterSecondGenerate := checkTree(t, root)
+	if !reflect.DeepEqual(before, afterSecondGenerate) {
+		t.Fatalf("second Generate() changed repository bytes on clean fixture: %v", changedCheckTreePaths(before, afterSecondGenerate))
+	}
+}
+
+func changedCheckTreePaths(before, after map[string]string) []string {
+	paths := make(map[string]struct{}, len(before)+len(after))
+	for path := range before {
+		paths[path] = struct{}{}
+	}
+	for path := range after {
+		paths[path] = struct{}{}
+	}
+
+	changed := make([]string, 0)
+	for path := range paths {
+		if before[path] != after[path] {
+			changed = append(changed, path)
+		}
+	}
+	sort.Strings(changed)
+	return changed
 }
 
 func TestCheckRejectsUnexpectedNonPackageArtifactPathsWhenOrderedAndSorted(t *testing.T) {
@@ -55,13 +82,14 @@ func TestCheckRejectsUnexpectedNonPackageArtifactPathsWhenOrderedAndSorted(t *te
 func checkFixture(t *testing.T) string {
 	t.Helper()
 	root := t.TempDir()
+	// The development manifest is commit-independent. Keep this a working-tree
+	// fixture so Git's mutable metadata cannot enter the byte-stability proof.
 	writeCheckFixture(t, root, "contracts/common/documentation.schema.json", `{"$id":"https://schemas.portpowered.com/you/contracts/common/documentation.schema.json","$defs":{"itemId":{"type":"string"}}}`)
 	writeCheckFixture(t, root, "contracts/common/deprecations.schema.json", `{"$id":"https://schemas.portpowered.com/you/contracts/common/deprecations.schema.json","properties":{"itemId":{"$ref":"https://schemas.portpowered.com/you/contracts/common/documentation.schema.json#/$defs/itemId"}}}`)
 	writeCheckFixture(t, root, "contracts/manifest.schema.json", `{"$id":"https://schemas.portpowered.com/you/contracts/manifest.schema.json","properties":{"packageId":{"$ref":"https://schemas.portpowered.com/you/contracts/common/documentation.schema.json#/$defs/itemId"}}}`)
 	for _, artifact := range contractstaging.RawArtifacts() {
 		writeCheckFixture(t, root, artifact.Source, canonicalFixture(artifact.Source))
 	}
-	initCheckGitRepo(t, root)
 	if err := contractstaging.Generate(root); err != nil {
 		t.Fatalf("Generate() error = %v", err)
 	}
@@ -139,26 +167,3 @@ func canonicalFixture(path string) string {
 	}
 	return "canonical:" + path
 }
-
-func initCheckGitRepo(t *testing.T, root string) {
-	t.Helper()
-	commands := [][]string{
-		{"git", "-C", root, "init", "--initial-branch", "main"},
-		{"git", "-C", root, "config", "user.email", "contractstaging-check@test"},
-		{"git", "-C", root, "config", "user.name", "contractstaging-check"},
-		{"git", "-C", root, "add", "-A"},
-		{"git", "-C", root, "commit", "-m", "contract staging check fixture"},
-	}
-	for _, command := range commands {
-		if output, err := execCommand(command...); err != nil {
-			t.Fatalf("%v: %s", command, output)
-		}
-	}
-}
-
-func execCommand(command ...string) ([]byte, error) {
-	cmd := exec.Command(command[0], command[1:]...)
-	return cmd.CombinedOutput()
-}
-
-const checkFixtureDefaultBranch = "main"
