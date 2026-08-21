@@ -12,8 +12,9 @@ import (
 )
 
 const (
-	unfinishedMovesStage        = "pss-unfinished-package-moves"
-	unfinishedMovesRelativePath = "docs/internal/baselines/unfinished-package-moves.json"
+	unfinishedMovesStage                      = "pss-unfinished-package-moves"
+	unfinishedMovesRelativePath               = "docs/internal/baselines/unfinished-package-moves.json"
+	packageTargetTestOnlyBaselineRelativePath = "docs/internal/baselines/package-target-test-only-baseline.json"
 )
 
 // DestinationVocabulary is the closed set of destinations move rows may claim.
@@ -106,9 +107,6 @@ func validateOpenMoveLedger(repoRoot string, moves UnfinishedMoves) error {
 	return validateRowsNamePackagesThatExist(repoRoot, moves.Moves)
 }
 
-// validateOpenMoveLedgerSchema keeps schema and destination validation separate
-// from source liveness. The package-target command needs to report classified
-// source observations before it applies the existing production failure path.
 func validateOpenMoveLedgerSchema(repoRoot string, moves UnfinishedMoves) error {
 	vocabulary, err := derivedDestinationVocabulary(repoRoot)
 	if err != nil {
@@ -116,6 +114,19 @@ func validateOpenMoveLedgerSchema(repoRoot string, moves UnfinishedMoves) error 
 	}
 	if err := validateUnfinishedMovesSchema(moves, vocabulary); err != nil {
 		return err
+	}
+	return validateMovePackagePaths(moves.Moves)
+}
+
+func validateMovePackagePaths(packages []PackageMapping) error {
+	for i, row := range packages {
+		packagePath := row.PackagePath
+		if strings.Contains(packagePath, "\\") {
+			return fmt.Errorf("moves[%d] %q must use slash separators", i, packagePath)
+		}
+		if !strings.HasPrefix(packagePath, "pkg/") {
+			return fmt.Errorf("moves[%d] %q must be repository-relative under pkg/", i, packagePath)
+		}
 	}
 	return nil
 }

@@ -2,183 +2,264 @@ package main
 
 import (
 	"bytes"
-	"errors"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 )
 
-func TestRunClassifiesOwnershipBoundaryEdgesBySourceClass(t *testing.T) {
-	const peerImport = `import engine "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/engine"`
+func TestRunClassifiesEquivalentOwnershipEdgesBySourceClass(t *testing.T) {
+	root := fixtureRepository(t, map[string]string{
+		"pkg/services/factory_runtime/doc.go": "package factory_runtime\n",
+		"pkg/platform/runtimeinput/config.go": `package runtimeinput
+import runtime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+var _ runtime.Service
+`,
+		"pkg/platform/runtimeinput/config_test.go": `package runtimeinput
+import runtime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+var _ runtime.Service
+`,
+	})
 
-	tests := []struct {
-		name    string
-		files   map[string]string
-		wantErr bool
-		counts  string
-		class   string
-	}{
-		{
-			name: "production",
-			files: map[string]string{
-				"pkg/services/factory_sessions/doc.go":                "package factory_sessions\n",
-				"pkg/services/factory_runtime/doc.go":                 "package factory_runtime\n",
-				"pkg/services/factory_runtime/internal/engine/doc.go": "package engine\n",
-				"pkg/services/factory_sessions/consume_peer.go":       "package factory_sessions\n" + peerImport + "\n",
-			},
-			wantErr: true,
-			counts:  "dependency violation counts: production=1 test-only=0",
-			class:   "[class=production]",
-		},
-		{
-			name: "test-only",
-			files: map[string]string{
-				"pkg/services/factory_sessions/doc.go":                "package factory_sessions\n",
-				"pkg/services/factory_runtime/doc.go":                 "package factory_runtime\n",
-				"pkg/services/factory_runtime/internal/engine/doc.go": "package engine\n",
-				"pkg/services/factory_sessions/consume_peer_test.go":  "package factory_sessions\n" + peerImport + "\n",
-			},
-			counts: "dependency violation counts: production=0 test-only=1",
-			class:  "[class=test-only]",
-		},
-		{
-			name: "mixed",
-			files: map[string]string{
-				"pkg/services/factory_sessions/doc.go":                "package factory_sessions\n",
-				"pkg/services/factory_runtime/doc.go":                 "package factory_runtime\n",
-				"pkg/services/factory_runtime/internal/engine/doc.go": "package engine\n",
-				"pkg/services/factory_sessions/consume_peer.go":       "package factory_sessions\n" + peerImport + "\n",
-				"pkg/services/factory_sessions/consume_peer_test.go":  "package factory_sessions\n" + peerImport + "\n",
-			},
-			wantErr: true,
-			counts:  "dependency violation counts: production=1 test-only=1",
-			class:   "[class=test-only]",
-		},
+	var stdout, stderr bytes.Buffer
+	err := run(config{root: root}, &stdout, &stderr)
+	if err == nil {
+		t.Fatal("run() error = nil, want production and test-only violations")
 	}
-
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			root := fixtureRepository(t, test.files)
-			var stdout, stderr bytes.Buffer
-			err := run(config{root: root}, &stdout, &stderr)
-			if (err != nil) != test.wantErr {
-				t.Fatalf("run() error = %v, wantErr=%t; stdout=%q stderr=%q", err, test.wantErr, stdout.String(), stderr.String())
-			}
-			output := stdout.String() + stderr.String()
-			if !strings.Contains(output, test.counts) {
-				t.Fatalf("run() output = %q, want counts %q", output, test.counts)
-			}
-			if !strings.Contains(output, test.class) {
-				t.Fatalf("run() output = %q, want source class %q", output, test.class)
-			}
-			if test.name == "test-only" && strings.Contains(stderr.String(), "new violation") {
-				t.Fatalf("test-only finding entered blocking stderr path: %q", stderr.String())
-			}
-		})
+	out := stderr.String()
+	for _, want := range []string{
+		"pkg/platform/runtimeinput/config.go",
+		"pkg/platform/runtimeinput/config_test.go",
+		"[class=production]",
+		"[class=test-only]",
+		"violation counts: production=1 test-only=1",
+	} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("run() stderr = %q, want %q", out, want)
+		}
+	}
+	if got, want := err.Error(), "[agent-factory:ownership-boundary] found 2 new violation(s) and 0 stale baseline entries"; got != want {
+		t.Fatalf("run() error = %q, want %q", got, want)
 	}
 }
 
-func TestOwnershipBoundaryDiscoveryRetainsTestOnlyEdgesInScopedAndPeerScans(t *testing.T) {
+func TestScanClassifiesInitializerMappingAndPeerEdgesBySourceClass(t *testing.T) {
 	root := fixtureRepository(t, map[string]string{
-		"pkg/services/factory_sessions/doc.go":                "package factory_sessions\n",
 		"pkg/services/factory_runtime/doc.go":                 "package factory_runtime\n",
+		"pkg/services/factory_sessions/doc.go":                "package factory_sessions\n",
 		"pkg/services/factory_runtime/internal/engine/doc.go": "package engine\n",
-		"pkg/initializer/application/initializer.go":          "package application\nimport _ \"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/engine\"\n",
-		"pkg/initializer/application/initializer_test.go":     "package application\nimport _ \"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/engine\"\n",
-		"pkg/services/factory_sessions/consume_peer.go":       "package factory_sessions\nimport _ \"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/engine\"\n",
-		"pkg/services/factory_sessions/consume_peer_test.go":  "package factory_sessions\nimport _ \"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/engine\"\n",
+		"pkg/initializer/coordinate.go": `package initializer
+import runtime "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/engine"
+var _ runtime.Service
+`,
+		"pkg/initializer/coordinate_test.go": `package initializer
+import runtime "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/engine"
+var _ runtime.Service
+`,
+		"pkg/transports/mapping/process.go": `package mapping
+import "os/exec"
+var _ = exec.Command
+`,
+		"pkg/transports/mapping/process_test.go": `package mapping
+import "os/exec"
+var _ = exec.Command
+`,
+		"pkg/services/factory_sessions/consume.go": `package factory_sessions
+import engine "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/engine"
+var _ engine.Service
+`,
+		"pkg/services/factory_sessions/consume_test.go": `package factory_sessions
+import engine "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/engine"
+var _ engine.Service
+`,
 	})
 
 	findings := scanFixture(t, root)
-	want := map[string]bool{
-		"pkg/initializer/application/initializer.go|production":        false,
-		"pkg/initializer/application/initializer_test.go|test-only":    false,
-		"pkg/services/factory_sessions/consume_peer.go|production":     false,
-		"pkg/services/factory_sessions/consume_peer_test.go|test-only": false,
-	}
+	assertClassifiedFindingPair(t, findings, ruleInitializerServiceImplementation)
+	assertClassifiedFindingPair(t, findings, ruleMappingProcess)
+	assertClassifiedFindingPair(t, findings, rulePeerServiceImplementation)
+}
+
+func TestScanIgnoresGeneratedOwnershipSources(t *testing.T) {
+	root := fixtureRepository(t, map[string]string{
+		"pkg/services/factory_runtime/doc.go":                 "package factory_runtime\n",
+		"pkg/services/factory_sessions/doc.go":                "package factory_sessions\n",
+		"pkg/services/factory_runtime/internal/engine/doc.go": "package engine\n",
+		"pkg/platform/runtimeinput/generated_test.go": `// Code generated by ownership test. DO NOT EDIT.
+
+package runtimeinput
+import _ "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+`,
+		"pkg/services/factory_sessions/generated_test.go": `// Code generated by ownership test. DO NOT EDIT.
+
+package factory_sessions
+import _ "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/engine"
+`,
+	})
+
+	findings := scanFixture(t, root)
 	for _, item := range findings {
-		key := item.FilePath + "|" + string(effectiveBoundarySourceClass(item.class, item.FilePath))
-		if _, ok := want[key]; ok {
-			want[key] = true
-		}
-	}
-	for key, found := range want {
-		if !found {
-			t.Errorf("scan findings missing classified edge %q: %#v", key, findings)
+		if strings.Contains(item.FilePath, "generated_test.go") {
+			t.Fatalf("generated source produced ownership finding: %#v", item)
 		}
 	}
 }
 
-func TestOwnershipBoundaryTestOnlyFindingsDoNotUseProductionBaseline(t *testing.T) {
+func TestTestOnlyBaselineIsExactClassBearingAndStale(t *testing.T) {
 	const (
-		productionPath = "pkg/services/factory_sessions/consume_peer.go"
-		testPath       = "pkg/services/factory_sessions/consume_peer_test.go"
-		target         = modulePath + "/pkg/services/factory_runtime/internal/engine"
+		sourcePath = "pkg/platform/runtimeinput/config_test.go"
+		target     = modulePath + "/pkg/services/factory_runtime"
+		source     = `package runtimeinput
+import runtime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+var _ runtime.Service
+`
 	)
-	root := fixtureRepository(t, map[string]string{
-		"pkg/services/factory_sessions/doc.go":                "package factory_sessions\n",
-		"pkg/services/factory_runtime/doc.go":                 "package factory_runtime\n",
-		"pkg/services/factory_runtime/internal/engine/doc.go": "package engine\n",
-		productionPath: "package factory_sessions\nimport _ \"" + target + "\"\n",
-		testPath:       "package factory_sessions\nimport _ \"" + target + "\"\n",
-	})
-	writeBaseline(t, root, baselineEntryFor(rulePeerServiceImplementation, productionPath, target))
 
+	t.Run("active exact test-only entry passes", func(t *testing.T) {
+		root := fixtureRepository(t, map[string]string{
+			"pkg/services/factory_runtime/doc.go": "package factory_runtime\n",
+			sourcePath:                            source,
+		})
+		writeBaseline(t, root, baselineEntryForClass(rulePlatformDomainImport, sourcePath, target, testOnlySourceClass))
+		var stdout, stderr bytes.Buffer
+		if err := run(config{root: root}, &stdout, &stderr); err != nil {
+			t.Fatalf("run active test-only baseline: %v; stderr=%s", err, stderr.String())
+		}
+		if !strings.Contains(stdout.String(), "1 deletion-only baseline") {
+			t.Fatalf("stdout = %q, want active baseline summary", stdout.String())
+		}
+		if !strings.Contains(stdout.String(), "violation counts: production=0 test-only=0") {
+			t.Fatalf("stdout = %q, want zero class-separated violation counts", stdout.String())
+		}
+	})
+
+	t.Run("stale test-only entry is labeled and blocking", func(t *testing.T) {
+		root := fixtureRepository(t, map[string]string{
+			"pkg/services/factory_runtime/doc.go": "package factory_runtime\n",
+		})
+		writeBaseline(t, root, baselineEntryForClass(rulePlatformDomainImport, sourcePath, target, testOnlySourceClass))
+		var stdout, stderr bytes.Buffer
+		err := run(config{root: root}, &stdout, &stderr)
+		if err == nil || !strings.Contains(stderr.String(), "stale baseline") {
+			t.Fatalf("run stale test-only baseline err=%v stderr=%q", err, stderr.String())
+		}
+		for _, want := range []string{
+			"[class=test-only]",
+			"violation counts: production=0 test-only=1",
+		} {
+			if !strings.Contains(stderr.String(), want) {
+				t.Fatalf("stderr = %q, want %q", stderr.String(), want)
+			}
+		}
+	})
+
+	t.Run("test-only entry must declare its class", func(t *testing.T) {
+		root := fixtureRepository(t, map[string]string{
+			"pkg/services/factory_runtime/doc.go": "package factory_runtime\n",
+			sourcePath:                            source,
+		})
+		writeBaseline(t, root, baselineEntryFor(rulePlatformDomainImport, sourcePath, target))
+		var stdout, stderr bytes.Buffer
+		err := run(config{root: root}, &stdout, &stderr)
+		if err == nil || !strings.Contains(err.Error(), "requires an explicit class") {
+			t.Fatalf("run missing test-only class err=%v, want explicit-class diagnostic", err)
+		}
+	})
+
+	t.Run("wildcard and duplicate entries are rejected", func(t *testing.T) {
+		root := fixtureRepository(t, map[string]string{
+			"pkg/services/factory_runtime/doc.go": "package factory_runtime\n",
+			sourcePath:                            source,
+		})
+		wildcard := baselineEntryForClass(rulePlatformDomainImport, sourcePath, target+"/*", testOnlySourceClass)
+		writeBaseline(t, root, wildcard)
+		var stdout, stderr bytes.Buffer
+		err := run(config{root: root}, &stdout, &stderr)
+		if err == nil || !strings.Contains(err.Error(), "cannot contain wildcards") {
+			t.Fatalf("run wildcard baseline err=%v, want exact-identity diagnostic", err)
+		}
+
+		root = fixtureRepository(t, map[string]string{
+			"pkg/services/factory_runtime/doc.go": "package factory_runtime\n",
+			sourcePath:                            source,
+		})
+		entry := baselineEntryForClass(rulePlatformDomainImport, sourcePath, target, testOnlySourceClass)
+		writeBaseline(t, root, entry, entry)
+		err = run(config{root: root}, &stdout, &stderr)
+		if err == nil || !strings.Contains(err.Error(), "duplicate entry") {
+			t.Fatalf("run duplicate baseline err=%v, want duplicate diagnostic", err)
+		}
+	})
+}
+
+func TestCreateBaselineRecordsSourceClass(t *testing.T) {
+	const sourcePath = "pkg/platform/runtimeinput/config_test.go"
+	root := fixtureRepository(t, map[string]string{
+		"pkg/services/factory_runtime/doc.go": "package factory_runtime\n",
+		sourcePath: `package runtimeinput
+import runtime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+var _ runtime.Service
+`,
+	})
 	var stdout, stderr bytes.Buffer
-	if err := run(config{root: root}, &stdout, &stderr); err != nil {
-		t.Fatalf("run with recorded production edge and test-only edge: %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+	if err := run(config{root: root, createBaseline: true}, &stdout, &stderr); err != nil {
+		t.Fatalf("create test-only baseline: %v; stderr=%s", err, stderr.String())
 	}
-	output := stdout.String() + stderr.String()
-	if !strings.Contains(output, "test-only observation") ||
-		!strings.Contains(output, "dependency violation counts: production=0 test-only=1") {
-		t.Fatalf("output = %q, want visible non-blocking test-only edge and zero unrecorded production count", output)
+
+	data, err := os.ReadFile(filepath.Join(root, baselineFile))
+	if err != nil {
+		t.Fatalf("read created baseline: %v", err)
 	}
-	if !strings.Contains(stdout.String(), "1 deletion-only baseline") {
-		t.Fatalf("stdout = %q, want active production baseline", stdout.String())
+	var recorded baseline
+	if err := json.Unmarshal(data, &recorded); err != nil {
+		t.Fatalf("decode created baseline: %v", err)
+	}
+	if len(recorded.Entries) != 1 || recorded.Entries[0].Class != string(testOnlySourceClass) {
+		t.Fatalf("created baseline entries = %#v, want one explicit test-only entry", recorded.Entries)
 	}
 }
 
-func TestOwnershipBoundaryCreateBaselineIgnoresTestOnlyFindings(t *testing.T) {
-	root := fixtureRepository(t, map[string]string{
-		"pkg/services/factory_sessions/doc.go":                "package factory_sessions\n",
-		"pkg/services/factory_runtime/doc.go":                 "package factory_runtime\n",
-		"pkg/services/factory_runtime/internal/engine/doc.go": "package engine\n",
-		"pkg/services/factory_sessions/consume_peer_test.go":  "package factory_sessions\nimport _ \"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/engine\"\n",
-	})
-
-	var stdout, stderr bytes.Buffer
-	err := run(config{root: root, createBaseline: true}, &stdout, &stderr)
-	if err == nil || !strings.Contains(err.Error(), "absence records zero debt") {
-		t.Fatalf("create baseline with only test findings = %v, want zero production debt refusal", err)
+func TestOwnershipFindingKeysIncludeSourceClass(t *testing.T) {
+	production := finding{Rule: rulePlatformDomainImport, FilePath: "pkg/platform/runtimeinput/config.go", Target: "target", Class: productionSourceClass}
+	testOnly := production
+	testOnly.Class = testOnlySourceClass
+	if findingKey(production) == findingKey(testOnly) {
+		t.Fatalf("finding keys collapsed source classes: %q", findingKey(production))
 	}
-	if _, statErr := os.Stat(filepath.Join(root, baselineFile)); !errors.Is(statErr, os.ErrNotExist) {
-		t.Fatalf("test-only baseline exists or stat failed unexpectedly: %v", statErr)
+
+	productionEntry := baselineEntry{Rule: production.Rule, FilePath: production.FilePath, Target: production.Target, Class: string(production.Class)}
+	testOnlyEntry := productionEntry
+	testOnlyEntry.Class = string(testOnly.Class)
+	if entryKey(productionEntry) == entryKey(testOnlyEntry) {
+		t.Fatalf("baseline keys collapsed source classes: %q", entryKey(productionEntry))
 	}
 }
 
-func TestOwnershipBoundaryKeysIncludeSourceClass(t *testing.T) {
-	production := findingKey(finding{
-		Rule: rulePeerServiceImplementation, FilePath: "pkg/services/factory_sessions/edge.go",
-		Target: "peer", class: productionSourceClass,
-	})
-	testOnly := findingKey(finding{
-		Rule: rulePeerServiceImplementation, FilePath: "pkg/services/factory_sessions/edge.go",
-		Target: "peer", class: testOnlySourceClass,
-	})
-	if production == testOnly {
-		t.Fatalf("finding keys collapsed source classes: %q", production)
+func assertClassifiedFindingPair(t *testing.T, findings []finding, rule string) {
+	t.Helper()
+	var production, testOnly int
+	for _, item := range findings {
+		if item.Rule != rule {
+			continue
+		}
+		switch item.Class {
+		case productionSourceClass:
+			production++
+		case testOnlySourceClass:
+			testOnly++
+		default:
+			t.Fatalf("rule %q has invalid source class: %#v", rule, item)
+		}
 	}
+	if production != 1 || testOnly != 1 {
+		t.Fatalf("rule %q class counts = production:%d test-only:%d; findings=%#v", rule, production, testOnly, findings)
+	}
+}
 
-	productionEntry := entryKey(baselineEntry{
-		Rule: rulePeerServiceImplementation, FilePath: "pkg/services/factory_sessions/edge.go",
-		Target: "peer", Class: string(productionSourceClass),
-	})
-	testOnlyEntry := entryKey(baselineEntry{
-		Rule: rulePeerServiceImplementation, FilePath: "pkg/services/factory_sessions/edge.go",
-		Target: "peer", Class: string(testOnlySourceClass),
-	})
-	if productionEntry == testOnlyEntry {
-		t.Fatalf("baseline keys collapsed source classes: %q", productionEntry)
+func baselineEntryForClass(rule, filePath, target string, class boundarySourceClass) baselineEntry {
+	return baselineEntry{
+		Rule: rule, FilePath: filePath, Target: target, Class: string(class),
+		Stage: baselineStage, DeletionGate: deletionGates[rule],
 	}
 }

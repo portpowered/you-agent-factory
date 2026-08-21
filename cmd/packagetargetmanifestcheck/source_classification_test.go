@@ -2,162 +2,185 @@ package main
 
 import (
 	"bytes"
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 )
 
-func TestRunClassifiesPackageTargetEdgesBySourceClass(t *testing.T) {
+func TestPackageTargetFindingsSeparateProductionAndTestOnlyClasses(t *testing.T) {
 	t.Parallel()
 
-	tests := []struct {
-		name       string
-		production bool
-		testOnly   bool
-		wantErr    bool
-		counts     string
-		violations string
-		classes    []string
-	}{
-		{
-			name:       "production-only",
-			production: true,
-			wantErr:    true,
-			counts:     "package-target observations: production=1 test-only=0",
-			violations: "dependency violation counts: production=1 test-only=0",
-		},
-		{
-			name:       "test-only",
-			testOnly:   true,
-			counts:     "package-target observations: production=0 test-only=1",
-			violations: "dependency violation counts: production=0 test-only=1",
-			classes:    []string{"[class=test-only]"},
-		},
-		{
-			name:       "mixed",
-			production: true,
-			testOnly:   true,
-			wantErr:    true,
-			counts:     "package-target observations: production=1 test-only=1",
-			violations: "dependency violation counts: production=1 test-only=1",
-		},
-	}
-
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			t.Parallel()
-			root := t.TempDir()
-			writeGoPackage(t, root, "pkg/services/work", "package work\n")
-			if test.production {
-				writeGoPackage(t, root, "pkg/services/work/edge", "package edge\n")
-			}
-			if test.testOnly {
-				writeGoPackage(t, root, "pkg/services/work/testedge", "package testedge_test\n", "testedge_test.go")
-			}
-			rows := make([]PackageMapping, 0, 2)
-			if test.production {
-				rows = append(rows, PackageMapping{
-					PackagePath: "pkg/services/work/edge",
-					Destination: "work/not-a-closed-destination",
-					Successor:   "pkg/services/work/not-a-closed-destination",
-				})
-			}
-			if test.testOnly {
-				rows = append(rows, PackageMapping{
-					PackagePath: "pkg/services/work/testedge",
-					Destination: "work/internal",
-					Successor:   "pkg/services/work/internal",
-				})
-			}
-			writeFixtureMoveLedger(t, root, rows)
-
-			var stdout, stderr bytes.Buffer
-			err := run(config{root: root}, &stdout, &stderr)
-			if (err != nil) != test.wantErr {
-				t.Fatalf("run() error = %v, wantErr=%t; stdout=%q stderr=%q", err, test.wantErr, stdout.String(), stderr.String())
-			}
-			if test.wantErr && (err == nil || !strings.Contains(err.Error(), "not-a-closed-destination")) {
-				t.Fatalf("run() error = %v, want the production migration gate to reject the closed-destination violation", err)
-			}
-			output := stdout.String() + stderr.String()
-			for _, want := range []string{test.counts, test.violations} {
-				if !strings.Contains(output, want) {
-					t.Fatalf("run() output = %q, want %q", output, want)
-				}
-			}
-			for _, class := range test.classes {
-				if !strings.Contains(output, class) {
-					t.Fatalf("run() output = %q, want class %q", output, class)
-				}
-			}
-			if test.name == "test-only" && err != nil {
-				t.Fatalf("test-only observation entered the blocking path: %v; stderr=%q", err, stderr.String())
-			}
-		})
-	}
-}
-
-func TestRunBlocksStaleProductionRowsWithoutBlockingTestOnlyObservations(t *testing.T) {
-	t.Parallel()
-
+	const packagePath = "pkg/services/work/dual"
 	root := t.TempDir()
 	writeGoPackage(t, root, "pkg/services/work", "package work\n")
-	writeGoPackage(t, root, "pkg/services/work/onlytest", "package onlytest_test\n", "onlytest_test.go")
-	writeFixtureMoveLedger(t, root, []PackageMapping{
-		{
-			PackagePath: "pkg/services/work/missing",
-			Destination: "work/internal",
-			Successor:   "pkg/services/work/internal",
-		},
-		{
-			PackagePath: "pkg/services/work/onlytest",
-			Destination: "work/internal",
-			Successor:   "pkg/services/work/internal",
-		},
-	})
+	writeGoPackage(t, root, packagePath, "package dual\n")
+	writeGoPackage(t, root, packagePath, "package dual\n", "dual_test.go")
+	writeFixtureMoveLedger(t, root, []PackageMapping{{
+		PackagePath: packagePath,
+		Destination: "work/internal",
+		Successor:   "pkg/services/work/internal",
+	}})
 
 	var stdout, stderr bytes.Buffer
 	err := run(config{root: root}, &stdout, &stderr)
 	if err == nil {
-		t.Fatal("run() error = nil, want stale production row failure")
+		t.Fatal("run() error = nil, want an unrecorded test-only observation")
 	}
-	output := stdout.String() + stderr.String()
 	for _, want := range []string{
-		"package-target observations: production=0 test-only=1",
-		"dependency violation counts: production=1 test-only=1",
-		"test-only observation: pkg/services/work/onlytest -> work/internal (successor pkg/services/work/internal) [class=test-only]",
-		"stale production package-target row: pkg/services/work/missing -> work/internal (successor pkg/services/work/internal) [class=production]",
+		"package-target observations: production=1 test-only=1",
+		"dependency violation counts: production=0 test-only=1",
+		"[class=test-only]",
 	} {
-		if !strings.Contains(output, want) {
-			t.Fatalf("run() output = %q, want %q", output, want)
+		if !strings.Contains(stderr.String(), want) {
+			t.Fatalf("run() stderr = %q, want %q", stderr.String(), want)
 		}
 	}
-	if !strings.Contains(err.Error(), "LINT_VIOLATION_COUNT: 1") {
-		t.Fatalf("run() error = %v, want one production violation", err)
+	if strings.Contains(stderr.String(), "stale production package-target row") {
+		t.Fatalf("run() stderr = %q, a production-live package must not be stale", stderr.String())
 	}
-	if strings.Contains(output, "test-only package-target baseline") {
-		t.Fatalf("run() output = %q, must not mention a test-only baseline", output)
+
+	writePackageTargetTestOnlyBaseline(t, root, packageTargetTestOnlyBaselineEntry{
+		PackagePath:  packagePath,
+		Destination:  "work/internal",
+		Successor:    "pkg/services/work/internal",
+		Class:        string(packageTargetTestOnlySourceClass),
+		Stage:        packageTargetTestOnlyBaselineStage,
+		DeletionGate: packageTargetTestOnlyDeletionGate,
+	})
+	stdout.Reset()
+	stderr.Reset()
+	if err := run(config{root: root}, &stdout, &stderr); err != nil {
+		t.Fatalf("run() with exact test-only baseline error = %v; stderr=%s", err, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "dependency violation counts: production=0 test-only=0") {
+		t.Fatalf("run() stdout = %q, want zero class-separated violations", stdout.String())
 	}
 }
 
-func TestPackageTargetSourceClassDiscoveryRetainsBothClasses(t *testing.T) {
+func TestTestOnlyPackageDoesNotSatisfyProductionLiveness(t *testing.T) {
 	t.Parallel()
 
+	const packagePath = "pkg/services/work/testonly"
 	root := t.TempDir()
-	writeGoPackage(t, root, "pkg/services/work/edge", "package edge\n")
-	writeGoPackage(t, root, "pkg/services/work/edge", "package edge_test\n", "edge_test.go")
+	writeGoPackage(t, root, "pkg/services/work", "package work\n")
+	writeGoPackage(t, root, packagePath, "package testonly\n", "testonly_test.go")
+	writeFixtureMoveLedger(t, root, []PackageMapping{{
+		PackagePath: packagePath,
+		Destination: "work/internal",
+		Successor:   "pkg/services/work/internal",
+	}})
 
-	classes, err := packageTargetSourceClasses(root, "pkg/services/work/edge")
-	if err != nil {
-		t.Fatalf("packageTargetSourceClasses() error = %v", err)
+	var stdout, stderr bytes.Buffer
+	err := run(config{root: root}, &stdout, &stderr)
+	if err == nil {
+		t.Fatal("run() error = nil, want test-only debt and production-liveness failure")
 	}
-	if _, ok := classes[packageTargetProductionSourceClass]; !ok {
-		t.Fatalf("classes = %#v, missing production", classes)
+	for _, want := range []string{
+		"package-target observations: production=0 test-only=1",
+		"dependency violation counts: production=1 test-only=1",
+		"[class=test-only]",
+		"stale production package-target row: pkg/services/work/testonly -> work/internal (successor pkg/services/work/internal) [class=production]",
+	} {
+		if !strings.Contains(stderr.String(), want) {
+			t.Fatalf("run() stderr = %q, want %q", stderr.String(), want)
+		}
 	}
-	if _, ok := classes[packageTargetTestOnlySourceClass]; !ok {
-		t.Fatalf("classes = %#v, missing test-only", classes)
+
+	writePackageTargetTestOnlyBaseline(t, root, packageTargetTestOnlyBaselineEntry{
+		PackagePath:  packagePath,
+		Destination:  "work/internal",
+		Successor:    "pkg/services/work/internal",
+		Class:        string(packageTargetTestOnlySourceClass),
+		Stage:        packageTargetTestOnlyBaselineStage,
+		DeletionGate: packageTargetTestOnlyDeletionGate,
+	})
+	stdout.Reset()
+	stderr.Reset()
+	err = run(config{root: root}, &stdout, &stderr)
+	if err == nil {
+		t.Fatal("run() with accepted test-only edge error = nil, want production-liveness failure")
 	}
+	for _, want := range []string{
+		"package-target observations: production=0 test-only=1",
+		"dependency violation counts: production=1 test-only=0",
+		"stale production package-target row: pkg/services/work/testonly -> work/internal (successor pkg/services/work/internal) [class=production]",
+	} {
+		if !strings.Contains(stderr.String(), want) {
+			t.Fatalf("run() stderr = %q, want production-liveness diagnostic %q", stderr.String(), want)
+		}
+	}
+}
+
+func TestPackageTargetTestOnlyBaselineRejectsMalformedAndStaleEntries(t *testing.T) {
+	t.Parallel()
+
+	const (
+		packagePath = "pkg/services/work/testonly"
+		destination = "work/internal"
+		successor   = "pkg/services/work/internal"
+	)
+	entry := packageTargetTestOnlyBaselineEntry{
+		PackagePath:  packagePath,
+		Destination:  destination,
+		Successor:    successor,
+		Class:        string(packageTargetTestOnlySourceClass),
+		Stage:        packageTargetTestOnlyBaselineStage,
+		DeletionGate: packageTargetTestOnlyDeletionGate,
+	}
+
+	t.Run("wildcard is rejected", func(t *testing.T) {
+		root := packageTargetTestOnlyFixture(t, packagePath, false)
+		wildcard := entry
+		wildcard.Destination = "work/*"
+		writePackageTargetTestOnlyBaseline(t, root, wildcard)
+		var stdout, stderr bytes.Buffer
+		err := run(config{root: root}, &stdout, &stderr)
+		if err == nil || !strings.Contains(err.Error(), "cannot contain wildcards") {
+			t.Fatalf("run() error = %v, want wildcard rejection", err)
+		}
+	})
+
+	t.Run("duplicate is rejected", func(t *testing.T) {
+		root := packageTargetTestOnlyFixture(t, packagePath, true)
+		writePackageTargetTestOnlyBaseline(t, root, entry, entry)
+		var stdout, stderr bytes.Buffer
+		err := run(config{root: root}, &stdout, &stderr)
+		if err == nil || !strings.Contains(err.Error(), "duplicate entry") {
+			t.Fatalf("run() error = %v, want duplicate rejection", err)
+		}
+	})
+
+	t.Run("class is required and must be test-only", func(t *testing.T) {
+		root := packageTargetTestOnlyFixture(t, packagePath, true)
+		malformed := entry
+		malformed.Class = ""
+		writePackageTargetTestOnlyBaseline(t, root, malformed)
+		var stdout, stderr bytes.Buffer
+		err := run(config{root: root}, &stdout, &stderr)
+		if err == nil || !strings.Contains(err.Error(), "want explicit") {
+			t.Fatalf("run() error = %v, want explicit class rejection", err)
+		}
+	})
+
+	t.Run("stale entry is class-labeled and blocking", func(t *testing.T) {
+		root := t.TempDir()
+		writeGoPackage(t, root, "pkg/services/work", "package work\n")
+		writeFixtureMoveLedger(t, root, nil)
+		writePackageTargetTestOnlyBaseline(t, root, entry)
+		var stdout, stderr bytes.Buffer
+		err := run(config{root: root}, &stdout, &stderr)
+		if err == nil {
+			t.Fatal("run() error = nil, want stale baseline failure")
+		}
+		for _, want := range []string{
+			"stale test-only package-target baseline entry",
+			"[class=test-only]",
+			"dependency violation counts: production=0 test-only=1",
+		} {
+			if !strings.Contains(stderr.String(), want) {
+				t.Fatalf("run() stderr = %q, want %q", stderr.String(), want)
+			}
+		}
+	})
 }
 
 func TestPackageTargetFindingKeyIncludesSourceClass(t *testing.T) {
@@ -174,29 +197,26 @@ func TestPackageTargetFindingKeyIncludesSourceClass(t *testing.T) {
 	}
 }
 
-func TestPackageTargetDoesNotCreateTestOnlyBaseline(t *testing.T) {
-	t.Parallel()
-
+func packageTargetTestOnlyFixture(t *testing.T, packagePath string, production bool) string {
+	t.Helper()
 	root := t.TempDir()
 	writeGoPackage(t, root, "pkg/services/work", "package work\n")
-	writeGoPackage(t, root, "pkg/services/work/edge", "package edge_test\n", "edge_test.go")
+	if production {
+		writeGoPackage(t, root, packagePath, "package testonly\n")
+	}
+	writeGoPackage(t, root, packagePath, "package testonly\n", "testonly_test.go")
 	writeFixtureMoveLedger(t, root, []PackageMapping{{
-		PackagePath: "pkg/services/work/edge",
+		PackagePath: packagePath,
 		Destination: "work/internal",
 		Successor:   "pkg/services/work/internal",
 	}})
+	return root
+}
 
-	var stdout, stderr bytes.Buffer
-	if err := run(config{root: root}, &stdout, &stderr); err != nil {
-		t.Fatalf("run() error = %v; stderr=%s", err, stderr.String())
-	}
-	entries, err := os.ReadDir(filepath.Join(root, "docs", "internal", "baselines"))
-	if err != nil {
-		t.Fatalf("read baseline directory: %v", err)
-	}
-	for _, entry := range entries {
-		if strings.Contains(entry.Name(), "test-only") {
-			t.Fatalf("run() created test-only baseline %q", entry.Name())
-		}
-	}
+func writePackageTargetTestOnlyBaseline(t *testing.T, repoRoot string, entries ...packageTargetTestOnlyBaselineEntry) {
+	t.Helper()
+	writeFixtureJSON(t, repoRoot, packageTargetTestOnlyBaselineRelativePath, packageTargetTestOnlyBaseline{
+		Version: packageTargetTestOnlyBaselineVersion,
+		Entries: entries,
+	})
 }

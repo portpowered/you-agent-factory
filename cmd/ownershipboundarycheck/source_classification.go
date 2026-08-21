@@ -6,9 +6,10 @@ import (
 	"strings"
 )
 
-// boundarySourceClass identifies the kind of Go source that produced a
-// boundary observation. Keeping it on the finding prevents production and
-// test-only edges from collapsing into one report or baseline key.
+// boundarySourceClass identifies whether a Go dependency observation came
+// from production code or from a test-only source file. The class is part of
+// the finding identity so the same boundary relationship can be ratcheted
+// independently in each source class.
 type boundarySourceClass string
 
 const (
@@ -27,37 +28,49 @@ func (class boundarySourceClass) valid() bool {
 	return class == productionSourceClass || class == testOnlySourceClass
 }
 
-func effectiveBoundarySourceClass(class boundarySourceClass, filePath string) boundarySourceClass {
-	if class.valid() {
-		return class
+func baselineSourceClass(entry baselineEntry) (boundarySourceClass, error) {
+	expected := classifyBoundarySource(entry.FilePath)
+	if strings.TrimSpace(entry.Class) == "" {
+		if expected == testOnlySourceClass {
+			return "", fmt.Errorf(
+				"%s entry %s requires an explicit class=%q",
+				baselineFile,
+				entry.Target,
+				testOnlySourceClass,
+			)
+		}
+		return productionSourceClass, nil
 	}
-	return classifyBoundarySource(filePath)
-}
-
-// sourceClassFromBaseline keeps the existing production baseline format
-// readable while allowing new entries to carry an explicit class. The source
-// filename remains authoritative so a malformed class cannot relabel an edge.
-func sourceClassFromBaseline(value, filePath string) (boundarySourceClass, error) {
-	expected := classifyBoundarySource(filePath)
-	if strings.TrimSpace(value) == "" {
-		return expected, nil
-	}
-	class := boundarySourceClass(value)
+	class := boundarySourceClass(entry.Class)
 	if !class.valid() {
-		return "", fmt.Errorf("baseline entry %s has invalid class %q", filePath, value)
+		return "", fmt.Errorf(
+			"%s entry %s has invalid class %q; want %q or %q",
+			baselineFile,
+			entry.Target,
+			entry.Class,
+			productionSourceClass,
+			testOnlySourceClass,
+		)
 	}
 	if class != expected {
-		return "", fmt.Errorf("baseline entry %s class = %q, want %q", filePath, class, expected)
+		return "", fmt.Errorf(
+			"%s entry %s class = %q does not match source file %s (%q)",
+			baselineFile,
+			entry.Target,
+			entry.Class,
+			entry.FilePath,
+			expected,
+		)
 	}
 	return class, nil
 }
 
-type classifiedFindingCounts struct {
+type classifiedViolationCounts struct {
 	production int
 	testOnly   int
 }
 
-func (counts *classifiedFindingCounts) add(class boundarySourceClass) {
+func (counts *classifiedViolationCounts) add(class boundarySourceClass) {
 	switch class {
 	case productionSourceClass:
 		counts.production++
@@ -66,45 +79,25 @@ func (counts *classifiedFindingCounts) add(class boundarySourceClass) {
 	}
 }
 
-func countFindingClasses(findings ...[]finding) classifiedFindingCounts {
-	var counts classifiedFindingCounts
-	for _, group := range findings {
-		for _, item := range group {
-			counts.add(effectiveBoundarySourceClass(item.class, item.FilePath))
+func countClassifiedViolations(unrecorded []finding, stale []baselineEntry) classifiedViolationCounts {
+	var counts classifiedViolationCounts
+	for _, item := range unrecorded {
+		counts.add(item.Class)
+	}
+	for _, item := range stale {
+		class, err := baselineSourceClass(item)
+		if err == nil {
+			counts.add(class)
 		}
 	}
 	return counts
 }
 
-func writeClassifiedFindingCounts(writer io.Writer, counts classifiedFindingCounts) {
+func writeClassifiedViolationCounts(writer io.Writer, counts classifiedViolationCounts) {
 	fmt.Fprintf(
 		writer,
-		"[agent-factory:ownership-boundary] dependency violation counts: production=%d test-only=%d\n",
+		"[agent-factory:ownership-boundary] violation counts: production=%d test-only=%d\n",
 		counts.production,
 		counts.testOnly,
 	)
-}
-
-func filterFindingsByClass(findings []finding, want boundarySourceClass) []finding {
-	filtered := make([]finding, 0, len(findings))
-	for _, item := range findings {
-		if effectiveBoundarySourceClass(item.class, item.FilePath) == want {
-			filtered = append(filtered, item)
-		}
-	}
-	return filtered
-}
-
-func productionBaseline(recorded baseline) (baseline, error) {
-	result := baseline{Version: recorded.Version}
-	for _, entry := range recorded.Entries {
-		class, err := sourceClassFromBaseline(entry.Class, entry.FilePath)
-		if err != nil {
-			return baseline{}, err
-		}
-		if class == productionSourceClass {
-			result.Entries = append(result.Entries, entry)
-		}
-	}
-	return result, nil
 }
