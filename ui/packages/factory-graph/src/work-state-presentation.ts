@@ -16,6 +16,11 @@ export const FACTORY_GRAPH_WORK_STATE_TYPES = [
 export type FactoryGraphWorkStateType =
   (typeof FACTORY_GRAPH_WORK_STATE_TYPES)[number];
 
+/** Canonical work-state categories may grow without requiring a UI release. */
+export type FactoryGraphWorkStateTypeValue =
+  | FactoryGraphWorkStateType
+  | (string & {});
+
 export const WORK_STATE_PHASE_LEGEND_ORDER = [
   "INITIAL",
   "PROCESSING",
@@ -40,9 +45,11 @@ export function workStatePhaseSwatchClassName(
 }
 
 export function workStatePhaseSurfaceClassName(
-  workStateType: FactoryGraphWorkStateType | undefined,
+  workStateType: FactoryGraphWorkStateTypeValue | undefined,
 ): string {
-  if (!workStateType) return factoryGraphNodeSurfaceClassName("workState");
+  if (!isFactoryGraphKnownWorkStateType(workStateType)) {
+    return factoryGraphNodeSurfaceClassName("neutral");
+  }
   return factoryGraphNodeVisualStatusSurfaceClassName(
     resolveFactoryGraphVisualState({
       family: "work-state",
@@ -52,19 +59,46 @@ export function workStatePhaseSurfaceClassName(
 }
 
 export function workStatePhaseSemanticIconKind(
-  workStateType: FactoryGraphWorkStateType | undefined,
+  workStateType: FactoryGraphWorkStateTypeValue | undefined,
 ): GraphSemanticIconKind {
-  return workStateType ? ICON_KIND_BY_PHASE[workStateType] : "queue";
+  return isFactoryGraphKnownWorkStateType(workStateType)
+    ? ICON_KIND_BY_PHASE[workStateType]
+    : "queue";
 }
 
 export function workStatePhaseSemanticIconClassName(
-  workStateType: FactoryGraphWorkStateType | undefined,
+  workStateType: FactoryGraphWorkStateTypeValue | undefined,
 ): string {
+  const lifecycle = isFactoryGraphKnownWorkStateType(workStateType)
+    ? workStateType
+    : undefined;
   return factoryGraphNodeVisualIconClassName(
     resolveFactoryGraphVisualState({
       family: "work-state",
-      lifecycle: workStateType,
+      lifecycle,
     }),
     "text-on-surface-variant",
   );
+}
+
+export function isFactoryGraphKnownWorkStateType(
+  workStateType: FactoryGraphWorkStateTypeValue | undefined,
+): workStateType is FactoryGraphWorkStateType {
+  return (
+    typeof workStateType === "string" &&
+    FACTORY_GRAPH_WORK_STATE_TYPES.includes(
+      workStateType as FactoryGraphWorkStateType,
+    )
+  );
+}
+
+/** Returns an unfamiliar category unchanged for a neutral raw-value label. */
+export function factoryGraphUnknownWorkStateType(
+  workStateType: FactoryGraphWorkStateTypeValue | undefined,
+): string | undefined {
+  return typeof workStateType === "string" &&
+    workStateType.length > 0 &&
+    !isFactoryGraphKnownWorkStateType(workStateType)
+    ? workStateType
+    : undefined;
 }

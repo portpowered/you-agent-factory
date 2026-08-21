@@ -1,6 +1,4 @@
 import type { FactoryDefinition } from "@you-agent-factory/client";
-import Ajv2020, { type ErrorObject } from "ajv/dist/2020.js";
-import addFormats from "ajv-formats";
 import { generatedScenarioSchema } from "./generated/scenario-schema.js";
 import {
   type FactoryEmulatorInitialSubmission,
@@ -9,96 +7,15 @@ import {
   type FactoryEmulatorRuleSelector,
   type FactoryEmulatorScenario,
   type FactoryEmulatorScenarioIssue,
-  type FactoryEmulatorScenarioIssueCode,
   FactoryEmulatorScenarioValidationError,
   type SafeParseFactoryEmulatorScenarioResult,
 } from "./scenario-contracts.js";
+import { validateFactoryEmulatorScenarioStructure } from "./scenario-validation.js";
 import { validateDependencyRelationships } from "./submission-validation.js";
 
 export * from "./scenario-contracts.js";
 
 export const scenarioSchema = generatedScenarioSchema;
-
-const ajv = new Ajv2020({
-  allErrors: true,
-  coerceTypes: false,
-  removeAdditional: false,
-  strict: false,
-  useDefaults: false,
-});
-addFormats(ajv);
-const validateScenarioShape = ajv.compile(generatedScenarioSchema);
-
-function pointerSegments(pointer: string): (string | number)[] {
-  if (pointer.length === 0) return [];
-  return pointer
-    .slice(1)
-    .split("/")
-    .map((segment) => segment.replaceAll("~1", "/").replaceAll("~0", "~"))
-    .map((segment) =>
-      /^(0|[1-9]\d*)$/.test(segment) ? Number(segment) : segment,
-    );
-}
-
-function errorPath(error: ErrorObject): readonly (string | number)[] {
-  const path = pointerSegments(error.instancePath);
-  if (error.keyword === "required") {
-    return [...path, error.params.missingProperty];
-  }
-  if (error.keyword === "additionalProperties") {
-    return [...path, error.params.additionalProperty];
-  }
-  return path;
-}
-
-function structuralIssueCode(
-  error: ErrorObject,
-  path: readonly (string | number)[],
-): FactoryEmulatorScenarioIssueCode {
-  if (error.keyword === "required") return "missing_required_field";
-  if (error.keyword === "additionalProperties") return "unsupported_field";
-  if (error.keyword === "type") return "invalid_type";
-  if (path.join(".") === "schemaVersion") return "unsupported_schema_version";
-  if (path.join(".") === "startAt") return "invalid_start_at";
-  if (
-    error.keyword === "pattern" &&
-    ["id", "name"].includes(String(path.at(-1)))
-  ) {
-    return "unstable_identity";
-  }
-  if (path.includes("cursor")) return "invalid_cursor";
-  if (path.at(-1) === "exhaustion") return "invalid_exhaustion";
-  if (path.includes("unmatched")) return "invalid_unmatched";
-  if (path.includes("outcomes") || path.at(-1) === "outcome") {
-    return "invalid_outcome";
-  }
-  return "invalid_value";
-}
-
-function structuralIssues(
-  errors: readonly ErrorObject[] | null | undefined,
-): FactoryEmulatorScenarioIssue[] {
-  const results: FactoryEmulatorScenarioIssue[] = [];
-  const seen = new Set<string>();
-  for (const error of errors ?? []) {
-    if (error.keyword === "oneOf") continue;
-    const path = errorPath(error);
-    const code = structuralIssueCode(error, path);
-    const field = path.at(-1);
-    const message =
-      error.keyword === "required"
-        ? `Expected required field ${String(field)}.`
-        : error.keyword === "additionalProperties"
-          ? `Unsupported field ${String(field)}.`
-          : `Expected ${path.join(".") || "scenario"} to satisfy the scenario contract: ${error.message ?? error.keyword}.`;
-    const key = `${code}:${path.join(".")}:${message}`;
-    if (!seen.has(key)) {
-      seen.add(key);
-      results.push({ category: "structure", code, path, message });
-    }
-  }
-  return results;
-}
 
 function addDuplicateIssues(
   values: readonly string[],
@@ -439,18 +356,24 @@ export function safeParseFactoryEmulatorScenario(
   input: unknown,
   factory: FactoryDefinition,
 ): SafeParseFactoryEmulatorScenarioResult {
-  if (!validateScenarioShape(input)) {
+  const { blockingIssues: structuralBlocking, diagnostics } =
+    validateFactoryEmulatorScenarioStructure(input);
+  if (structuralBlocking.length > 0) {
     return {
       success: false,
-      issues: structuralIssues(validateScenarioShape.errors),
+      issues: structuralBlocking,
+      diagnostics,
     };
   }
   const scenario = input as unknown as FactoryEmulatorScenario;
   const issues = semanticIssues(scenario, factory);
-  if (issues.length > 0) return { success: false, issues };
+  if (issues.length > 0) {
+    return { success: false, issues, diagnostics };
+  }
   return {
     success: true,
     data: JSON.parse(JSON.stringify(scenario)) as FactoryEmulatorScenario,
+    diagnostics,
   };
 }
 
@@ -461,7 +384,10 @@ export function parseFactoryEmulatorScenario(
 ): FactoryEmulatorScenario {
   const result = safeParseFactoryEmulatorScenario(input, factory);
   if (!result.success) {
-    throw new FactoryEmulatorScenarioValidationError(result.issues);
+    throw new FactoryEmulatorScenarioValidationError(
+      result.issues,
+      result.diagnostics,
+    );
   }
   return result.data;
 }

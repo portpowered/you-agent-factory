@@ -116,11 +116,12 @@ describe("worker-workstation taxonomy helpers", () => {
     ).toEqual(EDITABLE_WORKSTATION_TYPE_CONVERSION_OPTIONS);
   });
 
-  it("returns preferred worker options for unsupported worker types", () => {
-    expect(
-      resolveEditableWorkerTypeOptions(
-        "UNSUPPORTED_WORKER" as (typeof EDITABLE_WORKER_TYPES)[number],
-      ),
-    ).toEqual(EDITABLE_WORKER_TYPES);
+  it("retains unsupported worker types before preferred options", () => {
+    const unsupportedWorkerType =
+      "UNSUPPORTED_WORKER" as (typeof EDITABLE_WORKER_TYPES)[number];
+    expect(resolveEditableWorkerTypeOptions(unsupportedWorkerType)).toEqual([
+      unsupportedWorkerType,
+      ...EDITABLE_WORKER_TYPES,
+    ]);
   });
 });

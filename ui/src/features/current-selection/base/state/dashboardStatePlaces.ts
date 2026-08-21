@@ -18,17 +18,8 @@ function factoryWorkTypes(factory: DashboardFactoryDefinition | undefined) {
   return factory?.workTypes ?? legacyFactory?.work_types ?? [];
 }
 
-function isStateCategory(value: string): value is StateCategory {
-  return (
-    value === "INITIAL" ||
-    value === "PROCESSING" ||
-    value === "TERMINAL" ||
-    value === "FAILED"
-  );
-}
-
 function stateCategory(value: string | undefined): StateCategory | undefined {
-  return value && isStateCategory(value) ? value : undefined;
+  return value?.trim() ? value : undefined;
 }
 
 function topologyStatePlace(

@@ -20,8 +20,11 @@ const parsed = parseFactoryEmulatorScenario(scenario, factory);
 ```
 
 The parser returns a detached scenario value. `safeParseFactoryEmulatorScenario`
-returns all structure and semantic diagnostics without partially accepting an
-invalid scenario.
+returns all blocking structure and semantic issues without partially accepting
+an invalid scenario. Additive fields are retained in the detached value and
+reported in the successful result's `diagnostics`; throwing parsers throw only
+for blocking issues, so newer execution metadata cannot alter the supported
+emulator behavior.
 
 Factories can be preflighted against the deterministic v1 execution subset
 before any event history is emitted:

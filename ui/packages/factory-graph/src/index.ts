@@ -180,6 +180,9 @@ export {
 export {
   FACTORY_GRAPH_WORK_STATE_TYPES,
   type FactoryGraphWorkStateType,
+  type FactoryGraphWorkStateTypeValue,
+  factoryGraphUnknownWorkStateType,
+  isFactoryGraphKnownWorkStateType,
   WORK_STATE_PHASE_LEGEND_ORDER,
   workStatePhaseSemanticIconClassName,
   workStatePhaseSemanticIconKind,
@@ -187,9 +190,13 @@ export {
   workStatePhaseSwatchClassName,
 } from "./work-state-presentation.js";
 export {
+  FACTORY_GRAPH_WORKER_TYPES,
   type FactoryGraphWorkerIconKind,
+  type FactoryGraphWorkerType,
+  factoryGraphUnknownWorkerType,
   factoryGraphWorkerIconClassName,
   factoryGraphWorkerIconKind,
+  isFactoryGraphKnownWorkerType,
 } from "./worker-icon.js";
 export {
   type FactoryGraphWorkstationActivityProjection,

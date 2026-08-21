@@ -16,7 +16,13 @@ type DashboardRunnerOptionalCapability =
 type DashboardRunnerOptionalCapabilityStatus =
   components["schemas"]["FactoryWorldRunnerOptionalCapabilityStatus"];
 
-export type StateCategory = "INITIAL" | "PROCESSING" | "TERMINAL" | "FAILED";
+/** State categories are open so newer canonical values remain renderable. */
+export type StateCategory =
+  | "INITIAL"
+  | "PROCESSING"
+  | "TERMINAL"
+  | "FAILED"
+  | (string & {});
 export type DashboardPlaceKind =
   | "work_state"
   | "resource"

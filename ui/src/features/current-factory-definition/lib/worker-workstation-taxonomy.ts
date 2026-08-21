@@ -20,6 +20,12 @@ export const EDITABLE_WORKER_TYPES = [
   WorkerType.POLLER_WORKER,
 ] as const satisfies readonly ApiWorkerType[];
 
+const CANONICAL_WORKER_TYPES = [
+  ...EDITABLE_WORKER_TYPES,
+  WorkerType.MODEL_WORKER,
+  WorkerType.HOSTED_WORKER,
+] as const satisfies readonly ApiWorkerType[];
+
 export const EDITABLE_WORKSTATION_TYPE_CONVERSION_OPTIONS = [
   WorkstationType.AGENT_RUN,
   WorkstationType.INFERENCE_RUN,
@@ -132,6 +138,12 @@ export function resolveEditableWorkerTypeOptions(
     return EDITABLE_WORKER_TYPES;
   }
   if (isLegacyWorkerType(workerType)) {
+    return [workerType, ...EDITABLE_WORKER_TYPES];
+  }
+  if (
+    typeof workerType === "string" &&
+    !CANONICAL_WORKER_TYPES.includes(workerType as ApiWorkerType)
+  ) {
     return [workerType, ...EDITABLE_WORKER_TYPES];
   }
   return EDITABLE_WORKER_TYPES;

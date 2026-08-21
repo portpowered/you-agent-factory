@@ -84,6 +84,24 @@ describe("factory graph React Flow projection", () => {
     ).toBe(true);
   });
 
+  it("forwards future worker kinds to the semantic worker node", () => {
+    const factoryDefinition = {
+      ...baseFactoryDefinition,
+      workers: baseFactoryDefinition.workers?.map((worker) => ({
+        ...worker,
+        type: "FUTURE_WORKER_KIND" as never,
+      })),
+    } satisfies CanonicalFactoryDefinition;
+    const topology = buildFactoryGraphTopologyFromDefinition(factoryDefinition);
+
+    const worker = projectFactoryGraphToReactFlow({
+      factoryDefinition,
+      topology,
+    }).nodes.find((node) => node.id === "worker:writer");
+
+    expect(worker?.data.workerType).toBe("FUTURE_WORKER_KIND");
+  });
+
   it("projects authored node sizes into every React Flow dimension field", () => {
     const topology = buildFactoryGraphTopologyFromDefinition(
       baseFactoryDefinition,

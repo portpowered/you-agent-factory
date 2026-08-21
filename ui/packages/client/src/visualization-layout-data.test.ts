@@ -35,6 +35,7 @@ describe("Factory visualization plain-data projection", () => {
           path: ["annotations"],
         }),
       ],
+      diagnostics: [],
     });
 
     const validResult = safeParseFactoryVisualizationLayout(
@@ -70,6 +71,7 @@ describe("Factory visualization plain-data projection", () => {
           path: ["self"],
         }),
       ],
+      diagnostics: [],
     });
 
     const deeplyNested: Record<string, unknown> = {};

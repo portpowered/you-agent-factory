@@ -106,6 +106,7 @@ export type FactoryGraphReactFlowNode = Node<
     now: number;
     workstation: FactoryGraphWorkstationRef;
     workStateType?: FactoryGraphWorkStateType;
+    workerType?: string;
     workerStatus?: FactoryGraphWorkerRuntimeStatus;
     workerStatusLabel?: string;
     locale?: string;
@@ -296,6 +297,7 @@ interface FactoryGraphReactFlowNodeContext {
   workerStatus?: FactoryGraphWorkerRuntimeStatus;
   workerStatusLabel?: string;
   workStateType?: FactoryGraphWorkStateType;
+  workerType?: string;
   workstationSemantics?: FactoryGraphWorkstationSemantics;
 }
 
@@ -309,6 +311,15 @@ function resolveFactoryGraphReactFlowNodeContext(input: {
   const workerStatus =
     input.node.kind === "worker"
       ? input.input.runtime?.workerStatusByName?.get(input.node.label)
+      : undefined;
+  const workerType =
+    input.node.kind === "worker"
+      ? input.input.factoryDefinition?.workers?.find(
+          (worker) =>
+            worker.name === input.node.label ||
+            (input.node.key.kind === "worker" &&
+              worker.id === input.node.key.id),
+        )?.type
       : undefined;
   const canEditConnections = input.input.editor?.canEditConnections ?? false;
   const anchorContext = resolveFactoryGraphConnectionAnchorContext(
@@ -383,6 +394,7 @@ function resolveFactoryGraphReactFlowNodeContext(input: {
     workerStatus,
     workerStatusLabel,
     workStateType,
+    workerType,
     workstationSemantics,
   };
 }
@@ -443,6 +455,7 @@ function buildFactoryGraphReactFlowNodeData(
       : {}),
     workerStatus: context.workerStatus,
     workerStatusLabel: context.workerStatusLabel,
+    ...(context.workerType ? { workerType: context.workerType } : {}),
     workstation: workstationRefForGraphNode(node),
     ...(context.workstationSemantics
       ? { workstationSemantics: context.workstationSemantics }

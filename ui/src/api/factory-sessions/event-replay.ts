@@ -1,3 +1,9 @@
+import {
+  type FactoryReplayTextIssue,
+  FactoryReplayTextParseError,
+  safeParseFactoryEventReplayText,
+} from "@you-agent-factory/client";
+
 import { factoryAPIURL } from "../baseUrl";
 import { FACTORY_EVENTS_ENDPOINT, type FactoryEvent } from "../events";
 import { factorySessionScopedPath } from "../session-routing";
@@ -6,7 +12,24 @@ import { buildFactorySessionsAPIError, FactorySessionsAPIError } from "./api";
 
 export interface ListFactorySessionEventReplayOptions {
   fetch?: typeof globalThis.fetch;
+  onDiagnostics?: (
+    diagnostics: readonly FactoryEventReplayDiagnostic[],
+  ) => void;
 }
+
+export type FactoryEventReplayDiagnostic = FactoryReplayTextIssue;
+
+export type SafeParseFactoryEventReplayStreamResult =
+  | {
+      data: FactoryEvent[];
+      diagnostics: readonly FactoryEventReplayDiagnostic[];
+      success: true;
+    }
+  | {
+      diagnostics: readonly FactoryEventReplayDiagnostic[];
+      issues: readonly FactoryEventReplayDiagnostic[];
+      success: false;
+    };
 
 export async function listFactorySessionEventReplay(
   sessionID: string,
@@ -55,71 +78,46 @@ export async function listFactorySessionEventReplay(
   }
 
   const replayStream = await response.text();
-  try {
-    return parseFactoryEventReplayStream(replayStream);
-  } catch (error) {
+  const parsed = safeParseFactoryEventReplayStream(replayStream);
+  options.onDiagnostics?.(parsed.diagnostics);
+  if (!parsed.success) {
     throw new FactorySessionsAPIError(
       "The factory sessions API returned an invalid response.",
       {
         code: "INTERNAL_ERROR",
-        responseBody: error,
+        responseBody: new FactoryReplayTextParseError(parsed.issues),
         status: response.status,
         statusText: response.statusText,
       },
     );
   }
+  return parsed.data;
 }
 
 export function parseFactoryEventReplayStream(
   replayStream: string,
 ): FactoryEvent[] {
-  const events: FactoryEvent[] = [];
-  const normalized = replayStream.replace(/\r\n/g, "\n");
-  for (const block of normalized.split("\n\n")) {
-    const parsed = parseReplayEventBlock(block);
-    if (parsed) {
-      events.push(parsed);
-    }
+  const result = safeParseFactoryEventReplayStream(replayStream);
+  if (!result.success) {
+    throw new FactoryReplayTextParseError(result.issues);
   }
-  return events;
+  return result.data;
 }
 
-function parseReplayEventBlock(block: string): FactoryEvent | null {
-  const lines = block
-    .split("\n")
-    .map((line) => line.trimEnd())
-    .filter((line) => line.length > 0 && !line.startsWith(":"));
-  if (lines.length === 0) {
-    return null;
+export function safeParseFactoryEventReplayStream(
+  replayStream: string,
+): SafeParseFactoryEventReplayStreamResult {
+  const result = safeParseFactoryEventReplayText(replayStream);
+  if (!result.success) {
+    return {
+      diagnostics: result.diagnostics,
+      issues: result.issues,
+      success: false,
+    };
   }
-
-  const dataLines: string[] = [];
-  let eventType = "message";
-  for (const line of lines) {
-    if (line.startsWith("event:")) {
-      eventType = line.slice("event:".length).trim();
-      continue;
-    }
-    if (line.startsWith("data:")) {
-      dataLines.push(line.slice("data:".length).trimStart());
-    }
-  }
-
-  if (eventType !== "message" || dataLines.length === 0) {
-    return null;
-  }
-
-  const candidate = JSON.parse(dataLines.join("\n")) as Partial<FactoryEvent>;
-  if (
-    typeof candidate.id !== "string" ||
-    typeof candidate.type !== "string" ||
-    typeof candidate.context !== "object" ||
-    candidate.context === null ||
-    typeof candidate.payload !== "object" ||
-    candidate.payload === null
-  ) {
-    throw new Error("invalid factory event replay payload");
-  }
-
-  return candidate as FactoryEvent;
+  return {
+    data: result.data as unknown as FactoryEvent[],
+    diagnostics: result.diagnostics,
+    success: true,
+  };
 }

@@ -40,10 +40,20 @@ describe("factory graph work state phase styling", () => {
 
   it("falls back to neutral styling when workStateType is missing", () => {
     expect(workStatePhaseSurfaceClassName(undefined)).toBe(
-      "border-info-border bg-info-container",
+      "border-outline bg-surface",
     );
     expect(workStatePhaseSemanticIconKind(undefined)).toBe("queue");
     expect(workStatePhaseSemanticIconClassName(undefined)).toBe(
+      "text-on-surface-variant",
+    );
+  });
+
+  it("falls back to neutral styling for a future raw category", () => {
+    expect(workStatePhaseSurfaceClassName("PAUSED_BY_POLICY")).toBe(
+      "border-outline bg-surface",
+    );
+    expect(workStatePhaseSemanticIconKind("PAUSED_BY_POLICY")).toBe("queue");
+    expect(workStatePhaseSemanticIconClassName("PAUSED_BY_POLICY")).toBe(
       "text-on-surface-variant",
     );
   });

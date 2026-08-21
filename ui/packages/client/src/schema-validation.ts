@@ -22,6 +22,12 @@ export type CanonicalSchemaIssueCode =
   | "invalid_value"
   | "missing_required_field"
   | "unsupported_event_type"
+  | "unsupported_enum_value"
+  | "unsupported_field";
+
+export type CanonicalSchemaCompatibilityIssueCode =
+  | "unsupported_event_type"
+  | "unsupported_enum_value"
   | "unsupported_field";
 
 export interface CanonicalSchemaIssue {
@@ -29,6 +35,16 @@ export interface CanonicalSchemaIssue {
   code: CanonicalSchemaIssueCode;
   path: readonly (string | number)[];
   message: string;
+}
+
+export function isCanonicalSchemaCompatibilityIssueCode(
+  code: string,
+): code is CanonicalSchemaCompatibilityIssueCode {
+  return (
+    code === "unsupported_event_type" ||
+    code === "unsupported_enum_value" ||
+    code === "unsupported_field"
+  );
 }
 
 const ajv = new Ajv2020({
@@ -114,11 +130,30 @@ function issueCode(error: ErrorObject): CanonicalSchemaIssueCode {
   if (error.keyword === "enum" && error.instancePath === "/type") {
     return "unsupported_event_type";
   }
+  if (error.keyword === "enum") return "unsupported_enum_value";
   return "invalid_value";
+}
+
+function valueAtInstancePath(input: unknown, instancePath: string): unknown {
+  let value = input;
+  for (const segment of pointerSegments(instancePath)) {
+    if (value === null || typeof value !== "object") return undefined;
+    value = (value as Record<string, unknown>)[segment];
+  }
+  return value;
+}
+
+function formatEnumValue(value: unknown): string {
+  if (typeof value === "string") return JSON.stringify(value);
+  if (typeof value === "number" || typeof value === "boolean") {
+    return String(value);
+  }
+  return "<non-scalar>";
 }
 
 function issues(
   errors: readonly ErrorObject[] | null | undefined,
+  input: unknown,
   path: readonly (string | number)[],
 ): CanonicalSchemaIssue[] {
   return (errors ?? [])
@@ -129,16 +164,25 @@ function issues(
     .map((error) => {
       const pathToIssue = issuePath(error, path);
       const field = pathToIssue.at(-1);
+      const code = issueCode(error);
+      const enumValue =
+        error.keyword === "enum"
+          ? formatEnumValue(valueAtInstancePath(input, error.instancePath))
+          : undefined;
       return {
         category: "structure",
-        code: issueCode(error),
+        code,
         path: pathToIssue,
         message:
           error.keyword === "required"
             ? `Expected required field ${String(field)}.`
             : error.keyword === "additionalProperties"
               ? `Unsupported field ${String(field)}.`
-              : `Expected ${pathToIssue.join(".") || "value"} to satisfy the canonical contract: ${error.message ?? error.keyword}.`,
+              : code === "unsupported_event_type"
+                ? `Unsupported Factory event type ${enumValue}.`
+                : code === "unsupported_enum_value"
+                  ? `Unsupported canonical enum value at ${pathToIssue.join(".") || "value"}: ${enumValue}.`
+                  : `Expected ${pathToIssue.join(".") || "value"} to satisfy the canonical contract: ${error.message ?? error.keyword}.`,
       };
     });
 }
@@ -149,7 +193,7 @@ export function canonicalFactoryIssues(
 ): CanonicalSchemaIssue[] {
   return validateFactoryShape(input)
     ? []
-    : issues(validateFactoryShape.errors, path);
+    : issues(validateFactoryShape.errors, input, path);
 }
 
 export function canonicalEventIssues(
@@ -170,5 +214,5 @@ export function canonicalEventIssues(
     typeof input.type === "string"
       ? (eventValidators.get(input.type) ?? validateEventEnvelopeShape)
       : validateEventEnvelopeShape;
-  return validator(input) ? [] : issues(validator.errors, path);
+  return validator(input) ? [] : issues(validator.errors, input, path);
 }

@@ -19,6 +19,7 @@ import {
   imageSourceFields,
   layoutFields,
   noteFields,
+  noteTones,
   textContentFields,
 } from "./visualization-layout-fields.js";
 import {
@@ -43,6 +44,7 @@ import {
   factoryVisualizationCanonicalNodeIds,
   validateCanonicalNodeId,
 } from "./visualization-layout-topology.js";
+import { partitionFactoryVisualizationLayoutIssues } from "./visualization-layout-validation.js";
 
 type InputPath = readonly (string | number)[];
 /** A prepared topology can supply its canonical node IDs without owning Factory state. */
@@ -50,14 +52,7 @@ export interface FactoryVisualizationLayoutCanonicalNodeContext {
   canonicalNodeIds: ReadonlySet<string>;
 }
 const imageMediaTypes = new Set(["image/png", "image/jpeg", "image/webp"]);
-const noteTones = new Set([
-  "neutral",
-  "accent",
-  "info",
-  "success",
-  "warning",
-  "danger",
-]);
+
 function unsupportedFields(
   value: InputRecord,
   fields: ReadonlySet<string>,
@@ -376,12 +371,13 @@ export function safeParseFactoryVisualizationLayout(
           message: "Expected Factory visualization layout to be an object.",
         },
       ],
+      diagnostics: [],
     };
   }
 
   const issues: FactoryVisualizationLayoutIssue[] = [];
   validatePlainDataContainers(input, [], issues);
-  if (issues.length > 0) return { success: false, issues };
+  if (issues.length > 0) return { success: false, issues, diagnostics: [] };
   const imageBudget: ImageByteBudget = {
     total: 0,
     aggregateLimitReported: false,
@@ -441,11 +437,14 @@ export function safeParseFactoryVisualizationLayout(
     }
   }
 
-  return issues.length > 0
-    ? { success: false, issues }
+  const { blockingIssues, diagnostics } =
+    partitionFactoryVisualizationLayoutIssues(issues);
+  return blockingIssues.length > 0
+    ? { success: false, issues: blockingIssues, diagnostics }
     : {
         success: true,
         data: clonePlainData(input) as FactoryVisualizationLayoutV1,
+        diagnostics,
       };
 }
 
@@ -457,7 +456,10 @@ export function parseFactoryVisualizationLayout(
 ): FactoryVisualizationLayoutV1 {
   const result = safeParseFactoryVisualizationLayout(input, factory);
   if (!result.success) {
-    throw new FactoryVisualizationLayoutValidationError(result.issues);
+    throw new FactoryVisualizationLayoutValidationError(
+      result.issues,
+      result.diagnostics,
+    );
   }
   return result.data;
 }

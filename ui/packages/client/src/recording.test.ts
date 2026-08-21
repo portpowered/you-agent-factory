@@ -60,6 +60,7 @@ describe("Factory recording validation", () => {
           message: "Expected events to be an array.",
         },
       ],
+      diagnostics: [],
     });
   });
 
@@ -147,15 +148,114 @@ describe("Canonical Factory recording schema validation", () => {
       );
     }
   });
+});
 
-  it("rejects unsupported recording, Factory, event, context, and payload fields", async () => {
+describe("Factory canonical compatibility diagnostics", () => {
+  it("accepts future Factory and event data with compatibility diagnostics", async () => {
     const input = await exampleRecording();
-    input.unexpectedRecordingField = true;
-    (input.factory as Record<string, unknown>).unexpectedFactoryField = true;
+    input.unexpectedRecordingField = "recording-secret";
+    const factory = input.factory as Record<string, unknown>;
+    factory.unexpectedFactoryField = "factory-secret";
+    const factoryWorkTypes = factory.workTypes as Record<string, unknown>[];
+    factoryWorkTypes[0].unexpectedWorkTypeField = "work-type-secret";
+    const factoryStates = factoryWorkTypes[0].states as Record<
+      string,
+      unknown
+    >[];
+    factoryStates[0].type = "FUTURE_WORK_STATE";
+
     const event = exampleEvents(input)[0] as Record<string, unknown>;
-    event.unexpectedEventField = true;
-    (event.context as Record<string, unknown>).unexpectedContextField = true;
-    (event.payload as Record<string, unknown>).unexpectedPayloadField = true;
+    event.unexpectedEventField = "event-secret";
+    (event.context as Record<string, unknown>).unexpectedContextField =
+      "context-secret";
+    (event.payload as Record<string, unknown>).unexpectedPayloadField =
+      "payload-secret";
+    const eventFactory = (event.payload as Record<string, unknown>)
+      .factory as Record<string, unknown>;
+    eventFactory.unexpectedFactoryField = "event-factory-secret";
+
+    const futureEvent = structuredClone(event);
+    futureEvent.id = "evt-future-002";
+    futureEvent.type = "FUTURE_EVENT_TYPE";
+    (futureEvent.context as Record<string, unknown>).sequence = 2;
+    (futureEvent.context as Record<string, unknown>).sessionSequence = 2;
+    futureEvent.payload = { futurePayload: "future-payload-secret" };
+    input.events = [event, futureEvent];
+
+    const result = safeParseFactoryRecording(input);
+
+    expect(result.success).toBe(true);
+    if (!result.success) return;
+
+    expect(result.data.factory).toBe(input.factory);
+    expect(result.data.events[0]).toBe(event);
+    expect(result.data.events[1]?.type).toBe("FUTURE_EVENT_TYPE");
+    expect(result.diagnostics).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: "unsupported_field",
+          path: ["unexpectedRecordingField"],
+        }),
+        expect.objectContaining({
+          code: "unsupported_field",
+          path: ["factory", "unexpectedFactoryField"],
+        }),
+        expect.objectContaining({
+          code: "unsupported_field",
+          path: ["factory", "workTypes", 0, "unexpectedWorkTypeField"],
+        }),
+        expect.objectContaining({
+          code: "unsupported_enum_value",
+          path: ["factory", "workTypes", 0, "states", 0, "type"],
+        }),
+        expect.objectContaining({
+          code: "unsupported_field",
+          path: ["events", 0, "unexpectedEventField"],
+        }),
+        expect.objectContaining({
+          code: "unsupported_field",
+          path: ["events", 0, "context", "unexpectedContextField"],
+        }),
+        expect.objectContaining({
+          code: "unsupported_field",
+          path: ["events", 0, "payload", "unexpectedPayloadField"],
+        }),
+        expect.objectContaining({
+          code: "unsupported_field",
+          path: ["events", 0, "payload", "factory", "unexpectedFactoryField"],
+        }),
+        expect.objectContaining({
+          code: "unsupported_event_type",
+          path: ["events", 1, "type"],
+        }),
+      ]),
+    );
+    expect(
+      result.diagnostics.some(({ message }) =>
+        message.includes("FUTURE_WORK_STATE"),
+      ),
+    ).toBe(true);
+    expect(
+      result.diagnostics.every(
+        ({ message }) =>
+          !message.includes("recording-secret") &&
+          !message.includes("factory-secret") &&
+          !message.includes("work-type-secret") &&
+          !message.includes("event-secret") &&
+          !message.includes("context-secret") &&
+          !message.includes("payload-secret"),
+      ),
+    ).toBe(true);
+  });
+});
+
+describe("Factory canonical blocking failures", () => {
+  it("keeps known required and typed-field failures blocking", async () => {
+    const input = await exampleRecording();
+    delete input.id;
+    const event = exampleEvents(input)[0] as Record<string, unknown>;
+    (event.context as Record<string, unknown>).sequence = "not-a-number";
+    event.futureMetadata = "ignored-diagnostic";
 
     const result = safeParseFactoryRecording(input);
 
@@ -164,27 +264,26 @@ describe("Canonical Factory recording schema validation", () => {
       expect(result.issues).toEqual(
         expect.arrayContaining([
           expect.objectContaining({
-            code: "unsupported_field",
-            path: ["unexpectedRecordingField"],
+            code: "missing_required_field",
+            path: ["id"],
           }),
           expect.objectContaining({
-            code: "unsupported_field",
-            path: ["factory", "unexpectedFactoryField"],
-          }),
-          expect.objectContaining({
-            code: "unsupported_field",
-            path: ["events", 0, "unexpectedEventField"],
-          }),
-          expect.objectContaining({
-            code: "unsupported_field",
-            path: ["events", 0, "context", "unexpectedContextField"],
-          }),
-          expect.objectContaining({
-            code: "unsupported_field",
-            path: ["events", 0, "payload", "unexpectedPayloadField"],
+            code: "invalid_type",
+            path: ["events", 0, "context", "sequence"],
           }),
         ]),
       );
+      expect(result.issues).not.toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ code: "unsupported_field" }),
+        ]),
+      );
+      expect(result.diagnostics).toEqual([
+        expect.objectContaining({
+          code: "unsupported_field",
+          path: ["events", 0, "futureMetadata"],
+        }),
+      ]);
     }
   });
 });
@@ -279,6 +378,7 @@ describe("Factory recording semantic validation", () => {
             "Expected a usable top-level factory or a topology-establishing Factory event.",
         },
       ],
+      diagnostics: [],
     });
   });
 

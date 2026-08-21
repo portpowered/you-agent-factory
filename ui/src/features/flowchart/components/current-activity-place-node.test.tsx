@@ -101,6 +101,28 @@ describe("CurrentActivity place node work-state phase styling", () => {
     expect(shell?.className).toContain(
       workStatePhaseSurfaceClassName(undefined),
     );
+    expect(shell?.className).toContain("border-outline bg-surface");
+  });
+
+  it("keeps a future work-state category as an accessible raw neutral label", () => {
+    const place: DashboardPlaceRef = {
+      kind: "work_state",
+      place_id: "story:paused",
+      state_category: "PAUSED_BY_POLICY",
+      state_value: "paused",
+      type_id: "story",
+    };
+    const { container, getByText } = render(
+      <StatePositionNodeView {...statePositionNodeProps(place)} />,
+    );
+    const shell = nodeShell(container);
+    const category = getByText("PAUSED_BY_POLICY");
+
+    expect(category.getAttribute("data-state-category-label")).toBe("true");
+    expect(category.getAttribute("title")).toBe("PAUSED_BY_POLICY");
+    expect(category.className).toContain("text-on-surface-variant");
+    expect(shell?.className).toContain("border-outline bg-surface");
+    expect(shell?.getAttribute("data-graph-visual-status")).toBe("quiet");
   });
 
   it("keeps resource node styling unchanged", () => {

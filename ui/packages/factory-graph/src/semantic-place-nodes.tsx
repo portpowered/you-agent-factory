@@ -24,13 +24,15 @@ import type { FactoryGraphPlaceRef } from "./semantic-support-nodes.js";
 import { resolveFactoryGraphVisualState } from "./visual-state.js";
 import { factoryGraphWorkProgressMode } from "./work-progress-presentation.js";
 import {
-  type FactoryGraphWorkStateType,
+  type FactoryGraphWorkStateTypeValue,
+  factoryGraphUnknownWorkStateType,
+  isFactoryGraphKnownWorkStateType,
   workStatePhaseSurfaceClassName,
 } from "./work-state-presentation.js";
 
 export interface FactoryGraphSemanticPlaceRef extends FactoryGraphPlaceRef {
   kind: "constraint" | "limit" | "resource" | "work_state" | (string & {});
-  state_category?: FactoryGraphWorkStateType;
+  state_category?: FactoryGraphWorkStateTypeValue;
 }
 
 export interface FactoryGraphBasePlaceNodeData extends Record<string, unknown> {
@@ -95,6 +97,10 @@ function FactoryGraphPlaceNodeView({
     : data.place.kind === "resource"
       ? "resource"
       : "constraint";
+  const canonicalWorkStateType =
+    stateNode && isFactoryGraphKnownWorkStateType(data.place.state_category)
+      ? data.place.state_category
+      : undefined;
   const className = classNames(
     placeNodeClassName(data.place),
     factoryGraphNodeHoverClassName({
@@ -114,7 +120,7 @@ function FactoryGraphPlaceNodeView({
         ? "resource"
         : "constraint",
     focused: data.focused,
-    lifecycle: stateNode ? data.place.state_category : undefined,
+    lifecycle: canonicalWorkStateType,
     muted: data.muted,
     selected,
     validation: data.validationError,
@@ -149,7 +155,7 @@ function FactoryGraphPlaceNodeView({
         activeFlow: data.activeFlow,
         activeWork: holdsWork,
         focused: data.focused,
-        lifecycle: stateNode ? data.place.state_category : undefined,
+        lifecycle: canonicalWorkStateType,
         muted: data.muted,
         selected,
         validation: data.validationError,
@@ -158,9 +164,12 @@ function FactoryGraphPlaceNodeView({
       {selectable ? (
         <GraphNodeButton
           aria-invalid={data.validationError ? true : undefined}
-          aria-label={
-            data.validationMessage ?? selectStateLabel(placeLabel, data.locale)
-          }
+          aria-label={selectStateLabelWithValidation(
+            placeLabel,
+            data.locale,
+            data.place.state_category,
+            data.validationMessage,
+          )}
           aria-pressed={selected}
           className={CONTENT_CLASS}
           data-selected-state={selected ? "true" : undefined}
@@ -191,6 +200,9 @@ function FactoryGraphStatePositionContent({
   visualState: ReturnType<typeof resolveFactoryGraphVisualState>;
 }) {
   const label = factoryGraphPlaceLabel(place);
+  const unknownWorkStateType = factoryGraphUnknownWorkStateType(
+    place.state_category,
+  );
   return (
     <>
       <span
@@ -202,7 +214,18 @@ function FactoryGraphStatePositionContent({
           place={place}
           visualState={visualState}
         />
-        <FactoryGraphPlaceLabelText dataPrefix="state" place={place} />
+        <span className="grid min-w-0 gap-px overflow-hidden">
+          {unknownWorkStateType ? (
+            <span
+              className="block overflow-hidden text-[0.62rem] font-bold uppercase leading-none text-on-surface-variant"
+              data-state-category-label
+              title={unknownWorkStateType}
+            >
+              {unknownWorkStateType}
+            </span>
+          ) : null}
+          <FactoryGraphPlaceLabelText dataPrefix="state" place={place} />
+        </span>
       </span>
       <span
         className="flex min-h-5 w-full shrink-0 items-center justify-center overflow-hidden"
@@ -417,6 +440,21 @@ function activeItemCountLabel(count: number, locale?: string): string {
 }
 function selectStateLabel(label: string, locale?: string): string {
   return locale === "zh-CN" ? `选择 ${label} 状态` : `Select ${label} state`;
+}
+function selectStateLabelWithValidation(
+  label: string,
+  locale: string | undefined,
+  stateCategory: FactoryGraphWorkStateTypeValue | undefined,
+  validationMessage: string | undefined,
+): string {
+  const unknownWorkStateType = factoryGraphUnknownWorkStateType(stateCategory);
+  const selectionLabel = selectStateLabel(label, locale);
+  const compatibilityLabel = unknownWorkStateType
+    ? `${selectionLabel} (${unknownWorkStateType})`
+    : selectionLabel;
+  return validationMessage
+    ? `${validationMessage} · ${compatibilityLabel}`
+    : compatibilityLabel;
 }
 function tokenCountLabel(
   place: FactoryGraphSemanticPlaceRef,

@@ -17,6 +17,7 @@ import {
 } from "./semantic-node-style.js";
 import { resolveFactoryGraphVisualState } from "./visual-state.js";
 import {
+  factoryGraphUnknownWorkerType,
   factoryGraphWorkerIconClassName,
   factoryGraphWorkerIconKind,
 } from "./worker-icon.js";
@@ -100,8 +101,12 @@ export function FactoryGraphWorkerNodeView({
   selected: reactFlowSelected,
 }: NodeProps<FactoryGraphWorkerNode>) {
   const workerName = resolveWorkerName(data);
-  const label = `worker:${workerName}`;
+  const unknownWorkerType = factoryGraphUnknownWorkerType(data.workerType);
+  const label = unknownWorkerType
+    ? `worker:${workerName} (${unknownWorkerType})`
+    : `worker:${workerName}`;
   const workerLabel = semanticLabel("worker", data.locale);
+  const workerKindLabel = unknownWorkerType ?? workerLabel;
   const workerIconKind = factoryGraphWorkerIconKind(
     data.workerType,
     data.runnerId,
@@ -129,7 +134,10 @@ export function FactoryGraphWorkerNodeView({
       <GraphSemanticIcon
         className={classNames(
           "h-3.5 w-3.5 shrink-0",
-          factoryGraphWorkerIconClassName(visualState),
+          factoryGraphWorkerIconClassName(
+            visualState,
+            unknownWorkerType ? "text-on-surface-variant" : "text-info",
+          ),
         )}
         kind={workerIconKind}
         label={workerLabel}
@@ -137,11 +145,14 @@ export function FactoryGraphWorkerNodeView({
       <span className="grid min-w-0 gap-px overflow-hidden">
         <span
           className={factoryGraphNodeWrappedTextClassName(
-            "block overflow-hidden text-[0.62rem] font-bold uppercase leading-none text-info",
+            classNames(
+              "block overflow-hidden text-[0.62rem] font-bold uppercase leading-none",
+              unknownWorkerType ? "text-on-surface-variant" : "text-info",
+            ),
           )}
           data-worker-kind-label
         >
-          {workerLabel}
+          {workerKindLabel}
         </span>
         <strong
           className={factoryGraphNodeWrappedTextClassName(
@@ -158,7 +169,9 @@ export function FactoryGraphWorkerNodeView({
   return (
     <FactoryGraphNodeShell
       className={classNames(
-        factoryGraphNodeSurfaceClassName("info"),
+        factoryGraphNodeSurfaceClassName(
+          unknownWorkerType ? "neutral" : "info",
+        ),
         "justify-center text-left text-on-surface",
         factoryGraphNodeHoverClassName({
           activeFlow: data.activeFlow,
@@ -184,7 +197,13 @@ export function FactoryGraphWorkerNodeView({
     >
       {selectable ? (
         <GraphNodeButton
-          aria-label={selectLabel("worker", workerName, data.locale)}
+          aria-label={selectLabel(
+            "worker",
+            unknownWorkerType
+              ? `${workerName} (${unknownWorkerType})`
+              : workerName,
+            data.locale,
+          )}
           aria-pressed={selected}
           className="grid h-full min-h-0 min-w-0 place-content-center gap-0.5 overflow-hidden"
           data-selected-worker={selected ? "true" : undefined}
