@@ -104,47 +104,62 @@ func collectUnknownJSONPathsForType(value any, typ reflect.Type, path string, pa
 	if value == nil || typ == nil {
 		return
 	}
-	for typ.Kind() == reflect.Pointer {
-		typ = typ.Elem()
-	}
+	typ = dereferenceJSONType(typ)
 	if typ == globalConfigRawMessageType {
 		return
 	}
 
 	switch typ.Kind() {
-	case reflect.Interface:
-		return
 	case reflect.Map:
-		object, ok := value.(map[string]any)
-		if !ok || typ.Key().Kind() != reflect.String {
-			return
-		}
-		for key, child := range object {
-			collectUnknownJSONPathsForType(child, typ.Elem(), appendJSONPath(path, key), paths)
-		}
+		collectUnknownJSONPathsForMap(value, typ, path, paths)
 	case reflect.Slice, reflect.Array:
-		values, ok := value.([]any)
-		if !ok {
-			return
-		}
-		for index, item := range values {
-			collectUnknownJSONPathsForType(item, typ.Elem(), path+"["+strconv.Itoa(index)+"]", paths)
-		}
+		collectUnknownJSONPathsForSequence(value, typ, path, paths)
 	case reflect.Struct:
-		object, ok := value.(map[string]any)
-		if !ok {
-			return
+		collectUnknownJSONPathsForStruct(value, typ, path, paths)
+	}
+}
+
+func dereferenceJSONType(typ reflect.Type) reflect.Type {
+	for typ.Kind() == reflect.Pointer {
+		typ = typ.Elem()
+	}
+	return typ
+}
+
+func collectUnknownJSONPathsForMap(value any, typ reflect.Type, path string, paths *[]string) {
+	object, ok := value.(map[string]any)
+	if !ok || typ.Key().Kind() != reflect.String {
+		return
+	}
+	for key, child := range object {
+		collectUnknownJSONPathsForType(child, typ.Elem(), appendJSONPath(path, key), paths)
+	}
+}
+
+func collectUnknownJSONPathsForSequence(value any, typ reflect.Type, path string, paths *[]string) {
+	values, ok := value.([]any)
+	if !ok {
+		return
+	}
+	for index, item := range values {
+		collectUnknownJSONPathsForType(item, typ.Elem(), path+"["+strconv.Itoa(index)+"]", paths)
+	}
+}
+
+func collectUnknownJSONPathsForStruct(value any, typ reflect.Type, path string, paths *[]string) {
+	object, ok := value.(map[string]any)
+	if !ok {
+		return
+	}
+	fields := jsonFieldTypes(typ)
+	for key, child := range object {
+		fieldPath := appendJSONPath(path, key)
+		fieldType, known := fields[strings.ToLower(key)]
+		if !known {
+			*paths = append(*paths, fieldPath)
+			continue
 		}
-		fields := jsonFieldTypes(typ)
-		for key, child := range object {
-			fieldPath := appendJSONPath(path, key)
-			fieldType, known := fields[strings.ToLower(key)]
-			if !known {
-				*paths = append(*paths, fieldPath)
-				continue
-			}
-			collectUnknownJSONPathsForType(child, fieldType, fieldPath, paths)
-		}
+		collectUnknownJSONPathsForType(child, fieldType, fieldPath, paths)
 	}
 }
 
