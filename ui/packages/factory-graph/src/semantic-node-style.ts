@@ -121,19 +121,28 @@ const NESTED_ACCENT_RING_CLASS_NAME: Record<
   danger: "ring-af-danger-border",
 };
 
-const NESTED_ACCENT_GUARDED_CARD_CLASS_NAME: Record<
+/** Readable breaker ink on a node's soft semantic surface. */
+const NESTED_ACCENT_GUARDED_TEXT_CLASS_NAME: Record<
   FactoryGraphVisualNestedAccentRole,
   string
 > = {
-  neutral:
-    "[&_[data-workstation-guard-card]]:!border-outline [&_[data-workstation-guard-card]]:!bg-surface [&_[data-workstation-guard-card]]:!text-on-surface",
-  info: "[&_[data-workstation-guard-card]]:!border-info-border [&_[data-workstation-guard-card]]:!bg-info-container [&_[data-workstation-guard-card]]:!text-on-info-container",
-  warning:
-    "[&_[data-workstation-guard-card]]:!border-af-warning-border [&_[data-workstation-guard-card]]:!bg-warning-container [&_[data-workstation-guard-card]]:!text-on-warning-container",
-  success:
-    "[&_[data-workstation-guard-card]]:!border-af-success-border [&_[data-workstation-guard-card]]:!bg-success-container [&_[data-workstation-guard-card]]:!text-on-success-container",
-  danger:
-    "[&_[data-workstation-guard-card]]:!border-af-danger-border [&_[data-workstation-guard-card]]:!bg-error-container [&_[data-workstation-guard-card]]:!text-on-error-container",
+  neutral: "[&_[data-workstation-guard-card]]:!text-on-surface",
+  info: "[&_[data-workstation-guard-card]]:!text-on-info-container",
+  warning: "[&_[data-workstation-guard-card]]:!text-on-warning-container",
+  success: "[&_[data-workstation-guard-card]]:!text-on-success-container",
+  danger: "[&_[data-workstation-guard-card]]:!text-on-error-container",
+};
+
+/** Readable breaker ink when its parent node uses an opaque semantic fill. */
+const NESTED_ACCENT_GUARDED_SOLID_TEXT_CLASS_NAME: Record<
+  FactoryGraphVisualNestedAccentRole,
+  string
+> = {
+  neutral: "[&_[data-workstation-guard-card]]:!text-on-surface",
+  info: "[&_[data-workstation-guard-card]]:!text-on-info",
+  warning: "[&_[data-workstation-guard-card]]:!text-on-warning",
+  success: "[&_[data-workstation-guard-card]]:!text-on-success",
+  danger: "[&_[data-workstation-guard-card]]:!text-on-error",
 };
 
 function nestedAccentClassNameForStatus(
@@ -326,13 +335,15 @@ export function factoryGraphNodeVisualStateClassName(
     .join(" ");
 }
 
-/** Applies the owning node tone to nested guarded workstation content. */
+/** Applies the owning node tone to nested guarded workstation text. */
 export function factoryGraphNodeVisualNestedAccentClassName(
   state: FactoryGraphVisualState,
 ): string {
-  return NESTED_ACCENT_GUARDED_CARD_CLASS_NAME[
-    factoryGraphVisualNestedAccentRole(state.surface)
-  ];
+  const classNames =
+    state.fill === "solid"
+      ? NESTED_ACCENT_GUARDED_SOLID_TEXT_CLASS_NAME
+      : NESTED_ACCENT_GUARDED_TEXT_CLASS_NAME;
+  return classNames[factoryGraphVisualNestedAccentRole(state.surface)];
 }
 
 /** Returns a lifecycle/active icon class, with a family fallback for idle nodes. */

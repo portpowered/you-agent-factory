@@ -63,12 +63,12 @@ async function viewportTransform(page) {
     .evaluate((viewport) => viewport.style.transform);
 }
 
-async function verifyLoopBreakerCard(guardCard) {
+async function verifyLoopBreakerLabel(guardCard) {
   await guardCard.waitFor({ state: "visible" });
   const guardText = (await guardCard.textContent())?.trim();
   if (guardText !== "Breaker") {
     throw new Error(
-      `Expected the single-line breaker card to read "Breaker": ${guardText ?? "<empty>"}`,
+      `Expected the single-line breaker label to read "Breaker": ${guardText ?? "<empty>"}`,
     );
   }
   if (
@@ -76,14 +76,14 @@ async function verifyLoopBreakerCard(guardCard) {
     "VISIT_COUNT"
   ) {
     throw new Error(
-      "Breaker card did not carry its VISIT_COUNT guard type attribute",
+      "Breaker label did not carry its VISIT_COUNT guard type attribute",
     );
   }
 
   const guardRows = guardCard.locator("[data-workstation-guard-row]");
   if ((await guardRows.count()) !== 0) {
     throw new Error(
-      `Expected the single-line breaker card to have no detail rows, found ${await guardRows.count()}`,
+      `Expected the single-line breaker label to have no detail rows, found ${await guardRows.count()}`,
     );
   }
 
@@ -99,7 +99,7 @@ async function verifyLoopBreakerCard(guardCard) {
   const guardNodeBounds = await guardNode.boundingBox();
   const guardCardBounds = await guardCard.boundingBox();
   if (!guardNodeBounds || !guardCardBounds) {
-    throw new Error("Could not measure the loop-breaker node and guard card");
+    throw new Error("Could not measure the loop-breaker node and guard label");
   }
   if (
     guardCardBounds.x < guardNodeBounds.x ||
@@ -110,25 +110,50 @@ async function verifyLoopBreakerCard(guardCard) {
       guardNodeBounds.y + guardNodeBounds.height
   ) {
     throw new Error(
-      `Loop-breaker card escaped its workstation node: card=${JSON.stringify(guardCardBounds)} node=${JSON.stringify(guardNodeBounds)}`,
+      `Loop-breaker label escaped its workstation node: label=${JSON.stringify(guardCardBounds)} node=${JSON.stringify(guardNodeBounds)}`,
     );
   }
 
-  const guardCardStyle = await guardCard.evaluate((value) => {
+  const guardLabelStyle = await guardCard.evaluate((value) => {
     const style = getComputedStyle(value);
     return {
+      backgroundColor: style.backgroundColor,
+      borderWidth: style.borderWidth,
       overflow: style.overflow,
+      paddingInline: style.paddingInline,
       textOverflow: style.textOverflow,
       whiteSpace: style.whiteSpace,
     };
   });
   if (
-    guardCardStyle.overflow !== "hidden" ||
-    guardCardStyle.textOverflow !== "ellipsis" ||
-    guardCardStyle.whiteSpace !== "nowrap"
+    guardLabelStyle.overflow !== "hidden" ||
+    guardLabelStyle.textOverflow !== "ellipsis" ||
+    guardLabelStyle.whiteSpace !== "nowrap"
   ) {
     throw new Error(
-      `Breaker card is not a single-line truncating field: ${JSON.stringify(guardCardStyle)}`,
+      `Breaker label is not a single-line truncating field: ${JSON.stringify(guardLabelStyle)}`,
+    );
+  }
+
+  const hasTransparentBackground =
+    guardLabelStyle.backgroundColor === "transparent" ||
+    /^rgba\([^)]*,\s*0(?:\.\d+)?\)$/.test(guardLabelStyle.backgroundColor);
+  if (
+    guardLabelStyle.borderWidth !== "0px" ||
+    guardLabelStyle.paddingInline !== "0px" ||
+    !hasTransparentBackground
+  ) {
+    throw new Error(
+      `Breaker label is still boxed or inset: ${JSON.stringify(guardLabelStyle)}`,
+    );
+  }
+
+  const titleBounds = await guardNode
+    .locator("[data-workstation-title]")
+    .boundingBox();
+  if (!titleBounds || Math.abs(titleBounds.x - guardCardBounds.x) > 1) {
+    throw new Error(
+      `Breaker label is not flush with the workstation header: title=${JSON.stringify(titleBounds)} label=${JSON.stringify(guardCardBounds)}`,
     );
   }
 
@@ -192,7 +217,7 @@ async function verifyMixedWorkstationSemantics(page) {
   }
 
   const guardCard = page.locator("[data-workstation-guard-card]");
-  const guardNode = await verifyLoopBreakerCard(guardCard);
+  const guardNode = await verifyLoopBreakerLabel(guardCard);
 
   await assertWorkstationDescendantsContained(guardNode, "Loop-breaker");
 

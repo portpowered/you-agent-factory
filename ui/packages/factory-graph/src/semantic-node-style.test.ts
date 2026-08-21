@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  factoryGraphNodeVisualNestedAccentClassName,
   factoryGraphNodeVisualStateClassName,
   factoryGraphNodeVisualStatusSurfaceClassName,
 } from "./semantic-node-style.js";
@@ -145,5 +146,35 @@ describe("factoryGraphNodeVisualStateClassName nested accents", () => {
     expect(failed).toContain("border-af-danger-border");
     expect(failed).toContain("shadow-af-graph-danger");
     expect(failed).not.toContain("border-af-success-border");
+  });
+});
+
+describe("factoryGraphNodeVisualNestedAccentClassName breaker text", () => {
+  it.each([
+    [undefined, "text-on-surface"],
+    ["INITIAL", "text-on-info-container"],
+    ["PROCESSING", "text-on-warning-container"],
+    ["TERMINAL", "text-on-success-container"],
+    ["FAILED", "text-on-error-container"],
+  ] as const)("uses semantic %s parent ink", (lifecycle, expectedInk) => {
+    const className = factoryGraphNodeVisualNestedAccentClassName(
+      visualState({ lifecycle }),
+    );
+
+    expect(className).toContain(
+      `[&_[data-workstation-guard-card]]:!${expectedInk}`,
+    );
+    expect(className).not.toContain("border");
+    expect(className).not.toContain("bg-");
+  });
+
+  it("uses the opaque parent ink when the node holds work", () => {
+    const className = factoryGraphNodeVisualNestedAccentClassName(
+      visualState({ activeWork: true, lifecycle: "PROCESSING" }),
+    );
+
+    expect(className).toBe(
+      "[&_[data-workstation-guard-card]]:!text-on-warning",
+    );
   });
 });

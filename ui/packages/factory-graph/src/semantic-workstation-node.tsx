@@ -429,7 +429,7 @@ export function FactoryGraphWorkstationGuardedControlCard({
   const label = locale === "zh-CN" ? "断路器" : "Breaker";
   return (
     <span
-      className="min-w-0 max-w-full shrink truncate whitespace-nowrap rounded-sm border border-af-warning-border bg-warning-container px-1.5 py-0.5 text-[0.62rem] font-semibold leading-none text-on-warning-container"
+      className="min-w-0 max-w-full shrink truncate whitespace-nowrap text-[0.62rem] font-semibold leading-none text-on-surface"
       data-workstation-control-role={presentation.controlRole}
       data-workstation-guard-card
       data-workstation-guard-type={control.guardType}

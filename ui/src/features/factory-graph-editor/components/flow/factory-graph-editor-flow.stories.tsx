@@ -1276,10 +1276,22 @@ export const LoopBreakerDensityWithInteractionOverlay = {
       throw new Error("Expected the loop-breaker workstation React Flow node.");
     }
 
-    await expect(within(loopNode).getByText("Loop breaker")).toBeVisible();
-    await expect(within(loopNode).getByText("Default scheduler")).toBeVisible();
-    await expect(within(loopNode).getByText("execute-goal")).toBeVisible();
-    await expect(within(loopNode).getByText("3")).toBeVisible();
+    await expect(within(loopNode).getByText("Breaker")).toBeVisible();
+    const guardLabel = loopNode.querySelector("[data-workstation-guard-card]");
+    expect(guardLabel).toBeTruthy();
+    expect(guardLabel?.getAttribute("data-workstation-guard-type")).toBe(
+      "VISIT_COUNT",
+    );
+    expect(guardLabel?.className).toContain("text-on-surface");
+    for (const boxedClass of [
+      "rounded-sm",
+      "border",
+      "bg-warning-container",
+      "px-1.5",
+      "py-0.5",
+    ]) {
+      expect(guardLabel?.className).not.toContain(boxedClass);
+    }
     await expect(
       loopNode.querySelector("[data-graph-interaction-overlay]"),
     ).toBeVisible();
@@ -1288,7 +1300,7 @@ export const LoopBreakerDensityWithInteractionOverlay = {
     ).toBeGreaterThan(0);
     expect(
       loopNode.querySelectorAll("[data-workstation-guard-row]"),
-    ).toHaveLength(2);
+    ).toHaveLength(0);
 
     const nodeBounds = loopNode.getBoundingClientRect();
     for (const descendant of loopNode.querySelectorAll("*")) {

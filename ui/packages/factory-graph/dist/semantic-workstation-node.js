@@ -80,7 +80,7 @@ export function FactoryGraphWorkstationGuardedControlCard({ locale, presentation
     if (presentation.controlRole !== "LOOP_BREAKER" || !control)
         return null;
     const label = locale === "zh-CN" ? "断路器" : "Breaker";
-    return (_jsx("span", { className: "min-w-0 max-w-full shrink truncate whitespace-nowrap rounded-sm border border-af-warning-border bg-warning-container px-1.5 py-0.5 text-[0.62rem] font-semibold leading-none text-on-warning-container", "data-workstation-control-role": presentation.controlRole, "data-workstation-guard-card": true, "data-workstation-guard-type": control.guardType, title: label, children: label }));
+    return (_jsx("span", { className: "min-w-0 max-w-full shrink truncate whitespace-nowrap text-[0.62rem] font-semibold leading-none text-on-surface", "data-workstation-control-role": presentation.controlRole, "data-workstation-guard-card": true, "data-workstation-guard-type": control.guardType, title: label, children: label }));
 }
 function Overflow({ locale, total, visible, }) {
     if (total <= visible)

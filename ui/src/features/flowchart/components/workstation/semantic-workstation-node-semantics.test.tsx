@@ -97,7 +97,7 @@ describe("Factory workstation authored semantics", () => {
 });
 
 describe("Factory workstation guard card semantics", () => {
-  it("renders a single-line breaker card without limits or target details", () => {
+  it("renders a single-line unboxed breaker label without limits or target details", () => {
     const loopBreaker = renderWorkstationNode({
       workstationSemantics: loopBreakerSemantics,
     });
@@ -119,6 +119,16 @@ describe("Factory workstation guard card semantics", () => {
     ).toHaveLength(0);
     expect(guardCard?.className).toContain("truncate");
     expect(guardCard?.className).toContain("whitespace-nowrap");
+    expect(guardCard?.className).toContain("text-on-surface");
+    for (const boxedClass of [
+      "rounded-sm",
+      "border",
+      "bg-warning-container",
+      "px-1.5",
+      "py-0.5",
+    ]) {
+      expect(guardCard?.className).not.toContain(boxedClass);
+    }
     expect(loopBreaker.container.querySelector("button")).toBeNull();
 
     const shell = loopBreaker.container.querySelector(
@@ -129,17 +139,64 @@ describe("Factory workstation guard card semantics", () => {
       "neutral",
     );
     expect(shell?.className).toContain(
-      "[&_[data-workstation-guard-card]]:!border-outline",
-    );
-    expect(shell?.className).toContain(
-      "[&_[data-workstation-guard-card]]:!bg-surface",
-    );
-    expect(shell?.className).toContain(
       "[&_[data-workstation-guard-card]]:!text-on-surface",
+    );
+    expect(shell?.className).not.toContain(
+      "[&_[data-workstation-guard-card]]:!border",
+    );
+    expect(shell?.className).not.toContain(
+      "[&_[data-workstation-guard-card]]:!bg-",
+    );
+  });
+});
+
+describe("Factory workstation breaker tone semantics", () => {
+  it("derives semantic breaker ink from every supported parent tone", () => {
+    const expectations = [
+      [undefined, "text-on-surface"],
+      ["INITIAL", "text-on-info-container"],
+      ["PROCESSING", "text-on-warning-container"],
+      ["TERMINAL", "text-on-success-container"],
+      ["FAILED", "text-on-error-container"],
+    ] as const;
+
+    for (const [runtimeStatus, expectedInk] of expectations) {
+      const rendered = renderWorkstationNode({
+        runtimeStatus,
+        workstationSemantics: loopBreakerSemantics,
+      });
+      const shell = rendered.container.querySelector(
+        "[data-current-activity-node-type='workstation']",
+      );
+
+      expect(shell?.className).toContain(
+        `[&_[data-workstation-guard-card]]:!${expectedInk}`,
+      );
+      expect(shell?.className).not.toContain(
+        "[&_[data-workstation-guard-card]]:!border",
+      );
+      expect(shell?.className).not.toContain(
+        "[&_[data-workstation-guard-card]]:!bg-",
+      );
+    }
+  });
+
+  it("uses solid-surface breaker ink when the parent workstation is active", () => {
+    const activeLoopBreaker = renderWorkstationNode({
+      active: true,
+      workstationSemantics: loopBreakerSemantics,
+    });
+    const shell = activeLoopBreaker.container.querySelector(
+      "[data-current-activity-node-type='workstation']",
+    );
+
+    expect(shell?.getAttribute("data-graph-visual-fill")).toBe("solid");
+    expect(shell?.className).toContain(
+      "[&_[data-workstation-guard-card]]:!text-on-warning",
     );
   });
 
-  it("derives a danger loop-breaker card from its failed parent workstation", () => {
+  it("keeps a danger loop-breaker label readable from its failed parent workstation", () => {
     const failedLoopBreaker = renderWorkstationNode({
       runtimeStatus: "FAILED",
       workstationSemantics: loopBreakerSemantics,
@@ -154,12 +211,6 @@ describe("Factory workstation guard card semantics", () => {
     expect(shell?.getAttribute("data-graph-visual-status")).toBe("danger");
     expect(shell?.getAttribute("data-graph-visual-nested-accent")).toBe(
       "danger",
-    );
-    expect(shell?.className).toContain(
-      "[&_[data-workstation-guard-card]]:!border-af-danger-border",
-    );
-    expect(shell?.className).toContain(
-      "[&_[data-workstation-guard-card]]:!bg-error-container",
     );
     expect(shell?.className).toContain(
       "[&_[data-workstation-guard-card]]:!text-on-error-container",
