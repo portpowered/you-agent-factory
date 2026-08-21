@@ -167,7 +167,6 @@ func scanPeerServiceImports(
 				Target:   importPath,
 				Class:    class,
 				Line:     fileSet.Position(spec.Pos()).Line,
-				class:    classifyBoundarySource(relative),
 			})
 		}
 		return nil

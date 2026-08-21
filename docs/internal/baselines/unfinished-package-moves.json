@@ -11,12 +11,6 @@
   },
   "moves": [
     {
-      "packagePath": "pkg/services/factory_definitions/clonetests",
-      "destination": "factory_definitions/internal",
-      "successor": "pkg/services/factory_definitions/internal",
-      "deletionCondition": "delete transitional top-level package after CLN-DEF-FOLD-TOPLEVEL cutover proof"
-    },
-    {
       "packagePath": "pkg/services/factory_definitions/definition",
       "destination": "factory_definitions/internal",
       "successor": "pkg/services/factory_definitions/internal",
@@ -42,12 +36,6 @@
     },
     {
       "packagePath": "pkg/services/factory_definitions/internal/testcomposition",
-      "destination": "factory_definitions/internal",
-      "successor": "pkg/services/factory_definitions/internal",
-      "deletionCondition": "delete transitional top-level package after CLN-DEF-FOLD-TOPLEVEL cutover proof"
-    },
-    {
-      "packagePath": "pkg/services/factory_definitions/systeminitializationtests",
       "destination": "factory_definitions/internal",
       "successor": "pkg/services/factory_definitions/internal",
       "deletionCondition": "delete transitional top-level package after CLN-DEF-FOLD-TOPLEVEL cutover proof"
@@ -176,12 +164,6 @@
       "deletionCondition": "delete public package after IMP-REC-projection_query private subservice cutover proof"
     },
     {
-      "packagePath": "pkg/services/recordings/internal/projections/projectiontests",
-      "destination": "recordings/internal/services/projection_query",
-      "successor": "pkg/services/recordings/internal/services/projection_query",
-      "deletionCondition": "delete public package after IMP-REC-projection_query private subservice cutover proof"
-    },
-    {
       "packagePath": "pkg/services/recordings/internal/projections/workstation",
       "destination": "recordings/internal/services/projection_query",
       "successor": "pkg/services/recordings/internal/services/projection_query",
@@ -189,24 +171,6 @@
     },
     {
       "packagePath": "pkg/services/recordings/internal/replay",
-      "destination": "recordings/internal/services/replay",
-      "successor": "pkg/services/recordings/internal/services/replay",
-      "deletionCondition": "delete public package after IMP-REC-replay private subservice cutover proof"
-    },
-    {
-      "packagePath": "pkg/services/recordings/internal/replay/clocktests",
-      "destination": "recordings/internal/services/replay",
-      "successor": "pkg/services/recordings/internal/services/replay",
-      "deletionCondition": "delete public package after IMP-REC-replay private subservice cutover proof"
-    },
-    {
-      "packagePath": "pkg/services/recordings/internal/replay/configtests",
-      "destination": "recordings/internal/services/replay",
-      "successor": "pkg/services/recordings/internal/services/replay",
-      "deletionCondition": "delete public package after IMP-REC-replay private subservice cutover proof"
-    },
-    {
-      "packagePath": "pkg/services/recordings/internal/replay/fixturetests",
       "destination": "recordings/internal/services/replay",
       "successor": "pkg/services/recordings/internal/services/replay",
       "deletionCondition": "delete public package after IMP-REC-replay private subservice cutover proof"

@@ -72,15 +72,13 @@ func TestTestOnlyPackageDoesNotSatisfyProductionLiveness(t *testing.T) {
 	var stdout, stderr bytes.Buffer
 	err := run(config{root: root}, &stdout, &stderr)
 	if err == nil {
-		t.Fatal("run() error = nil, want an unrecorded test-only edge")
-	}
-	if strings.Contains(stderr.String(), "stale production package-target row") {
-		t.Fatalf("run() stderr = %q, test-only source must not be counted as production liveness", stderr.String())
+		t.Fatal("run() error = nil, want test-only debt and production-liveness failure")
 	}
 	for _, want := range []string{
 		"package-target observations: production=0 test-only=1",
-		"dependency violation counts: production=0 test-only=1",
+		"dependency violation counts: production=1 test-only=1",
 		"[class=test-only]",
+		"stale production package-target row: pkg/services/work/testonly -> work/internal (successor pkg/services/work/internal) [class=production]",
 	} {
 		if !strings.Contains(stderr.String(), want) {
 			t.Fatalf("run() stderr = %q, want %q", stderr.String(), want)
@@ -97,11 +95,18 @@ func TestTestOnlyPackageDoesNotSatisfyProductionLiveness(t *testing.T) {
 	})
 	stdout.Reset()
 	stderr.Reset()
-	if err := run(config{root: root}, &stdout, &stderr); err != nil {
-		t.Fatalf("run() with accepted test-only edge error = %v; stderr=%s", err, stderr.String())
+	err = run(config{root: root}, &stdout, &stderr)
+	if err == nil {
+		t.Fatal("run() with accepted test-only edge error = nil, want production-liveness failure")
 	}
-	if !strings.Contains(stdout.String(), "package-target observations: production=0 test-only=1") {
-		t.Fatalf("run() stdout = %q, want production-liveness isolation", stdout.String())
+	for _, want := range []string{
+		"package-target observations: production=0 test-only=1",
+		"dependency violation counts: production=1 test-only=0",
+		"stale production package-target row: pkg/services/work/testonly -> work/internal (successor pkg/services/work/internal) [class=production]",
+	} {
+		if !strings.Contains(stderr.String(), want) {
+			t.Fatalf("run() stderr = %q, want production-liveness diagnostic %q", stderr.String(), want)
+		}
 	}
 }
 

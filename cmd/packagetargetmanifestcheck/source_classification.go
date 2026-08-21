@@ -207,15 +207,11 @@ func partitionPackageTargetFindings(
 		}
 	}
 
-	// A row with no source class at all is stale production migration intent.
-	// A test-only row is deliberately not added here: it is visible only through
-	// the independent test-only baseline and must not make production liveness
-	// appear true.
+	// A row without a production source is stale production migration intent.
+	// Test-only evidence remains independently ratcheted above, but it cannot
+	// make an open move row satisfy the production liveness requirement.
 	for _, row := range moves {
 		if _, production := productionRows[row.PackagePath]; production {
-			continue
-		}
-		if hasPackageTargetClass(findings, row.PackagePath, packageTargetTestOnlySourceClass) {
 			continue
 		}
 		productionStale = append(productionStale, row)
@@ -241,15 +237,6 @@ func packageTargetStaleRowPaths(rows []PackageMapping) []string {
 		paths = append(paths, row.PackagePath)
 	}
 	return paths
-}
-
-func hasPackageTargetClass(findings []packageTargetFinding, packagePath string, class packageTargetSourceClass) bool {
-	for _, finding := range findings {
-		if finding.PackagePath == packagePath && finding.Class == class {
-			return true
-		}
-	}
-	return false
 }
 
 func validatePackageTargetTestOnlyBaselineEntry(index int, entry packageTargetTestOnlyBaselineEntry) error {

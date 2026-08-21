@@ -2,14 +2,6 @@
   "version": 1,
   "entries": [
     {
-      "packagePath": "pkg/services/factory_definitions/clonetests",
-      "destination": "factory_definitions/internal",
-      "successor": "pkg/services/factory_definitions/internal",
-      "class": "test-only",
-      "stage": "pss-package-target-test-only",
-      "deletionGate": "delete the exact test-only package-target edge after its owning migration lands, then remove this baseline entry"
-    },
-    {
       "packagePath": "pkg/services/factory_definitions/definition",
       "destination": "factory_definitions/internal",
       "successor": "pkg/services/factory_definitions/internal",
@@ -19,14 +11,6 @@
     },
     {
       "packagePath": "pkg/services/factory_definitions/internal/services/runtime_snapshot",
-      "destination": "factory_definitions/internal",
-      "successor": "pkg/services/factory_definitions/internal",
-      "class": "test-only",
-      "stage": "pss-package-target-test-only",
-      "deletionGate": "delete the exact test-only package-target edge after its owning migration lands, then remove this baseline entry"
-    },
-    {
-      "packagePath": "pkg/services/factory_definitions/systeminitializationtests",
       "destination": "factory_definitions/internal",
       "successor": "pkg/services/factory_definitions/internal",
       "class": "test-only",
@@ -178,14 +162,6 @@
       "deletionGate": "delete the exact test-only package-target edge after its owning migration lands, then remove this baseline entry"
     },
     {
-      "packagePath": "pkg/services/recordings/internal/projections/projectiontests",
-      "destination": "recordings/internal/services/projection_query",
-      "successor": "pkg/services/recordings/internal/services/projection_query",
-      "class": "test-only",
-      "stage": "pss-package-target-test-only",
-      "deletionGate": "delete the exact test-only package-target edge after its owning migration lands, then remove this baseline entry"
-    },
-    {
       "packagePath": "pkg/services/recordings/internal/projections/workstation",
       "destination": "recordings/internal/services/projection_query",
       "successor": "pkg/services/recordings/internal/services/projection_query",
@@ -195,30 +171,6 @@
     },
     {
       "packagePath": "pkg/services/recordings/internal/replay",
-      "destination": "recordings/internal/services/replay",
-      "successor": "pkg/services/recordings/internal/services/replay",
-      "class": "test-only",
-      "stage": "pss-package-target-test-only",
-      "deletionGate": "delete the exact test-only package-target edge after its owning migration lands, then remove this baseline entry"
-    },
-    {
-      "packagePath": "pkg/services/recordings/internal/replay/clocktests",
-      "destination": "recordings/internal/services/replay",
-      "successor": "pkg/services/recordings/internal/services/replay",
-      "class": "test-only",
-      "stage": "pss-package-target-test-only",
-      "deletionGate": "delete the exact test-only package-target edge after its owning migration lands, then remove this baseline entry"
-    },
-    {
-      "packagePath": "pkg/services/recordings/internal/replay/configtests",
-      "destination": "recordings/internal/services/replay",
-      "successor": "pkg/services/recordings/internal/services/replay",
-      "class": "test-only",
-      "stage": "pss-package-target-test-only",
-      "deletionGate": "delete the exact test-only package-target edge after its owning migration lands, then remove this baseline entry"
-    },
-    {
-      "packagePath": "pkg/services/recordings/internal/replay/fixturetests",
       "destination": "recordings/internal/services/replay",
       "successor": "pkg/services/recordings/internal/services/replay",
       "class": "test-only",

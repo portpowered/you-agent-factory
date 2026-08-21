@@ -101,6 +101,56 @@ func TestPackageBoundaryImportScansRetainTestOnlyEdges(t *testing.T) {
 	}
 }
 
+func TestPackageBoundaryDependencyScansRetainTestOnlyEdges(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	writeGoImportFile(t, repoRoot, "pkg/services/work/domain.go", "work", "github.com/portpowered/infinite-you/pkg/transports/mapping")
+	writeGoImportFile(t, repoRoot, "pkg/services/work/domain_test.go", "work_test", "github.com/portpowered/infinite-you/pkg/transports/mapping")
+	writeGoImportFile(t, repoRoot, "pkg/transports/runtime.go", "runtime", "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/runtime")
+	writeGoImportFile(t, repoRoot, "pkg/transports/runtime_test.go", "runtime_test", "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/runtime")
+	writeGoImportFile(t, repoRoot, "internal/testutil/support.go", "testutil", "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/service")
+	writeGoImportFile(t, repoRoot, "internal/testutil/support_test.go", "testutil", "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/service")
+
+	domain, err := scanDomainTransportImports(repoRoot, nil)
+	if err != nil {
+		t.Fatalf("scanDomainTransportImports() error = %v", err)
+	}
+	if got := countSourceClasses(domain, func(finding domainTransportImportFinding) boundarySourceClass { return finding.class }, func(finding domainTransportImportFinding) string { return finding.filePath }); got != "production=1 test-only=1" {
+		t.Fatalf("domain transport classes = %s, want production=1 test-only=1", got)
+	}
+
+	transport, err := scanTransportServiceImplementationImports(repoRoot)
+	if err != nil {
+		t.Fatalf("scanTransportServiceImplementationImports() error = %v", err)
+	}
+	if got := countSourceClasses(transport, func(finding transportServiceImplementationFinding) boundarySourceClass { return finding.class }, func(finding transportServiceImplementationFinding) string { return finding.filePath }); got != "production=1 test-only=1" {
+		t.Fatalf("transport implementation classes = %s, want production=1 test-only=1", got)
+	}
+
+	support, err := scanSupportServiceSubpackageImports(repoRoot)
+	if err != nil {
+		t.Fatalf("scanSupportServiceSubpackageImports() error = %v", err)
+	}
+	if got := countSourceClasses(support, func(finding supportServiceImportFinding) boundarySourceClass { return finding.class }, func(finding supportServiceImportFinding) string { return finding.filePath }); got != "production=1 test-only=1" {
+		t.Fatalf("support service classes = %s, want production=1 test-only=1", got)
+	}
+
+	var stdout, stderr bytes.Buffer
+	if err := run(config{root: repoRoot, packageRoot: defaultScanRoot}, &stdout, &stderr); err == nil {
+		t.Fatal("run() error = nil, want all three dependency rules enforced")
+	}
+	for _, path := range []string{
+		"pkg/services/work/domain_test.go",
+		"pkg/transports/runtime_test.go",
+		"internal/testutil/support_test.go",
+	} {
+		if !strings.Contains(stderr.String(), path+") [class=test-only]") {
+			t.Fatalf("run() stderr = %q, want class-labeled test-only diagnostic for %s", stderr.String(), path)
+		}
+	}
+}
+
 func TestPackageBoundaryDependencyKeysIncludeSourceClass(t *testing.T) {
 	t.Parallel()
 
