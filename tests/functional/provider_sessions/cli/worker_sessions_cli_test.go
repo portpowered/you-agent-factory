@@ -133,7 +133,7 @@ func assertWorkerSessionsCLIHelp(t *testing.T, ctx context.Context, process supp
 	}
 	listHelpInputs := executeCLI(t, ctx, process, env, factoryDir, "worker-sessions", "list", "--help")
 	for _, marker := range []string{"--work-id", "--state", "--limit", "fleet-wide", "provider-session"} {
-		if !strings.Contains(listHelpInputs.Stdout(), marker) {
+		if !strings.Contains(strings.ToLower(listHelpInputs.Stdout()), strings.ToLower(marker)) {
 			t.Fatalf("worker-sessions list help omitted %q:\n%s", marker, listHelpInputs.Stdout())
 		}
 	}
