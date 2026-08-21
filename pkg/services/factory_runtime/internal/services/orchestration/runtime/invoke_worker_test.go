@@ -681,6 +681,49 @@ func TestRuntimeExecutionSelectionResolvesInvocationWorkerDefaults(t *testing.T)
 	}
 }
 
+func TestRuntimeExecutionTargetUsesRuntimeBaseForAuthoredWorktree(t *testing.T) {
+	lookup := runtimefixtures.RuntimeConfigLookupFixture{
+		FactoryPath:     "installed-factory",
+		RuntimeBasePath: "requester-repository",
+		Workers: map[string]*interfaces.FactoryWorkerConfig{
+			"worker": {
+				Name:          "worker",
+				Type:          interfaces.WorkerTypeAgent,
+				Model:         "model",
+				ModelProvider: "codex",
+			},
+		},
+		Workstations: map[string]*interfaces.FactoryWorkstationConfig{
+			"work": {
+				Name:           "work",
+				WorkerTypeName: "worker",
+				Worktree:       "feature-fix",
+			},
+		},
+	}
+	selection := resolveRuntimeExecutionSelection(
+		&runtimeConfig{runtimeConfig: lookup},
+		workers.WorkstationDispatchRequest{
+			WorkstationName: "work",
+			Execution:       workers.WorkstationExecutionRequest{},
+		},
+		nil,
+		nil,
+		nil,
+	)
+
+	target := executionTargetFromSelection(selection, "work", nil)
+	if !target.Workspace.PrepareWorktree {
+		t.Fatalf("target workspace = %#v, want worktree preparation", target.Workspace)
+	}
+	if target.Workspace.FactoryDirectory != "requester-repository" {
+		t.Fatalf("target worktree root = %q, want requester-repository", target.Workspace.FactoryDirectory)
+	}
+	if target.FactoryDirectory != "installed-factory" {
+		t.Fatalf("target factory directory = %q, want installed-factory", target.FactoryDirectory)
+	}
+}
+
 func assertRuntimeExecutionSelection(t *testing.T, selection runtimeExecutionSelection) {
 	t.Helper()
 	assertSelectionStrings(t, []selectionStringCheck{

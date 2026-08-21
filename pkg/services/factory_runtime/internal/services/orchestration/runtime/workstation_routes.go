@@ -79,6 +79,7 @@ type runtimeExecutionSelection struct {
 	command                     string
 	args                        []string
 	factoryDirectory            string
+	worktreeFactoryDirectory    string
 	systemPrompt                string
 	promptTemplate              string
 	userMessage                 string
@@ -130,6 +131,15 @@ func resolveRuntimeExecutionSelection(
 		finalizeRuntimeExecutionSelection(cfg, &selection, inputs, cfg.expectedArtifactFileSystem)
 	} else {
 		finalizeRuntimeExecutionSelection(nil, &selection, inputs)
+	}
+	selection.worktreeFactoryDirectory = selection.factoryDirectory
+	if cfg != nil {
+		if runtimeLookup, ok := cfg.runtimeConfig.(interfaces.RuntimeConfigLookup); ok && runtimeLookup != nil {
+			selection.worktreeFactoryDirectory = firstRuntimeValue(
+				strings.TrimSpace(runtimeLookup.RuntimeBaseDir()),
+				selection.factoryDirectory,
+			)
+		}
 	}
 	return selection
 }
