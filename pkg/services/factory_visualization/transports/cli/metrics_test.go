@@ -189,6 +189,46 @@ func TestMetricsCommand_JSONIsDeterministicAndPreservesMissingLatency(t *testing
 	}
 }
 
+func TestMetricsCommand_PresentsQueryCostAvailabilityInHumanAndJSON(t *testing.T) {
+	tests := []struct {
+		name         string
+		availability factoryvisualization.RuntimeMetricsCostAvailability
+		want         string
+	}{
+		{name: "unavailable", availability: factoryvisualization.RuntimeMetricsCostUnavailable, want: "unavailable"},
+		{name: "query-provided state", availability: "ESTIMATED", want: "estimated"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			query := metricsQueryStub(func(context.Context, factoryvisualization.RuntimeMetricsQueryRequest) (factoryvisualization.RuntimeMetricsQueryResult, error) {
+				result := metricsResult()
+				result.Cost.Availability = test.availability
+				return result, nil
+			})
+
+			human, err := executeMetricsCommand(t, query, nil)
+			if err != nil {
+				t.Fatalf("execute human metrics: %v", err)
+			}
+			if !strings.Contains(human, "Cost: "+test.want+"\n") {
+				t.Fatalf("human cost = %q, want %q", human, "Cost: "+test.want)
+			}
+
+			jsonOutput, err := executeMetricsCommandWithJSON(t, query, nil, true)
+			if err != nil {
+				t.Fatalf("execute JSON metrics: %v", err)
+			}
+			var document metricsJSONDocument
+			if err := json.Unmarshal([]byte(jsonOutput), &document); err != nil {
+				t.Fatalf("decode JSON output: %v\n%s", err, jsonOutput)
+			}
+			if document.Cost.Availability != test.want {
+				t.Fatalf("JSON cost availability = %q, want %q", document.Cost.Availability, test.want)
+			}
+		})
+	}
+}
+
 func TestMetricsCommand_EmptyResultShowsZeroCountsAndNoSamples(t *testing.T) {
 	output, err := executeMetricsCommand(t, metricsQueryStub(func(context.Context, factoryvisualization.RuntimeMetricsQueryRequest) (factoryvisualization.RuntimeMetricsQueryResult, error) {
 		return factoryvisualization.RuntimeMetricsQueryResult{
