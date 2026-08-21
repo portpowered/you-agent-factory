@@ -654,7 +654,14 @@ func verifyFunctionalTestQuarantineSelectors(manifest functionalQuarantine, time
 		return nil
 	}
 
-	runtimeInventory, err := discoverFunctionalTestInventoryByRuntimeList(selectorPackages, timeout, short, jobs, repoRoot)
+	runtimeInventory, err := discoverFunctionalTestInventoryByRuntimeListWithPattern(
+		selectorPackages,
+		functionalTestSelectorListPattern(manifest),
+		timeout,
+		short,
+		jobs,
+		repoRoot,
+	)
 	if err != nil {
 		return err
 	}
@@ -679,17 +686,35 @@ func functionalTestSelectorPackages(manifest functionalQuarantine) []string {
 	return sortedUniqueStrings(selectorPackages)
 }
 
-func discoverFunctionalTestInventoryByRuntimeList(packages []string, timeout time.Duration, short bool, jobs int, repoRoot string) (functionalTestInventory, error) {
+func functionalTestSelectorListPattern(manifest functionalQuarantine) string {
+	testNames := make([]string, 0)
+	for _, entry := range manifest.Entries {
+		if entry.Test != "" {
+			testNames = append(testNames, entry.Test)
+		}
+	}
+	testNames = sortedUniqueStrings(testNames)
+	quoted := make([]string, 0, len(testNames))
+	for _, testName := range testNames {
+		quoted = append(quoted, regexp.QuoteMeta(testName))
+	}
+	return "^(?:" + strings.Join(quoted, "|") + ")$"
+}
+
+func discoverFunctionalTestInventoryByRuntimeListWithPattern(packages []string, listPattern string, timeout time.Duration, short bool, jobs int, repoRoot string) (functionalTestInventory, error) {
 	packages = sortedUniqueStrings(packages)
 	if len(packages) == 0 {
 		return functionalTestInventory{}, errors.New("discover functional tests: no packages were selected for runtime verification")
+	}
+	if strings.TrimSpace(listPattern) == "" {
+		return functionalTestInventory{}, errors.New("discover functional tests: runtime verification list pattern is required")
 	}
 
 	// This retained runtime path verifies test registration for quarantine
 	// selectors only; the coverage and lint lanes own vet execution. Skipping
 	// the redundant vet pass keeps selector verification bounded without
 	// weakening the runtime listing or its fail-closed parsing checks.
-	args := []string{"test", "-vet=off", "-list=^Test", "-json", fmt.Sprintf("-p=%d", maxFunctionalDiscoveryJobs(jobs)), "-count=1"}
+	args := []string{"test", "-vet=off", "-list=" + listPattern, "-json", fmt.Sprintf("-p=%d", maxFunctionalDiscoveryJobs(jobs)), "-count=1"}
 	if short {
 		args = append(args, "-short")
 	}
