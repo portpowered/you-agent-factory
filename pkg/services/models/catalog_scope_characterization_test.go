@@ -430,19 +430,19 @@ func TestBuiltInModelCatalogPublishesCanonicalDefinitions(t *testing.T) {
 		},
 		{
 			name:      "asr",
-			source:    "hf://ggerganov/whisper.cpp/ggml-base.en.bin",
+			source:    "hf://ggerganov/whisper.cpp/ggml-base.en.bin@5359861c739e955e79d9a303bcbc70fb988958b1",
 			backend:   "localai-whisper",
 			operation: models.OperationASR,
 		},
 		{
 			name:      "tts",
-			source:    "hf://vibevoice/VibeVoice-7B",
+			source:    "hf://vibevoice/VibeVoice-7B@505114ae6ad17be74df98e6939707434ec49c187",
 			backend:   "localai-vibevoice",
 			operation: models.OperationTTS,
 		},
 		{
 			name:      "embed",
-			source:    "hf://Qwen/Qwen3-Embedding-0.6B",
+			source:    "hf://Qwen/Qwen3-Embedding-0.6B@97b0c614be4d77ee51c0cef4e5f07c00f9eb65b3",
 			backend:   "localai-llamacpp",
 			operation: models.OperationEMBED,
 		},

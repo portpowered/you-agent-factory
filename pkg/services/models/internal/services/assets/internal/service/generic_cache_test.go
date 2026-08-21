@@ -217,6 +217,46 @@ func TestPrepareGenericAssetsKeepsModelAndBackendCachesSeparate(t *testing.T) {
 	}
 }
 
+func TestPrepareGenericAssetsBindsPublishedSnapshotForRuntimeHost(t *testing.T) {
+	t.Parallel()
+
+	localPath := filepath.Join(t.TempDir(), "weights.gguf")
+	body := []byte("joined runtime weights")
+	if err := os.WriteFile(localPath, body, 0o644); err != nil {
+		t.Fatalf("write local fixture: %v", err)
+	}
+	scopes := newScopes(t, "generic-runtime-binding")
+	scope := openScope(t, scopes, t.TempDir(), models.RuntimeConfig{})
+	service := newGenericService(t, scopes, httpDoerFunc(func(*http.Request) (*http.Response, error) {
+		t.Fatal("local joined preparation used the network")
+		return nil, nil
+	}), func(string) string { return "" })
+
+	if _, err := service.PrepareModelAssets(context.Background(), models.PrepareModelAssetsRequest{
+		Scope:     scope,
+		Name:      "joined-model",
+		Reference: models.ModelReference{NameOrURI: localPath},
+		Artifacts: []models.AssetRequirement{{Name: filepath.Base(localPath), Bytes: int64(len(body)), SHA256: sha256Hex(body)}},
+	}); err != nil {
+		t.Fatalf("PrepareModelAssets: %v", err)
+	}
+	inspection, err := service.InspectRuntimeCache(context.Background(), models.InspectModelAssetsRequest{
+		Scope: scope,
+		Name:  "joined-model",
+	})
+	if err != nil {
+		t.Fatalf("InspectRuntimeCache: %v", err)
+	}
+	if !inspection.Supported || !inspection.Installed || inspection.CachePath == "" ||
+		inspection.InstalledFileCount != 1 {
+		t.Fatalf("runtime inspection = %#v, want prepared generic snapshot", inspection)
+	}
+	if info, err := os.Stat(inspection.CachePath); err != nil || !info.IsDir() {
+		t.Fatalf("runtime cache path = %q, stat = (%v, %#v), want snapshot directory",
+			inspection.CachePath, err, info)
+	}
+}
+
 func TestPrepareGenericAssetsAcceptsFileURIWithoutNetwork(t *testing.T) {
 	t.Parallel()
 
@@ -407,6 +447,95 @@ func TestPrepareGenericAssetsPreservesPriorGoodSnapshotAfterFailedReplacement(t 
 	}
 	if len(entries) != 1 || strings.HasSuffix(entries[0].Name(), ".partial") {
 		t.Fatalf("replacement cache entries = %#v, want only prior good snapshot", entries)
+	}
+}
+
+func TestPrepareGenericAssetsRejectsSameSizeCorruptedFileBackedHFCache(t *testing.T) {
+	t.Parallel()
+
+	good := []byte("good payload")
+	corrupt := []byte("evil payload")
+	if len(good) != len(corrupt) {
+		t.Fatal("corruption fixture must preserve size")
+	}
+	hfCache := t.TempDir()
+	writeGenericHFFixture(t, hfCache, corrupt)
+	var requests atomic.Int32
+	manifestClient := genericManifestClient("weights.bin", good, func() []byte {
+		requests.Add(1)
+		return good
+	})
+	environment := func(name string) string {
+		if name == "HUGGINGFACE_HUB_CACHE" {
+			return hfCache
+		}
+		return ""
+	}
+	scopes := newScopes(t, "generic-hf-corrupt-same-size")
+	scope := openScope(t, scopes, t.TempDir(), models.RuntimeConfig{})
+	service := newGenericService(t, scopes, manifestClient, environment)
+
+	result, err := service.PrepareModelAssets(context.Background(), models.PrepareModelAssetsRequest{
+		Scope:     scope,
+		Reference: models.ModelReference{NameOrURI: "hf://owner/repo/weights.bin@" + genericTestRevision},
+	})
+	if err != nil {
+		t.Fatalf("PrepareModelAssets: %v", err)
+	}
+	if result.Outcome != models.AssetPreparationPrepared || len(result.Asset.Artifacts) != 1 ||
+		result.Asset.Artifacts[0].SHA256 != sha256Hex(good) || requests.Load() == 0 {
+		t.Fatalf("same-size corrupted HF result = %#v, network requests = %d", result, requests.Load())
+	}
+}
+
+func TestPublishGenericCacheRestoresPriorSnapshotWhenCommitRenameFails(t *testing.T) {
+	t.Parallel()
+
+	oldBody := []byte("prior snapshot")
+	newBody := []byte("replacement")
+	localPath := filepath.Join(t.TempDir(), "weights.bin")
+	if err := os.WriteFile(localPath, newBody, 0o644); err != nil {
+		t.Fatalf("write replacement fixture: %v", err)
+	}
+	scopes := newScopes(t, "generic-rename-rollback")
+	you := t.TempDir()
+	service := newGenericService(t, scopes, httpDoerFunc(func(*http.Request) (*http.Response, error) {
+		t.Fatal("local replacement used the network")
+		return nil, nil
+	}), func(string) string { return "" })
+	source := genericSource{kind: genericSourceLocal, safe: "local://path", localPath: localPath}
+	artifact := genericArtifact{requirement: models.AssetRequirement{Name: "weights.bin"}, localPath: localPath}
+	finalPath := filepath.Join(
+		you, assetContentDirectory, assetKindModel,
+		genericArtifactIdentityHash(assetKindModel, source, []genericArtifact{artifact}),
+	)
+	if err := os.MkdirAll(finalPath, 0o755); err != nil {
+		t.Fatalf("create prior snapshot: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(finalPath, "weights.bin"), oldBody, 0o644); err != nil {
+		t.Fatalf("write prior snapshot: %v", err)
+	}
+	originalRename := service.renamePath
+	service.renamePath = func(oldPath, newPath string) error {
+		if strings.HasSuffix(oldPath, ".partial") && newPath == finalPath {
+			return errors.New("injected snapshot commit rename failure")
+		}
+		return originalRename(oldPath, newPath)
+	}
+
+	_, err := service.publishGenericCache(
+		context.Background(), assetKindModel, models.AssetArtifactKindModel, source,
+		[]genericArtifact{artifact}, nil, []genericArtifact{artifact}, []string{you},
+	)
+	if !errors.Is(err, models.ErrAssetPreparationInterrupted) {
+		t.Fatalf("publish error = %v, want interrupted rename", err)
+	}
+	assertFileBody(t, filepath.Join(finalPath, "weights.bin"), oldBody)
+	if _, statErr := os.Stat(finalPath + ".previous"); !errors.Is(statErr, os.ErrNotExist) {
+		t.Fatalf("rollback backup = %v, want removed after restoration", statErr)
+	}
+	if _, statErr := os.Stat(finalPath + ".partial"); !errors.Is(statErr, os.ErrNotExist) {
+		t.Fatalf("partial snapshot = %v, want removed after rollback", statErr)
 	}
 }
 

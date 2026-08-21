@@ -23,6 +23,14 @@ type AssetReadFile = effects.AssetReadFile
 type AssetReadDirectory = effects.AssetReadDirectory
 type AssetCreateFile = effects.AssetCreateFile
 type AssetOpenFile = effects.AssetOpenFile
+type HostProtocolNegotiationRequest = effects.HostProtocolNegotiationRequest
+type HostProtocolNegotiationResult = effects.HostProtocolNegotiationResult
+type HostProtocolNegotiator = effects.HostProtocolNegotiator
+type HostGRPCDialer = effects.HostGRPCDialer
+type HostGRPCConnection = effects.HostGRPCConnection
+type HostCompatibilityRequest = effects.HostCompatibilityRequest
+type HostCompatibilityChecker = effects.HostCompatibilityChecker
+type PinnedGRPCNegotiator = effects.PinnedGRPCNegotiator
 
 type HostProcessStartSpec = effects.HostProcessStartSpec
 type HostManagedProcess = effects.HostManagedProcess

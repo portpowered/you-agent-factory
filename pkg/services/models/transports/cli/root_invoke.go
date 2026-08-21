@@ -2,6 +2,7 @@ package cli
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -55,6 +56,19 @@ func (service *rootService) Invoke(cfg InvokeConfig) error {
 	if err != nil {
 		return mapModelsRootError(err)
 	}
+	if cfg.JSON {
+		joinedResult, joinedErr := service.models.InvokeModel(cfg.Context, joinedCLIInvocationRequest(
+			scope.Scope, modelName, operation, text, catalogResult.Model,
+		))
+		if joinedErr == nil {
+			response := modelInvocationResponseFromInferenceResult(joinedResult, catalogResult.Model, text)
+			return json.NewEncoder(cfg.Output).Encode(response)
+		}
+		if !errors.Is(joinedErr, modelinference.ErrUnsupportedOperation) &&
+			!errors.Is(joinedErr, modelinference.ErrModelReferenceUnknown) {
+			return mapModelsRootError(joinedErr)
+		}
+	}
 	if runtime := catalogResult.Model.ManagedRuntime; strings.TrimSpace(runtime.Identity) != "" {
 		if err := runtime.InvocationError(); err != nil {
 			return mapModelsRootError(err)
@@ -102,6 +116,34 @@ func (service *rootService) Invoke(cfg InvokeConfig) error {
 	}
 	_, err = fmt.Fprintf(cfg.Output, "Wrote audio: %s\n", outputPath)
 	return err
+}
+
+func joinedCLIInvocationRequest(
+	scope modelinference.RuntimeScopeRef,
+	modelName string,
+	operation string,
+	text string,
+	catalog modelinference.Detail,
+) modelinference.InvokeModelRequest {
+	inputName := "input"
+	modality := modelinference.ModalityText
+	contentType := "text/plain"
+	if selected, ok := catalogOperationForName(catalog, operation); ok && len(selected.Inputs) > 0 {
+		inputName = selected.Inputs[0].Name
+		if selected.Inputs[0].Modality != "" {
+			modality = selected.Inputs[0].Modality
+		}
+		if len(selected.Inputs[0].MediaTypes) > 0 {
+			contentType = selected.Inputs[0].MediaTypes[0]
+		}
+	}
+	return modelinference.InvokeModelRequest{
+		Scope: scope, Holder: modelsCLIInvokeHolder,
+		Model: modelinference.ModelReference{NameOrURI: modelName}, Operation: operation,
+		Inputs: []modelinference.InferenceInput{{
+			Name: inputName, Modality: modality, ContentType: contentType, Content: text,
+		}},
+	}
 }
 
 func modelInvocationResponseFromInferenceResult(

@@ -14,6 +14,7 @@ import (
 	"strings"
 
 	models "github.com/portpowered/infinite-you/pkg/services/models"
+	scopedassets "github.com/portpowered/infinite-you/pkg/services/models/internal/services/assets"
 )
 
 const (
@@ -48,9 +49,10 @@ type genericArtifact struct {
 }
 
 type genericCacheResult struct {
-	artifacts []models.AssetArtifact
-	paths     []string
-	prepared  bool
+	artifacts    []models.AssetArtifact
+	paths        []string
+	snapshotPath string
+	prepared     bool
 }
 
 type assetCacheCall struct {
@@ -113,6 +115,15 @@ func (s *service) prepareGenericAssets(
 	backendResult, backendErr := s.acquireGenericBackend(ctx, plan, request.Offline)
 	if err := genericPreparationError(modelErr, backendErr); err != nil {
 		return genericAssetFailureResult(plan.source, modelResult, backendResult), err
+	}
+	if modelResult.snapshotPath != "" {
+		s.rememberPreparedRuntime(request.Scope, request.Name, scopedassets.RuntimeCacheInspection{
+			Supported:          true,
+			Installed:          true,
+			Revision:           plan.source.revision,
+			CachePath:          modelResult.snapshotPath,
+			InstalledFileCount: len(modelResult.artifacts),
+		})
 	}
 	return genericAssetResult(plan.source, modelResult, backendResult), nil
 }

@@ -271,6 +271,74 @@ func TestModelsCompositionRejectsTypedNilHostEdges(t *testing.T) {
 	}
 }
 
+func TestModelsCompositionAdaptsProtocolAndCompatibilityPorts(t *testing.T) {
+	t.Parallel()
+
+	request := modelswire.HostProtocolNegotiationRequest{
+		ProtocolVersion: "model-host.v1",
+		Backend:         "localai-vibevoice",
+		ModelName:       "tts",
+		Revision:        "revision-1",
+		Platform:        models.AssetHostPlatform{OperatingSystem: "test-os", Architecture: "test-arch"},
+	}
+	protocol := &modelEdgeProtocolNegotiator{}
+	adaptedProtocol := adaptModelHostProtocolNegotiator(protocol)
+	result, err := adaptedProtocol.Negotiate(context.Background(), "grpc://model-host", request)
+	if err != nil {
+		t.Fatalf("protocol negotiation: %v", err)
+	}
+	if protocol.endpoint != "grpc://model-host" || protocol.request.ProtocolVersion != request.ProtocolVersion ||
+		protocol.request.Backend != request.Backend || protocol.request.ModelName != request.ModelName ||
+		protocol.request.Revision != request.Revision || protocol.request.Platform != request.Platform {
+		t.Fatalf("edge protocol request = %#v at %q, want exact projection", protocol.request, protocol.endpoint)
+	}
+	if result != (modelswire.HostProtocolNegotiationResult{
+		ProtocolVersion: "model-host.v1", Backend: request.Backend, Ready: true,
+	}) {
+		t.Fatalf("protocol result = %#v, want ready pinned result", result)
+	}
+
+	compatibility := &modelEdgeCompatibilityChecker{}
+	if err := adaptModelHostCompatibilityChecker(compatibility).Check(context.Background(), modelswire.HostCompatibilityRequest{
+		Backend: request.Backend, ModelName: request.ModelName, Revision: request.Revision, Platform: request.Platform,
+	}); err != nil {
+		t.Fatalf("compatibility check: %v", err)
+	}
+	if compatibility.request.Backend != request.Backend || compatibility.request.ModelName != request.ModelName ||
+		compatibility.request.Revision != request.Revision || compatibility.request.Platform != request.Platform {
+		t.Fatalf("edge compatibility request = %#v, want exact projection", compatibility.request)
+	}
+
+	connection := &modelEdgeGRPCConnection{}
+	dialer := modelHostGRPCDialerAdapter{next: &modelEdgeGRPCDialer{connection: connection}}
+	adaptedConnection, err := dialer.Dial(context.Background(), "grpc://model-host")
+	if err != nil {
+		t.Fatalf("dial model host: %v", err)
+	}
+	if _, err := adaptedConnection.Negotiate(context.Background(), request); err != nil {
+		t.Fatalf("dialed protocol negotiation: %v", err)
+	}
+	if err := adaptedConnection.Close(); err != nil {
+		t.Fatalf("close model host connection: %v", err)
+	}
+	if connection.request.Backend != request.Backend || !connection.closed {
+		t.Fatalf("dialed connection state = %#v, want request and close", connection)
+	}
+
+	if adaptModelHostProtocolNegotiator(nil) != nil {
+		t.Fatal("nil protocol negotiator should stay nil")
+	}
+	if adaptModelHostCompatibilityChecker(nil) != nil {
+		t.Fatal("nil compatibility checker should stay nil")
+	}
+	if got := (modelsClock{source: modelEdgeClock{}}).Now(); !got.Equal(modelEdgeClockTime) {
+		t.Fatalf("injected models clock = %v, want %v", got, modelEdgeClockTime)
+	}
+	if got := (modelsClock{}).Now(); !got.IsZero() {
+		t.Fatalf("empty models clock = %v, want zero time", got)
+	}
+}
+
 var modelEdgeClockTime = time.Unix(1_725_000_000, 0)
 
 type modelEdgeManagedProcess struct {
@@ -335,4 +403,65 @@ type modelEdgePullMetricsRecorder struct {
 
 func (recorder *modelEdgePullMetricsRecorder) RecordModelPullMetric(metric serviceedges.PullMetric) {
 	recorder.metric = metric
+}
+
+type modelEdgeProtocolNegotiator struct {
+	endpoint string
+	request  serviceedges.ModelHostProtocolNegotiationRequest
+}
+
+func (negotiator *modelEdgeProtocolNegotiator) Negotiate(
+	_ context.Context,
+	endpoint string,
+	request serviceedges.ModelHostProtocolNegotiationRequest,
+) (serviceedges.ModelHostProtocolNegotiationResult, error) {
+	negotiator.endpoint = endpoint
+	negotiator.request = request
+	return serviceedges.ModelHostProtocolNegotiationResult{
+		ProtocolVersion: request.ProtocolVersion,
+		Backend:         request.Backend,
+		Ready:           true,
+	}, nil
+}
+
+type modelEdgeCompatibilityChecker struct {
+	request serviceedges.ModelHostCompatibilityRequest
+}
+
+func (checker *modelEdgeCompatibilityChecker) Check(
+	_ context.Context,
+	request serviceedges.ModelHostCompatibilityRequest,
+) error {
+	checker.request = request
+	return nil
+}
+
+type modelEdgeGRPCDialer struct {
+	connection *modelEdgeGRPCConnection
+}
+
+func (dialer *modelEdgeGRPCDialer) Dial(context.Context, string) (serviceedges.ModelHostGRPCConnection, error) {
+	return dialer.connection, nil
+}
+
+type modelEdgeGRPCConnection struct {
+	request serviceedges.ModelHostProtocolNegotiationRequest
+	closed  bool
+}
+
+func (connection *modelEdgeGRPCConnection) Negotiate(
+	_ context.Context,
+	request serviceedges.ModelHostProtocolNegotiationRequest,
+) (serviceedges.ModelHostProtocolNegotiationResult, error) {
+	connection.request = request
+	return serviceedges.ModelHostProtocolNegotiationResult{
+		ProtocolVersion: request.ProtocolVersion,
+		Backend:         request.Backend,
+		Ready:           true,
+	}, nil
+}
+
+func (connection *modelEdgeGRPCConnection) Close() error {
+	connection.closed = true
+	return nil
 }

@@ -1,8 +1,11 @@
 package edges
 
 import (
+	"context"
 	"io"
 	"os"
+
+	"github.com/portpowered/infinite-you/pkg/services/models"
 )
 
 // PullMetric is the process-edge representation of one managed-model pull
@@ -35,3 +38,41 @@ type RuntimeCreateTempFile func(string, string) (interface {
 	Close() error
 	Name() string
 }, error)
+
+type ModelHostProtocolNegotiationRequest struct {
+	ProtocolVersion string
+	Backend         string
+	ModelName       string
+	Revision        string
+	Platform        models.AssetHostPlatform
+}
+
+type ModelHostProtocolNegotiationResult struct {
+	ProtocolVersion string
+	Backend         string
+	Ready           bool
+}
+
+type ModelHostProtocolNegotiator interface {
+	Negotiate(context.Context, string, ModelHostProtocolNegotiationRequest) (ModelHostProtocolNegotiationResult, error)
+}
+
+type ModelHostGRPCDialer interface {
+	Dial(context.Context, string) (ModelHostGRPCConnection, error)
+}
+
+type ModelHostGRPCConnection interface {
+	Negotiate(context.Context, ModelHostProtocolNegotiationRequest) (ModelHostProtocolNegotiationResult, error)
+	Close() error
+}
+
+type ModelHostCompatibilityRequest struct {
+	Backend   string
+	ModelName string
+	Revision  string
+	Platform  models.AssetHostPlatform
+}
+
+type ModelHostCompatibilityChecker interface {
+	Check(context.Context, ModelHostCompatibilityRequest) error
+}

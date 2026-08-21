@@ -73,6 +73,7 @@ type Edges struct {
 	ModelAssetEndpoints             models.RuntimeAssetEndpoints
 	ModelAssetHostPlatform          models.AssetHostPlatform
 	ModelResolveHuggingFaceRevision func(context.Context, string) (string, error)
+	ModelAssetResolveEnvironment    func(string) string
 	ModelAssetMakeDirectories       AssetMakeDirectories
 	ModelAssetInspectPath           AssetInspectPath
 	ModelAssetResolveHomeDirectory  AssetResolveHomeDirectory
@@ -100,8 +101,11 @@ type Edges struct {
 			Stop() bool
 		}
 	}
-	ModelRuntimeCommandRunner platformprocess.CommandRunner
-	ModelRuntimeHTTPClient    interface {
+	ModelHostProtocolNegotiator   ModelHostProtocolNegotiator
+	ModelHostGRPCDialer           ModelHostGRPCDialer
+	ModelHostCompatibilityChecker ModelHostCompatibilityChecker
+	ModelRuntimeCommandRunner     platformprocess.CommandRunner
+	ModelRuntimeHTTPClient        interface {
 		Do(*http.Request) (*http.Response, error)
 	}
 	ModelRuntimeInspectFile           RuntimeInspectFile
@@ -311,6 +315,9 @@ func Merge(defaults Edges, replacements Edges) Edges {
 	if replacements.ModelResolveHuggingFaceRevision != nil {
 		defaults.ModelResolveHuggingFaceRevision = replacements.ModelResolveHuggingFaceRevision
 	}
+	if replacements.ModelAssetResolveEnvironment != nil {
+		defaults.ModelAssetResolveEnvironment = replacements.ModelAssetResolveEnvironment
+	}
 	if replacements.ModelAssetMakeDirectories != nil {
 		defaults.ModelAssetMakeDirectories = replacements.ModelAssetMakeDirectories
 	}
@@ -349,6 +356,15 @@ func Merge(defaults Edges, replacements Edges) Edges {
 	}
 	if replacements.ModelHostClock != nil {
 		defaults.ModelHostClock = replacements.ModelHostClock
+	}
+	if replacements.ModelHostProtocolNegotiator != nil {
+		defaults.ModelHostProtocolNegotiator = replacements.ModelHostProtocolNegotiator
+	}
+	if replacements.ModelHostGRPCDialer != nil {
+		defaults.ModelHostGRPCDialer = replacements.ModelHostGRPCDialer
+	}
+	if replacements.ModelHostCompatibilityChecker != nil {
+		defaults.ModelHostCompatibilityChecker = replacements.ModelHostCompatibilityChecker
 	}
 	if replacements.ModelRuntimeCommandRunner != nil {
 		defaults.ModelRuntimeCommandRunner = replacements.ModelRuntimeCommandRunner

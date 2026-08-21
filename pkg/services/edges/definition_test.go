@@ -518,6 +518,33 @@ func TestMergeAppliesAssetAndHostedEndpointReplacements(t *testing.T) {
 	}
 }
 
+func TestMergeAppliesModelAssetAndHostEffectReplacements(t *testing.T) {
+	t.Parallel()
+
+	environment := func(name string) string { return "value:" + name }
+	protocol := &edgeModelHostProtocol{}
+	dialer := &edgeModelHostGRPCDialer{}
+	compatibility := &edgeModelHostCompatibilityChecker{}
+	merged := Merge(Edges{}, Edges{
+		ModelAssetResolveEnvironment:  environment,
+		ModelHostProtocolNegotiator:   protocol,
+		ModelHostGRPCDialer:           dialer,
+		ModelHostCompatibilityChecker: compatibility,
+	})
+	if merged.ModelAssetResolveEnvironment("CACHE") != "value:CACHE" {
+		t.Fatalf("asset environment edge was not replaced")
+	}
+	if merged.ModelHostProtocolNegotiator != protocol {
+		t.Fatal("protocol negotiator edge was not replaced")
+	}
+	if merged.ModelHostGRPCDialer != dialer {
+		t.Fatal("gRPC dialer edge was not replaced")
+	}
+	if merged.ModelHostCompatibilityChecker != compatibility {
+		t.Fatal("compatibility checker edge was not replaced")
+	}
+}
+
 func TestMergeReplacesAndPreservesRecordingArtifactReadEffect(t *testing.T) {
 	t.Parallel()
 
@@ -550,6 +577,28 @@ type stubProvider struct {
 type edgeDirectoryReplacementStore struct{}
 
 type edgeWorktreeGit struct{}
+
+type edgeModelHostProtocol struct{}
+
+func (edgeModelHostProtocol) Negotiate(
+	context.Context,
+	string,
+	ModelHostProtocolNegotiationRequest,
+) (ModelHostProtocolNegotiationResult, error) {
+	return ModelHostProtocolNegotiationResult{}, nil
+}
+
+type edgeModelHostGRPCDialer struct{}
+
+func (edgeModelHostGRPCDialer) Dial(context.Context, string) (ModelHostGRPCConnection, error) {
+	return nil, nil
+}
+
+type edgeModelHostCompatibilityChecker struct{}
+
+func (edgeModelHostCompatibilityChecker) Check(context.Context, ModelHostCompatibilityRequest) error {
+	return nil
+}
 
 func (*edgeWorktreeGit) Run(context.Context, string, ...string) (string, string, int, error) {
 	return "", "", 0, nil

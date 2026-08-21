@@ -38,8 +38,16 @@ const (
 // pkgmaintcheck:ignore-cyclomatic-complexity service-ownership migration preserves this decision flow; simplify branches and remove this exemption.
 // pkgmaintcheck:ignore-function-lines service-ownership migration preserves this orchestration flow; extract focused helpers and remove this exemption.
 func provideModelsService(edges serviceedges.Edges) (models.Service, error) {
+	processClock := edges.Clock
+	if processClock == nil {
+		processClock = platformclock.Real{}
+	}
 	assetPlatform := provideModelAssetHostPlatform(edges)
 	assetEndpoints := edges.ModelAssetEndpoints
+	assetEnvironment := edges.ModelAssetResolveEnvironment
+	if assetEnvironment == nil {
+		assetEnvironment = os.Getenv
+	}
 
 	assetHTTP := edges.ModelAssetHTTPClient
 	if assetHTTP == nil {
@@ -96,8 +104,15 @@ func provideModelsService(edges serviceedges.Edges) (models.Service, error) {
 	}
 	hostClock := edges.ModelHostClock
 	if hostClock == nil {
-		hostClock = modelsClock{}
+		hostClock = modelsClock{source: processClock}
 	}
+	protocolNegotiator := adaptModelHostProtocolNegotiator(edges.ModelHostProtocolNegotiator)
+	if protocolNegotiator == nil && !isNilModelEdgeDependency(edges.ModelHostGRPCDialer) {
+		protocolNegotiator = modelswire.PinnedGRPCNegotiator{
+			Dialer: modelHostGRPCDialerAdapter{next: edges.ModelHostGRPCDialer},
+		}
+	}
+	compatibilityChecker := adaptModelHostCompatibilityChecker(edges.ModelHostCompatibilityChecker)
 	runtimeRunner := edges.ModelRuntimeCommandRunner
 	if runtimeRunner == nil {
 		var runnerErr error
@@ -151,14 +166,115 @@ func provideModelsService(edges serviceedges.Edges) (models.Service, error) {
 		modelswire.RuntimeTempDirectory(runtimeTempDir),
 		adaptModelRuntimeTempFile(runtimeTempFile),
 		zap.NewNop(),
-		time.Now,
+		processClock.Now,
 		platformrandom.CryptoSource{},
 		adaptModelsPullMetricsRecorder(edges.ModelPullMetricsRecorder),
 		modelswire.HostDiagnosticLogger(factorysessionwire.ModelHostDiagnosticLogger(zap.NewNop())),
 		modelswire.HostMetricsRecorder(factorysessionwire.ModelHostDiagnosticMetrics(edges.InvocationMetricsRecorder)),
 		modelLocalRuntimeHooks(workerswire.LocalRuntimeHooks()),
+		assetEnvironment,
+		protocolNegotiator,
+		compatibilityChecker,
 		edges.ModelResolveHuggingFaceRevision,
 	)
+}
+
+type modelHostProtocolNegotiatorAdapter struct {
+	next serviceedges.ModelHostProtocolNegotiator
+}
+
+func (adapter modelHostProtocolNegotiatorAdapter) Negotiate(
+	ctx context.Context,
+	endpoint string,
+	request modelswire.HostProtocolNegotiationRequest,
+) (modelswire.HostProtocolNegotiationResult, error) {
+	result, err := adapter.next.Negotiate(ctx, endpoint, serviceedges.ModelHostProtocolNegotiationRequest{
+		ProtocolVersion: request.ProtocolVersion,
+		Backend:         request.Backend,
+		ModelName:       request.ModelName,
+		Revision:        request.Revision,
+		Platform:        request.Platform,
+	})
+	return modelswire.HostProtocolNegotiationResult{
+		ProtocolVersion: result.ProtocolVersion,
+		Backend:         result.Backend,
+		Ready:           result.Ready,
+	}, err
+}
+
+type modelHostGRPCDialerAdapter struct {
+	next serviceedges.ModelHostGRPCDialer
+}
+
+func (adapter modelHostGRPCDialerAdapter) Dial(
+	ctx context.Context,
+	endpoint string,
+) (modelswire.HostGRPCConnection, error) {
+	connection, err := adapter.next.Dial(ctx, endpoint)
+	if err != nil || connection == nil {
+		return nil, err
+	}
+	return modelHostGRPCConnectionAdapter{next: connection}, nil
+}
+
+type modelHostGRPCConnectionAdapter struct {
+	next serviceedges.ModelHostGRPCConnection
+}
+
+func (adapter modelHostGRPCConnectionAdapter) Negotiate(
+	ctx context.Context,
+	request modelswire.HostProtocolNegotiationRequest,
+) (modelswire.HostProtocolNegotiationResult, error) {
+	result, err := adapter.next.Negotiate(ctx, serviceedges.ModelHostProtocolNegotiationRequest{
+		ProtocolVersion: request.ProtocolVersion,
+		Backend:         request.Backend,
+		ModelName:       request.ModelName,
+		Revision:        request.Revision,
+		Platform:        request.Platform,
+	})
+	return modelswire.HostProtocolNegotiationResult{
+		ProtocolVersion: result.ProtocolVersion,
+		Backend:         result.Backend,
+		Ready:           result.Ready,
+	}, err
+}
+
+func (adapter modelHostGRPCConnectionAdapter) Close() error {
+	return adapter.next.Close()
+}
+
+type modelHostCompatibilityCheckerAdapter struct {
+	next serviceedges.ModelHostCompatibilityChecker
+}
+
+func (adapter modelHostCompatibilityCheckerAdapter) Check(
+	ctx context.Context,
+	request modelswire.HostCompatibilityRequest,
+) error {
+	return adapter.next.Check(ctx, serviceedges.ModelHostCompatibilityRequest{
+		Backend:   request.Backend,
+		ModelName: request.ModelName,
+		Revision:  request.Revision,
+		Platform:  request.Platform,
+	})
+}
+
+func adaptModelHostProtocolNegotiator(
+	negotiator serviceedges.ModelHostProtocolNegotiator,
+) modelswire.HostProtocolNegotiator {
+	if isNilModelEdgeDependency(negotiator) {
+		return nil
+	}
+	return modelHostProtocolNegotiatorAdapter{next: negotiator}
+}
+
+func adaptModelHostCompatibilityChecker(
+	checker serviceedges.ModelHostCompatibilityChecker,
+) modelswire.HostCompatibilityChecker {
+	if isNilModelEdgeDependency(checker) {
+		return nil
+	}
+	return modelHostCompatibilityCheckerAdapter{next: checker}
 }
 
 func providePlatformProcessCommandRunner(edges serviceedges.Edges) (platformprocess.CommandRunner, error) {
@@ -204,9 +320,14 @@ func provideModelAssetHostPlatform(edges serviceedges.Edges) models.AssetHostPla
 	return platform
 }
 
-type modelsClock struct{}
+type modelsClock struct{ source platformclock.Source }
 
-func (modelsClock) Now() time.Time { return time.Now() }
+func (clock modelsClock) Now() time.Time {
+	if clock.source != nil {
+		return clock.source.Now()
+	}
+	return time.Time{}
+}
 
 func (modelsClock) NewTimer(duration time.Duration) interface {
 	C() <-chan time.Time

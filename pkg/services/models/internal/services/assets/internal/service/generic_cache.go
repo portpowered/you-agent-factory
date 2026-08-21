@@ -163,7 +163,14 @@ func (s *service) findGenericArtifact(
 				}
 				continue
 			}
-			if expected := strings.ToLower(strings.TrimSpace(artifact.requirement.SHA256)); expected != "" && actual != expected {
+			expected := strings.ToLower(strings.TrimSpace(artifact.requirement.SHA256))
+			// A file-backed HF reference has no trustworthy cache identity until
+			// its immutable manifest supplies a digest. Size alone cannot reject
+			// same-size corruption in a pre-existing hub cache.
+			if source.kind == genericSourceHF && expected == "" {
+				continue
+			}
+			if expected != "" && actual != expected {
 				continue
 			}
 			if artifact.requirement.Bytes > 0 && info.Size() != artifact.requirement.Bytes {
@@ -226,20 +233,53 @@ func (s *service) publishGenericCache(
 	if err := assetContextError(ctx); err != nil {
 		return cacheResultFromPaths(artifactKind, artifacts, published), err
 	}
-	if err := s.removeTree(finalPath); err != nil {
+	backupPath, hadExisting, err := s.moveExistingGenericSnapshot(finalPath)
+	if err != nil {
 		return cacheResultFromPaths(artifactKind, artifacts, published), interruptedAssetError(
 			"replace asset snapshot", err,
 		)
 	}
 	if err := s.renamePath(stagePath, finalPath); err != nil {
+		if hadExisting {
+			_ = s.renamePath(backupPath, finalPath)
+		}
 		return cacheResultFromPaths(artifactKind, artifacts, published), interruptedAssetError(
 			"publish asset snapshot", err,
 		)
 	}
 	committed = true
+	if hadExisting {
+		if err := s.removeTree(backupPath); err != nil {
+			return cacheResultFromPaths(artifactKind, artifacts, published), interruptedAssetError(
+				"clean replaced asset snapshot", err,
+			)
+		}
+	}
 	result := cacheResultFromPaths(artifactKind, artifacts, published)
+	result.snapshotPath = finalPath
 	result.prepared = true
 	return result, nil
+}
+
+func (s *service) moveExistingGenericSnapshot(finalPath string) (string, bool, error) {
+	info, err := s.inspectPath(finalPath)
+	if errors.Is(err, os.ErrNotExist) {
+		return "", false, nil
+	}
+	if err != nil {
+		return "", false, err
+	}
+	if info == nil || !info.IsDir() {
+		return "", false, fmt.Errorf("asset snapshot destination is not a directory")
+	}
+	backupPath := finalPath + ".previous"
+	if err := s.removeTree(backupPath); err != nil {
+		return "", false, err
+	}
+	if err := s.renamePath(finalPath, backupPath); err != nil {
+		return "", false, err
+	}
+	return backupPath, true, nil
 }
 
 func (s *service) prepareGenericStage(base, stagePath string) error {
@@ -355,7 +395,41 @@ func cacheResultFromPaths(
 		result.artifacts = append(result.artifacts, found.artifact)
 		result.paths = append(result.paths, found.path)
 	}
+	result.snapshotPath = genericSnapshotPath(result.paths)
 	return result
+}
+
+func genericSnapshotPath(paths []string) string {
+	if len(paths) == 0 {
+		return ""
+	}
+	candidate := genericSnapshotPathFor(paths[0])
+	if candidate == "" {
+		return ""
+	}
+	for _, path := range paths[1:] {
+		if genericSnapshotPathFor(path) != candidate {
+			return ""
+		}
+	}
+	return candidate
+}
+
+func genericSnapshotPathFor(path string) string {
+	clean := filepath.Clean(path)
+	parts := strings.Split(clean, string(filepath.Separator))
+	for index, part := range parts {
+		if part != assetContentDirectory || index+2 >= len(parts) {
+			continue
+		}
+		return filepath.Join(append([]string(nil), parts[:index+3]...)...)
+	}
+	for index, part := range parts {
+		if strings.EqualFold(part, "snapshots") && index+1 < len(parts) {
+			return filepath.Join(append([]string(nil), parts[:index+2]...)...)
+		}
+	}
+	return filepath.Dir(clean)
 }
 
 func (s *service) copyLocalArtifact(

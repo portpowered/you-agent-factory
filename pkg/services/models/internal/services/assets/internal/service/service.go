@@ -39,6 +39,9 @@ type service struct {
 
 	cacheMu  sync.Mutex
 	inflight map[string]*assetCacheCall
+
+	preparedRuntimeMu sync.RWMutex
+	preparedRuntime   map[string]assets.RuntimeCacheInspection
 }
 
 type assetSpec struct {
@@ -80,7 +83,7 @@ func New(
 	openFile modelseffects.AssetOpenFile,
 	options ...assets.ConstructionOptions,
 ) assets.Service {
-	resolveEnvironment := modelseffects.AssetResolveEnvironment(os.Getenv)
+	resolveEnvironment := modelseffects.AssetResolveEnvironment(func(string) string { return "" })
 	var resolveRevision func(context.Context, string) (string, error)
 	if len(options) > 0 {
 		if options[0].ResolveEnvironment != nil {
@@ -111,6 +114,7 @@ func New(
 		resolveEnvironment: resolveEnvironment,
 		resolveRevision:    resolveRevision,
 		inflight:           make(map[string]*assetCacheCall),
+		preparedRuntime:    make(map[string]assets.RuntimeCacheInspection),
 	}
 }
 
@@ -206,6 +210,9 @@ func (s *service) InspectRuntimeCache(
 	if err != nil {
 		return assets.RuntimeCacheInspection{}, err
 	}
+	if inspection, ok := s.preparedRuntimeInspection(request.Scope, request.Name); ok {
+		return inspection, nil
+	}
 	spec, source, err := s.resolveSource(scope.Runtime, request.Name)
 	if errors.Is(err, models.ErrAssetSourceUnsupported) {
 		return assets.RuntimeCacheInspection{}, nil
@@ -235,6 +242,41 @@ func (s *service) InspectRuntimeCache(
 		result.MissingAssets = nil
 	}
 	return result, nil
+}
+
+func preparedRuntimeKey(scope models.RuntimeScopeRef, name string) string {
+	return scope.String() + "|" + strings.ToUpper(strings.TrimSpace(name))
+}
+
+func (s *service) rememberPreparedRuntime(
+	scope models.RuntimeScopeRef,
+	name string,
+	inspection assets.RuntimeCacheInspection,
+) {
+	if s == nil || scope.IsZero() || strings.TrimSpace(name) == "" {
+		return
+	}
+	inspection.MissingAssets = append([]string(nil), inspection.MissingAssets...)
+	s.preparedRuntimeMu.Lock()
+	s.preparedRuntime[preparedRuntimeKey(scope, name)] = inspection
+	s.preparedRuntimeMu.Unlock()
+}
+
+func (s *service) preparedRuntimeInspection(
+	scope models.RuntimeScopeRef,
+	name string,
+) (assets.RuntimeCacheInspection, bool) {
+	if s == nil {
+		return assets.RuntimeCacheInspection{}, false
+	}
+	s.preparedRuntimeMu.RLock()
+	inspection, ok := s.preparedRuntime[preparedRuntimeKey(scope, name)]
+	s.preparedRuntimeMu.RUnlock()
+	if !ok {
+		return assets.RuntimeCacheInspection{}, false
+	}
+	inspection.MissingAssets = append([]string(nil), inspection.MissingAssets...)
+	return inspection, true
 }
 
 func (s *service) resolveScope(

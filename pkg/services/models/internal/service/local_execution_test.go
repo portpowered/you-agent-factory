@@ -240,8 +240,8 @@ func TestResolveModelReferenceResolvesAllBuiltInsWithImmutableRevisionLookup(t *
 			t.Fatalf("built-in %q provenance = %#v", definition.Name, result.Provenance)
 		}
 	}
-	if len(calls) != 3 {
-		t.Fatalf("revision resolver calls = %d, want 3 for unpinned built-ins", len(calls))
+	if len(calls) != 0 {
+		t.Fatalf("revision resolver calls = %d, want 0 for pinned built-ins", len(calls))
 	}
 }
 

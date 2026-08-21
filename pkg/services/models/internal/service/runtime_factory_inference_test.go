@@ -324,6 +324,64 @@ func TestRootInvokeModelValidatesSlotsBeforeAssetAndHostEffects(t *testing.T) {
 	}
 }
 
+func TestJoinedAssetPreparationRequestCarriesModelAndBackendSources(t *testing.T) {
+	t.Parallel()
+
+	scope, err := (models.RuntimeScopeRef{}).Parse("joined-scope")
+	if err != nil {
+		t.Fatalf("parse scope: %v", err)
+	}
+	request := models.InvokeModelRequest{
+		Scope:   scope,
+		Model:   models.ModelReference{NameOrURI: "tts"},
+		Offline: true,
+	}
+	resolved := models.ResolvedModelReference{Definition: models.ModelDefinition{
+		Name:    "tts",
+		Source:  "hf://owner/repository/weights.gguf@revision-1",
+		Backend: "hf://owner/backend/backend.bin@backend-revision",
+	}}
+	prepared := joinedAssetPreparationRequest(request, "tts", resolved)
+	if prepared.Scope != request.Scope || prepared.Name != "tts" || !prepared.Offline {
+		t.Fatalf("joined preparation identity = %#v, want request scope/name/offline", prepared)
+	}
+	if prepared.Reference.NameOrURI != resolved.Definition.Source || len(prepared.Artifacts) != 1 ||
+		prepared.Artifacts[0].Name != "weights.gguf" {
+		t.Fatalf("model asset preparation = %#v, want pinned model file", prepared)
+	}
+	if prepared.Backend != "" || prepared.BackendReference.NameOrURI != resolved.Definition.Backend ||
+		len(prepared.BackendArtifacts) != 1 || prepared.BackendArtifacts[0].Name != "backend.bin" {
+		t.Fatalf("backend asset preparation = %#v, want pinned backend file", prepared)
+	}
+}
+
+func TestJoinedAssetPreparationRequestKeepsNamedBackendAndRepositorySource(t *testing.T) {
+	t.Parallel()
+
+	request := models.InvokeModelRequest{Model: models.ModelReference{NameOrURI: "llm"}}
+	resolved := models.ResolvedModelReference{Definition: models.ModelDefinition{
+		Name: "llm", Source: "hf://owner/repository", Backend: "localai-llamacpp",
+	}}
+	prepared := joinedAssetPreparationRequest(request, "llm", resolved)
+	if prepared.Reference.NameOrURI != resolved.Definition.Source || len(prepared.Artifacts) != 0 {
+		t.Fatalf("repository source preparation = %#v, want source without guessed artifact", prepared)
+	}
+	if prepared.Backend != resolved.Definition.Backend || !prepared.BackendReference.IsZero() || len(prepared.BackendArtifacts) != 0 {
+		t.Fatalf("named backend preparation = %#v, want backend identity only", prepared)
+	}
+	for _, value := range []string{"hf://owner/repository", "file://weights.bin", "./weights.bin", "../weights.bin", "/weights.bin", `C:\\weights.bin`, "backend://localai"} {
+		if value == "backend://localai" {
+			if isJoinedSourceReference(value) {
+				t.Fatalf("backend identity %q should not be treated as source", value)
+			}
+			continue
+		}
+		if !isJoinedSourceReference(value) {
+			t.Fatalf("source %q was not recognized", value)
+		}
+	}
+}
+
 func joinedInvocationRequest(scope models.RuntimeScopeRef) models.InvokeModelRequest {
 	return models.InvokeModelRequest{
 		Scope:  scope,

@@ -11,7 +11,6 @@ import (
 	"context"
 	"encoding/hex"
 	"fmt"
-	"os"
 	"reflect"
 	"time"
 
@@ -74,6 +73,9 @@ func NewService(
 	hostLogger HostDiagnosticLogger,
 	hostMetrics HostMetricsRecorder,
 	localHooks LocalRuntimeHooks,
+	resolveEnvironment AssetResolveEnvironment,
+	protocolNegotiator HostProtocolNegotiator,
+	compatibilityChecker HostCompatibilityChecker,
 	revisionResolvers ...func(context.Context, string) (string, error),
 ) (models.Service, error) {
 	if err := validateConstructionInputs(
@@ -131,6 +133,9 @@ func NewService(
 		hostLogger,
 		hostMetrics,
 		localHooks,
+		resolveEnvironment,
+		protocolNegotiator,
+		compatibilityChecker,
 		revisionResolvers...,
 	)
 }
@@ -164,6 +169,9 @@ func composeModelsService(
 	hostLogger HostDiagnosticLogger,
 	hostMetrics HostMetricsRecorder,
 	localHooks LocalRuntimeHooks,
+	resolveEnvironment AssetResolveEnvironment,
+	protocolNegotiator HostProtocolNegotiator,
+	compatibilityChecker HostCompatibilityChecker,
 	revisionResolvers ...func(context.Context, string) (string, error),
 ) (models.Service, error) {
 	resolvedEndpoints := resolveAssetEndpoints(assetEndpoints)
@@ -183,7 +191,7 @@ func composeModelsService(
 		assetMkdirAll, assetStat, assetHome, assetWriteFile, assetRename,
 		assetRemove, assetReadFile, assetReadDir, assetCreate, assetOpen,
 		scopedassets.ConstructionOptions{
-			ResolveEnvironment: os.Getenv,
+			ResolveEnvironment: resolveEnvironment,
 			ResolveRevision:    firstRevisionResolver(revisionResolvers),
 		},
 	)
@@ -200,7 +208,11 @@ func composeModelsService(
 	runtimeHost, err := runtimehostwire.NewService(
 		runtimeScopes, assetService, processLauncher, hostHTTP, hostClock,
 		hostLogger, hostMetrics,
-		runtimehost.Options{Platform: assetPlatform},
+		runtimehost.Options{
+			Platform:             assetPlatform,
+			ProtocolNegotiator:   protocolNegotiator,
+			CompatibilityChecker: compatibilityChecker,
+		},
 	)
 	if err != nil {
 		return nil, err

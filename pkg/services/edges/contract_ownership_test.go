@@ -119,7 +119,10 @@ func TestPackageOwnsOnlyTheEdgeAggregator(t *testing.T) {
 		"AssetResolveHomeDirectory": {}, "AssetWriteFile": {}, "AssetRenamePath": {},
 		"AssetRemovePath": {}, "AssetReadFile": {}, "AssetReadDirectory": {},
 		"AssetCreateFile": {}, "AssetOpenFile": {},
-		"HostProcessStartSpec": {},
+		"HostProcessStartSpec":                {},
+		"ModelHostProtocolNegotiationRequest": {}, "ModelHostProtocolNegotiationResult": {},
+		"ModelHostProtocolNegotiator": {}, "ModelHostGRPCDialer": {}, "ModelHostGRPCConnection": {},
+		"ModelHostCompatibilityRequest": {}, "ModelHostCompatibilityChecker": {},
 		"RuntimeInspectFile":   {},
 		"RuntimeTempDirectory": {}, "RuntimeCreateTempFile": {},
 	}

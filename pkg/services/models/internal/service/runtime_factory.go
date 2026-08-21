@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/url"
+	"path"
 	"strings"
 	"sync"
 	"time"
@@ -472,14 +474,9 @@ func (o *Root) prepareJoinedInvocation(
 		plan.prepared.Input = plan.prepared.Inputs[0].Clone()
 	}
 
-	assetReference := joinedAssetReference(request.Model, resolved)
-	if _, err := o.PrepareModelAssets(ctx, models.PrepareModelAssetsRequest{
-		Scope:     request.Scope,
-		Name:      plan.modelName,
-		Reference: assetReference,
-		Offline:   request.Offline,
-		Backend:   resolved.Definition.Backend,
-	}); err != nil {
+	if _, err := o.PrepareModelAssets(ctx, joinedAssetPreparationRequest(
+		request, plan.modelName, resolved,
+	)); err != nil {
 		return plan, "acquire_assets", err
 	}
 	if _, err := o.EnsureModelHost(ctx, models.EnsureModelHostRequest{
@@ -602,6 +599,68 @@ func joinedAssetReference(
 	return reference
 }
 
+func joinedAssetPreparationRequest(
+	request models.InvokeModelRequest,
+	modelName string,
+	resolved models.ResolvedModelReference,
+) models.PrepareModelAssetsRequest {
+	assetReference := joinedAssetReference(request.Model, resolved)
+	prepared := models.PrepareModelAssetsRequest{
+		Scope:     request.Scope,
+		Name:      modelName,
+		Reference: assetReference,
+		Offline:   request.Offline,
+		Backend:   strings.TrimSpace(resolved.Definition.Backend),
+		Artifacts: joinedSourceAssetRequirements(assetReference.NameOrURI),
+	}
+	if backend := strings.TrimSpace(resolved.Definition.Backend); isJoinedSourceReference(backend) {
+		prepared.Backend = ""
+		prepared.BackendReference = models.ModelReference{NameOrURI: backend}
+		prepared.BackendArtifacts = joinedSourceAssetRequirements(backend)
+	}
+	return prepared
+}
+
+func isJoinedSourceReference(value string) bool {
+	lower := strings.ToLower(strings.TrimSpace(value))
+	return strings.HasPrefix(lower, "hf://") || strings.HasPrefix(lower, "file://") ||
+		strings.HasPrefix(lower, "./") || strings.HasPrefix(lower, "../") ||
+		strings.HasPrefix(lower, "/") || strings.HasPrefix(lower, "\\") ||
+		(len(lower) > 2 && lower[1] == ':')
+}
+
+func joinedSourceAssetRequirements(source string) []models.AssetRequirement {
+	source = strings.TrimSpace(source)
+	if source == "" {
+		return nil
+	}
+	if strings.HasPrefix(strings.ToLower(source), "hf://") {
+		rest := strings.TrimPrefix(source, "hf://")
+		if at := strings.LastIndex(rest, "@"); at >= 0 {
+			rest = rest[:at]
+		}
+		parts := strings.Split(rest, "/")
+		if len(parts) > 2 {
+			name := path.Clean(strings.Join(parts[2:], "/"))
+			if name != "." && name != "" {
+				return []models.AssetRequirement{{Name: name}}
+			}
+		}
+		return nil
+	}
+	if strings.HasPrefix(strings.ToLower(source), "file://") {
+		parsed, err := url.Parse(source)
+		if err != nil || parsed.Path == "" {
+			return nil
+		}
+		return []models.AssetRequirement{{Name: path.Base(parsed.Path)}}
+	}
+	if strings.Contains(source, "://") {
+		return nil
+	}
+	return nil
+}
+
 func inferenceInputIsZero(input models.InferenceInput) bool {
 	return input.Name == "" && input.Modality == "" && input.ContentType == "" &&
 		input.MediaType == "" && input.Content == "" && input.Artifact == nil
@@ -641,14 +700,14 @@ func joinedInvocationStart(o *Root) time.Time {
 	if o != nil && o.process.Clock != nil {
 		return o.process.Clock()
 	}
-	return time.Now()
+	return time.Time{}
 }
 
 func joinedInvocationElapsed(o *Root, started time.Time) time.Duration {
-	ended := time.Now()
-	if o != nil && o.process.Clock != nil {
-		ended = o.process.Clock()
+	if o == nil || o.process.Clock == nil || started.IsZero() {
+		return 0
 	}
+	ended := o.process.Clock()
 	if ended.Before(started) {
 		return 0
 	}

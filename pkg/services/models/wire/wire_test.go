@@ -334,6 +334,9 @@ func TestNewServiceConstructsInertRoot(t *testing.T) {
 		nil,
 		nil,
 		modelseffects.LocalRuntimeHooks{},
+		nil,
+		nil,
+		nil,
 	)
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
@@ -472,6 +475,9 @@ func (edges constructionEdges) newService() (models.Service, error) {
 		nil,
 		nil,
 		modelseffects.LocalRuntimeHooks{},
+		nil,
+		nil,
+		nil,
 	)
 }
 

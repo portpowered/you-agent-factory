@@ -2,7 +2,11 @@ package root_composition_test
 
 import (
 	"bytes"
+	"context"
+	"crypto/sha256"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -132,6 +136,165 @@ func TestModelsInferenceInvokeActivatesThroughRootBuildProcess(t *testing.T) {
 	}
 }
 
+// TestModelsJoinedInvokeConsumesGenericCacheThroughRootBuildProcess proves
+// the generic joined path can use a prepared content-addressed model snapshot
+// through the real root composition, without a legacy managed-cache fixture or
+// a model-weight download.
+func TestModelsJoinedInvokeConsumesGenericCacheThroughRootBuildProcess(t *testing.T) {
+	t.Parallel()
+
+	modelServer := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		switch request.URL.Path {
+		case "/health":
+			writer.WriteHeader(http.StatusOK)
+		default:
+			http.NotFound(writer, request)
+		}
+	}))
+	t.Cleanup(modelServer.Close)
+
+	home := t.TempDir()
+	writeGenericBuiltinTTSCache(t, home)
+	rejectingNetwork := &rejectingModelAssetHTTP{}
+	hostLauncher := &recordingModelHostLauncher{endpoint: modelServer.URL}
+	protocol := &joinedProtocolNegotiator{}
+	compatibility := &joinedCompatibilityChecker{}
+	assetFiles := functionalModelAssetFileSystem{home: home}
+	config := localModelReadinessAssetsHostFactoryConfig(modelServer.URL)
+	resources := config["resources"].([]map[string]any)
+	resources[0]["model"] = "tts"
+	resources[0]["backend"] = "localai-vibevoice"
+	workers := config["workers"].([]map[string]any)
+	workers[0]["name"] = "tts-worker"
+	workers[0]["model"] = "tts"
+	workers[0]["args"] = []string{"--grpc-endpoint", modelServer.URL}
+
+	dir := support.ScaffoldFactory(t, config)
+	process := support.BuildProcess(t, serviceedges.Edges{
+		ModelAssetHTTPClient:           rejectingNetwork,
+		ModelAssetMakeDirectories:      assetFiles.MkdirAll,
+		ModelAssetInspectPath:          assetFiles.Stat,
+		ModelAssetResolveHomeDirectory: assetFiles.UserHomeDir,
+		ModelAssetResolveEnvironment:   func(string) string { return "" },
+		ModelAssetWriteFile:            assetFiles.WriteFile,
+		ModelAssetRenamePath:           assetFiles.Rename,
+		ModelAssetRemovePath:           assetFiles.Remove,
+		ModelAssetReadFile:             assetFiles.ReadFile,
+		ModelAssetReadDirectory:        assetFiles.ReadDir,
+		ModelAssetCreateFile:           assetFiles.Create,
+		ModelAssetOpenFile:             assetFiles.Open,
+		ModelHostProcessLauncher:       hostLauncher,
+		ModelHostProtocolNegotiator:    protocol,
+		ModelHostCompatibilityChecker:  compatibility,
+		ModelHostHTTPClient:            modelServer.Client(),
+		ModelRuntimeHTTPClient:         modelServer.Client(),
+	})
+
+	var output bytes.Buffer
+	jsonInvoke := support.FakeInputs(t.Context(), []string{
+		"you", "--json", "models", "invoke", "tts", "--operation", "TTS", "--text", "joined cache input",
+	})
+	jsonInvoke.Input.Env = functionalHomeEnvironment(home)
+	jsonInvoke.Input.WorkingDirectory = dir
+	jsonInvoke.Input.Stdout = &output
+	jsonInvoke.Input.Stderr = io.Discard
+	if err := process.Execute(jsonInvoke.Input); err != nil {
+		t.Fatalf("Process.Execute(joined built-in invoke) error = %v", err)
+	}
+
+	var response factoryapi.ModelInvocationResponse
+	if err := json.Unmarshal(output.Bytes(), &response); err != nil {
+		t.Fatalf("decode joined models invoke output: %v\n%s", err, output.String())
+	}
+	if response.ModelName != "tts" || response.Operation != "TTS" || len(response.Content) == 0 {
+		t.Fatalf("joined models invoke response = %#v, want tts/TTS content", response)
+	}
+	if rejectingNetwork.Calls() != 0 {
+		t.Fatalf("joined asset network calls = %d, want 0 from content-addressed cache", rejectingNetwork.Calls())
+	}
+	if hostLauncher.Calls() != 1 {
+		t.Fatalf("joined host starts = %d, want exactly 1", hostLauncher.Calls())
+	}
+
+	closer, ok := process.(interface{ Close(context.Context) error })
+	if !ok {
+		t.Fatal("root process does not expose lifecycle close")
+	}
+	if err := closer.Close(context.Background()); err != nil {
+		t.Fatalf("close joined root process: %v", err)
+	}
+	if protocol.Calls() == 0 {
+		t.Fatalf("joined protocol negotiations = %d, want at least 1", protocol.Calls())
+	}
+	if compatibility.Calls() == 0 {
+		t.Fatalf("joined compatibility checks = %d, want at least 1", compatibility.Calls())
+	}
+}
+
+func TestModelsJoinedInvokeRejectsPinnedBackendBeforeProcessStartThroughRootBuildProcess(t *testing.T) {
+	t.Parallel()
+
+	modelServer := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		http.NotFound(writer, request)
+	}))
+	t.Cleanup(modelServer.Close)
+
+	home := t.TempDir()
+	writeGenericBuiltinTTSCache(t, home)
+	rejectingNetwork := &rejectingModelAssetHTTP{}
+	hostLauncher := &recordingModelHostLauncher{endpoint: modelServer.URL}
+	protocol := &joinedProtocolNegotiator{}
+	compatibility := &joinedCompatibilityChecker{failure: errors.New("fixture backend is incompatible")}
+	assetFiles := functionalModelAssetFileSystem{home: home}
+	config := localModelReadinessAssetsHostFactoryConfig(modelServer.URL)
+	resources := config["resources"].([]map[string]any)
+	resources[0]["model"] = "tts"
+	resources[0]["backend"] = "localai-vibevoice"
+	workers := config["workers"].([]map[string]any)
+	workers[0]["model"] = "tts"
+	workers[0]["args"] = []string{"--grpc-endpoint", modelServer.URL}
+	dir := support.ScaffoldFactory(t, config)
+	process := support.BuildProcess(t, serviceedges.Edges{
+		ModelAssetHTTPClient:           rejectingNetwork,
+		ModelAssetMakeDirectories:      assetFiles.MkdirAll,
+		ModelAssetInspectPath:          assetFiles.Stat,
+		ModelAssetResolveHomeDirectory: assetFiles.UserHomeDir,
+		ModelAssetResolveEnvironment:   func(string) string { return "" },
+		ModelAssetWriteFile:            assetFiles.WriteFile,
+		ModelAssetRenamePath:           assetFiles.Rename,
+		ModelAssetRemovePath:           assetFiles.Remove,
+		ModelAssetReadFile:             assetFiles.ReadFile,
+		ModelAssetReadDirectory:        assetFiles.ReadDir,
+		ModelAssetCreateFile:           assetFiles.Create,
+		ModelAssetOpenFile:             assetFiles.Open,
+		ModelHostProcessLauncher:       hostLauncher,
+		ModelHostProtocolNegotiator:    protocol,
+		ModelHostCompatibilityChecker:  compatibility,
+		ModelHostHTTPClient:            modelServer.Client(),
+		ModelRuntimeHTTPClient:         modelServer.Client(),
+	})
+
+	inputs := support.FakeInputs(t.Context(), []string{
+		"you", "--json", "models", "invoke", "tts", "--operation", "TTS", "--text", "must fail preflight",
+	})
+	inputs.Input.Env = functionalHomeEnvironment(home)
+	inputs.Input.WorkingDirectory = dir
+	inputs.Input.Stdout = io.Discard
+	inputs.Input.Stderr = io.Discard
+	if err := process.Execute(inputs.Input); err == nil {
+		t.Fatal("Process.Execute(incompatible joined invoke) error = nil, want preflight failure")
+	}
+	if compatibility.Calls() != 1 || protocol.Calls() != 0 || hostLauncher.Calls() != 0 {
+		t.Fatalf(
+			"pinned preflight effects = compatibility %d, protocol %d, starts %d; want 1/0/0",
+			compatibility.Calls(), protocol.Calls(), hostLauncher.Calls(),
+		)
+	}
+	if rejectingNetwork.Calls() != 0 {
+		t.Fatalf("pinned preflight asset network calls = %d, want 0", rejectingNetwork.Calls())
+	}
+}
+
 func localModelInferenceInvokeFactoryConfig(endpoint string) map[string]any {
 	return localModelReadinessAssetsHostFactoryConfig(endpoint)
 }
@@ -160,6 +323,82 @@ func writeReadyOmniVoiceInvokeCache(t *testing.T, home string) {
 	if err := os.WriteFile(filepath.Join(modelRoot, ".managed-cache.json"), data, 0o644); err != nil {
 		t.Fatalf("write model cache metadata: %v", err)
 	}
+}
+
+func writeGenericBuiltinTTSCache(t *testing.T, home string) {
+	t.Helper()
+	const source = "hf://vibevoice/VibeVoice-7B@505114ae6ad17be74df98e6939707434ec49c187"
+	name := "weights.bin"
+	body := []byte("joined built-in tts fixture")
+	digest := fmt.Sprintf("%x", sha256.Sum256(body))
+	identity := fmt.Sprintf("model|%s|%s:%d:%s", source, name, len(body), digest)
+	identityHash := fmt.Sprintf("%x", sha256.Sum256([]byte(identity)))
+	snapshot := filepath.Join(home, ".agent-factory", "models", ".you-content-addressed", "model", identityHash)
+	if err := os.MkdirAll(snapshot, 0o755); err != nil {
+		t.Fatalf("create generic model snapshot: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(snapshot, name), body, 0o644); err != nil {
+		t.Fatalf("write generic model snapshot: %v", err)
+	}
+	metadata, err := json.Marshal(map[string]any{
+		"kind": "model", "identity": identity, "source": source, "sourceKey": source,
+		"artifacts": []map[string]any{{"Name": name, "Bytes": len(body), "SHA256": digest}},
+	})
+	if err != nil {
+		t.Fatalf("marshal generic model metadata: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(snapshot, ".you-assets.json"), metadata, 0o644); err != nil {
+		t.Fatalf("write generic model metadata: %v", err)
+	}
+}
+
+type joinedProtocolNegotiator struct {
+	mu    sync.Mutex
+	calls int
+}
+
+func (negotiator *joinedProtocolNegotiator) Negotiate(
+	context.Context,
+	string,
+	serviceedges.ModelHostProtocolNegotiationRequest,
+) (serviceedges.ModelHostProtocolNegotiationResult, error) {
+	negotiator.mu.Lock()
+	negotiator.calls++
+	negotiator.mu.Unlock()
+	return serviceedges.ModelHostProtocolNegotiationResult{
+		ProtocolVersion: "localai-backend-v1",
+		Backend:         "localai-vibevoice",
+		Ready:           true,
+	}, nil
+}
+
+func (negotiator *joinedProtocolNegotiator) Calls() int {
+	negotiator.mu.Lock()
+	defer negotiator.mu.Unlock()
+	return negotiator.calls
+}
+
+type joinedCompatibilityChecker struct {
+	mu      sync.Mutex
+	calls   int
+	failure error
+}
+
+func (checker *joinedCompatibilityChecker) Check(
+	context.Context,
+	serviceedges.ModelHostCompatibilityRequest,
+) error {
+	checker.mu.Lock()
+	checker.calls++
+	failure := checker.failure
+	checker.mu.Unlock()
+	return failure
+}
+
+func (checker *joinedCompatibilityChecker) Calls() int {
+	checker.mu.Lock()
+	defer checker.mu.Unlock()
+	return checker.calls
 }
 
 func functionalHomeEnvironment(home string) []string {
