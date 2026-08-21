@@ -2501,6 +2501,44 @@ func assertWorkerObservationLookups(t *testing.T, registry *registry, got worker
 	}
 }
 
+func assertObservationTurnUsage(t *testing.T, observation workersessions.Observation) {
+	t.Helper()
+	if observation.TurnUsage == nil || observation.TurnUsage.TurnCount != 3 ||
+		observation.TurnUsage.FinalContextTokens != 450 || observation.TurnUsage.PeakContextTokens != 450 {
+		t.Fatalf("observation turn usage = %#v, want derived cumulative deltas", observation.TurnUsage)
+	}
+}
+
+func TestObservationTurnUsageDiffersCumulativeInputCounters(t *testing.T) {
+	got := observationTurnUsage([]int{100, 250, 700})
+	if got == nil || got.TurnCount != 3 || got.FinalContextTokens != 450 || got.PeakContextTokens != 450 {
+		t.Fatalf("observationTurnUsage() = %#v, want three turns with final/peak 450", got)
+	}
+	if observationTurnUsage(nil) != nil {
+		t.Fatal("observationTurnUsage(nil) returned a value")
+	}
+	if observationTurnUsage([]int{100, 90}) != nil {
+		t.Fatal("observationTurnUsage(decreasing counters) returned a value")
+	}
+}
+
+func TestInvokeSafeDiagnosticMessages(t *testing.T) {
+	for _, test := range []struct {
+		input string
+		want  string
+	}{
+		{"", "provider session parse error"},
+		{"password=secret", "provider session parse error"},
+		{"a/b", "provider session parse error"},
+		{strings.Repeat("x", 300), strings.Repeat("x", 256)},
+		{"  ordinary   message ", "ordinary message"},
+	} {
+		if got := safeDiagnosticMessage(test.input); got != test.want {
+			t.Fatalf("safeDiagnosticMessage(%q) = %q, want %q", test.input, got, test.want)
+		}
+	}
+}
+
 func TestStreamObservationsByWorkerSessionIDRejectsInvalidContextAndMissing(t *testing.T) {
 	registry := newObservationRegistry(nil, nil)
 	if _, err := registry.StreamObservationsByWorkerSessionID(context.Background(), workersessions.StreamObservationsByWorkerSessionIDRequest{}); !errors.Is(err, workersessions.ErrInvalidSessionID) {

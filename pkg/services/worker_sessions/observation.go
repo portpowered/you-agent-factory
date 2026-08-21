@@ -264,6 +264,7 @@ type Observation struct {
 	Duration                 *time.Duration
 	DurationBasis            DurationBasis
 	TokenUsage               *TokenUsage
+	TurnUsage                *TurnUsage
 	Transcript               TranscriptAvailability
 	// RecordingHealth is optional when the runtime has no durable Worker
 	// recording configured. When present it is the Recordings-owned health
@@ -402,6 +403,10 @@ func (o Observation) Clone() Observation {
 		tokens := o.TokenUsage.Clone()
 		o.TokenUsage = &tokens
 	}
+	if o.TurnUsage != nil {
+		turnUsage := o.TurnUsage.Clone()
+		o.TurnUsage = &turnUsage
+	}
 	if o.Failure != nil {
 		failure := *o.Failure
 		o.Failure = &failure
@@ -462,6 +467,18 @@ func (u TokenUsage) Clone() TokenUsage {
 	clone.TotalTokens = cloneInt(u.TotalTokens)
 	return clone
 }
+
+// TurnUsage is the provider-neutral per-turn context projection used by
+// Worker Session observations. The values are derived by differencing
+// consecutive cumulative provider input counters; nil means the transcript
+// did not provide supported evidence for the calculation.
+type TurnUsage struct {
+	TurnCount          int
+	FinalContextTokens int
+	PeakContextTokens  int
+}
+
+func (u TurnUsage) Clone() TurnUsage { return u }
 
 func cloneInt(value *int) *int {
 	if value == nil {

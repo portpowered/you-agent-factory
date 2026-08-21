@@ -101,6 +101,39 @@ func TestOpenAPIContract_ResponseEventStreamIsBundledWithTypedOutcomes(t *testin
 	}
 }
 
+func TestOpenAPIContract_WorkerSessionTurnUsageIsOptionalAndDocumented(t *testing.T) {
+	doc := loadBundledOpenAPIDocument(t)
+	schemas := componentSchemas(t, doc)
+	observation := schemaObject(t, schemas, "WorkerSessionObservation")
+	observationProperties := schemaProperties(t, observation, "WorkerSessionObservation")
+	assertPropertyRef(t, observationProperties, "tokenUsage", "#/components/schemas/ProviderSessionTokenUsage")
+	assertPropertyRef(t, observationProperties, "turnUsage", "#/components/schemas/WorkerSessionTurnUsage")
+	turnUsageDescription, ok := observationProperties["turnUsage"].(map[string]any)["description"].(string)
+	if !ok || !strings.Contains(strings.ToLower(turnUsageDescription), "omitted") {
+		t.Fatalf("WorkerSessionObservation.properties.turnUsage description = %q, want omission semantics", turnUsageDescription)
+	}
+	if required, ok := observation["required"].([]any); !ok || containsString(required, "turnUsage") || containsString(required, "tokenUsage") {
+		t.Fatalf("WorkerSessionObservation.required = %#v, want both usage blocks optional", observation["required"])
+	}
+
+	turnUsage := schemaObject(t, schemas, "WorkerSessionTurnUsage")
+	assertRequiredFields(t, turnUsage, "turnCount", "finalContextTokens", "peakContextTokens")
+	turnUsageProperties := schemaProperties(t, turnUsage, "WorkerSessionTurnUsage")
+	for _, field := range []string{"turnCount", "finalContextTokens", "peakContextTokens"} {
+		property, ok := turnUsageProperties[field].(map[string]any)
+		if !ok || property["type"] != "integer" {
+			t.Fatalf("WorkerSessionTurnUsage.properties.%s = %#v, want integer property", field, property)
+		}
+		if description, ok := property["description"].(string); !ok || strings.TrimSpace(description) == "" {
+			t.Fatalf("WorkerSessionTurnUsage.properties.%s has no description", field)
+		}
+	}
+	peakDescription := turnUsageProperties["peakContextTokens"].(map[string]any)["description"].(string)
+	if !strings.Contains(peakDescription, "pricing") || !strings.Contains(peakDescription, "cost") {
+		t.Fatalf("peakContextTokens description = %q, want non-cost semantics", peakDescription)
+	}
+}
+
 func TestOpenAPIAuthoring_EventSchemasUseDedicatedFragments(t *testing.T) {
 	doc := loadAuthoredOpenAPIDoc(t)
 	schemas := componentSchemas(t, doc)
@@ -250,6 +283,8 @@ func TestOpenAPIAuthoring_APISchemasUseDedicatedFragments(t *testing.T) {
 		"ErrorResponse":                       "./components/schemas/api/ErrorResponse.yaml",
 		"WorkRequest":                         "./components/schemas/api/WorkRequest.yaml",
 		"WorkRequestType":                     "./components/schemas/api/WorkRequestType.yaml",
+		"WorkerSessionObservation":            "./components/schemas/api/WorkerSessionObservation.yaml",
+		"WorkerSessionTurnUsage":              "./components/schemas/api/WorkerSessionTurnUsage.yaml",
 	}
 	for schemaName, wantRef := range expectedRefs {
 		assertSchemaRef(t, schemas, schemaName, wantRef)

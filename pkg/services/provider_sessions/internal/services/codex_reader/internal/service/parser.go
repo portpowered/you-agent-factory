@@ -56,11 +56,12 @@ func parseCodexSessionDetailsForSession(ctx context.Context, reader io.Reader, s
 	parser := codexSessionParser{
 		sessionID: sessionID,
 		summary: providersessions.ParseSummary{
-			Turns:         []providersessions.TurnSummary{},
-			FunctionCalls: []providersessions.FunctionCallSummary{},
-			Reasoning:     []providersessions.ReasoningSummary{},
-			ParseErrors:   []providersessions.LineError{},
-			UnknownEvents: []providersessions.UnknownEvent{},
+			Turns:                 []providersessions.TurnSummary{},
+			FunctionCalls:         []providersessions.FunctionCallSummary{},
+			Reasoning:             []providersessions.ReasoningSummary{},
+			ParseErrors:           []providersessions.LineError{},
+			CumulativeInputTokens: []int{},
+			UnknownEvents:         []providersessions.UnknownEvent{},
 		},
 		transcript: []providersessions.TranscriptEntry{},
 	}
@@ -650,8 +651,12 @@ func (p *codexSessionParser) recordTokenUsage(payload map[string]any) {
 	if !ok {
 		return
 	}
+	inputTokens, inputTokensPresent := intField(usage, "input_tokens")
+	if inputTokensPresent && inputTokens >= 0 {
+		p.summary.CumulativeInputTokens = append(p.summary.CumulativeInputTokens, inputTokens)
+	}
 	p.summary.TokenUsage = &providersessions.TokenUsage{
-		InputTokens:           intPtrIfPresent(intField(usage, "input_tokens")),
+		InputTokens:           intPtrIfPresent(inputTokens, inputTokensPresent),
 		CachedInputTokens:     intPtrIfPresent(intField(usage, "cached_input_tokens")),
 		OutputTokens:          intPtrIfPresent(intField(usage, "output_tokens")),
 		ReasoningOutputTokens: intPtrIfPresent(intField(usage, "reasoning_output_tokens")),

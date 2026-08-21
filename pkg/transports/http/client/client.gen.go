@@ -8108,6 +8108,9 @@ type WorkerSessionObservation struct {
 	// TurnId Optional turn correlation identifier.
 	TurnId *string `json:"turnId"`
 
+	// TurnUsage Provider-neutral per-turn context projection derived from supported cumulative input counters. Absence means the transcript cannot support these metrics.
+	TurnUsage *WorkerSessionTurnUsage `json:"turnUsage,omitempty"`
+
 	// WorkIds Work identities correlated with this Worker Session attempt.
 	WorkIds []string `json:"workIds"`
 
@@ -8281,6 +8284,18 @@ type WorkerSessionTranscriptResponse struct {
 
 	// WorkerSessionId Stable Worker Session identity.
 	WorkerSessionId string `json:"workerSessionId"`
+}
+
+// WorkerSessionTurnUsage Provider-neutral per-turn context projection derived from supported cumulative input counters. Absence means the transcript cannot support these metrics.
+type WorkerSessionTurnUsage struct {
+	// FinalContextTokens Input tokens for the final supported turn, derived by subtracting its prior cumulative counter. The first counter uses zero.
+	FinalContextTokens int `json:"finalContextTokens"`
+
+	// PeakContextTokens Largest derived per-turn input token count; this is a context metric, not a pricing or cost calculation.
+	PeakContextTokens int `json:"peakContextTokens"`
+
+	// TurnCount Number of supported provider usage turns represented by the transcript's cumulative input counters.
+	TurnCount int `json:"turnCount"`
 }
 
 // WorkerType Worker implementation families supported by the public factory-config contract.

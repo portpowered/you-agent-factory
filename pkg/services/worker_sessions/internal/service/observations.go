@@ -582,6 +582,7 @@ func (r *registry) enrichWithProviderSessionsProjection(ctx context.Context, pro
 	}
 	projected.Transcript = workersessions.TranscriptAvailabilityAvailable
 	projected.TokenUsage = observationTokenUsage(result.Detail.Parse.TokenUsage)
+	projected.TurnUsage = observationTurnUsage(result.Detail.Parse.CumulativeInputTokens)
 	projected.Parse = observationParseDiagnostics(result.Detail.Parse)
 	return projected, nil
 }
@@ -683,6 +684,37 @@ func observationTokenUsage(source *providersessions.TokenUsage) *workersessions.
 		OutputTokens:          cloneInt(source.OutputTokens),
 		ReasoningOutputTokens: cloneInt(source.ReasoningOutputTokens),
 		TotalTokens:           cloneInt(source.TotalTokens),
+	}
+}
+
+// observationTurnUsage derives per-turn input context from cumulative usage
+// counters already retained by Provider Sessions. A decreasing counter makes
+// the sequence unsupported because its baseline cannot be interpreted as a
+// cumulative total, so the optional projection is omitted.
+func observationTurnUsage(cumulativeInputTokens []int) *workersessions.TurnUsage {
+	if len(cumulativeInputTokens) == 0 {
+		return nil
+	}
+
+	previous := 0
+	final := 0
+	peak := 0
+	for _, cumulative := range cumulativeInputTokens {
+		if cumulative < previous {
+			return nil
+		}
+		perTurn := cumulative - previous
+		if perTurn > peak {
+			peak = perTurn
+		}
+		final = perTurn
+		previous = cumulative
+	}
+
+	return &workersessions.TurnUsage{
+		TurnCount:          len(cumulativeInputTokens),
+		FinalContextTokens: final,
+		PeakContextTokens:  peak,
 	}
 }
 

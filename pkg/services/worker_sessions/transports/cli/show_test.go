@@ -33,6 +33,7 @@ func TestShowJSONUsesObservationDocumentAndExactIdentity(t *testing.T) {
 			DurationBasis: generated.WorkerSessionObservationDurationBasisRECORDEDTIMESTAMPS,
 			Transcript:    generated.WorkerSessionObservationTranscriptAVAILABLE,
 			TokenUsage:    &generated.ProviderSessionTokenUsage{InputTokens: intPtr(4), OutputTokens: intPtr(8), TotalTokens: intPtr(12)},
+			TurnUsage:     &generated.WorkerSessionTurnUsage{TurnCount: 3, FinalContextTokens: 450, PeakContextTokens: 450},
 		})
 	}))
 	defer server.Close()
@@ -61,6 +62,9 @@ func TestShowJSONUsesObservationDocumentAndExactIdentity(t *testing.T) {
 	assertShowExecutionFacts(t, document)
 	if !strings.Contains(string(document["tokenUsage"]), `"totalTokens":12`) || string(document["durationMillis"]) != "2500" {
 		t.Fatalf("usage/duration = %s/%s, want token and timing projection", document["tokenUsage"], document["durationMillis"])
+	}
+	if got := string(document["turnUsage"]); got != `{"turnCount":3,"finalContextTokens":450,"peakContextTokens":450}` {
+		t.Fatalf("turnUsage = %s, want derived values", got)
 	}
 	for _, key := range []string{"failure", "parse", "turnId", "startedAt", "endedAt"} {
 		if _, ok := document[key]; !ok {
@@ -114,6 +118,9 @@ func TestShowByWorkerSessionIDUsesTopLevelIdentityRoute(t *testing.T) {
 			t.Fatalf("legacy show %s = %s, want explicit null", key, got)
 		}
 	}
+	if _, ok := document["turnUsage"]; ok {
+		t.Fatalf("show turnUsage = %s, want field omitted without supported evidence", document["turnUsage"])
+	}
 }
 
 func TestShowRejectsMixedIdentityModes(t *testing.T) {
@@ -139,6 +146,7 @@ func TestShowHumanRendersFailureAndParseDiagnostics(t *testing.T) {
 			DurationMillis: int64Ptr(2500), DurationBasis: generated.WorkerSessionObservationDurationBasisRECORDEDTIMESTAMPS,
 			Transcript: generated.WorkerSessionObservationTranscriptAVAILABLE,
 			TokenUsage: &generated.ProviderSessionTokenUsage{TotalTokens: intPtr(17)},
+			TurnUsage:  &generated.WorkerSessionTurnUsage{TurnCount: 3, FinalContextTokens: 450, PeakContextTokens: 450},
 			Failure:    &generated.WorkerSessionFailure{Kind: "WORKERS_EXECUTION_FAILURE", Detail: "safe failure detail", ProviderFailureKind: stringPtrForTest("dependency"), AgentRunFailureClass: stringPtrForTest("agent_run_provider_failure")},
 			Parse:      generated.WorkerSessionParseDiagnostics{EventCount: 3, Errors: []generated.WorkerSessionParseDiagnostic{{Code: "provider_session_parse_error", LineNumber: 2, Message: "malformed event"}}},
 		})
@@ -153,6 +161,7 @@ func TestShowHumanRendersFailureAndParseDiagnostics(t *testing.T) {
 	for _, want := range []string{
 		"Worker Session ID:\tworker-session-1", "Model:\tgpt-5.6-luna", "Reasoning Effort:\thigh", "Work IDs:\twork-1", "State:\tFAILED", "Duration:\t2.5s",
 		"Token usage:\tinput=- cached-input=- cache-write=- output=- reasoning=- total=17",
+		"Turn usage:\tcount=3 final-context=450 peak-context=450",
 		"Failure:\tkind=WORKERS_EXECUTION_FAILURE detail=safe failure detail provider-kind=dependency", "agent-run-class=agent_run_provider_failure",
 		"Parse diagnostics:\tevents=3 malformed=0 unknown=0 errors=1",
 		"Parse error 1:\tcode=provider_session_parse_error line=2 message=malformed event",

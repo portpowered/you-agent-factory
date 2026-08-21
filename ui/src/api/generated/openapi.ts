@@ -1675,6 +1675,8 @@ export interface components {
       /** @enum {string} */
       durationBasis: WorkerSessionObservationDurationBasis;
       tokenUsage?: components["schemas"]["ProviderSessionTokenUsage"];
+      /** @description Optional provider-neutral per-turn context projection. Omitted when supported cumulative input evidence is unavailable. */
+      turnUsage?: components["schemas"]["WorkerSessionTurnUsage"];
       /** @enum {string} */
       transcript: WorkerSessionObservationTranscript;
       failure?: components["schemas"]["WorkerSessionFailure"];
@@ -1686,6 +1688,15 @@ export interface components {
       /** @description Stable safe reason when recording health is DEGRADED or INCOMPLETE. */
       recordingHealthReason?: string;
       parse: components["schemas"]["WorkerSessionParseDiagnostics"];
+    };
+    /** @description Provider-neutral per-turn context projection derived from supported cumulative input counters. Absence means the transcript cannot support these metrics. */
+    WorkerSessionTurnUsage: {
+      /** @description Number of supported provider usage turns represented by the transcript's cumulative input counters. */
+      turnCount: number;
+      /** @description Input tokens for the final supported turn, derived by subtracting its prior cumulative counter. The first counter uses zero. */
+      finalContextTokens: number;
+      /** @description Largest derived per-turn input token count; this is a context metric, not a pricing or cost calculation. */
+      peakContextTokens: number;
     };
     WorkerSessionEvent: {
       delivery: components["schemas"]["WorkerSessionEventDelivery"];
