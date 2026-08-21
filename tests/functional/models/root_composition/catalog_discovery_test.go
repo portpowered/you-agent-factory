@@ -11,6 +11,8 @@ import (
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
+// TestGenericModelContractsRemainDetachedAtApplicationRoot proves generic model
+// contracts remain available and detached at the application root.
 func TestGenericModelContractsRemainDetachedAtApplicationRoot(t *testing.T) {
 	t.Parallel()
 

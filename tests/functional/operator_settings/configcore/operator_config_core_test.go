@@ -19,6 +19,9 @@ import (
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
+// TestOperatorConfigCore_ModelOverlaysRoundTripAndReportTypedFailures proves
+// model overlays round-trip through operator configuration and invalid inputs
+// report typed failures.
 func TestOperatorConfigCore_ModelOverlaysRoundTripAndReportTypedFailures(t *testing.T) {
 	process := support.BuildProcess(t, serviceedges.Edges{})
 	help := support.FakeInputs(t.Context(), []string{"you", "session", "show", "--help"})
