@@ -193,7 +193,7 @@ func parseConfig() config {
 	flag.StringVar(&cfg.covermode, "covermode", "count", "go test -covermode value")
 	flag.StringVar(&cfg.coverpkg, "coverpkg", "", "comma-separated import paths to measure; defaults to backend-owned packages")
 	flag.StringVar(&cfg.functionalQuarantine, "functional-quarantine", "", "strict functional quarantine JSON manifest; discovers and subtracts its package/test selectors")
-	flag.IntVar(&cfg.jobs, "jobs", 0, "maximum concurrent go test packages; defaults to 2")
+	flag.IntVar(&cfg.jobs, "jobs", 0, "maximum concurrent go test packages; defaults to runtime CPU count for non-Windows unit coverage, 1 for Windows unit coverage, and 2 for functional coverage")
 	flag.StringVar(&cfg.generateManifest, "generate-manifest", "", "create a deterministic package-minimum manifest from this lane's coverage profile")
 	flag.StringVar(&cfg.updateManifest, "update-manifest", "", "update an existing package-minimum manifest from a complete compatible profile sample set")
 	flag.StringVar(&cfg.updateProfiles, "update-profiles", "", "comma-separated complete coverage profiles for -update-manifest; requires at least five compatible profiles")
@@ -285,6 +285,10 @@ func run(cfg config) (coverageResult, error) {
 }
 
 func runForOS(cfg config, targetOS string) (result coverageResult, runErr error) {
+	return runForOSWithCPU(cfg, targetOS, runtime.NumCPU())
+}
+
+func runForOSWithCPU(cfg config, targetOS string, logicalCPUs int) (result coverageResult, runErr error) {
 	profilePath, cleanup, err := prepareCoverageProfile(cfg.profile)
 	if err != nil {
 		return coverageResult{}, err
@@ -294,10 +298,10 @@ func runForOS(cfg config, targetOS string) (result coverageResult, runErr error)
 			runErr = errors.Join(runErr, fmt.Errorf("remove temporary coverage profile: %w", cleanupErr))
 		}
 	}()
-	return runCoverageProfile(cfg, targetOS, profilePath)
+	return runCoverageProfile(cfg, targetOS, logicalCPUs, profilePath)
 }
 
-func runCoverageProfile(cfg config, targetOS string, profilePath string) (coverageResult, error) {
+func runCoverageProfile(cfg config, targetOS string, logicalCPUs int, profilePath string) (coverageResult, error) {
 	coverPackages, testPackages, err := resolveCoverageLane(cfg)
 	if err != nil {
 		return coverageResult{}, err
@@ -308,7 +312,7 @@ func runCoverageProfile(cfg config, targetOS string, profilePath string) (covera
 	}
 	var functionalSelection *functionalCoverageSelection
 	if strings.TrimSpace(cfg.functionalQuarantine) != "" {
-		selection, selectedPackages, selectionErr := prepareFunctionalCoverageRun(cfg, testPackages, targetOS, repoRoot)
+		selection, selectedPackages, selectionErr := prepareFunctionalCoverageRun(cfg, testPackages, targetOS, logicalCPUs, repoRoot)
 		if selectionErr != nil {
 			return coverageResult{}, selectionErr
 		}
@@ -326,7 +330,7 @@ func runCoverageProfile(cfg config, targetOS string, profilePath string) (covera
 	coverageTestArgs := []string{
 		"test",
 		fmt.Sprintf("-coverpkg=%s", coverPackageArgument),
-		fmt.Sprintf("-p=%d", cfg.testJobs(targetOS)),
+		fmt.Sprintf("-p=%d", cfg.testJobs(targetOS, logicalCPUs)),
 		// Coverage is an authoritative measurement, so every package must run
 		// even when a prior non-instrumented invocation is cached.
 		"-count=1",
@@ -389,7 +393,7 @@ func runCoverageProfile(cfg config, targetOS string, profilePath string) (covera
 	return result, nil
 }
 
-func (cfg config) testJobs(targetOS string) int {
+func (cfg config) testJobs(targetOS string, logicalCPUs int) int {
 	if cfg.jobs > 0 {
 		return cfg.jobs
 	}
@@ -397,6 +401,15 @@ func (cfg config) testJobs(targetOS string) int {
 		// Full unit coverage instrumentation exceeds the Windows host's stable
 		// memory boundary when go test builds two instrumented packages at once.
 		return 1
+	}
+	if cfg.suite == "" || cfg.suite == "unit" {
+		// Unit coverage is one instrumented go test, so non-Windows hosts can
+		// use their full logical CPU budget without changing functional coverage.
+		if logicalCPUs > 0 {
+			return logicalCPUs
+		}
+		// Keep the historical shared default if the runtime cannot provide a
+		// usable count. runtime.NumCPU normally guarantees a positive value.
 	}
 	return defaultCoverageJobs
 }

@@ -81,24 +81,71 @@ func TestCoverageTestJobs(t *testing.T) {
 	t.Parallel()
 
 	cases := []struct {
-		name     string
-		cfg      config
-		targetOS string
-		want     int
+		name        string
+		cfg         config
+		targetOS    string
+		logicalCPUs int
+		want        int
 	}{
-		{name: "unit defaults to one Windows coverage builder", cfg: config{suite: "unit"}, targetOS: "windows", want: 1},
-		{name: "empty suite defaults to one Windows unit builder", cfg: config{}, targetOS: "windows", want: 1},
-		{name: "functional keeps the shared Windows default", cfg: config{suite: "functional"}, targetOS: "windows", want: defaultCoverageJobs},
-		{name: "non-Windows keeps the shared unit default", cfg: config{suite: "unit"}, targetOS: "linux", want: defaultCoverageJobs},
-		{name: "explicit override", cfg: config{suite: "unit", jobs: 2}, targetOS: "windows", want: 2},
+		{name: "unit uses the non-Windows runner CPU count", cfg: config{suite: "unit"}, targetOS: "linux", logicalCPUs: 4, want: 4},
+		{name: "unit follows another positive non-Windows CPU count", cfg: config{suite: "unit"}, targetOS: "linux", logicalCPUs: 8, want: 8},
+		{name: "unit defaults to one Windows coverage builder", cfg: config{suite: "unit"}, targetOS: "windows", logicalCPUs: 64, want: 1},
+		{name: "empty suite defaults to one Windows unit builder", cfg: config{}, targetOS: "windows", logicalCPUs: 64, want: 1},
+		{name: "functional keeps the shared Windows default", cfg: config{suite: "functional"}, targetOS: "windows", logicalCPUs: 64, want: defaultCoverageJobs},
+		{name: "functional keeps the shared non-Windows default", cfg: config{suite: "functional"}, targetOS: "linux", logicalCPUs: 64, want: defaultCoverageJobs},
+		{name: "invalid CPU input uses the shared fallback", cfg: config{suite: "unit"}, targetOS: "linux", logicalCPUs: 0, want: defaultCoverageJobs},
+		{name: "explicit override wins on Windows", cfg: config{suite: "unit", jobs: 9}, targetOS: "windows", logicalCPUs: 64, want: 9},
+		{name: "explicit override wins on non-Windows", cfg: config{suite: "unit", jobs: 7}, targetOS: "linux", logicalCPUs: 4, want: 7},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			if got := tc.cfg.testJobs(tc.targetOS); got != tc.want {
-				t.Fatalf("config.testJobs(%q) = %d, want %d", tc.targetOS, got, tc.want)
+			if got := tc.cfg.testJobs(tc.targetOS, tc.logicalCPUs); got != tc.want {
+				t.Fatalf("config.testJobs(%q, %d) = %d, want %d", tc.targetOS, tc.logicalCPUs, got, tc.want)
 			}
 		})
+	}
+}
+
+func TestRunForOSWithCPUUsesDerivedUnitJobs(t *testing.T) {
+	originalCommandRunner := commandRunner
+	originalStdout := stdoutWriter
+	originalStderr := stderrWriter
+	t.Cleanup(func() {
+		commandRunner = originalCommandRunner
+		stdoutWriter = originalStdout
+		stderrWriter = originalStderr
+	})
+
+	var invocations []commandInvocation
+	var stdout strings.Builder
+	var stderr strings.Builder
+	commandRunner = func(invocation commandInvocation) (string, string, error) {
+		invocations = append(invocations, invocation)
+		return fakeGoCoverageCommandPassing(invocation)
+	}
+	stdoutWriter = &stdout
+	stderrWriter = &stderr
+
+	_, err := runForOSWithCPU(config{
+		min:       0,
+		suite:     "unit",
+		totalOnly: true,
+		coverpkg:  strings.Join([]string{modulePath + "/pkg/config", modulePath + "/pkg/service"}, ","),
+		packages:  "./pkg/config",
+		profile:   filepath.Join(t.TempDir(), "coverage.out"),
+	}, "linux", 4)
+	if err != nil {
+		t.Fatalf("runForOSWithCPU() error = %v", err)
+	}
+	if len(invocations) != 1 {
+		t.Fatalf("coverage invocations = %d, want one", len(invocations))
+	}
+	if !slices.Contains(invocations[0].args, "-p=4") {
+		t.Fatalf("go test args = %v, want CPU-derived -p=4", invocations[0].args)
+	}
+	if stdout.Len() == 0 || stderr.Len() != 0 {
+		t.Fatalf("coverage output = stdout %q, stderr %q; want stdout only", stdout.String(), stderr.String())
 	}
 }
 
