@@ -23,8 +23,6 @@ const (
 	functionalDiscoveryMaxJobs           = 4
 	functionalGoListErrorFlag            = "-e"
 	functionalGoListJSONFields           = "-json=Dir,ImportPath,TestGoFiles,XTestGoFiles"
-	functionalGoListTestJSONFields       = "-json=Dir,ImportPath,TestGoFiles,XTestGoFiles,ForTest"
-	functionalGoListTestFlag             = "-test"
 )
 
 type functionalGoListPackage struct {
@@ -32,7 +30,6 @@ type functionalGoListPackage struct {
 	ImportPath   string
 	TestGoFiles  []string
 	XTestGoFiles []string
-	ForTest      string
 	Error        *functionalGoListPackageError
 }
 
@@ -130,15 +127,13 @@ func listFunctionalTestPackageMetadata(patterns []string, repoRoot string) ([]fu
 		return nil, errors.New("resolve go coverage lane: no packages matched")
 	}
 
-	// Ask go list for the test packages in one current-tree query. The -test
-	// output includes synthetic test-binary and external-test-package entries;
-	// only the ordinary package entries are functional inventory owners. This
-	// retains go list's build-selected TestGoFiles/XTestGoFiles authority while
-	// avoiding a second identity-to-metadata round trip for every package.
+	// Ask go list for the current tree without loading dependencies. Ordinary
+	// package results include the build-selected TestGoFiles/XTestGoFiles that
+	// own the functional inventory, including external test files.
 	listedPackages, err := listFunctionalTestPackageBatchWithFieldsAndFlags(
 		patterns,
-		functionalGoListTestJSONFields,
-		[]string{functionalGoListTestFlag},
+		functionalGoListJSONFields,
+		[]string{"-find"},
 		repoRoot,
 	)
 	if err != nil {
@@ -146,9 +141,6 @@ func listFunctionalTestPackageMetadata(patterns []string, repoRoot string) ([]fu
 	}
 	functionalPackages := make([]functionalGoListPackage, 0, len(listedPackages))
 	for _, pkg := range listedPackages {
-		if pkg.ForTest != "" || strings.HasSuffix(pkg.ImportPath, ".test") {
-			continue
-		}
 		if isFunctionalTestPackage(pkg.ImportPath) {
 			functionalPackages = append(functionalPackages, pkg)
 		}
