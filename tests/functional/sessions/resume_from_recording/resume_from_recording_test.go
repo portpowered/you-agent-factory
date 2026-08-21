@@ -281,10 +281,9 @@ func assertResumeFromRecordingFactoryCursorReplay(
 	if wantCount == 0 {
 		t.Fatalf("Factory Event cursor %q has no post-resume events to replay", boundary.cursor.Id)
 	}
-	replayed := support.GetFactoryEventsAfterForSessionAt(
+	replayed := support.GetFactoryEventsAfterAt(
 		t,
 		baseURL,
-		factorysessions.DefaultSessionID,
 		support.FactoryEventReadCursor{AfterEventID: boundary.cursor.Id},
 	)
 	if len(replayed) != wantCount {
