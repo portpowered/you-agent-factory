@@ -129,6 +129,7 @@ export function buildSuccessfulReplayEventStream(
   return [
     `data: ${JSON.stringify({
       id: "evt-1",
+      schemaVersion: "agent-factory.event.v1",
       type: "SESSION_STARTED",
       context: {
         sequence: 1,
@@ -143,6 +144,7 @@ export function buildSuccessfulReplayEventStream(
     "",
     `data: ${JSON.stringify({
       id: "evt-2",
+      schemaVersion: "agent-factory.event.v1",
       type: "ORCHESTRATOR_PHASE_CHANGED",
       context: {
         sequence: 2,
@@ -153,6 +155,7 @@ export function buildSuccessfulReplayEventStream(
         phaseName: "review",
       },
       payload: {
+        phaseStatus: "ACTIVE",
         phase: "review",
         progressSummary: "Review work scheduled.",
       },
@@ -160,6 +163,7 @@ export function buildSuccessfulReplayEventStream(
     "",
     `data: ${JSON.stringify({
       id: "evt-3",
+      schemaVersion: "agent-factory.event.v1",
       type: "DISPATCH_QUEUED",
       context: {
         sequence: 3,
@@ -180,6 +184,7 @@ export function buildSuccessfulReplayEventStream(
     "",
     `data: ${JSON.stringify({
       id: "evt-4",
+      schemaVersion: "agent-factory.event.v1",
       type: "DISPATCH_RECONCILED",
       context: {
         sequence: 4,
@@ -192,10 +197,13 @@ export function buildSuccessfulReplayEventStream(
       },
       payload: {
         reconciledStatus: "COMPLETED",
+        reconciliationSource: "RUNTIME_RECONCILER",
+        replayed: false,
         resultArtifactRef: {
           id: "artifact-release-notes",
           kind: "FINAL_RESULT",
           label: "Release notes",
+          visibility: "PUBLIC",
         },
         artifactIds: ["artifact-release-notes"],
       },
@@ -203,6 +211,7 @@ export function buildSuccessfulReplayEventStream(
     "",
     `data: ${JSON.stringify({
       id: "evt-5",
+      schemaVersion: "agent-factory.event.v1",
       type: "SESSION_COMPLETED",
       context: {
         sequence: 5,
@@ -228,6 +237,7 @@ export function buildWarningReplayEventStream(
   return [
     `data: ${JSON.stringify({
       id: "evt-w1",
+      schemaVersion: "agent-factory.event.v1",
       type: "JAVASCRIPT_CHECKPOINT_REF",
       context: {
         sequence: 1,
@@ -239,6 +249,12 @@ export function buildWarningReplayEventStream(
         checkpointId: "checkpoint-9",
       },
       payload: {
+        artifactRef: {
+          id: "checkpoint-artifact-9",
+          kind: "CHECKPOINT",
+          visibility: "INTERNAL_CHECKPOINT",
+        },
+        checkpointId: "checkpoint-9",
         label: "Checkpoint before publish",
         warnings: [
           {
@@ -251,6 +267,7 @@ export function buildWarningReplayEventStream(
     "",
     `data: ${JSON.stringify({
       id: "evt-w2",
+      schemaVersion: "agent-factory.event.v1",
       type: "DISPATCH_INTERRUPTED",
       context: {
         sequence: 2,
@@ -271,6 +288,7 @@ export function buildWarningReplayEventStream(
     "",
     `data: ${JSON.stringify({
       id: "evt-w3",
+      schemaVersion: "agent-factory.event.v1",
       type: "SESSION_COMPLETED",
       context: {
         sequence: 3,
@@ -285,6 +303,7 @@ export function buildWarningReplayEventStream(
         completedAt: "2026-06-25T11:00:05Z",
         failureDetail: {
           message: "Release verification failed.",
+          reason: "timeout",
         },
       },
     })}`,
@@ -302,6 +321,7 @@ export function buildAwaitingReplayEventStream(
   return [
     `data: ${JSON.stringify({
       id: "session-started/dur-sess-js-awaiting-001",
+      schemaVersion: "agent-factory.event.v1",
       type: "SESSION_STARTED",
       context: {
         sequence: 1,
@@ -321,6 +341,7 @@ export function buildAwaitingReplayEventStream(
     "",
     `data: ${JSON.stringify({
       id: "session-result-updated/dur-sess-js-awaiting-001",
+      schemaVersion: "agent-factory.event.v1",
       type: "SESSION_RESULT_UPDATED",
       context: {
         sequence: 2,

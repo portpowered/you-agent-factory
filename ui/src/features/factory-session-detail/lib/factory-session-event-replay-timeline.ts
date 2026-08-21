@@ -2,6 +2,11 @@ import { FACTORY_EVENT_TYPES, type FactoryEvent } from "../../../api/events";
 import { formatDateTime } from "../../../i18n/formatters";
 import type { FactorySessionDetailMessages } from "../messages/factory-session-detail";
 
+const KNOWN_TIMELINE_EVENT_TYPES = new Set<string>([
+  ...Object.values(FACTORY_EVENT_TYPES),
+  "JAVASCRIPT_PHASE_CHANGE",
+]);
+
 export type FactorySessionEventReplayTone =
   | "danger"
   | "info"
@@ -51,7 +56,7 @@ function buildTimelineItem(
     }),
     title: eventDetails.title,
     tone: eventDetails.tone,
-    typeLabel: humanizeEventText(event.type),
+    typeLabel: timelineEventTypeLabel(event.type),
   };
 }
 
@@ -157,7 +162,7 @@ function describeEvent(
     default:
       return {
         detail: undefined,
-        title: humanizeEventText(event.type),
+        title: timelineEventTypeLabel(event.type),
         tone: "neutral",
       };
   }
@@ -263,6 +268,12 @@ function humanizeEventText(value: string): string {
     .split("_")
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
     .join(" ");
+}
+
+function timelineEventTypeLabel(value: string): string {
+  return KNOWN_TIMELINE_EVENT_TYPES.has(value)
+    ? humanizeEventText(value)
+    : value;
 }
 
 function mapStatusTone(

@@ -51,6 +51,7 @@ function dataFrames(replayText: string): string[] {
 
   for (const block of normalizedText.split(/\n[\t ]*\n/)) {
     const dataLines: string[] = [];
+    let eventType = "message";
     for (const line of block.split("\n")) {
       if (line.startsWith(":")) {
         continue;
@@ -58,6 +59,10 @@ function dataFrames(replayText: string): string[] {
 
       const separator = line.indexOf(":");
       const field = separator === -1 ? line : line.slice(0, separator);
+      if (field === "event") {
+        eventType = separator === -1 ? "" : line.slice(separator + 1).trim();
+        continue;
+      }
       if (field !== "data") {
         continue;
       }
@@ -69,7 +74,10 @@ function dataFrames(replayText: string): string[] {
       dataLines.push(value);
     }
 
-    if (dataLines.length > 0) {
+    if (
+      dataLines.length > 0 &&
+      (eventType === "message" || eventType.length === 0)
+    ) {
       frames.push(dataLines.join("\n"));
     }
   }

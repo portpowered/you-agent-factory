@@ -72,8 +72,12 @@ import supportPlayback from "@you-agent-factory/factory-visualizers/examples/sup
 
 `FactoryRecordingTopologyReplay` reports invalid input as one sanitized
 `recording-validation` diagnostic and renders the same accessible failed
-presentation as the controlled topology component. It does not require a
-router, data provider, store, browser persistence, network request, or backend.
+presentation as the controlled topology component. Additive fields and future
+canonical values remain usable: the component retains the recording, renders
+known projections, and sends one recoverable `recording-compatibility`
+diagnostic through `onError` with exact paths and sanitized messages. It does
+not require a router, data provider, store, browser persistence, network
+request, or backend.
 Asynchronous hosts can pass a controlled `state` with `loading`, `ready`, or
 `failed` status; a controlled state takes precedence over the direct `recording`
 shorthand. Controlled failures report their structured visualizer diagnostic

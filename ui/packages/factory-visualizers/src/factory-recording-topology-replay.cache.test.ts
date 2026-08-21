@@ -35,4 +35,24 @@ describe("FactoryRecordingTopologyReplay projection cache retention", () => {
     expect(cache.projections.has(99)).toBe(true);
     expect(cache.projections.has(0)).toBe(false);
   });
+
+  it("keeps known projections unchanged when an unfamiliar event is appended", () => {
+    const futureEvent = {
+      ...events[0],
+      id: "projection-cache-future-event",
+      type: "FUTURE_EVENT_TYPE",
+    } as unknown as FactoryRecording["events"][number];
+    const knownProjection = projectRecordingAtTick(
+      events,
+      0,
+      createRecordingProjectionCache(),
+    );
+    const futureProjection = projectRecordingAtTick(
+      [...events, futureEvent],
+      0,
+      createRecordingProjectionCache(),
+    );
+
+    expect(futureProjection).toEqual(knownProjection);
+  });
 });

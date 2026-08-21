@@ -228,6 +228,18 @@ describe("Factory event SSE replay text", () => {
   });
 });
 
+describe("Factory event SSE event types", () => {
+  it("ignores non-message SSE frames even when they contain data", () => {
+    const replayText = `event: ping\ndata: ignored\n\n${frame(
+      event("accepted", 0, 1),
+    )}`;
+
+    expect(parseFactoryEventReplayText(replayText).map(({ id }) => id)).toEqual(
+      ["accepted"],
+    );
+  });
+});
+
 describe("Factory event compatibility diagnostics", () => {
   it("retains future event types and extra fields with non-blocking diagnostics", () => {
     const future = event("future", 0, 1) as unknown as Record<string, unknown>;

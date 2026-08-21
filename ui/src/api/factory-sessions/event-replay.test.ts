@@ -19,6 +19,7 @@ import { FACTORY_EVENT_TYPES } from "../events";
 import {
   listFactorySessionEventReplay,
   parseFactoryEventReplayStream,
+  safeParseFactoryEventReplayStream,
 } from "./event-replay";
 
 describe("factory session event replay API", () => {
@@ -27,6 +28,7 @@ describe("factory session event replay API", () => {
   });
 
   it("parses a durable factory session replay stream into ordered Factory Events", async () => {
+    const onDiagnostics = vi.fn();
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(
         buildSuccessfulReplayEventStream(successfulReplaySessionID),
@@ -42,6 +44,7 @@ describe("factory session event replay API", () => {
 
     const events = await listFactorySessionEventReplay(
       successfulReplaySessionID,
+      { onDiagnostics },
     );
 
     expect(events).toEqual(
@@ -65,6 +68,18 @@ describe("factory session event replay API", () => {
       id: "evt-1",
       type: FACTORY_EVENT_TYPES.sessionStarted,
     });
+    expect(onDiagnostics).toHaveBeenCalledWith(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: "unsupported_field",
+          path: ["frames", 1, "data", "payload", "phase"],
+        }),
+        expect.objectContaining({
+          code: "unsupported_field",
+          path: ["frames", 3, "data", "payload", "resultArtifactRef", "label"],
+        }),
+      ]),
+    );
     expect(fetchMock).toHaveBeenCalledWith(
       `/factory-sessions/${successfulReplaySessionID}/events`,
       expect.objectContaining({
@@ -96,6 +111,62 @@ describe("factory session event replay API", () => {
     ).rejects.toMatchObject({
       message: "The factory sessions API returned an invalid response.",
     });
+  });
+});
+
+describe("factory session event replay compatibility", () => {
+  it("retains future event frames and reports additive diagnostics without leaking values", () => {
+    const futureEvent = {
+      context: {
+        eventTime: "2026-06-25T10:00:06Z",
+        futureContext: "context-secret",
+        sequence: 6,
+        sessionId: successfulReplaySessionID,
+        sessionSequence: 6,
+        tick: 6,
+      },
+      futureMetadata: "event-secret",
+      id: "evt-future",
+      payload: { futurePayload: "payload-secret" },
+      schemaVersion: "agent-factory.event.v1",
+      type: "FUTURE_EVENT_TYPE",
+    };
+
+    const futureFrame = `data: ${JSON.stringify(futureEvent)}\n\n`;
+    const result = safeParseFactoryEventReplayStream(
+      `${buildSuccessfulReplayEventStream(successfulReplaySessionID)}\n${futureFrame}`,
+    );
+
+    expect(result.success).toBe(true);
+    if (!result.success) return;
+    expect(result.data.map(({ id }) => id)).toContain("evt-future");
+    expect(result.diagnostics).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: "unsupported_event_type",
+          path: ["frames", 5, "data", "type"],
+        }),
+        expect.objectContaining({
+          code: "unsupported_field",
+          path: ["frames", 5, "data", "futureMetadata"],
+        }),
+        expect.objectContaining({
+          code: "unsupported_field",
+          path: ["frames", 5, "data", "context", "futureContext"],
+        }),
+      ]),
+    );
+    expect(
+      result.diagnostics.every(
+        ({ message }) =>
+          !message.includes("context-secret") &&
+          !message.includes("event-secret") &&
+          !message.includes("payload-secret"),
+      ),
+    ).toBe(true);
+    expect(
+      parseFactoryEventReplayStream(futureFrame).map(({ id }) => id),
+    ).toEqual(["evt-future"]);
   });
 });
 
