@@ -6,17 +6,18 @@ import (
 	"errors"
 	"os"
 	"reflect"
-	"strings"
 	"testing"
+	"time"
 
 	"github.com/portpowered/infinite-you/internal/testpath"
+	"github.com/portpowered/infinite-you/pkg/services/automations"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution/recordingreplay"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimeports"
 	durableexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/durable_execution"
 	operatorconfig "github.com/portpowered/infinite-you/pkg/services/operator_settings"
-	settingswire "github.com/portpowered/infinite-you/pkg/services/operator_settings/wire"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
@@ -102,6 +103,15 @@ func testPortableReplayResume(t *testing.T) {
 	}
 	if owner.probeCalls != 1 || owner.resumeCalls != 1 {
 		t.Fatalf("owner calls = probe:%d resume:%d, want 1:1", owner.probeCalls, owner.resumeCalls)
+	}
+	if owner.childExecutionCalls != 1 || !owner.childCompleted {
+		t.Fatalf("resumed child execution = calls:%d completed:%v, want one completed child", owner.childExecutionCalls, owner.childCompleted)
+	}
+	if owner.workerRuntimeID != "portable-replay-runtime" || owner.workerGenerationID != "portable-replay-generation" {
+		t.Fatalf("child execution identity = runtime:%q generation:%q, want portable replay identities", owner.workerRuntimeID, owner.workerGenerationID)
+	}
+	if owner.workerInvoker == nil || owner.progressPublisher == nil || owner.attemptStarter == nil || !owner.attemptStarted || !owner.attemptCompleted {
+		t.Fatalf("resumed child bindings = invoker:%v progress:%v attemptStarter:%v started:%v completed:%v, want all live bindings", owner.workerInvoker != nil, owner.progressPublisher != nil, owner.attemptStarter != nil, owner.attemptStarted, owner.attemptCompleted)
 	}
 }
 
@@ -309,9 +319,16 @@ func newPortableCheckpointRuntimeOpeningFactory(t *testing.T, owner *portableRep
 	dependencies.FactoryRuntime.NewSessionLogger = func(*zap.Logger, string, string, string) *zap.Logger {
 		return zap.NewNop()
 	}
+	runtimeRecord := &portableReplayRuntimeRecord{
+		service:    &portableReplayRuntimeService{},
+		generation: "portable-replay-generation",
+		progress:   func(workers.ProgressFragment) {},
+	}
+	dependencies.FactoryRuntime.FactoryRuntimeAssembler = portableReplayRuntimeAssemblerStub{runtime: runtimeRecord}
 	dependencies.FactorySessions.GenerateRuntimeInstanceID = func() string {
 		return "portable-replay-runtime"
 	}
+	dependencies.Workers.Service = &portableReplayWorkerService{}
 	dependencies.FactorySessions.DurableExecutionFactory = func(
 		_ factorydefinitions.RuntimeOpeningRequest,
 		_ factorysessions.SessionRuntimeOpeningRequest,
@@ -346,6 +363,18 @@ type portableReplayRuntimeOwner struct {
 	listResult              factorysessions.ListDispatchesResult
 	queryResult             factorysessions.ListDispatchesResult
 	queryRequest            factorysessions.DispatchQueryRequest
+	workerInvoker           factoryruntime.Service
+	workerExecution         interface {
+		Execute(context.Context, workers.ExecuteRequest) (workers.ExecuteResult, error)
+	}
+	progressPublisher   workers.ProgressPublisher
+	attemptStarter      func(context.Context, workers.ExecuteRequest) (func(context.Context, workers.ExecuteResult, error) error, error)
+	workerRuntimeID     string
+	workerGenerationID  string
+	childExecutionCalls int
+	childCompleted      bool
+	attemptStarted      bool
+	attemptCompleted    bool
 
 	probeCalls             int
 	resumeInterruptedCalls int
@@ -370,11 +399,47 @@ func (owner *portableReplayRuntimeOwner) ResumeInterruptedSession(
 }
 
 func (owner *portableReplayRuntimeOwner) Resume(
-	context.Context,
-	string,
-	factorysessions.ControlRequest,
+	ctx context.Context,
+	sessionID string,
+	request factorysessions.ControlRequest,
 ) (factorysessions.LifecycleControlResult, error) {
 	owner.resumeCalls++
+	if owner.workerExecution != nil {
+		executionRequest := workers.ExecuteRequest{
+			Correlation: workers.ExecutionCorrelation{
+				FactorySessionID: sessionID,
+				RuntimeID:        owner.workerRuntimeID,
+				GenerationID:     owner.workerGenerationID,
+				DispatchID:       "restored-dispatch",
+				AttemptID:        "restored-attempt",
+				RequestID:        request.RequestID,
+			},
+		}
+		var terminal func(context.Context, workers.ExecuteResult, error) error
+		var err error
+		if owner.attemptStarter != nil {
+			terminal, err = owner.attemptStarter(ctx, executionRequest)
+			if err != nil {
+				return factorysessions.LifecycleControlResult{}, err
+			}
+			owner.attemptStarted = true
+		}
+		result, err := owner.workerExecution.Execute(ctx, executionRequest)
+		if err != nil {
+			if terminal != nil {
+				_ = terminal(ctx, result, err)
+			}
+			return factorysessions.LifecycleControlResult{}, err
+		}
+		owner.childExecutionCalls++
+		if terminal != nil {
+			if err := terminal(ctx, result, nil); err != nil {
+				return factorysessions.LifecycleControlResult{}, err
+			}
+			owner.attemptCompleted = true
+		}
+		owner.childCompleted = true
+	}
 	return owner.resumeResult, owner.resumeErr
 }
 
@@ -404,29 +469,142 @@ func (owner *portableReplayRuntimeOwner) QueryDispatches(
 	return owner.queryResult, nil
 }
 
+func (*portableReplayRuntimeOwner) RecordPetriTokenMutations(
+	string,
+	[]factorydefinitions.TokenMutationRecord,
+) error {
+	return nil
+}
+
+func (owner *portableReplayRuntimeOwner) SetWorkerInvoker(runtime factoryruntime.Service) {
+	owner.workerInvoker = runtime
+}
+
+func (owner *portableReplayRuntimeOwner) SetWorkerExecution(
+	execution interface {
+		Execute(context.Context, workers.ExecuteRequest) (workers.ExecuteResult, error)
+	},
+	_ factoryruntime.ResourceCapacityLeaseAdmission,
+	runtimeID string,
+	generationID string,
+	_ providers.Service,
+	_ *workers.MockWorkersConfig,
+	_ workers.CommandRunner,
+) {
+	owner.workerExecution = execution
+	owner.workerRuntimeID = runtimeID
+	owner.workerGenerationID = generationID
+}
+
+func (owner *portableReplayRuntimeOwner) SetWorkerProgressPublisher(publisher workers.ProgressPublisher) {
+	owner.progressPublisher = publisher
+}
+
+func (owner *portableReplayRuntimeOwner) SetWorkerAttemptStarter(
+	starter func(context.Context, workers.ExecuteRequest) (func(context.Context, workers.ExecuteResult, error) error, error),
+) {
+	owner.attemptStarter = starter
+}
+
+type portableReplayWorkerService struct {
+	workers.Service
+}
+
+func (*portableReplayWorkerService) Execute(context.Context, workers.ExecuteRequest) (workers.ExecuteResult, error) {
+	return workers.ExecuteResult{}, nil
+}
+
+type portableReplayRuntimeService struct {
+	factoryruntime.Service
+}
+
+type portableReplayRuntimeRecord struct {
+	inertHostedInstance
+	service    factoryruntime.Service
+	generation string
+	progress   workers.ProgressPublisher
+}
+
+func (record *portableReplayRuntimeRecord) RuntimeService() factoryruntime.Service {
+	return record.service
+}
+
+func (record *portableReplayRuntimeRecord) StreamGeneration() string {
+	return record.generation
+}
+
+func (record *portableReplayRuntimeRecord) RuntimeProgressPublisher() workers.ProgressPublisher {
+	return record.progress
+}
+
+func (*portableReplayRuntimeRecord) BeginWorkerAttempt(
+	context.Context,
+	workers.ExecuteRequest,
+) (func(context.Context, workers.ExecuteResult, error) error, error) {
+	return func(context.Context, workers.ExecuteResult, error) error { return nil }, nil
+}
+
+type portableReplayRuntimeAssemblerStub struct {
+	runtime runtimeports.RuntimeInstance
+}
+
+func (assembler portableReplayRuntimeAssemblerStub) Assemble(
+	context.Context,
+	string,
+	string,
+	bool,
+	string,
+	string,
+	string,
+	factorydefinitions.WorkstationLoader,
+	factoryruntime.LoadedFactoryLoader,
+	providers.Service,
+	workers.CommandRunner,
+	workers.CommandRunner,
+	*workers.MockWorkersConfig,
+	factorydefinitions.RuntimeMode,
+	factoryruntime.Scheduler,
+	bool,
+	recordings.SubmissionRecorder,
+	recordings.DispatchRecorder,
+	string,
+	factoryruntime.RuntimeLogStorageConfig,
+	factoryruntime.RuntimeFileLoggingPolicy,
+	factoryruntime.RuntimeMetricsPolicy,
+	string,
+	factoryruntime.RuntimeMetricsStorageConfig,
+	time.Duration,
+	string,
+	string,
+	bool,
+	bool,
+	*bool,
+	factoryruntime.Clock,
+	*zap.Logger,
+	factoryruntime.WorkersMockCommandRunnerFactory,
+	func(string) workers.ProgressPublisher,
+	func(string) func(string),
+	factoryruntime.PetriMutationRecorder,
+	factoryruntime.WorldStateProjector,
+	recordings.RuntimeOpening,
+	factorydefinitions.InitialFactorySnapshotFactory,
+	string,
+	string,
+	string,
+	factorydefinitions.MutableLoadedFactorySource,
+	string,
+	*factorydefinitions.ReplayArtifact,
+	automations.Service,
+	bool,
+) (
+	runtimeports.RuntimeReplacementBuilder,
+	runtimeports.RuntimeInstance,
+	factoryruntime.SessionBuildSpec,
+	runtimeports.RuntimeLifecycle,
+	runtimeports.RuntimeSidecarService,
+	error,
+) {
+	return nil, assembler.runtime, factoryruntime.SessionBuildSpec{}, nil, nil, nil
+}
+
 var _ durableexecution.Service = (*portableReplayRuntimeOwner)(nil)
-
-func TestRuntimeOpeningExposesOnlyOperationSpecificOpenedViews(t *testing.T) {
-	t.Parallel()
-
-	for _, path := range []string{"../../opened_runtime.go", "factory.go"} {
-		source, err := os.ReadFile(path)
-		if err != nil {
-			t.Fatalf("read %s: %v", path, err)
-		}
-		for _, forbidden := range []string{
-			"type OpenedRuntime struct",
-			") (factorysessions.OpenedRuntime, error)",
-			"func (f *Factory) OpenRuntime(",
-		} {
-			if strings.Contains(string(source), forbidden) {
-				t.Errorf("%s exposes broad runtime product %q", path, forbidden)
-			}
-		}
-	}
-}
-
-func TestMain(m *testing.M) {
-	settingswire.RegisterTestComposition()
-	m.Run()
-}

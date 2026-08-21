@@ -40,7 +40,11 @@ func historicalReplayRuntimeProducts(
 	logger *zap.Logger,
 	projection recordingreplay.RecordingReplayProjection,
 	liveOwner durableexecution.Service,
+	closeResources func() error,
 ) runtimeProducts {
+	if closeResources == nil {
+		closeResources = func() error { return nil }
+	}
 	replay := recordingreplay.NewService(projection, liveOwner)
 	inspection := replay.Inspection()
 	return runtimeProducts{
@@ -49,13 +53,16 @@ func historicalReplayRuntimeProducts(
 			HistoricalReplay: &inspection,
 			Resources: roles.RuntimeResources{
 				Logger: logger,
-				Close:  func() error { return nil },
+				Close:  closeResources,
 			},
 		},
-		invocation: roles.OpenedInvocationRuntime{Execution: replay},
+		invocation: roles.OpenedInvocationRuntime{
+			Execution:      replay,
+			CloseArtifacts: closeResources,
+		},
 		execution: roles.OpenedExecutionRuntime{
 			Execution: replay,
-			Resources: roles.RuntimeResources{Logger: logger, Close: func() error { return nil }},
+			Resources: roles.RuntimeResources{Logger: logger, Close: closeResources},
 		},
 	}
 }

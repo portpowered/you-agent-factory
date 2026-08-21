@@ -146,25 +146,41 @@ func openRuntime(
 	}
 	if load.HistoricalReplay != nil {
 		var liveOwner durableexecution.Service
+		var replayClose func() error
 		if load.HistoricalReplay.Checkpoint != nil {
-			liveOwner, err = openPortableReplayDurableOwner(
+			liveOwner, replayClose, err = openPortableReplayDurableOwner(
 				configured,
 				root,
+				logger,
 				clockEdge,
 				providerOverride,
 				providerCommandRunner,
+				scriptCommandRunner,
+				workerService,
 				workersMockCommandRunnerFactory,
 				providerFromCommandRunnerFactory,
 				durableExecutionFactory,
 				factorySessionExecutionFactory,
 				providerIdentities,
 				resolveClock,
+				factoryRuntimeAssembler,
+				recordingsRuntime,
+				initialFactorySnapshotFactory,
+				loadFactory,
+				automationService,
+				submissionRecorder,
+				dispatchRecorder,
 			)
 			if err != nil {
 				return runtimeProducts{}, err
 			}
 		}
-		return historicalReplayRuntimeProducts(logger, *load.HistoricalReplay, liveOwner), nil
+		return historicalReplayRuntimeProducts(
+			logger,
+			*load.HistoricalReplay,
+			liveOwner,
+			replayClose,
+		), nil
 	}
 	if clock == nil {
 		return runtimeProducts{}, fmt.Errorf("construct runtime scope: Factory Runtime clock is required")
@@ -410,26 +426,26 @@ func openRuntime(
 	// already composed before opening; Runtime contributes only the identity and
 	// resource-admission capability that the child request needs. The existing
 	// live-change Runtime bind remains separate and is not an execution route.
-	setWorkerInvoker(durableExecution.Service, rootRuntime)
 	var resourceLeaseAdmission factoryruntime.ResourceCapacityLeaseAdmission
 	if admission, ok := rootRuntime.(factoryruntime.ResourceCapacityLeaseAdmission); ok {
 		resourceLeaseAdmission = admission
 	}
-	if err := setWorkerExecution(
+	if err := bindDurableExecutionCapabilities(
 		sessionID,
 		durableExecution.Service,
 		workerService,
+		rootRuntime,
 		resourceLeaseAdmission,
 		configured.Runtime.RuntimeInstanceID,
 		startupRuntime.StreamGeneration(),
 		providerForDurable,
 		configured.Workers.MockWorkers,
 		providerCommandRunner,
+		runtimeProgressPublisher(startupRuntime),
+		runtimeWorkerAttemptStarter(startupRuntime),
 	); err != nil {
 		return runtimeProducts{}, err
 	}
-	setWorkerProgressPublisher(durableExecution.Service, runtimeProgressPublisher(startupRuntime))
-	setWorkerAttemptStarter(durableExecution.Service, runtimeWorkerAttemptStarter(startupRuntime))
 	opened := assembleRuntimeProducts(
 		factoryDefinitions,
 		service4,

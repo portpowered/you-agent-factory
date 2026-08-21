@@ -190,11 +190,15 @@ func functionalAssertPortableReplayInspection(
 }
 
 func functionalPortableReplayPayload(t *testing.T) []byte {
+	return functionalPortableReplayPayloadForSession(t, "session-js-001")
+}
+
+func functionalPortableReplayPayloadForSession(t *testing.T, sessionID string) []byte {
 	t.Helper()
 
 	checkpointAt := time.Date(2026, time.July, 12, 12, 0, 1, 0, time.UTC)
 	recording, err := recordings.BuildPortableRecording(recordings.PortableRecordingCanonicalFacts{
-		SessionID:        "session-js-001",
+		SessionID:        sessionID,
 		Status:           "SUCCEEDED",
 		OrchestratorKind: "JAVASCRIPT",
 		SourceRef:        "workflow/example.js",

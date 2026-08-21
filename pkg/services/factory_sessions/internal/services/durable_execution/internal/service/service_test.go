@@ -87,15 +87,101 @@ func TestServiceForwardsOptionalRestorableStateProbe(t *testing.T) {
 	}
 }
 
+func TestServicePreflightsLifecycleResumeOnlyForInterruptedSessions(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name          string
+		status        factorysessions.LifecycleStatus
+		restorable    bool
+		wantErr       error
+		wantProbeCall int
+	}{
+		{
+			name:          "interrupted and restorable",
+			status:        factorysessions.LifecycleStatusInterrupted,
+			restorable:    true,
+			wantProbeCall: 1,
+		},
+		{
+			name:          "interrupted without restorable state",
+			status:        factorysessions.LifecycleStatusInterrupted,
+			wantErr:       factorysessions.ErrDurableSessionNotFound,
+			wantProbeCall: 1,
+		},
+		{
+			name:       "running skips restorable probe",
+			status:     factorysessions.LifecycleStatusRunning,
+			restorable: true,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			stub := &restorableStateExecutionStub{
+				restorable:      test.restorable,
+				lifecycleStatus: test.status,
+			}
+			service, err := New(stub)
+			if err != nil {
+				t.Fatalf("New: %v", err)
+			}
+			got, err := service.Resume(
+				context.Background(),
+				"dur-sess-1",
+				factorysessions.ControlRequest{RequestID: "resume-control-1"},
+			)
+			if !errors.Is(err, test.wantErr) {
+				t.Fatalf("Resume error = %v, want %v", err, test.wantErr)
+			}
+			if test.wantErr == nil && got.SessionID != "dur-sess-1" {
+				t.Fatalf("Resume = %#v, want forwarded session", got)
+			}
+			if stub.calls != test.wantProbeCall {
+				t.Fatalf("probe calls = %d, want %d", stub.calls, test.wantProbeCall)
+			}
+			wantResumeCalls := 0
+			if test.wantErr == nil {
+				wantResumeCalls = 1
+			}
+			if stub.resumeControlCalls != wantResumeCalls {
+				t.Fatalf("forwarded Resume calls = %d, want %d", stub.resumeControlCalls, wantResumeCalls)
+			}
+		})
+	}
+}
+
 type restorableStateExecutionStub struct {
 	durableexecution.Service
-	restorable bool
-	calls      int
+	restorable         bool
+	lifecycleStatus    factorysessions.LifecycleStatus
+	calls              int
+	resumeControlCalls int
 }
 
 func (s *restorableStateExecutionStub) HasRestorableState(context.Context, string) (bool, error) {
 	s.calls++
 	return s.restorable, nil
+}
+
+func (s *restorableStateExecutionStub) GetSession(context.Context, string) (factorysessions.SessionReadResult, error) {
+	return factorysessions.SessionReadResult{
+		SessionID: "dur-sess-1",
+		Status:    s.lifecycleStatus,
+	}, nil
+}
+
+func (s *restorableStateExecutionStub) Resume(
+	context.Context,
+	string,
+	factorysessions.ControlRequest,
+) (factorysessions.LifecycleControlResult, error) {
+	s.resumeControlCalls++
+	return factorysessions.LifecycleControlResult{
+		SessionID: "dur-sess-1",
+	}, nil
 }
 
 type executionStub struct {
@@ -164,6 +250,13 @@ func TestServiceForwardsOptionalLiveChangeAndWorkerCapabilities(t *testing.T) {
 
 	service.SetWorkerInvoker(nil)
 	service.SetWorkerExecution(nil, nil, "runtime-1", "generation-1", nil, nil, nil)
+	service.SetWorkerProgressPublisher(func(workers.ProgressFragment) {})
+	service.SetWorkerAttemptStarter(func(
+		context.Context,
+		workers.ExecuteRequest,
+	) (func(context.Context, workers.ExecuteResult, error) error, error) {
+		return func(context.Context, workers.ExecuteResult, error) error { return nil }, nil
+	})
 	cursor, err := service.SubscribeResponseEvents(
 		context.Background(),
 		"session-1",
@@ -182,8 +275,13 @@ func TestServiceForwardsOptionalLiveChangeAndWorkerCapabilities(t *testing.T) {
 	}
 	service.PublishWorkerProgress(workers.ProgressFragment{DispatchID: "dispatch-1", Kind: workers.ProgressFragmentKind})
 
-	if stub.setCalls != 1 || stub.setExecutionCalls != 1 || stub.subscribeCalls != 1 || stub.applyCalls != 1 || stub.recoverCalls != 1 || stub.progressCalls != 1 {
-		t.Fatalf("optional capability calls = %#v, want one call each", stub)
+	gotCalls := [...]int{
+		stub.setCalls, stub.setExecutionCalls, stub.progressPublisherCalls,
+		stub.attemptStarterCalls, stub.subscribeCalls, stub.applyCalls,
+		stub.recoverCalls, stub.progressCalls,
+	}
+	if gotCalls != [...]int{1, 1, 1, 1, 1, 1, 1, 1} {
+		t.Fatalf("optional capability calls = %#v, want one call each", gotCalls)
 	}
 }
 
@@ -218,13 +316,15 @@ func TestServiceOptionalCapabilitiesReturnUnavailableWhenUnsupported(t *testing.
 
 type executionCapabilitiesStub struct {
 	durableexecution.Service
-	cursor            *factorysessions.ResponseEventCursor
-	setCalls          int
-	setExecutionCalls int
-	subscribeCalls    int
-	applyCalls        int
-	recoverCalls      int
-	progressCalls     int
+	cursor                 *factorysessions.ResponseEventCursor
+	setCalls               int
+	setExecutionCalls      int
+	subscribeCalls         int
+	applyCalls             int
+	recoverCalls           int
+	progressCalls          int
+	progressPublisherCalls int
+	attemptStarterCalls    int
 }
 
 func (s *executionCapabilitiesStub) SetWorkerInvoker(factoryruntime.Service) {
@@ -265,4 +365,15 @@ func (s *executionCapabilitiesStub) RecoverLiveChange(_ context.Context, _ strin
 
 func (s *executionCapabilitiesStub) PublishWorkerProgress(workers.ProgressFragment) {
 	s.progressCalls++
+}
+
+func (s *executionCapabilitiesStub) SetWorkerProgressPublisher(workers.ProgressPublisher) {
+	s.progressPublisherCalls++
+}
+
+func (s *executionCapabilitiesStub) SetWorkerAttemptStarter(func(
+	context.Context,
+	workers.ExecuteRequest,
+) (func(context.Context, workers.ExecuteResult, error) error, error)) {
+	s.attemptStarterCalls++
 }
