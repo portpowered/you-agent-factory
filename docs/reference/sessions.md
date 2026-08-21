@@ -213,7 +213,7 @@ you use this proof for closeout review.
 | Validate JavaScript source before durable execution | [JavaScript Factory Session model](#javascript-factory-session-model) and `you docs javascript-workflows` |
 | Recover a stopped `@you/goal` run through existing session and work controls | [Stopped goal inspect and recovery](#stopped-goal-inspect-and-recovery) and `you docs run` |
 | Confirm anything is listening before `you submit` or `POST /factory-sessions/{session_id}/work` | [Session list](#session-list) |
-| Read the active factory name and directory on a live host | [Factory query](#factory-query) |
+| Read the active factory name and directory on a live host | [Factory show](#factory-show) |
 | Inspect lifecycle phase, engine activity, and token buckets | [Session status API](#session-status-api) |
 | Open the operator dashboard in a browser | [Dashboard](#dashboard) |
 | Inspect orchestrator-aware runtime for one live session | [Session show](#session-show) and `you docs orchestrators` |
@@ -461,9 +461,9 @@ identifier.
 After editing this reference topic, run `make docs-reference-smoke` from the
 repository root.
 
-## Factory query
+## Factory show
 
-`you factory query` reads the **current factory definition** for a live session
+`you factory show` reads the **current factory definition** for a live session
 from `GET /factory-sessions/{session_id}/factory`. When you omit `--session` on
 downstream commands, the API uses the default compatibility session (`~default`).
 
@@ -474,14 +474,14 @@ which `factory.json` exists in a checkout.
 
 ```bash
 # Human table from the default API base URI.
-you factory query
+you factory show
 
 # API-shaped JSON (place global flags before the subcommand).
-you --json factory query
+you --json factory show
 
 # Non-default host or port via global --server.
-you --server http://localhost:9090 factory query
-you --server http://localhost:9090 --json factory query
+you --server http://localhost:9090 factory show
+you --server http://localhost:9090 --json factory show
 ```
 
 ### Human output
@@ -504,7 +504,7 @@ Run `you session list` first when you are unsure which sessions exist.
 
 ## Session status API
 
-For deeper runtime health than list or factory query, call:
+For deeper runtime health than list or factory show, call:
 
 ```http
 GET /factory-sessions/{session_id}/status
@@ -697,7 +697,7 @@ you --server http://localhost:9090 --json work list
 |----------------|----------------|-----------------|
 | `you session list` / `create` / `delete` | `--port` (default `7437`) | Session id is a subcommand argument on `create` / `delete` |
 | `you session show`, `you session pause`, `you session resume` | Global `--server` | Session UUID is an optional subcommand argument; omission accepts the `~default` compatibility selector |
-| `you factory query`, `you submit`, `you work …` | Global `--server` | `--session` on submit, batch submit, and work commands |
+| `you factory show`, `you submit`, `you work …` | Global `--server` | `--session` on submit, batch submit, and work commands |
 | `you server --listen <host:port>` | Binds the Current Factory continuously to the exact loopback host/port | N/A — starts a runtime |
 | `you run --with-server --listen <host:port>` / `--with-site` | Binds only for the run lifetime to the exact loopback host/port | N/A — starts a runtime |
 | Ordinary `you run` | Does not bind an HTTP listener | N/A — starts a runtime |

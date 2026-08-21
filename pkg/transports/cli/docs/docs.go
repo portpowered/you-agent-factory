@@ -98,7 +98,7 @@ var topicDocuments = []topicDocument{
 	{topic: TopicRelationships, description: "Batch DEPENDS_ON and PARENT_CHILD relations, runtime SPAWNED_BY lineage, and parent-aware guard linkage.", path: referenceRelationshipsPath, displayOrder: 28},
 	{topic: TopicOperations, description: "Real-pipeline lifetime, finite-drain classification, and same-name restart recovery.", path: referenceOperationsPath, displayOrder: 29},
 	{topic: TopicWork, description: "Submitted work: session-scoped work routes, tags, batch cross-links, and submission contracts.", path: referenceWorkPath, displayOrder: 30},
-	{topic: TopicSessions, description: "Live factory sessions: session list, session show, pause and resume, factory query, status API, dashboard URL, and run modes.", path: referenceSessionsPath, displayOrder: 35},
+	{topic: TopicSessions, description: "Live factory sessions: session list, session show, pause and resume, factory show, status API, dashboard URL, and run modes.", path: referenceSessionsPath, displayOrder: 35},
 	{topic: TopicMetrics, description: "Factory Runtime token, dispatch, failure, and latency metrics with deterministic grouping and Factory Session scope.", path: referenceMetricsPath, displayOrder: 36},
 	{topic: TopicOrchestrators, description: "Factory, FactoryOrchestrator, FactorySession, Dispatch, FactoryArtifact, FactoryEvent, and dynamic workflow aliases.", path: referenceOrchestratorsPath, displayOrder: 37},
 	{topic: TopicJavaScriptWorkflows, description: "Supported JavaScript authoring, equivalent CLI/API/MCP execution, worker presets, capability boundaries, and runnable examples.", path: referenceJavaScriptWorkflowsPath, displayOrder: 38},

@@ -497,7 +497,7 @@
       "documentation": {
         "documentation": {
           "description": {
-            "canonicalEnglish": "Inspect live factory runtime state and manage persisted named factories.\n\nSubcommands:\n  query    show the current active factory from a running service\n  list     list persisted named factories under a factory root\n  config   inspect and transform factory configuration\n  create   create a named factory from factory.json\n  update   replace an existing named factory from factory.json\n  replace-current  persist the live current factory from a running service\n  delete   remove an unused named factory from disk\n\nUse query against a running service. Use config validate, flatten, and expand for factory configuration inspection and transformation. Use list, create, update, and delete for on-disk named factories under --dir (default factory/). Use replace-current with global --server and --session like query to persist the live current factory.",
+            "canonicalEnglish": "Inspect live factory runtime state and manage persisted named factories.\n\nSubcommands:\n  show     show the current active factory from a running service\n  list     list persisted named factories under a factory root\n  config   inspect and transform factory configuration\n  create   create a named factory from factory.json\n  update   replace an existing named factory from factory.json\n  replace-current  persist the live current factory from a running service\n  delete   remove an unused named factory from disk\n\nUse show against a running service. Use config validate, flatten, and expand for factory configuration inspection and transformation. Use list, create, update, and delete for on-disk named factories under --dir (default factory/). Use replace-current with global --server and --session like show to persist the live current factory.",
             "id": "you.factory.description"
           },
           "title": {
@@ -506,7 +506,7 @@
           }
         },
         "examples": [
-          "you factory query",
+          "you factory show",
           "you factory config validate ./factory.json",
           "you factory list"
         ],
@@ -648,7 +648,7 @@
       "path": "you factory",
       "runnable": false,
       "usage": {
-        "example": "  # Show the active factory from the running service.\n  you factory query\n\n  # Validate a factory config before creating or updating it.\n  you factory config validate ./factory.json\n\n  # List persisted named factories and which one is current.\n  you factory list\n\n  # Create a new named factory from a config file.\n  you factory create staging --from ./factory.json --set-current\n\n  # Replace an existing named factory definition.\n  you factory update staging --from ./factory.json\n\n  # Delete an unused named factory.\n  you factory delete staging\n\n  # Persist the live current factory back to durable storage.\n  you factory replace-current",
+        "example": "  # Show the active factory from the running service.\n  you factory show\n\n  # Validate a factory config before creating or updating it.\n  you factory config validate ./factory.json\n\n  # List persisted named factories and which one is current.\n  you factory list\n\n  # Create a new named factory from a config file.\n  you factory create staging --from ./factory.json --set-current\n\n  # Replace an existing named factory definition.\n  you factory update staging --from ./factory.json\n\n  # Delete an unused named factory.\n  you factory delete staging\n\n  # Persist the live current factory back to durable storage.\n  you factory replace-current",
         "line": "factory"
       },
       "visibility": "visible"
@@ -2584,7 +2584,7 @@
       },
       "visibility": "visible"
     },
-    "you.factory.query": {
+    "you.factory.show": {
       "aliases": [],
       "channels": {
         "input": [
@@ -2612,51 +2612,51 @@
         "documentation": {
           "description": {
             "canonicalEnglish": "Show the current active factory from a running you-agent-factory service.\n\nBy default the command writes a human-readable table with the current factory name and runtime-identifying fields. Use global --json for the API-shaped current-factory payload, and use global --server to target the same factory API base URI as work list and submit. Run you session list to discover live session ids when routing other commands with --session.",
-            "id": "you.factory.query.description"
+            "id": "you.factory.show.description"
           },
           "title": {
             "canonicalEnglish": "Show the current active factory",
-            "id": "you.factory.query.title"
+            "id": "you.factory.show.title"
           }
         },
         "examples": [
-          "you factory query",
-          "you --json factory query",
-          "you --server http://localhost:9090 --json factory query"
+          "you factory show",
+          "you --json factory show",
+          "you --server http://localhost:9090 --json factory show"
         ],
         "formatVersion": "1.0.0",
-        "itemId": "you.factory.query",
+        "itemId": "you.factory.show",
         "sourceHash": "b39d6cc087e78db8c6349c2da774fe17b8e7c9c16bb83d5a7583e454fdf1464f",
         "visibility": "public"
       },
       "exits": {
-        "you.factory.query.exit.failure": {
+        "you.factory.show.exit.failure": {
           "code": 1,
-          "id": "you.factory.query.exit.failure",
+          "id": "you.factory.show.exit.failure",
           "kind": "failure"
         },
-        "you.factory.query.exit.success": {
+        "you.factory.show.exit.success": {
           "code": 0,
-          "id": "you.factory.query.exit.success",
+          "id": "you.factory.show.exit.success",
           "kind": "success"
         },
-        "you.factory.query.exit.usage": {
+        "you.factory.show.exit.usage": {
           "code": 1,
-          "id": "you.factory.query.exit.usage",
+          "id": "you.factory.show.exit.usage",
           "kind": "usage"
         }
       },
       "flags": {
-        "you.factory.query.flag.debug": {
+        "you.factory.show.flag.debug": {
           "aliases": [],
           "binding": "",
           "changedDefault": false,
           "completion": "none",
           "default": "false",
-          "id": "you.factory.query.flag.debug",
+          "id": "you.factory.show.flag.debug",
           "lifecycle": {
             "formatVersion": "1.0.0",
-            "itemId": "you.factory.query.flag.debug",
+            "itemId": "you.factory.show.flag.debug",
             "since": "1.0.0",
             "state": "active"
           },
@@ -2671,16 +2671,16 @@
           "valueType": "bool",
           "visibility": "visible"
         },
-        "you.factory.query.flag.json": {
+        "you.factory.show.flag.json": {
           "aliases": [],
           "binding": "",
           "changedDefault": false,
           "completion": "none",
           "default": "false",
-          "id": "you.factory.query.flag.json",
+          "id": "you.factory.show.flag.json",
           "lifecycle": {
             "formatVersion": "1.0.0",
-            "itemId": "you.factory.query.flag.json",
+            "itemId": "you.factory.show.flag.json",
             "since": "1.0.0",
             "state": "active"
           },
@@ -2695,7 +2695,7 @@
           "valueType": "bool",
           "visibility": "visible"
         },
-        "you.factory.query.flag.port": {
+        "you.factory.show.flag.port": {
           "acceptedSources": [
             "cli",
             "manifest-default"
@@ -2705,12 +2705,12 @@
           "defaultValue": {
             "int": 0
           },
-          "handlerBindingId": "you.factory.query.binding.port",
-          "id": "you.factory.query.flag.port",
+          "handlerBindingId": "you.factory.show.binding.port",
+          "id": "you.factory.show.flag.port",
           "kind": "named",
           "lifecycle": {
             "formatVersion": "1.0.0",
-            "itemId": "you.factory.query.flag.port",
+            "itemId": "you.factory.show.flag.port",
             "since": "1.0.0",
             "state": "active"
           },
@@ -2727,16 +2727,16 @@
           "valueType": "int",
           "visibility": "hidden"
         },
-        "you.factory.query.flag.remote": {
+        "you.factory.show.flag.remote": {
           "aliases": [],
           "binding": "",
           "changedDefault": false,
           "completion": "none",
           "default": "false",
-          "id": "you.factory.query.flag.remote",
+          "id": "you.factory.show.flag.remote",
           "lifecycle": {
             "formatVersion": "1.0.0",
-            "itemId": "you.factory.query.flag.remote",
+            "itemId": "you.factory.show.flag.remote",
             "since": "1.0.0",
             "state": "active"
           },
@@ -2751,16 +2751,16 @@
           "valueType": "bool",
           "visibility": "visible"
         },
-        "you.factory.query.flag.server": {
+        "you.factory.show.flag.server": {
           "aliases": [],
           "binding": "",
           "changedDefault": false,
           "completion": "none",
           "default": "http://localhost:7437",
-          "id": "you.factory.query.flag.server",
+          "id": "you.factory.show.flag.server",
           "lifecycle": {
             "formatVersion": "1.0.0",
-            "itemId": "you.factory.query.flag.server",
+            "itemId": "you.factory.show.flag.server",
             "since": "1.0.0",
             "state": "active"
           },
@@ -2775,16 +2775,16 @@
           "valueType": "string",
           "visibility": "visible"
         },
-        "you.factory.query.flag.verbose": {
+        "you.factory.show.flag.verbose": {
           "aliases": [],
           "binding": "",
           "changedDefault": false,
           "completion": "none",
           "default": "false",
-          "id": "you.factory.query.flag.verbose",
+          "id": "you.factory.show.flag.verbose",
           "lifecycle": {
             "formatVersion": "1.0.0",
-            "itemId": "you.factory.query.flag.verbose",
+            "itemId": "you.factory.show.flag.verbose",
             "since": "1.0.0",
             "state": "active"
           },
@@ -2801,36 +2801,36 @@
         }
       },
       "handlerBindings": {
-        "you.factory.query.binding.port": {
-          "id": "you.factory.query.binding.port",
-          "inputId": "you.factory.query.flag.port"
+        "you.factory.show.binding.port": {
+          "id": "you.factory.show.binding.port",
+          "inputId": "you.factory.show.flag.port"
         }
       },
       "handler": {
-        "id": "you.factory.query.handler",
+        "id": "you.factory.show.handler",
         "operationId": "getCurrentFactoryBySessionId"
       },
-      "id": "you.factory.query",
+      "id": "you.factory.show",
       "lifecycle": {
         "formatVersion": "1.0.0",
-        "itemId": "you.factory.query",
+        "itemId": "you.factory.show",
         "since": "1.0.0",
         "state": "active"
       },
-      "name": "query",
+      "name": "show",
       "outputs": {
-        "you.factory.query.output.human": {
+        "you.factory.show.output.human": {
           "channel": "stdout",
           "format": "text",
-          "id": "you.factory.query.output.human"
+          "id": "you.factory.show.output.human"
         },
-        "you.factory.query.output.json": {
+        "you.factory.show.output.json": {
           "channel": "stdout",
           "format": "json",
-          "id": "you.factory.query.output.json"
+          "id": "you.factory.show.output.json"
         }
       },
-      "path": "you factory query",
+      "path": "you factory show",
       "precedence": {
         "order": [
           "cli",
@@ -2850,14 +2850,14 @@
       "runnable": true,
       "placement": "remote-only",
       "sideEffects": {
-        "you.factory.query.side-effect.network": {
-          "id": "you.factory.query.side-effect.network",
+        "you.factory.show.side-effect.network": {
+          "id": "you.factory.show.side-effect.network",
           "kind": "network"
         }
       },
       "usage": {
-        "example": "  # Show the current factory from the default local service.\n  you factory query\n\n  # Emit API-shaped JSON for automation from the default local service.\n  you --json factory query\n\n  # Query a factory API on a non-default host or port.\n  you --server http://localhost:9090 --json factory query",
-        "line": "query"
+        "example": "  # Show the current factory from the default local service.\n  you factory show\n\n  # Emit API-shaped JSON for automation from the default local service.\n  you --json factory show\n\n  # Query a factory API on a non-default host or port.\n  you --server http://localhost:9090 --json factory show",
+        "line": "show"
       },
       "visibility": "visible"
     },
@@ -2888,7 +2888,7 @@
       "documentation": {
         "documentation": {
           "description": {
-            "canonicalEnglish": "Read the session current factory from a running service and persist it with PUT.\n\nThe command uses global --server and --session like factory query.",
+            "canonicalEnglish": "Read the session current factory from a running service and persist it with PUT.\n\nThe command uses global --server and --session like factory show.",
             "id": "you.factory.replace-current.description"
           },
           "title": {
@@ -6553,7 +6553,7 @@
       "documentation": {
         "documentation": {
           "description": {
-            "canonicalEnglish": "Show one live factory session from GET /factory-sessions/{session_id}.\n\nHuman output uses FactorySession as the canonical runtime noun and prints orchestrator kind plus Petri or JavaScript runtime projections. Dynamic workflow wording appears only as JavaScript shorthand. Omit session-id to target the default compatibility session (~default). Use global --json for the API-shaped FactorySession payload and global --server to target the same factory API base URI as work list and factory query.",
+            "canonicalEnglish": "Show one live factory session from GET /factory-sessions/{session_id}.\n\nHuman output uses FactorySession as the canonical runtime noun and prints orchestrator kind plus Petri or JavaScript runtime projections. Dynamic workflow wording appears only as JavaScript shorthand. Omit session-id to target the default compatibility session (~default). Use global --json for the API-shaped FactorySession payload and global --server to target the same factory API base URI as work list and factory show.",
             "id": "you.session.show.description"
           },
           "title": {

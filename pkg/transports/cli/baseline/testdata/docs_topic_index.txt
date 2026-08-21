@@ -10,7 +10,7 @@ guards	Workstation, input, and factory guards, guarded LOGICAL_MOVE loop breaker
 relationships	Batch DEPENDS_ON and PARENT_CHILD relations, runtime SPAWNED_BY lineage, and parent-aware guard linkage.
 operations	Real-pipeline lifetime, finite-drain classification, and same-name restart recovery.
 work	Submitted work: session-scoped work routes, tags, batch cross-links, and submission contracts.
-sessions	Live factory sessions: session list, session show, pause and resume, factory query, status API, dashboard URL, and run modes.
+sessions	Live factory sessions: session list, session show, pause and resume, factory show, status API, dashboard URL, and run modes.
 metrics	Factory Runtime token, dispatch, failure, and latency metrics with deterministic grouping and Factory Session scope.
 orchestrators	Factory, FactoryOrchestrator, FactorySession, Dispatch, FactoryArtifact, FactoryEvent, and dynamic workflow aliases.
 javascript-workflows	Supported JavaScript authoring, equivalent CLI/API/MCP execution, worker presets, capability boundaries, and runnable examples.

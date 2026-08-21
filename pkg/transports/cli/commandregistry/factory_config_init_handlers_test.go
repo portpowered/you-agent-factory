@@ -11,10 +11,10 @@ import (
 	startupcli "github.com/portpowered/infinite-you/pkg/initializer/process"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorydefinitionscli "github.com/portpowered/infinite-you/pkg/services/factory_definitions/transports/cli"
-	"github.com/portpowered/infinite-you/pkg/transports/cli/commandregistry"
 	configcli "github.com/portpowered/infinite-you/pkg/services/factory_definitions/transports/cli/config"
-	factorycli "github.com/portpowered/infinite-you/pkg/transports/cli/factory"
 	"github.com/portpowered/infinite-you/pkg/services/operator_settings/transports/cli/initsetup"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/commandregistry"
+	factorycli "github.com/portpowered/infinite-you/pkg/transports/cli/factory"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/resolvedinput"
 	"github.com/spf13/cobra"
 )
@@ -358,7 +358,7 @@ func TestFactoryConfigInitCommandHandlerReportsMissingServices(t *testing.T) {
 		name string
 		run  func() error
 	}{
-		{name: "query", run: func() error { return handler.FactoryQuery(cmd, resolvedinput.Inputs{}, globals) }},
+		{name: "show", run: func() error { return handler.FactoryQuery(cmd, resolvedinput.Inputs{}, globals) }},
 		{name: "list", run: func() error { return handler.FactoryList(cmd, resolvedinput.Inputs{}, globals) }},
 		{name: "create", run: func() error { return handler.FactoryCreate(cmd, resolvedinput.Inputs{}, globals) }},
 		{name: "update", run: func() error { return handler.FactoryUpdate(cmd, resolvedinput.Inputs{}, globals) }},
@@ -515,7 +515,7 @@ func TestFactoryConfigInitCommandHandlerRejectsChangedDeprecatedPort(t *testing.
 		},
 	)
 	inputs := resolvedTestInputs(t,
-		resolvedTestValue{id: "you.factory.query.flag.port", source: resolvedinput.SourceCLIFlag, value: resolvedinput.IntValue(9090)},
+		resolvedTestValue{id: "you.factory.show.flag.port", source: resolvedinput.SourceCLIFlag, value: resolvedinput.IntValue(9090)},
 	)
 	err := handler.FactoryQuery(&cobra.Command{}, inputs, resolvedFactoryGlobals(t, false, false, false))
 	if err == nil || !strings.Contains(err.Error(), "--server") {

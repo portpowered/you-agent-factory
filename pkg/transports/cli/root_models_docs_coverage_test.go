@@ -560,36 +560,36 @@ func TestRootCommand_HelpDocumentsGlobalServerFlag(t *testing.T) {
 	}
 }
 
-func TestFactoryQueryCommand_HelpUsesGlobalFlags(t *testing.T) {
+func TestFactoryShowCommand_HelpUsesGlobalFlags(t *testing.T) {
 	var out bytes.Buffer
 	root := newLegacyTestRootCommand()
 	root.SetOut(&out)
 	root.SetErr(io.Discard)
-	root.SetArgs([]string{"factory", "query", "--help"})
+	root.SetArgs([]string{"factory", "show", "--help"})
 
 	if err := root.Execute(); err != nil {
-		t.Fatalf("execute factory query --help: %v", err)
+		t.Fatalf("execute factory show --help: %v", err)
 	}
 	help := out.String()
 	for _, want := range []string{
 		"global --json",
 		"global --server",
-		"you --server http://localhost:9090 --json factory query",
-		"you --json factory query",
+		"you --server http://localhost:9090 --json factory show",
+		"you --json factory show",
 	} {
 		if !bytes.Contains([]byte(help), []byte(want)) {
-			t.Fatalf("factory query help missing %q:\n%s", want, help)
+			t.Fatalf("factory show help missing %q:\n%s", want, help)
 		}
 	}
 	if bytes.Contains([]byte(help), []byte("--port")) {
-		t.Fatalf("factory query help must not advertise --port:\n%s", help)
+		t.Fatalf("factory show help must not advertise --port:\n%s", help)
 	}
 }
 
 func TestSupportedCommands_DoNotRegisterLocalJSONFlag(t *testing.T) {
 	root := newLegacyTestRootCommand()
 	for _, path := range [][]string{
-		{"factory", "query"},
+		{"factory", "show"},
 		{"work", "list"},
 		{"models", "list"},
 		{"models", "inspect"},
@@ -606,7 +606,7 @@ func TestSupportedCommands_DoNotRegisterLocalJSONFlag(t *testing.T) {
 	}
 }
 
-func TestFactoryQueryCommand_GlobalJSONMapsToConfig(t *testing.T) {
+func TestFactoryShowCommand_GlobalJSONMapsToConfig(t *testing.T) {
 	originalQueryFactory := queryFactory
 	defer func() {
 		queryFactory = originalQueryFactory
@@ -621,10 +621,10 @@ func TestFactoryQueryCommand_GlobalJSONMapsToConfig(t *testing.T) {
 	root := newLegacyTestRootCommand()
 	root.SetOut(io.Discard)
 	root.SetErr(io.Discard)
-	root.SetArgs([]string{"--json", "factory", "query"})
+	root.SetArgs([]string{"--json", "factory", "show"})
 
 	if err := root.Execute(); err != nil {
-		t.Fatalf("execute factory query with global --json: %v", err)
+		t.Fatalf("execute factory show with global --json: %v", err)
 	}
 	if !got.JSON {
 		t.Fatal("expected global --json to map to QueryConfig.JSON")

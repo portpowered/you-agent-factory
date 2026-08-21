@@ -9,9 +9,9 @@ import (
 	"strings"
 	"testing"
 
+	configcli "github.com/portpowered/infinite-you/pkg/services/factory_definitions/transports/cli/config"
 	modelscli "github.com/portpowered/infinite-you/pkg/services/models/transports/cli"
 	"github.com/portpowered/infinite-you/pkg/services/work"
-	configcli "github.com/portpowered/infinite-you/pkg/services/factory_definitions/transports/cli/config"
 	docscli "github.com/portpowered/infinite-you/pkg/transports/cli/docs"
 	factorycli "github.com/portpowered/infinite-you/pkg/transports/cli/factory"
 	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
@@ -384,7 +384,7 @@ func TestDocsCommand_NoTopicPrintsDocsIndex(t *testing.T) {
 		"`guards` - Workstation, input, and factory guards",
 		"`relationships` - Batch DEPENDS_ON",
 		"`work` - Submitted work: session-scoped work routes, tags, batch cross-links, and submission contracts",
-		"`sessions` - Live factory sessions: session list, session show, pause and resume, factory query, status API, dashboard URL, and run modes",
+		"`sessions` - Live factory sessions: session list, session show, pause and resume, factory show, status API, dashboard URL, and run modes",
 		"`metrics` - Factory Runtime token, dispatch, failure, and latency metrics with deterministic grouping and Factory Session scope",
 		"`workstations` - Workstation kinds",
 		"`workers` - Worker types",

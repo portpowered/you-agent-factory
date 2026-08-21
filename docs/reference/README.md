@@ -32,7 +32,7 @@ concept owners below when you need the complete customer-facing contract.
 | `record-replay` | Default recording, `--record`, `--replay`, `--resume`, and `--no-record` | [Record, replay, and resume](record-replay.md) |
 | `operations` | Real-pipeline lifetime, finite-drain classification, and recorded-state restart recovery | [Operations](operations.md) |
 | `work` | Submitted work: session-scoped work routes, tags, and batch cross-links | [Submitted work](work.md) |
-| `sessions` | Session list, session show, pause and resume, factory query, status API, dashboard, and run modes | [Sessions](sessions.md) |
+| `sessions` | Session list, session show, pause and resume, factory show, status API, dashboard, and run modes | [Sessions](sessions.md) |
 | `metrics` | Factory Runtime metrics and exact operator-configured cost rollups with deterministic grouping, coverage, and Factory Session scope | [Metrics](metrics.md) |
 | `orchestrators` | Factory orchestrator identity, FactorySession runtime nouns, dispatch/artifact/event aliases | [Orchestrators](orchestrators.md) |
 | `javascript-workflows` | Supported JavaScript authoring, equivalent CLI/API/MCP execution, worker presets, host boundaries, and runnable examples | [JavaScript workflows](javascript-workflows.md) |
@@ -85,7 +85,7 @@ filesystem work around that invocation.
 - [Submitted work](work.md) owns `POST /factory-sessions/{session_id}/work`,
   submitted-work tags, and batch cross-links.
 - [Sessions](sessions.md) owns live session discovery, session show, pause and
-  resume, factory query, status API fields, dashboard URL, and `--server` /
+  resume, factory show, status API fields, dashboard URL, and `--server` /
   `--session` routing for HTTP client commands.
 - [Metrics](metrics.md) owns the `you metrics` command output contract,
   grouping, Factory Session scope, units, and cost availability.

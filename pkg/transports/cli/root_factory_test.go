@@ -14,9 +14,9 @@ import (
 	"testing"
 
 	startupcli "github.com/portpowered/infinite-you/pkg/initializer/process"
+	configcli "github.com/portpowered/infinite-you/pkg/services/factory_definitions/transports/cli/config"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/commandidentity"
-	configcli "github.com/portpowered/infinite-you/pkg/services/factory_definitions/transports/cli/config"
 	factorycli "github.com/portpowered/infinite-you/pkg/transports/cli/factory"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
@@ -478,7 +478,7 @@ func TestFactoryConfigCommand_NoHiddenOrDeprecatedWrappers(t *testing.T) {
 func TestFactoryCommand_RegistersSubcommands(t *testing.T) {
 	root := newLegacyTestRootCommand()
 	for _, path := range [][]string{
-		{"factory", "query"},
+		{"factory", "show"},
 		{"factory", "list"},
 		{"factory", "config"},
 		{"factory", "config", "validate"},
@@ -508,7 +508,7 @@ func TestFactoryCommand_HelpDocumentsSubcommandsAndExamples(t *testing.T) {
 
 	help := out.String()
 	for _, want := range []string{
-		"query",
+		"show",
 		"list",
 		"config",
 		"create",
@@ -516,7 +516,7 @@ func TestFactoryCommand_HelpDocumentsSubcommandsAndExamples(t *testing.T) {
 		"replace-current",
 		"delete",
 		"global --server",
-		"you factory query",
+		"you factory show",
 		"you factory config validate",
 		"you factory list",
 		"you factory create staging --from ./factory.json",
@@ -592,7 +592,7 @@ func TestFactoryListCommand_HelpDocumentsProjectAndGlobalRoots(t *testing.T) {
 	}
 }
 
-func TestFactoryQueryCommand_ServerFlagReachesHTTPTestServer(t *testing.T) {
+func TestFactoryShowCommand_ServerFlagReachesHTTPTestServer(t *testing.T) {
 	factoryDir := t.TempDir()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/factory-sessions/~default/factory" {
@@ -622,10 +622,10 @@ func TestFactoryQueryCommand_ServerFlagReachesHTTPTestServer(t *testing.T) {
 	root := newLegacyTestRootCommand()
 	root.SetOut(io.Discard)
 	root.SetErr(io.Discard)
-	root.SetArgs([]string{"factory", "query", "--server", strings.TrimSuffix(srv.URL, "/")})
+	root.SetArgs([]string{"factory", "show", "--server", strings.TrimSuffix(srv.URL, "/")})
 
 	if err := root.Execute(); err != nil {
-		t.Fatalf("execute factory query --server: %v", err)
+		t.Fatalf("execute factory show --server: %v", err)
 	}
 	if got.Server != strings.TrimSuffix(srv.URL, "/") {
 		t.Fatalf("server = %q, want %q", got.Server, strings.TrimSuffix(srv.URL, "/"))
@@ -703,11 +703,11 @@ func rootFactoryConfigIncompatibleTaxonomyJSON() string {
 }`
 }
 
-func TestFactoryQueryCommand_PortFlagRejected(t *testing.T) {
+func TestFactoryShowCommand_PortFlagRejected(t *testing.T) {
 	root := newLegacyTestRootCommand()
 	root.SetOut(io.Discard)
 	root.SetErr(io.Discard)
-	root.SetArgs([]string{"factory", "query", "--port", "9090"})
+	root.SetArgs([]string{"factory", "show", "--port", "9090"})
 
 	if execErr := root.Execute(); execErr == nil {
 		t.Fatal("expected --port rejection")
@@ -716,12 +716,24 @@ func TestFactoryQueryCommand_PortFlagRejected(t *testing.T) {
 	}
 }
 
+func TestFactoryQueryCommand_IsUnknownAfterRename(t *testing.T) {
+	root := newLegacyTestRootCommand()
+	root.SetOut(io.Discard)
+	root.SetErr(io.Discard)
+	root.SetArgs([]string{"factory", "query"})
+
+	err := root.Execute()
+	if err == nil || !strings.Contains(err.Error(), `unknown command "query"`) {
+		t.Fatalf("execute retired factory query = %v, want unknown command", err)
+	}
+}
+
 func TestProductionFactoryConfigInitCommandsUsesGeneratedFamily(t *testing.T) {
 	commands := productionFactoryConfigInitCommands(&cliDiagnosticsOptions{}, CommandFactory{})
 	if commands.Factory == nil || commands.Config == nil || commands.Init == nil {
 		t.Fatalf("production commands = %#v, want factory/config/init", commands)
 	}
-	if _, _, err := commands.Factory.Find([]string{"query"}); err != nil {
-		t.Fatalf("generated factory tree missing query: %v", err)
+	if _, _, err := commands.Factory.Find([]string{"show"}); err != nil {
+		t.Fatalf("generated factory tree missing show: %v", err)
 	}
 }

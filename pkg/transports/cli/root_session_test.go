@@ -691,15 +691,15 @@ func TestWorkShowCommand_HelpDocumentsVerifyFlow(t *testing.T) {
 	}
 }
 
-func TestFactoryQueryCommand_HelpDocumentsSessionListDiscoverability(t *testing.T) {
+func TestFactoryShowCommand_HelpDocumentsSessionListDiscoverability(t *testing.T) {
 	var out bytes.Buffer
 	root := newLegacyTestRootCommand()
 	root.SetOut(&out)
 	root.SetErr(io.Discard)
-	root.SetArgs([]string{"factory", "query", "--help"})
+	root.SetArgs([]string{"factory", "show", "--help"})
 
 	if err := root.Execute(); err != nil {
-		t.Fatalf("execute factory query --help: %v", err)
+		t.Fatalf("execute factory show --help: %v", err)
 	}
 
 	help := out.String()
@@ -708,7 +708,7 @@ func TestFactoryQueryCommand_HelpDocumentsSessionListDiscoverability(t *testing.
 		"discover live session ids",
 	} {
 		if !strings.Contains(help, want) {
-			t.Fatalf("factory query help missing %q:\n%s", want, help)
+			t.Fatalf("factory show help missing %q:\n%s", want, help)
 		}
 	}
 }

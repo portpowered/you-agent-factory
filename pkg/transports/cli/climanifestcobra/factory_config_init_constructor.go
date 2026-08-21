@@ -152,7 +152,7 @@ func factoryConfigInitResolvedHandlers(
 	handler commandregistry.FactoryConfigInitHandler,
 ) (ResolvedCobraHandlerRegistry, error) {
 	bindings := map[string]ResolvedCobraHandler{
-		"you.factory.query":           handler.FactoryQuery,
+		"you.factory.show":            handler.FactoryQuery,
 		"you.factory.list":            handler.FactoryList,
 		"you.factory.create":          handler.FactoryCreate,
 		"you.factory.update":          handler.FactoryUpdate,

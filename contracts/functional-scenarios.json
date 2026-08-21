@@ -117,8 +117,8 @@
       "reviewedReason": "No qualifying repository-owned functional test currently invokes and observes this component through its customer boundary."
     },
     {
-      "stableId": "cli/you.factory.query",
-      "name": "you factory query",
+      "stableId": "cli/you.factory.show",
+      "name": "you factory show",
       "interface": "cli",
       "classification": "runnable",
       "status": "missing",

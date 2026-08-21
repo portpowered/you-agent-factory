@@ -62,7 +62,7 @@ func TestNewFactoryConfigInitFamilyComponentsProjectsContractedTree(t *testing.T
 		root *cobra.Command
 		path []string
 	}{
-		{root: components.Factory, path: []string{"query"}},
+		{root: components.Factory, path: []string{"show"}},
 		{root: components.Factory, path: []string{"list"}},
 		{root: components.Factory, path: []string{"create"}},
 		{root: components.Factory, path: []string{"config", "validate"}},

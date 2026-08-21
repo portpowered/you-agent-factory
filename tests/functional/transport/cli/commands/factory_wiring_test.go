@@ -29,11 +29,11 @@ const (
 	factoryReplaceSuccessMarker = "Replaced current factory"
 )
 
-// TestCLIFactoryInitValidateAndQuery proves you factory create authors a named
+// TestCLIFactoryInitValidateAndShow proves you factory create authors a named
 // Factory, you factory config validate reports validation success, and you
-// factory query against a running session prints observable Factory identity
+// factory show against a running session prints observable Factory identity
 // markers without asserting definitions-domain validation internals.
-func TestCLIFactoryInitValidateAndQuery(t *testing.T) {
+func TestCLIFactoryInitValidateAndShow(t *testing.T) {
 	if testing.Short() {
 		t.Skip("slow CLI factory wiring")
 	}
@@ -92,12 +92,12 @@ func TestCLIFactoryInitValidateAndQuery(t *testing.T) {
 
 	queryCmd := processHarness.CommandContext(ctx,
 		"--server", server.URL(),
-		"factory", "query",
+		"factory", "show",
 	)
 	queryCmd.Dir = createdFactoryDir
 	queryOut, err := queryCmd.CombinedOutput()
 	if err != nil {
-		t.Fatalf("you factory query: %v\noutput:\n%s", err, queryOut)
+		t.Fatalf("you factory show: %v\noutput:\n%s", err, queryOut)
 	}
 
 	queryOutput := string(queryOut)
@@ -107,7 +107,7 @@ func TestCLIFactoryInitValidateAndQuery(t *testing.T) {
 		"default-root",
 	} {
 		if !strings.Contains(queryOutput, marker) {
-			t.Fatalf("factory query output missing %q:\n%s", marker, queryOutput)
+			t.Fatalf("factory show output missing %q:\n%s", marker, queryOutput)
 		}
 	}
 }
@@ -164,7 +164,7 @@ func TestCLIFactoryFlattenExpandPreservesMeaning(t *testing.T) {
 
 // TestCLIFactoryReplaceCurrentChangesSessionFactory proves you factory
 // replace-current re-persists the live session Factory with the documented
-// success marker and you factory query reports the same Factory identity with
+// success marker and you factory show reports the same Factory identity with
 // an advanced version after persistence without asserting definitions save
 // orchestration internals.
 func TestCLIFactoryReplaceCurrentChangesSessionFactory(t *testing.T) {
@@ -277,17 +277,17 @@ func queryFactoryViaCLIJSON(
 	queryCmd := processHarness.CommandContext(ctx,
 		"--json",
 		"--server", serverURL,
-		"factory", "query",
+		"factory", "show",
 	)
 	queryCmd.Dir = workDir
 	queryOut, err := queryCmd.Output()
 	if err != nil {
-		t.Fatalf("you factory query --json: %v", err)
+		t.Fatalf("you factory show --json: %v", err)
 	}
 
 	var current factoryapi.Factory
 	if err := json.Unmarshal(queryOut, &current); err != nil {
-		t.Fatalf("decode factory query JSON: %v\n%s", err, string(queryOut))
+		t.Fatalf("decode factory show JSON: %v\n%s", err, string(queryOut))
 	}
 	return current
 }
