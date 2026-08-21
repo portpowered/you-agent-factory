@@ -6581,6 +6581,7 @@ export interface components {
       /** @description Stable identifier for the local provider-backed runtime boundary. */
       backendScopeID?: string;
       defaults?: components["schemas"]["GlobalConfigDefaults"];
+      priceTable?: components["schemas"]["GlobalConfigPriceTable"];
       runtime?: components["schemas"]["GlobalConfigRuntime"];
       models?: components["schemas"]["GlobalConfigModels"];
       workers?: components["schemas"]["GlobalConfigWorkers"];
@@ -6593,6 +6594,31 @@ export interface components {
       workerModelProvider?: string;
       /** @description Default worker model name. */
       workerModel?: string;
+    };
+    /** @description Operator-authored USD rates per one million tokens. Omit this property to use an empty table; no provider or model prices are supplied by default. */
+    GlobalConfigPriceTable: {
+      /**
+       * @description Currency used by every configured rate. This contract supports USD only.
+       * @enum {string}
+       */
+      currency: GlobalConfigPriceTableCurrency;
+      /** @description Deterministic provider/model price entries. */
+      models: components["schemas"]["GlobalConfigPriceTableModel"][];
+    };
+    /** @description Exact operator-authored rates for one provider and model identity. */
+    GlobalConfigPriceTableModel: {
+      /** @description Canonical provider identity or a supported built-in alias; the Operator Settings decoder trims and canonicalizes this value. */
+      provider: string;
+      /** @description Exact model identifier. It is trimmed but never guessed or aliased. */
+      model: string;
+      /** @description Non-negative USD rate per one million uncached input tokens. */
+      inputPerMillionTokens: string;
+      /** @description Non-negative USD rate per one million non-reasoning output tokens. */
+      outputPerMillionTokens: string;
+      /** @description Optional non-negative USD rate per one million cached input tokens. */
+      cachedInputPerMillionTokens?: string;
+      /** @description Optional non-negative USD rate per one million reasoning output tokens. */
+      reasoningOutputPerMillionTokens?: string;
     };
     /** @description Runtime observability settings loaded from operator configuration before command-line overrides. */
     GlobalConfigRuntime: {
@@ -11203,6 +11229,11 @@ export const FactoryValidationSubjectLocation = {
 } as const;
 export type FactoryValidationSubjectLocation =
   (typeof FactoryValidationSubjectLocation)[keyof typeof FactoryValidationSubjectLocation];
+export const GlobalConfigPriceTableCurrency = {
+  USD: "USD",
+} as const;
+export type GlobalConfigPriceTableCurrency =
+  (typeof GlobalConfigPriceTableCurrency)[keyof typeof GlobalConfigPriceTableCurrency];
 export const GlobalConfigModelLoadPolicy = {
   ON_DEMAND: "ON_DEMAND",
 } as const;

@@ -70,4 +70,8 @@ type Service interface {
 	// and, only once valid, atomically persists it while preserving all other
 	// operator settings.
 	UpdateACPAgentProfile(context.Context, string, ACPAgentProfile) (ACPAgentProfile, error)
+
+	// UpdatePriceTable validates and atomically replaces the complete operator
+	// price table while preserving unrelated settings.
+	UpdatePriceTable(context.Context, string, PriceTable) (PriceTable, error)
 }

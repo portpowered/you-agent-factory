@@ -450,6 +450,14 @@ func (fake *fakeSettingsRoot) UpdateACPAgentProfile(
 	return operatorsettings.ACPAgentProfile{}, errors.New("test settings root does not implement ACP Agent profile")
 }
 
+func (fake *fakeSettingsRoot) UpdatePriceTable(
+	context.Context,
+	string,
+	operatorsettings.PriceTable,
+) (operatorsettings.PriceTable, error) {
+	return operatorsettings.PriceTable{}, errors.New("test settings root does not implement price table")
+}
+
 func cliWinningDefaultsValue(fileValue, environmentValue, flagValue string) (string, operatorsettings.Source) {
 	switch {
 	case strings.TrimSpace(flagValue) != "":

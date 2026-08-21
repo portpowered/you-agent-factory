@@ -193,6 +193,55 @@ func TestRootACPConfigurationAddsDeletesAndMaterializesDefaults(t *testing.T) {
 	}
 }
 
+func TestRootUpdatePriceTablePersistsAndPreservesUnrelatedSettings(t *testing.T) {
+	t.Parallel()
+
+	root := newFilesystemRoot(t, testCreateTemporaryFile)
+	path := filepath.Join(t.TempDir(), "config.json")
+	initial := `{
+  "backendScopeID": "local-11111111-1111-4111-8111-111111111111",
+  "defaults": {"workerModelProvider": "CODEX", "workerModel": "gpt-5"},
+  "runtime": {"logging": {"maxSizeMB": 11}, "metrics": {"maxSizeMB": 12}},
+  "workers": {"acp": {"integrations": [{"id":"entry-1","name":"cursor-acp","transport":"stdio","command":"cursor-agent acp"}]}},
+  "workerPresets": [{"id":"build","modelProvider":"CODEX","model":"gpt-5"}]
+}`
+	if err := os.WriteFile(path, []byte(initial), 0o600); err != nil {
+		t.Fatalf("WriteFile() = %v", err)
+	}
+
+	cached := "0"
+	updated, err := root.UpdatePriceTable(context.Background(), path, operatorsettings.PriceTable{
+		Currency: "USD",
+		Models: []operatorsettings.PriceTableModel{{
+			Provider: " openai ", Model: " gpt-5 ", InputPerMillionTokens: "1.25", OutputPerMillionTokens: "10",
+			CachedInputPerMillionTokens: &cached,
+		}},
+	})
+	if err != nil {
+		t.Fatalf("UpdatePriceTable() = %v", err)
+	}
+	if updated.Currency != operatorsettings.PriceTableCurrencyUSD || len(updated.Models) != 1 || updated.Models[0].Provider != "CODEX" {
+		t.Fatalf("updated price table = %#v, want normalized replacement", updated)
+	}
+
+	loaded, err := root.LoadDocument(operatorsettings.LoadDocumentRequest{Path: path})
+	if err != nil {
+		t.Fatalf("LoadDocument() = %v", err)
+	}
+	if loaded.Document.BackendScopeID != "local-11111111-1111-4111-8111-111111111111" ||
+		loaded.Document.Defaults.WorkerModel != "gpt-5" ||
+		loaded.Document.Runtime.Logging.MaxSizeMB != 11 ||
+		len(loaded.Document.WorkerPresets) != 1 ||
+		len(loaded.Document.Workers.ACP.Integrations) != 1 {
+		t.Fatalf("unrelated settings changed after update: %#v", loaded.Document)
+	}
+	if loaded.Document.PriceTable.Models[0].InputPerMillionTokens != "1.25" ||
+		loaded.Document.PriceTable.Models[0].CachedInputPerMillionTokens == nil ||
+		*loaded.Document.PriceTable.Models[0].CachedInputPerMillionTokens != "0" {
+		t.Fatalf("persisted price table = %#v, want exact rates", loaded.Document.PriceTable)
+	}
+}
+
 // newFilesystemRoot constructs a real-filesystem Operator Settings root Service
 // with the default codec, so tests can exercise persistence without
 // duplicating construction. See newFilesystemRootWithOptions for injecting

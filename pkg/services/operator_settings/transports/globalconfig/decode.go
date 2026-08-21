@@ -53,6 +53,7 @@ func requireEOF(decoder *json.Decoder) error {
 func mapConfig(generated factoryapi.GlobalConfig) (operatorsettings.Config, error) {
 	config := operatorsettings.Config{
 		BackendScopeID: optionalString(generated.BackendScopeID),
+		PriceTable:     operatorsettings.DefaultPriceTable(),
 		Runtime:        defaultRuntimeSettings(),
 	}
 	if generated.Defaults != nil {
@@ -82,6 +83,13 @@ func mapConfig(generated factoryapi.GlobalConfig) (operatorsettings.Config, erro
 		if err != nil {
 			return operatorsettings.Config{}, err
 		}
+	}
+	if generated.PriceTable != nil {
+		priceTable, err := mapPriceTable(*generated.PriceTable)
+		if err != nil {
+			return operatorsettings.Config{}, err
+		}
+		config.PriceTable = priceTable
 	}
 	if generated.Workers != nil && generated.Workers.Acp != nil && generated.Workers.Acp.Integrations != nil {
 		config.Workers.ACP.Integrations = make([]operatorsettings.ACPIntegration, len(*generated.Workers.Acp.Integrations))
@@ -127,6 +135,33 @@ func mapConfig(generated factoryapi.GlobalConfig) (operatorsettings.Config, erro
 		}
 	}
 	return config, nil
+}
+
+func mapPriceTable(generated factoryapi.GlobalConfigPriceTable) (operatorsettings.PriceTable, error) {
+	if string(generated.Currency) == "" {
+		return operatorsettings.PriceTable{}, fmt.Errorf("priceTable.currency is required and must be USD")
+	}
+	if generated.Models == nil {
+		return operatorsettings.PriceTable{}, fmt.Errorf(
+			"priceTable.models is required; use an empty array when no prices are configured",
+		)
+	}
+	models := make([]operatorsettings.PriceTableModel, len(generated.Models))
+	for index, model := range generated.Models {
+		models[index] = operatorsettings.PriceTableModel{
+			Provider:                        model.Provider,
+			Model:                           model.Model,
+			InputPerMillionTokens:           model.InputPerMillionTokens,
+			OutputPerMillionTokens:          model.OutputPerMillionTokens,
+			CachedInputPerMillionTokens:     model.CachedInputPerMillionTokens,
+			ReasoningOutputPerMillionTokens: model.ReasoningOutputPerMillionTokens,
+		}
+	}
+	table, err := (operatorsettings.PriceTable{Currency: string(generated.Currency), Models: models}).Normalize()
+	if err != nil {
+		return operatorsettings.PriceTable{}, err
+	}
+	return table, nil
 }
 
 func defaultRuntimeSettings() operatorsettings.RuntimeSettings {
@@ -188,6 +223,21 @@ func Encode(config operatorsettings.Config) ([]byte, error) {
 	generated := factoryapi.GlobalConfig{}
 	if scopeID := strings.TrimSpace(config.BackendScopeID); scopeID != "" {
 		generated.BackendScopeID = &scopeID
+	}
+	priceModels := make([]factoryapi.GlobalConfigPriceTableModel, len(config.PriceTable.Models))
+	for index, model := range config.PriceTable.Models {
+		priceModels[index] = factoryapi.GlobalConfigPriceTableModel{
+			Provider:                        model.Provider,
+			Model:                           model.Model,
+			InputPerMillionTokens:           model.InputPerMillionTokens,
+			OutputPerMillionTokens:          model.OutputPerMillionTokens,
+			CachedInputPerMillionTokens:     model.CachedInputPerMillionTokens,
+			ReasoningOutputPerMillionTokens: model.ReasoningOutputPerMillionTokens,
+		}
+	}
+	generated.PriceTable = &factoryapi.GlobalConfigPriceTable{
+		Currency: factoryapi.GlobalConfigPriceTableCurrency(config.PriceTable.Currency),
+		Models:   priceModels,
 	}
 	if config.Defaults != (operatorsettings.Defaults{}) {
 		generated.Defaults = &factoryapi.GlobalConfigDefaults{

@@ -52,7 +52,7 @@ func LoadFileConfig(
 	data, err := files.ReadFile(path)
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
-			return operatorsettings.Config{Runtime: defaultRuntimeSettings()}, nil
+			return operatorsettings.Config{PriceTable: operatorsettings.DefaultPriceTable(), Runtime: defaultRuntimeSettings()}, nil
 		}
 		return operatorsettings.Config{}, fmt.Errorf("read operator config %s: %w", path, err)
 	}

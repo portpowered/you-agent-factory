@@ -3339,6 +3339,10 @@ components:
       $ref: './components/schemas/api/GlobalConfig.yaml'
     GlobalConfigDefaults:
       $ref: './components/schemas/api/GlobalConfigDefaults.yaml'
+    GlobalConfigPriceTable:
+      $ref: './components/schemas/api/GlobalConfigPriceTable.yaml'
+    GlobalConfigPriceTableModel:
+      $ref: './components/schemas/api/GlobalConfigPriceTableModel.yaml'
     GlobalConfigRuntime:
       $ref: './components/schemas/api/GlobalConfigRuntime.yaml'
     GlobalConfigRuntimeArtifactSettings:

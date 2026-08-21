@@ -170,6 +170,39 @@ func (service ConfigDocumentService) ConfigureProviderModel(
 	return ConfigDocument{config: configFromDocument(result.Document)}, nil
 }
 
+// ReplacePriceTable returns a new validated document with the complete
+// operator-owned price table replaced while preserving every unrelated setting.
+func (service ConfigDocumentService) ReplacePriceTable(document ConfigDocument, table PriceTable) (ConfigDocument, error) {
+	normalized, err := table.Normalize()
+	if err != nil {
+		return ConfigDocument{}, err
+	}
+	config := document.FileConfig()
+	config.PriceTable = normalized
+	return ConfigDocument{config: config}, nil
+}
+
+// ConfigurePriceTable loads, replaces, and atomically persists one complete
+// price table through the same document owner used by the other settings
+// updates.
+func (service ConfigDocumentService) ConfigurePriceTable(ctx context.Context, path string, table PriceTable) (ConfigDocument, error) {
+	if err := operationContextError(ctx); err != nil {
+		return ConfigDocument{}, err
+	}
+	document, err := service.Load(path)
+	if err != nil {
+		return ConfigDocument{}, err
+	}
+	updated, err := service.ReplacePriceTable(document, table)
+	if err != nil {
+		return ConfigDocument{}, err
+	}
+	if err := service.Persist(ctx, path, updated); err != nil {
+		return ConfigDocument{}, err
+	}
+	return updated, nil
+}
+
 // ConfigureProviderModelPrompted acquires values through a write-free prompt,
 // then delegates successful input to ConfigureProviderModel.
 func (service ConfigDocumentService) ConfigureProviderModelPrompted(
@@ -272,6 +305,7 @@ func configFromDocument(document Document) Config {
 			WorkerModelProvider: document.Defaults.WorkerModelProvider,
 			WorkerModel:         document.Defaults.WorkerModel,
 		},
+		PriceTable: document.PriceTable.Clone(),
 		Runtime: RuntimeSettings{
 			Logging: RuntimeArtifactSettings(document.Runtime.Logging),
 			Metrics: RuntimeArtifactSettings(document.Runtime.Metrics),
@@ -301,6 +335,7 @@ func documentFromConfig(config Config) Document {
 			WorkerModelProvider: config.Defaults.WorkerModelProvider,
 			WorkerModel:         config.Defaults.WorkerModel,
 		},
+		PriceTable: config.PriceTable.Clone(),
 		Runtime: DocumentRuntimeSettings{
 			Logging: DocumentRuntimeArtifactSettings(config.Runtime.Logging),
 			Metrics: DocumentRuntimeArtifactSettings(config.Runtime.Metrics),
@@ -324,5 +359,5 @@ func documentFromConfig(config Config) Document {
 }
 
 func emptyConfigDocument() ConfigDocument {
-	return ConfigDocument{config: Config{Runtime: defaultRuntimeSettings()}}
+	return ConfigDocument{config: Config{PriceTable: DefaultPriceTable(), Runtime: defaultRuntimeSettings()}}
 }

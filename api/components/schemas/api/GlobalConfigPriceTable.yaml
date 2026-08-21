@@ -1,0 +1,19 @@
+type: object
+additionalProperties: false
+description: >-
+  Operator-authored USD rates per one million tokens. Omit this property to
+  use an empty table; no provider or model prices are supplied by default.
+required:
+  - currency
+  - models
+properties:
+  currency:
+    type: string
+    enum:
+      - USD
+    description: Currency used by every configured rate. This contract supports USD only.
+  models:
+    type: array
+    description: Deterministic provider/model price entries.
+    items:
+      $ref: './GlobalConfigPriceTableModel.yaml'

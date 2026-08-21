@@ -80,6 +80,7 @@ func sentinelForDocumentFailureKind(kind DocumentFailureKind) error {
 type Document struct {
 	BackendScopeID string
 	Defaults       DocumentDefaults
+	PriceTable     PriceTable
 	Runtime        DocumentRuntimeSettings
 	WorkerPresets  []DocumentWorkerPreset
 	Models         map[string]ModelConfig
@@ -90,6 +91,7 @@ type Document struct {
 func (document Document) Clone() Document {
 	cloned := document
 	cloned.Defaults = document.Defaults.Clone()
+	cloned.PriceTable = document.PriceTable.Clone()
 	cloned.Runtime = document.Runtime.Clone()
 	if document.WorkerPresets != nil {
 		cloned.WorkerPresets = cloneDocumentWorkerPresets(document.WorkerPresets)
@@ -178,7 +180,10 @@ func (settings DocumentRuntimeArtifactSettings) Clone() DocumentRuntimeArtifactS
 
 // EmptyDocument is a valid empty operator document with production-default
 // runtime artifact settings. It is a detached value, not a construction hook.
-var EmptyDocument = Document{Runtime: defaultDocumentRuntimeSettings()}
+var EmptyDocument = Document{
+	PriceTable: DefaultPriceTable(),
+	Runtime:    defaultDocumentRuntimeSettings(),
+}
 
 func defaultDocumentRuntimeSettings() DocumentRuntimeSettings {
 	defaults := defaultRuntimeArtifactSettings()

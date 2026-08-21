@@ -349,6 +349,14 @@ func (fake *servicePeerFake) UpdateACPAgentProfile(
 	return operatorsettings.ACPAgentProfile{}, errors.New("fake ACP Agent profile service is not configured")
 }
 
+func (fake *servicePeerFake) UpdatePriceTable(
+	context.Context,
+	string,
+	operatorsettings.PriceTable,
+) (operatorsettings.PriceTable, error) {
+	return operatorsettings.PriceTable{}, errors.New("fake price table service is not configured")
+}
+
 // TestRootContractInvariants_AllSlicesThroughSingularService seals the
 // Operator Settings root-contract packet: document operations and effective
 // resolution are reachable through one named operatorsettings.Service, a

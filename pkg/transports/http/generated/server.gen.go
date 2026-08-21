@@ -694,6 +694,11 @@ const (
 	TTS   GlobalConfigModelOperation = "TTS"
 )
 
+// Defines values for GlobalConfigPriceTableCurrency.
+const (
+	USD GlobalConfigPriceTableCurrency = "USD"
+)
+
 // Defines values for GuardType.
 const (
 	GuardTypeAllChildrenComplete GuardType = "ALL_CHILDREN_COMPLETE"
@@ -4996,6 +5001,9 @@ type GlobalConfig struct {
 	// Models Optional operator model overlays keyed by model name. A model entry may override one or more built-in fields or fully describe a new model name.
 	Models *GlobalConfigModels `json:"models,omitempty"`
 
+	// PriceTable Operator-authored USD rates per one million tokens. Omit this property to use an empty table; no provider or model prices are supplied by default.
+	PriceTable *GlobalConfigPriceTable `json:"priceTable,omitempty"`
+
 	// Runtime Runtime observability settings loaded from operator configuration before command-line overrides.
 	Runtime *GlobalConfigRuntime `json:"runtime,omitempty"`
 
@@ -5071,6 +5079,39 @@ type GlobalConfigModelOperation string
 
 // GlobalConfigModels Optional operator model overlays keyed by model name. A model entry may override one or more built-in fields or fully describe a new model name.
 type GlobalConfigModels map[string]GlobalConfigModel
+
+// GlobalConfigPriceTable Operator-authored USD rates per one million tokens. Omit this property to use an empty table; no provider or model prices are supplied by default.
+type GlobalConfigPriceTable struct {
+	// Currency Currency used by every configured rate. This contract supports USD only.
+	Currency GlobalConfigPriceTableCurrency `json:"currency"`
+
+	// Models Deterministic provider/model price entries.
+	Models []GlobalConfigPriceTableModel `json:"models"`
+}
+
+// GlobalConfigPriceTableCurrency Currency used by every configured rate. This contract supports USD only.
+type GlobalConfigPriceTableCurrency string
+
+// GlobalConfigPriceTableModel Exact operator-authored rates for one provider and model identity.
+type GlobalConfigPriceTableModel struct {
+	// CachedInputPerMillionTokens Optional non-negative USD rate per one million cached input tokens.
+	CachedInputPerMillionTokens *string `json:"cachedInputPerMillionTokens,omitempty"`
+
+	// InputPerMillionTokens Non-negative USD rate per one million uncached input tokens.
+	InputPerMillionTokens string `json:"inputPerMillionTokens"`
+
+	// Model Exact model identifier. It is trimmed but never guessed or aliased.
+	Model string `json:"model"`
+
+	// OutputPerMillionTokens Non-negative USD rate per one million non-reasoning output tokens.
+	OutputPerMillionTokens string `json:"outputPerMillionTokens"`
+
+	// Provider Canonical provider identity or a supported built-in alias; the Operator Settings decoder trims and canonicalizes this value.
+	Provider string `json:"provider"`
+
+	// ReasoningOutputPerMillionTokens Optional non-negative USD rate per one million reasoning output tokens.
+	ReasoningOutputPerMillionTokens *string `json:"reasoningOutputPerMillionTokens,omitempty"`
+}
 
 // GlobalConfigRuntime Runtime observability settings loaded from operator configuration before command-line overrides.
 type GlobalConfigRuntime struct {
