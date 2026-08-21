@@ -877,7 +877,9 @@ func provideRecordingFilesystemEffects(
 	}
 	renamePath := edges.RecordingRenamePath
 	if renamePath == nil {
-		renamePath = platformfilesystem.Local{}.RenameReplacing
+		renamePath = (platformfilesystem.Local{
+			AllowRenameReplacement: runtime.GOOS == "windows",
+		}).RenameReplacing
 	}
 	readFile := edges.RecordingReadFile
 	if readFile == nil {

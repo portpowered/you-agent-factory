@@ -8,7 +8,6 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
-	"runtime"
 	"time"
 )
 
@@ -17,7 +16,12 @@ const (
 	localReplaceDelay    = 10 * time.Millisecond
 )
 
-type Local struct{}
+// Local exposes the host filesystem effects selected by Wire. The replacement
+// policy is supplied by the composition boundary because this platform leaf
+// must not inspect process-wide operating-system state itself.
+type Local struct {
+	AllowRenameReplacement bool
+}
 
 // WorkingDirectory is the exact process-directory effect supplied by this
 // Platform adapter to services that resolve invocation-local paths.
@@ -105,7 +109,7 @@ func (local Local) RenameReplacing(oldPath, newPath string) error {
 	return renameReplacing(
 		oldPath,
 		newPath,
-		runtime.GOOS == "windows",
+		local.AllowRenameReplacement,
 		local.Rename,
 		local.Remove,
 		local.Stat,

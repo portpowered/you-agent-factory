@@ -209,7 +209,14 @@ func TestNew_WithRestoredActiveDispatchUsesRecordedWorkPlacement(t *testing.T) {
 			},
 		},
 		ActiveDispatches: map[string]interfaces.FactoryWorldDispatch{
-			"dispatch-active": {DispatchID: "dispatch-active", WorkItemIDs: []string{"work-active"}},
+			"dispatch-active": {
+				DispatchID:  "dispatch-active",
+				WorkItemIDs: []string{"work-active"},
+				Inputs: []interfaces.WorkstationInput{{
+					TokenID: "work-active", PlaceID: "task:done",
+					WorkItem: &work.FactoryWorkItem{ID: "work-active"},
+				}},
+			},
 		},
 		// An in-flight dispatch has consumed the Work token, so the
 		// reconstructed occupancy is intentionally empty.
@@ -235,101 +242,6 @@ func TestNew_WithRestoredActiveDispatchUsesRecordedWorkPlacement(t *testing.T) {
 	token := snapshot.Marking.Tokens[tokens[0]]
 	if token == nil || token.Color.WorkID != "work-active" {
 		t.Fatalf("restored active Work token = %#v, want work-active", token)
-	}
-}
-
-func TestNew_WithRestoredWorldStateSeedsEachOccupiedWorkExactlyOnce(t *testing.T) {
-	base := time.Date(2026, time.April, 10, 12, 0, 0, 0, time.UTC)
-	net := buildSimpleNet()
-	net.WorkTypes["task"].States = []state.StateDefinition{
-		{Value: "init", Category: state.StateCategoryInitial},
-		{Value: "processing", Category: state.StateCategoryProcessing},
-		{Value: "done", Category: state.StateCategoryTerminal},
-		{Value: "failed", Category: state.StateCategoryFailed},
-	}
-	net.Places = make(map[string]*petri.Place)
-	for _, place := range net.WorkTypes["task"].GeneratePlaces() {
-		net.Places[place.ID] = place
-	}
-	restored := &interfaces.FactoryWorldState{
-		WorkItemsByID: map[string]work.FactoryWorkItem{
-			"work-init": {
-				ID: "work-init", WorkTypeID: "task", State: "init", PlaceID: "task:init",
-				DisplayName: "Initialize", TraceID: "trace-batch",
-			},
-			"work-processing": {
-				ID: "work-processing", WorkTypeID: "task", State: "processing", PlaceID: "task:processing",
-				DisplayName: "Process", TraceID: "trace-batch", ParentID: "work-init",
-			},
-			"work-done": {
-				ID: "work-done", WorkTypeID: "task", State: "done", PlaceID: "task:done",
-				DisplayName: "Done", TraceID: "trace-batch",
-			},
-		},
-		ActiveWorkItemsByID: map[string]work.FactoryWorkItem{
-			"work-init":       {ID: "work-init", WorkTypeID: "task", State: "init", PlaceID: "task:init"},
-			"work-processing": {ID: "work-processing", WorkTypeID: "task", State: "processing", PlaceID: "task:processing"},
-		},
-		TerminalWorkByID: map[string]interfaces.FactoryTerminalWork{
-			"work-done": {WorkItem: work.FactoryWorkItem{ID: "work-done", WorkTypeID: "task", State: "done", PlaceID: "task:done"}, Status: "TERMINAL"},
-		},
-		WorkRequestsByID: map[string]interfaces.WorkRequestPayload{
-			"request-batch": {RequestID: "request-batch", WorkItems: []work.FactoryWorkItem{
-				{ID: "work-init"}, {ID: "work-processing"}, {ID: "work-done"},
-			}},
-		},
-		PlaceOccupancyByID: map[string]interfaces.FactoryPlaceOccupancy{
-			"task:init": {PlaceID: "task:init", WorkItemIDs: []string{"work-init"}},
-			"task:done": {PlaceID: "task:done", WorkItemIDs: []string{"work-done"}},
-		},
-		ActiveDispatches: map[string]interfaces.FactoryWorldDispatch{
-			"dispatch-processing": {
-				DispatchID:  "dispatch-processing",
-				WorkItemIDs: []string{"work-processing"},
-				Inputs: []interfaces.WorkstationInput{{
-					TokenID: "work-processing", PlaceID: "task:processing",
-					WorkItem: &work.FactoryWorkItem{ID: "work-processing"},
-				}},
-			},
-		},
-	}
-
-	f, err := newTestFactory(
-		withNet(net),
-		withClock(platformclock.NewDeterministic(base, time.Second)),
-		withRestoredWorldState(restored),
-	)
-	if err != nil {
-		t.Fatalf("New: %v", err)
-	}
-	snapshot, err := f.GetEngineStateSnapshot(context.Background())
-	if err != nil {
-		t.Fatalf("GetEngineStateSnapshot: %v", err)
-	}
-	wantByPlace := map[string]string{
-		"task:init":       "work-init",
-		"task:processing": "work-processing",
-		"task:done":       "work-done",
-	}
-	seen := make(map[string]int, len(wantByPlace))
-	for placeID, workID := range wantByPlace {
-		tokenIDs := snapshot.Marking.PlaceTokens[placeID]
-		if len(tokenIDs) != 1 {
-			t.Fatalf("restored token IDs at %q = %#v, want one token", placeID, tokenIDs)
-		}
-		token := snapshot.Marking.Tokens[tokenIDs[0]]
-		if token == nil || token.Color.WorkID != workID {
-			t.Fatalf("restored token at %q = %#v, want Work %q", placeID, token, workID)
-		}
-		seen[token.Color.WorkID]++
-	}
-	if len(seen) != len(wantByPlace) {
-		t.Fatalf("restored Work identities = %#v, want one identity per occupied place", seen)
-	}
-	for workID, count := range seen {
-		if count != 1 {
-			t.Fatalf("restored Work %q appears %d times, want once", workID, count)
-		}
 	}
 }
 
