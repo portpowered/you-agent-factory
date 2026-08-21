@@ -6,6 +6,7 @@ import {
 	selectBackendLint,
 	upsertBackendLintComment,
 } from "./backend-lint-workflow.mjs";
+import { resolveRunnerParallelism } from "./runner-parallelism.mjs";
 import {
 	BACKEND_LINT_COMMENT_MARKER,
 	renderBackendLintComment,
@@ -34,6 +35,22 @@ test("selects pull requests and pushes to main at the tested head", () => {
 		selectBackendLint({ eventName: "push", ref: "refs/heads/feature", sha: "feature-head" }).selected,
 		false,
 	);
+});
+
+test("uses all valid logical CPUs for the exclusive CI runner", () => {
+	assert.deepEqual(resolveRunnerParallelism("4"), { logicalCPUs: 4, jobs: 4 });
+	assert.deepEqual(resolveRunnerParallelism(" 8\n"), { logicalCPUs: 8, jobs: 8 });
+});
+
+test("uses the safe minimum when logical CPU discovery is invalid or unavailable", () => {
+	for (const rawLogicalCPUs of ["", "not-a-number", "0", "4x"]) {
+		assert.deepEqual(
+			resolveRunnerParallelism(rawLogicalCPUs),
+			{ logicalCPUs: 0, jobs: 2 },
+			`raw logical CPU value ${JSON.stringify(rawLogicalCPUs)}`,
+		);
+	}
+	assert.deepEqual(resolveRunnerParallelism("1"), { logicalCPUs: 1, jobs: 2 });
 });
 
 test("publishes a complete report by creating or updating the marked bot comment", () => {
