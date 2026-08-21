@@ -69,10 +69,13 @@ export function workStatePhaseSemanticIconKind(
 export function workStatePhaseSemanticIconClassName(
   workStateType: FactoryGraphWorkStateTypeValue | undefined,
 ): string {
+  const lifecycle = isFactoryGraphKnownWorkStateType(workStateType)
+    ? workStateType
+    : undefined;
   return factoryGraphNodeVisualIconClassName(
     resolveFactoryGraphVisualState({
       family: "work-state",
-      lifecycle: workStateType,
+      lifecycle,
     }),
     "text-on-surface-variant",
   );
@@ -84,7 +87,7 @@ export function isFactoryGraphKnownWorkStateType(
   return (
     typeof workStateType === "string" &&
     FACTORY_GRAPH_WORK_STATE_TYPES.includes(
-      workStateType.trim() as FactoryGraphWorkStateType,
+      workStateType as FactoryGraphWorkStateType,
     )
   );
 }

@@ -24,8 +24,14 @@ export function factoryGraphWorkerIconKind(
   workerType: string | null | undefined,
   runnerId: string | null | undefined,
 ): FactoryGraphWorkerIconKind {
-  if (normalize(workerType) === "SCRIPT_WORKER") {
+  if (workerType === "SCRIPT_WORKER") {
     return "script";
+  }
+
+  // Canonical worker kinds are exact values. A future kind must not inherit a
+  // runner-specific glyph just because its spelling resembles a known kind.
+  if (factoryGraphUnknownWorkerType(workerType) !== undefined) {
+    return "worker";
   }
 
   switch (normalize(runnerId)) {
@@ -45,9 +51,7 @@ export function isFactoryGraphKnownWorkerType(
 ): workerType is FactoryGraphWorkerType {
   return (
     typeof workerType === "string" &&
-    FACTORY_GRAPH_WORKER_TYPES.includes(
-      normalize(workerType) as FactoryGraphWorkerType,
-    )
+    FACTORY_GRAPH_WORKER_TYPES.includes(workerType as FactoryGraphWorkerType)
   );
 }
 

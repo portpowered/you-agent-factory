@@ -4,7 +4,6 @@ import type { FactorySessionDetailMessages } from "../messages/factory-session-d
 
 const KNOWN_TIMELINE_EVENT_TYPES = new Set<string>([
   ...Object.values(FACTORY_EVENT_TYPES),
-  "JAVASCRIPT_PHASE_CHANGE",
 ]);
 
 export type FactorySessionEventReplayTone =

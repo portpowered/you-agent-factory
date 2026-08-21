@@ -26,6 +26,7 @@ import { factoryGraphWorkProgressMode } from "./work-progress-presentation.js";
 import {
   type FactoryGraphWorkStateTypeValue,
   factoryGraphUnknownWorkStateType,
+  isFactoryGraphKnownWorkStateType,
   workStatePhaseSurfaceClassName,
 } from "./work-state-presentation.js";
 
@@ -96,6 +97,10 @@ function FactoryGraphPlaceNodeView({
     : data.place.kind === "resource"
       ? "resource"
       : "constraint";
+  const canonicalWorkStateType =
+    stateNode && isFactoryGraphKnownWorkStateType(data.place.state_category)
+      ? data.place.state_category
+      : undefined;
   const className = classNames(
     placeNodeClassName(data.place),
     factoryGraphNodeHoverClassName({
@@ -115,7 +120,7 @@ function FactoryGraphPlaceNodeView({
         ? "resource"
         : "constraint",
     focused: data.focused,
-    lifecycle: stateNode ? data.place.state_category : undefined,
+    lifecycle: canonicalWorkStateType,
     muted: data.muted,
     selected,
     validation: data.validationError,
@@ -150,7 +155,7 @@ function FactoryGraphPlaceNodeView({
         activeFlow: data.activeFlow,
         activeWork: holdsWork,
         focused: data.focused,
-        lifecycle: stateNode ? data.place.state_category : undefined,
+        lifecycle: canonicalWorkStateType,
         muted: data.muted,
         selected,
         validation: data.validationError,
@@ -159,9 +164,12 @@ function FactoryGraphPlaceNodeView({
       {selectable ? (
         <GraphNodeButton
           aria-invalid={data.validationError ? true : undefined}
-          aria-label={
-            data.validationMessage ?? selectStateLabel(placeLabel, data.locale)
-          }
+          aria-label={selectStateLabelWithValidation(
+            placeLabel,
+            data.locale,
+            data.place.state_category,
+            data.validationMessage,
+          )}
           aria-pressed={selected}
           className={CONTENT_CLASS}
           data-selected-state={selected ? "true" : undefined}
@@ -432,6 +440,21 @@ function activeItemCountLabel(count: number, locale?: string): string {
 }
 function selectStateLabel(label: string, locale?: string): string {
   return locale === "zh-CN" ? `选择 ${label} 状态` : `Select ${label} state`;
+}
+function selectStateLabelWithValidation(
+  label: string,
+  locale: string | undefined,
+  stateCategory: FactoryGraphWorkStateTypeValue | undefined,
+  validationMessage: string | undefined,
+): string {
+  const unknownWorkStateType = factoryGraphUnknownWorkStateType(stateCategory);
+  const selectionLabel = selectStateLabel(label, locale);
+  const compatibilityLabel = unknownWorkStateType
+    ? `${selectionLabel} (${unknownWorkStateType})`
+    : selectionLabel;
+  return validationMessage
+    ? `${validationMessage} · ${compatibilityLabel}`
+    : compatibilityLabel;
 }
 function tokenCountLabel(
   place: FactoryGraphSemanticPlaceRef,

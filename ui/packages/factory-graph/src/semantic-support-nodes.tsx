@@ -197,7 +197,13 @@ export function FactoryGraphWorkerNodeView({
     >
       {selectable ? (
         <GraphNodeButton
-          aria-label={selectLabel("worker", workerName, data.locale)}
+          aria-label={selectLabel(
+            "worker",
+            unknownWorkerType
+              ? `${workerName} (${unknownWorkerType})`
+              : workerName,
+            data.locale,
+          )}
           aria-pressed={selected}
           className="grid h-full min-h-0 min-w-0 place-content-center gap-0.5 overflow-hidden"
           data-selected-worker={selected ? "true" : undefined}
