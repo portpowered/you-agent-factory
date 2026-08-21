@@ -49,10 +49,11 @@ for tag_set in default functionallong; do
   for index in "${!packages[@]}"; do
     package="${packages[$index]}"
     event_path="$temporary_root/${tag_set}-${index}.json"
+    diagnostic_path="$temporary_root/${tag_set}-${index}.stderr"
     command_line=(go test "${tag_args[@]}" -list='^Test' -json -count=1 -short=false "-timeout=$test_timeout" "$package")
 
     set +e
-    "${command_line[@]}" > "$event_path" 2>&1
+    "${command_line[@]}" > "$event_path" 2> "$diagnostic_path"
     command_status=$?
     set -e
 
@@ -64,6 +65,7 @@ for tag_set in default functionallong; do
     if [[ "$command_status" -ne 0 || -z "$terminal_action" ]]; then
       measurement_failed=1
       record "package=$package terminal=${terminal_action:-missing} result=measurement-failed exit=$command_status"
+      tail -n 20 "$diagnostic_path" | sed 's/^/diagnostic=/' | tee -a "$output_path"
       tail -n 20 "$event_path" | sed 's/^/diagnostic=/' | tee -a "$output_path"
       continue
     fi
