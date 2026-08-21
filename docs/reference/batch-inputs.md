@@ -646,7 +646,8 @@ The smallest useful parent-child batch needs these fields:
 | `works[].state` on the parent | Usually | Place the parent directly into the waiting state consumed by the parent-aware fan-in workstation. |
 | `relations[].type` | Yes | Use `PARENT_CHILD` for submitted parent-child membership. |
 | `relations[].sourceWorkName` | Yes | Name of the child work item. |
-| `relations[].targetWorkName` | Yes | Name of the parent work item. |
+| `relations[].targetWorkName` | One of `targetWorkName` or `targetWorkId` | Name of the parent Work. The reference must resolve to a Work in this submitted batch. |
+| `relations[].targetWorkId` | One of `targetWorkName` or `targetWorkId` | Stable ID of the parent Work. The ID must identify a Work in this submitted batch. |
 
 Children usually omit `state` so they start in their work type's initial
 state. Set a child `state` only when you intentionally need non-initial
