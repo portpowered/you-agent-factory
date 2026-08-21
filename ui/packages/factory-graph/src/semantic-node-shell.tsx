@@ -5,6 +5,7 @@ import {
 import type { ReactNode } from "react";
 
 import {
+  type FactoryGraphNodeFamily,
   factoryGraphNodeFamilyForShellType,
   factoryGraphNodeFamilyRole,
 } from "./node-family.js";
@@ -21,8 +22,8 @@ import {
   factoryGraphNodeVisualStateClassName,
 } from "./semantic-node-style.js";
 import {
-  factoryGraphVisualNestedAccentRole,
   type FactoryGraphVisualStateInput,
+  factoryGraphVisualNestedAccentRole,
   resolveFactoryGraphVisualState,
 } from "./visual-state.js";
 
@@ -62,6 +63,24 @@ export interface FactoryGraphNodeShellProps {
   resizeControls?: FactoryGraphNodeResizeControlsProps;
   visualState?: Omit<FactoryGraphVisualStateInput, "family">;
   zAxisIncompleteHints?: FactoryGraphZAxisIncompleteHints | null;
+}
+
+/** Shared secondary surface rendered when a semantic node has been resized. */
+export function FactoryGraphNodeExpandedContent({
+  children,
+  family,
+}: {
+  children: ReactNode;
+  family: FactoryGraphNodeFamily;
+}) {
+  return (
+    <div
+      className="grid min-w-0 gap-0.5 overflow-hidden border-t border-outline-variant pt-1 text-xs leading-tight text-on-surface-subtle"
+      data-factory-graph-expanded-content={family}
+    >
+      {children}
+    </div>
+  );
 }
 
 /** Original semantic Factory node frame, including its typed connection rails. */

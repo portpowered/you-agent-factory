@@ -15,6 +15,10 @@ const Z_AXIS_INCOMPLETE_HINT_ANCHOR_IDS = [
     "workstation-on-continue-source",
     "workstation-on-rejection-source",
 ];
+/** Shared secondary surface rendered when a semantic node has been resized. */
+export function FactoryGraphNodeExpandedContent({ children, family, }) {
+    return (_jsx("div", { className: "grid min-w-0 gap-0.5 overflow-hidden border-t border-outline-variant pt-1 text-xs leading-tight text-on-surface-subtle", "data-factory-graph-expanded-content": family, children: children }));
+}
 /** Original semantic Factory node frame, including its typed connection rails. */
 export function FactoryGraphNodeShell({ children, className = "", handles, interactionOverlay, nodeType, resizeControls, visualState: visualStateInput, zAxisIncompleteHints = null, }) {
     const packageHandles = handles.map((handle) => ({

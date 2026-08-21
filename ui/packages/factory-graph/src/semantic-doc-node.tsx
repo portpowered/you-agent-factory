@@ -4,6 +4,7 @@ import type { FactoryGraphNodeInteractionOverlay } from "./node-interaction-over
 import type { FactoryGraphNodeResizeControlsProps } from "./node-resize-controls.js";
 import { GraphSemanticIcon } from "./semantic-icon.js";
 import {
+  FactoryGraphNodeExpandedContent,
   type FactoryGraphNodeHandle,
   FactoryGraphNodeShell,
 } from "./semantic-node-shell.js";
@@ -46,6 +47,7 @@ export function FactoryGraphDocNodeView({
 }: NodeProps<FactoryGraphDocNode>) {
   const selectable = data.onSelectDoc !== undefined;
   const docLabel = "Document";
+  const isExpanded = data.expanded === true;
   const selected = data.selectedDoc || reactFlowSelected;
   const visualState = resolveFactoryGraphVisualState({
     activeFlow: data.activeFlow,
@@ -97,6 +99,8 @@ export function FactoryGraphDocNodeView({
           <FactoryGraphDocNodeContent
             displayLabel={data.displayLabel}
             docLabel={docLabel}
+            expanded={isExpanded}
+            fileType={data.fileType}
             targetPath={data.targetPath}
             visualState={visualState}
           />
@@ -105,6 +109,8 @@ export function FactoryGraphDocNodeView({
         <FactoryGraphDocNodeContent
           displayLabel={data.displayLabel}
           docLabel={docLabel}
+          expanded={isExpanded}
+          fileType={data.fileType}
           targetPath={data.targetPath}
           visualState={visualState}
         />
@@ -116,11 +122,15 @@ export function FactoryGraphDocNodeView({
 function FactoryGraphDocNodeContent({
   displayLabel,
   docLabel,
+  expanded,
+  fileType,
   targetPath,
   visualState,
 }: {
   displayLabel: string;
   docLabel: string;
+  expanded: boolean;
+  fileType?: string;
   targetPath: string;
   visualState: FactoryGraphVisualState;
 }) {
@@ -153,6 +163,13 @@ function FactoryGraphDocNodeContent({
       >
         {targetPath}
       </span>
+      {expanded ? (
+        <FactoryGraphNodeExpandedContent family="doc">
+          <span data-factory-graph-expanded-field="file-type">
+            {fileType ?? docLabel}
+          </span>
+        </FactoryGraphNodeExpandedContent>
+      ) : null}
     </div>
   );
 }

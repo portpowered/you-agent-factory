@@ -6,7 +6,7 @@ export { FactoryGraphNodeInteractionOverlayView, } from "./node-interaction-over
 export { FactoryGraphNodeResizeControls, } from "./node-resize-controls.js";
 export { FactoryGraphDocNodeView, } from "./semantic-doc-node.js";
 export { GRAPH_SEMANTIC_ICON_KINDS, GraphSemanticIcon, graphSemanticIconLabel, } from "./semantic-icon.js";
-export { FactoryGraphNodeShell, factoryGraphHandleToneFromId, } from "./semantic-node-shell.js";
+export { FactoryGraphNodeExpandedContent, FactoryGraphNodeShell, factoryGraphHandleToneFromId, } from "./semantic-node-shell.js";
 export { factoryGraphNodeHoverClassName, factoryGraphNodeSurfaceClassName, factoryGraphNodeTitleClassName, factoryGraphNodeVisualIconClassName, factoryGraphNodeVisualNestedAccentClassName, factoryGraphNodeVisualStateClassName, factoryGraphNodeVisualStatusSurfaceClassName, factoryGraphNodeWrappedTextClassName, } from "./semantic-node-style.js";
 export { FACTORY_GRAPH_NODE_TYPES, } from "./semantic-nodes.js";
 export { FactoryGraphConstraintNodeView, FactoryGraphStatePositionNodeView, } from "./semantic-place-nodes.js";

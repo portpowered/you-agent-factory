@@ -83,6 +83,7 @@ export {
   graphSemanticIconLabel,
 } from "./semantic-icon.js";
 export {
+  FactoryGraphNodeExpandedContent,
   type FactoryGraphNodeHandle,
   FactoryGraphNodeShell,
   type FactoryGraphNodeShellProps,

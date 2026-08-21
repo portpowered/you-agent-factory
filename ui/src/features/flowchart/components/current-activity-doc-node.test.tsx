@@ -55,4 +55,31 @@ describe("DocNodeView", () => {
     expect(screen.getByText("factory/docs/guide.md")).toBeTruthy();
     expect(screen.queryByRole("button")).toBeNull();
   });
+
+  it("renders the document detail projection after resize", () => {
+    const { container } = render(
+      <DocNodeView
+        data={{
+          displayLabel: "runbook.md",
+          expanded: true,
+          fileType: "DOC",
+          factoryGraphNodeId: "doc:factory/docs/runbook.md",
+          handles: [],
+          kind: "doc",
+          selectedDoc: false,
+          targetPath: "factory/docs/runbook.md",
+        }}
+        id="doc:factory/docs/runbook.md"
+        type="doc"
+      />,
+    );
+
+    expect(
+      container.querySelector('[data-factory-graph-expanded-content="doc"]'),
+    ).toBeTruthy();
+    expect(
+      container.querySelector('[data-factory-graph-expanded-field="file-type"]')
+        ?.textContent,
+    ).toBe("DOC");
+  });
 });

@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 import type { FactoryGraphNodeInteractionOverlay } from "./node-interaction-overlay.js";
 import type { FactoryGraphNodeResizeControlsProps } from "./node-resize-controls.js";
 import {
+  FactoryGraphNodeExpandedContent,
   type FactoryGraphNodeHandle,
   FactoryGraphNodeShell,
   type FactoryGraphPlaceNodeType,
@@ -94,6 +95,7 @@ function FactoryGraphPlaceNodeView({
   const selectable =
     data.place.kind === "work_state" && data.onSelectStateNode !== undefined;
   const stateNode = data.place.kind === "work_state";
+  const isExpanded = data.expanded === true;
   const nodeType: FactoryGraphPlaceNodeType = stateNode
     ? "statePosition"
     : data.place.kind === "resource"
@@ -129,6 +131,8 @@ function FactoryGraphPlaceNodeView({
   });
   const content = stateNode ? (
     <FactoryGraphStatePositionContent
+      activeItemLabels={data.activeItemLabels}
+      expanded={isExpanded}
       locale={data.locale}
       place={data.place}
       tokenCount={data.tokenCount}
@@ -136,6 +140,7 @@ function FactoryGraphPlaceNodeView({
     />
   ) : (
     <FactoryGraphStaticPlaceContent
+      expanded={isExpanded}
       locale={data.locale}
       place={data.place}
       tokenCount={data.tokenCount}
@@ -187,11 +192,15 @@ function FactoryGraphPlaceNodeView({
 }
 
 function FactoryGraphStatePositionContent({
+  activeItemLabels,
+  expanded,
   locale,
   place,
   tokenCount,
   visualState,
 }: {
+  activeItemLabels: string[];
+  expanded: boolean;
   locale?: string;
   place: FactoryGraphSemanticPlaceRef;
   tokenCount: number;
@@ -236,16 +245,27 @@ function FactoryGraphStatePositionContent({
           </span>
         )}
       </span>
+      {expanded ? (
+        <FactoryGraphNodeExpandedContent family="work-state">
+          <span data-factory-graph-expanded-field="active-items">
+            {activeItemLabels.length > 0
+              ? activeItemLabels.join(", ")
+              : activeItemCountLabel(tokenCount, locale)}
+          </span>
+        </FactoryGraphNodeExpandedContent>
+      ) : null}
     </>
   );
 }
 
 function FactoryGraphStaticPlaceContent({
+  expanded,
   locale,
   place,
   tokenCount,
   visualState,
 }: {
+  expanded: boolean;
   locale?: string;
   place: FactoryGraphSemanticPlaceRef;
   tokenCount: number;
@@ -286,6 +306,13 @@ function FactoryGraphStaticPlaceContent({
             count={tokenCount}
           />
         </span>
+        {expanded ? (
+          <FactoryGraphNodeExpandedContent family="constraint">
+            <span data-factory-graph-expanded-field="place-id">
+              {place.place_id}
+            </span>
+          </FactoryGraphNodeExpandedContent>
+        ) : null}
       </div>
     );
   return (
@@ -316,6 +343,13 @@ function FactoryGraphStaticPlaceContent({
           count={tokenCount}
         />
       </span>
+      {expanded ? (
+        <FactoryGraphNodeExpandedContent family="resource">
+          <span data-factory-graph-expanded-field="place-id">
+            {place.place_id}
+          </span>
+        </FactoryGraphNodeExpandedContent>
+      ) : null}
     </div>
   );
 }
