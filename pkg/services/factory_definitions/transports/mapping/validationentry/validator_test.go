@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"testing"
 
-	factorydefinitionfixtures "github.com/portpowered/infinite-you/internal/testutil/factorydefinitionfixtures"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
@@ -55,56 +54,6 @@ func (v *programmableFactoryValidator) ValidateSubmittedDefinition(
 	request factorydefinitions.SubmittedDefinitionValidationRequest,
 ) (factorydefinitions.ValidationResult, error) {
 	return v.validateResult, nil
-}
-
-func (v *programmableFactoryValidator) ValidateBlockingLoad(
-	context.Context,
-	*factorydefinitions.FactoryConfig,
-) factorydefinitions.ValidationResult {
-	return v.blockingResult
-}
-
-func (*programmableFactoryValidator) ValidateTopology(
-	context.Context,
-	*factorydefinitions.FactoryConfig,
-	factorydefinitions.RequiredToolChecker,
-) factorydefinitions.TopologyValidationResult {
-	return factorydefinitions.TopologyValidationResult{}
-}
-
-func (*programmableFactoryValidator) WorkerWorkstationBehaviorCompatibility(
-	context.Context,
-	*factorydefinitions.FactoryConfig,
-) []factorydefinitions.ValidationTarget {
-	return nil
-}
-
-func (*programmableFactoryValidator) WorkTypeHandlingBehavior(
-	context.Context,
-	*factorydefinitions.FactoryConfig,
-	bool,
-) []factorydefinitions.ValidationTarget {
-	return nil
-}
-
-func (*programmableFactoryValidator) PruneLayout(
-	context.Context,
-	*factorydefinitions.FactoryConfig,
-	factorydefinitions.PendingFactoryGraphTopology,
-) factorydefinitions.ValidationResult {
-	return factorydefinitions.ValidationResult{}
-}
-
-func testCanonicalFactoryLoader(
-	payload []byte,
-	loader factorydefinitions.WorkstationLoader,
-) (factorydefinitions.MutableLoadedFactorySource, error) {
-	config, err := factorymapping.NewFactoryConfigMapper().Expand(payload)
-	if err != nil {
-		return nil, err
-	}
-	return factorydefinitionfixtures.NewLoadedSource("", config, nil, nil)
-
 }
 
 // invokeSubmittedDefinitionRole maps the transport payload and invokes only a
