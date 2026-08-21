@@ -7,6 +7,12 @@ import (
 func TestOpenAPIContract_WorkerSessionObservationPublishesOptionalResolvedFacts(t *testing.T) {
 	doc := loadBundledOpenAPIDocument(t)
 	schemas := componentSchemas(t, doc)
+	assertWorkerSessionOptionalResolvedFacts(t, schemas)
+	assertWorkerSessionListContract(t, doc, schemas)
+}
+
+func assertWorkerSessionOptionalResolvedFacts(t *testing.T, schemas map[string]any) {
+	t.Helper()
 	observation := schemaObject(t, schemas, "WorkerSessionObservation")
 	properties := schemaProperties(t, observation, "WorkerSessionObservation")
 
@@ -33,7 +39,10 @@ func TestOpenAPIContract_WorkerSessionObservationPublishesOptionalResolvedFacts(
 			t.Fatalf("WorkerSessionObservation.%s nullable = %#v, want true", field, property["nullable"])
 		}
 	}
+}
 
+func assertWorkerSessionListContract(t *testing.T, doc map[string]any, schemas map[string]any) {
+	t.Helper()
 	listResponse := schemaObject(t, schemas, "ListWorkerSessionsResponse")
 	listProperties := schemaProperties(t, listResponse, "ListWorkerSessionsResponse")
 	sessions := listProperties["sessions"].(map[string]any)

@@ -8,10 +8,10 @@ import (
 	"sort"
 	"strings"
 
-	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
@@ -737,7 +737,7 @@ func (a *Adapter) resolveWorkAttribution(
 		workID := strings.TrimSpace(observation.WorkIDs[0])
 		sessionID := strings.TrimSpace(observation.FactorySessionID)
 		if sessionID == "" {
-			sessionID = factorysessions.DefaultSessionID
+			sessionID = workers.DefaultSessionID
 		}
 		workModel, err := a.work.GetWork(ctx, sessionID, workID)
 		if err != nil {

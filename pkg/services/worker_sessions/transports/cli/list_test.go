@@ -319,6 +319,42 @@ func TestListTopLevelSupportsRepeatedStatesAndPositiveLimit(t *testing.T) {
 	}
 }
 
+func TestListRejectsTopLevelFiltersForWorkScopedRoute(t *testing.T) {
+	cases := []struct {
+		name   string
+		config ListConfig
+	}{
+		{name: "state", config: ListConfig{States: []string{"RUNNING"}}},
+		{name: "limit", config: ListConfig{Limit: 2, LimitSet: true}},
+		{name: "legacy max results", config: ListConfig{MaxResults: 2}},
+		{name: "explicit zero legacy max results", config: ListConfig{MaxResultsSet: true}},
+		{name: "next token", config: ListConfig{NextToken: "cursor-1"}},
+	}
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			var output bytes.Buffer
+			config := testCase.config
+			config.Context = context.Background()
+			config.Server = "http://127.0.0.1:1"
+			config.WorkID = "work-1"
+			config.OutputFormat = "json"
+			config.Output = &output
+			err := NewList(testHTTPProtocol(t))(config)
+			var typed *CLIError
+			if !errors.As(err, &typed) || typed.Code != "WORKER_SESSION_SCOPED_FILTER_UNSUPPORTED" {
+				t.Fatalf("error = %v, want WORKER_SESSION_SCOPED_FILTER_UNSUPPORTED", err)
+			}
+			var payload map[string]string
+			if decodeErr := json.Unmarshal(output.Bytes(), &payload); decodeErr != nil {
+				t.Fatalf("decode error JSON: %v; output=%q", decodeErr, output.String())
+			}
+			if payload["code"] != typed.Code {
+				t.Fatalf("error payload = %#v, want code %q", payload, typed.Code)
+			}
+		})
+	}
+}
+
 func TestListRejectsNonPositiveLimit(t *testing.T) {
 	var output bytes.Buffer
 	err := NewList(testHTTPProtocol(t))(ListConfig{

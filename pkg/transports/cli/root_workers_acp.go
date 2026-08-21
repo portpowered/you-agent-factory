@@ -681,7 +681,7 @@ func executeGeneratedWorkerSessionsListWithValues(
 	jsonOutput := globals.json || strings.EqualFold(strings.TrimSpace(outputFormat), "json")
 	return list(workersessionscli.ListConfig{
 		Context: cmd.Context(), Server: globals.server, SessionID: sessionID,
-		WorkID: workID, Scope: scope, States: states, Limit: limit, LimitSet: cmd.Flags().Changed("limit"), MaxResults: maxResults, NextToken: nextToken,
+		WorkID: workID, Scope: scope, States: states, Limit: limit, LimitSet: cmd.Flags().Changed("limit"), MaxResults: maxResults, MaxResultsSet: cmd.Flags().Changed("max-results"), NextToken: nextToken,
 		OutputFormat: outputFormat, JSON: jsonOutput,
 		Output: cmd.OutOrStdout(), Diagnostics: diagnostics.writer(cmd),
 		Verbose: diagnostics.verboseEnabled(), Debug: diagnostics.debug,

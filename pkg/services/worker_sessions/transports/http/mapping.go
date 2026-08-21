@@ -639,12 +639,25 @@ func WorkerSessionObservationToAPI(observation workersessions.Observation) facto
 		Transcript:               factoryapi.WorkerSessionObservationTranscript(observation.Transcript),
 		Parse:                    workerSessionParseDiagnosticsToAPI(observation.Parse),
 	}
+	mapWorkerSessionIdentity(&result, observation)
+	mapWorkerSessionResolvedFacts(&result, observation)
+	mapWorkerSessionProvider(&result, observation)
+	mapWorkerSessionTiming(&result, observation)
+	mapWorkerSessionUsage(&result, observation)
+	mapWorkerSessionFailure(&result, observation)
+	return result
+}
+
+func mapWorkerSessionIdentity(result *factoryapi.WorkerSessionObservation, observation workersessions.Observation) {
 	if observation.FactorySessionID != "" {
 		result.FactorySessionId = stringPtr(observation.FactorySessionID)
 	}
 	if len(observation.WorkIDs) > 0 && strings.TrimSpace(observation.WorkIDs[0]) != "" {
 		result.WorkId = stringPtr(observation.WorkIDs[0])
 	}
+}
+
+func mapWorkerSessionResolvedFacts(result *factoryapi.WorkerSessionObservation, observation workersessions.Observation) {
 	if observation.Model != nil {
 		result.Model = cloneString(observation.Model)
 	}
@@ -661,6 +674,9 @@ func WorkerSessionObservationToAPI(observation workersessions.Observation) facto
 	if observation.TurnID != "" {
 		result.TurnId = stringPtr(observation.TurnID)
 	}
+}
+
+func mapWorkerSessionProvider(result *factoryapi.WorkerSessionObservation, observation workersessions.Observation) {
 	if observation.ProviderSessionAvailable {
 		result.ProviderSession = &factoryapi.WorkerSessionProviderSessionRef{
 			Provider: string(observation.ProviderSession.Provider),
@@ -668,6 +684,9 @@ func WorkerSessionObservationToAPI(observation workersessions.Observation) facto
 			Id:       observation.ProviderSession.ID,
 		}
 	}
+}
+
+func mapWorkerSessionTiming(result *factoryapi.WorkerSessionObservation, observation workersessions.Observation) {
 	if observation.StartedAt != nil {
 		started := observation.StartedAt.UTC()
 		result.StartedAt = &started
@@ -680,6 +699,9 @@ func WorkerSessionObservationToAPI(observation workersessions.Observation) facto
 		millis := observation.Duration.Milliseconds()
 		result.DurationMillis = &millis
 	}
+}
+
+func mapWorkerSessionUsage(result *factoryapi.WorkerSessionObservation, observation workersessions.Observation) {
 	if observation.TokenUsage != nil {
 		result.TokenUsage = &factoryapi.ProviderSessionTokenUsage{
 			CacheWriteTokens:      cloneInt(observation.TokenUsage.CacheWriteTokens),
@@ -697,6 +719,9 @@ func WorkerSessionObservationToAPI(observation workersessions.Observation) facto
 			PeakContextTokens:  observation.TurnUsage.PeakContextTokens,
 		}
 	}
+}
+
+func mapWorkerSessionFailure(result *factoryapi.WorkerSessionObservation, observation workersessions.Observation) {
 	if observation.Failure != nil {
 		result.Failure = &factoryapi.WorkerSessionFailure{
 			Kind:                            string(observation.Failure.Kind),
@@ -707,7 +732,6 @@ func WorkerSessionObservationToAPI(observation workersessions.Observation) facto
 			ProviderContinuationOutcome:     stringPtrIfNonEmpty(string(observation.Failure.ProviderContinuationOutcome)),
 		}
 	}
-	return result
 }
 
 func safeAgentRunFailureClass(class string) string {

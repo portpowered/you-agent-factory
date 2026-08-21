@@ -23,23 +23,24 @@ import (
 
 // ListConfig holds parameters for the Worker Sessions list command.
 type ListConfig struct {
-	Context      context.Context
-	Server       string
-	SessionID    string
-	WorkID       string
-	Scope        string
-	States       []string
-	Limit        int
-	LimitSet     bool
-	MaxResults   int
-	NextToken    string
-	OutputFormat string
-	JSON         bool
-	Verbose      bool
-	Debug        bool
-	Output       io.Writer
-	Diagnostics  io.Writer
-	HTTP         clihttp.Protocol
+	Context       context.Context
+	Server        string
+	SessionID     string
+	WorkID        string
+	Scope         string
+	States        []string
+	Limit         int
+	LimitSet      bool
+	MaxResults    int
+	MaxResultsSet bool
+	NextToken     string
+	OutputFormat  string
+	JSON          bool
+	Verbose       bool
+	Debug         bool
+	Output        io.Writer
+	Diagnostics   io.Writer
+	HTTP          clihttp.Protocol
 }
 
 // NewList returns the composition-facing list operation bound to one HTTP
@@ -136,6 +137,23 @@ func validateListConfig(config ListConfig) error {
 	if config.HTTP == nil {
 		return fmt.Errorf("CLI HTTP protocol is required")
 	}
+	if err := validateListBounds(config); err != nil {
+		return err
+	}
+	if err := validateListScopeAndStates(config); err != nil {
+		return err
+	}
+	if strings.TrimSpace(config.WorkID) != "" && scopedListHasTopLevelFilters(config) {
+		return newCLIError(
+			"WORKER_SESSION_SCOPED_FILTER_UNSUPPORTED",
+			"--state, --limit, --max-results, and --next-token require fleet-wide listing; omit --work-id or use the Work-scoped list without those filters",
+			nil,
+		)
+	}
+	return nil
+}
+
+func validateListBounds(config ListConfig) error {
 	if config.MaxResults < 0 {
 		return newCLIError("MAX_RESULTS_INVALID", "--max-results must not be negative", nil)
 	}
@@ -145,6 +163,10 @@ func validateListConfig(config ListConfig) error {
 	if !config.LimitSet && config.Limit < 0 {
 		return newCLIError("LIMIT_INVALID", "--limit must be positive", nil)
 	}
+	return nil
+}
+
+func validateListScopeAndStates(config ListConfig) error {
 	if config.Scope != "" && config.Scope != "direct" && config.Scope != "factory" && config.Scope != "all" {
 		return newCLIError("WORKER_SESSION_SCOPE_INVALID", fmt.Sprintf("unsupported --scope value %q; supported values are direct, factory, and all", config.Scope), nil)
 	}
@@ -154,6 +176,10 @@ func validateListConfig(config ListConfig) error {
 		}
 	}
 	return nil
+}
+
+func scopedListHasTopLevelFilters(config ListConfig) bool {
+	return len(config.States) > 0 || config.LimitSet || config.Limit != 0 || config.MaxResultsSet || config.MaxResults != 0 || strings.TrimSpace(config.NextToken) != ""
 }
 
 func validWorkerSessionState(state string) bool {

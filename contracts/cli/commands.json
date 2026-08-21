@@ -9553,7 +9553,7 @@
           },
           "description": {
             "id": "you.worker-sessions.list.description",
-          "canonicalEnglish": "List authoritative Worker Session observations by stable identity. Omit --work-id to inspect the fleet-wide top-level identity surface, or provide --work-id for one Work. The human table shows Work name and ID, Worker Session ID, provider and kind, state, start time, duration, and exit or failure kind; provider-session identity remains distinct from Worker Session identity. Use --output json for stable machine-readable facts."
+          "canonicalEnglish": "List authoritative Worker Session observations by stable identity. Omit --work-id to inspect the fleet-wide top-level identity surface, or provide --work-id for one Work. Repeat --state values to combine lifecycle states with OR semantics. Use --limit as a positive fleet-wide result bound after filtering. The legacy --max-results and --next-token options are also fleet-wide only. Work-scoped listing does not accept those filters and returns a typed error when they are supplied. The human table shows Work name and ID, Worker Session ID, provider and kind, state, start time, duration, and exit or failure kind. Provider-session identity remains distinct from Worker Session identity. Use --output json for stable machine-readable facts."
           }
         },
         "examples": [
@@ -9636,7 +9636,7 @@
         "you.worker-sessions.list.flag.state": {
           "id": "you.worker-sessions.list.flag.state",
           "long": "state",
-          "usage": "repeatable Worker Session lifecycle state filter",
+          "usage": "repeatable fleet-wide Worker Session lifecycle state filter. Work-scoped listing does not support this option",
           "shorthand": "",
           "aliases": [],
           "scope": "local",
@@ -9670,7 +9670,7 @@
         "you.worker-sessions.list.flag.limit": {
           "id": "you.worker-sessions.list.flag.limit",
           "long": "limit",
-          "usage": "positive maximum Worker Session observations after scope and state filters",
+          "usage": "positive fleet-wide maximum Worker Session observations after scope and state filters",
           "shorthand": "",
           "aliases": [],
           "scope": "local",
@@ -9694,7 +9694,7 @@
         "you.worker-sessions.list.flag.max-results": {
           "id": "you.worker-sessions.list.flag.max-results",
           "long": "max-results",
-          "usage": "legacy maximum top-level Worker Session observations per page; prefer --limit",
+          "usage": "legacy fleet-wide maximum Worker Session observations per page. Prefer --limit",
           "shorthand": "",
           "aliases": [],
           "scope": "local",
@@ -9718,7 +9718,7 @@
         "you.worker-sessions.list.flag.next-token": {
           "id": "you.worker-sessions.list.flag.next-token",
           "long": "next-token",
-          "usage": "opaque cursor returned by a previous top-level Worker Session list",
+          "usage": "opaque cursor returned by a previous fleet-wide Worker Session list",
           "shorthand": "",
           "aliases": [],
           "scope": "local",

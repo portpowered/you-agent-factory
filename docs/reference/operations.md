@@ -345,7 +345,11 @@ Repeat `--state` to select multiple lifecycle states (the values are combined
 with OR). `--limit` is a positive result bound applied after scope and state
 filters; `--next-token` resumes from the opaque cursor returned in JSON
 `paginationContext`. The legacy `--max-results` flag remains accepted for
-compatibility when `--limit` is omitted.
+compatibility when `--limit` is omitted. These filters are fleet-wide only.
+When `--work-id` is supplied, the Work-scoped endpoint preserves its established
+unfiltered behavior and returns a typed error if `--state`, `--limit`,
+`--max-results`, or `--next-token` is supplied. Omit `--work-id` to filter the
+fleet-wide view.
 
 The human fleet table includes Work name and ID, the stable Worker Session ID,
 provider and provider-session kind, provider-session ID when available, state,
