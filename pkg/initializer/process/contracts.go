@@ -132,6 +132,13 @@ type RuntimeMetricsQueryCapability interface {
 	RuntimeMetricsQuery() any
 }
 
+// ExecutionRuntimeOpeningCapability is the neutral process handoff for the
+// canonical Factory Sessions durable-execution opening. The initializer keeps
+// the capability opaque; pkg/root reifies its public service-owned contract.
+type ExecutionRuntimeOpeningCapability interface {
+	ExecutionRuntimeOpening() any
+}
+
 // ACPServer is the neutral application-process capability for serving the ACP
 // protocol. The transport package supplies the concrete implementation at the
 // composition root; the initializer only retains the protocol operation.

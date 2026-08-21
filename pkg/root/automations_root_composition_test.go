@@ -108,6 +108,7 @@ func TestRuntimeMetricsQueryFromProcessResolvesTypedCapability(t *testing.T) {
 		nil,
 		nil,
 		rootRuntimeMetricsQueryCapabilityProbe{query: want},
+		nil,
 	)
 	if err != nil {
 		t.Fatalf("NewProcess(runtime metrics query capability) error = %v", err)
@@ -129,6 +130,7 @@ func TestRuntimeMetricsQueryFromProcessResolvesTypedCapability(t *testing.T) {
 		nil,
 		nil,
 		rootRuntimeMetricsQueryCapabilityProbe{query: struct{}{}},
+		nil,
 	)
 	if err != nil {
 		t.Fatalf("NewProcess(wrong runtime metrics query capability) error = %v", err)
