@@ -22,6 +22,9 @@ import (
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
+// TestHTTPGenericInvocationContractsPreserveOrderedInputsAndNamedOutputs proves
+// generic HTTP invocation contracts preserve ordered, repeated named inputs and
+// named outputs for a customer request.
 func TestHTTPGenericInvocationContractsPreserveOrderedInputsAndNamedOutputs(t *testing.T) {
 	process := support.BuildProcess(t, serviceedges.Edges{})
 	help := support.FakeInputs(t.Context(), []string{"you", "session", "show", "--help"})
