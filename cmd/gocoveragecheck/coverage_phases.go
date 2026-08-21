@@ -13,7 +13,7 @@ type preparedCoverageRun struct {
 	testPackages []string
 }
 
-func prepareCoverageRun(cfg config, targetOS string, logicalCPUs int, profilePath string, coverPackages []string, testPackages []string) (preparedCoverageRun, error) {
+func prepareCoverageRun(cfg config, targetOS string, logicalCPUs int, profilePath string, coverPackages []string, testPackages []string, packageUniverse []string) (preparedCoverageRun, error) {
 	repoRoot, err := repoRootDir()
 	if err != nil {
 		return preparedCoverageRun{}, err
@@ -52,7 +52,7 @@ func prepareCoverageRun(cfg config, targetOS string, logicalCPUs int, profilePat
 		fmt.Sprintf("-covermode=%s", cfg.covermode),
 		fmt.Sprintf("-timeout=%s", cfg.timeout),
 	)
-	testPackageArgs := compactUnitTestPackageArgs(cfg, testPackages, targetOS)
+	testPackageArgs := compactUnitTestPackageArgs(cfg, testPackages, targetOS, packageUniverse)
 
 	var plan coverageInvocationPlan
 	if functionalSelection == nil {
@@ -71,7 +71,7 @@ type evaluatedCoverageRun struct {
 	baselinePackages map[string]struct{}
 }
 
-func evaluateCoverageRun(cfg config, profilePath string, repoRoot string, coverPackages []string) (evaluatedCoverageRun, error) {
+func evaluateCoverageRun(cfg config, profilePath string, repoRoot string, coverPackages []string, canonicalBlocks map[string]coverageBlock) (evaluatedCoverageRun, error) {
 	baselinePackages := map[string]struct{}{}
 	if legacyPackageGateEnabled(cfg) {
 		var err error
@@ -81,7 +81,14 @@ func evaluateCoverageRun(cfg config, profilePath string, repoRoot string, coverP
 		}
 	}
 
-	result, totalLine, err := evaluateCoverage("", "", profilePath, repoRoot, coverPackages, cfg.packageCoverageMin(), baselinePackages, legacyPackageGateEnabled(cfg))
+	var result coverageResult
+	var totalLine string
+	var err error
+	if canonicalBlocks == nil {
+		result, totalLine, err = evaluateCoverage("", "", profilePath, repoRoot, coverPackages, cfg.packageCoverageMin(), baselinePackages, legacyPackageGateEnabled(cfg))
+	} else {
+		result, totalLine, err = evaluateCoverageBlocks(canonicalBlocks, coverPackages, cfg.packageCoverageMin(), baselinePackages, legacyPackageGateEnabled(cfg))
+	}
 	if err != nil {
 		return evaluatedCoverageRun{}, err
 	}

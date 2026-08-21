@@ -312,9 +312,11 @@ func runForOSWithCPU(cfg config, targetOS string, logicalCPUs int) (result cover
 func runCoverageProfile(cfg config, targetOS string, logicalCPUs int, profilePath string) (coverageResult, error) {
 	var coverPackages []string
 	var testPackages []string
+	var packageDiscovery coveragePackageDiscovery
+	var canonicalBlocks map[string]coverageBlock
 	if err := cfg.measureCoveragePhase(coveragePhaseList, func() error {
 		var err error
-		coverPackages, testPackages, err = resolveCoverageLane(cfg)
+		packageDiscovery, coverPackages, testPackages, err = resolveCoverageLaneWithDiscovery(cfg)
 		return err
 	}); err != nil {
 		return coverageResult{}, err
@@ -323,7 +325,7 @@ func runCoverageProfile(cfg config, targetOS string, logicalCPUs int, profilePat
 	var prepared preparedCoverageRun
 	if err := cfg.measureCoveragePhase(coveragePhasePlan, func() error {
 		var err error
-		prepared, err = prepareCoverageRun(cfg, targetOS, logicalCPUs, profilePath, coverPackages, testPackages)
+		prepared, err = prepareCoverageRun(cfg, targetOS, logicalCPUs, profilePath, coverPackages, testPackages, packageDiscovery.allPackages)
 		return err
 	}); err != nil {
 		return coverageResult{}, err
@@ -337,7 +339,9 @@ func runCoverageProfile(cfg config, targetOS string, logicalCPUs int, profilePat
 		return coverageResult{}, runErr
 	}
 	if err := cfg.measureCoveragePhase(coveragePhaseCanonicalize, func() error {
-		return canonicalizeCoverageProfile(profilePath, prepared.repoRoot, coverPackages)
+		var err error
+		canonicalBlocks, err = canonicalizeCoverageProfileWithBlocks(profilePath, prepared.repoRoot, coverPackages)
+		return err
 	}); err != nil {
 		return coverageResult{}, err
 	}
@@ -345,7 +349,7 @@ func runCoverageProfile(cfg config, targetOS string, logicalCPUs int, profilePat
 	var evaluated evaluatedCoverageRun
 	if err := cfg.measureCoveragePhase(coveragePhaseEvaluate, func() error {
 		var err error
-		evaluated, err = evaluateCoverageRun(cfg, profilePath, prepared.repoRoot, coverPackages)
+		evaluated, err = evaluateCoverageRun(cfg, profilePath, prepared.repoRoot, coverPackages, canonicalBlocks)
 		return err
 	}); err != nil {
 		return coverageResult{}, err
@@ -390,93 +394,36 @@ func packageCoverageBaselinePackages(cfg config, repoRoot string) (map[string]st
 }
 
 func resolveCoverageLane(cfg config) ([]string, []string, error) {
-	coverPackages, err := resolveCoverPackages(cfg)
-	if err != nil {
-		return nil, nil, err
-	}
-	testPackages, err := resolveTestPackages(cfg)
+	_, coverPackages, testPackages, err := resolveCoverageLaneWithDiscovery(cfg)
 	if err != nil {
 		return nil, nil, err
 	}
 	return coverPackages, testPackages, nil
 }
 
-func resolveCoverPackages(cfg config) ([]string, error) {
-	if strings.TrimSpace(cfg.coverpkg) != "" {
-		return splitList(cfg.coverpkg, ",", false), nil
-	}
-	return listGoPackages(defaultCoveragePatterns, isBackendCoveragePackage, true)
-}
-
-func resolveTestPackages(cfg config) ([]string, error) {
-	if strings.TrimSpace(cfg.packages) != "" {
-		return splitList(cfg.packages, " ", true), nil
-	}
-	switch cfg.suite {
-	case "", "unit":
-		return listGoPackages(unitTestPatterns, isBackendCoveragePackage, false)
-	case "functional":
-		return listGoPackages(functionalTestPatterns, isFunctionalTestPackage, false)
-	default:
-		return nil, fmt.Errorf("resolve go coverage lane: unsupported suite %q", cfg.suite)
-	}
-}
-
 func listGoPackages(patterns []string, include func(string) bool, requireNonTestGoFiles bool) ([]string, error) {
-	args := append([]string{"list", "-f", "{{.ImportPath}}	{{len .GoFiles}}"}, patterns...)
-	rootDir, err := repoRootDir()
+	listings, err := listGoPackageListings(patterns)
 	if err != nil {
 		return nil, err
 	}
-	stdout, stderr, err := runCommand(commandInvocation{
-		name: "go",
-		args: args,
-		env:  os.Environ(),
-		dir:  rootDir,
-	})
-	if err != nil {
-		detail := strings.TrimSpace(stderr)
-		if detail == "" {
-			detail = strings.TrimSpace(stdout)
-		}
-		if detail != "" {
-			return nil, fmt.Errorf("list go packages: %w\n%s", err, detail)
-		}
-		return nil, fmt.Errorf("list go packages: %w", err)
-	}
-
-	seen := make(map[string]struct{})
-	var packages []string
-	for _, line := range strings.Split(stdout, "\n") {
-		importPath, goFiles, hasGoFiles := parseGoListPackageLine(line)
-		if importPath == "" || !include(importPath) {
-			continue
-		}
-		if requireNonTestGoFiles && hasGoFiles && goFiles == 0 {
-			continue
-		}
-		if _, ok := seen[importPath]; ok {
-			continue
-		}
-		seen[importPath] = struct{}{}
-		packages = append(packages, importPath)
-	}
-	slices.Sort(packages)
-	if len(packages) == 0 {
-		return nil, errors.New("resolve go coverage lane: no packages matched")
-	}
-	return packages, nil
+	return filterCoveragePackageListings(listings, include, requireNonTestGoFiles)
 }
 
-func compactUnitTestPackageArgs(cfg config, testPackages []string, targetOS string) []string {
+func compactUnitTestPackageArgs(cfg config, testPackages []string, targetOS string, packageUniverse ...[]string) []string {
 	// The compact patterns are safe only for the default unit package universe:
 	// custom package lists and functional packages retain their existing args.
 	if targetOS != "windows" || (cfg.suite != "" && cfg.suite != "unit") || strings.TrimSpace(cfg.packages) != "" {
 		return nil
 	}
-	allPackages, err := listGoPackages([]string{"./pkg/..."}, func(string) bool { return true }, false)
-	if err != nil {
-		return nil
+	var allPackages []string
+	if len(packageUniverse) > 0 && len(packageUniverse[0]) > 0 {
+		allPackages = append([]string(nil), packageUniverse[0]...)
+	} else {
+		var err error
+		allPackages, err = listGoPackages([]string{"./pkg/..."}, func(string) bool { return true }, false)
+		if err != nil {
+			return nil
+		}
 	}
 	patterns, err := compactGoPackagePatterns(allPackages, testPackages, modulePath+"/pkg")
 	if err != nil {
@@ -571,6 +518,10 @@ func evaluateCoverage(_ string, _ string, profilePath string, repoRoot string, c
 	if err != nil {
 		return coverageResult{}, "", err
 	}
+	return evaluateCoverageBlocks(coverageBlocks, coverPackages, minCoverage, baselinePackages, packageGate...)
+}
+
+func evaluateCoverageBlocks(coverageBlocks map[string]coverageBlock, coverPackages []string, minCoverage float64, baselinePackages map[string]struct{}, packageGate ...bool) (coverageResult, string, error) {
 	packageTotals := coverageTotals(coverageBlocks)
 	actual, totalLine := calculateTotalCoverage(packageTotals, coverPackages)
 	packageGateEnabled := len(packageGate) == 0 || packageGate[0]
@@ -811,34 +762,44 @@ func coverageTotals(coverageBlocks map[string]coverageBlock) map[string]packageC
 }
 
 func canonicalizeCoverageProfile(profilePath string, repoRoot string, coverPackages []string) error {
-	return mergeCoverageProfiles([]string{profilePath}, profilePath, repoRoot, coverPackages)
+	_, err := canonicalizeCoverageProfileWithBlocks(profilePath, repoRoot, coverPackages)
+	return err
 }
 
 func mergeCoverageProfiles(profilePaths []string, outputPath string, repoRoot string, coverPackages []string) error {
+	_, err := mergeCoverageProfilesWithBlocks(profilePaths, outputPath, repoRoot, coverPackages)
+	return err
+}
+
+func canonicalizeCoverageProfileWithBlocks(profilePath string, repoRoot string, coverPackages []string) (map[string]coverageBlock, error) {
+	return mergeCoverageProfilesWithBlocks([]string{profilePath}, profilePath, repoRoot, coverPackages)
+}
+
+func mergeCoverageProfilesWithBlocks(profilePaths []string, outputPath string, repoRoot string, coverPackages []string) (map[string]coverageBlock, error) {
 	coverageBlocks := make(map[string]coverageBlock)
 	header := ""
 	for _, profilePath := range profilePaths {
 		profile, err := os.Open(profilePath)
 		if err != nil {
-			return fmt.Errorf("read go coverage profile: %w", err)
+			return nil, fmt.Errorf("read go coverage profile: %w", err)
 		}
 		profileHeader, profileBlocks, scanErr := scanCoverageProfile(profile, repoRoot)
 		closeErr := profile.Close()
 		if scanErr != nil {
-			return scanErr
+			return nil, scanErr
 		}
 		if closeErr != nil {
-			return fmt.Errorf("close go coverage profile: %w", closeErr)
+			return nil, fmt.Errorf("close go coverage profile: %w", closeErr)
 		}
 		if header == "" {
 			header = profileHeader
 		} else if header != profileHeader {
-			return fmt.Errorf("merge go coverage profiles: mode headers differ: %q and %q", header, profileHeader)
+			return nil, fmt.Errorf("merge go coverage profiles: mode headers differ: %q and %q", header, profileHeader)
 		}
 		for key, block := range profileBlocks {
 			merged := coverageBlocks[key]
 			if merged.statementCount != 0 && merged.statementCount != block.statementCount {
-				return fmt.Errorf("merge go coverage profiles: source block %s has inconsistent statement counts %d and %d", key, merged.statementCount, block.statementCount)
+				return nil, fmt.Errorf("merge go coverage profiles: source block %s has inconsistent statement counts %d and %d", key, merged.statementCount, block.statementCount)
 			}
 			if block.executionCount > merged.executionCount {
 				merged.executionCount = block.executionCount
@@ -865,15 +826,17 @@ func mergeCoverageProfiles(profilePaths []string, outputPath string, repoRoot st
 
 	output, err := os.Create(outputPath)
 	if err != nil {
-		return fmt.Errorf("rewrite canonical go coverage profile: %w", err)
+		return nil, fmt.Errorf("rewrite canonical go coverage profile: %w", err)
 	}
 	writer := bufio.NewWriter(output)
 	_, writeErr := fmt.Fprintln(writer, header)
+	selectedBlocks := make(map[string]coverageBlock, len(keys))
 	for _, key := range keys {
 		if writeErr != nil {
 			break
 		}
 		block := coverageBlocks[key]
+		selectedBlocks[key] = block
 		_, writeErr = fmt.Fprintf(writer, "%s:%s %d %d\n", block.canonicalPath, block.rangeSpec, block.statementCount, block.executionCount)
 	}
 	if writeErr == nil {
@@ -881,12 +844,12 @@ func mergeCoverageProfiles(profilePaths []string, outputPath string, repoRoot st
 	}
 	closeErr := output.Close()
 	if writeErr != nil {
-		return fmt.Errorf("rewrite canonical go coverage profile: %w", writeErr)
+		return nil, fmt.Errorf("rewrite canonical go coverage profile: %w", writeErr)
 	}
 	if closeErr != nil {
-		return fmt.Errorf("close canonical go coverage profile: %w", closeErr)
+		return nil, fmt.Errorf("close canonical go coverage profile: %w", closeErr)
 	}
-	return nil
+	return selectedBlocks, nil
 }
 
 func coverageCanonicalFilePath(filePath string, repoRoot string) (string, error) {
