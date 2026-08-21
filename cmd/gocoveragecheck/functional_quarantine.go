@@ -72,12 +72,12 @@ type goTestListEvent struct {
 	Test    string `json:"Test"`
 }
 
-func resolveFunctionalCoverageSelection(path string, packages []string, timeout time.Duration, short bool, jobs int, repoRoot string) (functionalCoverageSelection, functionalQuarantine, error) {
+func resolveFunctionalCoverageSelection(path string, listPatterns, packages []string, timeout time.Duration, short bool, jobs int, repoRoot string) (functionalCoverageSelection, functionalQuarantine, error) {
 	manifest, err := readFunctionalQuarantineFile(path)
 	if err != nil {
 		return functionalCoverageSelection{}, functionalQuarantine{}, err
 	}
-	inventory, err := discoverFunctionalTestInventory(packages, timeout, short, jobs, repoRoot)
+	inventory, err := discoverFunctionalTestInventoryWithPatterns(listPatterns, packages, repoRoot)
 	if err != nil {
 		return functionalCoverageSelection{}, functionalQuarantine{}, err
 	}
@@ -101,8 +101,13 @@ func prepareFunctionalCoverageRun(cfg config, packages []string, targetOS string
 	}
 	discoveryStarted := time.Now()
 	fmt.Fprintf(stdoutWriter, "Functional discovery: begin requested-packages=%d\n", len(sortedUniqueStrings(packages)))
+	listPatterns := packages
+	if strings.TrimSpace(cfg.packages) == "" {
+		listPatterns = functionalTestPatterns
+	}
 	selection, manifest, err := resolveFunctionalCoverageSelection(
 		quarantinePath,
+		listPatterns,
 		packages,
 		cfg.timeout,
 		cfg.short,

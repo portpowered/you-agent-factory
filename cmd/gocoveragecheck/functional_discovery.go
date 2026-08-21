@@ -29,15 +29,21 @@ type functionalGoListPackage struct {
 // tests.
 func discoverFunctionalTestInventory(packages []string, _ time.Duration, _ bool, _ int, repoRoot string) (functionalTestInventory, error) {
 	requestedPackages := sortedUniqueStrings(packages)
+	return discoverFunctionalTestInventoryWithPatterns(requestedPackages, requestedPackages, repoRoot)
+}
+
+func discoverFunctionalTestInventoryWithPatterns(listPatterns, packages []string, repoRoot string) (functionalTestInventory, error) {
+	requestedPackages := sortedUniqueStrings(packages)
 	if len(requestedPackages) == 0 {
 		return functionalTestInventory{}, errors.New("discover functional tests: no packages were selected")
 	}
 
-	listedPackages, err := listFunctionalTestPackages(requestedPackages, repoRoot)
+	listedPackages, err := listFunctionalTestPackages(listPatterns, repoRoot)
 	if err != nil {
 		return functionalTestInventory{}, err
 	}
-	if err := validateFunctionalPackageSet(requestedPackages, listedPackages); err != nil {
+	listedPackages, err = selectFunctionalPackageSet(requestedPackages, listedPackages)
+	if err != nil {
 		return functionalTestInventory{}, err
 	}
 
@@ -111,24 +117,26 @@ func listFunctionalTestPackages(packages []string, repoRoot string) ([]functiona
 	return listed, nil
 }
 
-func validateFunctionalPackageSet(requested []string, listed []functionalGoListPackage) error {
+func selectFunctionalPackageSet(requested []string, listed []functionalGoListPackage) ([]functionalGoListPackage, error) {
 	requestedSet := make(map[string]struct{}, len(requested))
 	for _, packagePath := range requested {
 		requestedSet[packagePath] = struct{}{}
 	}
-	listedSet := make(map[string]struct{}, len(listed))
+	listedByImportPath := make(map[string]functionalGoListPackage, len(listed))
 	for _, pkg := range listed {
-		if _, expected := requestedSet[pkg.ImportPath]; !expected {
-			return fmt.Errorf("discover functional tests: go list reported unexpected package %q", pkg.ImportPath)
+		if _, requested := requestedSet[pkg.ImportPath]; requested {
+			listedByImportPath[pkg.ImportPath] = pkg
 		}
-		listedSet[pkg.ImportPath] = struct{}{}
 	}
+	selected := make([]functionalGoListPackage, 0, len(requested))
 	for _, packagePath := range requested {
-		if _, found := listedSet[packagePath]; !found {
-			return fmt.Errorf("discover functional tests: go list did not report requested package %q", packagePath)
+		pkg, found := listedByImportPath[packagePath]
+		if !found {
+			return nil, fmt.Errorf("discover functional tests: go list did not report requested package %q", packagePath)
 		}
+		selected = append(selected, pkg)
 	}
-	return nil
+	return selected, nil
 }
 
 func discoverFunctionalPackageTests(pkg functionalGoListPackage) ([]string, error) {

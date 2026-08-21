@@ -64,6 +64,48 @@ func TestBeta(t *testing.T) {}
 	}
 }
 
+func TestDiscoverFunctionalTestInventoryWithPatternsFiltersUnrequestedPackages(t *testing.T) {
+	packagePath := modulePath + "/tests/functional/selected"
+	supportPath := modulePath + "/tests/functional/internal/support"
+	repoRoot := t.TempDir()
+	packageDir := filepath.Join(repoRoot, "selected")
+	supportDir := filepath.Join(repoRoot, "support")
+	if err := os.MkdirAll(packageDir, 0o755); err != nil {
+		t.Fatalf("create selected package directory: %v", err)
+	}
+	if err := os.MkdirAll(supportDir, 0o755); err != nil {
+		t.Fatalf("create support package directory: %v", err)
+	}
+	writeFunctionalDiscoveryFixture(t, packageDir, "selected_test.go", `package selected
+
+import "testing"
+
+func TestSelected(t *testing.T) {}
+`)
+
+	originalRunner := commandRunner
+	t.Cleanup(func() { commandRunner = originalRunner })
+	var gotInvocation commandInvocation
+	commandRunner = func(invocation commandInvocation) (string, string, error) {
+		gotInvocation = invocation
+		return strings.Join([]string{
+			marshalFunctionalGoListPackage(t, functionalGoListPackage{ImportPath: supportPath, Dir: supportDir}),
+			marshalFunctionalGoListPackage(t, functionalGoListPackage{ImportPath: packagePath, Dir: packageDir, TestGoFiles: []string{"selected_test.go"}}),
+		}, "\n"), "", nil
+	}
+
+	inventory, err := discoverFunctionalTestInventoryWithPatterns([]string{"./tests/functional/..."}, []string{packagePath}, repoRoot)
+	if err != nil {
+		t.Fatalf("discoverFunctionalTestInventoryWithPatterns() error = %v", err)
+	}
+	if !slices.Equal(inventory.Packages, []string{packagePath}) || !slices.Equal(inventory.Tests[packagePath], []string{"TestSelected"}) {
+		t.Fatalf("inventory = %+v, want selected package only", inventory)
+	}
+	if gotInvocation.name != "go" || gotInvocation.dir != repoRoot || !slices.Equal(gotInvocation.args, []string{"list", "-json", "./tests/functional/..."}) {
+		t.Fatalf("discovery invocation = %+v, want one current-tree go list pattern", gotInvocation)
+	}
+}
+
 func marshalFunctionalGoListPackage(t *testing.T, pkg functionalGoListPackage) string {
 	t.Helper()
 	data, err := json.Marshal(pkg)
@@ -255,7 +297,7 @@ func TestTwo(t *testing.T) {}
 	var stdout bytes.Buffer
 	stdoutWriter = &stdout
 	_, selected, err := prepareFunctionalCoverageRun(
-		config{functionalQuarantine: quarantinePath, timeout: time.Minute},
+		config{functionalQuarantine: quarantinePath, timeout: time.Minute, packages: packagePath},
 		[]string{packagePath},
 		"linux",
 		4,
