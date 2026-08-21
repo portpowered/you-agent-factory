@@ -97,6 +97,41 @@ func TestPackagedSpawnPlansExactCountRunsChildrenAndMergesThroughCodexCommandRun
 	}
 }
 
+func TestPackagedSpawnRunsAntigravityChildrenWithExactModel(t *testing.T) {
+	for _, executorProvider := range []string{"", "SCRIPT_WRAP"} {
+		t.Run("executorProvider="+executorProvider, func(t *testing.T) {
+			const model = "gemini-3.6-flash-medium"
+			runner := testutil.NewProviderCommandRunner(
+				providerResult([]byte(`{"event":"result","result":{"conversation_id":"agy-spawn-plan","status":"SUCCESS","response":"[\"one task\"]","duration_seconds":1,"num_turns":1,"usage":{"input_tokens":1,"output_tokens":1,"thinking_tokens":0,"cache_read_tokens":0,"total_tokens":2}}}`+"\n")),
+				providerResult([]byte(`{"event":"result","result":{"conversation_id":"agy-spawn-task","status":"SUCCESS","response":"one task result","duration_seconds":1,"num_turns":1,"usage":{"input_tokens":1,"output_tokens":1,"thinking_tokens":0,"cache_read_tokens":0,"total_tokens":2}}}`+"\n")),
+				providerResult([]byte(`{"event":"result","result":{"conversation_id":"agy-spawn-merge","status":"SUCCESS","response":"merged Antigravity spawn answer","duration_seconds":1,"num_turns":1,"usage":{"input_tokens":1,"output_tokens":1,"thinking_tokens":0,"cache_read_tokens":0,"total_tokens":2}}}`+"\n")),
+			)
+			response := invokeJavaScriptFactory(t, javascriptInvocation{
+				factoryName: factorydefinitions.PackagedSpawnFactoryName,
+				requestID:   "packaged-spawn-antigravity-" + strings.ToLower(strings.ReplaceAll(executorProvider, "_", "-")),
+				args: map[string]any{
+					"request":          "research the best places to travel",
+					"count":            1,
+					"executorProvider": executorProvider,
+					"modelProvider":    "ANTIGRAVITY",
+					"model":            model,
+				},
+				runner: runner,
+			})
+			assertSucceededPrimaryContains(t, response, "merged Antigravity spawn answer")
+			requests := runner.Requests()
+			if len(requests) != 3 {
+				t.Fatalf("provider calls = %d, want planner, task, and merger", len(requests))
+			}
+			for index, request := range requests {
+				if request.Command != "agy" || !containsArgPair(request.Args, "--model", model) || containsArg(request.Args, "--effort") {
+					t.Fatalf("provider request[%d] = %#v, want agy with exact model and no separate effort", index, request)
+				}
+			}
+		})
+	}
+}
+
 type javascriptInvocation struct {
 	factoryName string
 	requestID   string
@@ -154,6 +189,15 @@ func invokeJavaScriptFactory(t *testing.T, invocation javascriptInvocation) fact
 func containsArgPair(args []string, name, value string) bool {
 	for index := 0; index+1 < len(args); index++ {
 		if args[index] == name && args[index+1] == value {
+			return true
+		}
+	}
+	return false
+}
+
+func containsArg(args []string, want string) bool {
+	for _, arg := range args {
+		if arg == want {
 			return true
 		}
 	}

@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
@@ -19,6 +20,9 @@ import (
 )
 
 const (
+	agyJavaScriptChildModel  = "gemini-3.6-flash-medium"
+	agyJavaScriptChildOutput = "real Antigravity JavaScript child output"
+
 	childCodexLabel           = "child-codex"
 	childClaudeLabel          = "child-claude"
 	childMockedLabel          = "child-mocked"
@@ -79,6 +83,54 @@ const (
 	mockWorkerAcceptedOutput = "mock worker accepted"
 	livePassthroughChildText = "passthrough child provider output"
 )
+
+func TestJavaScriptAntigravityChildUsesModelEmbeddedEffortThroughRootProcess(t *testing.T) {
+	for _, executorProvider := range []string{"", "SCRIPT_WRAP"} {
+		t.Run("executorProvider="+executorProvider, func(t *testing.T) {
+			dir := support.ScaffoldFactory(t, overridesFactoryConfig())
+			runner := testutil.NewProviderCommandRunner(platformprocess.CommandResult{
+				Stdout: []byte(`{"event":"result","result":{"conversation_id":"js-agy-child","status":"SUCCESS","response":"` + agyJavaScriptChildOutput + `","duration_seconds":1,"num_turns":1,"usage":{"input_tokens":1,"output_tokens":1,"thinking_tokens":0,"cache_read_tokens":0,"total_tokens":2}}}` + "\n"),
+			})
+			server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+				FactoryDir:                dir,
+				WaitForServiceModeRuntime: true,
+				Edges:                     serviceedges.Edges{ProviderCommandRunner: runner},
+			})
+			t.Cleanup(func() { server.Stop(t) })
+
+			workflow := `return (async function () {
+			return await agent.run({
+  prompt: "return a real Antigravity answer",
+  label: "javascript-antigravity-child",
+  executorProvider: "` + executorProvider + `",
+  modelProvider: "ANTIGRAVITY",
+  model: "` + agyJavaScriptChildModel + `",
+  reasoningEffort: "high",
+  skipPermissions: true
+});
+})();`
+			started := startOverridesWorkflow(t, server.URL(), "javascript-antigravity-"+strings.ToLower(strings.ReplaceAll(executorProvider, "_", "-")), workflow)
+			if started.Status != factoryapi.FactorySessionDurableLifecycleStatusSucceeded {
+				session := readOverridesDurableSession(t, server.URL(), started.SessionId)
+				t.Fatalf("session status = %q, want SUCCEEDED; result=%#v failure=%#v", started.Status, started.Result, session.FailureDetail)
+			}
+			if runner.CallCount() != 1 {
+				t.Fatalf("provider command calls = %d, want one", runner.CallCount())
+			}
+			request := runner.LastRequest()
+			if request.Command != "agy" {
+				t.Fatalf("provider command = %q, want agy", request.Command)
+			}
+			if !containsArgPair(request.Args, "--model", agyJavaScriptChildModel) {
+				t.Fatalf("provider argv = %#v, want exact model %q", request.Args, agyJavaScriptChildModel)
+			}
+			if containsArg(request.Args, "--effort") {
+				t.Fatalf("provider argv = %#v, want no separate Antigravity effort", request.Args)
+			}
+			assertSucceededPrimaryContains(t, started, agyJavaScriptChildOutput)
+		})
+	}
+}
 
 // TestJavaScriptChildUsesProviderCommandEdgeThroughRootProcess proves the
 // live provider-invocation route is assembled from the Providers root and
@@ -568,6 +620,43 @@ func startOverridesWorkflow(
 		t.Fatalf("decode overrides workflow response: %v", err)
 	}
 	return started
+}
+
+func containsArg(args []string, want string) bool {
+	for _, arg := range args {
+		if arg == want {
+			return true
+		}
+	}
+	return false
+}
+
+func containsArgPair(args []string, name, value string) bool {
+	for index := 0; index+1 < len(args); index++ {
+		if args[index] == name && args[index+1] == value {
+			return true
+		}
+	}
+	return false
+}
+
+func assertSucceededPrimaryContains(t *testing.T, response factoryapi.FactorySessionSyncExecutionResponse, fragments ...string) {
+	t.Helper()
+	if response.Status != factoryapi.FactorySessionDurableLifecycleStatusSucceeded {
+		t.Fatalf("session status = %q, want SUCCEEDED; result = %#v", response.Status, response.Result)
+	}
+	if response.Result == nil || response.Result.PrimaryResult == nil || len(*response.Result.PrimaryResult) != 1 {
+		t.Fatalf("primary result = %#v, want one JavaScript result", response.Result)
+	}
+	payload, err := json.Marshal((*response.Result.PrimaryResult)[0])
+	if err != nil {
+		t.Fatalf("marshal primary result: %v", err)
+	}
+	for _, fragment := range fragments {
+		if !strings.Contains(string(payload), fragment) {
+			t.Fatalf("primary result = %s, want %q", payload, fragment)
+		}
+	}
 }
 
 func assertPerChildProviderModelDispatches(
