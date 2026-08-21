@@ -212,6 +212,30 @@ func TestConfigMapping_ReviewRepeaterContinuePreservesRejectionFailureAndVisitBo
 	}
 }
 
+func TestConfigMapping_VisitCountGuardMapsLogicalRoundTripPolicy(t *testing.T) {
+	cfg := reviewHoldFactoryConfig()
+	cfg.Workstations[1].Guards[0].MaxVisits = 12
+	cfg.Workstations[1].Guards[0].LogicalRoundTrip = &interfaces.LogicalRoundTripConfig{
+		Workstations: []string{"process", "review"},
+		MaxRawVisits: 24,
+	}
+
+	outputNet, err := (testConfigMapper{}).Map(context.Background(), cfg)
+	if err != nil {
+		t.Fatalf("failed to map logical round-trip config: %v", err)
+	}
+	guard, ok := outputNet.Transitions["review-loop-breaker"].InputArcs[0].Guard.(*factoryruntime.PetriVisitCountGuard)
+	if !ok {
+		t.Fatalf("loop-breaker input guard = %T, want VisitCountGuard", outputNet.Transitions["review-loop-breaker"].InputArcs[0].Guard)
+	}
+	if guard.LogicalRoundTrip == nil {
+		t.Fatal("logical round-trip policy = nil, want compiled policy")
+	}
+	if guard.LogicalRoundTrip.Transitions != [2]string{"process", "review"} || guard.LogicalRoundTrip.MaxRawVisits != 24 {
+		t.Fatalf("compiled logical round-trip policy = %#v, want process/review and raw ceiling 24", guard.LogicalRoundTrip)
+	}
+}
+
 func reviewHoldFactoryConfig() *interfaces.FactoryConfig {
 	return &interfaces.FactoryConfig{
 		WorkTypes: []interfaces.WorkTypeConfig{

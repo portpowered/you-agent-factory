@@ -767,6 +767,15 @@ func compareGuardParams(t *testing.T, transName, placeID string, bg, cg petri.Gu
 			t.Errorf("transition %q arc to %q: VisitCountGuard.MaxVisits builder=%d, config=%d",
 				transName, placeID, bv.MaxVisits, cv.MaxVisits)
 		}
+		if (bv.LogicalRoundTrip == nil) != (cv.LogicalRoundTrip == nil) {
+			t.Errorf("transition %q arc to %q: VisitCountGuard logical round-trip presence builder=%t, config=%t",
+				transName, placeID, bv.LogicalRoundTrip != nil, cv.LogicalRoundTrip != nil)
+		} else if bv.LogicalRoundTrip != nil &&
+			(bv.LogicalRoundTrip.Transitions != cv.LogicalRoundTrip.Transitions ||
+				bv.LogicalRoundTrip.MaxRawVisits != cv.LogicalRoundTrip.MaxRawVisits) {
+			t.Errorf("transition %q arc to %q: VisitCountGuard logical round-trip builder=%#v, config=%#v",
+				transName, placeID, bv.LogicalRoundTrip, cv.LogicalRoundTrip)
+		}
 	case *petri.AllWithParentGuard:
 		cv := cg.(*petri.AllWithParentGuard)
 		if bv.MatchBinding != cv.MatchBinding {

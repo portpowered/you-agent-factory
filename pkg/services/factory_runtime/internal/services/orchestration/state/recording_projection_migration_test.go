@@ -306,6 +306,10 @@ func projectionNetAndRuntimeConfigWithConstraints() (*factoryruntime.Net, projec
 	net.Transitions["build"].InputArcs[0].Guard = &factoryruntime.PetriVisitCountGuard{
 		TransitionID: "build",
 		MaxVisits:    3,
+		LogicalRoundTrip: &factoryruntime.PetriLogicalRoundTripPolicy{
+			Transitions:  [2]string{"build", "review"},
+			MaxRawVisits: 6,
+		},
 	}
 	return net, projectionRuntimeConfig{
 		Workers: map[string]*interfaces.FactoryWorkerConfig{
@@ -329,7 +333,12 @@ func projectionNetAndRuntimeConfigWithConstraints() (*factoryruntime.Net, projec
 				},
 				Resources: []interfaces.ResourceConfig{{Name: "cpu", Capacity: 1}},
 				Guards: []interfaces.GuardConfig{
-					{Type: interfaces.GuardTypeVisitCount, Workstation: "Build", MaxVisits: 3},
+					{
+						Type: interfaces.GuardTypeVisitCount, Workstation: "Build", MaxVisits: 3,
+						LogicalRoundTrip: &interfaces.LogicalRoundTripConfig{
+							Workstations: []string{"Build", "review"}, MaxRawVisits: 6,
+						},
+					},
 				},
 				PromptFile:       "prompt.md",
 				OutputSchema:     "schema.json",
@@ -378,9 +387,11 @@ func projectionRuntimeConstraints() []interfaces.FactoryConstraint {
 			Type:  "configured_guard",
 			Scope: "workstation:build",
 			Values: map[string]string{
-				"type":        string(interfaces.GuardTypeVisitCount),
-				"workstation": "Build",
-				"max_visits":  "3",
+				"type":                            string(interfaces.GuardTypeVisitCount),
+				"workstation":                     "Build",
+				"max_visits":                      "3",
+				"logical_round_trip_workstations": "Build,review",
+				"max_raw_visits":                  "6",
 			},
 		},
 		{
@@ -399,13 +410,15 @@ func projectionRuntimeConstraints() []interfaces.FactoryConstraint {
 			Type:  "visit_count_guard",
 			Scope: "workstation:build",
 			Values: map[string]string{
-				"arc_set":               "input",
-				"binding":               "work",
-				"cardinality":           "ONE",
-				"max_visits":            "3",
-				"mode":                  "CONSUME",
-				"place_id":              "story:init",
-				"watched_transition_id": "build",
+				"arc_set":                         "input",
+				"binding":                         "work",
+				"cardinality":                     "ONE",
+				"max_visits":                      "3",
+				"mode":                            "CONSUME",
+				"place_id":                        "story:init",
+				"watched_transition_id":           "build",
+				"logical_round_trip_workstations": "build,review",
+				"max_raw_visits":                  "6",
 			},
 		},
 		{

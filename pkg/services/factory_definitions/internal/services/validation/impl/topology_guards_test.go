@@ -107,6 +107,86 @@ func TestRuleGuards_VisitCountZeroMaxVisits(t *testing.T) {
 	assertFindingExists(t, findings, "guard-visit-count-max-visits")
 }
 
+func TestRuleGuards_LogicalRoundTripAcceptsDistinctKnownPairAndHigherBackstop(t *testing.T) {
+	cfg := testBaseConfig()
+	cfg.Workstations = []factorydefinitions.FactoryWorkstationConfig{
+		{Name: "process"},
+		{Name: "review"},
+		{
+			Name: "review-loop-breaker",
+			Guards: []factorydefinitions.GuardConfig{{
+				Type:        factorydefinitions.GuardTypeVisitCount,
+				Workstation: "review",
+				MaxVisits:   12,
+				LogicalRoundTrip: &factorydefinitions.LogicalRoundTripConfig{
+					Workstations: []string{"process", "review"},
+					MaxRawVisits: 24,
+				},
+			}},
+		},
+	}
+
+	if findings := ruleGuards(cfg); len(findings) != 0 {
+		t.Fatalf("valid logical round-trip guard produced findings: %#v", findings)
+	}
+}
+
+func TestRuleGuards_LogicalRoundTripRejectsInvalidPairAndBackstop(t *testing.T) {
+	tests := []struct {
+		name string
+		cfg  factorydefinitions.LogicalRoundTripConfig
+		want string
+	}{
+		{
+			name: "duplicate pair member",
+			cfg: factorydefinitions.LogicalRoundTripConfig{
+				Workstations: []string{"process", "process"}, MaxRawVisits: 24,
+			},
+			want: "guard-visit-count-round-trip-pair",
+		},
+		{
+			name: "unknown pair member",
+			cfg: factorydefinitions.LogicalRoundTripConfig{
+				Workstations: []string{"process", "missing"}, MaxRawVisits: 24,
+			},
+			want: "guard-visit-count-round-trip-workstation",
+		},
+		{
+			name: "non-positive raw ceiling",
+			cfg: factorydefinitions.LogicalRoundTripConfig{
+				Workstations: []string{"process", "review"}, MaxRawVisits: 0,
+			},
+			want: "guard-visit-count-round-trip-backstop",
+		},
+		{
+			name: "raw ceiling not higher than logical limit",
+			cfg: factorydefinitions.LogicalRoundTripConfig{
+				Workstations: []string{"process", "review"}, MaxRawVisits: 12,
+			},
+			want: "guard-visit-count-round-trip-backstop",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := testBaseConfig()
+			cfg.Workstations = []factorydefinitions.FactoryWorkstationConfig{
+				{Name: "process"},
+				{Name: "review"},
+				{
+					Name: "review-loop-breaker",
+					Guards: []factorydefinitions.GuardConfig{{
+						Type: factorydefinitions.GuardTypeVisitCount, Workstation: "review", MaxVisits: 12,
+						LogicalRoundTrip: &tt.cfg,
+					}},
+				},
+			}
+			findings := ruleGuards(cfg)
+			assertFindingExists(t, findings, tt.want)
+		})
+	}
+}
+
 func TestValidate_ReviewRepeaterContinueTopologyWithBoundedLoopBreaker(t *testing.T) {
 	cfg := &factorydefinitions.FactoryConfig{
 		WorkTypes: []factorydefinitions.WorkTypeConfig{

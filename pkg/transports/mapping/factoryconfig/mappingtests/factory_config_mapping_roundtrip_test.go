@@ -2,6 +2,7 @@ package mappingtests
 
 import (
 	"encoding/json"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -288,6 +289,43 @@ func TestFactoryConfigMapper_ExpandAndFlattenPreservesMatchesFieldsWorkstationGu
 	}
 	if got := matchConfig["inputKey"]; got != ".Name" {
 		t.Fatalf("expected matchConfig.inputKey=.Name, got %#v", got)
+	}
+}
+
+func TestFactoryConfigMapper_ExpandAndFlattenPreservesLogicalRoundTripGuard(t *testing.T) {
+	mapper := NewFactoryConfigMapper()
+	raw := []byte(`{
+		"name":"logical-round-trip-test",
+		"workTypes":[{"name":"task","states":[{"name":"init","type":"INITIAL"},{"name":"failed","type":"FAILED"}]}],
+		"workstations":[
+			{"name":"process","inputs":[{"workType":"task","state":"init"}]},
+			{"name":"review","inputs":[{"workType":"task","state":"init"}]},
+			{"name":"review-loop-breaker","inputs":[{"workType":"task","state":"init"}],"guards":[{"type":"VISIT_COUNT","workstation":"review","maxVisits":12,"logicalRoundTrip":{"workstations":["process","review"],"maxRawVisits":24}}]}
+		]
+	}`)
+
+	cfg, err := mapper.Expand(raw)
+	if err != nil {
+		t.Fatalf("mapper.Expand: %v", err)
+	}
+	guard := cfg.Workstations[2].Guards[0]
+	if guard.LogicalRoundTrip == nil || !reflect.DeepEqual(guard.LogicalRoundTrip.Workstations, []string{"process", "review"}) || guard.LogicalRoundTrip.MaxRawVisits != 24 {
+		t.Fatalf("expanded logical round-trip guard = %#v, want pair and raw ceiling", guard.LogicalRoundTrip)
+	}
+
+	flattened, err := mapper.Flatten(cfg)
+	if err != nil {
+		t.Fatalf("mapper.Flatten: %v", err)
+	}
+	payload := mustDecodeFactoryPayload(t, flattened)
+	workstations := payload["workstations"].([]any)
+	guardPayload := workstations[2].(map[string]any)["guards"].([]any)[0].(map[string]any)
+	logical, ok := guardPayload["logicalRoundTrip"].(map[string]any)
+	if !ok {
+		t.Fatalf("flattened logicalRoundTrip = %#v, want object", guardPayload["logicalRoundTrip"])
+	}
+	if !reflect.DeepEqual(logical["workstations"], []any{"process", "review"}) || logical["maxRawVisits"] != float64(24) {
+		t.Fatalf("flattened logicalRoundTrip = %#v, want pair and raw ceiling", logical)
 	}
 }
 

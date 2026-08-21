@@ -6,10 +6,10 @@ import (
 	"strings"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/transports/mapping/factorydefinition/retiredboundary"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	factorymapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig"
-	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/transports/mapping/factorydefinition/retiredboundary"
 	"gopkg.in/yaml.v3"
 )
 
@@ -335,11 +335,12 @@ type inputGuardFrontmatter struct {
 }
 
 type guardFrontmatter struct {
-	Type              factorydefinitions.GuardType         `yaml:"type"`
-	Workstation       string                               `yaml:"workstation,omitempty"`
-	MaxVisits         int                                  `yaml:"maxVisits,omitempty"`
-	MaxVisitsArgument string                               `yaml:"maxVisitsArgument,omitempty"`
-	MatchConfig       *factorydefinitions.GuardMatchConfig `yaml:"matchConfig,omitempty"`
+	Type              factorydefinitions.GuardType               `yaml:"type"`
+	Workstation       string                                     `yaml:"workstation,omitempty"`
+	MaxVisits         int                                        `yaml:"maxVisits,omitempty"`
+	MaxVisitsArgument string                                     `yaml:"maxVisitsArgument,omitempty"`
+	LogicalRoundTrip  *factorydefinitions.LogicalRoundTripConfig `yaml:"logicalRoundTrip,omitempty"`
+	MatchConfig       *factorydefinitions.GuardMatchConfig       `yaml:"matchConfig,omitempty"`
 }
 
 func workstationFrontmatterForExpansion(def factorydefinitions.FactoryWorkstationConfig) workstationFrontmatter {
@@ -453,10 +454,21 @@ func guardFrontmatterSlice(configs []factorydefinitions.GuardConfig) []guardFron
 			Workstation:       configs[i].Workstation,
 			MaxVisits:         configs[i].MaxVisits,
 			MaxVisitsArgument: configs[i].MaxVisitsArgument,
+			LogicalRoundTrip:  cloneLogicalRoundTripConfig(configs[i].LogicalRoundTrip),
 			MatchConfig:       factorydefinitions.CloneGuardMatchConfig(configs[i].MatchConfig),
 		}
 	}
 	return out
+}
+
+func cloneLogicalRoundTripConfig(config *factorydefinitions.LogicalRoundTripConfig) *factorydefinitions.LogicalRoundTripConfig {
+	if config == nil {
+		return nil
+	}
+	return &factorydefinitions.LogicalRoundTripConfig{
+		Workstations: append([]string(nil), config.Workstations...),
+		MaxRawVisits: config.MaxRawVisits,
+	}
 }
 
 func authoredFactoryConfigForExpandedLayout(cfg *factorydefinitions.FactoryConfig) (*factorydefinitions.FactoryConfig, error) {

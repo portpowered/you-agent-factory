@@ -175,6 +175,7 @@ func (cb *CircuitBreakerSubsystem) evaluateExhaustion(
 
 	guardBindings := make(map[string]*factorytoken.Token)
 	matchedTokens := make(map[string][]factorytoken.Token) // arc name → matched tokens
+	limitReasons := make(map[string]string)
 
 	// Phase 1: unguarded arcs.
 	for _, idx := range unguarded {
@@ -196,6 +197,11 @@ func (cb *CircuitBreakerSubsystem) evaluateExhaustion(
 			return nil
 		}
 		matchedTokens[arc.Name] = matched
+		for _, token := range matched {
+			if reason := visitCountLimitReason(arc.Guard, token); reason != "" {
+				limitReasons[token.ID] = reason
+			}
+		}
 		if len(matched) > 0 {
 			guardBindings[arc.Name] = &matched[0]
 		}
@@ -215,7 +221,7 @@ func (cb *CircuitBreakerSubsystem) evaluateExhaustion(
 				continue
 			}
 			seen[tok.ID] = true
-			mutations = append(mutations, cb.exhaustionMutation(tr, tok, outputPlace))
+			mutations = append(mutations, cb.exhaustionMutation(tr, tok, outputPlace, limitReasons[tok.ID]))
 		}
 	}
 
@@ -232,9 +238,12 @@ func (cb *CircuitBreakerSubsystem) evaluateGuard(guard petri.Guard, candidates [
 	return guard.Evaluate(candidates, bindings, snapshot)
 }
 
-func (cb *CircuitBreakerSubsystem) exhaustionMutation(tr *petri.Transition, tok *factorytoken.Token, outputPlace string) interfaces.MarkingMutation {
+func (cb *CircuitBreakerSubsystem) exhaustionMutation(tr *petri.Transition, tok *factorytoken.Token, outputPlace, limitReason string) interfaces.MarkingMutation {
 	mutationType := interfaces.MutationMove
 	reason := fmt.Sprintf("exhaustion transition %s", tr.ID)
+	if limitReason != "" {
+		reason = limitReason
+	}
 	if outputPlace == "" && isSystemConsumeTransition(tr) {
 		mutationType = interfaces.MutationConsume
 		reason = fmt.Sprintf("consumed by system transition %s", tr.ID)
@@ -246,6 +255,20 @@ func (cb *CircuitBreakerSubsystem) exhaustionMutation(tr *petri.Transition, tok 
 		ToPlace:   outputPlace,
 		Reason:    reason,
 	}
+}
+
+func visitCountLimitReason(guard petri.Guard, token factorytoken.Token) string {
+	switch typed := guard.(type) {
+	case *petri.VisitCountGuard:
+		return typed.LimitReason(token)
+	case *petri.AllGuard:
+		for _, nested := range typed.Guards {
+			if reason := visitCountLimitReason(nested, token); reason != "" {
+				return reason
+			}
+		}
+	}
+	return ""
 }
 
 func isSystemConsumeTransition(tr *petri.Transition) bool {

@@ -793,13 +793,23 @@ type GuardMatchConfig struct {
 	InputKey string `json:"input_key,omitempty" yaml:"inputKey,omitempty"`
 }
 
+// LogicalRoundTripConfig enables paired workstation visit counting for a
+// VISIT_COUNT guard. MaxVisits on the containing guard is the logical cycle
+// budget; MaxRawVisits is the independent absolute ceiling over both paired
+// workstation visit counts.
+type LogicalRoundTripConfig struct {
+	Workstations []string `json:"workstations" yaml:"workstations"`
+	MaxRawVisits int      `json:"max_raw_visits" yaml:"maxRawVisits"`
+}
+
 // GuardConfig declares a guard on a workstation using customer-facing names.
 type GuardConfig struct {
-	Type              GuardType         `json:"type" yaml:"type"`
-	Workstation       string            `json:"workstation,omitempty" yaml:"workstation,omitempty"`
-	MaxVisits         int               `json:"max_visits,omitempty" yaml:"maxVisits,omitempty"`
-	MaxVisitsArgument string            `json:"max_visits_argument,omitempty" yaml:"maxVisitsArgument,omitempty"`
-	MatchConfig       *GuardMatchConfig `json:"match_config,omitempty" yaml:"matchConfig,omitempty"`
+	Type              GuardType               `json:"type" yaml:"type"`
+	Workstation       string                  `json:"workstation,omitempty" yaml:"workstation,omitempty"`
+	MaxVisits         int                     `json:"max_visits,omitempty" yaml:"maxVisits,omitempty"`
+	MaxVisitsArgument string                  `json:"max_visits_argument,omitempty" yaml:"maxVisitsArgument,omitempty"`
+	LogicalRoundTrip  *LogicalRoundTripConfig `json:"logical_round_trip,omitempty" yaml:"logicalRoundTrip,omitempty"`
+	MatchConfig       *GuardMatchConfig       `json:"match_config,omitempty" yaml:"matchConfig,omitempty"`
 }
 
 type IOConfig struct {

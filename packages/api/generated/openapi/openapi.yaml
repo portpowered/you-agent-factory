@@ -14546,6 +14546,25 @@ components:
       enum:
         - VISIT_COUNT
         - MATCHES_FIELDS
+    LogicalRoundTrip:
+      type: object
+      description: Optional paired workstation policy for charging one logical visit per process/review round trip.
+      additionalProperties: false
+      required:
+        - workstations
+        - maxRawVisits
+      properties:
+        workstations:
+          type: array
+          minItems: 2
+          maxItems: 2
+          description: Exactly two workstation names whose visits form one logical round trip.
+          items:
+            type: string
+        maxRawVisits:
+          type: integer
+          minimum: 1
+          description: Absolute raw-visit ceiling across both paired workstations; it must exceed the containing guard's maxVisits.
     WorkstationGuard:
       type: object
       description: Guard attached to a workstation as a whole.
@@ -14567,6 +14586,10 @@ components:
         maxVisitsArgument:
           type: string
           description: Optional invocation argument whose positive integer value tightens the fixed visit ceiling.
+        logicalRoundTrip:
+          allOf:
+            - $ref: '#/components/schemas/LogicalRoundTrip'
+          description: Optional paired process/review policy. When present, the containing maxVisits is the logical cycle budget and maxRawVisits is the absolute raw-visit backstop.
         matchConfig:
           allOf:
             - $ref: '#/components/schemas/GuardMatchConfig'

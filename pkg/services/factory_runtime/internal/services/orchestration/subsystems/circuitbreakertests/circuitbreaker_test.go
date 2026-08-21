@@ -352,6 +352,48 @@ func TestCircuitBreaker_ExhaustionTransition(t *testing.T) {
 	}
 }
 
+func TestCircuitBreaker_LogicalRoundTripReportsRawBackstopReason(t *testing.T) {
+	n := buildTestNet()
+	n.Transitions["review-exhausted"] = &petri.Transition{
+		ID:   "review-exhausted",
+		Type: petri.TransitionExhaustion,
+		InputArcs: []petri.Arc{{
+			ID:      "exh-in",
+			Name:    "work",
+			PlaceID: "task:init",
+			Guard: &petri.VisitCountGuard{
+				TransitionID: "review",
+				MaxVisits:    12,
+				LogicalRoundTrip: &petri.LogicalRoundTripPolicy{
+					Transitions:  [2]string{"process", "review"},
+					MaxRawVisits: 24,
+				},
+			},
+			Cardinality: petri.ArcCardinality{Mode: petri.CardinalityOne},
+		}},
+		OutputArcs: []petri.Arc{{ID: "exh-out", PlaceID: "task:failed"}},
+	}
+
+	marking := petri.NewMarking("test-wf")
+	tok := makeToken("tok-raw-backstop", "task:init", time.Now())
+	tok.History.TotalVisits["process"] = 24
+	marking.AddToken(tok)
+
+	markingSnap := marking.Snapshot()
+	snap := interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{Marking: markingSnap}
+	cb := subsystems.NewCircuitBreakerWithClock(n, time.Now, nil, nil)
+	result, err := cb.Execute(context.Background(), &snap)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result == nil || len(result.Mutations) != 1 {
+		t.Fatalf("expected one backstop mutation, got %+v", result)
+	}
+	if got := result.Mutations[0].Reason; got != "absolute raw-visit backstop reached: 24 >= 24" {
+		t.Fatalf("backstop mutation reason = %q, want actionable raw-limit reason", got)
+	}
+}
+
 func TestCircuitBreaker_ExhaustionNotTriggered(t *testing.T) {
 	n := buildTestNet()
 

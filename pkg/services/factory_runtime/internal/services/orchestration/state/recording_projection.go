@@ -376,6 +376,12 @@ func guardConstraintValues(arc petri.Arc, arcSet string) map[string]string {
 		if guard.MaxVisits > 0 {
 			values["max_visits"] = strconv.Itoa(guard.MaxVisits)
 		}
+		if guard.LogicalRoundTrip != nil {
+			values["logical_round_trip_workstations"] = strings.Join(guard.LogicalRoundTrip.Transitions[:], ",")
+			if guard.LogicalRoundTrip.MaxRawVisits > 0 {
+				values["max_raw_visits"] = strconv.Itoa(guard.LogicalRoundTrip.MaxRawVisits)
+			}
+		}
 	case *petri.AllWithParentGuard:
 		addStringValue(values, "match_binding", guard.MatchBinding)
 	case *petri.AnyWithParentGuard:
@@ -570,6 +576,12 @@ func guardConfigValues(guard interfaces.GuardConfig) map[string]string {
 	addStringValue(values, "workstation", guard.Workstation)
 	if guard.MaxVisits > 0 {
 		values["max_visits"] = strconv.Itoa(guard.MaxVisits)
+	}
+	if guard.LogicalRoundTrip != nil {
+		values["logical_round_trip_workstations"] = strings.Join(guard.LogicalRoundTrip.Workstations, ",")
+		if guard.LogicalRoundTrip.MaxRawVisits > 0 {
+			values["max_raw_visits"] = strconv.Itoa(guard.LogicalRoundTrip.MaxRawVisits)
+		}
 	}
 	return values
 }

@@ -5588,6 +5588,15 @@ type LoadableProviderSessionRef struct {
 	Provider LoadableProviderSessionProvider `json:"provider"`
 }
 
+// LogicalRoundTrip Optional paired workstation policy for charging one logical visit per process/review round trip.
+type LogicalRoundTrip struct {
+	// MaxRawVisits Absolute raw-visit ceiling across both paired workstations; it must exceed the containing guard's maxVisits.
+	MaxRawVisits int `json:"maxRawVisits"`
+
+	// Workstations Exactly two workstation names whose visits form one logical round trip.
+	Workstations []string `json:"workstations"`
+}
+
 // ManagedRuntime defines model for ManagedRuntime.
 type ManagedRuntime struct {
 	Diagnostics *StringMap `json:"diagnostics,omitempty"`
@@ -8810,6 +8819,9 @@ type WorkstationCron struct {
 
 // WorkstationGuard Guard attached to a workstation as a whole.
 type WorkstationGuard struct {
+	// LogicalRoundTrip Optional paired process/review policy. When present, the containing maxVisits is the logical cycle budget and maxRawVisits is the absolute raw-visit backstop.
+	LogicalRoundTrip *LogicalRoundTrip `json:"logicalRoundTrip,omitempty"`
+
 	// MatchConfig For `MATCHES_FIELDS` guards, the field-selector configuration used to compare candidate inputs.
 	MatchConfig *GuardMatchConfig `json:"matchConfig,omitempty"`
 
