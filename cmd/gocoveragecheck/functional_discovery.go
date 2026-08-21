@@ -8,7 +8,6 @@ import (
 	"go/parser"
 	"go/token"
 	"io"
-	"io/fs"
 	"os"
 	"path/filepath"
 	"slices"
@@ -22,9 +21,10 @@ import (
 const (
 	functionalDiscoveryParallelThreshold = 8
 	functionalDiscoveryMaxJobs           = 4
+	functionalDiscoveryMetadataMaxJobs   = 8
 	functionalGoListErrorFlag            = "-e"
-	functionalGoListIdentityJSONFields   = "-json=Dir,ImportPath"
-	functionalGoListJSONFields           = "-json=Dir,ImportPath,TestGoFiles,XTestGoFiles"
+	functionalGoListIdentityJSONFields   = "-json=Dir,ImportPath,Error"
+	functionalGoListJSONFields           = "-json=Dir,ImportPath,TestGoFiles,XTestGoFiles,Error"
 )
 
 type functionalGoListPackage struct {
@@ -128,99 +128,16 @@ func listFunctionalTestPackageMetadata(patterns []string, repoRoot string) ([]fu
 	if len(patterns) == 0 {
 		return nil, errors.New("resolve go coverage lane: no packages matched")
 	}
-
-	candidatePaths, usedCurrentTree, err := currentTreeFunctionalPackageCandidates(patterns, repoRoot)
-	if err != nil {
-		return nil, err
-	}
-	if usedCurrentTree {
-		return listFunctionalTestPackageMetadataForCandidates(candidatePaths, repoRoot)
-	}
 	return listFunctionalTestPackageMetadataFromPatterns(patterns, repoRoot)
-}
-
-func currentTreeFunctionalPackageCandidates(patterns []string, repoRoot string) ([]string, bool, error) {
-	if !slices.Equal(patterns, functionalTestPatterns) {
-		return nil, false, nil
-	}
-	root := filepath.Join(repoRoot, "tests", "functional")
-	if _, err := os.Stat(root); err != nil {
-		if errors.Is(err, fs.ErrNotExist) {
-			return nil, false, nil
-		}
-		return nil, false, fmt.Errorf("discover functional tests: inspect current functional tree: %w", err)
-	}
-
-	candidates := make(map[string]struct{})
-	err := filepath.WalkDir(root, func(path string, entry fs.DirEntry, walkErr error) error {
-		if walkErr != nil {
-			return fmt.Errorf("discover functional tests: inspect current functional tree entry %q: %w", filepath.ToSlash(path), walkErr)
-		}
-		if entry.IsDir() {
-			if entry.Name() == "testdata" {
-				return fs.SkipDir
-			}
-			return nil
-		}
-		if !strings.HasSuffix(entry.Name(), ".go") {
-			return nil
-		}
-		relativeDir, err := filepath.Rel(repoRoot, filepath.Dir(path))
-		if err != nil {
-			return fmt.Errorf("discover functional tests: resolve current functional package directory %q: %w", filepath.ToSlash(filepath.Dir(path)), err)
-		}
-		candidates[modulePath+"/"+filepath.ToSlash(relativeDir)] = struct{}{}
-		return nil
-	})
-	if err != nil {
-		return nil, false, err
-	}
-
-	paths := make([]string, 0, len(candidates))
-	for path := range candidates {
-		paths = append(paths, path)
-	}
-	if len(paths) == 0 {
-		return nil, false, nil
-	}
-	slices.Sort(paths)
-	return paths, true, nil
-}
-
-func listFunctionalTestPackageMetadataForCandidates(candidatePaths []string, repoRoot string) ([]functionalGoListPackage, error) {
-	listedPackages, err := listFunctionalTestPackageBatchWithFieldsAndFlags(
-		candidatePaths,
-		functionalGoListJSONFields,
-		[]string{"-find"},
-		repoRoot,
-	)
-	if err != nil {
-		return nil, err
-	}
-	listedPackages, err = mergeFunctionalGoListPackages(listedPackages)
-	if err != nil {
-		return nil, err
-	}
-	runnableCandidates := make([]string, 0, len(candidatePaths))
-	for _, candidatePath := range candidatePaths {
-		if isFunctionalTestPackage(candidatePath) {
-			runnableCandidates = append(runnableCandidates, candidatePath)
-		}
-	}
-	if len(runnableCandidates) == 0 {
-		return nil, errors.New("resolve go coverage lane: no packages matched")
-	}
-	return selectFunctionalPackageSet(runnableCandidates, listedPackages)
 }
 
 func listFunctionalTestPackageMetadataFromPatterns(patterns []string, repoRoot string) ([]functionalGoListPackage, error) {
 	// Resolve package identities separately from test-file metadata. A wildcard
 	// metadata query makes one go list process inspect every test file before it
-	// returns. The identity query stays cheap; a single concrete metadata query
-	// retains go list's build-selected TestGoFiles/XTestGoFiles authority while
-	// letting one go list process share its package-loading cache across the
-	// current tree. Splitting this same query into subprocess batches repeats
-	// that loading work and increases discovery latency on the coverage runner.
+	// returns. The identity query stays cheap; the metadata queries retain
+	// go list's build-selected TestGoFiles/XTestGoFiles authority while bounded
+	// subtree queries keep the coverage runner from paying for one serial
+	// metadata walk across the whole current tree.
 	identityPackages, err := listFunctionalTestPackageBatchWithFieldsAndFlags(
 		patterns,
 		functionalGoListIdentityJSONFields,
@@ -241,12 +158,8 @@ func listFunctionalTestPackageMetadataFromPatterns(patterns []string, repoRoot s
 		return nil, errors.New("resolve go coverage lane: no packages matched")
 	}
 
-	listedPackages, err := listFunctionalTestPackageBatchWithFieldsAndFlags(
-		functionalPaths,
-		functionalGoListJSONFields,
-		[]string{"-find"},
-		repoRoot,
-	)
+	metadataBatches := functionalMetadataPatternBatches(functionalPaths, functionalDiscoveryMetadataMaxJobs)
+	listedPackages, err := listFunctionalTestPackageMetadataBatches(metadataBatches, repoRoot)
 	if err != nil {
 		return nil, err
 	}
@@ -255,6 +168,101 @@ func listFunctionalTestPackageMetadataFromPatterns(patterns []string, repoRoot s
 		return nil, err
 	}
 	return selectFunctionalPackageSet(functionalPaths, listedPackages)
+}
+
+func functionalMetadataPatterns(packages []string) []string {
+	const functionalPrefix = modulePath + "/tests/functional/"
+	patterns := make(map[string]struct{})
+	for _, packagePath := range sortedUniqueStrings(packages) {
+		relative, found := strings.CutPrefix(packagePath, functionalPrefix)
+		if !found || relative == "" {
+			patterns[packagePath] = struct{}{}
+			continue
+		}
+		firstSegment := strings.SplitN(relative, "/", 2)[0]
+		patterns[functionalPrefix+firstSegment+"/..."] = struct{}{}
+	}
+	result := make([]string, 0, len(patterns))
+	for pattern := range patterns {
+		result = append(result, pattern)
+	}
+	slices.Sort(result)
+	return result
+}
+
+func functionalMetadataPatternBatches(packages []string, maxJobs int) [][]string {
+	patterns := functionalMetadataPatterns(packages)
+	if len(patterns) == 0 {
+		return nil
+	}
+	if maxJobs < 1 {
+		maxJobs = 1
+	}
+	if maxJobs > len(patterns) {
+		maxJobs = len(patterns)
+	}
+
+	packageCounts := make(map[string]int, len(patterns))
+	for _, packagePath := range sortedUniqueStrings(packages) {
+		for _, pattern := range patterns {
+			prefix := strings.TrimSuffix(pattern, "/...")
+			if packagePath == prefix || strings.HasPrefix(packagePath, prefix+"/") {
+				packageCounts[pattern]++
+				break
+			}
+		}
+	}
+	slices.SortFunc(patterns, func(left, right string) int {
+		if packageCounts[left] != packageCounts[right] {
+			return packageCounts[right] - packageCounts[left]
+		}
+		return strings.Compare(left, right)
+	})
+
+	batches := make([][]string, maxJobs)
+	loads := make([]int, maxJobs)
+	for _, pattern := range patterns {
+		batchIndex := 0
+		for index := 1; index < len(loads); index++ {
+			if loads[index] < loads[batchIndex] {
+				batchIndex = index
+			}
+		}
+		batches[batchIndex] = append(batches[batchIndex], pattern)
+		loads[batchIndex] += packageCounts[pattern]
+	}
+	for _, batch := range batches {
+		slices.Sort(batch)
+	}
+	return batches
+}
+
+func listFunctionalTestPackageMetadataBatches(batches [][]string, repoRoot string) ([]functionalGoListPackage, error) {
+	results := make([]functionalGoListBatchResult, len(batches))
+	var waitGroup sync.WaitGroup
+	for index, batch := range batches {
+		waitGroup.Add(1)
+		go func(index int, batch []string) {
+			defer waitGroup.Done()
+			listed, err := listFunctionalTestPackageBatchWithFieldsAndFlags(
+				batch,
+				functionalGoListJSONFields,
+				[]string{"-find"},
+				repoRoot,
+			)
+			results[index] = functionalGoListBatchResult{packages: listed, err: err, requested: batch}
+		}(index, batch)
+	}
+	waitGroup.Wait()
+
+	listedPackages := make([]functionalGoListPackage, 0)
+	for _, result := range results {
+		if result.err != nil {
+			return nil, fmt.Errorf("discover functional tests: go list metadata batch %q: %w", strings.Join(result.requested, " "), result.err)
+		}
+		listedPackages = append(listedPackages, result.packages...)
+	}
+	return mergeFunctionalGoListPackages(listedPackages)
 }
 
 func resolveFunctionalTestPackagesWithMetadata(cfg config, repoRoot string) ([]string, []functionalGoListPackage, error) {

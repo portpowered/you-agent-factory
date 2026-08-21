@@ -156,31 +156,7 @@ func TestDiscoverFunctionalTestInventoryParallelizesConcretePackageBatches(t *te
 	}
 }
 
-func TestCurrentTreeFunctionalPackageCandidatesSkipTestdataAndNonGoFiles(t *testing.T) {
-	repoRoot := t.TempDir()
-	visibleDir := filepath.Join(repoRoot, "tests", "functional", "visible")
-	testdataDir := filepath.Join(visibleDir, "testdata")
-	if err := os.MkdirAll(testdataDir, 0o755); err != nil {
-		t.Fatalf("create candidate fixture directories: %v", err)
-	}
-	writeFunctionalDiscoveryFixture(t, visibleDir, "visible_test.go", "package visible\n")
-	writeFunctionalDiscoveryFixture(t, visibleDir, "notes.txt", "not a Go source file\n")
-	writeFunctionalDiscoveryFixture(t, testdataDir, "ignored_test.go", "package ignored\n")
-
-	paths, usedCurrentTree, err := currentTreeFunctionalPackageCandidates(functionalTestPatterns, repoRoot)
-	if err != nil {
-		t.Fatalf("currentTreeFunctionalPackageCandidates() error = %v", err)
-	}
-	if !usedCurrentTree {
-		t.Fatal("currentTreeFunctionalPackageCandidates() did not use the current tree")
-	}
-	want := []string{modulePath + "/tests/functional/visible"}
-	if !slices.Equal(paths, want) {
-		t.Fatalf("candidate package paths = %v, want %v", paths, want)
-	}
-}
-
-func TestResolveFunctionalTestPackagesWithMetadataUsesCurrentTreeGoList(t *testing.T) {
+func TestResolveFunctionalTestPackagesWithMetadataUsesGoListIdentityAndGroupedMetadata(t *testing.T) {
 	originalRunner := commandRunner
 	t.Cleanup(func() { commandRunner = originalRunner })
 
@@ -208,19 +184,28 @@ import "testing"
 func TestSecond(t *testing.T) {}
 `)
 
+	var mu sync.Mutex
 	var invocations []commandInvocation
 	commandRunner = func(invocation commandInvocation) (string, string, error) {
+		mu.Lock()
 		invocations = append(invocations, invocation)
-		switch {
-		case slices.Equal(invocation.args, []string{"list", functionalGoListErrorFlag, functionalGoListJSONFields, "-find", packagePath, secondPackagePath}):
+		mu.Unlock()
+		if slices.Equal(invocation.args, []string{"list", functionalGoListErrorFlag, functionalGoListIdentityJSONFields, "-find", functionalTestPatterns[0]}) {
 			return strings.Join([]string{
-				marshalFunctionalGoListPackage(t, functionalGoListPackage{ImportPath: packagePath, Dir: packageDir, TestGoFiles: []string{"metadata_test.go"}}),
-				marshalFunctionalGoListPackage(t, functionalGoListPackage{ImportPath: secondPackagePath, Dir: secondPackageDir, TestGoFiles: []string{"second_test.go"}}),
+				marshalFunctionalGoListPackage(t, functionalGoListPackage{ImportPath: packagePath, Dir: packageDir}),
+				marshalFunctionalGoListPackage(t, functionalGoListPackage{ImportPath: secondPackagePath, Dir: secondPackageDir}),
 			}, "\n"), "", nil
-		default:
-			t.Fatalf("unexpected go list invocation: %+v", invocation)
-			return "", "", nil
 		}
+		if len(invocation.args) == 5 && invocation.args[0] == "list" && invocation.args[1] == functionalGoListErrorFlag && invocation.args[2] == functionalGoListJSONFields && invocation.args[3] == "-find" {
+			switch invocation.args[4] {
+			case packagePath + "/...":
+				return marshalFunctionalGoListPackage(t, functionalGoListPackage{ImportPath: packagePath, Dir: packageDir, TestGoFiles: []string{"metadata_test.go"}}), "", nil
+			case secondPackagePath + "/...":
+				return marshalFunctionalGoListPackage(t, functionalGoListPackage{ImportPath: secondPackagePath, Dir: secondPackageDir, TestGoFiles: []string{"second_test.go"}}), "", nil
+			}
+		}
+		t.Fatalf("unexpected go list invocation: %+v", invocation)
+		return "", "", nil
 	}
 
 	packages, listed, err := resolveFunctionalTestPackagesWithMetadata(config{suite: "functional"}, repoRoot)
@@ -231,14 +216,46 @@ func TestSecond(t *testing.T) {}
 		t.Fatalf("packages = %v, want only runnable packages", packages)
 	}
 	if len(listed) != 2 || listed[0].ImportPath != packagePath || !slices.Equal(listed[0].TestGoFiles, []string{"metadata_test.go"}) || listed[1].ImportPath != secondPackagePath || !slices.Equal(listed[1].TestGoFiles, []string{"second_test.go"}) {
-		t.Fatalf("listed metadata = %+v, want one combined build-selected metadata query", listed)
+		t.Fatalf("listed metadata = %+v, want complete grouped build-selected metadata", listed)
 	}
-	if len(invocations) != 1 {
-		t.Fatalf("go list invocations = %d, want one concrete metadata query: %+v", len(invocations), invocations)
+	if len(invocations) != 3 {
+		t.Fatalf("go list invocations = %d, want one identity and two grouped metadata queries: %+v", len(invocations), invocations)
 	}
 	for _, invocation := range invocations {
 		if invocation.name != "go" || invocation.dir != repoRoot {
 			t.Fatalf("go list invocation = %+v, want repo-root go command", invocation)
+		}
+	}
+}
+
+func TestFunctionalMetadataPatternBatchesBalanceCurrentTreePackages(t *testing.T) {
+	packages := []string{
+		modulePath + "/tests/functional/factory",
+		modulePath + "/tests/functional/factory/one",
+		modulePath + "/tests/functional/transport",
+		modulePath + "/tests/functional/workers",
+		modulePath + "/tests/functional/work",
+	}
+	batches := functionalMetadataPatternBatches(packages, 3)
+	if len(batches) != 3 {
+		t.Fatalf("metadata batches = %v, want three workers", batches)
+	}
+	seen := make(map[string]struct{})
+	for _, batch := range batches {
+		for _, pattern := range batch {
+			if _, duplicate := seen[pattern]; duplicate {
+				t.Fatalf("metadata pattern %q was assigned more than once", pattern)
+			}
+			seen[pattern] = struct{}{}
+		}
+	}
+	wantPatterns := functionalMetadataPatterns(packages)
+	if len(seen) != len(wantPatterns) {
+		t.Fatalf("metadata patterns = %v, want every pattern exactly once from %v", seen, wantPatterns)
+	}
+	for _, pattern := range wantPatterns {
+		if _, found := seen[pattern]; !found {
+			t.Fatalf("metadata pattern %q was omitted from batches %v", pattern, batches)
 		}
 	}
 }
