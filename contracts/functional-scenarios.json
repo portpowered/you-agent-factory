@@ -1277,6 +1277,21 @@
       ]
     },
     {
+      "stableId": "rest/invokeGenericModel",
+      "name": "invokeGenericModel",
+      "interface": "rest",
+      "classification": "operation",
+      "status": "covered",
+      "lane": "long",
+      "executionClass": "deterministic",
+      "evidence": [
+        {
+          "test": "tests/functional/models/root_composition/inference_invoke_test.go::TestModelsGenericHTTPInvocationReachesJoinedRootThroughProcess",
+          "boundary": "rest"
+        }
+      ]
+    },
+    {
       "stableId": "rest/invokeModel",
       "name": "invokeModel",
       "interface": "rest",

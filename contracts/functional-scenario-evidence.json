@@ -14,6 +14,12 @@
       ]
     },
     {
+      "test": "tests/functional/models/root_composition/inference_invoke_test.go::TestModelsGenericHTTPInvocationReachesJoinedRootThroughProcess",
+      "stableIds": [
+        "rest/invokeGenericModel"
+      ]
+    },
+    {
       "test": "tests/functional/provider_sessions/cli/worker_sessions_cli_test.go::TestWorkerSessionsCLI",
       "stableIds": [
         "cli/you.worker-sessions.list",

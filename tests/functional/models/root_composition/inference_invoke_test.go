@@ -19,6 +19,7 @@ import (
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
+	"github.com/portpowered/infinite-you/tests/internal/functionalevidence"
 )
 
 // TestModelsInferenceInvokeActivatesThroughRootBuildProcess proves a process
@@ -291,6 +292,7 @@ func TestModelsGenericHTTPInvocationReachesJoinedRootThroughProcess(t *testing.T
 	if rejectingNetwork.Calls() != 0 || hostLauncher.Calls() != 1 || protocol.Calls() == 0 || compatibility.Calls() == 0 {
 		t.Fatalf("generic HTTP effects = network %d, starts %d, protocol %d, compatibility %d; want cache hit and joined lifecycle", rejectingNetwork.Calls(), hostLauncher.Calls(), protocol.Calls(), compatibility.Calls())
 	}
+	functionalevidence.Covers(t, "rest/invokeGenericModel")
 }
 
 func genericHTTPInvocationEdges(
