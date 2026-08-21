@@ -20,6 +20,19 @@ type functionalQuarantineSelectorVerification struct {
 	err           error
 }
 
+// Selector verification only compiles the packages named by test-level
+// selectors and does not run instrumented tests, so it can use a small bounded
+// build-only concurrency allowance without changing the coverage lane's jobs.
+const maxFunctionalQuarantineVerificationJobs = 8
+
+func functionalQuarantineVerificationJobs(jobs int) int {
+	jobs = maxFunctionalDiscoveryJobs(jobs)
+	if jobs >= maxFunctionalQuarantineVerificationJobs/2 {
+		return maxFunctionalQuarantineVerificationJobs
+	}
+	return jobs * 2
+}
+
 func startFunctionalQuarantineSelectorVerification(cfg config, targetOS string, logicalCPUs int, repoRoot string) *functionalQuarantineSelectorVerification {
 	if strings.TrimSpace(cfg.functionalQuarantine) == "" {
 		return nil
@@ -44,7 +57,7 @@ func startFunctionalQuarantineSelectorVerification(cfg config, targetOS string, 
 			manifest,
 			cfg.timeout,
 			cfg.short,
-			cfg.testJobs(targetOS, logicalCPUs),
+			functionalQuarantineVerificationJobs(cfg.testJobs(targetOS, logicalCPUs)),
 			repoRoot,
 		)
 	}()

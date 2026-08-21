@@ -597,6 +597,25 @@ func TestFunctionalQuarantineRuntimeVerificationScopesListingToTestSelectors(t *
 	}
 }
 
+func TestFunctionalQuarantineVerificationJobsAreBounded(t *testing.T) {
+	for _, test := range []struct {
+		name string
+		jobs int
+		want int
+	}{
+		{name: "zero uses minimum", jobs: 0, want: 2},
+		{name: "normal doubles", jobs: 2, want: 4},
+		{name: "runner default doubles", jobs: 4, want: 8},
+		{name: "large input caps", jobs: 16, want: maxFunctionalQuarantineVerificationJobs},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			if got := functionalQuarantineVerificationJobs(test.jobs); got != test.want {
+				t.Fatalf("functionalQuarantineVerificationJobs(%d) = %d, want %d", test.jobs, got, test.want)
+			}
+		})
+	}
+}
+
 func TestFunctionalQuarantineSelectorVerificationOverlapsAndCachesRuntimeListing(t *testing.T) {
 	originalRunner := commandRunner
 	originalStdout := stdoutWriter
@@ -625,7 +644,7 @@ func TestFunctionalQuarantineSelectorVerificationOverlapsAndCachesRuntimeListing
 	var output bytes.Buffer
 	stdoutWriter = &output
 	verification := startFunctionalQuarantineSelectorVerification(
-		config{functionalQuarantine: quarantinePath, jobs: 1, timeout: time.Minute},
+		config{functionalQuarantine: quarantinePath, jobs: 4, timeout: time.Minute},
 		"linux",
 		4,
 		t.TempDir(),
@@ -641,6 +660,9 @@ func TestFunctionalQuarantineSelectorVerificationOverlapsAndCachesRuntimeListing
 	}
 	if len(invocations) != 1 {
 		t.Fatalf("runtime listing invocations = %d, want one cached verification", len(invocations))
+	}
+	if !slices.Contains(invocations[0].args, "-p=8") {
+		t.Fatalf("runtime listing args = %v, want bounded selector-build parallelism", invocations[0].args)
 	}
 	if !strings.Contains(output.String(), "Functional quarantine selector verification: begin selectors=1") ||
 		!strings.Contains(output.String(), "Functional quarantine selector verification: end status=complete") {
