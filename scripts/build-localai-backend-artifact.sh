@@ -159,7 +159,7 @@ build_grpc_dependencies() {
 		exit 1
 	fi
 	rm -rf "${grpc_path}/grpc_build" "${grpc_path}/grpc_repo" "$install_path"
-	"$make_command" -C "$grpc_path" TAG_LIB_GRPC="$GRPC_COMMIT" CMAKE_ARGS="$grpc_cmake_args" build
+	CMAKE_ARGS="$grpc_cmake_args" "$make_command" -C "$grpc_path" TAG_LIB_GRPC="$GRPC_COMMIT" build
 
 	if [[ ! -x "$protoc_path" ]]; then
 		echo "pinned gRPC build did not install ${protoc_path}" >&2
