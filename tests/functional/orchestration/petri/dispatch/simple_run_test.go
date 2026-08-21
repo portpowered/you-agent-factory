@@ -459,6 +459,7 @@ func TestPetriSingleWorkerRunCompletesAtQuiescence(t *testing.T) {
 		support.WriteAgentConfig(t, dir, "worker-a", support.BuildModelWorkerConfig(modelprovider.ProviderCodex, "gpt-5-codex"))
 		for i := 0; i < 3; i++ {
 			testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
+				Name:       fmt.Sprintf("batch-item-%d", i),
 				WorkTypeID: "task",
 				TraceID:    fmt.Sprintf("trace-e2e-batch-%d", i),
 				Payload:    []byte(`{"title":"batch item"}`),

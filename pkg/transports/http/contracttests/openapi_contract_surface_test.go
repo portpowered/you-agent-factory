@@ -361,6 +361,7 @@ func TestOpenAPIContract_ListWorkReturnsStructuredWorkResults(t *testing.T) {
 	assertParameterRef(t, parameters, "#/components/parameters/WorkListTerminal")
 	assertParameterRef(t, parameters, "#/components/parameters/WorkListNonTerminal")
 	assertParameterRef(t, parameters, "#/components/parameters/WorkListCounts")
+	assertParameterRef(t, parameters, "#/components/parameters/WorkListIncludeSuperseded")
 	assertResponseRef(t, listWork, "400", "#/components/responses/BadRequest")
 }
 

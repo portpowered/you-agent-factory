@@ -22,26 +22,27 @@ import (
 
 // ListConfig holds parameters for the work list command.
 type ListConfig struct {
-	Context      context.Context
-	Server       string
-	SessionID    string
-	StateName    string
-	StateType    string
-	Name         string
-	WorkTypeName string
-	TraceID      string
-	Terminal     bool
-	NonTerminal  bool
-	SortBy       string
-	MaxResults   int
-	NextToken    string
-	Counts       bool
-	JSON         bool
-	Verbose      bool
-	Debug        bool
-	Output       io.Writer
-	Diagnostics  io.Writer
-	HTTP         clihttp.Protocol
+	Context           context.Context
+	Server            string
+	SessionID         string
+	StateName         string
+	StateType         string
+	Name              string
+	WorkTypeName      string
+	TraceID           string
+	Terminal          bool
+	NonTerminal       bool
+	IncludeSuperseded bool
+	SortBy            string
+	MaxResults        int
+	NextToken         string
+	Counts            bool
+	JSON              bool
+	Verbose           bool
+	Debug             bool
+	Output            io.Writer
+	Diagnostics       io.Writer
+	HTTP              clihttp.Protocol
 }
 
 func NewList(
@@ -75,17 +76,18 @@ func (service *service) List(cfg ListConfig) error {
 	}
 
 	prepared, err := service.listPrepare.PrepareListRequest(cfg.Context, workdomain.ListOptions{
-		StateName:    cfg.StateName,
-		StateType:    cfg.StateType,
-		Name:         cfg.Name,
-		WorkTypeName: cfg.WorkTypeName,
-		TraceID:      cfg.TraceID,
-		Terminal:     cfg.Terminal,
-		NonTerminal:  cfg.NonTerminal,
-		SortBy:       cfg.SortBy,
-		MaxResults:   cfg.MaxResults,
-		NextToken:    cfg.NextToken,
-		Counts:       cfg.Counts,
+		StateName:         cfg.StateName,
+		StateType:         cfg.StateType,
+		Name:              cfg.Name,
+		WorkTypeName:      cfg.WorkTypeName,
+		TraceID:           cfg.TraceID,
+		Terminal:          cfg.Terminal,
+		NonTerminal:       cfg.NonTerminal,
+		IncludeSuperseded: cfg.IncludeSuperseded,
+		SortBy:            cfg.SortBy,
+		MaxResults:        cfg.MaxResults,
+		NextToken:         cfg.NextToken,
+		Counts:            cfg.Counts,
 	})
 	if err != nil {
 		return listConfigError(err)
@@ -213,6 +215,9 @@ func listQueryValues(options workdomain.ListOptions) url.Values {
 	if options.NonTerminal {
 		values.Set(workdomain.FilterNonTerminal, "true")
 	}
+	if options.IncludeSuperseded {
+		values.Set(workdomain.FilterIncludeSuperseded, "true")
+	}
 	if options.Counts {
 		values.Set("counts", "true")
 	}
@@ -254,6 +259,11 @@ func renderListResult(output io.Writer, result factoryapi.ListWorkResponse) erro
 		}
 		if work.ExpectedArtifacts != nil && len(*work.ExpectedArtifacts) > 0 {
 			if _, err := fmt.Fprintf(output, "  Artifacts: %s\n", formatExpectedArtifactSummary(*work.ExpectedArtifacts)); err != nil {
+				return err
+			}
+		}
+		if supersededBy := stringValue(work.SupersededBy); supersededBy != "" {
+			if _, err := fmt.Fprintf(output, "  Superseded by: %s\n", supersededBy); err != nil {
 				return err
 			}
 		}

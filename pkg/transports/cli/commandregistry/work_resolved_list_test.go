@@ -45,7 +45,7 @@ func TestResolvedListRunEMapsStableInputsIntoFreshRequests(t *testing.T) {
 		"--name", "prd",
 		"--work-type", "story",
 		"--trace-id", "trace-1",
-		"--terminal", "--counts",
+		"--terminal", "--all", "--counts",
 		"--sort-by", "state.type",
 		"--max-results", "7",
 		"--next-token", base64.StdEncoding.EncodeToString([]byte("cursor-1")),
@@ -65,7 +65,7 @@ func TestResolvedListRunEMapsStableInputsIntoFreshRequests(t *testing.T) {
 	assertResolvedListConfig(t, requests[0], resolvedListConfigValues{
 		server: "https://factory.example", sessionID: "session-alpha",
 		stateName: "review", stateType: "PROCESSING", name: "prd",
-		workTypeName: "story", traceID: "trace-1", terminal: true, counts: true,
+		workTypeName: "story", traceID: "trace-1", terminal: true, includeSuperseded: true, counts: true,
 		sortBy:     "state.type",
 		maxResults: 7, nextToken: base64.StdEncoding.EncodeToString([]byte("cursor-1")),
 		json: true, verbose: true, debug: true,
@@ -785,22 +785,23 @@ func (w errorWriter) Write([]byte) (int, error) {
 }
 
 type resolvedListConfigValues struct {
-	server       string
-	sessionID    string
-	stateName    string
-	stateType    string
-	name         string
-	workTypeName string
-	traceID      string
-	terminal     bool
-	nonTerminal  bool
-	sortBy       string
-	maxResults   int
-	nextToken    string
-	counts       bool
-	json         bool
-	verbose      bool
-	debug        bool
+	server            string
+	sessionID         string
+	stateName         string
+	stateType         string
+	name              string
+	workTypeName      string
+	traceID           string
+	terminal          bool
+	nonTerminal       bool
+	includeSuperseded bool
+	sortBy            string
+	maxResults        int
+	nextToken         string
+	counts            bool
+	json              bool
+	verbose           bool
+	debug             bool
 }
 
 type resolvedShowConfigValues struct {
@@ -822,7 +823,7 @@ func assertResolvedListConfig(
 		server: got.Server, sessionID: got.SessionID,
 		stateName: got.StateName, stateType: got.StateType, name: got.Name,
 		workTypeName: got.WorkTypeName, traceID: got.TraceID,
-		terminal: got.Terminal, nonTerminal: got.NonTerminal, sortBy: got.SortBy,
+		terminal: got.Terminal, nonTerminal: got.NonTerminal, includeSuperseded: got.IncludeSuperseded, sortBy: got.SortBy,
 		maxResults: got.MaxResults, nextToken: got.NextToken,
 		counts: got.Counts,
 		json:   got.JSON, verbose: got.Verbose, debug: got.Debug,

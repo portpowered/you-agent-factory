@@ -2,11 +2,13 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"sort"
 
 	"github.com/portpowered/infinite-you/pkg/platform/jsonvalue"
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/legacysnapshot"
@@ -95,7 +97,70 @@ func (a workRuntimeAdapter) ReadWorkSnapshot(ctx context.Context) (work.ReadSnap
 		item.StopSummary = runtimeWorkStopSummary(sessionprojection.ProjectWorkStopSummary(a.sessionID, snapshot, token, sessionSummary))
 		result.Items = append(result.Items, item)
 	}
+	admissions, err := a.readWorkAdmissions(ctx)
+	if err != nil {
+		return work.ReadSnapshot{}, err
+	}
+	result.Admissions = admissions
 	return result, nil
+}
+
+func (a workRuntimeAdapter) readWorkAdmissions(ctx context.Context) ([]work.WorkAdmission, error) {
+	if a.ingress == nil {
+		return nil, errors.New("Factory Runtime Work admission history is required")
+	}
+	historyContext := ctx
+	if historyContext == nil {
+		historyContext = context.Background()
+	}
+	historyContext, cancelHistory := context.WithCancel(historyContext)
+	defer cancelHistory()
+	stream, err := a.ingress.SubscribeFactoryEvents(
+		historyContext,
+		nil,
+		factorydefinitions.FactoryEventReconnectScope{SessionID: a.sessionID},
+	)
+	if err != nil {
+		return nil, fmt.Errorf("subscribe Work admission history: %w", err)
+	}
+	if stream == nil {
+		return nil, errors.New("subscribe Work admission history: stream is unavailable")
+	}
+	return workAdmissionsFromFactoryEvents(a.sessionID, stream.History), nil
+}
+
+func workAdmissionsFromFactoryEvents(
+	sessionID string,
+	events []factorydefinitions.FactoryEvent,
+) []work.WorkAdmission {
+	admissions := make([]work.WorkAdmission, 0)
+	for _, event := range events {
+		if event.Type != factorydefinitions.FactoryEventTypeWorkRequest {
+			continue
+		}
+		if sessionID != "" && event.Context.SessionID != nil && *event.Context.SessionID != sessionID {
+			continue
+		}
+		var payload work.WorkRequestEventPayload
+		if err := json.Unmarshal(event.Payload, &payload); err != nil {
+			continue
+		}
+		for index, item := range payload.Works {
+			workID := item.WorkID
+			if workID == "" && event.Context.WorkIDs != nil && index < len(*event.Context.WorkIDs) {
+				workID = (*event.Context.WorkIDs)[index]
+			}
+			if workID == "" || item.Name == "" {
+				continue
+			}
+			admissions = append(admissions, work.WorkAdmission{
+				WorkID: workID,
+				Name:   item.Name,
+				Order:  len(admissions),
+			})
+		}
+	}
+	return admissions
 }
 
 func runtimeHumanApprovalForWork(

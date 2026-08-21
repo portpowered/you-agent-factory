@@ -17,6 +17,9 @@ properties:
   workTypeName:
     type: string
     description: Configured work type name from factory.json for this submitted work item.
+  supersededBy:
+    type: string
+    description: Optional successor Work ID when this terminal or failed same-name Work item has been superseded by a later admission.
   state:
     $ref: './WorkState.yaml'
     description: Current lifecycle state for this work item when returned by read APIs. Submit requests use the state's name when an explicit initial state is provided.

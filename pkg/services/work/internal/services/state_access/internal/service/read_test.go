@@ -63,6 +63,133 @@ func TestListWorkHonorsPaginationNextToken(t *testing.T) {
 	}
 }
 
+func TestListWorkDerivesSupersessionBeforeCountsAndPagination(t *testing.T) {
+	t.Parallel()
+
+	svc := internalservice.New(stubSessionResolver{adapter: &recordingSessionAdapter{
+		snapshot: supersessionReadSnapshot(),
+	}}, nil)
+	assertDefaultSupersessionSelection(t, svc)
+	assertIncludedSupersessionHistory(t, svc)
+}
+
+func supersessionReadSnapshot() work.ReadSnapshot {
+	return work.ReadSnapshot{
+		Items: []work.ReadModel{
+			{CursorID: "tok-old", WorkID: "work-old", Name: "same name", State: &work.State{Type: work.StateTypeFailed}},
+			{CursorID: "tok-new", WorkID: "work-new", Name: "same name", State: &work.State{Type: work.StateTypeProcessing}},
+			{CursorID: "tok-fresh", WorkID: "work-fresh", Name: "fresh failure", State: &work.State{Type: work.StateTypeFailed}},
+		},
+		Admissions: []work.WorkAdmission{
+			{WorkID: "work-old", Name: "same name", Order: 0},
+			{WorkID: "work-new", Name: "same name", Order: 1},
+			{WorkID: "work-fresh", Name: "fresh failure", Order: 2},
+		},
+	}
+}
+
+func assertDefaultSupersessionSelection(t *testing.T, svc *internalservice.Service) {
+	t.Helper()
+
+	defaultPage, err := svc.ListWork(context.Background(), "session-1", work.ListOptions{
+		Counts: true, MaxResults: 1,
+	})
+	if err != nil {
+		t.Fatalf("default ListWork: %v", err)
+	}
+	if len(defaultPage.Results) != 1 || defaultPage.Results[0].WorkID != "work-new" {
+		t.Fatalf("default first page = %#v, want replacement only", defaultPage)
+	}
+	if defaultPage.Results[0].SupersededBy != "" || defaultPage.Counts == nil || defaultPage.Counts.Total != 2 {
+		t.Fatalf("default first page annotation/counts = %#v, want current row and total 2", defaultPage)
+	}
+	if defaultPage.NextToken == "" {
+		t.Fatalf("default first page next token = %q, want continuation after filtering", defaultPage.NextToken)
+	}
+
+	defaultSecondPage, err := svc.ListWork(context.Background(), "session-1", work.ListOptions{
+		Counts: true, MaxResults: 1, NextToken: defaultPage.NextToken,
+	})
+	if err != nil {
+		t.Fatalf("default second ListWork: %v", err)
+	}
+	if len(defaultSecondPage.Results) != 1 || defaultSecondPage.Results[0].WorkID != "work-fresh" || defaultSecondPage.NextToken != "" {
+		t.Fatalf("default second page = %#v, want fresh failure and no continuation", defaultSecondPage)
+	}
+	if defaultSecondPage.Counts == nil || defaultSecondPage.Counts.Total != 2 {
+		t.Fatalf("default second counts = %#v, want stable total 2", defaultSecondPage.Counts)
+	}
+}
+
+func assertIncludedSupersessionHistory(t *testing.T, svc *internalservice.Service) {
+	t.Helper()
+
+	allHistory, err := svc.ListWork(context.Background(), "session-1", work.ListOptions{
+		IncludeSuperseded: true, Counts: true,
+	})
+	if err != nil {
+		t.Fatalf("include-superseded ListWork: %v", err)
+	}
+	if allHistory.Counts == nil || allHistory.Counts.Total != 3 || len(allHistory.Results) != 3 {
+		t.Fatalf("include-superseded result = %#v, want all three rows", allHistory)
+	}
+	var old work.ReadModel
+	for _, item := range allHistory.Results {
+		if item.WorkID == "work-old" {
+			old = item
+		}
+	}
+	if old.SupersededBy != "work-new" {
+		t.Fatalf("old history row SupersededBy = %q, want work-new", old.SupersededBy)
+	}
+
+	got, err := svc.GetWork(context.Background(), "session-1", "work-old")
+	if err != nil {
+		t.Fatalf("GetWork(old): %v", err)
+	}
+	if got.SupersededBy != "work-new" {
+		t.Fatalf("GetWork(old).SupersededBy = %q, want work-new", got.SupersededBy)
+	}
+}
+
+func TestLiveAndReplaySnapshotsProduceIdenticalSupersessionSelection(t *testing.T) {
+	t.Parallel()
+
+	snapshot := work.ReadSnapshot{
+		Items: []work.ReadModel{
+			{CursorID: "tok-old", WorkID: "work-old", Name: "same name", State: &work.State{Type: work.StateTypeTerminal}},
+			{CursorID: "tok-new", WorkID: "work-new", Name: "same name", State: &work.State{Type: work.StateTypeProcessing}},
+		},
+		Admissions: []work.WorkAdmission{
+			{WorkID: "work-old", Name: "same name", Order: 0},
+			{WorkID: "work-new", Name: "same name", Order: 1},
+		},
+	}
+	live := internalservice.New(stubSessionResolver{
+		adapter: &recordingSessionAdapter{snapshot: snapshot},
+	}, nil)
+	replay := internalservice.New(stubSessionResolver{}, &recordingSnapshotReader{snapshot: snapshot})
+	options := work.ListOptions{Counts: true}
+
+	liveResult, err := live.ListWork(context.Background(), "session-1", options)
+	if err != nil {
+		t.Fatalf("live ListWork: %v", err)
+	}
+	replayResult, err := replay.ListWork(context.Background(), "session-1", options)
+	if err != nil {
+		t.Fatalf("replay ListWork: %v", err)
+	}
+	if !reflect.DeepEqual(liveResult, replayResult) {
+		t.Fatalf("live result = %#v, replay result = %#v, want identical projections", liveResult, replayResult)
+	}
+	if len(liveResult.Results) != 1 || liveResult.Results[0].WorkID != "work-new" || liveResult.Results[0].SupersededBy != "" {
+		t.Fatalf("live/replay result = %#v, want only authoritative replacement", liveResult)
+	}
+	if liveResult.Counts == nil || liveResult.Counts.Total != 1 {
+		t.Fatalf("live/replay counts = %#v, want one unsuperseded row", liveResult.Counts)
+	}
+}
+
 // pkgmaintcheck:ignore-cyclomatic-complexity pre-existing main-branch test complexity; split this scenario into focused helpers and remove this exemption.
 func TestListWorkTerminalityCountsAndPaginationUseOneFilteredSelection(t *testing.T) {
 	t.Parallel()

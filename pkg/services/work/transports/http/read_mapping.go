@@ -15,17 +15,18 @@ import (
 // list options.
 func ListOptionsFromAPI(params factoryapi.ListWorkBySessionIdParams) (work.ListOptions, error) {
 	options := work.ListOptions{
-		StateName:    optional.StringValue(params.StateName),
-		StateType:    listParamString(params.StateType),
-		Name:         optional.StringValue(params.Name),
-		WorkTypeName: optional.StringValue(params.WorkTypeName),
-		TraceID:      optional.StringValue(params.TraceId),
-		Terminal:     listParamBool(params.Terminal),
-		NonTerminal:  listParamBool(params.NonTerminal),
-		SortBy:       listParamString(params.SortBy),
-		MaxResults:   optional.IntValue(params.MaxResults),
-		NextToken:    optional.StringValue(params.NextToken),
-		Counts:       listParamBool(params.Counts),
+		StateName:         optional.StringValue(params.StateName),
+		StateType:         listParamString(params.StateType),
+		Name:              optional.StringValue(params.Name),
+		WorkTypeName:      optional.StringValue(params.WorkTypeName),
+		TraceID:           optional.StringValue(params.TraceId),
+		Terminal:          listParamBool(params.Terminal),
+		NonTerminal:       listParamBool(params.NonTerminal),
+		IncludeSuperseded: listParamBool(params.IncludeSuperseded),
+		SortBy:            listParamString(params.SortBy),
+		MaxResults:        optional.IntValue(params.MaxResults),
+		NextToken:         optional.StringValue(params.NextToken),
+		Counts:            listParamBool(params.Counts),
 	}
 	query, err := work.NormalizeList(options)
 	if err != nil {
@@ -85,6 +86,7 @@ func WorkReadModelToAPI(item work.ReadModel) factoryapi.Work {
 		CurrentChainingTraceId:   optional.NonEmptyStringPtr(item.CurrentChainingTraceID),
 		PreviousChainingTraceIds: optional.CopiedStringsPtr(item.PreviousChainingTraceIDs),
 		TraceId:                  optional.NonEmptyStringPtr(item.TraceID),
+		SupersededBy:             optional.NonEmptyStringPtr(item.SupersededBy),
 		Content:                  contentcontract.GeneratedPtrFromParts(item.Content),
 		Tags:                     optional.CopiedStringMapPtr(item.Tags),
 		StopSummary:              workStopSummaryToAPI(item.StopSummary),

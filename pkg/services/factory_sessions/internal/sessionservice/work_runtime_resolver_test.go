@@ -12,6 +12,7 @@ import (
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/legacysnapshot"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responsestream"
 	sessionruntime "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtime"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/sessionregistry"
@@ -472,6 +473,59 @@ func TestWorkRuntimeAdapterMoveWorkFailsClosedWithoutRuntime(t *testing.T) {
 	)
 	if err == nil || !strings.Contains(err.Error(), "Factory Runtime work move is required") {
 		t.Fatalf("MoveWork() error = %v, want move-required error", err)
+	}
+}
+
+type unavailableWorkHistoryRuntime struct {
+	factory.Service
+	snapshot   *legacysnapshot.Snapshot
+	stream     *interfaces.FactoryEventStream
+	historyErr error
+}
+
+func (runtime *unavailableWorkHistoryRuntime) SubmitWorkRequest(context.Context, work.WorkRequest) (work.WorkRequestSubmitResult, error) {
+	return work.WorkRequestSubmitResult{}, nil
+}
+
+func (runtime *unavailableWorkHistoryRuntime) SubscribeFactoryEvents(
+	context.Context,
+	*interfaces.FactoryEventReconnectCursor,
+	interfaces.FactoryEventReconnectScope,
+) (*interfaces.FactoryEventStream, error) {
+	return runtime.stream, runtime.historyErr
+}
+
+func (runtime *unavailableWorkHistoryRuntime) GetEngineStateSnapshot(context.Context) (*legacysnapshot.Snapshot, error) {
+	return runtime.snapshot, nil
+}
+
+func TestWorkRuntimeAdapterFailsClosedWhenAdmissionHistoryUnavailable(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name        string
+		historyErr  error
+		withIngress bool
+		want        string
+	}{
+		{name: "missing ingress", want: "admission history is required"},
+		{name: "subscription error", historyErr: errors.New("history unavailable"), withIngress: true, want: "history unavailable"},
+		{name: "nil stream", withIngress: true, want: "stream is unavailable"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			runtime := &unavailableWorkHistoryRuntime{
+				snapshot:   &legacysnapshot.Snapshot{},
+				historyErr: test.historyErr,
+			}
+			adapter := workRuntimeAdapter{sessionID: "session-1", runtime: runtime}
+			if test.withIngress {
+				adapter.ingress = runtime
+			}
+			_, err := adapter.ReadWorkSnapshot(context.Background())
+			if err == nil || !strings.Contains(err.Error(), test.want) {
+				t.Fatalf("ReadWorkSnapshot() error = %v, want %q", err, test.want)
+			}
+		})
 	}
 }
 

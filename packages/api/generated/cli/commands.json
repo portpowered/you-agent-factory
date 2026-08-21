@@ -6965,7 +6965,7 @@
           },
           "description": {
             "id": "you.work.list.description",
-            "canonicalEnglish": "List work from a running you-agent-factory service.\n\nBy default the command targets the default compatibility session. Use --session to route the request to one specific live factory session instead. Run you session list to discover live session ids.\n\nOptional filters are applied on the server before ordering and pagination. --state matches the current state name exactly (legacy alias: --state-name). --name matches a case-insensitive substring of the work name. --work-type matches workTypeName exactly (legacy alias: --work-type-name). --trace-id matches traceId or currentChainingTraceId exactly. --terminal selects TERMINAL and FAILED work; --non-terminal selects INITIAL and PROCESSING work. The terminality flags are mutually exclusive. Combine all filters with logical AND, plus --max-results and --next-token to page through the filtered result set. --counts adds the total for the complete filtered result set before pagination in human and JSON output.\n\nWhen a Work has a validated workstation result, JSON output exposes it as native structuredResult data, including explicit null. Human output adds a STRUCTURED RESULT column with deterministic compact JSON and leaves it blank when the field is omitted."
+            "canonicalEnglish": "List work from a running you-agent-factory service.\n\nBy default the command targets the default compatibility session. Use --session to route the request to one specific live factory session instead. Run you session list to discover live session ids.\n\nOptional filters are applied on the server before ordering and pagination. --state matches the current state name exactly (legacy alias: --state-name). --name matches a case-insensitive substring of the work name. --work-type matches workTypeName exactly (legacy alias: --work-type-name). --trace-id matches traceId or currentChainingTraceId exactly. --terminal selects TERMINAL and FAILED work; --non-terminal selects INITIAL and PROCESSING work. The terminality flags are mutually exclusive. Combine all filters with logical AND, plus --max-results and --next-token to page through the filtered result set. --counts adds the total for the complete filtered result set before pagination in human and JSON output. --all includes superseded terminal or failed same-name attempts and identifies each row's successor.\n\nWhen a Work has a validated workstation result, JSON output exposes it as native structuredResult data, including explicit null. Human output adds a STRUCTURED RESULT column with deterministic compact JSON and leaves it blank when the field is omitted."
           }
         },
         "examples": [
@@ -7373,6 +7373,30 @@
           "lifecycle": {
             "formatVersion": "1.0.0",
             "itemId": "you.work.list.flag.counts",
+            "state": "active",
+            "since": "1.0.0"
+          }
+        },
+        "you.work.list.flag.all": {
+          "id": "you.work.list.flag.all",
+          "long": "all",
+          "usage": "include superseded terminal or failed same-name work and identify each successor",
+          "shorthand": "",
+          "aliases": [],
+          "scope": "local",
+          "valueType": "bool",
+          "required": false,
+          "default": "false",
+          "changedDefault": false,
+          "noOptionDefault": "true",
+          "repeatable": false,
+          "normalization": "",
+          "completion": "none",
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.work.list.flag.all",
             "state": "active",
             "since": "1.0.0"
           }

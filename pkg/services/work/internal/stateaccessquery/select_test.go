@@ -104,6 +104,45 @@ func TestSelectTerminalityIncludesFailedAndExcludesUnknownStates(t *testing.T) {
 	}
 }
 
+func TestAnnotateSupersessionUsesNewestSameNameSuccessor(t *testing.T) {
+	t.Parallel()
+
+	items := []stateaccessquery.Item{
+		{ID: "tok-old", WorkID: "work-old", Name: "same", State: &stateaccessquery.State{Type: stateaccessquery.StateTypeFailed}},
+		{ID: "tok-processing", WorkID: "work-processing", Name: "same", State: &stateaccessquery.State{Type: stateaccessquery.StateTypeProcessing}},
+		{ID: "tok-new", WorkID: "work-new", Name: "same", State: &stateaccessquery.State{Type: stateaccessquery.StateTypeProcessing}},
+		{ID: "tok-different", WorkID: "work-different", Name: "different", State: &stateaccessquery.State{Type: stateaccessquery.StateTypeTerminal}},
+	}
+	admissions := []stateaccessquery.Admission{
+		{WorkID: "work-old", Name: "same", Order: 0},
+		{WorkID: "work-processing", Name: "same", Order: 1},
+		{WorkID: "work-new", Name: "same", Order: 2},
+		{WorkID: "work-different", Name: "different", Order: 3},
+	}
+
+	annotated := stateaccessquery.AnnotateSupersession(items, admissions)
+	if annotated[0].SupersededBy != "work-new" {
+		t.Fatalf("old item SupersededBy = %q, want work-new", annotated[0].SupersededBy)
+	}
+	for _, index := range []int{1, 2, 3} {
+		if annotated[index].SupersededBy != "" {
+			t.Fatalf("item %q SupersededBy = %q, want empty", annotated[index].ID, annotated[index].SupersededBy)
+		}
+	}
+	if items[0].SupersededBy != "" {
+		t.Fatalf("AnnotateSupersession mutated input: %#v", items[0])
+	}
+
+	defaultSelection := mustSelection(t, stateaccessquery.SelectionOptions{})
+	if got := itemIDs(defaultSelection.Apply(annotated)); !reflect.DeepEqual(got, []string{"tok-new", "tok-processing", "tok-different"}) {
+		t.Fatalf("default selection IDs = %v, want superseded item omitted", got)
+	}
+	includeSelection := mustSelection(t, stateaccessquery.SelectionOptions{IncludeSuperseded: true})
+	if got := itemIDs(includeSelection.Apply(annotated)); !reflect.DeepEqual(got, []string{"tok-new", "tok-processing", "tok-old", "tok-different"}) {
+		t.Fatalf("include-superseded selection IDs = %v, want complete history", got)
+	}
+}
+
 func TestValidateSelectionRejectsInvalidValues(t *testing.T) {
 	t.Parallel()
 

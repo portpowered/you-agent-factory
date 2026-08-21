@@ -7918,7 +7918,10 @@ type Work struct {
 
 	// StructuredResult Optional JSON value produced by a workstation whose outputSchema validated the worker response. JSON null is distinct from an omitted value.
 	StructuredResult interface{} `json:"structuredResult,omitempty"`
-	Tags             *StringMap  `json:"tags,omitempty"`
+
+	// SupersededBy Optional successor Work ID when this terminal or failed same-name Work item has been superseded by a later admission.
+	SupersededBy *string    `json:"supersededBy,omitempty"`
+	Tags         *StringMap `json:"tags,omitempty"`
 
 	// TraceId Legacy trace identifier retained for compatibility; prefer currentChainingTraceId.
 	TraceId *string `json:"traceId,omitempty"`
@@ -9235,6 +9238,9 @@ type StateType = WorkStateType
 // WorkListCounts defines model for WorkListCounts.
 type WorkListCounts = bool
 
+// WorkListIncludeSuperseded defines model for WorkListIncludeSuperseded.
+type WorkListIncludeSuperseded = bool
+
 // WorkListName defines model for WorkListName.
 type WorkListName = string
 
@@ -9456,6 +9462,9 @@ type ListWorkBySessionIdParams struct {
 
 	// Counts Optional count request. When true, the response includes counts.total for the complete filtered selection before ordering page slicing and pagination.
 	Counts *WorkListCounts `form:"counts,omitempty" json:"counts,omitempty"`
+
+	// IncludeSuperseded Optional historical view. When true, includes terminal or failed same-name Work items that have a later admitted successor; otherwise those superseded rows are omitted before counts and pagination.
+	IncludeSuperseded *WorkListIncludeSuperseded `form:"includeSuperseded,omitempty" json:"includeSuperseded,omitempty"`
 }
 
 // ListWorkBySessionIdParamsSortBy defines parameters for ListWorkBySessionId.
@@ -14252,6 +14261,14 @@ func (siw *ServerInterfaceWrapper) ListWorkBySessionId(w http.ResponseWriter, r 
 	err = runtime.BindQueryParameter("form", true, false, "counts", r.URL.Query(), &params.Counts)
 	if err != nil {
 		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "counts", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "includeSuperseded" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "includeSuperseded", r.URL.Query(), &params.IncludeSuperseded)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "includeSuperseded", Err: err})
 		return
 	}
 

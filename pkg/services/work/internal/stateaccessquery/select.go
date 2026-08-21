@@ -14,23 +14,26 @@ type State struct {
 // Item contains only the Work facts needed for selection and ordering.
 type Item struct {
 	ID                     string
+	WorkID                 string
 	Name                   string
 	WorkTypeName           string
 	State                  *State
 	TraceID                string
 	CurrentChainingTraceID string
+	SupersededBy           string
 }
 
 // SelectionOptions contains filters and ordering for canonical Work selection.
 type SelectionOptions struct {
-	StateName    *string
-	StateType    *string
-	Name         *string
-	WorkTypeName *string
-	TraceID      *string
-	Terminal     *bool
-	NonTerminal  *bool
-	SortBy       string
+	StateName         *string
+	StateType         *string
+	Name              *string
+	WorkTypeName      *string
+	TraceID           *string
+	Terminal          *bool
+	NonTerminal       *bool
+	IncludeSuperseded bool
+	SortBy            string
 }
 
 // Selection is a validated, immutable Work selection policy.
@@ -110,9 +113,14 @@ func (s Selection) Apply(items []Item) []Item {
 func matches(item Item, options SelectionOptions) bool {
 	return matchesState(item, options) &&
 		matchesTerminality(item, options) &&
+		matchesSupersession(item, options) &&
 		matchesName(item, options.Name) &&
 		matchesWorkType(item, options.WorkTypeName) &&
 		matchesTrace(item, options.TraceID)
+}
+
+func matchesSupersession(item Item, options SelectionOptions) bool {
+	return options.IncludeSuperseded || item.SupersededBy == ""
 }
 
 func matchesTerminality(item Item, options SelectionOptions) bool {

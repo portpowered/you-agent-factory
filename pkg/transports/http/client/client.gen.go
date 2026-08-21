@@ -7892,7 +7892,10 @@ type Work struct {
 
 	// StructuredResult Optional JSON value produced by a workstation whose outputSchema validated the worker response. JSON null is distinct from an omitted value.
 	StructuredResult interface{} `json:"structuredResult,omitempty"`
-	Tags             *StringMap  `json:"tags,omitempty"`
+
+	// SupersededBy Optional successor Work ID when this terminal or failed same-name Work item has been superseded by a later admission.
+	SupersededBy *string    `json:"supersededBy,omitempty"`
+	Tags         *StringMap `json:"tags,omitempty"`
 
 	// TraceId Legacy trace identifier retained for compatibility; prefer currentChainingTraceId.
 	TraceId *string `json:"traceId,omitempty"`
@@ -9208,6 +9211,9 @@ type StateType = WorkStateType
 
 // WorkListCounts defines model for WorkListCounts.
 type WorkListCounts = bool
+
+// WorkListIncludeSuperseded defines model for WorkListIncludeSuperseded.
+type WorkListIncludeSuperseded = bool
 
 // WorkListName defines model for WorkListName.
 type WorkListName = string

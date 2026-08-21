@@ -17,6 +17,7 @@ const (
 	workListTraceIDInputID            = "you.work.list.flag.trace-id"
 	workListTerminalInputID           = "you.work.list.flag.terminal"
 	workListNonTerminalInputID        = "you.work.list.flag.non-terminal"
+	workListIncludeSupersededInputID  = "you.work.list.flag.all"
 	workListSortByInputID             = "you.work.list.flag.sort-by"
 	workListMaxResultsInputID         = "you.work.list.flag.max-results"
 	workListNextTokenInputID          = "you.work.list.flag.next-token"
@@ -220,51 +221,11 @@ func resolvedListConfig(
 	inputs resolvedinput.Inputs,
 	inherited resolvedinput.Inputs,
 ) (workcli.ListConfig, error) {
-	stateName, err := inputs.String(workListStateNameInputID)
+	filters, err := readResolvedWorkListFilterInputs(inputs)
 	if err != nil {
 		return workcli.ListConfig{}, err
 	}
-	stateType, err := inputs.String(workListStateTypeInputID)
-	if err != nil {
-		return workcli.ListConfig{}, err
-	}
-	name, err := inputs.String(workListNameInputID)
-	if err != nil {
-		return workcli.ListConfig{}, err
-	}
-	workTypeName, err := inputs.String(workListWorkTypeNameInputID)
-	if err != nil {
-		return workcli.ListConfig{}, err
-	}
-	traceID, err := inputs.String(workListTraceIDInputID)
-	if err != nil {
-		return workcli.ListConfig{}, err
-	}
-	sortBy, err := inputs.String(workListSortByInputID)
-	if err != nil {
-		return workcli.ListConfig{}, err
-	}
-	terminal, err := inputs.Bool(workListTerminalInputID)
-	if err != nil {
-		return workcli.ListConfig{}, err
-	}
-	nonTerminal, err := inputs.Bool(workListNonTerminalInputID)
-	if err != nil {
-		return workcli.ListConfig{}, err
-	}
-	maxResults, err := inputs.Int(workListMaxResultsInputID)
-	if err != nil {
-		return workcli.ListConfig{}, err
-	}
-	nextToken, err := inputs.String(workListNextTokenInputID)
-	if err != nil {
-		return workcli.ListConfig{}, err
-	}
-	counts, err := inputs.Bool(workListCountsInputID)
-	if err != nil {
-		return workcli.ListConfig{}, err
-	}
-	sessionID, err := inputs.String(workListSessionInputID)
+	paging, err := readResolvedWorkListPagingInputs(inputs)
 	if err != nil {
 		return workcli.ListConfig{}, err
 	}
@@ -273,13 +234,100 @@ func resolvedListConfig(
 		return workcli.ListConfig{}, err
 	}
 	return workcli.ListConfig{
-		Context: cmd.Context(), Server: globals.server, SessionID: sessionID,
-		StateName: stateName, StateType: stateType, Name: name,
-		WorkTypeName: workTypeName, TraceID: traceID, Terminal: terminal,
-		NonTerminal: nonTerminal, SortBy: sortBy, MaxResults: maxResults,
-		NextToken: nextToken, Counts: counts, JSON: globals.json,
+		Context: cmd.Context(), Server: globals.server, SessionID: paging.sessionID,
+		StateName: filters.stateName, StateType: filters.stateType, Name: filters.name,
+		WorkTypeName: filters.workTypeName, TraceID: filters.traceID, Terminal: paging.terminal,
+		NonTerminal: paging.nonTerminal, IncludeSuperseded: paging.includeSuperseded,
+		SortBy: filters.sortBy, MaxResults: paging.maxResults,
+		NextToken: paging.nextToken, Counts: paging.counts, JSON: globals.json,
 		Verbose: globals.verbose || globals.debug, Debug: globals.debug,
 		Output: cmd.OutOrStdout(),
+	}, nil
+}
+
+type resolvedWorkListFilterInputs struct {
+	stateName    string
+	stateType    string
+	name         string
+	workTypeName string
+	traceID      string
+	sortBy       string
+}
+
+func readResolvedWorkListFilterInputs(inputs resolvedinput.Inputs) (resolvedWorkListFilterInputs, error) {
+	stateName, err := inputs.String(workListStateNameInputID)
+	if err != nil {
+		return resolvedWorkListFilterInputs{}, err
+	}
+	stateType, err := inputs.String(workListStateTypeInputID)
+	if err != nil {
+		return resolvedWorkListFilterInputs{}, err
+	}
+	name, err := inputs.String(workListNameInputID)
+	if err != nil {
+		return resolvedWorkListFilterInputs{}, err
+	}
+	workTypeName, err := inputs.String(workListWorkTypeNameInputID)
+	if err != nil {
+		return resolvedWorkListFilterInputs{}, err
+	}
+	traceID, err := inputs.String(workListTraceIDInputID)
+	if err != nil {
+		return resolvedWorkListFilterInputs{}, err
+	}
+	sortBy, err := inputs.String(workListSortByInputID)
+	if err != nil {
+		return resolvedWorkListFilterInputs{}, err
+	}
+	return resolvedWorkListFilterInputs{
+		stateName: stateName, stateType: stateType, name: name,
+		workTypeName: workTypeName, traceID: traceID, sortBy: sortBy,
+	}, nil
+}
+
+type resolvedWorkListPagingInputs struct {
+	terminal          bool
+	nonTerminal       bool
+	includeSuperseded bool
+	maxResults        int
+	nextToken         string
+	counts            bool
+	sessionID         string
+}
+
+func readResolvedWorkListPagingInputs(inputs resolvedinput.Inputs) (resolvedWorkListPagingInputs, error) {
+	terminal, err := inputs.Bool(workListTerminalInputID)
+	if err != nil {
+		return resolvedWorkListPagingInputs{}, err
+	}
+	nonTerminal, err := inputs.Bool(workListNonTerminalInputID)
+	if err != nil {
+		return resolvedWorkListPagingInputs{}, err
+	}
+	includeSuperseded, err := inputs.Bool(workListIncludeSupersededInputID)
+	if err != nil {
+		return resolvedWorkListPagingInputs{}, err
+	}
+	maxResults, err := inputs.Int(workListMaxResultsInputID)
+	if err != nil {
+		return resolvedWorkListPagingInputs{}, err
+	}
+	nextToken, err := inputs.String(workListNextTokenInputID)
+	if err != nil {
+		return resolvedWorkListPagingInputs{}, err
+	}
+	counts, err := inputs.Bool(workListCountsInputID)
+	if err != nil {
+		return resolvedWorkListPagingInputs{}, err
+	}
+	sessionID, err := inputs.String(workListSessionInputID)
+	if err != nil {
+		return resolvedWorkListPagingInputs{}, err
+	}
+	return resolvedWorkListPagingInputs{
+		terminal: terminal, nonTerminal: nonTerminal,
+		includeSuperseded: includeSuperseded, maxResults: maxResults,
+		nextToken: nextToken, counts: counts, sessionID: sessionID,
 	}, nil
 }
 

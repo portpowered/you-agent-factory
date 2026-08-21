@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -52,6 +53,37 @@ func TestNewWorkSnapshotReaderConstructsReconstructWorldStateThroughRoot(t *test
 	}
 	if snapshot.Items[0].State == nil || snapshot.Items[0].State.Name != "review" {
 		t.Fatalf("snapshot state = %#v, want review", snapshot.Items[0].State)
+	}
+}
+
+func TestWorkAdmissionsFromCanonicalEventsPreserveRequestOrder(t *testing.T) {
+	t.Parallel()
+
+	oldPayload, err := json.Marshal(work.WorkRequestEventPayload{
+		Type:  work.WorkRequestTypeFactoryRequestBatch,
+		Works: []work.WorkRequestEventWork{{Name: "same name", WorkID: "work-old"}},
+	})
+	if err != nil {
+		t.Fatalf("marshal old work request: %v", err)
+	}
+	newPayload, err := json.Marshal(work.WorkRequestEventPayload{
+		Type:  work.WorkRequestTypeFactoryRequestBatch,
+		Works: []work.WorkRequestEventWork{{Name: "same name", WorkID: "work-new"}},
+	})
+	if err != nil {
+		t.Fatalf("marshal new work request: %v", err)
+	}
+
+	got := workAdmissionsFromCanonicalEvents([]recordings.CanonicalEvent{
+		{Kind: recordings.CanonicalEventKind(factorydefinitions.FactoryEventTypeWorkRequest), Payload: string(oldPayload)},
+		{Kind: recordings.CanonicalEventKind(factorydefinitions.FactoryEventTypeWorkRequest), Payload: string(newPayload)},
+	})
+	want := []work.WorkAdmission{
+		{WorkID: "work-old", Name: "same name", Order: 0},
+		{WorkID: "work-new", Name: "same name", Order: 1},
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("workAdmissionsFromCanonicalEvents() = %#v, want %#v", got, want)
 	}
 }
 

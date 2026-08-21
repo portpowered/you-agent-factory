@@ -5198,6 +5198,10 @@
         "structuredResult": {
           "description": "Optional JSON value produced by a workstation whose outputSchema validated the worker response. JSON null is distinct from an omitted value."
         },
+        "supersededBy": {
+          "description": "Optional successor Work ID when this terminal or failed same-name Work item has been superseded by a later admission.",
+          "type": "string"
+        },
         "tags": {
           "$ref": "#/$defs/StringMap"
         },

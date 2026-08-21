@@ -482,6 +482,7 @@ paths:
         - $ref: '#/components/parameters/WorkListTerminal'
         - $ref: '#/components/parameters/WorkListNonTerminal'
         - $ref: '#/components/parameters/WorkListCounts'
+        - $ref: '#/components/parameters/WorkListIncludeSuperseded'
       responses:
         '200':
           description: >-
@@ -2339,6 +2340,8 @@ components:
       $ref: './components/parameters/WorkListNonTerminal.yaml'
     WorkListCounts:
       $ref: './components/parameters/WorkListCounts.yaml'
+    WorkListIncludeSuperseded:
+      $ref: './components/parameters/WorkListIncludeSuperseded.yaml'
     WorkOrTokenID:
       $ref: './components/parameters/WorkOrTokenID.yaml'
     FactorySessionListScope:

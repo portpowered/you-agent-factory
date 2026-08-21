@@ -426,6 +426,7 @@ paths:
         - $ref: '#/components/parameters/WorkListTerminal'
         - $ref: '#/components/parameters/WorkListNonTerminal'
         - $ref: '#/components/parameters/WorkListCounts'
+        - $ref: '#/components/parameters/WorkListIncludeSuperseded'
       responses:
         '200':
           description: Current work tokens for the targeted session. All supplied filters compose with logical AND before deterministic ordering and pagination. When counts=true, counts.total is the complete filtered selection before page slicing and is stable across pages of an unchanged session snapshot.
@@ -2118,6 +2119,13 @@ components:
       in: query
       required: false
       description: Optional count request. When true, the response includes counts.total for the complete filtered selection before ordering page slicing and pagination.
+      schema:
+        type: boolean
+    WorkListIncludeSuperseded:
+      name: includeSuperseded
+      in: query
+      required: false
+      description: Optional historical view. When true, includes terminal or failed same-name Work items that have a later admitted successor; otherwise those superseded rows are omitted before counts and pagination.
       schema:
         type: boolean
     WorkOrTokenID:
@@ -14093,6 +14101,9 @@ components:
         workTypeName:
           type: string
           description: Configured work type name from factory.json for this submitted work item.
+        supersededBy:
+          type: string
+          description: Optional successor Work ID when this terminal or failed same-name Work item has been superseded by a later admission.
         state:
           $ref: '#/components/schemas/WorkState'
           description: Current lifecycle state for this work item when returned by read APIs. Submit requests use the state's name when an explicit initial state is provided.

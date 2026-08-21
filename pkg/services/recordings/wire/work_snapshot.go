@@ -2,6 +2,7 @@ package wire
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -67,7 +68,42 @@ func (r workSnapshotReader) ReadWorkSnapshot(
 	if err != nil {
 		return work.ReadSnapshot{}, err
 	}
-	return readSnapshotFromWorldState(reconstructed.WorldState)
+	snapshot, err := readSnapshotFromWorldState(reconstructed.WorldState)
+	if err != nil {
+		return work.ReadSnapshot{}, err
+	}
+	snapshot.Admissions = workAdmissionsFromCanonicalEvents(events)
+	return snapshot, nil
+}
+
+func workAdmissionsFromCanonicalEvents(events []recordings.CanonicalEvent) []work.WorkAdmission {
+	admissions := make([]work.WorkAdmission, 0)
+	for _, event := range events {
+		if event.Kind != recordings.CanonicalEventKind(factorydefinitions.FactoryEventTypeWorkRequest) {
+			continue
+		}
+		var payload work.WorkRequestEventPayload
+		if err := json.Unmarshal([]byte(event.Payload), &payload); err != nil {
+			continue
+		}
+		var context factorydefinitions.FactoryEventContext
+		_ = json.Unmarshal([]byte(event.SourceContext), &context)
+		for index, item := range payload.Works {
+			workID := item.WorkID
+			if workID == "" && context.WorkIDs != nil && index < len(*context.WorkIDs) {
+				workID = (*context.WorkIDs)[index]
+			}
+			if workID == "" || item.Name == "" {
+				continue
+			}
+			admissions = append(admissions, work.WorkAdmission{
+				WorkID: workID,
+				Name:   item.Name,
+				Order:  len(admissions),
+			})
+		}
+	}
+	return admissions
 }
 
 func (r workSnapshotReader) canonicalEventsForScope(
