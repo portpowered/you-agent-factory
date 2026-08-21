@@ -597,6 +597,57 @@ func TestFunctionalQuarantineRuntimeVerificationScopesListingToTestSelectors(t *
 	}
 }
 
+func TestFunctionalQuarantineSelectorVerificationOverlapsAndCachesRuntimeListing(t *testing.T) {
+	originalRunner := commandRunner
+	originalStdout := stdoutWriter
+	t.Cleanup(func() {
+		commandRunner = originalRunner
+		stdoutWriter = originalStdout
+	})
+
+	packagePath := modulePath + "/tests/functional/test-level"
+	quarantinePath := filepath.Join(t.TempDir(), "functional-quarantine.json")
+	quarantine := `{"version":1,"suite":"functional","entries":[{"package":"` + packagePath + `","test":"TestRuntimeSelector","bucket":"ENVIRONMENT-DEPENDENT","reason":"runtime verification fixture"}]}`
+	if err := os.WriteFile(quarantinePath, []byte(quarantine), 0o644); err != nil {
+		t.Fatalf("write quarantine fixture: %v", err)
+	}
+
+	var invocations []commandInvocation
+	commandRunner = func(invocation commandInvocation) (string, string, error) {
+		invocations = append(invocations, invocation)
+		return strings.Join([]string{
+			marshalFunctionalListEvent(goTestListEvent{Action: "start", Package: packagePath}),
+			marshalFunctionalListEvent(goTestListEvent{Action: "output", Package: packagePath, Output: "TestRuntimeSelector\n"}),
+			marshalFunctionalListEvent(goTestListEvent{Action: timingOutcomePass, Package: packagePath}),
+		}, "\n"), "", nil
+	}
+
+	var output bytes.Buffer
+	stdoutWriter = &output
+	verification := startFunctionalQuarantineSelectorVerification(
+		config{functionalQuarantine: quarantinePath, jobs: 1, timeout: time.Minute},
+		"linux",
+		4,
+		t.TempDir(),
+	)
+	if verification == nil {
+		t.Fatal("startFunctionalQuarantineSelectorVerification() returned nil for a test selector")
+	}
+	if err := verification.wait(); err != nil {
+		t.Fatalf("selector verification wait = %v", err)
+	}
+	if err := verification.wait(); err != nil {
+		t.Fatalf("second selector verification wait = %v", err)
+	}
+	if len(invocations) != 1 {
+		t.Fatalf("runtime listing invocations = %d, want one cached verification", len(invocations))
+	}
+	if !strings.Contains(output.String(), "Functional quarantine selector verification: begin selectors=1") ||
+		!strings.Contains(output.String(), "Functional quarantine selector verification: end status=complete") {
+		t.Fatalf("selector verification lifecycle output = %q", output.String())
+	}
+}
+
 func TestPrepareFunctionalCoverageRunReportsDiscoveryLifecycle(t *testing.T) {
 	originalRunner := commandRunner
 	originalStdout := stdoutWriter

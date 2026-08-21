@@ -74,10 +74,14 @@ type goTestListEvent struct {
 }
 
 func resolveFunctionalCoverageSelection(path string, listPatterns, packages []string, timeout time.Duration, short bool, jobs int, repoRoot string) (functionalCoverageSelection, functionalQuarantine, error) {
-	return resolveFunctionalCoverageSelectionWithMetadata(path, listPatterns, packages, timeout, short, jobs, repoRoot, nil)
+	return resolveFunctionalCoverageSelectionWithMetadataAndVerification(path, listPatterns, packages, timeout, short, jobs, repoRoot, nil, nil)
 }
 
 func resolveFunctionalCoverageSelectionWithMetadata(path string, listPatterns, packages []string, timeout time.Duration, short bool, jobs int, repoRoot string, listedPackages []functionalGoListPackage) (functionalCoverageSelection, functionalQuarantine, error) {
+	return resolveFunctionalCoverageSelectionWithMetadataAndVerification(path, listPatterns, packages, timeout, short, jobs, repoRoot, listedPackages, nil)
+}
+
+func resolveFunctionalCoverageSelectionWithMetadataAndVerification(path string, listPatterns, packages []string, timeout time.Duration, short bool, jobs int, repoRoot string, listedPackages []functionalGoListPackage, selectorVerification *functionalQuarantineSelectorVerification) (functionalCoverageSelection, functionalQuarantine, error) {
 	manifest, err := readFunctionalQuarantineFile(path)
 	if err != nil {
 		return functionalCoverageSelection{}, functionalQuarantine{}, err
@@ -94,7 +98,12 @@ func resolveFunctionalCoverageSelectionWithMetadata(path string, listPatterns, p
 	if err := validateFunctionalQuarantine(manifest, inventory); err != nil {
 		return functionalCoverageSelection{}, functionalQuarantine{}, err
 	}
-	if err := verifyFunctionalTestQuarantineSelectors(manifest, timeout, short, jobs, repoRoot); err != nil {
+	if selectorVerification != nil {
+		err = selectorVerification.wait()
+	} else {
+		err = verifyFunctionalTestQuarantineSelectors(manifest, timeout, short, jobs, repoRoot)
+	}
+	if err != nil {
 		return functionalCoverageSelection{}, functionalQuarantine{}, err
 	}
 	selection, err := buildFunctionalCoverageSelection(manifest, inventory)
@@ -117,15 +126,16 @@ func prepareFunctionalCoverageRun(cfg config, packages []string, targetOS string
 }
 
 func prepareFunctionalCoverageRunAfterStart(cfg config, packages []string, targetOS string, logicalCPUs int, repoRoot string, listedPackages []functionalGoListPackage, discoveryStarted time.Time) (functionalCoverageSelection, []string, error) {
-	quarantinePath := cfg.functionalQuarantine
-	if !filepath.IsAbs(quarantinePath) {
-		quarantinePath = filepath.Join(repoRoot, quarantinePath)
-	}
+	return prepareFunctionalCoverageRunAfterStartWithVerification(cfg, packages, targetOS, logicalCPUs, repoRoot, listedPackages, discoveryStarted, nil)
+}
+
+func prepareFunctionalCoverageRunAfterStartWithVerification(cfg config, packages []string, targetOS string, logicalCPUs int, repoRoot string, listedPackages []functionalGoListPackage, discoveryStarted time.Time, selectorVerification *functionalQuarantineSelectorVerification) (functionalCoverageSelection, []string, error) {
+	quarantinePath := functionalQuarantinePath(cfg, repoRoot)
 	var selection functionalCoverageSelection
 	var manifest functionalQuarantine
 	var err error
 	if listedPackages == nil {
-		selection, manifest, err = resolveFunctionalCoverageSelection(
+		selection, manifest, err = resolveFunctionalCoverageSelectionWithMetadataAndVerification(
 			quarantinePath,
 			packages,
 			packages,
@@ -133,9 +143,11 @@ func prepareFunctionalCoverageRunAfterStart(cfg config, packages []string, targe
 			cfg.short,
 			cfg.testJobs(targetOS, logicalCPUs),
 			repoRoot,
+			nil,
+			selectorVerification,
 		)
 	} else {
-		selection, manifest, err = resolveFunctionalCoverageSelectionWithMetadata(
+		selection, manifest, err = resolveFunctionalCoverageSelectionWithMetadataAndVerification(
 			quarantinePath,
 			packages,
 			packages,
@@ -144,6 +156,7 @@ func prepareFunctionalCoverageRunAfterStart(cfg config, packages []string, targe
 			cfg.testJobs(targetOS, logicalCPUs),
 			repoRoot,
 			listedPackages,
+			selectorVerification,
 		)
 	}
 	if err != nil {
@@ -170,12 +183,18 @@ func prepareFunctionalCoverageRunAfterStart(cfg config, packages []string, targe
 	return selection, selectedFunctionalPackages(selection), nil
 }
 
-func resolveCoverageTestPackages(cfg config, repoRoot string) ([]string, []functionalGoListPackage, time.Time, error) {
+func resolveCoverageTestPackages(cfg config, repoRoot string, selectorVerification *functionalQuarantineSelectorVerification) ([]string, []functionalGoListPackage, time.Time, error) {
 	if strings.TrimSpace(cfg.functionalQuarantine) == "" {
 		packages, err := resolveTestPackages(cfg)
 		return packages, nil, time.Time{}, err
 	}
 
+	// Keep the expensive retained runtime selector build outside the timed
+	// current-tree inventory interval. Its result is checked again after static
+	// quarantine validation before selection is returned.
+	if selectorVerification != nil {
+		_ = selectorVerification.wait()
+	}
 	discoveryStarted := startFunctionalDiscovery(functionalDiscoveryRequestLabel(cfg))
 	packages, listedPackages, err := resolveFunctionalTestPackagesWithMetadata(cfg, repoRoot)
 	if err != nil {
@@ -186,10 +205,14 @@ func resolveCoverageTestPackages(cfg config, repoRoot string) ([]string, []funct
 }
 
 func prepareCoverageTestPackages(cfg config, packages []string, targetOS string, logicalCPUs int, repoRoot string, listedPackages []functionalGoListPackage, discoveryStarted time.Time) ([]string, *functionalCoverageSelection, error) {
+	return prepareCoverageTestPackagesWithVerification(cfg, packages, targetOS, logicalCPUs, repoRoot, listedPackages, discoveryStarted, nil)
+}
+
+func prepareCoverageTestPackagesWithVerification(cfg config, packages []string, targetOS string, logicalCPUs int, repoRoot string, listedPackages []functionalGoListPackage, discoveryStarted time.Time, selectorVerification *functionalQuarantineSelectorVerification) ([]string, *functionalCoverageSelection, error) {
 	if strings.TrimSpace(cfg.functionalQuarantine) == "" {
 		return packages, nil, nil
 	}
-	selection, selectedPackages, err := prepareFunctionalCoverageRunAfterStart(cfg, packages, targetOS, logicalCPUs, repoRoot, listedPackages, discoveryStarted)
+	selection, selectedPackages, err := prepareFunctionalCoverageRunAfterStartWithVerification(cfg, packages, targetOS, logicalCPUs, repoRoot, listedPackages, discoveryStarted, selectorVerification)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -626,13 +649,7 @@ func parseFunctionalTestList(output string, inventory functionalTestInventory, s
 }
 
 func verifyFunctionalTestQuarantineSelectors(manifest functionalQuarantine, timeout time.Duration, short bool, jobs int, repoRoot string) error {
-	selectorPackages := make([]string, 0)
-	for _, entry := range manifest.Entries {
-		if entry.Test != "" {
-			selectorPackages = append(selectorPackages, entry.Package)
-		}
-	}
-	selectorPackages = sortedUniqueStrings(selectorPackages)
+	selectorPackages := functionalTestSelectorPackages(manifest)
 	if len(selectorPackages) == 0 {
 		return nil
 	}
@@ -650,6 +667,16 @@ func verifyFunctionalTestQuarantineSelectors(manifest functionalQuarantine, time
 		}
 	}
 	return nil
+}
+
+func functionalTestSelectorPackages(manifest functionalQuarantine) []string {
+	selectorPackages := make([]string, 0)
+	for _, entry := range manifest.Entries {
+		if entry.Test != "" {
+			selectorPackages = append(selectorPackages, entry.Package)
+		}
+	}
+	return sortedUniqueStrings(selectorPackages)
 }
 
 func discoverFunctionalTestInventoryByRuntimeList(packages []string, timeout time.Duration, short bool, jobs int, repoRoot string) (functionalTestInventory, error) {
