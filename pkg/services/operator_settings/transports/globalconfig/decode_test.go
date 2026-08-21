@@ -424,6 +424,54 @@ func TestDecode_PartialRuntimeSettingsApplyDefaultsIndependently(t *testing.T) {
 	}
 }
 
+func TestDecodeWithDiagnostics_IgnoresUnknownFieldsAndReportsSortedPaths(t *testing.T) {
+	config, diagnostics, err := globalconfig.DecodeWithDiagnostics([]byte(`{
+		"zFuture": "secret-root-value",
+		"defaults": {
+			"workerModelProvider": " codex ",
+			"workerModel": " gpt-5 ",
+			"futureDefault": "secret-default-value"
+		},
+		"runtime": {
+			"futureRuntime": "secret-runtime-value",
+			"metrics": {"compress": true, "futureMetric": "secret-metric-value"}
+		},
+		"models": {
+			"llm": {"source": " hf://custom/gemma ", "futureModel": "secret-model-value"}
+		},
+		"workers": {"acp": {"futureAcp": "secret-acp-value"}},
+		"workerPresets": [{
+			"id": "build",
+			"modelProvider": "codex",
+			"futurePreset": "secret-preset-value"
+		}]
+	}`))
+	if err != nil {
+		t.Fatalf("DecodeWithDiagnostics() error = %v", err)
+	}
+	if config.Defaults.WorkerModelProvider != "codex" || config.Defaults.WorkerModel != "gpt-5" {
+		t.Fatalf("known defaults = %#v, want normalized codex/gpt-5", config.Defaults)
+	}
+	if source := config.Models["llm"].Source; source == nil || *source != "hf://custom/gemma" {
+		t.Fatalf("known model source = %#v, want normalized source", config.Models["llm"].Source)
+	}
+	wantPaths := []string{
+		"$.defaults.futureDefault",
+		"$.models.llm.futureModel",
+		"$.runtime.futureRuntime",
+		"$.runtime.metrics.futureMetric",
+		"$.workerPresets[0].futurePreset",
+		"$.workers.acp.futureAcp",
+		"$.zFuture",
+	}
+	if got := diagnostics.Paths(); !reflect.DeepEqual(got, wantPaths) {
+		t.Fatalf("ignored JSON paths = %#v, want %#v", got, wantPaths)
+	}
+	if strings.Contains(strings.Join(diagnostics.Paths(), "\n"), "secret") {
+		t.Fatalf("ignored JSON paths leaked a field value: %#v", diagnostics.Paths())
+	}
+}
+
 func TestLoadFileConfig_PartialDocumentParticipatesInDocumentedPrecedence(t *testing.T) {
 	path := writeConfig(t, `{"defaults":{"workerModelProvider":"codex","workerModel":"file-model"}}`)
 	fileConfig, err := operatorsettings.LoadFileConfig(platformfilesystem.Local{}, globalconfig.Decode, path)
@@ -632,9 +680,6 @@ func TestLoadFileConfig_InvalidDocumentsNamePathAndCause(t *testing.T) {
 	}{
 		{name: "malformed", json: `{"defaults":`, want: "decode generated global config"},
 		{name: "null root", json: `null`, want: "expected a JSON object"},
-		{name: "unknown top-level", json: `{"unsupported":true}`, want: `unknown field "unsupported"`},
-		{name: "unknown defaults field", json: `{"defaults":{"unsupported":true}}`, want: `unknown field "unsupported"`},
-		{name: "unknown runtime field", json: `{"runtime":{"unsupported":true}}`, want: `unknown field "unsupported"`},
 		{name: "empty runtime directory", json: `{"runtime":{"logging":{"directory":" "}}}`, want: "runtime.logging.directory must be non-empty"},
 		{name: "invalid runtime size", json: `{"runtime":{"metrics":{"maxSizeMB":0}}}`, want: "runtime.metrics.maxSizeMB must be at least 1"},
 		{name: "trailing JSON", json: `{}` + "\n{}", want: "unexpected trailing JSON"},
@@ -669,7 +714,6 @@ func TestDecode_PreservesCanonicalErrorWrappingAndRejection(t *testing.T) {
 	}{
 		{name: "malformed", payload: `{"defaults":`, want: "decode generated global config: unexpected EOF"},
 		{name: "null root", payload: `null`, want: "decode generated global config: expected a JSON object"},
-		{name: "unknown field", payload: `{"unsupported":true}`, want: `decode generated global config: json: unknown field "unsupported"`},
 		{name: "trailing JSON", payload: "{}\n{}", want: "decode generated global config: unexpected trailing JSON"},
 		{name: "invalid runtime", payload: `{"runtime":{"metrics":{"maxSizeMB":0}}}`, want: "runtime.metrics.maxSizeMB must be at least 1"},
 	}

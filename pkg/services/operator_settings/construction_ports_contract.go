@@ -4,6 +4,8 @@ import (
 	"context"
 	"io"
 	"io/fs"
+	"sort"
+	"strings"
 )
 
 // Construction/process-edge port aliases and func types for owner wire and
@@ -44,6 +46,37 @@ type IDGenerator func() string
 // ConfigDecoder maps serialized global configuration into domain values.
 // Wire supplies the OpenAPI-generated contract decoder at the transport boundary.
 type ConfigDecoder func([]byte) (Config, error)
+
+// ConfigDecodeDiagnostics contains safe metadata produced while decoding one
+// operator configuration. It retains paths only; ignored values are never
+// retained for logging or persistence.
+type ConfigDecodeDiagnostics struct {
+	IgnoredJSONPaths []string
+}
+
+// Paths returns a detached, deterministic copy of ignored JSON paths.
+func (diagnostics ConfigDecodeDiagnostics) Paths() []string {
+	if len(diagnostics.IgnoredJSONPaths) == 0 {
+		return nil
+	}
+	unique := make(map[string]struct{}, len(diagnostics.IgnoredJSONPaths))
+	for _, path := range diagnostics.IgnoredJSONPaths {
+		path = strings.TrimSpace(path)
+		if path != "" {
+			unique[path] = struct{}{}
+		}
+	}
+	paths := make([]string, 0, len(unique))
+	for path := range unique {
+		paths = append(paths, path)
+	}
+	sort.Strings(paths)
+	return paths
+}
+
+// ConfigDiagnosticsDecoder maps serialized global configuration into domain
+// values and reports safe paths for ignored forward-compatible fields.
+type ConfigDiagnosticsDecoder func([]byte) (Config, ConfigDecodeDiagnostics, error)
 
 // ConfigEncoder maps domain values into the serialized generated global
 // configuration contract. Wire supplies the transport-boundary implementation.
