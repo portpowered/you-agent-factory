@@ -53,8 +53,8 @@ recording.
 
 **Resume mode** reads a recoverable Factory Event recording, reconstructs its
 last valid Factory world state, and opens a new live Factory Session from that
-state. Pass `--resume <path>`. Resume can dispatch eligible Work again and
-writes a successor recording.
+state. Pass `--resume <path>`. Resume writes a successor recording, but it does
+not make the original live Factory Session queue durable.
 
 ## Run Controls
 
@@ -97,19 +97,28 @@ you run --resume ./recordings/source.json \
   --record ./recordings/successor.json
 ```
 
-Resume restores Work from the recovered world state with these boundaries:
+Resume restores the recorded Work state with these boundaries:
 
 - Work in a terminal state is not dispatched again.
-- Queued Work is restored and can become eligible for dispatch.
-- Nonterminal Work that was in flight can receive a new live attempt after
-  resume.
-- A provider effect that completed before its completion event was recorded can
-  run again. Use idempotent provider-side operations when duplicate attempts
-  would matter.
+- Only Work state represented by recorded Factory Events is reconstructed.
+- The live queue is process-local. Work that was queued or in flight when the
+  source process stopped is not guaranteed to be re-admitted by `--resume`.
 
-This is not an exactly-once provider-effect guarantee. The recorded terminal
-state prevents duplicate dispatch of completed Work, while an incomplete
-provider attempt can be retried after recovery.
+This is not an exactly-once provider-effect guarantee. If you resubmit Work
+after a process stop, a provider-side effect may run again. Make provider-side
+operations idempotent when duplicate attempts would matter.
+
+### Process-kill recovery boundary
+
+The live Factory Session queue and provider process are not stored in a
+recording. A process-kill can leave a valid, unfinalized recording while Work
+was queued or in flight. `--resume` can read the valid prefix and write a
+successor, but successor creation does not prove that interrupted Work was
+continued.
+
+For interrupted Work, start a new live Factory Session and resubmit the Work
+with its original authored `name`. Inspect the source and successor recordings
+separately. See `you docs operations` for the complete restart procedure.
 
 The runtime accepts an unfinalized recording when it has a valid complete event
 prefix. It can also skip a truncated final event-stream block after earlier

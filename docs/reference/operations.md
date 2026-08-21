@@ -425,16 +425,17 @@ reload behavior is covered by the functional prompt hot-reload check.
 ## Recover after a process restart
 
 The live Factory Session queue is process-local and in memory. Restarting the
-process loses the live queue, but a retained Factory Event recording can seed a
-new live Factory Session with `you run --resume <recording>`. Resume reads the
-source without overwriting it and writes a successor recording by default. Use
-`--record <successor-path>` to choose that path.
+process loses the live queue. A retained Factory Event recording can reconstruct
+the recorded Factory state in a new live Factory Session with
+`you run --resume <recording>`. Resume reads the source without overwriting it
+and writes a successor recording by default. Use `--record <successor-path>` to
+choose that path.
 
-Resume restores the last valid Factory world state. Terminal Work is not
-dispatched again. Queued Work can become eligible, and nonterminal Work can
-receive a new live attempt. A provider effect may run again when its completion
-event was not recorded before the process stopped, so provider-side operations
-that matter should be idempotent.
+Resume does not make the lost queue durable. Terminal Work represented by the
+recording is not dispatched again. Work that was queued or in flight when the
+process stopped is not guaranteed to be re-admitted by `--resume`. A provider
+effect can run again if you resubmit interrupted Work, so provider-side
+operations that matter should be idempotent.
 
 Portable JavaScript recordings remain replay and inspection artifacts. They do
 not contain a JavaScript VM or provider process and cannot be passed to
@@ -448,30 +449,29 @@ Use this recovery sequence:
 1. Inspect any durable artifacts first: the existing worktree, generated
    outputs, runtime logs, and any recording that was explicitly retained.
 2. If the recording contains recoverable Factory Event history, run
-   `you run --resume <recording>` and inspect the successor recording path.
-   Continue at step 6.
-3. If resume is unavailable, start a new Factory Session with the continuous
-   server shape above.
-4. For that new session, resubmit the intended Work through the normal Work
-   ingress, preserving each
+   `you run --resume <recording> --record <successor-path>` and inspect both
+   recording paths. Successor creation reconstructs recorded state. It does not
+   prove that interrupted Work was dispatched.
+3. Start a new Factory Session with the continuous server shape above.
+4. Resubmit the intended Work through the normal Work ingress, preserving each
    Work's authored `name`. Do not invent a new name just because the old
    process stopped.
 5. For that new session, let the workstation's worktree template render from
-   that same name. For a
-   template such as
-   `.claude/worktrees/{{ (index .Inputs 0).Name }}`, the resumed dispatch
-   targets the existing named artifact directory; valid existing worktrees are
-   reusable when the runtime's worktree rules allow it.
-6. Verify the resumed Work reaches an explicit terminal or failed state. A
-   successful recovery proves only that this recovery worked for that Work; it
+   that same name. For a template such as
+   `.claude/worktrees/{{ (index .Inputs 0).Name }}`, the new dispatch targets
+   the existing named artifact directory when the runtime's worktree rules
+   allow it.
+6. Verify the resubmitted Work reaches an explicit terminal or failed state. A
+   successful recovery proves only that this recovery worked for that Work. It
    does not make the original in-memory queue durable.
 
 The six production recoveries recorded on 2026-08-08/09 are operational
 evidence that this inspect → restart → same-name resubmit procedure worked in
 those cases. They are not a durability guarantee, restart replay contract, or
-promise that every provider dispatch can be resumed automatically. Prefer
-`--resume` when the retained recording has the Factory Event history required
-for live continuation.
+promise that every provider dispatch can be resumed automatically. Use
+`--resume` to reconstruct recorded state and write a successor. Use the
+same-name resubmit procedure for Work that the stopped process had not recorded
+as terminal.
 
 ## Related topics
 
