@@ -1,6 +1,8 @@
 package main
 
 import (
+	"bytes"
+	"errors"
 	"fmt"
 	"path/filepath"
 	"strings"
@@ -16,8 +18,22 @@ type functionalQuarantineSelectorVerification struct {
 	done          chan error
 	started       time.Time
 	selectorCount int
+	manifest      functionalQuarantine
+	ratchet       *functionalQuarantineRatchetVerification
 	once          sync.Once
 	err           error
+}
+
+type functionalQuarantineRatchetVerification struct {
+	done   chan functionalQuarantineRatchetResult
+	once   sync.Once
+	err    error
+	output string
+}
+
+type functionalQuarantineRatchetResult struct {
+	output string
+	err    error
 }
 
 // Selector verification only compiles the packages named by test-level
@@ -51,6 +67,7 @@ func startFunctionalQuarantineSelectorVerification(cfg config, targetOS string, 
 	}
 
 	verification := newFunctionalQuarantineSelectorVerification(len(selectorPackages))
+	verification.manifest = manifest
 	fmt.Fprintf(stdoutWriter, "Functional quarantine selector verification: begin selectors=%d\n", verification.selectorCount)
 	go func() {
 		verification.done <- verifyFunctionalTestQuarantineSelectors(
@@ -60,6 +77,21 @@ func startFunctionalQuarantineSelectorVerification(cfg config, targetOS string, 
 			functionalQuarantineVerificationJobs(cfg.testJobs(targetOS, logicalCPUs)),
 			repoRoot,
 		)
+	}()
+	return verification
+}
+
+func startFunctionalQuarantineRatchetVerification(manifest functionalQuarantine, timeout time.Duration, short bool, repoRoot string) *functionalQuarantineRatchetVerification {
+	if len(manifest.Entries) == 0 {
+		return nil
+	}
+	verification := &functionalQuarantineRatchetVerification{
+		done: make(chan functionalQuarantineRatchetResult, 1),
+	}
+	go func() {
+		var output bytes.Buffer
+		err := runFunctionalQuarantineRatchetWithWriter(manifest, timeout, short, repoRoot, &output)
+		verification.done <- functionalQuarantineRatchetResult{output: output.String(), err: err}
 	}()
 	return verification
 }
@@ -97,6 +129,35 @@ func (verification *functionalQuarantineSelectorVerification) wait() error {
 			time.Since(verification.started).Seconds(),
 			verification.selectorCount,
 		)
+	})
+	return verification.err
+}
+
+func (verification *functionalQuarantineSelectorVerification) waitRatchet() error {
+	if verification == nil || verification.ratchet == nil {
+		return nil
+	}
+	return verification.ratchet.wait()
+}
+
+func (verification *functionalQuarantineSelectorVerification) waitAll() error {
+	if verification == nil {
+		return nil
+	}
+	return errors.Join(verification.wait(), verification.waitRatchet())
+}
+
+func (verification *functionalQuarantineRatchetVerification) wait() error {
+	if verification == nil {
+		return nil
+	}
+	verification.once.Do(func() {
+		result := <-verification.done
+		verification.output = result.output
+		verification.err = result.err
+		if verification.output != "" {
+			_, _ = fmt.Fprint(stdoutWriter, verification.output)
+		}
 	})
 	return verification.err
 }

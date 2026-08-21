@@ -670,6 +670,56 @@ func TestFunctionalQuarantineSelectorVerificationOverlapsAndCachesRuntimeListing
 	}
 }
 
+func TestFunctionalQuarantineRatchetVerificationBuffersOutputUntilWait(t *testing.T) {
+	originalRunner := commandRunner
+	originalStdout := stdoutWriter
+	t.Cleanup(func() {
+		commandRunner = originalRunner
+		stdoutWriter = originalStdout
+	})
+
+	packagePath := modulePath + "/tests/functional/quarantine-ratchet"
+	var invocations []commandInvocation
+	commandRunner = func(invocation commandInvocation) (string, string, error) {
+		invocations = append(invocations, invocation)
+		return marshalFunctionalTimingEvents(
+			goTestTimingEvent{Action: "start", Package: packagePath},
+			goTestTimingEvent{Action: timingOutcomeSkip, Package: packagePath},
+		), "", nil
+	}
+	var output bytes.Buffer
+	stdoutWriter = &output
+	manifest := functionalQuarantine{
+		Version: functionalQuarantineVersion,
+		Suite:   functionalSuiteName,
+		Entries: []functionalQuarantineEntry{{
+			Package: packagePath,
+			Bucket:  functionalBucketEnvironment,
+			Reason:  "ratchet verification fixture",
+		}},
+	}
+
+	verification := startFunctionalQuarantineRatchetVerification(manifest, time.Minute, true, t.TempDir())
+	if verification == nil {
+		t.Fatal("startFunctionalQuarantineRatchetVerification() returned nil")
+	}
+	if output.Len() != 0 {
+		t.Fatalf("ratchet output before wait = %q, want buffered output", output.String())
+	}
+	if err := verification.wait(); err != nil {
+		t.Fatalf("ratchet verification wait = %v", err)
+	}
+	if err := verification.wait(); err != nil {
+		t.Fatalf("second ratchet verification wait = %v", err)
+	}
+	if len(invocations) != 1 {
+		t.Fatalf("ratchet invocations = %d, want one", len(invocations))
+	}
+	if !strings.Contains(output.String(), "Functional quarantine ratchet: selectors=1") {
+		t.Fatalf("ratchet output after wait = %q, want terminal summary", output.String())
+	}
+}
+
 func TestPrepareFunctionalCoverageRunReportsDiscoveryLifecycle(t *testing.T) {
 	originalRunner := commandRunner
 	originalStdout := stdoutWriter

@@ -13,10 +13,21 @@ func runCoverageProfile(cfg config, targetOS string, logicalCPUs int, profilePat
 		return coverageResult{}, err
 	}
 	selectorVerification := startFunctionalQuarantineSelectorVerification(cfg, targetOS, logicalCPUs, repoRoot)
+	if selectorVerification != nil {
+		selectorVerification.ratchet = startFunctionalQuarantineRatchetVerification(
+			selectorVerification.manifest,
+			cfg.timeout,
+			cfg.short,
+			repoRoot,
+		)
+		defer func() {
+			_ = selectorVerification.waitAll()
+		}()
+	}
 	coverPackages, err := resolveCoverPackages(cfg)
 	if err != nil {
 		if selectorVerification != nil {
-			_ = selectorVerification.wait()
+			_ = selectorVerification.waitAll()
 		}
 		return coverageResult{}, err
 	}

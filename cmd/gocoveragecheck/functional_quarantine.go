@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -84,6 +85,9 @@ func resolveFunctionalCoverageSelectionWithMetadata(path string, listPatterns, p
 func resolveFunctionalCoverageSelectionWithMetadataAndVerification(path string, listPatterns, packages []string, timeout time.Duration, short bool, jobs int, repoRoot string, listedPackages []functionalGoListPackage, selectorVerification *functionalQuarantineSelectorVerification) (functionalCoverageSelection, functionalQuarantine, error) {
 	manifest, err := readFunctionalQuarantineFile(path)
 	if err != nil {
+		if selectorVerification != nil {
+			_ = selectorVerification.waitAll()
+		}
 		return functionalCoverageSelection{}, functionalQuarantine{}, err
 	}
 	var inventory functionalTestInventory
@@ -93,9 +97,15 @@ func resolveFunctionalCoverageSelectionWithMetadataAndVerification(path string, 
 		inventory, err = discoverFunctionalTestInventoryFromListedPackagesWithJobs(packages, listedPackages, jobs)
 	}
 	if err != nil {
+		if selectorVerification != nil {
+			_ = selectorVerification.waitAll()
+		}
 		return functionalCoverageSelection{}, functionalQuarantine{}, err
 	}
 	if err := validateFunctionalQuarantine(manifest, inventory); err != nil {
+		if selectorVerification != nil {
+			_ = selectorVerification.waitAll()
+		}
 		return functionalCoverageSelection{}, functionalQuarantine{}, err
 	}
 	if selectorVerification != nil {
@@ -104,10 +114,16 @@ func resolveFunctionalCoverageSelectionWithMetadataAndVerification(path string, 
 		err = verifyFunctionalTestQuarantineSelectors(manifest, timeout, short, jobs, repoRoot)
 	}
 	if err != nil {
+		if selectorVerification != nil {
+			_ = selectorVerification.waitRatchet()
+		}
 		return functionalCoverageSelection{}, functionalQuarantine{}, err
 	}
 	selection, err := buildFunctionalCoverageSelection(manifest, inventory)
 	if err != nil {
+		if selectorVerification != nil {
+			_ = selectorVerification.waitRatchet()
+		}
 		return functionalCoverageSelection{}, functionalQuarantine{}, err
 	}
 	return selection, manifest, nil
@@ -177,8 +193,14 @@ func prepareFunctionalCoverageRunAfterStartWithVerification(cfg config, packages
 		selection.SelectedTestCount,
 		filepath.ToSlash(cfg.functionalQuarantine),
 	)
-	if err := runFunctionalQuarantineRatchet(manifest, cfg.timeout, cfg.short, repoRoot); err != nil {
-		return functionalCoverageSelection{}, nil, err
+	var ratchetErr error
+	if selectorVerification != nil {
+		ratchetErr = selectorVerification.waitRatchet()
+	} else {
+		ratchetErr = runFunctionalQuarantineRatchet(manifest, cfg.timeout, cfg.short, repoRoot)
+	}
+	if ratchetErr != nil {
+		return functionalCoverageSelection{}, nil, ratchetErr
 	}
 	return selection, selectedFunctionalPackages(selection), nil
 }
@@ -311,6 +333,10 @@ func (result functionalQuarantineOutcomeResult) allAttemptsPassed() bool {
 }
 
 func runFunctionalQuarantineRatchet(manifest functionalQuarantine, timeout time.Duration, short bool, repoRoot string) error {
+	return runFunctionalQuarantineRatchetWithWriter(manifest, timeout, short, repoRoot, stdoutWriter)
+}
+
+func runFunctionalQuarantineRatchetWithWriter(manifest functionalQuarantine, timeout time.Duration, short bool, repoRoot string, output io.Writer) error {
 	if len(manifest.Entries) == 0 {
 		return nil
 	}
@@ -321,14 +347,14 @@ func runFunctionalQuarantineRatchet(manifest functionalQuarantine, timeout time.
 		measurement, measurementErr := functionalQuarantineMeasurement(entry)
 		if measurementErr != nil {
 			failures = append(failures, fmt.Errorf("functional quarantine ratchet: selector %q has invalid measurement metadata (fail-closed): %w", functionalSelectorDisplay(entry), measurementErr))
-			fmt.Fprintf(stdoutWriter, "Functional quarantine selector: selector=%q bucket=%s observed=validation-error status=fail-closed measurement=%q detail=%q\n", functionalSelectorDisplay(entry), entry.Bucket, entry.Measurement, compactFunctionalQuarantineDetail(measurementErr.Error()))
+			fmt.Fprintf(output, "Functional quarantine selector: selector=%q bucket=%s observed=validation-error status=fail-closed measurement=%q detail=%q\n", functionalSelectorDisplay(entry), entry.Bucket, entry.Measurement, compactFunctionalQuarantineDetail(measurementErr.Error()))
 			continue
 		}
 
 		result, err := runFunctionalQuarantineSelectorWithMeasurementSpec(entry, measurement, timeout, short, repoRoot)
 		if err != nil {
 			failures = append(failures, fmt.Errorf("functional quarantine ratchet: selector %q execution error (fail-closed): %w", functionalSelectorDisplay(entry), err))
-			fmt.Fprintf(stdoutWriter, "Functional quarantine selector: selector=%q bucket=%s observed=execution-error status=fail-closed measurement=%s detail=%q\n", functionalSelectorDisplay(entry), entry.Bucket, measurement.method, compactFunctionalQuarantineDetail(err.Error()))
+			fmt.Fprintf(output, "Functional quarantine selector: selector=%q bucket=%s observed=execution-error status=fail-closed measurement=%s detail=%q\n", functionalSelectorDisplay(entry), entry.Bucket, measurement.method, compactFunctionalQuarantineDetail(err.Error()))
 			continue
 		}
 
@@ -336,7 +362,7 @@ func runFunctionalQuarantineRatchet(manifest functionalQuarantine, timeout time.
 		expected, expectedErr := expectedFunctionalQuarantineOutcome(entry.Bucket)
 		if expectedErr != nil {
 			failures = append(failures, fmt.Errorf("functional quarantine ratchet: selector %q has no expected outcome for bucket %q: %w", functionalSelectorDisplay(entry), entry.Bucket, expectedErr))
-			fmt.Fprintf(stdoutWriter, "Functional quarantine selector: selector=%q bucket=%s observed=%s status=fail-closed measurement=%s detail=%q\n", functionalSelectorDisplay(entry), entry.Bucket, result.Observed, measurement.method, compactFunctionalQuarantineDetail(expectedErr.Error()))
+			fmt.Fprintf(output, "Functional quarantine selector: selector=%q bucket=%s observed=%s status=fail-closed measurement=%s detail=%q\n", functionalSelectorDisplay(entry), entry.Bucket, result.Observed, measurement.method, compactFunctionalQuarantineDetail(expectedErr.Error()))
 			continue
 		}
 
@@ -360,7 +386,7 @@ func runFunctionalQuarantineRatchet(manifest functionalQuarantine, timeout time.
 		} else if status == "unexpected-outcome" {
 			failures = append(failures, fmt.Errorf("functional quarantine ratchet: selector %q observed %s, expected %s for bucket=%s; verify the quarantine bucket and precondition", functionalSelectorDisplay(entry), result.Observed, expected, entry.Bucket))
 		}
-		fmt.Fprintf(stdoutWriter, "Functional quarantine selector: selector=%q bucket=%s expected=%s observed=%s status=%s %s detail=%q\n", functionalSelectorDisplay(entry), entry.Bucket, expected, result.Observed, status, formatFunctionalQuarantineMeasurement(measurement, result.OutcomeCounts), compactFunctionalQuarantineDetail(result.Detail))
+		fmt.Fprintf(output, "Functional quarantine selector: selector=%q bucket=%s expected=%s observed=%s status=%s %s detail=%q\n", functionalSelectorDisplay(entry), entry.Bucket, expected, result.Observed, status, formatFunctionalQuarantineMeasurement(measurement, result.OutcomeCounts), compactFunctionalQuarantineDetail(result.Detail))
 	}
 
 	passCount, failCount, skipCount := 0, 0, 0
@@ -374,7 +400,7 @@ func runFunctionalQuarantineRatchet(manifest functionalQuarantine, timeout time.
 			skipCount++
 		}
 	}
-	fmt.Fprintf(stdoutWriter, "Functional quarantine ratchet: selectors=%d observed-pass=%d observed-fail=%d observed-skip=%d execution-errors=%d\n", len(manifest.Entries), passCount, failCount, skipCount, len(manifest.Entries)-len(results))
+	fmt.Fprintf(output, "Functional quarantine ratchet: selectors=%d observed-pass=%d observed-fail=%d observed-skip=%d execution-errors=%d\n", len(manifest.Entries), passCount, failCount, skipCount, len(manifest.Entries)-len(results))
 	return errors.Join(failures...)
 }
 
