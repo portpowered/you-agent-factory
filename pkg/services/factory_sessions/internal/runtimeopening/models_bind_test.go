@@ -239,6 +239,7 @@ func TestAssembleRuntimeProductsCarriesModelsRootAndScopeIntoOpenedRuntime(t *te
 	}
 
 	opened := assembleRuntimeProducts(
+		context.Background(),
 		nil,
 		nil,
 		nil,
@@ -277,6 +278,7 @@ func TestAssembleRuntimeProductsBindsHostBoundFactorySessionsGatewayForApplicati
 		return factorysessions.LiveControlSnapshot{Context: factorysessions.ProjectionContext{FactorySessionID: "host-bound-gateway"}}
 	}}
 	opened := assembleRuntimeProducts(
+		context.Background(),
 		nil,
 		gateway,
 		nil,
@@ -329,6 +331,7 @@ func TestAssembledRuntimeResourcesCloseAcquiredResourcesInReverseOrder(t *testin
 	})
 
 	opened := assembleRuntimeProducts(
+		context.Background(),
 		nil,
 		nil,
 		nil,

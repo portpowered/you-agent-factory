@@ -88,6 +88,22 @@ func (wrapped *invocationScheduleFactory) WorkerSessionsObservation() workersess
 	return provider.WorkerSessionsObservation()
 }
 
+// WorkerSessionsObservationForSession forwards the effective Factory Session
+// identity through the automation decorator without changing the runtime's
+// execution identity.
+func (wrapped *invocationScheduleFactory) WorkerSessionsObservationForSession(factorySessionID string) workersessions.ObservationService {
+	if wrapped == nil {
+		return nil
+	}
+	provider, _ := wrapped.Engine.(interface {
+		WorkerSessionsObservationForSession(string) workersessions.ObservationService
+	})
+	if provider == nil {
+		return nil
+	}
+	return provider.WorkerSessionsObservationForSession(factorySessionID)
+}
+
 // RuntimeProgressPublisher forwards the runtime-owned child observation
 // bridge through the schedule decorator installed on the Factory engine.
 func (wrapped *invocationScheduleFactory) RuntimeProgressPublisher() workers.ProgressPublisher {

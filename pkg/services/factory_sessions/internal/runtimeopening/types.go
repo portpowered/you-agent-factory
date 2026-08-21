@@ -1,6 +1,7 @@
 package runtimeopening
 
 import (
+	"context"
 	"strings"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
@@ -35,6 +36,10 @@ type workerSessionsObservationProvider interface {
 	WorkerSessionsObservation() workersessions.ObservationService
 }
 
+type workerSessionsObservationForSessionProvider interface {
+	WorkerSessionsObservationForSession(string) workersessions.ObservationService
+}
+
 func historicalReplayRuntimeProducts(
 	logger *zap.Logger,
 	projection recordingreplay.RecordingReplayProjection,
@@ -53,6 +58,7 @@ func historicalReplayRuntimeProducts(
 }
 
 func assembleRuntimeProducts(
+	ctx context.Context,
 	factoryDefinitions factorydefinitions.Service,
 	factorySessionGateway factorysessions.Service,
 	sessionInvocation roles.SessionInvoker,
@@ -74,6 +80,9 @@ func assembleRuntimeProducts(
 	closeResources func() error,
 	factorySessionIDs ...string,
 ) runtimeProducts {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	var bindRuntime func(factoryruntime.RuntimeBinding) error
 	factorySessionID := ""
 	if len(factorySessionIDs) > 0 {
@@ -88,10 +97,20 @@ func assembleRuntimeProducts(
 			}
 		}
 	}
+	effectiveFactorySessionID := factorySessionID
+	if factorySessionGateway != nil && factorySessionID != "" {
+		if projection, err := factorySessionGateway.GetFactorySession(ctx, factorySessionID); err == nil {
+			if resolved := strings.TrimSpace(projection.Context.FactorySessionID); resolved != "" {
+				effectiveFactorySessionID = resolved
+			}
+		}
+	}
 	workerPrompts, _ := workerService.(workers.PromptTemplates)
 	liveControl, _ := factorySessionGateway.(factorysessions.LiveControlService)
 	var workerSessions workersessions.ObservationService
-	if provider, ok := factoryRuntime.(workerSessionsObservationProvider); ok {
+	if provider, ok := factoryRuntime.(workerSessionsObservationForSessionProvider); ok {
+		workerSessions = provider.WorkerSessionsObservationForSession(effectiveFactorySessionID)
+	} else if provider, ok := factoryRuntime.(workerSessionsObservationProvider); ok {
 		workerSessions = provider.WorkerSessionsObservation()
 	}
 	inputResolver, _ := sessionInvocation.(roles.InvocationInputResolver)

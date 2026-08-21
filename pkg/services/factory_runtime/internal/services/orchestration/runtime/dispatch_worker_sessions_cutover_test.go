@@ -961,6 +961,15 @@ func TestRecordedLiveAdapterBranches(t *testing.T) {
 	if (&factoryImpl{cfg: &runtimeConfig{}}).WorkerSessionsObservation() == nil {
 		t.Fatal("WorkerSessionsObservation() on configured runtime returned nil")
 	}
+	resolved := "550e8400-e29b-41d4-a716-446655440000"
+	observation := (&factoryImpl{cfg: &runtimeConfig{}}).WorkerSessionsObservationForSession(resolved)
+	service, ok := observation.(*recordedWorkerSessionObservation)
+	if !ok {
+		t.Fatalf("WorkerSessionsObservationForSession() type = %T, want recordedWorkerSessionObservation", observation)
+	}
+	if service.factorySessionID != resolved {
+		t.Fatalf("WorkerSessionsObservationForSession() factory session id = %q, want %q", service.factorySessionID, resolved)
+	}
 }
 
 func recordedDispatchFactTestEvents(t *testing.T) (time.Time, []interfaces.FactoryEvent) {

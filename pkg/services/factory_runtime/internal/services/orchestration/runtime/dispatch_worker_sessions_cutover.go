@@ -227,6 +227,21 @@ func (f *factoryImpl) WorkerSessionsObservation() workersessions.ObservationServ
 	if f == nil || f.cfg == nil {
 		return nil
 	}
+	return f.WorkerSessionsObservationForSession(sessionIDFromFactoryConfig(f.cfg))
+}
+
+// WorkerSessionsObservationForSession binds the detached Worker Session read
+// projection to the effective Factory Session identity exposed by the live
+// Factory Sessions registry. Runtime execution may retain the ~default alias,
+// while public reads use the resolved canonical identity.
+func (f *factoryImpl) WorkerSessionsObservationForSession(factorySessionID string) workersessions.ObservationService {
+	if f == nil || f.cfg == nil {
+		return nil
+	}
+	factorySessionID = strings.TrimSpace(factorySessionID)
+	if factorySessionID == "" {
+		factorySessionID = sessionIDFromFactoryConfig(f.cfg)
+	}
 	var workerRecordingReader recordings.WorkerRecordingReader
 	if reader, ok := f.cfg.workerSessions.(recordings.WorkerRecordingReader); ok {
 		workerRecordingReader = reader
@@ -240,7 +255,7 @@ func (f *factoryImpl) WorkerSessionsObservation() workersessions.ObservationServ
 		f.cfg.replayEvents,
 		f.cfg.recordingID,
 		workerRecordingReader,
-		sessionIDFromFactoryConfig(f.cfg),
+		factorySessionID,
 	)
 }
 
