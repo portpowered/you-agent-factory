@@ -176,8 +176,22 @@ func TestWorkListAllAnnotatesSupersededSameName(t *testing.T) {
 	submitWorkListFiltersCountsBatchWithRequestID(t, process, home, server.URL(),
 		"work-list-fresh-failure", []workListFiltersCountsWork{freshFailure})
 	moveWorkListFiltersCountsWork(t, process, home, server.URL(), freshFailure.WorkID, "failed")
+	assertWorkListSupersessionDefault(t, process, home, server.URL(), oldWork, newWork, freshFailure)
+	assertWorkListSupersessionHistory(t, process, home, server.URL(), oldWork, newWork)
+}
 
-	defaultOutput := executeWorkListFiltersCountsCLI(t, process, home, "--server", server.URL(),
+func assertWorkListSupersessionDefault(
+	t *testing.T,
+	process support.Process,
+	home string,
+	serverURL string,
+	oldWork workListFiltersCountsWork,
+	newWork workListFiltersCountsWork,
+	freshFailure workListFiltersCountsWork,
+) {
+	t.Helper()
+
+	defaultOutput := executeWorkListFiltersCountsCLI(t, process, home, "--server", serverURL,
 		"--json", "work", "list", "--name", oldWork.Name, "--counts")
 	var defaultList factoryapi.ListWorkResponse
 	if err := json.Unmarshal([]byte(strings.TrimSpace(defaultOutput)), &defaultList); err != nil {
@@ -189,34 +203,45 @@ func TestWorkListAllAnnotatesSupersededSameName(t *testing.T) {
 		t.Fatalf("default same-name list exposed superseded Work: %s", defaultOutput)
 	}
 
-	terminal := listWorkListFiltersCounts(t, process, home, server.URL(),
+	freshFailureList := listWorkListFiltersCounts(t, process, home, serverURL,
+		"--terminal", "--name", freshFailure.Name, "--counts")
+	assertWorkListFiltersCountsSummary(t, freshFailureList, 1, 1)
+	assertWorkListFiltersCountsIDs(t, freshFailureList, map[string]bool{freshFailure.WorkID: true})
+}
+
+func assertWorkListSupersessionHistory(
+	t *testing.T,
+	process support.Process,
+	home string,
+	serverURL string,
+	oldWork workListFiltersCountsWork,
+	newWork workListFiltersCountsWork,
+) {
+	t.Helper()
+
+	terminal := listWorkListFiltersCounts(t, process, home, serverURL,
 		"--all", "--name", oldWork.Name, "--terminal", "--counts")
 	assertWorkListFiltersCountsSummary(t, terminal, 1, 1)
 	assertWorkListFiltersCountsIDs(t, terminal, map[string]bool{oldWork.WorkID: true})
-	nonTerminal := listWorkListFiltersCounts(t, process, home, server.URL(),
+	nonTerminal := listWorkListFiltersCounts(t, process, home, serverURL,
 		"--all", "--name", oldWork.Name, "--non-terminal", "--counts")
 	assertWorkListFiltersCountsSummary(t, nonTerminal, 1, 1)
 	assertWorkListFiltersCountsIDs(t, nonTerminal, map[string]bool{newWork.WorkID: true})
 
-	firstPage := listWorkListFiltersCounts(t, process, home, server.URL(),
+	firstPage := listWorkListFiltersCounts(t, process, home, serverURL,
 		"--all", "--name", oldWork.Name, "--counts", "--max-results", "1")
 	assertWorkListFiltersCountsSummary(t, firstPage, 2, 1)
 	if firstPage.PaginationContext == nil || firstPage.PaginationContext.NextToken == nil ||
 		strings.TrimSpace(*firstPage.PaginationContext.NextToken) == "" {
 		t.Fatalf("--all same-name page missing next token: %#v", firstPage.PaginationContext)
 	}
-	secondPage := listWorkListFiltersCounts(t, process, home, server.URL(),
+	secondPage := listWorkListFiltersCounts(t, process, home, serverURL,
 		"--all", "--name", oldWork.Name, "--counts", "--max-results", "1",
 		"--next-token", *firstPage.PaginationContext.NextToken)
 	assertWorkListFiltersCountsSummary(t, secondPage, 2, 1)
 	assertDisjointWorkListFiltersCountsPages(t, firstPage, secondPage)
 
-	freshFailureList := listWorkListFiltersCounts(t, process, home, server.URL(),
-		"--terminal", "--name", freshFailure.Name, "--counts")
-	assertWorkListFiltersCountsSummary(t, freshFailureList, 1, 1)
-	assertWorkListFiltersCountsIDs(t, freshFailureList, map[string]bool{freshFailure.WorkID: true})
-
-	allOutput := executeWorkListFiltersCountsCLI(t, process, home, "--server", server.URL(),
+	allOutput := executeWorkListFiltersCountsCLI(t, process, home, "--server", serverURL,
 		"--json", "work", "list", "--all", "--name", oldWork.Name, "--counts")
 	var allList factoryapi.ListWorkResponse
 	if err := json.Unmarshal([]byte(strings.TrimSpace(allOutput)), &allList); err != nil {
@@ -246,7 +271,7 @@ func TestWorkListAllAnnotatesSupersededSameName(t *testing.T) {
 		t.Fatalf("--all response missing old/new annotation: %s", allOutput)
 	}
 
-	human := executeWorkListFiltersCountsCLI(t, process, home, "--server", server.URL(),
+	human := executeWorkListFiltersCountsCLI(t, process, home, "--server", serverURL,
 		"work", "list", "--all", "--name", oldWork.Name)
 	if !strings.Contains(human, oldWork.WorkID) || !strings.Contains(human, newWork.WorkID) ||
 		!strings.Contains(human, "Superseded by: "+newWork.WorkID) {

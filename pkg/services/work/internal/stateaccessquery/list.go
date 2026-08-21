@@ -126,6 +126,11 @@ func NormalizeList(options ListOptions) (ListQuery, error) {
 		return ListQuery{}, err
 	}
 
+	summary := listFilterSummary(options)
+	return ListQuery{options: options, filterSummary: summary}, nil
+}
+
+func listFilterSummary(options ListOptions) string {
 	active := make([]string, 0, 8)
 	for _, entry := range []struct {
 		key   string
@@ -153,12 +158,10 @@ func NormalizeList(options ListOptions) (ListQuery, error) {
 	if options.SortBy != "" {
 		active = append(active, "sortBy")
 	}
-
-	summary := "none"
-	if len(active) > 0 {
-		summary = strings.Join(active, ",")
+	if len(active) == 0 {
+		return "none"
 	}
-	return ListQuery{options: options, filterSummary: summary}, nil
+	return strings.Join(active, ",")
 }
 
 // Options returns the normalized query values.

@@ -66,7 +66,15 @@ func TestListWorkHonorsPaginationNextToken(t *testing.T) {
 func TestListWorkDerivesSupersessionBeforeCountsAndPagination(t *testing.T) {
 	t.Parallel()
 
-	adapter := &recordingSessionAdapter{snapshot: work.ReadSnapshot{
+	svc := internalservice.New(stubSessionResolver{adapter: &recordingSessionAdapter{
+		snapshot: supersessionReadSnapshot(),
+	}}, nil)
+	assertDefaultSupersessionSelection(t, svc)
+	assertIncludedSupersessionHistory(t, svc)
+}
+
+func supersessionReadSnapshot() work.ReadSnapshot {
+	return work.ReadSnapshot{
 		Items: []work.ReadModel{
 			{CursorID: "tok-old", WorkID: "work-old", Name: "same name", State: &work.State{Type: work.StateTypeFailed}},
 			{CursorID: "tok-new", WorkID: "work-new", Name: "same name", State: &work.State{Type: work.StateTypeProcessing}},
@@ -77,8 +85,11 @@ func TestListWorkDerivesSupersessionBeforeCountsAndPagination(t *testing.T) {
 			{WorkID: "work-new", Name: "same name", Order: 1},
 			{WorkID: "work-fresh", Name: "fresh failure", Order: 2},
 		},
-	}}
-	svc := internalservice.New(stubSessionResolver{adapter: adapter}, nil)
+	}
+}
+
+func assertDefaultSupersessionSelection(t *testing.T, svc *internalservice.Service) {
+	t.Helper()
 
 	defaultPage, err := svc.ListWork(context.Background(), "session-1", work.ListOptions{
 		Counts: true, MaxResults: 1,
@@ -108,6 +119,10 @@ func TestListWorkDerivesSupersessionBeforeCountsAndPagination(t *testing.T) {
 	if defaultSecondPage.Counts == nil || defaultSecondPage.Counts.Total != 2 {
 		t.Fatalf("default second counts = %#v, want stable total 2", defaultSecondPage.Counts)
 	}
+}
+
+func assertIncludedSupersessionHistory(t *testing.T, svc *internalservice.Service) {
+	t.Helper()
 
 	allHistory, err := svc.ListWork(context.Background(), "session-1", work.ListOptions{
 		IncludeSuperseded: true, Counts: true,
