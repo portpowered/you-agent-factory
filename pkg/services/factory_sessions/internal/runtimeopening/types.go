@@ -83,44 +83,15 @@ func assembleRuntimeProducts(
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	var bindRuntime func(factoryruntime.RuntimeBinding) error
 	factorySessionID := ""
 	if len(factorySessionIDs) > 0 {
 		factorySessionID = strings.TrimSpace(factorySessionIDs[0])
 	}
-	if factorySessionID != "" {
-		if binder, ok := factoryRuntime.(interface {
-			BindRuntime(string, factoryruntime.RuntimeBinding) error
-		}); ok {
-			bindRuntime = func(binding factoryruntime.RuntimeBinding) error {
-				return binder.BindRuntime(factorySessionID, binding)
-			}
-		}
-	}
-	effectiveFactorySessionID := factorySessionID
-	if factorySessionGateway != nil && factorySessionID != "" {
-		if projection, err := factorySessionGateway.GetFactorySession(ctx, factorySessionID); err == nil {
-			if resolved := strings.TrimSpace(projection.Context.FactorySessionID); resolved != "" {
-				effectiveFactorySessionID = resolved
-			}
-		}
-	}
+	bindRuntime := runtimeBindingForSession(factoryRuntime, factorySessionID)
+	effectiveFactorySessionID := resolveOpenedFactorySessionID(ctx, factorySessionGateway, factorySessionID)
 	workerPrompts, _ := workerService.(workers.PromptTemplates)
 	liveControl, _ := factorySessionGateway.(factorysessions.LiveControlService)
-	var workerSessions workersessions.ObservationService
-	// The process Factory Sessions root resolves its current selected runtime,
-	// which is not necessarily the runtime being opened here. Prefer the
-	// session's freshly assembled runtime instance so its observation decorator
-	// retains the matching Worker Sessions registry and canonical event ledger.
-	observationRuntime := factoryRuntime
-	if startup != nil && startup.RuntimeService() != nil {
-		observationRuntime = startup.RuntimeService()
-	}
-	if provider, ok := observationRuntime.(workerSessionsObservationForSessionProvider); ok {
-		workerSessions = provider.WorkerSessionsObservationForSession(effectiveFactorySessionID)
-	} else if provider, ok := observationRuntime.(workerSessionsObservationProvider); ok {
-		workerSessions = provider.WorkerSessionsObservation()
-	}
+	workerSessions := openedWorkerSessionsObservation(factoryRuntime, startup, effectiveFactorySessionID)
 	inputResolver, _ := sessionInvocation.(roles.InvocationInputResolver)
 	resources := roles.RuntimeResources{
 		Logger: startup.RuntimeLogger(), Close: closeResources,
@@ -165,4 +136,63 @@ func assembleRuntimeProducts(
 			Resources: resources,
 		},
 	}
+}
+
+func runtimeBindingForSession(
+	factoryRuntime factoryruntime.Service,
+	factorySessionID string,
+) func(factoryruntime.RuntimeBinding) error {
+	if strings.TrimSpace(factorySessionID) == "" {
+		return nil
+	}
+	binder, ok := factoryRuntime.(interface {
+		BindRuntime(string, factoryruntime.RuntimeBinding) error
+	})
+	if !ok {
+		return nil
+	}
+	return func(binding factoryruntime.RuntimeBinding) error {
+		return binder.BindRuntime(factorySessionID, binding)
+	}
+}
+
+func resolveOpenedFactorySessionID(
+	ctx context.Context,
+	factorySessionGateway factorysessions.Service,
+	factorySessionID string,
+) string {
+	effectiveID := factorySessionID
+	if factorySessionGateway == nil || factorySessionID == "" {
+		return effectiveID
+	}
+	projection, err := factorySessionGateway.GetFactorySession(ctx, factorySessionID)
+	if err != nil {
+		return effectiveID
+	}
+	if resolved := strings.TrimSpace(projection.Context.FactorySessionID); resolved != "" {
+		return resolved
+	}
+	return effectiveID
+}
+
+func openedWorkerSessionsObservation(
+	factoryRuntime factoryruntime.Service,
+	startup runtimeports.RuntimeInstance,
+	effectiveFactorySessionID string,
+) workersessions.ObservationService {
+	// The process Factory Sessions root resolves its current selected runtime,
+	// which is not necessarily the runtime being opened here. Prefer the
+	// session's freshly assembled runtime instance so its observation decorator
+	// retains the matching Worker Sessions registry and canonical event ledger.
+	observationRuntime := factoryRuntime
+	if startup != nil && startup.RuntimeService() != nil {
+		observationRuntime = startup.RuntimeService()
+	}
+	if provider, ok := observationRuntime.(workerSessionsObservationForSessionProvider); ok {
+		return provider.WorkerSessionsObservationForSession(effectiveFactorySessionID)
+	}
+	if provider, ok := observationRuntime.(workerSessionsObservationProvider); ok {
+		return provider.WorkerSessionsObservation()
+	}
+	return nil
 }

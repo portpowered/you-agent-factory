@@ -8,7 +8,6 @@ import (
 	"sort"
 	"strings"
 
-	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
@@ -48,8 +47,20 @@ type controlService interface {
 	Terminate(context.Context, workersessions.ControlRequest) (workersessions.ControlResult, error)
 }
 
-type sessionScopeResolver interface {
-	GetFactorySession(context.Context, string) (factorysessions.SessionProjection, error)
+// SessionScope is the transport's detached view of the identity needed to
+// select and validate one Factory Session's Worker Session observations.
+// EffectiveID is used for the internal observation lookup; the requested
+// selector remains the public response alias.
+type SessionScope struct {
+	EffectiveID string
+	IsDefault   bool
+}
+
+// SessionScopeResolver supplies the already-opened session identity to the
+// Worker Sessions transport without coupling this package to Factory Sessions.
+// The application composition root adapts the owning Factory Sessions service.
+type SessionScopeResolver interface {
+	ResolveWorkerSessionScope(context.Context, string) (SessionScope, error)
 }
 
 type sessionObservationResolver interface {
@@ -57,6 +68,7 @@ type sessionObservationResolver interface {
 }
 
 type workerSessionScope struct {
+	requestedID  string
 	effectiveID  string
 	defaultScope bool
 }
@@ -68,7 +80,7 @@ type Adapter struct {
 	interrupter  interruptService
 	controller   controlService
 	work         work.Service
-	resolver     sessionScopeResolver
+	resolver     SessionScopeResolver
 }
 
 // GetWorkerSessionObservation verifies the request identity and returns the
@@ -409,7 +421,7 @@ func (a *Adapter) StreamWorkerSessionEventsByWorkerSessionIDWithCursor(
 func NewAdapter(
 	observations observationService,
 	workRoot work.Service,
-	resolvers ...sessionScopeResolver,
+	resolvers ...SessionScopeResolver,
 ) *Adapter {
 	if observations == nil || workRoot == nil {
 		return nil
@@ -423,7 +435,7 @@ func NewAdapterWithStart(
 	starter startService,
 	observations observationService,
 	workRoot work.Service,
-	resolvers ...sessionScopeResolver,
+	resolvers ...SessionScopeResolver,
 ) *Adapter {
 	if starter == nil || observations == nil || workRoot == nil {
 		return nil
@@ -438,7 +450,7 @@ func NewAdapterWithStartAndContinue(
 	continuer continuationService,
 	observations observationService,
 	workRoot work.Service,
-	resolvers ...sessionScopeResolver,
+	resolvers ...SessionScopeResolver,
 ) *Adapter {
 	if starter == nil || continuer == nil || observations == nil || workRoot == nil {
 		return nil
@@ -455,7 +467,7 @@ func NewAdapterWithStartAndContinueAndInterrupt(
 	interrupter interruptService,
 	observations observationService,
 	workRoot work.Service,
-	resolvers ...sessionScopeResolver,
+	resolvers ...SessionScopeResolver,
 ) *Adapter {
 	if starter == nil || continuer == nil || interrupter == nil || observations == nil || workRoot == nil {
 		return nil
@@ -476,7 +488,7 @@ func NewAdapterWithStartAndContinueAndInterruptAndControl(
 	controller controlService,
 	observations observationService,
 	workRoot work.Service,
-	resolvers ...sessionScopeResolver,
+	resolvers ...SessionScopeResolver,
 ) *Adapter {
 	if starter == nil || continuer == nil || interrupter == nil || controller == nil || observations == nil || workRoot == nil {
 		return nil
@@ -789,7 +801,7 @@ func (a *Adapter) StreamTopLevelWorkerSessionEvents(
 	return WorkerSessionObservationToAPI(observation), subscription, nil
 }
 
-func firstSessionScopeResolver(resolvers []sessionScopeResolver) sessionScopeResolver {
+func firstSessionScopeResolver(resolvers []SessionScopeResolver) SessionScopeResolver {
 	for _, resolver := range resolvers {
 		if resolver != nil {
 			return resolver
@@ -799,21 +811,19 @@ func firstSessionScopeResolver(resolvers []sessionScopeResolver) sessionScopeRes
 }
 
 func (a *Adapter) resolveWorkerSessionScope(ctx context.Context, sessionID string) (workerSessionScope, error) {
-	scope := workerSessionScope{effectiveID: strings.TrimSpace(sessionID)}
+	requestedID := strings.TrimSpace(sessionID)
+	scope := workerSessionScope{requestedID: requestedID, effectiveID: requestedID}
 	if a == nil || a.resolver == nil {
 		return scope, nil
 	}
-	projection, err := a.resolver.GetFactorySession(ctx, scope.effectiveID)
+	resolved, err := a.resolver.ResolveWorkerSessionScope(ctx, requestedID)
 	if err != nil {
-		if errors.Is(err, factorysessions.ErrSessionNotFound) {
-			return workerSessionScope{}, workersessions.ErrObservationSessionNotFound
-		}
 		return workerSessionScope{}, err
 	}
-	if resolved := strings.TrimSpace(projection.Context.FactorySessionID); resolved != "" {
-		scope.effectiveID = resolved
+	if effectiveID := strings.TrimSpace(resolved.EffectiveID); effectiveID != "" {
+		scope.effectiveID = effectiveID
 	}
-	scope.defaultScope = projection.Context.Session != nil && projection.Context.Session.IsDefault
+	scope.defaultScope = resolved.IsDefault
 	return scope, nil
 }
 
@@ -836,12 +846,17 @@ func scopeWorkerSessionObservation(
 	expectedSessionID := strings.TrimSpace(scope.effectiveID)
 	actualSessionID := strings.TrimSpace(observation.FactorySessionID)
 	if actualSessionID != "" && actualSessionID != expectedSessionID &&
-		!(scope.defaultScope && actualSessionID == factorysessions.DefaultSessionID) {
+		!(scope.defaultScope && actualSessionID == defaultFactorySessionAlias) {
 		return workersessions.Observation{}, workersessions.ErrObservationSessionNotFound
 	}
-	observation.FactorySessionID = expectedSessionID
+	observation.FactorySessionID = scope.requestedID
+	if observation.FactorySessionID == "" {
+		observation.FactorySessionID = expectedSessionID
+	}
 	return observation, nil
 }
+
+const defaultFactorySessionAlias = "~default"
 
 // sortObservations gives the public list a chronological attempt order while
 // retaining stable identity tie-breakers for projections without timestamps.

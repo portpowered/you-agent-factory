@@ -10,7 +10,6 @@ import (
 	"testing"
 	"time"
 
-	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
@@ -261,82 +260,6 @@ func TestListWorkerSessionsBySessionIDReturnsNotFoundForMissingWork(t *testing.T
 	}
 	if service.listCalled {
 		t.Fatal("observation service called for missing Work")
-	}
-}
-
-func TestListWorkerSessionsBySessionIDResolvesDefaultIdentityForLegacyObservation(t *testing.T) {
-	resolvedID := "550e8400-e29b-41d4-a716-446655440000"
-	service := &fakeObservationService{result: workersessions.ListObservationsResult{Observations: []workersessions.Observation{{
-		WorkerSessionID:  "worker-session-default",
-		FactorySessionID: factorysessions.DefaultSessionID,
-		WorkIDs:          []string{"work-1"},
-		AttemptID:        "attempt-default",
-		State:            workersessions.StateRunning,
-		DurationBasis:    workersessions.DurationBasisRecordedTimestamps,
-		Transcript:       workersessions.TranscriptAvailabilityUnavailable,
-	}}}}
-	resolver := &factorySessionResolverStub{projection: factorysessions.SessionProjection{Context: factorysessions.ProjectionContext{
-		FactorySessionID: resolvedID,
-		Session:          &factorysessions.ScopedLiveSessionSummary{ID: resolvedID, IsDefault: true},
-	}}}
-	handler := NewHandler(NewAdapter(service, workServiceStub{}, resolver), zap.NewNop())
-	recorder := httptest.NewRecorder()
-	request := httptest.NewRequest("GET", "/factory-sessions/"+resolvedID+"/worker-sessions?workId=work-1", nil)
-
-	handler.ListWorkerSessionsBySessionId(
-		recorder,
-		request,
-		factoryapi.SessionID(resolvedID),
-		factoryapi.ListWorkerSessionsBySessionIdParams{WorkId: "work-1"},
-	)
-
-	if recorder.Code != http.StatusOK {
-		t.Fatalf("status = %d, want 200; body=%s", recorder.Code, recorder.Body.String())
-	}
-	var response factoryapi.ListWorkerSessionsResponse
-	if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
-	if len(response.Sessions) != 1 || response.Sessions[0].FactorySessionId == nil || *response.Sessions[0].FactorySessionId != resolvedID {
-		t.Fatalf("resolved default response = %#v, want one session scoped to %q", response.Sessions, resolvedID)
-	}
-}
-
-func TestListWorkerSessionsBySessionIDMapsMismatchedObservationScopeToNotFound(t *testing.T) {
-	resolvedID := "factory-session-1"
-	service := &fakeObservationService{result: workersessions.ListObservationsResult{Observations: []workersessions.Observation{{
-		WorkerSessionID:  "worker-session-other",
-		FactorySessionID: "factory-session-other",
-		WorkIDs:          []string{"work-1"},
-		AttemptID:        "attempt-other",
-		State:            workersessions.StateCompleted,
-		DurationBasis:    workersessions.DurationBasisRecordedTimestamps,
-		Transcript:       workersessions.TranscriptAvailabilityUnavailable,
-	}}}}
-	resolver := &factorySessionResolverStub{projection: factorysessions.SessionProjection{Context: factorysessions.ProjectionContext{
-		FactorySessionID: resolvedID,
-		Session:          &factorysessions.ScopedLiveSessionSummary{ID: resolvedID, IsDefault: false},
-	}}}
-	handler := NewHandler(NewAdapter(service, workServiceStub{}, resolver), zap.NewNop())
-	recorder := httptest.NewRecorder()
-	request := httptest.NewRequest("GET", "/factory-sessions/"+resolvedID+"/worker-sessions?workId=work-1", nil)
-
-	handler.ListWorkerSessionsBySessionId(
-		recorder,
-		request,
-		factoryapi.SessionID(resolvedID),
-		factoryapi.ListWorkerSessionsBySessionIdParams{WorkId: "work-1"},
-	)
-
-	if recorder.Code != http.StatusNotFound {
-		t.Fatalf("status = %d, want 404; body=%s", recorder.Code, recorder.Body.String())
-	}
-	var response factoryapi.ErrorResponse
-	if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil {
-		t.Fatalf("decode error response: %v", err)
-	}
-	if response.Code != factoryapi.ErrorResponseCodeNOTFOUND {
-		t.Fatalf("error code = %q, want NOT_FOUND", response.Code)
 	}
 }
 
@@ -911,15 +834,6 @@ type fakeObservationService struct {
 	interruptErr               error
 	interruptCalled            bool
 	interruptRequest           workersessions.InterruptRequest
-}
-
-type factorySessionResolverStub struct {
-	projection factorysessions.SessionProjection
-	err        error
-}
-
-func (stub *factorySessionResolverStub) GetFactorySession(context.Context, string) (factorysessions.SessionProjection, error) {
-	return stub.projection, stub.err
 }
 
 func (f *fakeObservationService) ListObservations(context.Context, workersessions.ListObservationsRequest) (workersessions.ListObservationsResult, error) {

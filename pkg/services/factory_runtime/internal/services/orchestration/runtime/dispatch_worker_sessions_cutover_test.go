@@ -11,7 +11,6 @@ import (
 	"github.com/portpowered/infinite-you/internal/testutil/recordingfixtures"
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
-	eventswire "github.com/portpowered/infinite-you/pkg/services/events/wire"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
@@ -19,7 +18,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
-	workersessionswire "github.com/portpowered/infinite-you/pkg/services/worker_sessions/wire"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
@@ -56,14 +54,7 @@ func (l *blockingAssociationLedger) RecordDispatchWorkerSessionAssociation(
 
 func TestStartThroughWorkerSessions_AssociationIsControlAddressableBeforeStart(t *testing.T) {
 	workerService := newControlledWorkstationBoundary()
-	events, err := eventswire.NewService(logging.NoopLogger{})
-	if err != nil {
-		t.Fatalf("New events service: %v", err)
-	}
-	workerSessions, err := workersessionswire.NewService(workerService, events, logging.NoopLogger{}, platformclock.Real{}, unavailableProviderSessions{}, nil)
-	if err != nil {
-		t.Fatalf("New Worker Sessions service: %v", err)
-	}
+	workerSessions := newRuntimeWorkerSessionsService(workerService)
 	ledger := newBlockingAssociationLedger()
 	request := workers.WorkstationDispatchRequest{
 		WorkstationName: "review",
@@ -118,9 +109,8 @@ func TestStartThroughWorkerSessions_AssociationIsControlAddressableBeforeStart(t
 // dispatch-to-Worker-Session association is committed to Factory Events
 // before worker_sessions.Service.Start can hand the attempt to Workers.
 // controlledWorkstationBoundary only receives a DispatchWorkstation call once
-// Start has reserved the session, transitioned STARTING, and handed off --
-// so observing the association at that exact point proves the ordering
-// without needing a controlled Worker Sessions fake.
+// the service-root test double has reserved the session and handed off -- so
+// observing the association at that exact point proves the ordering.
 func TestFactoryImpl_PlanDispatchRecordsWorkerSessionAssociationBeforeWorkersHandoff(t *testing.T) {
 	boundary := newControlledWorkstationBoundary()
 	runtime, ledger, err := newTestFactoryWithScriptedLedger(
@@ -247,10 +237,7 @@ func newInvokeWorkerTestFactory(
 	execution *controlledWorkstationBoundary,
 ) *factoryImpl {
 	t.Helper()
-	events, err := eventswire.NewService(logging.NoopLogger{})
-	requireNoRootErr(t, err, "New events service")
-	sessions, err := workersessionswire.NewService(execution, events, logging.NoopLogger{}, platformclock.Real{}, unavailableProviderSessions{}, nil)
-	requireNoRootErr(t, err, "New Worker Sessions service")
+	sessions := newRuntimeWorkerSessionsService(execution)
 
 	runtime, _, err := newTestFactoryWithScriptedLedger(
 		withNet(buildSimpleNet()),
