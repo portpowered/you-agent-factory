@@ -33,22 +33,26 @@ func TestMockWorkersSchema_DeclaresDraft202012AndStableID(t *testing.T) {
 	}
 }
 
-func TestMockWorkersSchema_ClosesAuthoredObjects(t *testing.T) {
+func TestMockWorkersSchema_AllConfigObjectsAllowUnknownFields(t *testing.T) {
 	t.Parallel()
 
 	schema := loadAuthoredMockWorkersSchema(t)
-	assertObjectClosed(t, schema, "/")
+	assertObjectAllowsUnknownFields(t, schema, "/")
 
 	defs, ok := schema["$defs"].(map[string]any)
 	if !ok {
 		t.Fatal("$defs missing or not an object")
 	}
-	for name, def := range defs {
+	for _, name := range []string{"mockWorker", "rejectConfig", "scriptConfig", "workInput"} {
+		def, ok := defs[name]
+		if !ok {
+			t.Fatalf("$defs[%q] missing", name)
+		}
 		defObject, ok := def.(map[string]any)
 		if !ok {
 			t.Fatalf("$defs[%q] is not an object", name)
 		}
-		assertObjectClosed(t, defObject, "/$defs/"+name)
+		assertObjectAllowsUnknownFields(t, defObject, "/$defs/"+name)
 	}
 }
 
@@ -265,14 +269,14 @@ func objectProperties(t *testing.T, object map[string]any, path string) map[stri
 	return props
 }
 
-func assertObjectClosed(t *testing.T, object map[string]any, path string) {
+func assertObjectAllowsUnknownFields(t *testing.T, object map[string]any, path string) {
 	t.Helper()
 
 	if object["type"] != "object" {
 		return
 	}
-	if object["additionalProperties"] != false {
-		t.Fatalf("%s.additionalProperties = %#v, want false", path, object["additionalProperties"])
+	if object["additionalProperties"] == false {
+		t.Fatalf("%s.additionalProperties = false, want unknown fields allowed", path)
 	}
 }
 

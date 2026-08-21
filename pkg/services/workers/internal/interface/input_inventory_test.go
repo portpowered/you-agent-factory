@@ -21,6 +21,15 @@ func localMockWorkersConfigLoader(t *testing.T) mockworkers.MockWorkersConfigLoa
 	return load
 }
 
+func localMockWorkersConfigDiagnosticsLoader(t *testing.T) mockworkers.MockWorkersConfigDiagnosticsLoader {
+	t.Helper()
+	load, err := mockworkers.NewMockWorkersConfigDiagnosticsLoader(platformfilesystem.Local{})
+	if err != nil {
+		t.Fatalf("construct mock workers diagnostics loader: %v", err)
+	}
+	return load
+}
+
 func TestProjectInputInventory_RecordsUnknownFieldPolicyAndEntrypoints(t *testing.T) {
 	t.Parallel()
 
@@ -28,8 +37,10 @@ func TestProjectInputInventory_RecordsUnknownFieldPolicyAndEntrypoints(t *testin
 	if inventory.FormatVersion != mockworkers.InputInventoryFormatVersion {
 		t.Fatalf("FormatVersion = %q, want %q", inventory.FormatVersion, mockworkers.InputInventoryFormatVersion)
 	}
-	if !strings.Contains(inventory.UnknownFieldPolicy, "DisallowUnknownFields") {
-		t.Fatalf("unknown field policy = %q, want DisallowUnknownFields reference", inventory.UnknownFieldPolicy)
+	for _, want := range []string{"ignores unknown object fields", "sorted unique JSON paths", "exactly one JSON document"} {
+		if !strings.Contains(inventory.UnknownFieldPolicy, want) {
+			t.Fatalf("unknown field policy = %q, want %q", inventory.UnknownFieldPolicy, want)
+		}
 	}
 	if len(inventory.LoaderEntrypoints) != 2 {
 		t.Fatalf("loader entrypoints len = %d, want ParseMockWorkersConfig and LoadMockWorkersConfig", len(inventory.LoaderEntrypoints))
@@ -48,6 +59,8 @@ func TestProjectInputInventory_HasDocsExampleAndVariantCases(t *testing.T) {
 		"valid-reject-without-reject-config",
 		"valid-script-minimal-command",
 		"valid-unmatched-policy-explicit-accept",
+		"valid-unknown-top-level",
+		"valid-unknown-nested-mock-worker",
 		"docs-example-mock-workers",
 		"docs-example-mock-workers-script",
 		"docs-example-mock-workers-mixed",
@@ -55,6 +68,8 @@ func TestProjectInputInventory_HasDocsExampleAndVariantCases(t *testing.T) {
 		"load-docs-example-mock-workers",
 		"load-docs-example-mock-workers-script",
 		"load-docs-example-mock-workers-mixed",
+		"load-unknown-top-level",
+		"load-unknown-nested-mock-worker",
 	}
 	for _, id := range required {
 		if _, ok := byID[id]; !ok {
@@ -63,15 +78,15 @@ func TestProjectInputInventory_HasDocsExampleAndVariantCases(t *testing.T) {
 	}
 }
 
-func TestProjectInputInventory_HasUnknownFieldAndInvalidUnionRejectCases(t *testing.T) {
+func TestProjectInputInventory_HasTolerantUnknownFieldAndInvalidUnionCases(t *testing.T) {
 	t.Parallel()
 
 	inventory := mockworkers.ProjectInputInventory()
 	byID := indexInputCasesByID(t, inventory.Cases)
 
 	required := []string{
-		"invalid-unknown-top-level",
-		"invalid-unknown-nested-mock-worker",
+		"valid-unknown-top-level",
+		"valid-unknown-nested-mock-worker",
 		"invalid-trailing-json",
 		"invalid-unknown-run-type",
 		"invalid-unknown-unmatched-policy",
@@ -84,6 +99,12 @@ func TestProjectInputInventory_HasUnknownFieldAndInvalidUnionRejectCases(t *test
 		if !ok {
 			t.Fatalf("missing indexed invalid input case %q", id)
 		}
+		if strings.HasPrefix(id, "valid-unknown-") {
+			if inputCase.Outcome != "accept" || len(inputCase.IgnoredJSONPaths) == 0 {
+				t.Fatalf("input case %q = %#v, want accepted case with ignored paths", id, inputCase)
+			}
+			continue
+		}
 		if inputCase.Outcome != "reject" {
 			t.Fatalf("input case %q outcome = %q, want reject", id, inputCase.Outcome)
 		}
@@ -92,19 +113,19 @@ func TestProjectInputInventory_HasUnknownFieldAndInvalidUnionRejectCases(t *test
 		}
 	}
 
-	var unknownFieldReject bool
+	var unknownFieldAccept bool
 	for _, inputCase := range inventory.Cases {
-		if inputCase.Category != "parse-unknown-field" || inputCase.Outcome != "reject" {
+		if inputCase.Category != "parse-unknown-field" || inputCase.Outcome != "accept" {
 			continue
 		}
-		if inputCase.Fixture == "" {
-			t.Fatalf("unknown-field case %q missing fixture", inputCase.ID)
+		if inputCase.Fixture == "" || len(inputCase.IgnoredJSONPaths) == 0 {
+			t.Fatalf("unknown-field case %q missing fixture or ignored paths", inputCase.ID)
 		}
-		unknownFieldReject = true
+		unknownFieldAccept = true
 		break
 	}
-	if !unknownFieldReject {
-		t.Fatal("missing unknown-field reject case in input inventory")
+	if !unknownFieldAccept {
+		t.Fatal("missing unknown-field accept case in input inventory")
 	}
 }
 
@@ -143,12 +164,13 @@ func runParseMockWorkersConfigCase(t *testing.T, inputCase mockworkers.InputCase
 	t.Helper()
 
 	data := readRepoFixture(t, inputCase.Fixture)
-	cfg, err := mockworkers.ParseMockWorkersConfig(data)
+	cfg, diagnostics, err := mockworkers.ParseMockWorkersConfigWithDiagnostics(data)
 	if inputCase.Outcome == "accept" {
 		if err != nil {
 			t.Fatalf("ParseMockWorkersConfig() error = %v, want accept", err)
 		}
 		assertMockWorkersConfigExpectation(t, cfg, inputCase.ExpectedConfig)
+		assertIgnoredJSONPaths(t, diagnostics.Paths(), inputCase.IgnoredJSONPaths)
 		return
 	}
 	if err == nil {
@@ -167,18 +189,26 @@ func runLoadMockWorkersConfigCase(t *testing.T, inputCase mockworkers.InputCase)
 		path = repoFixturePath(t, inputCase.Fixture)
 	}
 
-	cfg, err := localMockWorkersConfigLoader(t)(path)
+	cfg, diagnostics, err := localMockWorkersConfigDiagnosticsLoader(t)(path)
 	if inputCase.Outcome == "accept" {
 		if err != nil {
 			t.Fatalf("LoadMockWorkersConfig() error = %v, want accept", err)
 		}
 		assertMockWorkersConfigExpectation(t, cfg, inputCase.ExpectedConfig)
+		assertIgnoredJSONPaths(t, diagnostics.Paths(), inputCase.IgnoredJSONPaths)
 		return
 	}
 	if err == nil {
 		t.Fatal("LoadMockWorkersConfig() error = nil, want reject")
 	}
 	assertErrorFragments(t, err, inputCase.ErrorFragments)
+}
+
+func assertIgnoredJSONPaths(t *testing.T, got, want []string) {
+	t.Helper()
+	if strings.Join(got, "\n") != strings.Join(want, "\n") {
+		t.Fatalf("ignored JSON paths = %#v, want %#v", got, want)
+	}
 }
 
 func assertMockWorkersConfigExpectation(t *testing.T, cfg *mockworkers.MockWorkersConfig, want *mockworkers.MockWorkersConfigExpectation) {

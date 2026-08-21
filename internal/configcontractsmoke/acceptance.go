@@ -55,7 +55,7 @@ func AcceptanceCases() []AcceptanceCase {
 		{ID: "mock-worker-valid-empty", Family: FamilyMockWorker, Category: CategoryValid, FixturePath: "pkg/services/workers/internal/interface/testdata/fixtures/valid/empty-accept.json", Outcome: OutcomeAccept},
 		{ID: "mock-worker-compat-reject-default", Family: FamilyMockWorker, Category: CategoryCompatibility, FixturePath: "pkg/services/workers/internal/interface/testdata/fixtures/valid/reject-without-reject-config.json", Outcome: OutcomeAccept},
 		{ID: "mock-worker-malformed-json", Family: FamilyMockWorker, Category: CategoryMalformedDocument, FixturePath: "pkg/services/workers/internal/interface/testdata/fixtures/invalid/trailing-json.json", Outcome: OutcomeReject, DocumentPath: "/"},
-		{ID: "mock-worker-unknown-field", Family: FamilyMockWorker, Category: CategoryUnknownField, FixturePath: "pkg/services/workers/internal/interface/testdata/fixtures/invalid/unknown-top-level.json", Outcome: OutcomeReject, DocumentPath: "/unexpectedTopLevel"},
+		{ID: "mock-worker-unknown-field", Family: FamilyMockWorker, Category: CategoryUnknownField, FixturePath: "pkg/services/workers/internal/interface/testdata/fixtures/invalid/unknown-top-level.json", Outcome: OutcomeAccept},
 		{ID: "mock-worker-incompatible-run-type", Family: FamilyMockWorker, Category: CategoryIncompatibleValue, FixturePath: "pkg/services/workers/internal/interface/testdata/fixtures/invalid/unknown-run-type.json", Outcome: OutcomeReject, DocumentPath: "/mockWorkers/0/runType"},
 
 		{ID: "factory-valid-minimal", Family: FamilyFactory, Category: CategoryValid, FixturePath: "internal/configcontractsmoke/testdata/factory-valid-minimal.json", Outcome: OutcomeAccept},

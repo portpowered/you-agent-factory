@@ -10,8 +10,8 @@ func ProjectInputInventory() InputInventory {
 
 	return InputInventory{
 		FormatVersion: InputInventoryFormatVersion,
-		UnknownFieldPolicy: "ParseMockWorkersConfig uses json.Decoder.DisallowUnknownFields and rejects unknown top-level keys, " +
-			"unknown nested keys, and trailing JSON values",
+		UnknownFieldPolicy: "ParseMockWorkersConfig ignores unknown object fields and reports sorted unique JSON paths; " +
+			"known-field validation and exactly one JSON document remain strict",
 		LoaderEntrypoints: []string{
 			entrypointParseMockWorkersConfig,
 			entrypointLoadMockWorkersConfig,
@@ -100,6 +100,29 @@ func parseValidFixtureInputCases() []InputCase {
 				MockWorkerCount:         0,
 			},
 		},
+		{
+			ID:               "valid-unknown-top-level",
+			Category:         categoryParseUnknownField,
+			Entrypoint:       entrypointParseMockWorkersConfig,
+			Outcome:          outcomeAccept,
+			Fixture:          "pkg/services/workers/internal/interface/testdata/fixtures/invalid/unknown-top-level.json",
+			Description:      "unknown top-level keys are ignored and reported by JSON path",
+			IgnoredJSONPaths: []string{"$.unexpectedTopLevel"},
+			ExpectedConfig:   &MockWorkersConfigExpectation{MockWorkerCount: 0},
+		},
+		{
+			ID:               "valid-unknown-nested-mock-worker",
+			Category:         categoryParseUnknownField,
+			Entrypoint:       entrypointParseMockWorkersConfig,
+			Outcome:          outcomeAccept,
+			Fixture:          "pkg/services/workers/internal/interface/testdata/fixtures/invalid/unknown-nested-mock-worker.json",
+			Description:      "unknown nested mockWorkers[] keys are ignored and reported by JSON path",
+			IgnoredJSONPaths: []string{"$.mockWorkers[0].unexpectedNested"},
+			ExpectedConfig: &MockWorkersConfigExpectation{
+				MockWorkerCount: 1,
+				MockWorkers:     []MockWorkerExpectation{{ID: "bad", RunType: string(MockWorkerRunTypeAccept)}},
+			},
+		},
 	}
 }
 
@@ -165,30 +188,6 @@ func parseValidDocsExampleInputCases() []InputCase {
 
 func parseInvalidInputCases() []InputCase {
 	return []InputCase{
-		{
-			ID:          "invalid-unknown-top-level",
-			Category:    categoryParseUnknownField,
-			Entrypoint:  entrypointParseMockWorkersConfig,
-			Outcome:     outcomeReject,
-			Fixture:     "pkg/services/workers/internal/interface/testdata/fixtures/invalid/unknown-top-level.json",
-			Description: "unknown top-level keys are rejected under strict decode",
-			ErrorFragments: []string{
-				"decode mock workers JSON",
-				"unknown field",
-			},
-		},
-		{
-			ID:          "invalid-unknown-nested-mock-worker",
-			Category:    categoryParseUnknownField,
-			Entrypoint:  entrypointParseMockWorkersConfig,
-			Outcome:     outcomeReject,
-			Fixture:     "pkg/services/workers/internal/interface/testdata/fixtures/invalid/unknown-nested-mock-worker.json",
-			Description: "unknown nested mockWorkers[] keys are rejected under strict decode",
-			ErrorFragments: []string{
-				"decode mock workers JSON",
-				"unknown field",
-			},
-		},
 		{
 			ID:          "invalid-trailing-json",
 			Category:    categoryParseUnknownField,
@@ -311,6 +310,29 @@ func loadValidInputCases() []InputCase {
 			ExpectedConfig: &MockWorkersConfigExpectation{
 				UnmatchedDispatchPolicy: string(MockWorkerUnmatchedDispatchPolicyPassthrough),
 				MockWorkerCount:         1,
+			},
+		},
+		{
+			ID:               "load-unknown-top-level",
+			Category:         categoryParseUnknownField,
+			Entrypoint:       entrypointLoadMockWorkersConfig,
+			Outcome:          outcomeAccept,
+			Fixture:          "pkg/services/workers/internal/interface/testdata/fixtures/invalid/unknown-top-level.json",
+			Description:      "LoadMockWorkersConfig preserves known fields and reports ignored top-level paths",
+			IgnoredJSONPaths: []string{"$.unexpectedTopLevel"},
+			ExpectedConfig:   &MockWorkersConfigExpectation{MockWorkerCount: 0},
+		},
+		{
+			ID:               "load-unknown-nested-mock-worker",
+			Category:         categoryParseUnknownField,
+			Entrypoint:       entrypointLoadMockWorkersConfig,
+			Outcome:          outcomeAccept,
+			Fixture:          "pkg/services/workers/internal/interface/testdata/fixtures/invalid/unknown-nested-mock-worker.json",
+			Description:      "LoadMockWorkersConfig preserves known nested fields and reports ignored paths",
+			IgnoredJSONPaths: []string{"$.mockWorkers[0].unexpectedNested"},
+			ExpectedConfig: &MockWorkersConfigExpectation{
+				MockWorkerCount: 1,
+				MockWorkers:     []MockWorkerExpectation{{ID: "bad", RunType: string(MockWorkerRunTypeAccept)}},
 			},
 		},
 	}

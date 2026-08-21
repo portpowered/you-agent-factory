@@ -6,7 +6,7 @@
     "MockWorkersConfig.Validate",
     "MockWorkerConfig.Validate"
   ],
-  "unknownFieldPolicy": "ParseMockWorkersConfig uses json.Decoder.DisallowUnknownFields and rejects unknown top-level keys, unknown nested keys, and trailing JSON values",
+  "unknownFieldPolicy": "ParseMockWorkersConfig ignores unknown object fields and reports sorted unique JSON paths; known-field validation and exactly one JSON document remain strict",
   "entrySelectionPolicy": "first matching mockWorkers[] entry wins; there is no response-sequence or multi-hit authoring surface beyond that first-match selection",
   "runTypeUnion": {
     "summary": "runType is required on every mockWorkers[] entry and selects which nested config shape Validate enforces",
@@ -43,11 +43,6 @@
     }
   ],
   "validationBoundaries": [
-    {
-      "condition": "unknown top-level or nested JSON field",
-      "owner": "decode",
-      "errorPattern": "unknown field"
-    },
     {
       "condition": "trailing JSON after the root object",
       "owner": "decode",

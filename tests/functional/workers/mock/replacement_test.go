@@ -87,7 +87,7 @@ func TestMockWorkersReplaceOnlyNamedChildren(t *testing.T) {
 	assertInjectedProviderDispatch(t, realObservation)
 }
 
-// TestUnknownWorkerOverrideFailsActionably proves an unknown or invalid
+// TestUnknownWorkerOverrideFailsActionably proves an invalid
 // --with-mock-workers override fails before dispatch with a stable,
 // customer-visible diagnostic instead of silently accepting the bad override.
 func TestUnknownWorkerOverrideFailsActionably(t *testing.T) {
@@ -111,20 +111,6 @@ func TestUnknownWorkerOverrideFailsActionably(t *testing.T) {
 			}`,
 			wantNeedle:    invalidMockRunType,
 			wantSecondary: `runtype must be one of "accept", "script", or "reject"`,
-		},
-		{
-			name: "unknown nested override field",
-			payload: `{
-				"mockWorkers": [
-					{
-						"workerName": "` + unknownMockWorkerName + `",
-						"runType": "accept",
-						"unexpectedNested": true
-					}
-				]
-			}`,
-			wantNeedle:    "unexpectednested",
-			wantSecondary: "unknown field",
 		},
 	}
 
@@ -160,6 +146,41 @@ func TestUnknownWorkerOverrideFailsActionably(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestFutureMockWorkerFieldsAreIgnoredAndDispatchBehaviorIsPreserved(t *testing.T) {
+	dir := scaffoldNamedReplacementFactory(t)
+	mockWorkersPath := writeRawMockWorkersConfig(t, `{
+		"mockWorkers": [{
+			"workerName": "`+mockedWorkerName+`",
+			"workstationName": "`+mockedWorkstationName+`",
+			"runType": "accept",
+			"futureNested": {"secret": "must not affect matching"}
+		}],
+		"futureTopLevel": true
+	}`)
+
+	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir: dir,
+		Args:       []string{"--with-mock-workers", mockWorkersPath},
+	})
+	defer server.Stop(t)
+
+	support.WaitForTerminalStatus(t, server.URL(), 10*time.Second)
+	listed := support.ListDefaultSessionWork(t, server.URL())
+	if got := support.CountWorkAtCustomerState(listed, support.WorkCustomerLocation(mockedWorkType, "done")); got != 1 {
+		t.Fatalf("mocked work done count = %d, want 1", got)
+	}
+	if got := support.CountWorkAtCustomerState(listed, support.WorkCustomerLocation(mockedWorkType, "failed")); got != 0 {
+		t.Fatalf("mocked work failed count = %d, want 0", got)
+	}
+
+	observation := dispatchObservationByTransition(
+		t,
+		support.ObserveDispatchEvents(t, server.GetFactoryEvents(t)),
+		mockedWorkstationName,
+	)
+	assertMockAcceptedDispatch(t, observation)
 }
 
 // TestMockWorkerFailureReturnsStablePublicFailure proves configured mock

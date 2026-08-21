@@ -810,7 +810,7 @@ func provideLifecycleRunnerFactory() lifecycle.RunnerFactory {
 
 func provideRunOpener(
 	prepareWorkTarget work.SingleWorkTargetPreparation,
-	loadMockWorkers workers.MockWorkersConfigLoader,
+	loadMockWorkers workers.MockWorkersConfigDiagnosticsLoader,
 	buildRuntimeRequest runcli.RuntimeOpeningRequestFactory,
 	presentations factorysessions.OpeningPresentationOwner,
 	visualizations factoryvisualization.RuntimeSinkOwner,
@@ -822,9 +822,9 @@ func provideRunOpener(
 		invocation runcli.InvocationOperation,
 		presentation factoryvisualization.ResponsePresentation,
 	) (*runcli.Operation, error) {
-		return runcli.OpenWithVisualizationOwner(
+		return runcli.OpenWithVisualizationOwnerAndDiagnostics(
 			ctx, cfg, buildRunner, invocation, presentation,
-			prepareWorkTarget, loadMockWorkers, buildRuntimeRequest, presentations, visualizations,
+			prepareWorkTarget, nil, loadMockWorkers, buildRuntimeRequest, presentations, visualizations,
 		)
 	}
 }

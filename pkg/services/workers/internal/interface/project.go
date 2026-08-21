@@ -14,7 +14,7 @@ func ProjectTopologyInventory() Inventory {
 			"MockWorkersConfig.Validate",
 			"MockWorkerConfig.Validate",
 		},
-		UnknownFieldPolicy:   "ParseMockWorkersConfig uses json.Decoder.DisallowUnknownFields and rejects unknown top-level keys, unknown nested keys, and trailing JSON values",
+		UnknownFieldPolicy:   "ParseMockWorkersConfig ignores unknown object fields and reports sorted unique JSON paths; known-field validation and exactly one JSON document remain strict",
 		EntrySelectionPolicy: "first matching mockWorkers[] entry wins; there is no response-sequence or multi-hit authoring surface beyond that first-match selection",
 		RunTypeUnion:         topologyRunTypeUnion(),
 		UnmatchedDispatchPolicies: []UnmatchedDispatchPolicy{
@@ -62,11 +62,6 @@ func topologyRunTypeUnion() RunTypeUnion {
 
 func topologyValidationBoundaries() []ValidationBoundary {
 	return []ValidationBoundary{
-		{
-			Condition:    "unknown top-level or nested JSON field",
-			Owner:        ownerDecode,
-			ErrorPattern: "unknown field",
-		},
 		{
 			Condition:    "trailing JSON after the root object",
 			Owner:        ownerDecode,

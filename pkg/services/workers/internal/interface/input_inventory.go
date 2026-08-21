@@ -37,12 +37,13 @@ type InputInventory struct {
 
 // InputCase records one indexed input and the production loader outcome it documents.
 type InputCase struct {
-	ID          string `json:"id"`
-	Category    string `json:"category"`
-	Entrypoint  string `json:"entrypoint"`
-	Outcome     string `json:"outcome"`
-	Fixture     string `json:"fixture,omitempty"`
-	Description string `json:"description"`
+	ID               string   `json:"id"`
+	Category         string   `json:"category"`
+	Entrypoint       string   `json:"entrypoint"`
+	Outcome          string   `json:"outcome"`
+	Fixture          string   `json:"fixture,omitempty"`
+	Description      string   `json:"description"`
+	IgnoredJSONPaths []string `json:"ignoredJSONPaths,omitempty"`
 
 	ExpectedConfig *MockWorkersConfigExpectation `json:"expectedConfig,omitempty"`
 	ErrorFragments []string                      `json:"errorFragments,omitempty"`

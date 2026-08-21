@@ -18,8 +18,10 @@ func TestProjectTopologyInventory_RecordsLoaderBoundariesAndRunTypes(t *testing.
 	if inventory.FormatVersion != mockworkers.FormatVersion {
 		t.Fatalf("FormatVersion = %q, want %q", inventory.FormatVersion, mockworkers.FormatVersion)
 	}
-	if !strings.Contains(inventory.UnknownFieldPolicy, "DisallowUnknownFields") {
-		t.Fatalf("unknown field policy = %q, want strict decode language", inventory.UnknownFieldPolicy)
+	for _, want := range []string{"ignores unknown object fields", "sorted unique JSON paths", "exactly one JSON document"} {
+		if !strings.Contains(inventory.UnknownFieldPolicy, want) {
+			t.Fatalf("unknown field policy = %q, want %q", inventory.UnknownFieldPolicy, want)
+		}
 	}
 	if !strings.Contains(inventory.EntrySelectionPolicy, "first matching") {
 		t.Fatalf("entry selection policy = %q, want first-match language", inventory.EntrySelectionPolicy)
@@ -108,8 +110,8 @@ func TestProjectTopologyInventory_RecordsStrictBoundariesAndNonAcceptedCapabilit
 	t.Parallel()
 
 	inventory := mockworkers.ProjectTopologyInventory()
-	if len(inventory.ValidationBoundaries) < 7 {
-		t.Fatalf("validation boundary len = %d, want decode and validate rejections", len(inventory.ValidationBoundaries))
+	if len(inventory.ValidationBoundaries) < 6 {
+		t.Fatalf("validation boundary len = %d, want exact-document and known-field validation rejections", len(inventory.ValidationBoundaries))
 	}
 
 	patterns := make([]string, 0, len(inventory.ValidationBoundaries))
@@ -117,7 +119,6 @@ func TestProjectTopologyInventory_RecordsStrictBoundariesAndNonAcceptedCapabilit
 		patterns = append(patterns, boundary.ErrorPattern)
 	}
 	for _, want := range []string{
-		"unknown field",
 		`runType must be one of "accept", "script", or "reject"`,
 		`scriptConfig is required when runType is "script"`,
 		`scriptConfig.command is required when runType is "script"`,

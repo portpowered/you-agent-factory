@@ -4,11 +4,55 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"reflect"
 	"strings"
 	"testing"
 
 	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
 )
+
+func TestParseMockWorkersConfigWithDiagnosticsPreservesKnownBehavior(t *testing.T) {
+	t.Parallel()
+
+	config, diagnostics, err := ParseMockWorkersConfigWithDiagnostics([]byte(`{
+		"mockWorkers": [{
+			"id": "reviewer",
+			"runType": "accept",
+			"futureEntry": {"secret": "do-not-log"}
+		}],
+		"futureTopLevel": true
+	}`))
+	if err != nil {
+		t.Fatalf("ParseMockWorkersConfigWithDiagnostics() error = %v", err)
+	}
+	if config == nil || len(config.MockWorkers) != 1 || config.MockWorkers[0].ID != "reviewer" {
+		t.Fatalf("config = %#v, want known mock-worker fields preserved", config)
+	}
+	wantPaths := []string{"$.futureTopLevel", "$.mockWorkers[0].futureEntry"}
+	if got := diagnostics.Paths(); !reflect.DeepEqual(got, wantPaths) {
+		t.Fatalf("diagnostic paths = %#v, want %#v", got, wantPaths)
+	}
+	if strings.Contains(strings.Join(diagnostics.Paths(), "\n"), "secret") {
+		t.Fatal("diagnostics retained an ignored field value")
+	}
+}
+
+func TestParseMockWorkersConfigWithDiagnosticsRemainsStrictForKnownAndTrailingInput(t *testing.T) {
+	t.Parallel()
+
+	for name, payload := range map[string]string{
+		"invalid run type":  `{"mockWorkers":[{"runType":"future"}]}`,
+		"trailing document": `{"mockWorkers":[]} {"later":true}`,
+		"malformed json":    `{"mockWorkers":[` + "\n",
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			if _, _, err := ParseMockWorkersConfigWithDiagnostics([]byte(payload)); err == nil {
+				t.Fatal("ParseMockWorkersConfigWithDiagnostics() error = nil, want reject")
+			}
+		})
+	}
+}
 
 func TestMockWorkerCommandRunnerUsesGoalRoutingEnvelopePolicy(t *testing.T) {
 	t.Parallel()
@@ -62,6 +106,16 @@ func TestMockWorkersConfigLoaderValidatesAndReadsDetachedConfiguration(t *testin
 		t.Fatalf("NewMockWorkersConfigLoader() error = %v", err)
 	}
 	assertMockWorkersConfigLoaderResults(t, loader)
+	futureLoader, err := NewMockWorkersConfigLoader(mockWorkersConfigReader(func(string) ([]byte, error) {
+		return []byte(`{"mockWorkers":[{"id":"future-compatible","runType":"accept","futureEntry":{"secret":"do-not-log"}}],"futureTopLevel":true}`), nil
+	}))
+	if err != nil {
+		t.Fatalf("NewMockWorkersConfigLoader(future fields) error = %v", err)
+	}
+	futureConfig, err := futureLoader("future.json")
+	if err != nil || futureConfig == nil || len(futureConfig.MockWorkers) != 1 || futureConfig.MockWorkers[0].ID != "future-compatible" {
+		t.Fatalf("future loader result = %#v, %v, want known fields preserved", futureConfig, err)
+	}
 
 	readErr := errors.New("read failed")
 	failingLoader, err := NewMockWorkersConfigLoader(mockWorkersConfigReader(func(string) ([]byte, error) {
@@ -87,7 +141,6 @@ func assertMockWorkersConfigLoaderResults(t *testing.T, loader MockWorkersConfig
 	}
 	for name, data := range map[string][]byte{
 		"trailing JSON":    []byte(`{"mockWorkers":[]} {}`),
-		"unknown field":    []byte(`{"unexpected":true}`),
 		"invalid run type": []byte(`{"mockWorkers":[{"runType":"unknown"}]}`),
 	} {
 		t.Run(name, func(t *testing.T) {
@@ -95,6 +148,13 @@ func assertMockWorkersConfigLoaderResults(t *testing.T, loader MockWorkersConfig
 				t.Fatal("ParseMockWorkersConfig() error = nil")
 			}
 		})
+	}
+	config, diagnostics, err := ParseMockWorkersConfigWithDiagnostics([]byte(`{"unexpected":true}`))
+	if err != nil || config == nil {
+		t.Fatalf("ParseMockWorkersConfigWithDiagnostics(unknown field) = %#v, %v, want accepted config", config, err)
+	}
+	if got := diagnostics.Paths(); len(got) != 1 || got[0] != "$.unexpected" {
+		t.Fatalf("unknown field paths = %#v, want [$.unexpected]", got)
 	}
 }
 
