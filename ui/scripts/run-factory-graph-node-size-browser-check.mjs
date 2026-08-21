@@ -92,6 +92,15 @@ try {
   }
 
   const beforeResize = await nodeDimensions(selectedButton);
+  if (
+    (await selectedButton.locator(
+      "[data-workstation-runtime-label], [data-workstation-scheduling-label]",
+    ).count()) !== 0
+  ) {
+    throw new Error(
+      "Collapsed workstation rendered expanded runtime or scheduling content.",
+    );
+  }
   await page.mouse.move(
     handleBounds.x + handleBounds.width / 2,
     handleBounds.y + handleBounds.height / 2,
@@ -129,6 +138,15 @@ try {
       `Pointer resize did not increase both axes: before=${JSON.stringify(beforeResize)} after=${JSON.stringify(resizedDimensions)}.`,
     );
   }
+  const expandedDetails = selectedButton.locator(
+    "[data-workstation-runtime-label], [data-workstation-scheduling-label]",
+  );
+  if ((await expandedDetails.count()) === 0) {
+    throw new Error(
+      "Committed workstation resize did not render expanded runtime or scheduling content.",
+    );
+  }
+  await expandedDetails.first().waitFor({ state: "visible" });
   const attachedEdgeIdsAfterResize = await attachedEdgeIds(page);
   if (
     JSON.stringify(attachedEdgeIdsAfterResize) !==
