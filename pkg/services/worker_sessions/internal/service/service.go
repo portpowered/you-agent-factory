@@ -397,6 +397,10 @@ func (r *registry) reserveIfAbsent(id string) {
 // reserved identity, or an identity in any other state, sees
 // ErrSessionNotStartable and makes no mutation and no Workers call.
 func (r *registry) transitionToStarting(id string) (workersessions.Session, error) {
+	return r.transitionToStartingWithExecution(id, workers.WorkstationExecutionRequest{})
+}
+
+func (r *registry) transitionToStartingWithExecution(id string, execution workers.WorkstationExecutionRequest) (workersessions.Session, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -407,8 +411,26 @@ func (r *registry) transitionToStarting(id string) (workersessions.Session, erro
 
 	session.State = workersessions.StateStarting
 	session.Result = nil
+	session.Model = optionalExecutionFact(execution.Model)
+	session.ReasoningEffort = optionalExecutionFact(execution.ReasoningEffort)
 	r.sessions[id] = session
 	return cloneSession(session), nil
+}
+
+func optionalExecutionFact(value string) *string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return nil
+	}
+	return &value
+}
+
+func cloneOptionalExecutionFact(value *string) *string {
+	if value == nil {
+		return nil
+	}
+	clone := *value
+	return &clone
 }
 
 // commitTerminal stores the exactly-once terminal outcome for id and reports

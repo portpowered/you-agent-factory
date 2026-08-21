@@ -2289,6 +2289,123 @@ func TestStart_OpeningRecordCarriesCanonicalExecutionCorrelation(t *testing.T) {
 	assertOpeningRecord(t, liveDraft, replay, livePayload, replayPayload, startedAt, request)
 }
 
+func TestInvokeSession_CapturesResolvedExecutionFactsInServiceAndOpening(t *testing.T) {
+	eventsSvc := newEventsAppender()
+	execution := succeedingExecution()
+	registry, err := newService(executionBoundary{execution: execution}, eventsSvc, nil)
+	if err != nil {
+		t.Fatalf("service.New() error = %v, want nil", err)
+	}
+
+	request := validStartRequest("worker-model-facts", "dispatch-model-facts")
+	request.Execution.Execution.Model = "gpt-5.6-luna"
+	request.Execution.Execution.ReasoningEffort = "high"
+	result, err := registry.InvokeSession(context.Background(), request)
+	if err != nil {
+		t.Fatalf("InvokeSession() error = %v, want nil", err)
+	}
+	calls := execution.requests()
+	if len(calls) != 1 || calls[0].Execution.Model != request.Execution.Execution.Model || calls[0].Execution.ReasoningEffort != request.Execution.Execution.ReasoningEffort {
+		t.Fatalf("Workers execution facts = %#v, want resolved model/effort %q/%q", calls, request.Execution.Execution.Model, request.Execution.Execution.ReasoningEffort)
+	}
+	assertResolvedExecutionFacts(t, "InvokeSession result", result.Session, request.Execution.Execution.Model, request.Execution.Execution.ReasoningEffort)
+
+	got, err := registry.Get(context.Background(), workersessions.GetRequest{ID: request.ID})
+	if err != nil {
+		t.Fatalf("Get() error = %v, want nil", err)
+	}
+	assertResolvedExecutionFacts(t, "Get", got, request.Execution.Execution.Model, request.Execution.Execution.ReasoningEffort)
+
+	list, err := registry.List(context.Background(), workersessions.ListRequest{})
+	if err != nil {
+		t.Fatalf("List() error = %v, want nil", err)
+	}
+	if len(list.Sessions) != 1 {
+		t.Fatalf("List() returned %d sessions, want one", len(list.Sessions))
+	}
+	assertResolvedExecutionFacts(t, "List", list.Sessions[0], request.Execution.Execution.Model, request.Execution.Execution.ReasoningEffort)
+
+	observation, err := registry.GetObservationByWorkerSessionID(context.Background(), workersessions.GetObservationByWorkerSessionIDRequest{WorkerSessionID: request.ID})
+	if err != nil {
+		t.Fatalf("GetObservationByWorkerSessionID() error = %v, want nil", err)
+	}
+	assertResolvedObservationFacts(t, "GetObservationByWorkerSessionID", observation, request.Execution.Execution.Model, request.Execution.Execution.ReasoningEffort)
+
+	observations, err := registry.ListWorkerSessionObservations(context.Background(), workersessions.ListWorkerSessionObservationsRequest{Scope: workersessions.ObservationScopeAll})
+	if err != nil {
+		t.Fatalf("ListWorkerSessionObservations() error = %v, want nil", err)
+	}
+	if len(observations.Observations) != 1 {
+		t.Fatalf("ListWorkerSessionObservations() returned %d observations, want one", len(observations.Observations))
+	}
+	assertResolvedObservationFacts(t, "ListWorkerSessionObservations", observations.Observations[0], request.Execution.Execution.Model, request.Execution.Execution.ReasoningEffort)
+
+	_, payload := readOpening(t, eventsSvc, workersessions.Topic(request.ID), context.Background())
+	if payload.Model != request.Execution.Execution.Model || payload.ReasoningEffort != request.Execution.Execution.ReasoningEffort {
+		t.Fatalf("persisted opening model facts = %q/%q, want %q/%q", payload.Model, payload.ReasoningEffort, request.Execution.Execution.Model, request.Execution.Execution.ReasoningEffort)
+	}
+}
+
+func TestInvokeSession_PreservesIndependentlyMissingResolvedExecutionFacts(t *testing.T) {
+	for _, test := range []struct {
+		name            string
+		model           string
+		reasoningEffort string
+	}{
+		{name: "both missing"},
+		{name: "model only", model: "gpt-5.6-luna"},
+		{name: "reasoning effort only", reasoningEffort: "high"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			eventsSvc := newEventsAppender()
+			registry, err := newService(executionBoundary{execution: succeedingExecution()}, eventsSvc, nil)
+			if err != nil {
+				t.Fatalf("service.New() error = %v, want nil", err)
+			}
+
+			request := validStartRequest("worker-missing-"+strings.ReplaceAll(test.name, " ", "-"), "dispatch-missing")
+			request.Execution.Execution.Model = test.model
+			request.Execution.Execution.ReasoningEffort = test.reasoningEffort
+			result, err := registry.InvokeSession(context.Background(), request)
+			if err != nil {
+				t.Fatalf("InvokeSession() error = %v, want nil", err)
+			}
+			assertResolvedExecutionFacts(t, "InvokeSession result", result.Session, test.model, test.reasoningEffort)
+
+			observation, err := registry.GetObservationByWorkerSessionID(context.Background(), workersessions.GetObservationByWorkerSessionIDRequest{WorkerSessionID: request.ID})
+			if err != nil {
+				t.Fatalf("GetObservationByWorkerSessionID() error = %v, want nil", err)
+			}
+			assertResolvedObservationFacts(t, "GetObservationByWorkerSessionID", observation, test.model, test.reasoningEffort)
+		})
+	}
+}
+
+func assertResolvedExecutionFacts(t *testing.T, label string, session workersessions.Session, model, reasoningEffort string) {
+	t.Helper()
+	assertOptionalExecutionFact(t, label+" model", session.Model, model)
+	assertOptionalExecutionFact(t, label+" reasoning effort", session.ReasoningEffort, reasoningEffort)
+}
+
+func assertResolvedObservationFacts(t *testing.T, label string, observation workersessions.Observation, model, reasoningEffort string) {
+	t.Helper()
+	assertOptionalExecutionFact(t, label+" model", observation.Model, model)
+	assertOptionalExecutionFact(t, label+" reasoning effort", observation.ReasoningEffort, reasoningEffort)
+}
+
+func assertOptionalExecutionFact(t *testing.T, label string, actual *string, want string) {
+	t.Helper()
+	if strings.TrimSpace(want) == "" {
+		if actual != nil {
+			t.Fatalf("%s = %q, want absent", label, *actual)
+		}
+		return
+	}
+	if actual == nil || *actual != want {
+		t.Fatalf("%s = %v, want %q", label, actual, want)
+	}
+}
+
 func canonicalOpeningRequest() workersessions.InvokeSessionRequest {
 	request := validStartRequest("worker-1", "dispatch-1")
 	resolved := &request.Execution.Execution

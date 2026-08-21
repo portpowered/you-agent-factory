@@ -646,10 +646,13 @@ func TestObservationClone_DetachesNestedValues(t *testing.T) {
 	cacheWrite, cachedInput, input, output, reasoning, total := 1, 2, 3, 4, 5, 6
 	wantInput := input
 	failure := FailureCause{Kind: FailureCauseWorkersExecutionFailure, Detail: "failed"}
+	model, reasoningEffort := "gpt-5.6-luna", "high"
 	original := Observation{
 		WorkerSessionID:          "worker-1",
 		ProviderSession:          observationTestProviderSession(),
 		ProviderSessionAvailable: true,
+		Model:                    &model,
+		ReasoningEffort:          &reasoningEffort,
 		WorkIDs:                  []string{"work-1"},
 		AttemptID:                "attempt-1",
 		State:                    StateFailed,
@@ -668,10 +671,13 @@ func TestObservationClone_DetachesNestedValues(t *testing.T) {
 	*original.EndedAt = ended.Add(time.Hour)
 	*original.Duration = time.Hour
 	*original.TokenUsage.InputTokens = 99
+	*original.Model = "mutated-model"
+	*original.ReasoningEffort = "mutated-effort"
 	original.Failure.Detail = "mutated"
 	original.Parse.Errors[0].Message = "mutated"
 	if clone.WorkIDs[0] != "work-1" || !clone.StartedAt.Equal(wantStarted) || !clone.EndedAt.Equal(wantEnded) || *clone.Duration != wantDuration ||
-		*clone.TokenUsage.InputTokens != wantInput || clone.Failure.Detail != "failed" || clone.Parse.Errors[0].Message != "malformed" {
+		*clone.TokenUsage.InputTokens != wantInput || *clone.Model != "gpt-5.6-luna" || *clone.ReasoningEffort != "high" ||
+		clone.Failure.Detail != "failed" || clone.Parse.Errors[0].Message != "malformed" {
 		t.Fatalf("Clone() retained mutable source state: %#v", clone)
 	}
 }
