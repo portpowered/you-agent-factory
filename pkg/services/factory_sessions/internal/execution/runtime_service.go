@@ -217,22 +217,23 @@ type JavaScriptRuntimeService struct {
 	// helpers and tests. Production standalone opening supplies the narrow
 	// Workers Execute capability through directChildExecution; P6-C can remove
 	// this compatibility input after those callers are retired.
-	directChildInvocation   workers.InvocationExecutor
-	directChildExecution    childExecuteService
-	persistence             runtimepersist.Store
-	clock                   factory.Clock
-	syncWaits               SyncWaitScheduler
-	checkpointSummaries     factory.JavaScriptCheckpointSummaries
-	workflowDefinitions     factory.JavaScriptWorkflowDefinitions
-	orchestration           factory.OrchestrationJavaScriptExecution
-	childValues             factory.JavaScriptChildValues
-	workerPresetIDs         map[string]struct{}
-	workerSettings          factory.JavaScriptWorkerSettings
-	recordingWriter         recording.PortableRecordingWriter
-	generateSessionID       internalcontracts.SessionIDGenerator
-	generateResponseEventID factorysessions.ResponseEventIDGenerator
-	responseStreams         responsestreamservice.Service
-	liveChangeCoordinator   factorysessioncontracts.LiveChangeCoordinator
+	directChildInvocation       workers.InvocationExecutor
+	directChildExecution        childExecuteService
+	persistence                 runtimepersist.Store
+	persistedFailureLogCapacity int
+	clock                       factory.Clock
+	syncWaits                   SyncWaitScheduler
+	checkpointSummaries         factory.JavaScriptCheckpointSummaries
+	workflowDefinitions         factory.JavaScriptWorkflowDefinitions
+	orchestration               factory.OrchestrationJavaScriptExecution
+	childValues                 factory.JavaScriptChildValues
+	workerPresetIDs             map[string]struct{}
+	workerSettings              factory.JavaScriptWorkerSettings
+	recordingWriter             recording.PortableRecordingWriter
+	generateSessionID           internalcontracts.SessionIDGenerator
+	generateResponseEventID     factorysessions.ResponseEventIDGenerator
+	responseStreams             responsestreamservice.Service
+	liveChangeCoordinator       factorysessioncontracts.LiveChangeCoordinator
 	// workerInvokerService is guarded by its own lock, not the session lock. It
 	// is attached once after construction and read on paths that already hold the
 	// session lock; sharing one mutex between them deadlocks.
@@ -284,27 +285,28 @@ func NewJavaScriptRuntimeService(
 	}
 	projectRoot = strings.TrimSpace(projectRoot)
 	service := &JavaScriptRuntimeService{
-		projectRoot:             projectRoot,
-		childExecutorMode:       normalizeChildExecutorMode(childExecutorMode),
-		directChildInvocation:   directChildInvocation,
-		clock:                   clock,
-		syncWaits:               syncWaits,
-		checkpointSummaries:     checkpointSummaries,
-		workflowDefinitions:     workflowDefinitions,
-		orchestration:           orchestration,
-		childValues:             childValues,
-		workerPresetIDs:         workerPresetIDs,
-		workerSettings:          workerSettings,
-		recordingWriter:         recordingWriter,
-		generateSessionID:       generateSessionID,
-		generateResponseEventID: generateResponseEventID,
-		responseStreams:         responseStreams,
-		liveChangeCoordinator:   liveChangeCoordinator,
-		persistence:             persistence,
-		sessions:                make(map[string]*runtimeSessionState),
-		startReplay:             make(map[string]startReplayRecord),
-		startInflight:           make(map[string]*startInflightFlight),
-		controlReplay:           make(map[string]controlReplayRecord),
+		projectRoot:                 projectRoot,
+		childExecutorMode:           normalizeChildExecutorMode(childExecutorMode),
+		directChildInvocation:       directChildInvocation,
+		clock:                       clock,
+		syncWaits:                   syncWaits,
+		checkpointSummaries:         checkpointSummaries,
+		workflowDefinitions:         workflowDefinitions,
+		orchestration:               orchestration,
+		childValues:                 childValues,
+		workerPresetIDs:             workerPresetIDs,
+		workerSettings:              workerSettings,
+		recordingWriter:             recordingWriter,
+		generateSessionID:           generateSessionID,
+		generateResponseEventID:     generateResponseEventID,
+		responseStreams:             responseStreams,
+		liveChangeCoordinator:       liveChangeCoordinator,
+		persistence:                 persistence,
+		persistedFailureLogCapacity: defaultPersistedTokenFailureLogCapacity,
+		sessions:                    make(map[string]*runtimeSessionState),
+		startReplay:                 make(map[string]startReplayRecord),
+		startInflight:               make(map[string]*startInflightFlight),
+		controlReplay:               make(map[string]controlReplayRecord),
 	}
 	return service
 }

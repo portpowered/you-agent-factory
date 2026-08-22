@@ -898,6 +898,20 @@ type PersistedRuntimeSessionState struct {
 }
 
 func persistedSnapshotFromRuntimeState(state runtimeSessionState) PersistedRuntimeSessionState {
+	return persistedSnapshotFromRuntimeStateWithFailureLogCapacity(
+		state,
+		defaultPersistedTokenFailureLogCapacity,
+	)
+}
+
+// persistedSnapshotFromRuntimeStateWithFailureLogCapacity builds a detached
+// durable snapshot and compacts only its serialized Petri token histories.
+// A non-positive capacity disables compaction for deterministic regression
+// comparisons; production callers use the positive configured default.
+func persistedSnapshotFromRuntimeStateWithFailureLogCapacity(
+	state runtimeSessionState,
+	failureLogCapacity int,
+) PersistedRuntimeSessionState {
 	snapshot := PersistedRuntimeSessionState{
 		Session:           cloneSessionRead(state.session),
 		Result:            cloneResultRead(state.result),
@@ -922,6 +936,7 @@ func persistedSnapshotFromRuntimeState(state runtimeSessionState) PersistedRunti
 			snapshot.Events[i] = append(json.RawMessage(nil), event...)
 		}
 	}
+	compactPersistedTokenFailureLogs(&snapshot, failureLogCapacity)
 	return snapshot
 }
 
@@ -969,7 +984,11 @@ func (s *JavaScriptRuntimeService) persistSessionSnapshot(state runtimeSessionSt
 	if !shouldPersistSessionSnapshot(state) {
 		return nil
 	}
-	snapshot := persistedSnapshotFromRuntimeState(state)
+	failureLogCapacity := s.persistedFailureLogCapacity
+	if failureLogCapacity <= 0 {
+		failureLogCapacity = defaultPersistedTokenFailureLogCapacity
+	}
+	snapshot := persistedSnapshotFromRuntimeStateWithFailureLogCapacity(state, failureLogCapacity)
 	encoded, err := json.MarshalIndent(snapshot, "", "  ")
 	if err != nil {
 		return fmt.Errorf("marshal durable session snapshot: %w", err)

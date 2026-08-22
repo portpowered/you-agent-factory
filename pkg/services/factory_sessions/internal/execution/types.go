@@ -4,14 +4,16 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
+	"time"
+
 	"github.com/portpowered/infinite-you/pkg/platform/jsonvalue"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	workflowsource "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	durableexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/durable_execution"
 	"github.com/portpowered/infinite-you/pkg/services/work"
-	"strings"
-	"time"
+	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
 func workContentJSONFromParts(parts []work.WorkContentPart) json.RawMessage {
@@ -227,7 +229,7 @@ func durableRecordsFromRuntimeState(state runtimeSessionState) []DurableSessionR
 			Kind: DurableRecordKindJavaScriptRuntime, JavaScriptRecord: &cloned,
 		})
 	}
-	for _, mutation := range state.petriMutations {
+	for _, mutation := range clonePetriMutations(state.petriMutations) {
 		cloned := mutation
 		records = append(records, DurableSessionRecord{
 			Kind: DurableRecordKindPetriTokenMutation, PetriMutation: &cloned,
@@ -283,6 +285,7 @@ func clonePetriMutations(mutations []interfaces.TokenMutationRecord) []interface
 			continue
 		}
 		token := *mutations[i].Token
+		token.History = cloneWorkerHistory(token.History)
 		token.Color.StructuredResult = jsonvalue.Clone(token.Color.StructuredResult)
 		token.Color.StructuredResultPresent = jsonvalue.Present(
 			token.Color.StructuredResult,
@@ -291,6 +294,32 @@ func clonePetriMutations(mutations []interfaces.TokenMutationRecord) []interface
 		cloned[i].Token = &token
 	}
 	return cloned
+}
+
+func cloneWorkerHistory(value workerexecution.History) workerexecution.History {
+	value.TotalVisits = cloneStringIntMapPreserveNil(value.TotalVisits)
+	value.ConsecutiveFailures = cloneStringIntMapPreserveNil(value.ConsecutiveFailures)
+	value.PlaceVisits = cloneStringIntMapPreserveNil(value.PlaceVisits)
+	value.FailureLog = cloneFailuresPreserveNil(value.FailureLog)
+	return value
+}
+
+func cloneStringIntMapPreserveNil(values map[string]int) map[string]int {
+	if values == nil {
+		return nil
+	}
+	cloned := make(map[string]int, len(values))
+	for key, value := range values {
+		cloned[key] = value
+	}
+	return cloned
+}
+
+func cloneFailuresPreserveNil(values []workerexecution.Failure) []workerexecution.Failure {
+	if values == nil {
+		return nil
+	}
+	return append([]workerexecution.Failure{}, values...)
 }
 
 const (
