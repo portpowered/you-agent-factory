@@ -1,4 +1,4 @@
-// Package costs values canonical runtime usage with operator-authored prices.
+// Package costs values canonical runtime usage with Providers-owned prices.
 package costs
 
 import (
@@ -9,9 +9,13 @@ import (
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
 )
 
-// PriceTableReader is retained as a descriptive alias for the narrow
-// Providers-owned pricing capability consumed by Costs.
-type PriceTableReader = providers.PriceTableReader
+// PriceTableReader is the Costs-side view of the narrow Providers-owned
+// pricing capability. Providers remains the authority for the table and its
+// facts; this consumer port keeps Costs independent of the provider service's
+// broader identity and execution operations.
+type PriceTableReader interface {
+	providers.PriceTableReader
+}
 
 // CostsQuery is the stateless operation over canonical runtime usage rows.
 // The request supplies artifact/configuration paths as data; the operation

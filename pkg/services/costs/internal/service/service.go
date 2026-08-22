@@ -15,14 +15,14 @@ import (
 // Provider pricing and canonical metrics remain behind two injected owner
 // contracts.
 type Service struct {
-	pricing providers.PriceTableReader
+	pricing costs.PriceTableReader
 	metrics factoryvisualization.RuntimeMetricsQuery
 	logger  logging.Logger
 }
 
 // New constructs the stateless Costs operation.
 func New(
-	pricing providers.PriceTableReader,
+	pricing costs.PriceTableReader,
 	metrics factoryvisualization.RuntimeMetricsQuery,
 	logger logging.Logger,
 ) (costs.CostsQuery, error) {

@@ -195,6 +195,11 @@ func TestQueryUnpricedFactsDeduplicateDispatchesAndRetainUnknownIdentity(t *test
 	if err != nil {
 		t.Fatalf("Query() error = %v", err)
 	}
+	assertUnpricedReportFacts(t, report)
+}
+
+func assertUnpricedReportFacts(t *testing.T, report costs.Report) {
+	t.Helper()
 	if report.Status != costs.StatusUnpriced || report.KnownCost != nil {
 		t.Fatalf("report = %#v, want wholly unpriced with no known cost", report)
 	}
@@ -205,14 +210,29 @@ func TestQueryUnpricedFactsDeduplicateDispatchesAndRetainUnknownIdentity(t *test
 	if report.UnpricedDispatchCount != 2 {
 		t.Fatalf("unpriced dispatch count = %d, want two distinct dispatches", report.UnpricedDispatchCount)
 	}
-	if len(report.UnpricedPairs) != 2 {
-		t.Fatalf("unpriced pairs = %#v, want canonical unknown and missing pairs", report.UnpricedPairs)
+	assertUnpricedPairFacts(t, report.UnpricedPairs)
+}
+
+func assertUnpricedPairFacts(t *testing.T, pairs []costs.UnpricedPair) {
+	t.Helper()
+	if len(pairs) != 2 {
+		t.Fatalf("unpriced pairs = %#v, want canonical unknown and missing pairs", pairs)
 	}
-	if report.UnpricedPairs[0].Provider != nil || report.UnpricedPairs[0].Model != nil || report.UnpricedPairs[0].DispatchCount != 1 {
-		t.Fatalf("missing identity pair = %#v, want explicit nil identities", report.UnpricedPairs[0])
+	assertMissingIdentityPair(t, pairs[0])
+	assertCanonicalUnknownPair(t, pairs[1])
+}
+
+func assertMissingIdentityPair(t *testing.T, pair costs.UnpricedPair) {
+	t.Helper()
+	if pair.Provider != nil || pair.Model != nil || pair.DispatchCount != 1 {
+		t.Fatalf("missing identity pair = %#v, want explicit nil identities", pair)
 	}
-	if report.UnpricedPairs[1].Provider == nil || *report.UnpricedPairs[1].Provider != "CODEX" || report.UnpricedPairs[1].Model == nil || *report.UnpricedPairs[1].Model != "unknown" || report.UnpricedPairs[1].DispatchCount != 1 {
-		t.Fatalf("canonical pair = %#v, want CODEX/unknown with one dispatch", report.UnpricedPairs[1])
+}
+
+func assertCanonicalUnknownPair(t *testing.T, pair costs.UnpricedPair) {
+	t.Helper()
+	if pair.Provider == nil || *pair.Provider != "CODEX" || pair.Model == nil || *pair.Model != "unknown" || pair.DispatchCount != 1 {
+		t.Fatalf("canonical pair = %#v, want CODEX/unknown with one dispatch", pair)
 	}
 }
 

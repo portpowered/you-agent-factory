@@ -291,30 +291,17 @@ func validateProvenance(index int, sourceURL, asOfDate string) error {
 func normalizeEqualRateClasses(index int, classes []PriceClass, input, output string, cached, reasoning *string) ([]PriceClass, error) {
 	seen := make(map[PriceClass]struct{}, len(classes))
 	for _, class := range classes {
-		class = PriceClass(strings.ToLower(strings.TrimSpace(string(class))))
-		if class != PriceClassCachedInput && class != PriceClassReasoningOutput {
-			return nil, fmt.Errorf("%w: models[%d].equalRateClasses contains unsupported class %q", ErrPriceTableInvalid, index, class)
+		class, err := normalizeEqualRateClass(index, class, input, output, cached, reasoning)
+		if err != nil {
+			return nil, err
 		}
 		if _, exists := seen[class]; exists {
 			return nil, fmt.Errorf("%w: models[%d].equalRateClasses duplicates %q", ErrPriceTableInvalid, index, class)
 		}
 		seen[class] = struct{}{}
-		switch class {
-		case PriceClassCachedInput:
-			if cached == nil || *cached != input {
-				return nil, fmt.Errorf("%w: models[%d] cached-input equality declaration does not match its input rate", ErrPriceTableInvalid, index)
-			}
-		case PriceClassReasoningOutput:
-			if reasoning == nil || *reasoning != output {
-				return nil, fmt.Errorf("%w: models[%d] reasoning-output equality declaration does not match its output rate", ErrPriceTableInvalid, index)
-			}
-		}
 	}
-	if cached != nil && *cached == input && !containsPriceClass(classes, PriceClassCachedInput) {
-		return nil, fmt.Errorf("%w: models[%d] equal cached-input rate must be explicitly declared", ErrPriceTableInvalid, index)
-	}
-	if reasoning != nil && *reasoning == output && !containsPriceClass(classes, PriceClassReasoningOutput) {
-		return nil, fmt.Errorf("%w: models[%d] equal reasoning-output rate must be explicitly declared", ErrPriceTableInvalid, index)
+	if err := validateImplicitEqualRateClasses(index, classes, input, output, cached, reasoning); err != nil {
+		return nil, err
 	}
 	result := make([]PriceClass, 0, len(seen))
 	for class := range seen {
@@ -322,6 +309,34 @@ func normalizeEqualRateClasses(index int, classes []PriceClass, input, output st
 	}
 	sort.Slice(result, func(i, j int) bool { return result[i] < result[j] })
 	return result, nil
+}
+
+func normalizeEqualRateClass(index int, class PriceClass, input, output string, cached, reasoning *string) (PriceClass, error) {
+	class = PriceClass(strings.ToLower(strings.TrimSpace(string(class))))
+	if class != PriceClassCachedInput && class != PriceClassReasoningOutput {
+		return "", fmt.Errorf("%w: models[%d].equalRateClasses contains unsupported class %q", ErrPriceTableInvalid, index, class)
+	}
+	switch class {
+	case PriceClassCachedInput:
+		if cached == nil || *cached != input {
+			return "", fmt.Errorf("%w: models[%d] cached-input equality declaration does not match its input rate", ErrPriceTableInvalid, index)
+		}
+	case PriceClassReasoningOutput:
+		if reasoning == nil || *reasoning != output {
+			return "", fmt.Errorf("%w: models[%d] reasoning-output equality declaration does not match its output rate", ErrPriceTableInvalid, index)
+		}
+	}
+	return class, nil
+}
+
+func validateImplicitEqualRateClasses(index int, classes []PriceClass, input, output string, cached, reasoning *string) error {
+	if cached != nil && *cached == input && !containsPriceClass(classes, PriceClassCachedInput) {
+		return fmt.Errorf("%w: models[%d] equal cached-input rate must be explicitly declared", ErrPriceTableInvalid, index)
+	}
+	if reasoning != nil && *reasoning == output && !containsPriceClass(classes, PriceClassReasoningOutput) {
+		return fmt.Errorf("%w: models[%d] equal reasoning-output rate must be explicitly declared", ErrPriceTableInvalid, index)
+	}
+	return nil
 }
 
 func containsPriceClass(classes []PriceClass, want PriceClass) bool {

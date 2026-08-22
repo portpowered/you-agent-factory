@@ -104,21 +104,41 @@ func assertJSONCostsReport(t *testing.T, output string) {
 	if err := json.Unmarshal([]byte(output), &decoded); err != nil {
 		t.Fatalf("decode API-shaped JSON: %v\n%s", err, output)
 	}
+	assertJSONCostAmounts(t, decoded)
+	assertJSONUnpricedFacts(t, decoded)
+	assertJSONReportDimensions(t, decoded)
+	assertNoLegacyJSONEnvelope(t, output)
+}
+
+func assertJSONCostAmounts(t *testing.T, decoded generatedclient.CostsReport) {
+	t.Helper()
 	if decoded.PricedSubtotal == nil || *decoded.PricedSubtotal != "12.345678" {
 		t.Fatalf("decoded subtotal = %#v, want exact amount", decoded.PricedSubtotal)
 	}
 	if decoded.KnownCost == nil || *decoded.KnownCost != "12.345678" || decoded.TokenTotals.TotalTokens == nil || *decoded.TokenTotals.TotalTokens != 10 {
 		t.Fatalf("decoded partial facts = %#v, want known cost and total tokens", decoded)
 	}
+}
+
+func assertJSONUnpricedFacts(t *testing.T, decoded generatedclient.CostsReport) {
+	t.Helper()
 	if decoded.UnpricedDispatchCount != 1 || len(decoded.UnpricedPairs) != 1 || decoded.UnpricedPairs[0].DispatchCount != 1 {
 		t.Fatalf("decoded unpriced facts = %#v, want one unpriced dispatch/pair", decoded)
 	}
+}
+
+func assertJSONReportDimensions(t *testing.T, decoded generatedclient.CostsReport) {
+	t.Helper()
 	if decoded.Coverage.PricedRows != 1 || len(decoded.LineItems) != 2 || len(decoded.WorkItems) != 1 || len(decoded.WorkerSessions) != 1 {
 		t.Fatalf("decoded report dimensions = %#v, want complete API report", decoded)
 	}
 	if len(decoded.ProviderModels) != 1 || decoded.ProviderModels[0].Key != "openai/mystery" || len(decoded.FactorySessions) != 1 {
 		t.Fatalf("decoded provider/session rollups = %#v, want complete API report", decoded)
 	}
+}
+
+func assertNoLegacyJSONEnvelope(t *testing.T, output string) {
+	t.Helper()
 	if strings.Contains(output, "group_by") || strings.Contains(output, "\"totals\"") || strings.Contains(output, "\\u0000") {
 		t.Fatalf("JSON output used the legacy metrics envelope:\n%s", output)
 	}
