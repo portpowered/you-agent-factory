@@ -118,7 +118,7 @@ func (s *service) execute(
 		}
 		if failure, ok := providerFailure(err); ok {
 			response := runnerFailureResult(failure, request)
-			normalizedErr := normalizeProviderFailure(ctx, failure, err, response, hasContinuation(request))
+			normalizedErr := normalizeProviderFailure(ctx, failure, err, response)
 			s.publishFailureProgress(
 				identity,
 				failure,
@@ -722,10 +722,6 @@ func providerIDForRequest(request workers.RunnerExecutionRequest) providers.ID {
 	return providerIDForRunner(request.RunnerID)
 }
 
-func hasContinuation(request workers.RunnerExecutionRequest) bool {
-	return request.Continuation != nil || strings.TrimSpace(request.SessionID) != ""
-}
-
 func continuationSessionRef(
 	request workers.RunnerExecutionRequest,
 ) *providers.SessionRef {
@@ -846,7 +842,6 @@ func normalizeProviderFailure(
 	failure providers.ExecuteFailure,
 	cause error,
 	result workers.RunnerExecutionResult,
-	continuation bool,
 ) error {
 	interruption := ctx.Err()
 	if errors.Is(interruption, context.Canceled) {
@@ -882,9 +877,11 @@ func normalizeProviderFailure(
 		boundedFailureMessage(canonicalAgentFailureMessage(failureType, failure.Message)),
 		errors.Join(interruption, cause),
 	)
-	if continuation {
-		normalized.ProviderFailureKind = failure.Kind
-	}
+	// Providers has already normalized and sanitized this message. Retain the
+	// provider failure kind on fresh attempts as well as continuations so the
+	// downstream invocation/child boundary can distinguish provider-owned safe
+	// detail from an arbitrary Worker error.
+	normalized.ProviderFailureKind = failure.Kind
 	normalized.Continuation = cloneContinuation(result.Continuation)
 	normalized.Diagnostics = workers.CloneWorkDiagnostics(result.Diagnostics)
 	return normalized

@@ -330,17 +330,15 @@ func (e *directChildExecutor) failedChild(
 	result workers.ExecuteResult,
 	executeErr error,
 ) (factory.JavaScriptChildExecutionResult, error) {
-	diagnostic := ""
-	if result.Failure != nil {
-		diagnostic = strings.TrimSpace(result.Failure.Message)
-	}
-	if diagnostic == "" && executeErr != nil {
-		diagnostic = strings.TrimSpace(executeErr.Error())
-	}
-	if diagnostic == "" {
-		diagnostic = "Provider execution failed."
-	}
+	result = normalizeChildExecuteFailure(result, executeErr)
+	diagnostic := childFailureDiagnostic(result, executeErr, req)
 	providerName, providerSessionRef := childProviderSession(result)
+	if providerName == "" {
+		providerName = childProviderName(result)
+	}
+	if providerName == "" {
+		providerName = canonicalChildProvider(req.ModelProvider)
+	}
 	failed := base
 	failed.Status = factory.JavaScriptChildDispatchStatusFailed
 	failed.Provider = providerName
@@ -351,7 +349,7 @@ func (e *directChildExecutor) failedChild(
 		if failed.FailureDetail == nil {
 			failed.FailureDetail = &workers.FailureDetail{
 				Reason:  result.Failure.Type,
-				Message: diagnostic,
+				Message: childFailureMessage(result, executeErr),
 			}
 		}
 		retryable := result.Failure.RetryHint

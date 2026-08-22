@@ -174,20 +174,162 @@ func childTerminalProgressFromResult(
 
 func childProviderName(result workers.ExecuteResult) string {
 	provider, _ := childProviderSession(result)
-	return provider
+	if provider != "" {
+		return provider
+	}
+	if result.Diagnostics != nil && result.Diagnostics.Provider != nil {
+		return canonicalChildProvider(result.Diagnostics.Provider.Provider)
+	}
+	return ""
 }
 
 func childExecutionDiagnostic(result workers.ExecuteResult, executeErr error) string {
-	if result.Failure != nil && strings.TrimSpace(result.Failure.Message) != "" {
-		return strings.TrimSpace(result.Failure.Message)
+	return childFailureDiagnostic(result, executeErr, factory.JavaScriptChildExecutionRequest{})
+}
+
+// normalizeChildExecuteFailure keeps a typed Worker/Provider error typed when a
+// child executor returns it as the operation error rather than embedding the
+// failure on ExecuteResult. Only an error with no typed Worker detail takes the
+// terminal/unknown fallback path.
+func normalizeChildExecuteFailure(
+	result workers.ExecuteResult,
+	executeErr error,
+) workers.ExecuteResult {
+	if result.Failure != nil || executeErr == nil {
+		return result
 	}
-	if executeErr != nil && strings.TrimSpace(executeErr.Error()) != "" {
-		return strings.TrimSpace(executeErr.Error())
+	if providerErr := workers.NormalizeProviderExecutionError(executeErr); providerErr != nil {
+		metadata := workers.WorkFailureMetadataFromProviderError(providerErr)
+		decision := workers.FailureDecisionFromMetadata(metadata)
+		failureType := workers.WorkFailureTypeUnknown
+		family := workers.WorkFailureFamilyTerminal
+		if metadata != nil {
+			failureType = metadata.Type
+			family = metadata.Family
+		}
+		message := strings.TrimSpace(providerErr.Message)
+		if providerErr.ProviderFailureKind == "" {
+			message = ""
+		}
+		if message == "" {
+			message = childSafeFailureMessage(failureType)
+		}
+		result.Failure = &workers.ExecutionFailure{
+			Type:                            failureType,
+			Family:                          family,
+			Message:                         message,
+			RetryHint:                       decision.Retryable,
+			ProviderFailureKind:             providerErr.ProviderFailureKind,
+			ProviderContinuationFailureKind: providerErr.ProviderContinuationFailureKind,
+			ProviderContinuationOutcome:     providerErr.ProviderContinuationOutcome,
+			Detail:                          &workers.FailureDetail{Reason: failureType, Message: message},
+		}
+		if result.Diagnostics == nil {
+			result.Diagnostics = providerErr.Diagnostics.ToSafeDiagnostics()
+		}
+		if result.Continuation == nil {
+			result.Continuation = (providerErr.Continuation).ClonePtr()
+		}
+		return result
 	}
-	if result.Outcome == workers.ExecutionOutcomeCanceled {
-		return "Provider execution canceled."
+
+	message := strings.TrimSpace(executeErr.Error())
+	if message == "" {
+		message = "Provider execution failed."
 	}
-	return "Provider execution failed."
+	result.Failure = &workers.ExecutionFailure{
+		Type:    workers.WorkFailureTypeUnknown,
+		Family:  workers.WorkFailureFamilyTerminal,
+		Message: message,
+		Detail:  &workers.FailureDetail{Reason: workers.WorkFailureTypeUnknown, Message: message},
+	}
+	return result
+}
+
+func childFailureDiagnostic(
+	result workers.ExecuteResult,
+	executeErr error,
+	req factory.JavaScriptChildExecutionRequest,
+) string {
+	message := childFailureMessage(result, executeErr)
+	provider := childProviderName(result)
+	if provider == "" {
+		provider = canonicalChildProvider(req.ModelProvider)
+	}
+	if provider == "" && req.ExecutorProvider != "" &&
+		!strings.EqualFold(strings.TrimSpace(req.ExecutorProvider), workers.ExecutorProviderACP) &&
+		!strings.EqualFold(strings.TrimSpace(req.ExecutorProvider), "SCRIPT_WRAP") {
+		provider = canonicalChildProvider(req.ExecutorProvider)
+	}
+	return formatChildProviderFailure(provider, message)
+}
+
+func childFailureMessage(result workers.ExecuteResult, executeErr error) string {
+	message := ""
+	if result.Failure != nil && result.Failure.Detail != nil {
+		message = strings.TrimSpace(result.Failure.Detail.Message)
+	}
+	if message == "" && result.Failure != nil {
+		message = strings.TrimSpace(result.Failure.Message)
+	}
+	if message == "" && executeErr != nil {
+		message = strings.TrimSpace(executeErr.Error())
+	}
+	if message == "" {
+		if result.Outcome == workers.ExecutionOutcomeCanceled {
+			message = "Provider execution canceled."
+		} else {
+			message = "Provider execution failed."
+		}
+	}
+	return message
+}
+
+func childSafeFailureMessage(reason workers.WorkFailureType) string {
+	switch reason {
+	case workers.WorkFailureTypeAuthFailure:
+		return "Provider authentication failed."
+	case workers.WorkFailureTypePermanentBadRequest:
+		return "Provider rejected the request as invalid."
+	case workers.WorkFailureTypeThrottled:
+		return "Provider is temporarily unavailable due to usage or capacity limits."
+	case workers.WorkFailureTypeInternalServerError:
+		return "Provider encountered a temporary server error."
+	case workers.WorkFailureTypeTimeout:
+		return "Provider request timed out."
+	case workers.WorkFailureTypeMisconfigured:
+		return "Provider command could not be started."
+	default:
+		return "Provider execution failed."
+	}
+}
+
+func canonicalChildProvider(provider string) string {
+	provider = strings.TrimSpace(provider)
+	if provider == "" {
+		return ""
+	}
+	canonical := providers.ID(strings.ToLower(provider)).CanonicalSessionProvider()
+	if canonical == "" {
+		return strings.ToLower(provider)
+	}
+	return canonical
+}
+
+func formatChildProviderFailure(provider, message string) string {
+	provider = canonicalChildProvider(provider)
+	message = strings.TrimSpace(message)
+	if provider == "" || message == "" {
+		return message
+	}
+	display := provider
+	if runes := []rune(display); len(runes) > 0 {
+		display = strings.ToUpper(string(runes[0])) + string(runes[1:])
+	}
+	if strings.HasPrefix(strings.ToLower(message), strings.ToLower(display)+":") {
+		return message
+	}
+	return fmt.Sprintf("%s: %s", display, message)
 }
 
 // SetWorkerInvoker attaches the Runtime capability used by durable live-change
@@ -792,17 +934,15 @@ func (e *childWorkerExecutor) failedChild(
 	result workers.ExecuteResult,
 	executeErr error,
 ) (factory.JavaScriptChildExecutionResult, error) {
-	diagnostic := ""
-	if result.Failure != nil {
-		diagnostic = strings.TrimSpace(result.Failure.Message)
-	}
-	if diagnostic == "" && executeErr != nil {
-		diagnostic = strings.TrimSpace(executeErr.Error())
-	}
-	if diagnostic == "" {
-		diagnostic = "Provider execution failed."
-	}
+	result = normalizeChildExecuteFailure(result, executeErr)
+	diagnostic := childFailureDiagnostic(result, executeErr, req)
 	provider, providerSessionRef := childProviderSession(result)
+	if provider == "" {
+		provider = childProviderName(result)
+	}
+	if provider == "" {
+		provider = canonicalChildProvider(req.ModelProvider)
+	}
 	failed := base
 	failed.Status = factory.JavaScriptChildDispatchStatusFailed
 	// The provider travels with its session reference or not at all. A
@@ -818,7 +958,7 @@ func (e *childWorkerExecutor) failedChild(
 		if failed.FailureDetail == nil {
 			failed.FailureDetail = &workers.FailureDetail{
 				Reason:  result.Failure.Type,
-				Message: diagnostic,
+				Message: childFailureMessage(result, executeErr),
 			}
 		}
 		retryable := result.Failure.RetryHint

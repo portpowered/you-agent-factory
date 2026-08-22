@@ -72,6 +72,39 @@ func TestProviderExecutorExecuteMapsCanonicalProviderFailure(t *testing.T) {
 	}
 }
 
+func TestProviderExecutorExecutePreservesTypedProviderReasonAndIdentity(t *testing.T) {
+	const rejection = "Agy does not support a separate reasoning effort."
+	service := &invocationProviderServiceBase{
+		identity: providers.IDAntigravity,
+		executeErr: providers.ExecuteFailure{
+			Kind:    providers.ExecuteFailureKindInvalidRequest,
+			Message: rejection,
+		},
+	}
+
+	result, err := workerinvocation.NewProviderExecutor(service).Execute(
+		context.Background(),
+		workerexecution.InvocationInput{Request: workerexecution.ProviderInferenceRequest{
+			ModelProvider: string(providers.IDAntigravity),
+			Model:         "gemini-3.6-flash-medium",
+		}},
+	)
+	var providerErr *workerexecution.ProviderError
+	if err == nil || !errors.As(err, &providerErr) {
+		t.Fatalf("Execute() error = %v, want typed provider failure", err)
+	}
+	if providerErr.ProviderFailureKind != providers.ExecuteFailureKindInvalidRequest {
+		t.Fatalf("provider failure kind = %q, want invalid_request", providerErr.ProviderFailureKind)
+	}
+	if result.FailureDetail == nil || result.FailureDetail.Message != rejection {
+		t.Fatalf("failure detail = %#v, want the provider's safe rejection reason", result.FailureDetail)
+	}
+	if result.Diagnostics == nil || result.Diagnostics.Provider == nil ||
+		result.Diagnostics.Provider.Provider != string(providers.IDAntigravity) {
+		t.Fatalf("diagnostics = %#v, want Antigravity provider identity", result.Diagnostics)
+	}
+}
+
 func TestProviderExecutorExecutePropagatesCancellationWithoutRetry(t *testing.T) {
 	provider := newBlockingExecutionTestProvider()
 	ctx, cancel := context.WithCancel(context.Background())

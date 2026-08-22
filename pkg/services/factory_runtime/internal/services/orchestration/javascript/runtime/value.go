@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"reflect"
+	"strings"
 
 	"github.com/dop251/goja"
 	workflowresult "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/runtimecontract"
@@ -37,7 +38,10 @@ func typedValueFromGoja(vm *goja.Runtime, value goja.Value) (workflowresult.Type
 		case goja.PromiseStatePending:
 			return workflowresult.TypedValue{Unresolved: true}, nil
 		case goja.PromiseStateRejected:
-			return workflowresult.TypedValue{}, fmt.Errorf("workflow promise rejected: %v", promise.Result().Export())
+			return workflowresult.TypedValue{}, fmt.Errorf(
+				"workflow promise rejected: %s",
+				promiseRejectionMessage(vm, promise.Result()),
+			)
 		default:
 			return typedValueFromGoja(vm, promise.Result())
 		}
@@ -47,4 +51,48 @@ func typedValueFromGoja(vm *goja.Runtime, value goja.Value) (workflowresult.Type
 		return workflowresult.TypedValue{}, fmt.Errorf("marshal workflow result: %w", err)
 	}
 	return workflowresult.TypedValue{JSON: raw}, nil
+}
+
+func promiseRejectionMessage(vm *goja.Runtime, reason goja.Value) string {
+	if reason == nil || goja.IsUndefined(reason) || goja.IsNull(reason) {
+		return "promise rejection"
+	}
+	object := reason.ToObject(vm)
+	if object != nil {
+		if value := object.Get("value"); value != nil && !goja.IsUndefined(value) && !goja.IsNull(value) {
+			if message := exportedRejectionMessage(value.Export()); message != "" {
+				return message
+			}
+		}
+		name := valueString(object.Get("name"))
+		for _, key := range []string{"message", "diagnostic", "reason", "detail", "error"} {
+			if message := valueString(object.Get(key)); message != "" {
+				if name != "" && !strings.EqualFold(name, "error") && key == "message" {
+					return name + ": " + message
+				}
+				return message
+			}
+		}
+	}
+	if message := exportedRejectionMessage(reason.Export()); message != "" {
+		return message
+	}
+	return "promise rejection"
+}
+
+func exportedRejectionMessage(value any) string {
+	if err, ok := value.(error); ok && err != nil {
+		return strings.TrimSpace(err.Error())
+	}
+	if message, ok := value.(string); ok {
+		return strings.TrimSpace(message)
+	}
+	return ""
+}
+
+func valueString(value goja.Value) string {
+	if value == nil || goja.IsUndefined(value) || goja.IsNull(value) {
+		return ""
+	}
+	return strings.TrimSpace(value.String())
 }

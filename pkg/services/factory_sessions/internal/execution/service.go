@@ -607,14 +607,15 @@ func dispatchSummaryFromChildRecord(currentPhase string, child factory.JavaScrip
 		Model:                 strings.TrimSpace(child.Model),
 		ReasoningEffort:       strings.TrimSpace(child.ReasoningEffort),
 	}
+	summary.Provider = strings.TrimSpace(child.Provider)
+	if summary.Provider == "" && strings.TrimSpace(child.ExecutionMode) == factory.JavaScriptChildExecutionModeFake {
+		summary.Provider = "fake"
+	}
 	if javascript := dispatchJavaScriptFromChildRecord(child); strings.TrimSpace(javascript.TaskKind) != "" {
 		summary.JavaScript = &javascript
 	}
 	if ref := strings.TrimSpace(child.ProviderSessionRef); ref != "" {
-		provider := strings.TrimSpace(child.Provider)
-		if provider == "" && strings.TrimSpace(child.ExecutionMode) == factory.JavaScriptChildExecutionModeFake {
-			provider = "fake"
-		}
+		provider := summary.Provider
 		summary.Provider = provider
 		summary.ProviderSessionRefs = []ProviderSessionRef{{
 			Provider: provider,

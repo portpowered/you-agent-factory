@@ -364,7 +364,7 @@ func (g *runtimeGlobals) resolvePromiseValue(value goja.Value) (any, error) {
 		case goja.PromiseStateRejected:
 			reason := promise.Result()
 			if reason != nil {
-				return nil, fmt.Errorf("%v", reason.Export())
+				return nil, fmt.Errorf("%s", promiseRejectionMessage(g.vm, reason))
 			}
 			return nil, fmt.Errorf("parallel child rejected")
 		default:
