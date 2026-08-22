@@ -183,12 +183,17 @@ func TestQueryUnpricedUsageRetainsCorrelationAndCountsRepeatedRows(t *testing.T)
 		t.Fatalf("line items = %#v, want two diagnostics", report.LineItems)
 	}
 	for _, line := range report.LineItems {
-		if line.Status != costs.StatusUnpriced || line.PricedAmount != nil || line.Provider != "CODEX" || line.Model != "missing" {
-			t.Fatalf("unpriced line = %#v, want safe identity and no amount", line)
-		}
-		if line.DispatchID == "" || line.WorkID == "" || line.WorkerSessionID == "" || !strings.Contains(line.Reason, "no configured price") {
-			t.Fatalf("unpriced diagnostic = %#v, want correlation and stable reason", line)
-		}
+		assertUnpricedLineRetainsCorrelation(t, line)
+	}
+}
+
+func assertUnpricedLineRetainsCorrelation(t *testing.T, line costs.LineItem) {
+	t.Helper()
+	if line.Status != costs.StatusUnpriced || line.PricedAmount != nil || line.Provider != "CODEX" || line.Model != "missing" {
+		t.Fatalf("unpriced line = %#v, want safe identity and no amount", line)
+	}
+	if line.DispatchID == "" || line.WorkID == "" || line.WorkerSessionID == "" || !strings.Contains(line.Reason, "no configured price") {
+		t.Fatalf("unpriced diagnostic = %#v, want correlation and stable reason", line)
 	}
 }
 
