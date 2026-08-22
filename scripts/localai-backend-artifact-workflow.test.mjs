@@ -291,10 +291,14 @@ test("the pinned build repairs LocalAI path and Darwin shell incompatibilities",
 
 test("the pinned llama build preserves recursive protobuf arguments and Darwin compatibility", async () => {
 	const buildScript = await readFile("scripts/build-localai-backend-artifact.sh", "utf8");
-	assert.match(buildScript, /CMAKE_ARGS="\$cmake_args_text" "\$make_command" -C "\$backend_path" BUILD_TYPE=cpu BUILD_GRPC_FOR_BACKEND_LLAMA=1 grpc-server/);
+	assert.match(buildScript, /run_direct_grpc_server_make\(\)/);
+	assert.match(buildScript, /_PROTOBUF_PROTOC=\$\{grpc_path\}\/installed_packages\/bin\/proto/);
+	assert.match(buildScript, /_GRPC_CPP_PLUGIN_EXECUTABLE=\$\{grpc_path\}\/installed_packages\/bin\/grpc_cpp_plugin/);
+	assert.match(buildScript, /PATH=\$\{grpc_path\}\/installed_packages\/bin:\$\{PATH\}/);
+	assert.match(buildScript, /run_direct_grpc_server_make "\$\{cmake_args_text\} \$\{grpc_added_cmake_args\}" BUILD_TYPE=cpu BUILD_GRPC_FOR_BACKEND_LLAMA=1 grpc-server/);
 	assert.match(buildScript, /-DProtobuf_PROTOC_EXECUTABLE=\$\{protoc_path\}/);
 	assert.match(buildScript, /darwin_llama_cmake_args="\$\{cmake_args_text\} \$\{grpc_added_cmake_args\} -DGGML_CPU_ARM_ARCH=armv8\.2-a\+dotprod"/);
-	assert.match(buildScript, /CMAKE_ARGS="\$darwin_llama_cmake_args" "\$make_command" -C "\$backend_path" "\$\{os_make_args\[@\]\}" BUILD_TYPE="\$BUILD_TYPE" BUILD_GRPC_FOR_BACKEND_LLAMA=1 grpc-server/);
+	assert.match(buildScript, /run_direct_grpc_server_make "\$darwin_llama_cmake_args" "\$\{os_make_args\[@\]\}" BUILD_TYPE="\$BUILD_TYPE" BUILD_GRPC_FOR_BACKEND_LLAMA=1 grpc-server/);
 	assert.match(buildScript, /cp -f "\$\{backend_path\}\/grpc-server" "\$\{backend_path\}\/llama-cpp-cpu-all"/);
 	assert.match(buildScript, /CMAKE_ARGS="\$cmake_args_text" "\$make_command" -C "\$backend_path" "\$\{os_make_args\[@\]\}" BUILD_TYPE="\$BUILD_TYPE" BUILD_GRPC_FOR_BACKEND_LLAMA=1 llama-cpp-cpu-all/);
 	assert.doesNotMatch(buildScript, /BUILD_GRPC_FOR_BACKEND_LLAMA=1 CMAKE_ARGS="\$cmake_args_text"/);

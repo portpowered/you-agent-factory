@@ -209,6 +209,18 @@ ensure_localai_grpc_compat_path() {
 	ln -s "$grpc_path" "$compatibility_path"
 }
 
+run_direct_grpc_server_make() {
+	local cmake_args_text_arg="$1"
+	shift
+	local grpc_path="${LOCALAI_ROOT}/backend/cpp/grpc"
+	env \
+		"_PROTOBUF_PROTOC=${grpc_path}/installed_packages/bin/proto" \
+		"_GRPC_CPP_PLUGIN_EXECUTABLE=${grpc_path}/installed_packages/bin/grpc_cpp_plugin" \
+		"PATH=${grpc_path}/installed_packages/bin:${PATH}" \
+		CMAKE_ARGS="$cmake_args_text_arg" \
+		"$make_command" -C "$backend_path" "$@"
+}
+
 generate_go_protocol() {
 	local grpc_path="${LOCALAI_ROOT}/backend/cpp/grpc"
 	local protoc_path="${grpc_path}/installed_packages/bin/protoc"
@@ -363,7 +375,7 @@ if [[ "$TARGET_ID" == "windows-amd64" ]]; then
 			# The upstream package target is Unix-only. Build its gRPC target with
 			# the static Windows toolchain and stage it under the canonical
 			# llama-cpp-cpu-all entrypoint used by the package contract.
-			CMAKE_ARGS="$cmake_args_text" "$make_command" -C "$backend_path" BUILD_TYPE=cpu BUILD_GRPC_FOR_BACKEND_LLAMA=1 grpc-server
+			run_direct_grpc_server_make "${cmake_args_text} ${grpc_added_cmake_args}" BUILD_TYPE=cpu BUILD_GRPC_FOR_BACKEND_LLAMA=1 grpc-server
 			mkdir -p "${backend_path}/package"
 			built_binary="$(find "$backend_path" -maxdepth 3 -type f \( -name 'grpc-server.exe' -o -name 'grpc-server' \) -size +0c -print -quit)"
 			[[ -n "$built_binary" ]] || { echo "Windows llama gRPC executable was not produced" >&2; exit 1; }
@@ -398,7 +410,7 @@ if [[ "$TARGET_ID" == "windows-amd64" ]]; then
 			# pinned grpc-server directly with a generic Darwin arm64 setting, then
 			# retain the existing CPU-all executable name and package contract.
 			darwin_llama_cmake_args="${cmake_args_text} ${grpc_added_cmake_args} -DGGML_CPU_ARM_ARCH=armv8.2-a+dotprod"
-			CMAKE_ARGS="$darwin_llama_cmake_args" "$make_command" -C "$backend_path" "${os_make_args[@]}" BUILD_TYPE="$BUILD_TYPE" BUILD_GRPC_FOR_BACKEND_LLAMA=1 grpc-server
+			run_direct_grpc_server_make "$darwin_llama_cmake_args" "${os_make_args[@]}" BUILD_TYPE="$BUILD_TYPE" BUILD_GRPC_FOR_BACKEND_LLAMA=1 grpc-server
 			test -s "${backend_path}/grpc-server"
 			cp -f "${backend_path}/grpc-server" "${backend_path}/llama-cpp-cpu-all"
 			stage_darwin_llama_package
