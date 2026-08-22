@@ -1,0 +1,1781 @@
+{
+  "scenarios": [
+    {
+      "id": "petri-running-one-dispatch",
+      "tags": {
+        "orchestrator": "PETRI",
+        "status": "RUNNING",
+        "dispatchCount": "ONE",
+        "outcome": "running"
+      },
+      "executionRequest": {
+        "requestId": "req-petri-run-001",
+        "source": {
+          "kind": "FACTORY_ID",
+          "factoryId": "customer-support-triage"
+        },
+        "args": {
+          "ticketId": "TKT-1001"
+        },
+        "requestedPolicy": {
+          "policyHash": "req-policy-petri-run"
+        }
+      },
+      "asyncResponse": {
+        "sessionId": "dur-sess-petri-run-001",
+        "status": "RUNNING",
+        "orchestratorKind": "PETRI",
+        "resolvedSource": {
+          "kind": "FACTORY_ID",
+          "sourceRef": "factory/customer-support-triage",
+          "sourceHash": "sha256:petri-factory-001"
+        },
+        "sourceHash": "sha256:petri-factory-001",
+        "requestedPolicy": {
+          "policyHash": "req-policy-petri-run"
+        },
+        "effectivePolicy": {
+          "policyHash": "eff-policy-petri-run"
+        },
+        "effectivePolicyHash": "eff-policy-petri-run",
+        "links": {
+          "session": "/factory-sessions/dur-sess-petri-run-001",
+          "events": "/factory-sessions/dur-sess-petri-run-001/events",
+          "results": "/factory-sessions/dur-sess-petri-run-001/results",
+          "status": "/factory-sessions/dur-sess-petri-run-001"
+        }
+      },
+      "session": {
+        "sessionId": "dur-sess-petri-run-001",
+        "status": "RUNNING",
+        "orchestratorKind": "PETRI",
+        "resolvedSource": {
+          "kind": "FACTORY_ID",
+          "sourceRef": "factory/customer-support-triage",
+          "sourceHash": "sha256:petri-factory-001"
+        },
+        "sourceHash": "sha256:petri-factory-001",
+        "requestedPolicy": {
+          "policyHash": "req-policy-petri-run"
+        },
+        "effectivePolicy": {
+          "policyHash": "eff-policy-petri-run"
+        },
+        "effectivePolicyHash": "eff-policy-petri-run",
+        "phase": "triage",
+        "phaseSummaries": [
+          {
+            "phase": "triage",
+            "dispatchCount": 1,
+            "completedDispatchCount": 0,
+            "failedDispatchCount": 0
+          }
+        ],
+        "progress": {
+          "totalDispatches": 1,
+          "completedDispatches": 0,
+          "failedDispatches": 0,
+          "inFlightDispatches": 1
+        },
+        "links": {
+          "session": "/factory-sessions/dur-sess-petri-run-001",
+          "events": "/factory-sessions/dur-sess-petri-run-001/events",
+          "results": "/factory-sessions/dur-sess-petri-run-001/results",
+          "status": "/factory-sessions/dur-sess-petri-run-001"
+        },
+        "usage": {
+          "resources": []
+        }
+      },
+      "listSummary": {
+        "sessionId": "dur-sess-petri-run-001",
+        "status": "RUNNING",
+        "orchestratorKind": "PETRI",
+        "resolvedSource": {
+          "kind": "FACTORY_ID",
+          "sourceRef": "factory/customer-support-triage",
+          "sourceHash": "sha256:petri-factory-001"
+        },
+        "requestedPolicy": {
+          "policyHash": "req-policy-petri-run"
+        },
+        "effectivePolicy": {
+          "policyHash": "eff-policy-petri-run"
+        },
+        "effectivePolicyHash": "eff-policy-petri-run",
+        "phase": "triage",
+        "progress": {
+          "totalDispatches": 1,
+          "inFlightDispatches": 1
+        },
+        "resultSummary": {
+          "resultStatus": "NOT_READY"
+        },
+        "actions": {
+          "canPause": true,
+          "canCancel": true,
+          "canTerminate": true
+        }
+      },
+      "dispatches": [
+        {
+          "id": "disp-petri-001",
+          "status": "RUNNING",
+          "dispatchKind": "PETRI_TRANSITION",
+          "phase": "triage",
+          "label": "plan-task",
+          "attempt": 1,
+          "runnerId": "planner",
+          "model": "claude-sonnet-4-20250514",
+          "provider": "claude",
+          "providerSessionRefs": [
+            {
+              "provider": "codex",
+              "kind": "session_id",
+              "id": "prov-sess-disp-petri-001"
+            }
+          ]
+        }
+      ],
+      "dispatchDetail": {
+        "id": "disp-petri-001",
+        "sessionId": "dur-sess-petri-run-001",
+        "orchestratorKind": "PETRI",
+        "dispatchKind": "PETRI_TRANSITION",
+        "status": "RUNNING",
+        "phase": "triage",
+        "label": "plan-task",
+        "attempt": 1,
+        "runnerId": "planner",
+        "model": "claude-sonnet-4-20250514",
+        "provider": "claude",
+        "petri": {
+          "transitionId": "transition-plan-task",
+          "workstationName": "plan-task",
+          "workerType": "model-worker"
+        },
+        "providerSessionRefs": [
+          {
+            "provider": "codex",
+            "kind": "session_id",
+            "id": "prov-sess-disp-petri-001"
+          }
+        ]
+      },
+      "artifacts": [],
+      "result": {
+        "sessionId": "dur-sess-petri-run-001",
+        "resultStatus": "NOT_READY",
+        "sessionStatus": "RUNNING",
+        "mode": "final",
+        "includeArtifacts": false,
+        "availability": {
+          "reason": "RESULT_NOT_READY",
+          "message": "Session is still running.",
+          "retryable": true
+        }
+      }
+    },
+    {
+      "id": "petri-succeeded-one-dispatch",
+      "tags": {
+        "orchestrator": "PETRI",
+        "status": "SUCCEEDED",
+        "dispatchCount": "ONE",
+        "outcome": "succeeded"
+      },
+      "executionRequest": {
+        "requestId": "req-petri-success-001",
+        "source": {
+          "kind": "FACTORY_ID",
+          "factoryId": "customer-support-triage"
+        },
+        "args": {
+          "ticketId": "TKT-2002"
+        }
+      },
+      "syncResponse": {
+        "sessionId": "dur-sess-petri-success-001",
+        "status": "SUCCEEDED",
+        "orchestratorKind": "PETRI",
+        "resolvedSource": {
+          "kind": "FACTORY_ID",
+          "sourceRef": "factory/customer-support-triage",
+          "sourceHash": "sha256:petri-factory-001"
+        },
+        "sourceHash": "sha256:petri-factory-001",
+        "syncOutcome": "COMPLETED",
+        "result": {
+          "sessionId": "dur-sess-petri-success-001",
+          "resultStatus": "FINAL",
+          "sessionStatus": "SUCCEEDED",
+          "mode": "final",
+          "includeArtifacts": false,
+          "primaryResult": [
+            {
+              "type": "text",
+              "text": "Ticket triaged and resolved."
+            }
+          ]
+        },
+        "links": {
+          "session": "/factory-sessions/dur-sess-petri-success-001",
+          "results": "/factory-sessions/dur-sess-petri-success-001/results"
+        }
+      },
+      "session": {
+        "sessionId": "dur-sess-petri-success-001",
+        "status": "SUCCEEDED",
+        "orchestratorKind": "PETRI",
+        "resolvedSource": {
+          "kind": "FACTORY_ID",
+          "sourceRef": "factory/customer-support-triage",
+          "sourceHash": "sha256:petri-factory-001"
+        },
+        "resultSummary": {
+          "resultStatus": "FINAL",
+          "summary": "Ticket triaged and resolved."
+        },
+        "lifecycle": {
+          "queuedAt": "2026-06-08T10:00:00Z",
+          "startedAt": "2026-06-08T10:00:01Z",
+          "finishedAt": "2026-06-08T10:05:00Z"
+        },
+        "links": {
+          "session": "/factory-sessions/dur-sess-petri-success-001",
+          "results": "/factory-sessions/dur-sess-petri-success-001/results"
+        },
+        "usage": {
+          "resources": []
+        }
+      },
+      "listSummary": {
+        "sessionId": "dur-sess-petri-success-001",
+        "status": "SUCCEEDED",
+        "orchestratorKind": "PETRI",
+        "resolvedSource": {
+          "kind": "FACTORY_ID",
+          "sourceRef": "factory/customer-support-triage",
+          "sourceHash": "sha256:petri-factory-001"
+        },
+        "progress": {
+          "totalDispatches": 1,
+          "completedDispatches": 1
+        },
+        "resultSummary": {
+          "resultStatus": "FINAL",
+          "summary": "Ticket triaged and resolved."
+        },
+        "artifactCount": 1,
+        "recoverable": false,
+        "actions": {
+          "canRetryDispatch": false
+        }
+      },
+      "dispatches": [
+        {
+          "id": "disp-petri-success-001",
+          "status": "COMPLETED",
+          "dispatchKind": "PETRI_TRANSITION",
+          "label": "plan-task",
+          "attempt": 1,
+          "outputArtifactIds": [
+            "art-petri-final-001"
+          ]
+        }
+      ],
+      "dispatchDetail": {
+        "id": "disp-petri-success-001",
+        "sessionId": "dur-sess-petri-success-001",
+        "orchestratorKind": "PETRI",
+        "dispatchKind": "PETRI_TRANSITION",
+        "status": "COMPLETED",
+        "label": "plan-task",
+        "attempt": 1,
+        "artifactIds": [
+          "art-petri-final-001"
+        ],
+        "petri": {
+          "transitionId": "transition-plan-task",
+          "workstationName": "plan-task",
+          "workerType": "model-worker"
+        }
+      },
+      "artifacts": [
+        {
+          "id": "art-petri-final-001",
+          "kind": "FINAL_RESULT",
+          "visibility": "PUBLIC",
+          "label": "Triage summary",
+          "contentHash": "sha256:petri-final-001",
+          "sizeBytes": 128,
+          "createdAt": "2026-06-08T10:05:00Z",
+          "dispatchId": "disp-petri-success-001",
+          "auditMode": "REDACTED",
+          "retrievalRef": {
+            "href": "/factory-sessions/dur-sess-petri-success-001/artifacts/art-petri-final-001",
+            "method": "GET"
+          }
+        }
+      ],
+      "artifactDetail": {
+        "sessionId": "dur-sess-petri-success-001",
+        "id": "art-petri-final-001",
+        "kind": "FINAL_RESULT",
+        "visibility": "PUBLIC",
+        "label": "Triage summary",
+        "contentHash": "sha256:petri-final-001",
+        "sizeBytes": 128,
+        "createdAt": "2026-06-08T10:05:00Z",
+        "dispatchId": "disp-petri-success-001",
+        "auditMode": "REDACTED",
+        "captureMetadata": {
+          "capturedAt": "2026-06-08T10:05:00Z",
+          "sourceDispatchId": "disp-petri-success-001",
+          "mimeType": "text/plain"
+        },
+        "content": [
+          {
+            "type": "text",
+            "text": "Ticket triaged and resolved."
+          }
+        ]
+      },
+      "result": {
+        "sessionId": "dur-sess-petri-success-001",
+        "resultStatus": "FINAL",
+        "sessionStatus": "SUCCEEDED",
+        "mode": "final",
+        "includeArtifacts": true,
+        "primaryResult": [
+          {
+            "type": "text",
+            "text": "Ticket triaged and resolved."
+          }
+        ],
+        "artifactRefs": [
+          {
+            "id": "art-petri-final-001",
+            "kind": "FINAL_RESULT",
+            "visibility": "PUBLIC",
+            "contentHash": "sha256:petri-final-001",
+            "sizeBytes": 128
+          }
+        ]
+      }
+    },
+    {
+      "id": "javascript-running-n-dispatch",
+      "tags": {
+        "orchestrator": "JAVASCRIPT",
+        "status": "RUNNING",
+        "dispatchCount": "N",
+        "outcome": "running"
+      },
+      "executionRequest": {
+        "requestId": "req-js-run-n-001",
+        "source": {
+          "kind": "WORKFLOW_NAME",
+          "workflowName": "release-train"
+        },
+        "args": {
+          "release": "2026.06"
+        },
+        "orchestrator": {
+          "kind": "JAVASCRIPT",
+          "javascript": {
+            "dialect": "you-workflow-v1"
+          }
+        }
+      },
+      "asyncResponse": {
+        "sessionId": "dur-sess-js-run-n-001",
+        "status": "RUNNING",
+        "orchestratorKind": "JAVASCRIPT",
+        "dialect": "you-workflow-v1",
+        "resolvedSource": {
+          "kind": "WORKFLOW_NAME",
+          "sourceRef": "workflow/release-train",
+          "sourceHash": "sha256:js-workflow-release-train",
+          "dialect": "you-workflow-v1",
+          "resolutionOrder": [
+            "PROJECT_CLAUDE_WORKFLOWS",
+            "USER_YOU_AGENT_FACTORY_WORKFLOWS"
+          ],
+          "metadata": {
+            "workflowName": "release-train"
+          }
+        },
+        "links": {
+          "session": "/factory-sessions/dur-sess-js-run-n-001",
+          "results": "/factory-sessions/dur-sess-js-run-n-001/results",
+          "status": "/factory-sessions/dur-sess-js-run-n-001"
+        }
+      },
+      "session": {
+        "sessionId": "dur-sess-js-run-n-001",
+        "status": "RUNNING",
+        "orchestratorKind": "JAVASCRIPT",
+        "dialect": "you-workflow-v1",
+        "resolvedSource": {
+          "kind": "WORKFLOW_NAME",
+          "sourceRef": "workflow/release-train",
+          "sourceHash": "sha256:js-workflow-release-train",
+          "dialect": "you-workflow-v1",
+          "resolutionOrder": [
+            "PROJECT_CLAUDE_WORKFLOWS",
+            "USER_YOU_AGENT_FACTORY_WORKFLOWS"
+          ]
+        },
+        "phase": "verify",
+        "progress": {
+          "totalDispatches": 3,
+          "completedDispatches": 1,
+          "failedDispatches": 0,
+          "inFlightDispatches": 1
+        },
+        "links": {
+          "session": "/factory-sessions/dur-sess-js-run-n-001",
+          "results": "/factory-sessions/dur-sess-js-run-n-001/results",
+          "status": "/factory-sessions/dur-sess-js-run-n-001"
+        },
+        "usage": {
+          "resources": []
+        },
+        "budgets": {
+          "maxAgents": 3
+        }
+      },
+      "listSummary": {
+        "sessionId": "dur-sess-js-run-n-001",
+        "status": "RUNNING",
+        "orchestratorKind": "JAVASCRIPT",
+        "resolvedSource": {
+          "kind": "WORKFLOW_NAME",
+          "sourceRef": "workflow/release-train",
+          "sourceHash": "sha256:js-workflow-release-train"
+        }
+      },
+      "dispatches": [
+        {
+          "id": "disp-js-001",
+          "status": "COMPLETED",
+          "dispatchKind": "JAVASCRIPT_AGENT",
+          "phase": "plan",
+          "label": "plan-release",
+          "attempt": 1
+        },
+        {
+          "id": "disp-js-002",
+          "status": "RUNNING",
+          "dispatchKind": "JAVASCRIPT_VERIFY",
+          "phase": "verify",
+          "label": "verify-release",
+          "attempt": 1
+        },
+        {
+          "id": "disp-js-003",
+          "status": "QUEUED",
+          "dispatchKind": "JAVASCRIPT_SYNTHESIZE",
+          "phase": "synthesize",
+          "label": "synthesize-notes",
+          "attempt": 1
+        }
+      ],
+      "dispatchDetail": {
+        "id": "disp-js-002",
+        "sessionId": "dur-sess-js-run-n-001",
+        "orchestratorKind": "JAVASCRIPT",
+        "dispatchKind": "JAVASCRIPT_VERIFY",
+        "status": "RUNNING",
+        "phase": "verify",
+        "label": "verify-release",
+        "attempt": 1,
+        "javascript": {
+          "taskKind": "VERIFY",
+          "taskLabel": "verify-release",
+          "executionMode": "live"
+        },
+        "statusTransitions": ["QUEUED", "RUNNING"]
+      },
+      "artifacts": [],
+      "result": {
+        "sessionId": "dur-sess-js-run-n-001",
+        "resultStatus": "PARTIAL",
+        "sessionStatus": "RUNNING",
+        "mode": "partial",
+        "includeArtifacts": false,
+        "primaryResult": [
+          {
+            "type": "JSON",
+            "json": {
+              "phase": "verify",
+              "completedSteps": 1
+            }
+          }
+        ]
+      },
+      "events": [
+        {
+          "schemaVersion": "agent-factory.event.v1",
+          "id": "session-started/dur-sess-js-run-n-001",
+          "type": "SESSION_STARTED",
+          "context": {
+            "sequence": 1,
+            "tick": 1,
+            "eventTime": "2026-06-08T14:00:00Z",
+            "sessionId": "dur-sess-js-run-n-001",
+            "sessionSequence": 0,
+            "orchestratorKind": "JAVASCRIPT",
+            "orchestratorDialect": "you-workflow-v1",
+            "phaseId": "verify",
+            "phaseName": "verify",
+            "source": "fake-service"
+          },
+          "payload": {
+            "sourceRef": "workflow/release-train",
+            "sourceHash": "sha256:js-workflow-release-train",
+            "startedAt": "2026-06-08T14:00:00Z"
+          }
+        },
+        {
+          "schemaVersion": "agent-factory.event.v1",
+          "id": "session-result-updated/dur-sess-js-run-n-001",
+          "type": "SESSION_RESULT_UPDATED",
+          "context": {
+            "sequence": 2,
+            "tick": 2,
+            "eventTime": "2026-06-08T14:05:00Z",
+            "sessionId": "dur-sess-js-run-n-001",
+            "sessionSequence": 1,
+            "orchestratorKind": "JAVASCRIPT",
+            "orchestratorDialect": "you-workflow-v1",
+            "phaseId": "verify",
+            "phaseName": "verify",
+            "source": "fake-service"
+          },
+          "payload": {
+            "resultStatus": "PARTIAL"
+          }
+        }
+      ]
+    },
+    {
+      "id": "javascript-paused-two-dispatch",
+      "tags": {
+        "orchestrator": "JAVASCRIPT",
+        "status": "PAUSED",
+        "dispatchCount": "TWO",
+        "outcome": "paused"
+      },
+      "executionRequest": {
+        "requestId": "req-js-paused-001",
+        "source": {
+          "kind": "WORKFLOW_FILE",
+          "workflowFile": ".claude/workflows/approval-gate.yaml"
+        },
+        "args": {
+          "changeId": "CHG-42"
+        }
+      },
+      "session": {
+        "sessionId": "dur-sess-js-paused-001",
+        "status": "PAUSED",
+        "orchestratorKind": "JAVASCRIPT",
+        "dialect": "you-workflow-v1",
+        "resolvedSource": {
+          "kind": "WORKFLOW_FILE",
+          "sourceRef": "workflow/.claude/workflows/approval-gate.yaml",
+          "sourceHash": "sha256:js-workflow-approval-gate",
+          "resolutionOrder": [
+            "PROJECT_CLAUDE_WORKFLOWS"
+          ]
+        },
+        "progress": {
+          "totalDispatches": 2,
+          "completedDispatches": 1,
+          "failedDispatches": 0,
+          "inFlightDispatches": 0
+        },
+        "links": {
+          "session": "/factory-sessions/dur-sess-js-paused-001",
+          "results": "/factory-sessions/dur-sess-js-paused-001/results",
+          "status": "/factory-sessions/dur-sess-js-paused-001"
+        },
+        "usage": {
+          "resources": []
+        },
+        "budgets": {
+          "maxAgents": 3
+        }
+      },
+      "listSummary": {
+        "sessionId": "dur-sess-js-paused-001",
+        "status": "PAUSED",
+        "orchestratorKind": "JAVASCRIPT",
+        "resolvedSource": {
+          "kind": "WORKFLOW_FILE",
+          "sourceRef": "workflow/.claude/workflows/approval-gate.yaml",
+          "sourceHash": "sha256:js-workflow-approval-gate"
+        }
+      },
+      "dispatches": [
+        {
+          "id": "disp-js-pause-001",
+          "status": "COMPLETED",
+          "dispatchKind": "JAVASCRIPT_AGENT",
+          "label": "draft-change",
+          "attempt": 1
+        },
+        {
+          "id": "disp-js-pause-002",
+          "status": "QUEUED",
+          "dispatchKind": "JAVASCRIPT_SYSTEM",
+          "label": "await-approval",
+          "attempt": 1
+        }
+      ],
+      "dispatchDetail": {
+        "id": "disp-js-pause-002",
+        "sessionId": "dur-sess-js-paused-001",
+        "orchestratorKind": "JAVASCRIPT",
+        "dispatchKind": "JAVASCRIPT_SYSTEM",
+        "status": "QUEUED",
+        "label": "await-approval",
+        "attempt": 1,
+        "javascript": {
+          "taskKind": "SYSTEM",
+          "taskLabel": "await-approval"
+        }
+      },
+      "artifacts": [
+        {
+          "id": "art-js-pause-001",
+          "kind": "FINDING",
+          "visibility": "PUBLIC",
+          "label": "Approval draft",
+          "contentHash": "sha256:js-pause-art-001",
+          "sizeBytes": 512,
+          "createdAt": "2026-06-08T11:00:00Z",
+          "dispatchId": "disp-js-pause-001",
+          "auditMode": "REDACTED",
+          "retrievalRef": {
+            "href": "/factory-sessions/dur-sess-js-paused-001/artifacts/art-js-pause-001",
+            "method": "GET"
+          }
+        }
+      ],
+      "artifactDetail": {
+        "sessionId": "dur-sess-js-paused-001",
+        "id": "art-js-pause-001",
+        "kind": "FINDING",
+        "visibility": "PUBLIC",
+        "label": "Approval draft",
+        "contentHash": "sha256:js-pause-art-001",
+        "sizeBytes": 512,
+        "createdAt": "2026-06-08T11:00:00Z",
+        "dispatchId": "disp-js-pause-001",
+        "auditMode": "REDACTED",
+        "contentRef": {
+          "href": "/factory-sessions/dur-sess-js-paused-001/artifacts/art-js-pause-001",
+          "method": "GET"
+        }
+      },
+      "result": {
+        "sessionId": "dur-sess-js-paused-001",
+        "resultStatus": "PARTIAL",
+        "sessionStatus": "PAUSED",
+        "mode": "partial",
+        "includeArtifacts": true,
+        "primaryResult": [
+          {
+            "type": "text",
+            "text": "Awaiting operator approval."
+          }
+        ],
+        "artifactRefs": [
+          {
+            "id": "art-js-pause-001",
+            "kind": "FINDING",
+            "visibility": "PUBLIC",
+            "contentHash": "sha256:js-pause-art-001",
+            "sizeBytes": 512
+          }
+        ]
+      },
+      "lifecycleControl": {
+        "sessionId": "dur-sess-js-paused-001",
+        "operation": "PAUSE",
+        "outcome": "ACCEPTED",
+        "status": "PAUSED",
+        "links": {
+          "session": "/factory-sessions/dur-sess-js-paused-001",
+          "results": "/factory-sessions/dur-sess-js-paused-001/results",
+          "dispatches": "/factory-sessions/dur-sess-js-paused-001/dispatches",
+          "artifacts": "/factory-sessions/dur-sess-js-paused-001/artifacts"
+        }
+      }
+    },
+    {
+      "id": "javascript-failed-with-partial",
+      "tags": {
+        "orchestrator": "JAVASCRIPT",
+        "status": "FAILED",
+        "dispatchCount": "TWO",
+        "outcome": "failed-with-partial"
+      },
+      "executionRequest": {
+        "requestId": "req-js-failed-partial-001",
+        "source": {
+          "kind": "INLINE_WORKFLOW",
+          "inlineWorkflow": {
+            "dialect": "you-workflow-v1",
+            "inlineSource": {
+              "encoding": "utf-8",
+              "inline": "export async function run() { return { ok: true }; }"
+            }
+          }
+        }
+      },
+      "session": {
+        "sessionId": "dur-sess-js-failed-partial-001",
+        "status": "FAILED",
+        "orchestratorKind": "JAVASCRIPT",
+        "dialect": "you-workflow-v1",
+        "resolvedSource": {
+          "kind": "INLINE_WORKFLOW",
+          "sourceRef": "inline-workflow/req-js-failed-partial-001",
+          "sourceHash": "sha256:inline-workflow-001"
+        },
+        "resultSummary": {
+          "resultStatus": "FAILED_WITH_PARTIAL",
+          "summary": "Partial synthesis available before verify failed."
+        },
+        "failureDetail": {
+          "reason": "unknown",
+          "message": "Verify step failed after partial synthesis."
+        },
+        "partialResultAvailable": true,
+        "links": {
+          "session": "/factory-sessions/dur-sess-js-failed-partial-001",
+          "results": "/factory-sessions/dur-sess-js-failed-partial-001/results"
+        },
+        "usage": {
+          "resources": []
+        },
+        "budgets": {
+          "maxAgents": 3
+        }
+      },
+      "listSummary": {
+        "sessionId": "dur-sess-js-failed-partial-001",
+        "status": "FAILED",
+        "orchestratorKind": "JAVASCRIPT",
+        "resolvedSource": {
+          "kind": "INLINE_WORKFLOW",
+          "sourceRef": "inline-workflow/req-js-failed-partial-001",
+          "sourceHash": "sha256:inline-workflow-001"
+        }
+      },
+      "dispatches": [
+        {
+          "id": "disp-js-fail-001",
+          "status": "COMPLETED",
+          "dispatchKind": "JAVASCRIPT_SYNTHESIZE",
+          "label": "synthesize",
+          "attempt": 1
+        },
+        {
+          "id": "disp-js-fail-002",
+          "status": "FAILED",
+          "dispatchKind": "JAVASCRIPT_VERIFY",
+          "label": "verify",
+          "attempt": 1,
+          "providerSessionRefs": [
+            {
+              "provider": "codex",
+              "kind": "session_id",
+              "id": "resp-verify-failed-001"
+            }
+          ],
+          "javascript": {
+            "taskKind": "VERIFY",
+            "taskLabel": "verify",
+            "executionMode": "live"
+          },
+          "failureDetail": {
+            "reason": "unknown",
+            "message": "Expected release manifest checksum."
+          }
+        }
+      ],
+      "dispatchDetail": {
+        "id": "disp-js-fail-002",
+        "sessionId": "dur-sess-js-failed-partial-001",
+        "orchestratorKind": "JAVASCRIPT",
+        "dispatchKind": "JAVASCRIPT_VERIFY",
+        "status": "FAILED",
+        "label": "verify",
+        "attempt": 1,
+        "javascript": {
+          "taskKind": "VERIFY",
+          "taskLabel": "verify",
+          "executionMode": "live"
+        },
+        "providerSessionRefs": [
+          {
+            "provider": "codex",
+            "kind": "session_id",
+            "id": "resp-verify-failed-001"
+          }
+        ],
+        "statusTransitions": ["QUEUED", "RUNNING", "FAILED"],
+        "failureDetail": {
+          "reason": "unknown",
+          "message": "Expected release manifest checksum."
+        }
+      },
+      "artifacts": [],
+      "result": {
+        "sessionId": "dur-sess-js-failed-partial-001",
+        "resultStatus": "FAILED_WITH_PARTIAL",
+        "sessionStatus": "FAILED",
+        "mode": "partial",
+        "includeArtifacts": false,
+        "primaryResult": [
+          {
+            "type": "JSON",
+            "json": {
+              "synthesis": "partial manifest draft"
+            }
+          }
+        ],
+        "failureDetail": {
+          "reason": "unknown",
+          "message": "Verify step failed after partial synthesis."
+        },
+        "partialResultAvailable": true
+      }
+    },
+    {
+      "id": "javascript-sync-timed-out",
+      "tags": {
+        "orchestrator": "JAVASCRIPT",
+        "status": "RUNNING",
+        "dispatchCount": "ONE",
+        "outcome": "timed-out"
+      },
+      "executionRequest": {
+        "requestId": "req-js-timeout-001",
+        "source": {
+          "kind": "WORKFLOW_NAME",
+          "workflowName": "long-running-audit"
+        },
+        "wait": {
+          "timeoutMillis": 30000,
+          "cancelOnTimeout": false
+        }
+      },
+      "syncResponse": {
+        "sessionId": "dur-sess-js-timeout-001",
+        "status": "RUNNING",
+        "orchestratorKind": "JAVASCRIPT",
+        "dialect": "you-workflow-v1",
+        "resolvedSource": {
+          "kind": "WORKFLOW_NAME",
+          "sourceRef": "workflow/long-running-audit",
+          "sourceHash": "sha256:js-workflow-long-audit"
+        },
+        "syncOutcome": "TIMED_OUT",
+        "timedOut": true,
+        "sessionCanceledByTimeout": false,
+        "links": {
+          "session": "/factory-sessions/dur-sess-js-timeout-001",
+          "status": "/factory-sessions/dur-sess-js-timeout-001"
+        }
+      },
+      "session": {
+        "sessionId": "dur-sess-js-timeout-001",
+        "status": "RUNNING",
+        "orchestratorKind": "JAVASCRIPT",
+        "resolvedSource": {
+          "kind": "WORKFLOW_NAME",
+          "sourceRef": "workflow/long-running-audit",
+          "sourceHash": "sha256:js-workflow-long-audit"
+        },
+        "links": {
+          "session": "/factory-sessions/dur-sess-js-timeout-001",
+          "status": "/factory-sessions/dur-sess-js-timeout-001"
+        },
+        "usage": {
+          "resources": []
+        },
+        "budgets": {
+          "maxAgents": 3
+        }
+      },
+      "listSummary": {
+        "sessionId": "dur-sess-js-timeout-001",
+        "status": "RUNNING",
+        "orchestratorKind": "JAVASCRIPT",
+        "resolvedSource": {
+          "kind": "WORKFLOW_NAME",
+          "sourceRef": "workflow/long-running-audit",
+          "sourceHash": "sha256:js-workflow-long-audit"
+        }
+      },
+      "dispatches": [
+        {
+          "id": "disp-js-timeout-001",
+          "status": "RUNNING",
+          "dispatchKind": "JAVASCRIPT_AGENT",
+          "label": "audit",
+          "attempt": 1
+        }
+      ],
+      "dispatchDetail": {
+        "id": "disp-js-timeout-001",
+        "sessionId": "dur-sess-js-timeout-001",
+        "orchestratorKind": "JAVASCRIPT",
+        "dispatchKind": "JAVASCRIPT_AGENT",
+        "status": "RUNNING",
+        "label": "audit",
+        "attempt": 1,
+        "javascript": {
+          "taskKind": "AGENT",
+          "taskLabel": "audit",
+          "executionMode": "live"
+        },
+        "statusTransitions": ["QUEUED", "RUNNING"]
+      },
+      "artifacts": [],
+      "result": {
+        "sessionId": "dur-sess-js-timeout-001",
+        "resultStatus": "NOT_READY",
+        "sessionStatus": "RUNNING",
+        "mode": "final",
+        "includeArtifacts": false,
+        "availability": {
+          "reason": "SYNC_WAIT_TIMED_OUT",
+          "message": "Sync wait ended before a terminal result was available.",
+          "retryable": true
+        }
+      }
+    },
+    {
+      "id": "petri-canceled",
+      "tags": {
+        "orchestrator": "PETRI",
+        "status": "CANCELED",
+        "dispatchCount": "ONE",
+        "outcome": "canceled"
+      },
+      "executionRequest": {
+        "requestId": "req-petri-cancel-001",
+        "source": {
+          "kind": "FACTORY_ID",
+          "factoryId": "customer-support-triage"
+        }
+      },
+      "session": {
+        "sessionId": "dur-sess-petri-cancel-001",
+        "status": "CANCELED",
+        "orchestratorKind": "PETRI",
+        "resolvedSource": {
+          "kind": "FACTORY_ID",
+          "sourceRef": "factory/customer-support-triage",
+          "sourceHash": "sha256:petri-factory-001"
+        },
+        "lifecycle": {
+          "queuedAt": "2026-06-08T12:00:00Z",
+          "startedAt": "2026-06-08T12:00:01Z",
+          "finishedAt": "2026-06-08T12:02:00Z"
+        },
+        "links": {
+          "session": "/factory-sessions/dur-sess-petri-cancel-001",
+          "results": "/factory-sessions/dur-sess-petri-cancel-001/results",
+          "status": "/factory-sessions/dur-sess-petri-cancel-001"
+        },
+        "usage": {
+          "resources": []
+        }
+      },
+      "listSummary": {
+        "sessionId": "dur-sess-petri-cancel-001",
+        "status": "CANCELED",
+        "orchestratorKind": "PETRI",
+        "resolvedSource": {
+          "kind": "FACTORY_ID",
+          "sourceRef": "factory/customer-support-triage",
+          "sourceHash": "sha256:petri-factory-001"
+        }
+      },
+      "dispatches": [
+        {
+          "id": "disp-petri-cancel-001",
+          "status": "FAILED",
+          "dispatchKind": "PETRI_TRANSITION",
+          "label": "plan-task",
+          "attempt": 1
+        }
+      ],
+      "dispatchDetail": {
+        "id": "disp-petri-cancel-001",
+        "sessionId": "dur-sess-petri-cancel-001",
+        "orchestratorKind": "PETRI",
+        "dispatchKind": "PETRI_TRANSITION",
+        "status": "FAILED",
+        "label": "plan-task",
+        "attempt": 1,
+        "petri": {
+          "transitionId": "transition-plan-task",
+          "workstationName": "plan-task",
+          "workerType": "model-worker"
+        }
+      },
+      "artifacts": [],
+      "result": {
+        "sessionId": "dur-sess-petri-cancel-001",
+        "resultStatus": "UNAVAILABLE",
+        "sessionStatus": "CANCELED",
+        "mode": "final",
+        "includeArtifacts": false,
+        "availability": {
+          "reason": "SESSION_CANCELED",
+          "message": "Session was canceled before a final result was produced.",
+          "retryable": false
+        }
+      },
+      "lifecycleControl": {
+        "sessionId": "dur-sess-petri-cancel-001",
+        "operation": "CANCEL",
+        "outcome": "ACCEPTED",
+        "status": "CANCELING",
+        "links": {
+          "session": "/factory-sessions/dur-sess-petri-cancel-001",
+          "results": "/factory-sessions/dur-sess-petri-cancel-001/results",
+          "dispatches": "/factory-sessions/dur-sess-petri-cancel-001/dispatches",
+          "artifacts": "/factory-sessions/dur-sess-petri-cancel-001/artifacts"
+        }
+      }
+    },
+    {
+      "id": "javascript-succeeded-two-dispatch",
+      "tags": {
+        "orchestrator": "JAVASCRIPT",
+        "status": "SUCCEEDED",
+        "dispatchCount": "TWO",
+        "outcome": "succeeded"
+      },
+      "executionRequest": {
+        "requestId": "req-js-success-002",
+        "source": {
+          "kind": "WORKFLOW_FILE",
+          "workflowFile": ".claude/workflows/docs-refresh.yaml"
+        },
+        "requestedPolicy": {
+          "policyHash": "req-policy-docs-refresh"
+        }
+      },
+      "session": {
+        "sessionId": "dur-sess-js-success-002",
+        "status": "SUCCEEDED",
+        "orchestratorKind": "JAVASCRIPT",
+        "dialect": "you-workflow-v1",
+        "resolvedSource": {
+          "kind": "WORKFLOW_FILE",
+          "sourceRef": "workflow/.claude/workflows/docs-refresh.yaml",
+          "sourceHash": "sha256:js-workflow-docs-refresh",
+          "resolutionOrder": [
+            "PROJECT_CLAUDE_WORKFLOWS"
+          ]
+        },
+        "requestedPolicy": {
+          "policyHash": "req-policy-docs-refresh"
+        },
+        "effectivePolicy": {
+          "policyHash": "eff-policy-docs-refresh"
+        },
+        "effectivePolicyHash": "eff-policy-docs-refresh",
+        "resultSummary": {
+          "resultStatus": "FINAL",
+          "summary": "Documentation refresh complete."
+        },
+        "artifactRefs": [
+          {
+            "id": "art-js-success-001",
+            "kind": "FINAL_RESULT",
+            "visibility": "PUBLIC",
+            "contentHash": "sha256:js-success-art-001",
+            "sizeBytes": 2048
+          }
+        ],
+        "lifecycle": {
+          "queuedAt": "2026-06-08T13:00:00Z",
+          "startedAt": "2026-06-08T13:00:02Z",
+          "finishedAt": "2026-06-08T13:10:00Z"
+        },
+        "links": {
+          "session": "/factory-sessions/dur-sess-js-success-002",
+          "results": "/factory-sessions/dur-sess-js-success-002/results",
+          "status": "/factory-sessions/dur-sess-js-success-002"
+        },
+        "usage": {
+          "resources": []
+        },
+        "budgets": {
+          "maxAgents": 3
+        }
+      },
+      "listSummary": {
+        "sessionId": "dur-sess-js-success-002",
+        "status": "SUCCEEDED",
+        "orchestratorKind": "JAVASCRIPT",
+        "resolvedSource": {
+          "kind": "WORKFLOW_FILE",
+          "sourceRef": "workflow/.claude/workflows/docs-refresh.yaml",
+          "sourceHash": "sha256:js-workflow-docs-refresh"
+        },
+        "effectivePolicyHash": "eff-policy-docs-refresh"
+      },
+      "dispatches": [
+        {
+          "id": "disp-js-success-001",
+          "status": "COMPLETED",
+          "dispatchKind": "JAVASCRIPT_AGENT",
+          "label": "draft-docs",
+          "attempt": 1
+        },
+        {
+          "id": "disp-js-success-002",
+          "status": "COMPLETED",
+          "dispatchKind": "JAVASCRIPT_VERIFY",
+          "label": "verify-docs",
+          "attempt": 1,
+          "providerSessionRefs": [
+            {
+              "provider": "codex",
+              "kind": "session_id",
+              "id": "resp-docs-refresh-001"
+            }
+          ],
+          "javascript": {
+            "taskKind": "VERIFY",
+            "taskLabel": "verify-docs",
+            "executionMode": "live"
+          },
+          "outputArtifactIds": [
+            "art-js-success-001"
+          ]
+        }
+      ],
+      "dispatchDetail": {
+        "id": "disp-js-success-002",
+        "sessionId": "dur-sess-js-success-002",
+        "orchestratorKind": "JAVASCRIPT",
+        "dispatchKind": "JAVASCRIPT_VERIFY",
+        "status": "COMPLETED",
+        "label": "verify-docs",
+        "attempt": 1,
+        "artifactIds": [
+          "art-js-success-001"
+        ],
+        "javascript": {
+          "taskKind": "VERIFY",
+          "taskLabel": "verify-docs",
+          "executionMode": "live"
+        },
+        "providerSessionRefs": [
+          {
+            "provider": "codex",
+            "kind": "session_id",
+            "id": "resp-docs-refresh-001"
+          }
+        ],
+        "statusTransitions": ["QUEUED", "RUNNING", "COMPLETED"]
+      },
+      "artifacts": [
+        {
+          "id": "art-js-success-001",
+          "kind": "FINAL_RESULT",
+          "visibility": "PUBLIC",
+          "label": "Docs refresh output",
+          "contentHash": "sha256:js-success-art-001",
+          "sizeBytes": 2048,
+          "createdAt": "2026-06-08T13:10:00Z",
+          "dispatchId": "disp-js-success-002",
+          "auditMode": "FULL",
+          "retrievalRef": {
+            "href": "/factory-sessions/dur-sess-js-success-002/artifacts/art-js-success-001",
+            "method": "GET"
+          }
+        }
+      ],
+      "artifactDetail": {
+        "sessionId": "dur-sess-js-success-002",
+        "id": "art-js-success-001",
+        "kind": "FINAL_RESULT",
+        "visibility": "PUBLIC",
+        "label": "Docs refresh output",
+        "contentHash": "sha256:js-success-art-001",
+        "sizeBytes": 2048,
+        "createdAt": "2026-06-08T13:10:00Z",
+        "dispatchId": "disp-js-success-002",
+        "auditMode": "FULL",
+        "content": [
+          {
+            "type": "text",
+            "text": "Documentation refresh complete."
+          }
+        ]
+      },
+      "result": {
+        "sessionId": "dur-sess-js-success-002",
+        "resultStatus": "FINAL",
+        "sessionStatus": "SUCCEEDED",
+        "mode": "final",
+        "includeArtifacts": true,
+        "primaryResult": [
+          {
+            "type": "text",
+            "text": "Documentation refresh complete."
+          }
+        ],
+        "artifactRefs": [
+          {
+            "id": "art-js-success-001",
+            "kind": "FINAL_RESULT",
+            "visibility": "PUBLIC",
+            "contentHash": "sha256:js-success-art-001",
+            "sizeBytes": 2048
+          }
+        ]
+      },
+      "events": [
+        {
+          "schemaVersion": "agent-factory.event.v1",
+          "id": "session-started/dur-sess-js-success-002",
+          "type": "SESSION_STARTED",
+          "context": {
+            "sequence": 1,
+            "tick": 1,
+            "eventTime": "2026-06-08T13:00:02Z",
+            "sessionId": "dur-sess-js-success-002",
+            "sessionSequence": 0,
+            "orchestratorKind": "JAVASCRIPT",
+            "orchestratorDialect": "you-workflow-v1",
+            "source": "fake-service"
+          },
+          "payload": {
+            "sourceRef": "workflow/.claude/workflows/docs-refresh.yaml",
+            "sourceHash": "sha256:js-workflow-docs-refresh",
+            "policyHash": "eff-policy-docs-refresh",
+            "startedAt": "2026-06-08T13:00:02Z"
+          }
+        },
+        {
+          "schemaVersion": "agent-factory.event.v1",
+          "id": "session-result-updated/dur-sess-js-success-002",
+          "type": "SESSION_RESULT_UPDATED",
+          "context": {
+            "sequence": 2,
+            "tick": 2,
+            "eventTime": "2026-06-08T13:05:00Z",
+            "sessionId": "dur-sess-js-success-002",
+            "sessionSequence": 1,
+            "orchestratorKind": "JAVASCRIPT",
+            "orchestratorDialect": "you-workflow-v1",
+            "source": "fake-service"
+          },
+          "payload": {
+            "resultStatus": "FINAL",
+            "artifactIds": [
+              "art-js-success-001"
+            ]
+          }
+        },
+        {
+          "schemaVersion": "agent-factory.event.v1",
+          "id": "session-completed/dur-sess-js-success-002",
+          "type": "SESSION_COMPLETED",
+          "context": {
+            "sequence": 3,
+            "tick": 3,
+            "eventTime": "2026-06-08T13:10:00Z",
+            "sessionId": "dur-sess-js-success-002",
+            "sessionSequence": 2,
+            "orchestratorKind": "JAVASCRIPT",
+            "orchestratorDialect": "you-workflow-v1",
+            "source": "fake-service"
+          },
+          "payload": {
+            "finalStatus": "SUCCEEDED",
+            "completedAt": "2026-06-08T13:10:00Z",
+            "resultStatus": "FINAL",
+            "artifactIds": [
+              "art-js-success-001"
+            ]
+          }
+        }
+      ],
+      "lifecycleControl": {
+        "sessionId": "dur-sess-js-success-002",
+        "operation": "RETRY_DISPATCH",
+        "outcome": "TERMINAL_SESSION",
+        "status": "SUCCEEDED",
+        "dispatchId": "disp-js-success-002",
+        "detail": "Session is terminal; retry-dispatch is not accepted.",
+        "links": {
+          "session": "/factory-sessions/dur-sess-js-success-002",
+          "results": "/factory-sessions/dur-sess-js-success-002/results",
+          "dispatches": "/factory-sessions/dur-sess-js-success-002/dispatches",
+          "artifacts": "/factory-sessions/dur-sess-js-success-002/artifacts"
+        }
+      }
+    },
+    {
+      "id": "javascript-awaiting-approval",
+      "tags": {
+        "orchestrator": "JAVASCRIPT",
+        "status": "AWAITING_APPROVAL",
+        "dispatchCount": "ONE",
+        "outcome": "awaiting-approval"
+      },
+      "executionRequest": {
+        "requestId": "req-js-awaiting-001",
+        "source": {
+          "kind": "WORKFLOW_FILE",
+          "workflowFile": ".claude/workflows/policy-gated-release.yaml"
+        },
+        "requestedPolicy": {
+          "policyHash": "req-policy-gated-release"
+        }
+      },
+      "asyncResponse": {
+        "sessionId": "dur-sess-js-awaiting-001",
+        "status": "AWAITING_APPROVAL",
+        "orchestratorKind": "JAVASCRIPT",
+        "dialect": "you-workflow-v1",
+        "resolvedSource": {
+          "kind": "WORKFLOW_FILE",
+          "sourceRef": "workflow/.claude/workflows/policy-gated-release.yaml",
+          "sourceHash": "sha256:js-workflow-policy-gated-release",
+          "dialect": "you-workflow-v1",
+          "resolutionOrder": [
+            "PROJECT_CLAUDE_WORKFLOWS"
+          ]
+        },
+        "requestedPolicy": {
+          "policyHash": "req-policy-gated-release"
+        },
+        "effectivePolicy": {
+          "policyHash": "eff-policy-gated-release",
+          "approvalPreviewId": "preview-policy-gated-release"
+        },
+        "effectivePolicyHash": "eff-policy-gated-release",
+        "links": {
+          "session": "/factory-sessions/dur-sess-js-awaiting-001",
+          "events": "/factory-sessions/dur-sess-js-awaiting-001/events",
+          "results": "/factory-sessions/dur-sess-js-awaiting-001/results",
+          "status": "/factory-sessions/dur-sess-js-awaiting-001"
+        }
+      },
+      "session": {
+        "sessionId": "dur-sess-js-awaiting-001",
+        "status": "AWAITING_APPROVAL",
+        "orchestratorKind": "JAVASCRIPT",
+        "dialect": "you-workflow-v1",
+        "resolvedSource": {
+          "kind": "WORKFLOW_FILE",
+          "sourceRef": "workflow/.claude/workflows/policy-gated-release.yaml",
+          "sourceHash": "sha256:js-workflow-policy-gated-release",
+          "dialect": "you-workflow-v1",
+          "resolutionOrder": [
+            "PROJECT_CLAUDE_WORKFLOWS"
+          ]
+        },
+        "requestedPolicy": {
+          "policyHash": "req-policy-gated-release"
+        },
+        "effectivePolicy": {
+          "policyHash": "eff-policy-gated-release",
+          "approvalPreviewId": "preview-policy-gated-release"
+        },
+        "effectivePolicyHash": "eff-policy-gated-release",
+        "phase": "approval",
+        "resultSummary": {
+          "resultStatus": "NOT_READY",
+          "summary": "Awaiting orchestrator policy approval before execution."
+        },
+        "lifecycle": {
+          "queuedAt": "2026-06-08T15:00:00Z",
+          "awaitingApprovalAt": "2026-06-08T15:00:01Z"
+        },
+        "links": {
+          "session": "/factory-sessions/dur-sess-js-awaiting-001",
+          "events": "/factory-sessions/dur-sess-js-awaiting-001/events",
+          "results": "/factory-sessions/dur-sess-js-awaiting-001/results",
+          "status": "/factory-sessions/dur-sess-js-awaiting-001"
+        },
+        "usage": {
+          "resources": []
+        },
+        "budgets": {
+          "maxAgents": 3
+        }
+      },
+      "listSummary": {
+        "sessionId": "dur-sess-js-awaiting-001",
+        "status": "AWAITING_APPROVAL",
+        "orchestratorKind": "JAVASCRIPT",
+        "resolvedSource": {
+          "kind": "WORKFLOW_FILE",
+          "sourceRef": "workflow/.claude/workflows/policy-gated-release.yaml",
+          "sourceHash": "sha256:js-workflow-policy-gated-release"
+        },
+        "resultSummary": {
+          "resultStatus": "NOT_READY",
+          "summary": "Awaiting orchestrator policy approval before execution."
+        },
+        "actions": {
+          "canApprove": true,
+          "canCancel": true,
+          "canTerminate": true
+        }
+      },
+      "dispatches": [],
+      "artifacts": [],
+      "result": {
+        "sessionId": "dur-sess-js-awaiting-001",
+        "resultStatus": "NOT_READY",
+        "sessionStatus": "AWAITING_APPROVAL",
+        "mode": "final",
+        "includeArtifacts": false,
+        "availability": {
+          "reason": "RESULT_NOT_READY",
+          "message": "Session is awaiting policy approval.",
+          "retryable": true
+        }
+      },
+      "events": [
+        {
+          "schemaVersion": "agent-factory.event.v1",
+          "id": "session-started/dur-sess-js-awaiting-001",
+          "type": "SESSION_STARTED",
+          "context": {
+            "sequence": 1,
+            "tick": 1,
+            "eventTime": "2026-06-08T15:00:00Z",
+            "sessionId": "dur-sess-js-awaiting-001",
+            "sessionSequence": 0,
+            "orchestratorKind": "JAVASCRIPT",
+            "orchestratorDialect": "you-workflow-v1",
+            "phaseId": "approval",
+            "phaseName": "approval",
+            "source": "fake-service"
+          },
+          "payload": {
+            "sourceRef": "workflow/.claude/workflows/policy-gated-release.yaml",
+            "sourceHash": "sha256:js-workflow-policy-gated-release",
+            "policyHash": "eff-policy-gated-release",
+            "startedAt": "2026-06-08T15:00:00Z"
+          }
+        },
+        {
+          "schemaVersion": "agent-factory.event.v1",
+          "id": "session-result-updated/dur-sess-js-awaiting-001",
+          "type": "SESSION_RESULT_UPDATED",
+          "context": {
+            "sequence": 2,
+            "tick": 2,
+            "eventTime": "2026-06-08T15:00:01Z",
+            "sessionId": "dur-sess-js-awaiting-001",
+            "sessionSequence": 1,
+            "orchestratorKind": "JAVASCRIPT",
+            "orchestratorDialect": "you-workflow-v1",
+            "phaseId": "approval",
+            "phaseName": "approval",
+            "source": "fake-service"
+          },
+          "payload": {
+            "resultStatus": "NOT_READY"
+          }
+        }
+      ]
+    },
+    {
+      "id": "unsupported-runner",
+      "tags": {
+        "orchestrator": "JAVASCRIPT",
+        "status": "FAILED",
+        "dispatchCount": "ONE",
+        "outcome": "unsupported-runner"
+      },
+      "executionRequest": {
+        "requestId": "req-unsupported-runner-001",
+        "source": {
+          "kind": "WORKFLOW_NAME",
+          "workflowName": "experimental-runner"
+        }
+      },
+      "session": {
+        "sessionId": "dur-sess-unsupported-runner-001",
+        "status": "FAILED",
+        "orchestratorKind": "JAVASCRIPT",
+        "resolvedSource": {
+          "kind": "WORKFLOW_NAME",
+          "sourceRef": "workflow/experimental-runner",
+          "sourceHash": "sha256:js-workflow-experimental"
+        },
+        "failureDetail": {
+          "reason": "unknown",
+          "message": "Requested runner is not available in this environment."
+        },
+        "partialResultAvailable": false,
+        "links": {
+          "session": "/factory-sessions/dur-sess-unsupported-runner-001",
+          "results": "/factory-sessions/dur-sess-unsupported-runner-001/results"
+        },
+        "usage": {
+          "resources": []
+        },
+        "budgets": {
+          "maxAgents": 3
+        }
+      },
+      "listSummary": {
+        "sessionId": "dur-sess-unsupported-runner-001",
+        "status": "FAILED",
+        "orchestratorKind": "JAVASCRIPT",
+        "resolvedSource": {
+          "kind": "WORKFLOW_NAME",
+          "sourceRef": "workflow/experimental-runner",
+          "sourceHash": "sha256:js-workflow-experimental"
+        }
+      },
+      "dispatches": [
+        {
+          "id": "disp-unsupported-001",
+          "status": "FAILED",
+          "dispatchKind": "JAVASCRIPT_AGENT",
+          "label": "experimental-agent",
+          "attempt": 1,
+          "runnerId": "experimental-runner",
+          "failureDetail": {
+            "reason": "unknown",
+            "message": "Runner experimental-runner is not registered."
+          }
+        }
+      ],
+      "dispatchDetail": {
+        "id": "disp-unsupported-001",
+        "sessionId": "dur-sess-unsupported-runner-001",
+        "orchestratorKind": "JAVASCRIPT",
+        "dispatchKind": "JAVASCRIPT_AGENT",
+        "status": "FAILED",
+        "label": "experimental-agent",
+        "attempt": 1,
+        "runnerId": "experimental-runner",
+        "javascript": {
+          "taskKind": "AGENT",
+          "taskLabel": "experimental-agent"
+        },
+        "failureDetail": {
+          "reason": "unknown",
+          "message": "Runner experimental-runner is not registered."
+        }
+      },
+      "artifacts": [],
+      "result": {
+        "sessionId": "dur-sess-unsupported-runner-001",
+        "resultStatus": "UNAVAILABLE",
+        "sessionStatus": "FAILED",
+        "mode": "final",
+        "includeArtifacts": false,
+        "failureDetail": {
+          "reason": "unknown",
+          "message": "Requested runner is not available in this environment."
+        },
+        "partialResultAvailable": false
+      }
+    },
+    {
+      "id": "missing-source",
+      "tags": {
+        "orchestrator": "JAVASCRIPT",
+        "status": "FAILED",
+        "dispatchCount": "ONE",
+        "outcome": "missing-source"
+      },
+      "executionRequest": {
+        "requestId": "req-missing-source-001",
+        "source": {
+          "kind": "WORKFLOW_NAME",
+          "workflowName": "does-not-exist"
+        }
+      },
+      "asyncResponse": {
+        "sessionId": "dur-sess-missing-source-001",
+        "status": "FAILED",
+        "orchestratorKind": "JAVASCRIPT",
+        "resolvedSource": {
+          "kind": "WORKFLOW_NAME",
+          "sourceRef": "workflow/does-not-exist",
+          "resolutionOrder": [
+            "PROJECT_CLAUDE_WORKFLOWS",
+            "USER_YOU_AGENT_FACTORY_WORKFLOWS",
+            "PACKAGE_RELATIVE_WORKFLOW_DIRECTORIES",
+            "BUILTIN_GLOBAL_JAVASCRIPT_FACTORIES"
+          ],
+          "metadata": {
+            "workflowName": "does-not-exist"
+          }
+        },
+        "links": {
+          "session": "/factory-sessions/dur-sess-missing-source-001"
+        }
+      },
+      "session": {
+        "sessionId": "dur-sess-missing-source-001",
+        "status": "FAILED",
+        "orchestratorKind": "JAVASCRIPT",
+        "resolvedSource": {
+          "kind": "WORKFLOW_NAME",
+          "sourceRef": "workflow/does-not-exist",
+          "resolutionOrder": [
+            "PROJECT_CLAUDE_WORKFLOWS",
+            "USER_YOU_AGENT_FACTORY_WORKFLOWS",
+            "PACKAGE_RELATIVE_WORKFLOW_DIRECTORIES",
+            "BUILTIN_GLOBAL_JAVASCRIPT_FACTORIES"
+          ]
+        },
+        "failureDetail": {
+          "reason": "unknown",
+          "message": "Workflow does-not-exist could not be resolved."
+        },
+        "partialResultAvailable": false,
+        "links": {
+          "session": "/factory-sessions/dur-sess-missing-source-001"
+        },
+        "usage": {
+          "resources": []
+        },
+        "budgets": {
+          "maxAgents": 3
+        }
+      },
+      "listSummary": {
+        "sessionId": "dur-sess-missing-source-001",
+        "status": "FAILED",
+        "orchestratorKind": "JAVASCRIPT",
+        "resolvedSource": {
+          "kind": "WORKFLOW_NAME",
+          "sourceRef": "workflow/does-not-exist"
+        }
+      },
+      "dispatches": [],
+      "result": {
+        "sessionId": "dur-sess-missing-source-001",
+        "resultStatus": "UNAVAILABLE",
+        "sessionStatus": "FAILED",
+        "mode": "final",
+        "includeArtifacts": false,
+        "failureDetail": {
+          "reason": "unknown",
+          "message": "Workflow does-not-exist could not be resolved."
+        },
+        "partialResultAvailable": false
+      }
+    }
+  ],
+  "idempotentReplay": {
+    "executionRequest": {
+      "requestId": "req-idempotent-replay-001",
+      "source": {
+        "kind": "WORKFLOW_FILE",
+        "workflowFile": ".claude/workflows/idempotent.yaml"
+      },
+      "args": {
+        "task": "replay"
+      },
+      "requestedPolicy": {
+        "policyHash": "req-policy-idempotent"
+      }
+    },
+    "asyncResponse": {
+      "sessionId": "dur-sess-idempotent-001",
+      "status": "QUEUED",
+      "orchestratorKind": "JAVASCRIPT",
+      "resolvedSource": {
+        "kind": "WORKFLOW_FILE",
+        "sourceRef": "workflow/.claude/workflows/idempotent.yaml",
+        "sourceHash": "sha256:js-workflow-idempotent",
+        "resolutionOrder": [
+          "PROJECT_CLAUDE_WORKFLOWS"
+        ]
+      },
+      "requestedPolicy": {
+        "policyHash": "req-policy-idempotent"
+      },
+      "effectivePolicy": {
+        "policyHash": "eff-policy-idempotent"
+      },
+      "effectivePolicyHash": "eff-policy-idempotent",
+      "links": {
+        "session": "/factory-sessions/dur-sess-idempotent-001",
+        "status": "/factory-sessions/dur-sess-idempotent-001"
+      }
+    },
+    "replayAsyncResponse": {
+      "sessionId": "dur-sess-idempotent-001",
+      "status": "QUEUED",
+      "orchestratorKind": "JAVASCRIPT",
+      "resolvedSource": {
+        "kind": "WORKFLOW_FILE",
+        "sourceRef": "workflow/.claude/workflows/idempotent.yaml",
+        "sourceHash": "sha256:js-workflow-idempotent",
+        "resolutionOrder": [
+          "PROJECT_CLAUDE_WORKFLOWS"
+        ]
+      },
+      "requestedPolicy": {
+        "policyHash": "req-policy-idempotent"
+      },
+      "effectivePolicy": {
+        "policyHash": "eff-policy-idempotent"
+      },
+      "effectivePolicyHash": "eff-policy-idempotent",
+      "links": {
+        "session": "/factory-sessions/dur-sess-idempotent-001",
+        "status": "/factory-sessions/dur-sess-idempotent-001"
+      }
+    }
+  },
+  "listResponse": {
+    "scope": "all",
+    "sessions": [],
+    "durableSessions": [
+      {
+        "sessionId": "dur-sess-petri-run-001",
+        "status": "RUNNING",
+        "orchestratorKind": "PETRI",
+        "resolvedSource": {
+          "kind": "FACTORY_ID",
+          "sourceRef": "factory/customer-support-triage",
+          "sourceHash": "sha256:petri-factory-001"
+        }
+      },
+      {
+        "sessionId": "dur-sess-js-success-002",
+        "status": "SUCCEEDED",
+        "orchestratorKind": "JAVASCRIPT",
+        "resolvedSource": {
+          "kind": "WORKFLOW_FILE",
+          "sourceRef": "workflow/.claude/workflows/docs-refresh.yaml",
+          "sourceHash": "sha256:js-workflow-docs-refresh"
+        },
+        "effectivePolicyHash": "eff-policy-docs-refresh"
+      }
+    ]
+  }
+}

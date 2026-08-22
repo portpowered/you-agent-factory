@@ -1,6 +1,8 @@
 package service
 
 import (
+	"strings"
+
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factorysessionexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution"
@@ -92,11 +94,17 @@ func NewStandalone(
 ) (*Service, error) {
 	switch provider {
 	case factorysessions.ExecutionProviderFake:
-		execution, err := factorysessionexecution.NewFakeServiceFromContractFixtures(
-			fixtureCatalogPath,
-			clock,
-			fixtureFiles,
-		)
+		var execution *factorysessionexecution.FakeService
+		var err error
+		if strings.TrimSpace(fixtureCatalogPath) == "" {
+			execution, err = factorysessionexecution.NewFakeServiceFromEmbeddedContractFixtures(clock)
+		} else {
+			execution, err = factorysessionexecution.NewFakeServiceFromContractFixtures(
+				fixtureCatalogPath,
+				clock,
+				fixtureFiles,
+			)
+		}
 		if err != nil {
 			return nil, err
 		}

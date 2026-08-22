@@ -17320,7 +17320,7 @@
       "documentation": {
         "documentation": {
           "description": {
-            "canonicalEnglish": "Start the dynamic workflow Factory Session MCP server over stdio.\n\nHosts launch this command as a child process and communicate through newline-delimited JSON-RPC on stdin and stdout. The default backing service is the deterministic durable session fixture catalog used by workflow CLI commands.\n\nUse --runtime to select the shared durable JavaScript runtime execution service instead of the fixture catalog. Runtime mode requires workflow sources to resolve from the MCP host working directory or an explicit --project-root.\n\nSet the MCP host working directory to the project root where workflow sources and the fixture catalog resolve. See `you docs mcp` for host configuration, serve modes, smoke, and troubleshooting.",
+            "canonicalEnglish": "Start the dynamic workflow Factory Session MCP server over stdio.\n\nHosts launch this command as a child process and communicate through newline-delimited JSON-RPC on stdin and stdout. Fixture-backed mode uses the canonical deterministic durable session catalog embedded in the `you` binary, so it does not require a repository checkout or a fixture file in the working directory.\n\nUse --fixture-catalog to provide a custom deterministic catalog explicitly. Use --runtime to select the shared durable JavaScript runtime execution service instead of the fixture catalog. Runtime mode requires workflow sources to resolve from the MCP host working directory or an explicit --project-root. See `you docs mcp` for host configuration, serve modes, smoke, and troubleshooting.",
             "id": "you.server.mcp.description"
           },
           "title": {
@@ -17330,7 +17330,7 @@
         },
         "examples": [
           "you server mcp",
-          "you server mcp --fixture-catalog ./pkg/transports/http/testdata/durable-session-contract-fixtures.json",
+          "you server mcp --fixture-catalog /absolute/path/to/durable-session-contract-fixtures.json",
           "you server mcp --runtime"
         ],
         "formatVersion": "1.0.0",
@@ -17413,7 +17413,7 @@
           "scope": "local",
           "sensitivity": "public",
           "shorthand": "",
-          "usage": "optional path to durable-session contract fixtures; defaults to the catalog discovered from the current working directory",
+          "usage": "optional path to a custom durable-session contract fixture catalog; defaults to the catalog embedded in the you binary",
           "valueType": "string",
           "visibility": "visible"
         },

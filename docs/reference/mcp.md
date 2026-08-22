@@ -29,7 +29,7 @@ Configure these three host fields explicitly:
 |-------|-------|
 | Executable | `you` on the host `PATH`, or an absolute path to the installed binary |
 | Arguments | `server`, `mcp` |
-| Working directory | Absolute project root used to find workflow sources or the fixture catalog |
+| Working directory | Absolute project root used to find workflow sources in runtime mode |
 
 No extra environment variables are required. A generic host configuration is:
 
@@ -67,9 +67,10 @@ The equivalent runtime-backed child-process command is:
 you server mcp --runtime
 ```
 
-Fixture-backed mode searches upward from the working directory for
-`pkg/transports/http/testdata/durable-session-contract-fixtures.json`.
-When the catalog is elsewhere, pass its path explicitly:
+Fixture-backed mode uses the canonical durable Factory Session catalog embedded
+in the `you` binary. It does not need a repository checkout, a project root,
+or a working-directory lookup. To use a custom deterministic catalog, pass its
+path explicitly:
 
 ```json
 "args": ["server", "mcp", "--fixture-catalog", "/absolute/path/to/durable-session-contract-fixtures.json"]
@@ -162,9 +163,9 @@ go test ./tests/functional/smoke -run TestDocsCommandSmoke
 
 | Symptom or outcome | Action |
 |--------------------|--------|
-| Host cannot start `you` | Use an absolute executable path, confirm it is executable, and keep `args` as separate `mcp` and `serve` values. |
+| Host cannot start `you` | Use an absolute executable path, confirm it is executable, and keep `args` as separate `server` and `mcp` values. |
 | No tools appear | Reload the host, inspect child-process stderr, and confirm stdout is not receiving logs or shell banners. |
-| `fixture catalog not found` | Start from the repository/project root that contains the catalog or pass an absolute `--fixture-catalog` path. |
+| `fixture catalog` override fails | Confirm the explicit `--fixture-catalog` path is readable and contains a valid deterministic catalog. The default embedded catalog does not require this flag. |
 | Named workflow or source is not found | Set `cwd` to the project root or use runtime mode with an explicit `--project-root`; confirm the source exists under a supported source location. |
 | `cannot combine --runtime with --fixture-catalog` | Choose exactly one backing mode and remove the other mode's flag. |
 | `factory_session.result.not_ready` with `retryable: true` | Keep the same `sessionId` and poll status/result with backoff; do not start duplicate Work. |

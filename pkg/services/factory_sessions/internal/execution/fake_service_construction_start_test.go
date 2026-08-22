@@ -42,6 +42,42 @@ func TestNewFakeServiceFromContractFixturesRequiresInjectedReader(t *testing.T) 
 	}
 }
 
+func TestNewFakeServiceFromEmbeddedContractFixturesUsesPublishedScenario(t *testing.T) {
+	t.Parallel()
+
+	service, err := NewFakeServiceFromEmbeddedContractFixtures(fakeServiceTestClock())
+	if err != nil {
+		t.Fatalf("NewFakeServiceFromEmbeddedContractFixtures: %v", err)
+	}
+	started := startAsyncByRequestID(t, service, "req-petri-success-001")
+	if started.SessionID != "dur-sess-petri-success-001" || started.Status != string(LifecycleStatusSucceeded) {
+		t.Fatalf("embedded fixture start = %#v, want published success scenario", started)
+	}
+}
+
+func TestNewFakeServiceFromContractFixturesUsesExplicitOverride(t *testing.T) {
+	t.Parallel()
+
+	const customCatalog = `{"scenarios":[{"id":"custom","executionRequest":{"requestId":"req-custom-001"},"session":{"sessionId":"dur-sess-custom-001","status":"RUNNING"},"asyncResponse":{"sessionId":"dur-sess-custom-001","status":"RUNNING","orchestratorKind":"javascript","dialect":"you-workflow-v1"}}]}`
+	service, err := NewFakeServiceFromContractFixtures(
+		"custom/catalog.json",
+		fakeServiceTestClock(),
+		func(path string) ([]byte, error) {
+			if path != "custom/catalog.json" {
+				t.Fatalf("fixture path = %q, want explicit override path", path)
+			}
+			return []byte(customCatalog), nil
+		},
+	)
+	if err != nil {
+		t.Fatalf("NewFakeServiceFromContractFixtures: %v", err)
+	}
+	started := startAsyncByRequestID(t, service, "req-custom-001")
+	if started.SessionID != "dur-sess-custom-001" {
+		t.Fatalf("explicit fixture start session = %q, want custom session", started.SessionID)
+	}
+}
+
 func TestLoadFakeScenariosUsesInjectedReader(t *testing.T) {
 	t.Parallel()
 

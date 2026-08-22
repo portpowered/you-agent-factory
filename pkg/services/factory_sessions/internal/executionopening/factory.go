@@ -5,7 +5,6 @@ package executionopening
 import (
 	"context"
 	"fmt"
-	"path/filepath"
 	"strings"
 
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
@@ -283,28 +282,5 @@ func (f *Factory) ResolveProjectRoot(explicit string) (string, error) {
 }
 
 func (f *Factory) resolveFixtureCatalog(explicit string) (string, error) {
-	if trimmed := strings.TrimSpace(explicit); trimmed != "" {
-		return trimmed, nil
-	}
-	if f == nil || f.paths == nil {
-		return "", fmt.Errorf("resolve fixture catalog: Factory Session execution-opening filesystem is required")
-	}
-	cwd, err := f.paths.Getwd()
-	if err != nil {
-		return "", fmt.Errorf("resolve current working directory: %w", err)
-	}
-	relative := filepath.FromSlash(factorysessions.ContractFixtureCatalogRelativePath)
-	for dir := cwd; ; dir = filepath.Dir(dir) {
-		candidate := filepath.Join(dir, relative)
-		if _, statErr := f.paths.Stat(candidate); statErr == nil {
-			return candidate, nil
-		}
-		if parent := filepath.Dir(dir); parent == dir {
-			break
-		}
-	}
-	return "", fmt.Errorf(
-		"fixture catalog not found; run from the repository root or set --fixture-catalog to %s",
-		factorysessions.ContractFixtureCatalogRelativePath,
-	)
+	return strings.TrimSpace(explicit), nil
 }

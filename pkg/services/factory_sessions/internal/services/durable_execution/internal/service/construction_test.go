@@ -180,6 +180,45 @@ func TestNewStandalone_DoesNotCreateProjectDurableSessions(t *testing.T) {
 	}
 }
 
+func TestNewStandalone_FakeProviderUsesEmbeddedCatalogByDefault(t *testing.T) {
+	t.Parallel()
+
+	owner, err := NewStandalone(
+		factorysessions.ExecutionProviderFake,
+		"",
+		nil,
+		"",
+		"",
+		nil,
+		restartClock{now: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)},
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("NewStandalone(fake): %v", err)
+	}
+	started, err := owner.StartAsync(context.Background(), factorysessions.StartRequest{
+		RequestID: "req-petri-success-001",
+		Source: factorysessions.Source{
+			Kind:      factoryruntime.WorkflowSourceKindFactoryID,
+			FactoryID: "customer-support-triage",
+		},
+	})
+	if err != nil {
+		t.Fatalf("StartAsync: %v", err)
+	}
+	if started.SessionID != "dur-sess-petri-success-001" {
+		t.Fatalf("embedded default session = %q, want published fixture session", started.SessionID)
+	}
+}
+
 func projectPersistenceStoreFactory() roles.RuntimePersistenceStoreFactory {
 	return countingProjectPersistenceStoreFactory(nil)
 }

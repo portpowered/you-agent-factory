@@ -34,14 +34,11 @@ func (stub *executionOpeningFileSystemStub) Stat(path string) (fs.FileInfo, erro
 	return nil, fs.ErrNotExist
 }
 
-func TestPathResolutionUsesInjectedExecutionOpeningFileSystem(t *testing.T) {
+func TestDefaultFixtureCatalogResolutionDoesNotUseExecutionOpeningFileSystem(t *testing.T) {
 	t.Parallel()
 
-	root := filepath.Join("workspace", "repository")
-	catalog := filepath.Join(root, filepath.FromSlash(factorysessions.ContractFixtureCatalogRelativePath))
 	paths := &executionOpeningFileSystemStub{
-		workingDirectory: filepath.Join(root, "nested", "directory"),
-		foundPath:        catalog,
+		workingDirectory: filepath.Join("workspace", "repository", "nested", "directory"),
 	}
 	factory := &Factory{paths: paths}
 
@@ -50,11 +47,25 @@ func TestPathResolutionUsesInjectedExecutionOpeningFileSystem(t *testing.T) {
 		t.Fatalf("ResolveProjectRoot() = (%q, %v), want injected working directory %q", projectRoot, err, paths.workingDirectory)
 	}
 	fixtureCatalog, err := factory.resolveFixtureCatalog("")
-	if err != nil || fixtureCatalog != catalog {
-		t.Fatalf("resolveFixtureCatalog() = (%q, %v), want injected catalog %q", fixtureCatalog, err, catalog)
+	if err != nil || fixtureCatalog != "" {
+		t.Fatalf("resolveFixtureCatalog() = (%q, %v), want empty embedded-catalog selector", fixtureCatalog, err)
 	}
-	if len(paths.inspectedPaths) < 2 || paths.inspectedPaths[len(paths.inspectedPaths)-1] != catalog {
-		t.Fatalf("inspected paths = %#v, want ancestor search ending at %q", paths.inspectedPaths, catalog)
+	if len(paths.inspectedPaths) != 0 {
+		t.Fatalf("inspected paths = %#v, want no filesystem inspection", paths.inspectedPaths)
+	}
+}
+
+func TestExplicitFixtureCatalogResolutionPreservesPath(t *testing.T) {
+	t.Parallel()
+
+	paths := &executionOpeningFileSystemStub{}
+	factory := &Factory{paths: paths}
+	fixtureCatalog, err := factory.resolveFixtureCatalog("custom/catalog.json")
+	if err != nil || fixtureCatalog != "custom/catalog.json" {
+		t.Fatalf("resolveFixtureCatalog() = (%q, %v), want explicit path", fixtureCatalog, err)
+	}
+	if len(paths.inspectedPaths) != 0 {
+		t.Fatalf("inspected paths = %#v, want no filesystem inspection for explicit path", paths.inspectedPaths)
 	}
 }
 
@@ -66,8 +77,8 @@ func TestPathResolutionPropagatesInjectedWorkingDirectoryFailure(t *testing.T) {
 	if _, err := factory.ResolveProjectRoot(""); !errors.Is(err, want) {
 		t.Fatalf("ResolveProjectRoot() error = %v, want %v", err, want)
 	}
-	if _, err := factory.resolveFixtureCatalog(""); !errors.Is(err, want) {
-		t.Fatalf("resolveFixtureCatalog() error = %v, want %v", err, want)
+	if fixtureCatalog, err := factory.resolveFixtureCatalog(""); err != nil || fixtureCatalog != "" {
+		t.Fatalf("resolveFixtureCatalog() = (%q, %v), want embedded default without filesystem access", fixtureCatalog, err)
 	}
 }
 

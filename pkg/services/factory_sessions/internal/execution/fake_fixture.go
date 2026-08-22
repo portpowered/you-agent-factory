@@ -23,6 +23,10 @@ func LoadFakeScenariosFromContractFixtures(
 	if err != nil {
 		return nil, fmt.Errorf("read contract fixtures: %w", err)
 	}
+	return loadFakeScenariosFromContractFixtureData(raw)
+}
+
+func loadFakeScenariosFromContractFixtureData(raw []byte) ([]FakeScenario, error) {
 	var document map[string]any
 	if err := json.Unmarshal(raw, &document); err != nil {
 		return nil, fmt.Errorf("decode contract fixtures: %w", err)
