@@ -211,6 +211,73 @@ func TestJavaScriptRuntimeService_AgentRunLiveChild_TimeoutInterruptsProviderInf
 	waitForInferContextHonored(t, provider, 2*time.Second)
 }
 
+func TestJavaScriptRuntimeService_AgentRunLiveChild_TimeoutSettlesSessionAndDispatch(t *testing.T) {
+	provider := newBlockingFixtureProvider()
+	projectRoot := setupRuntimeWorkflowFixture(t, "agent-run-fake-child.workflow.js", "agent-run-fake-child")
+	service := newConfiguredJavaScriptRuntimeService(runtimeServiceConfig{
+		ProjectRoot:       projectRoot,
+		ChildExecutorMode: fse.ChildExecutorModeLive,
+		ProviderExecutor:  provider,
+		Workflows: scriptedSingleChildWorkflows(factory.JavaScriptChildExecutionRequest{
+			Prompt:           "wait for Antigravity",
+			ExecutorProvider: "SCRIPT_WRAP",
+			ModelProvider:    "antigravity",
+			Model:            "gemini-3.6-flash-medium",
+			Label:            "non-responsive-antigravity",
+		}),
+	})
+
+	completed, err := service.StartSync(context.Background(), fse.StartRequest{
+		RequestID: "req-runtime-agent-run-live-child-child-timeout",
+		Source: fse.Source{
+			Kind:         factory.WorkflowSourceKindWorkflowName,
+			WorkflowName: "agent-run-fake-child",
+		},
+		Args: map[string]any{
+			"subject": "workflows",
+		},
+		Runtime: &fse.RuntimeOptions{
+			ChildExecutorMode: fse.ChildExecutorModeLive,
+		},
+		RequestedPolicy: map[string]any{
+			"maxWorkerDurationMs": int64(25),
+		},
+	})
+	if err != nil {
+		t.Fatalf("StartSync: %v", err)
+	}
+
+	provider.waitForInferStart(t)
+	waitForInferContextHonored(t, provider, 2*time.Second)
+
+	read, err := service.GetSession(context.Background(), completed.SessionID)
+	if err != nil {
+		t.Fatalf("GetSession: %v", err)
+	}
+	if read.Status != fse.LifecycleStatusFailed {
+		t.Fatalf("session status = %q, want FAILED", read.Status)
+	}
+	if read.Failure == nil || !strings.Contains(strings.ToLower(read.Failure.Message), "antigravity") ||
+		!strings.Contains(strings.ToLower(read.Failure.Message), "timed out") {
+		t.Fatalf("session failure = %#v, want Antigravity timeout", read.Failure)
+	}
+	if read.Progress == nil || read.Progress.TotalDispatches != 1 || read.Progress.FailedDispatches != 1 {
+		t.Fatalf("progress = %#v, want one failed dispatch", read.Progress)
+	}
+
+	dispatch, err := service.GetDispatch(context.Background(), completed.SessionID, "dispatch-1")
+	if err != nil {
+		t.Fatalf("GetDispatch: %v", err)
+	}
+	if dispatch.Status != fse.DispatchStatusFailed || dispatch.FailureClassification != string(workerexecution.WorkFailureTypeTimeout) {
+		t.Fatalf("dispatch = %#v, want one typed timeout", dispatch)
+	}
+	if dispatch.FailureDetail == nil || dispatch.FailureDetail.Reason != string(workerexecution.WorkFailureTypeTimeout) ||
+		!strings.Contains(dispatch.FailureDetail.Message, "timed out") {
+		t.Fatalf("dispatch failure detail = %#v, want timeout reason", dispatch.FailureDetail)
+	}
+}
+
 func TestJavaScriptRuntimeService_AgentRunLiveChild_StartAsyncProjectsRunningDispatchForInterrupt(t *testing.T) {
 	provider := newBlockingFixtureProvider()
 	projectRoot := setupRuntimeWorkflowFixture(t, "agent-run-fake-child.workflow.js", "agent-run-fake-child")

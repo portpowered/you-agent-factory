@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	"github.com/portpowered/infinite-you/pkg/services/work"
@@ -30,11 +31,12 @@ import (
 // invisible to a client: there is no Factory whose tool call they could be
 // content inside.
 type directChildExecutor struct {
-	sessionID   string
-	execute     childExecuteService
-	records     factory.JavaScriptChildRecordSink
-	childValues factory.JavaScriptChildValues
-	workingDir  string
+	sessionID         string
+	execute           childExecuteService
+	records           factory.JavaScriptChildRecordSink
+	childValues       factory.JavaScriptChildValues
+	workingDir        string
+	maxWorkerDuration time.Duration
 }
 
 // legacyDirectChildExecution is a test/in-package compatibility bridge for
@@ -200,7 +202,7 @@ func (e *directChildExecutor) Execute(
 	e.records.AppendChildDispatch(base, factory.JavaScriptChildDispatchStatusRunning)
 
 	executeRequest := e.executeRequest(req, base, dispatchID, runnerID)
-	result, err := e.execute.Execute(ctx, executeRequest)
+	result, err := executeChildAttempt(ctx, e.execute, executeRequest)
 	if err != nil || !childExecutionSucceeded(result.Outcome) {
 		return e.failedChild(base, req, dispatchID, childIndex, result, err)
 	}
@@ -277,6 +279,7 @@ func (e *directChildExecutor) executeRequest(
 				FactoryDirectory: e.workingDir,
 			},
 			Permissions: workers.PermissionPolicy{SkipPermissions: req.SkipPermissions},
+			Timeout:     childAttemptTimeout(req, runnerID, e.maxWorkerDuration),
 		},
 		Input: workers.ExecutionInput{
 			Dispatch: work.WorkDispatch{
@@ -403,6 +406,7 @@ func (s *JavaScriptRuntimeService) childExecutorHooks(mode, sessionID string) fa
 				s.projectRoot,
 				policy.MaxRetries,
 			)
+			executor.maxWorkerDuration = childWorkerDurationFromPolicy(policy)
 			executor.resourceLeaseAcquirer = binding.resourceLeaseAcquirer
 			executor.runtimeID = binding.runtimeID
 			executor.generationID = binding.generationID
@@ -414,13 +418,15 @@ func (s *JavaScriptRuntimeService) childExecutorHooks(mode, sessionID string) fa
 			return executor
 		}
 		if execution := s.directWorkerExecution(); execution != nil {
-			return newDirectChildExecutor(
+			executor := newDirectChildExecutor(
 				childSessionID,
 				execution,
 				records,
 				s.childValues,
 				s.projectRoot,
 			)
+			executor.maxWorkerDuration = childWorkerDurationFromPolicy(policy)
+			return executor
 		}
 		// Compatibility is retained for in-package callers that have not yet
 		// moved to the standalone Workers binding. It is not part of the Wire
@@ -428,13 +434,15 @@ func (s *JavaScriptRuntimeService) childExecutorHooks(mode, sessionID string) fa
 		if s.directChildInvocation == nil {
 			return missingChildExecutor{sessionID: childSessionID}
 		}
-		return newDirectChildExecutor(
+		executor := newDirectChildExecutor(
 			childSessionID,
 			legacyDirectChildExecution{invocation: s.directChildInvocation},
 			records,
 			s.childValues,
 			s.projectRoot,
 		)
+		executor.maxWorkerDuration = childWorkerDurationFromPolicy(policy)
+		return executor
 	}
 	return hooks
 }

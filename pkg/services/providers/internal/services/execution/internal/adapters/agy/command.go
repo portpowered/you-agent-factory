@@ -17,7 +17,7 @@ import (
 )
 
 const (
-	defaultPrintTimeout = 5 * time.Minute
+	defaultPrintTimeout = providers.DefaultAntigravityPrintTimeout
 	outputFormatStream  = "stream-json"
 	agyExecutable       = "agy"
 )

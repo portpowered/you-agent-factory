@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"time"
 
 	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
@@ -51,6 +52,7 @@ type childWorkerProgressBridge struct {
 	publish    childWorkerProgressPublisher
 	dispatchID string
 	pending    *workers.ProgressFragment
+	terminal   bool
 }
 
 func newChildWorkerProgressBridge(
@@ -68,13 +70,20 @@ func (b *childWorkerProgressBridge) publishProgress(fragment workers.ProgressFra
 		return
 	}
 	fragment = b.normalize(fragment)
+	b.mu.Lock()
+	if b.terminal {
+		b.mu.Unlock()
+		return
+	}
 	if isChildTerminalProgress(fragment) {
-		b.mu.Lock()
 		b.pending = &fragment
 		b.mu.Unlock()
 		return
 	}
-	b.publish(b.dispatchID, fragment)
+	publish := b.publish
+	dispatchID := b.dispatchID
+	b.mu.Unlock()
+	publish(dispatchID, fragment)
 }
 
 func (b *childWorkerProgressBridge) resetAttempt() {
@@ -82,6 +91,10 @@ func (b *childWorkerProgressBridge) resetAttempt() {
 		return
 	}
 	b.mu.Lock()
+	if b.terminal {
+		b.mu.Unlock()
+		return
+	}
 	b.pending = nil
 	b.mu.Unlock()
 }
@@ -94,6 +107,11 @@ func (b *childWorkerProgressBridge) publishTerminal(
 		return
 	}
 	b.mu.Lock()
+	if b.terminal {
+		b.mu.Unlock()
+		return
+	}
+	b.terminal = true
 	pending := b.pending
 	b.pending = nil
 	b.mu.Unlock()
@@ -526,6 +544,7 @@ type childWorkerExecutor struct {
 	attemptStarter        childWorkerAttemptStarter
 	maxAttempts           int
 	resourceLeaseAcquirer childResourceLeaseAcquirer
+	maxWorkerDuration     time.Duration
 }
 
 // childResourceLease is the execution-owned view of a resource lease. The
@@ -636,7 +655,7 @@ func (e *childWorkerExecutor) Execute(
 				return e.failedChild(base, req, dispatchID, childIndex, preStartResult, err)
 			}
 		}
-		invoked, err := e.execute.Execute(ctx, request)
+		invoked, err := executeChildAttempt(ctx, e.execute, request)
 		if childExecutionShouldRetry(ctx, invoked, err, attemptNumber, e.maxAttempts) {
 			if progress != nil {
 				progress.resetAttempt()
@@ -684,6 +703,131 @@ func failedChildWorkerExecuteResult(
 			Message: err.Error(),
 		},
 	}
+}
+
+// executeChildAttempt keeps the JavaScript child boundary bounded even when a
+// test, legacy adapter, or provider effect returns after its context has been
+// canceled. The buffered result channel lets that late operation finish
+// without retaining the child caller, while the caller publishes the timeout
+// result exactly once at the deadline.
+func executeChildAttempt(
+	ctx context.Context,
+	execute childExecuteService,
+	request workers.ExecuteRequest,
+) (workers.ExecuteResult, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if request.Target.Timeout <= 0 {
+		return execute.Execute(ctx, request)
+	}
+	attemptCtx := ctx
+	cancel := func() {}
+	if request.Target.Timeout > 0 {
+		attemptCtx, cancel = context.WithTimeout(ctx, request.Target.Timeout)
+	}
+	defer cancel()
+
+	type completion struct {
+		result workers.ExecuteResult
+		err    error
+	}
+	completed := make(chan completion, 1)
+	go func() {
+		result, err := execute.Execute(attemptCtx, request)
+		completed <- completion{result: result, err: err}
+	}()
+
+	for {
+		select {
+		case outcome := <-completed:
+			// If the deadline won the race with a late successful result, the
+			// timeout remains authoritative. A caller-owned deadline or
+			// cancellation remains the caller's terminal outcome.
+			if timedOutChildAttempt(attemptCtx, ctx, request.Target.Timeout) {
+				return childTimeoutExecuteResult(request), context.DeadlineExceeded
+			}
+			return outcome.result, outcome.err
+		case <-attemptCtx.Done():
+			if timedOutChildAttempt(attemptCtx, ctx, request.Target.Timeout) {
+				return childTimeoutExecuteResult(request), context.DeadlineExceeded
+			}
+			return workers.ExecuteResult{Correlation: request.Correlation}, attemptCtx.Err()
+		}
+	}
+}
+
+func timedOutChildAttempt(attemptCtx, parentCtx context.Context, timeout time.Duration) bool {
+	return timeout > 0 &&
+		errors.Is(attemptCtx.Err(), context.DeadlineExceeded) &&
+		(parentCtx == nil || parentCtx.Err() == nil)
+}
+
+func childTimeoutExecuteResult(request workers.ExecuteRequest) workers.ExecuteResult {
+	provider := childProviderForExecuteRequest(request)
+	timeout := request.Target.Timeout
+	message := "child execution timed out"
+	if timeout > 0 {
+		message = fmt.Sprintf("child execution timed out after %s", timeout)
+	}
+	return workers.ExecuteResult{
+		Correlation: request.Correlation,
+		Outcome:     workers.ExecutionOutcomeFailed,
+		Failure: &workers.ExecutionFailure{
+			Type:                workers.WorkFailureTypeTimeout,
+			Family:              workers.WorkFailureFamilyTerminal,
+			Message:             message,
+			RetryHint:           false,
+			ProviderFailureKind: providers.ExecuteFailureKindTimeout,
+			Detail: &workers.FailureDetail{
+				Reason:  workers.WorkFailureTypeTimeout,
+				Message: message,
+			},
+		},
+		Diagnostics: &workers.SafeDiagnostics{
+			Provider: &workers.SafeProviderDiagnostic{Provider: provider},
+		},
+	}
+}
+
+func childProviderForExecuteRequest(request workers.ExecuteRequest) string {
+	provider := firstNonBlank(
+		request.Target.Model.Provider,
+		request.Target.Provider.ID,
+		request.Target.Provider.Alias,
+	)
+	if provider == "" &&
+		!strings.EqualFold(strings.TrimSpace(request.Target.ExecutorProvider), workers.ExecutorProviderACP) &&
+		!strings.EqualFold(strings.TrimSpace(request.Target.ExecutorProvider), "SCRIPT_WRAP") {
+		provider = request.Target.RunnerID
+	}
+	return canonicalChildProvider(provider)
+}
+
+func childWorkerDurationFromPolicy(policy factory.JavaScriptPolicy) time.Duration {
+	if policy.MaxWorkerDurationMs == nil || *policy.MaxWorkerDurationMs <= 0 {
+		return 0
+	}
+	return time.Duration(*policy.MaxWorkerDurationMs) * time.Millisecond
+}
+
+func childAttemptTimeout(
+	request factory.JavaScriptChildExecutionRequest,
+	runnerID string,
+	configured time.Duration,
+) time.Duration {
+	provider := ""
+	if !strings.EqualFold(strings.TrimSpace(request.ExecutorProvider), workers.ExecutorProviderACP) {
+		provider = firstNonBlank(request.ModelProvider, runnerID)
+	}
+	providerDefault := providers.DefaultNativeAttemptTimeout(providers.ID(provider))
+	if configured <= 0 {
+		return providerDefault
+	}
+	if providerDefault <= 0 || configured < providerDefault {
+		return configured
+	}
+	return providerDefault
 }
 
 func finishChildWorkerAttempt(
@@ -807,6 +951,7 @@ func (e *childWorkerExecutor) executeRequest(
 				FactoryDirectory: e.workingDir,
 			},
 			Permissions: workers.PermissionPolicy{SkipPermissions: req.SkipPermissions},
+			Timeout:     childAttemptTimeout(req, base.RunnerID, e.maxWorkerDuration),
 		},
 		Input: workers.ExecutionInput{
 			Dispatch:              dispatch,
