@@ -126,6 +126,7 @@ type coverageResult struct {
 	packageMinimumWarnings       []string
 	manifestCompletenessWarnings []string
 	unmeasuredPackageDiagnostics []string
+	packageFloorPolicy           string
 }
 
 type packageCoverageTotals struct {
@@ -174,6 +175,7 @@ func execute(cfg config) error {
 		}
 		return err
 	}
+	result.packageFloorPolicy = cfg.packageFloorPolicyValue()
 
 	var failures []string
 	if result.actual < cfg.min {

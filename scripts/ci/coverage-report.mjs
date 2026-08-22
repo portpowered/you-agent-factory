@@ -42,6 +42,9 @@ function summarizeCoverageArtifact(coverage, limits) {
 	if (!coverage || typeof coverage !== "object" || !Array.isArray(coverage.packages)) {
 		return {
 			available: false,
+			packageFloorPolicy: "",
+			packageFloorFindings: [],
+			manifestDiagnostics: [],
 			violations: [],
 			violationCount: 0,
 			omittedViolations: 0,
@@ -86,6 +89,9 @@ function summarizeCoverageArtifact(coverage, limits) {
 	const nearFloor = contenders.slice(0, limits.packages);
 	return {
 		available: true,
+		packageFloorPolicy: textValue(coverage.packageFloorPolicy),
+		packageFloorFindings: diagnosticEntries(coverage.packageFloorFindings),
+		manifestDiagnostics: diagnosticEntries(coverage.manifestDiagnostics),
 		complete: coverage.complete !== false,
 		measurementReason: textValue(coverage.measurementReason),
 		coveredStatements: finiteNumber(coverage.coveredStatements),
@@ -161,6 +167,20 @@ export function renderCoverageReportBody(summary, options = {}) {
 			`### Closest to their floor\n\n${nearFloor}\n- ${summary.coverage.omitted} additional gated package(s) omitted.`,
 		);
 	}
+	const packageFloorFindings = renderDiagnostics(
+		"### Package-floor findings",
+		summary.coverage.packageFloorFindings,
+	);
+	if (packageFloorFindings) {
+		sections.push(packageFloorFindings);
+	}
+	const manifestDiagnostics = renderDiagnostics(
+		"### Manifest findings",
+		summary.coverage.manifestDiagnostics,
+	);
+	if (manifestDiagnostics) {
+		sections.push(manifestDiagnostics);
+	}
 	sections.push(renderTimingOverview(summary.timing, timingArtifactName));
 	const slowest = renderSlowestTable(summary.timing.slowest);
 	if (slowest) {
@@ -184,12 +204,28 @@ function renderCoverageOverview(coverage, artifactName) {
 		`- Gated packages: ${coverage.gatedCount}`,
 		`- Floor violations: ${coverage.violationCount}`,
 	];
+	if (coverage.packageFloorPolicy === "advisory") {
+		lines.push(
+			"!!! COVERAGE FLOOR POLICY: advisory !!!",
+			"- Package floors and missing-manifest findings are report-only during the test-corpus rebuild.",
+			"- Set `-package-floor-policy=blocking` to restore blocking enforcement.",
+		);
+	} else if (coverage.packageFloorPolicy) {
+		lines.push(`- Package-floor policy: ${coverage.packageFloorPolicy}`);
+	}
 	if (!coverage.complete) {
 		lines.push(
 			`- Measurement status: incomplete — partial diagnostics only${coverage.measurementReason ? ` (${coverage.measurementReason})` : ""}`,
 		);
 	}
 	return lines.join("\n");
+}
+
+function renderDiagnostics(heading, diagnostics) {
+	if (!diagnostics || diagnostics.length === 0) {
+		return "";
+	}
+	return `${heading}\n\n${diagnostics.map((diagnostic) => `- ${diagnostic}`).join("\n")}`;
 }
 
 function renderTimingOverview(timing, artifactName) {
@@ -332,4 +368,11 @@ function measuredCoveragePercent(entry) {
 
 function textValue(value) {
 	return typeof value === "string" ? value.trim() : "";
+}
+
+function diagnosticEntries(value) {
+	if (!Array.isArray(value)) {
+		return [];
+	}
+	return value.filter((entry) => typeof entry === "string" && entry.trim()).map((entry) => entry.trim());
 }

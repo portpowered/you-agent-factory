@@ -4,6 +4,8 @@ import { pathToFileURL } from "node:url";
 
 const inventoryPrefix = "Functional suite inventory:";
 const ordinaryGocoverageExitCode = 1;
+const advisoryPolicyBanner = "!!! COVERAGE FLOOR POLICY: advisory !!!";
+const failedCoverageTestDiagnostic = "package floors were NOT checked because the coverage test run failed";
 
 export function parseRecordedExitCode(value, source = "recorded exit code") {
 	const normalized = String(value).trim();
@@ -27,6 +29,9 @@ function normalizedLines(log) {
 
 function isCompactVerdictLine(line) {
 	return (
+		line === advisoryPolicyBanner ||
+		line.startsWith("Package floors and missing-manifest findings are report-only") ||
+		line.startsWith("Set -package-floor-policy=blocking to restore blocking enforcement.") ||
 		line.startsWith(inventoryPrefix) ||
 		line.startsWith("total: (statements)") ||
 		line.startsWith("Functional package coverage verdict:") ||
@@ -35,6 +40,7 @@ function isCompactVerdictLine(line) {
 		line.startsWith("  package=") ||
 		line.startsWith("  tally:") ||
 		line.startsWith("package coverage regression:") ||
+		line.startsWith("coverage manifest missing entry:") ||
 		line.startsWith("coverage not evaluated:") ||
 		/^(?:go|Go) coverage (?:found |.* below minimum |.* meets minimum )/.test(line)
 	);
@@ -51,11 +57,33 @@ function hasCoverageGateFailure(lines) {
 }
 
 function hasOrdinaryTestFailure(lines) {
-	return lines.some((line) => line.startsWith("coverage not evaluated:"));
+	return lines.some(
+		(line) =>
+			line.startsWith("coverage not evaluated: ") &&
+			line.includes(failedCoverageTestDiagnostic),
+	);
 }
 
 function hasGreenGate(lines) {
 	return lines.some((line) => /^Go coverage .* meets minimum /.test(line));
+}
+
+function isAdvisoryPolicyLine(line) {
+	return (
+		line === advisoryPolicyBanner ||
+		line.startsWith("Package floors and missing-manifest findings are report-only") ||
+		line.startsWith("Set -package-floor-policy=blocking to restore blocking enforcement.")
+	);
+}
+
+function hasAdvisoryFinding(lines) {
+	return lines.some(
+		(line) =>
+			line.startsWith("package coverage regression:") ||
+			line.startsWith("coverage manifest missing entry:") ||
+			line.startsWith("coverage not evaluated: package=") ||
+			line.startsWith("package coverage warning:"),
+	);
 }
 
 export function extractFunctionalCoverageVerdict(log) {
@@ -71,11 +99,17 @@ export function extractFunctionalCoverageVerdict(log) {
 			hasCoverageGateFailure: false,
 			hasOrdinaryTestFailure: false,
 			hasGreenGate: false,
+			hasAdvisoryPolicy: false,
+			hasAdvisoryFindings: false,
 		};
 	}
 
 	const tail = lines.slice(inventoryIndex);
-	const verdictLines = tail.filter(isCompactVerdictLine);
+	const advisoryLines = lines.filter(isAdvisoryPolicyLine);
+	const verdictLines = [
+		...advisoryLines,
+		...tail.filter((line) => isCompactVerdictLine(line) && !isAdvisoryPolicyLine(line)),
+	];
 	const text = verdictLines.length > 0 ? `${verdictLines.join("\n")}\n` : "";
 	return {
 		foundInventory: true,
@@ -84,6 +118,8 @@ export function extractFunctionalCoverageVerdict(log) {
 		hasCoverageGateFailure: hasCoverageGateFailure(tail),
 		hasOrdinaryTestFailure: hasOrdinaryTestFailure(tail),
 		hasGreenGate: hasGreenGate(tail),
+		hasAdvisoryPolicy: advisoryLines.length > 0,
+		hasAdvisoryFindings: hasAdvisoryFinding(lines),
 	};
 }
 
@@ -117,12 +153,28 @@ export function classifyFunctionalCoverageRun({ commandExitCode = 0, gocoverageE
 		};
 	}
 	if (gocoverageExitCode === 0 && extraction.foundInventory && extraction.hasGreenGate) {
+		const advisoryOnly = extraction.hasAdvisoryPolicy && extraction.hasAdvisoryFindings;
 		return {
-			outcome: "green",
+			outcome: advisoryOnly ? "advisory" : "green",
 			shouldDeferFailure: false,
 			exitCode: 0,
 			extraction,
-			reason: "functional coverage and test gates passed",
+			reason: advisoryOnly
+				? "functional coverage passed with report-only package-floor findings"
+				: "functional coverage and test gates passed",
+		};
+	}
+	if (
+		gocoverageExitCode === ordinaryGocoverageExitCode &&
+		extraction.foundInventory &&
+		extraction.hasOrdinaryTestFailure
+	) {
+		return {
+			outcome: "test-failure",
+			shouldDeferFailure: true,
+			exitCode: gocoverageExitCode,
+			extraction,
+			reason: "gocoveragecheck recorded an ordinary test failure",
 		};
 	}
 	if (
@@ -138,17 +190,13 @@ export function classifyFunctionalCoverageRun({ commandExitCode = 0, gocoverageE
 			reason: "gocoveragecheck recorded a coverage-gate failure",
 		};
 	}
-	if (
-		gocoverageExitCode === ordinaryGocoverageExitCode &&
-		extraction.foundInventory &&
-		extraction.hasOrdinaryTestFailure
-	) {
+	if (extraction.foundInventory) {
 		return {
-			outcome: "test-failure",
-			shouldDeferFailure: true,
-			exitCode: gocoverageExitCode,
+			outcome: "incomplete",
+			shouldDeferFailure: false,
+			exitCode: gocoverageExitCode || 1,
 			extraction,
-			reason: "gocoveragecheck recorded an ordinary test failure",
+			reason: `gocoveragecheck exit ${gocoverageExitCode} had no recognized complete verdict`,
 		};
 	}
 	return {
@@ -186,14 +234,15 @@ export function writeFunctionalCoverageVerdict({ logPath, exitCodePath, outputPa
 		gocoverageExitCode,
 		log,
 	});
-	if (classification.outcome === "infrastructure-failure") {
+	if (["infrastructure-failure", "incomplete"].includes(classification.outcome)) {
 		throw new Error(classification.reason);
 	}
 	if (!classification.extraction.text) {
 		throw new Error("functional coverage verdict extract is empty");
 	}
 	mkdirSync(dirname(resolve(outputPath)), { recursive: true });
-	writeFileSync(outputPath, classification.extraction.text, "utf8");
+	const output = `Functional coverage outcome: ${classification.outcome}\n${classification.extraction.text}`;
+	writeFileSync(outputPath, output, "utf8");
 	return classification;
 }
 

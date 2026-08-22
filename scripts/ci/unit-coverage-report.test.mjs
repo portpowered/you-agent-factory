@@ -20,6 +20,14 @@ import {
 function coverageArtifact() {
 	return {
 		complete: true,
+		packageFloorPolicy: "advisory",
+		packageFloorFindings: [
+			"package coverage regression: package=pkg/regressed lane=unit expected-minimum=70.00% actual=40.0000% delta=-30.0000 percentage-points",
+		],
+		manifestDiagnostics: [
+			"coverage manifest missing entry: package=pkg/services/example lane=unit",
+			"coverage not evaluated: package=pkg/unmeasured lane=unit (no measurement in profile)",
+		],
 		coveredStatements: 30,
 		measurableStatements: 40,
 		coveragePercent: 75,
@@ -145,6 +153,18 @@ test("renders a package table ordered by headroom, not by import path", () => {
 	assert.ok(body.indexOf("`pkg/near`") < body.indexOf("`pkg/ample`"));
 	// A package held to the 0.00 lane-default floor cannot be close to failing.
 	assert.ok(!body.includes("`pkg/lane-default`"));
+});
+
+test("renders advisory policy and all retained floor and manifest diagnostics", () => {
+	const body = renderUnitCoverageJobSummary(
+		summarizeUnitCoverage(coverageArtifact(), timingArtifact()),
+	);
+	assert.match(body, /!!! COVERAGE FLOOR POLICY: advisory !!!/);
+	assert.match(body, /Package floors and missing-manifest findings are report-only/);
+	assert.match(body, /Set `-package-floor-policy=blocking` to restore blocking enforcement/);
+	assert.match(body, /package coverage regression: package=pkg\/regressed/);
+	assert.match(body, /coverage manifest missing entry: package=pkg\/services\/example/);
+	assert.match(body, /coverage not evaluated: package=pkg\/unmeasured/);
 });
 
 test("renders the slowest unit tests with real durations, ordered descending", () => {
