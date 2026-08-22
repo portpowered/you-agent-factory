@@ -213,3 +213,18 @@ func TestChooseUnitCoverageImportCarrierSkipsDependencyCycle(t *testing.T) {
 		t.Fatalf("chooseUnitCoverageImportCarrier() = (%d, %t), want fallback carrier %q", index, ok, fallback)
 	}
 }
+
+func TestChooseUnitCoverageImportCarrierPrefersLoadedEqualPrefixCarrier(t *testing.T) {
+	testFree := modulePath + "/pkg/services/automations/internal/services/cron"
+	loaded := modulePath + "/pkg/services/automations/internal/services/cron/loaded"
+	empty := modulePath + "/pkg/services/automations/internal/services/cron/empty"
+	carriers := []unitCoverageImportCarrier{
+		{listing: coveragePackageListing{importPath: empty}},
+		{listing: coveragePackageListing{importPath: loaded}, imports: []string{"example.com/already-grouped"}},
+	}
+
+	index, ok := chooseUnitCoverageImportCarrier(testFree, nil, carriers)
+	if !ok || carriers[index].listing.importPath != loaded {
+		t.Fatalf("chooseUnitCoverageImportCarrier() = (%d, %t), want loaded carrier %q", index, ok, loaded)
+	}
+}

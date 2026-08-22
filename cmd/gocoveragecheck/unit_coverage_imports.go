@@ -107,6 +107,7 @@ func prepareUnitCoverageImportFile(testPackages []string, listings []coveragePac
 func chooseUnitCoverageImportCarrier(importPath string, deps []string, carriers []unitCoverageImportCarrier) (int, bool) {
 	bestIndex := -1
 	bestPrefixLength := -1
+	bestImportCount := -1
 	for index, carrier := range carriers {
 		if !canUnitCoverageImport(carrier.listing.importPath, importPath) {
 			continue
@@ -115,9 +116,11 @@ func chooseUnitCoverageImportCarrier(importPath string, deps []string, carriers 
 			continue
 		}
 		prefixLength := commonImportPathPrefixLength(carrier.listing.importPath, importPath)
-		if prefixLength > bestPrefixLength {
+		importCount := len(carrier.imports)
+		if prefixLength > bestPrefixLength || (prefixLength == bestPrefixLength && importCount > bestImportCount) {
 			bestIndex = index
 			bestPrefixLength = prefixLength
+			bestImportCount = importCount
 		}
 	}
 	return bestIndex, bestIndex >= 0
