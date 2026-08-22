@@ -38,6 +38,36 @@ func TestRuntimeMetricsSelectionReducesSessionProjectionAndDateWork(t *testing.T
 	assertSelectionWorkReduction(t, allStats, sessionStats, providerStats, windowStats)
 }
 
+func TestRuntimeMetricsSelectionKeepsLegacyArtifactForEnvelopeFiltering(t *testing.T) {
+	root := t.TempDir()
+	writeSelectionArtifact(t, filepath.Join(root, "2026", "08", "20", "120000.000000000-runtime-metrics-legacy.log"), "session-a", "runtime-a")
+
+	reader, err := platformmetrics.NewRuntimeMetricsReader(platformfilesystem.Local{})
+	if err != nil {
+		t.Fatalf("NewRuntimeMetricsReader() error = %v", err)
+	}
+	projection, err := newMetricsProjection("")
+	if err != nil {
+		t.Fatalf("newMetricsProjection() error = %v", err)
+	}
+	selection, err := runtimeMetricsStreamSelection(root, "session-a", "", time.Time{}, time.Time{}, projection)
+	if err != nil {
+		t.Fatalf("runtimeMetricsStreamSelection() error = %v", err)
+	}
+	stats := &platformmetrics.RuntimeMetricsReadStats{}
+	selection.Stats = stats
+	decoded := 0
+	if err := reader.StreamSelected(context.Background(), root, selection, func(platformmetrics.RuntimeMetricRecord) error {
+		decoded++
+		return nil
+	}); err != nil {
+		t.Fatalf("StreamSelected() error = %v", err)
+	}
+	if decoded != 3 || stats.ArtifactsOpened != 1 || stats.RecordsDecoded != 3 {
+		t.Fatalf("legacy selection work = decoded %d, stats %#v; want three records from one opened artifact", decoded, stats)
+	}
+}
+
 func collectSelectionStats(
 	t *testing.T,
 	reader platformmetrics.SelectedReader,

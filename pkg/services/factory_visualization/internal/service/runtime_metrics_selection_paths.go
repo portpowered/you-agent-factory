@@ -2,11 +2,14 @@ package service
 
 import (
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 
 	platformruntimeartifact "github.com/portpowered/infinite-you/pkg/platform/runtimeartifact"
 )
+
+var runtimeMetricsBackupSuffixPattern = regexp.MustCompile(`-[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}-[0-9]{2}-[0-9]{2}\.[0-9]{3}(?:-[0-9]+)?\.log(?:\.gz)?$`)
 
 func runtimeMetricsPathSelector(
 	root string,
@@ -27,15 +30,19 @@ func runtimeMetricsPathSelector(
 		}
 		base := filepath.Base(path)
 		marker := "-runtime-metrics-"
-		if len(sessionComponents) > 0 && !runtimeMetricsArtifactMatchesSession(base, marker, sessionComponents) {
+		if len(sessionComponents) > 0 &&
+			!runtimeMetricsArtifactMatchesSession(base, marker, sessionComponents) &&
+			runtimeMetricsArtifactHasEncodedComponents(base, marker) {
 			return false
 		}
 		if runtimeID != "" {
 			if len(sessionComponents) > 0 {
-				if !runtimeMetricsArtifactMatchesRuntime(base, marker, sessionComponents, runtimeComponent) {
+				if !runtimeMetricsArtifactMatchesRuntime(base, marker, sessionComponents, runtimeComponent) &&
+					runtimeMetricsArtifactHasEncodedComponents(base, marker) {
 					return false
 				}
-			} else if !runtimeMetricsArtifactContains(base, "-"+runtimeComponent) {
+			} else if !runtimeMetricsArtifactContains(base, "-"+runtimeComponent) &&
+				runtimeMetricsArtifactHasEncodedComponents(base, marker) {
 				return false
 			}
 		}
@@ -81,6 +88,17 @@ func runtimeMetricsArtifactMatchesRuntime(base, marker string, sessionComponents
 func runtimeMetricsArtifactContains(base, component string) bool {
 	return strings.Contains(base, component+"-") ||
 		strings.Contains(base, component+".log")
+}
+
+func runtimeMetricsArtifactHasEncodedComponents(base, marker string) bool {
+	_, suffix, found := strings.Cut(base, marker)
+	if !found {
+		return false
+	}
+	suffix = runtimeMetricsBackupSuffixPattern.ReplaceAllString(suffix, "")
+	suffix = strings.TrimSuffix(suffix, ".log")
+	suffix = strings.TrimSuffix(suffix, ".gz")
+	return strings.Contains(suffix, "-")
 }
 
 func runtimeMetricsDatePathInWindow(
