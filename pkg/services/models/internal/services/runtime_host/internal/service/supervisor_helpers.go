@@ -38,7 +38,11 @@ func runtimeSlotKey(scope models.RuntimeScopeRef, modelName string) string {
 }
 
 func requiresSupervisedBackend(backend string) bool {
-	return models.IsManagedRuntimeBackend(backend) || requiresPinnedGRPCBackend(backend)
+	return models.IsManagedRuntimeBackend(backend)
+}
+
+func requiresRuntimeHostBackend(backend string) bool {
+	return requiresSupervisedBackend(backend) || requiresPinnedGRPCBackend(backend)
 }
 
 func requiresPinnedGRPCBackend(backend string) bool {
