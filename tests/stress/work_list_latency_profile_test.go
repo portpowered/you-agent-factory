@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -32,6 +33,7 @@ const (
 	workListProfileTimeout               = 30 * time.Second
 	workListProfilePageLimit             = 500 * time.Millisecond
 	workListProfileWalkLimit             = 2 * time.Second
+	workListStabilityRounds              = 2
 )
 
 // TestWorkListLatencyProfile characterizes the incident-sized Work list
@@ -63,6 +65,44 @@ func TestWorkListLatencyProfile(t *testing.T) {
 		}
 		if os.Getenv("YOU_WORK_LIST_LATENCY_ENFORCE") == "1" {
 			assertWorkListLatencyTarget(t, profile)
+		}
+	})
+}
+
+// TestWorkListLatencyStability repeats complete public pagination walks while
+// the identified degradation dimensions are present. The default run reports
+// every sample; YOU_WORK_LIST_LATENCY_ENFORCE=1 applies the incident bounds to
+// each sample as an opt-in, machine-sensitive regression assertion.
+func TestWorkListLatencyStability(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping repeated Work list stability profile in short mode")
+	}
+	enforceTarget := os.Getenv("YOU_WORK_LIST_LATENCY_ENFORCE") == "1"
+
+	t.Run("worker-contention", func(t *testing.T) {
+		for _, workerLoad := range []int{0, workListProfileWorkerLoad} {
+			workerLoad := workerLoad
+			t.Run(fmt.Sprintf("workers-%d", workerLoad), func(t *testing.T) {
+				samples := runWorkerContentionStability(t, workerLoad)
+				assertWorkListStabilitySamples(t, samples, enforceTarget)
+			})
+		}
+	})
+
+	t.Run("event-growth", func(t *testing.T) {
+		samples := runEventGrowthStability(t)
+		assertWorkListStabilitySamples(t, samples, enforceTarget)
+		for index := 1; index < len(samples); index++ {
+			if samples[index].retainedEvents <= samples[index-1].retainedEvents {
+				t.Fatalf(
+					"event-growth sample %d retained %d events after %d dispatches; want more than sample %d's %d events",
+					index+1,
+					samples[index].retainedEvents,
+					samples[index].accumulatedDispatches,
+					index,
+					samples[index-1].retainedEvents,
+				)
+			}
 		}
 	})
 }
@@ -102,6 +142,22 @@ type workListOperationEstimates struct {
 	eventSubscriptions  int
 	eventRecordsVisited int
 	workRowsProjected   int
+}
+
+type workListStabilitySample struct {
+	scenario              string
+	round                 int
+	boardRows             int
+	workerLoad            int
+	accumulatedDispatches int
+	retainedEvents        int
+	updatesDuringWalk     bool
+	eventSubscription     phaseSample
+	pages                 []workListProfilePage
+	totalWalk             time.Duration
+	returnedWorkIDs       []string
+	expectedWorkIDs       []string
+	operationEstimates    workListOperationEstimates
 }
 
 func runWorkListLatencyProfile(t *testing.T, workerLoad int) workListLatencyProfile {
@@ -197,6 +253,193 @@ func runAccumulatedWorkListLatencyProfile(t *testing.T) workListLatencyProfile {
 	}
 }
 
+func runWorkerContentionStability(t *testing.T, workerLoad int) []workListStabilitySample {
+	t.Helper()
+
+	const workerName = "work-list-stability-worker"
+	dir := testutil.ScaffoldFactoryDir(t, testutil.PipelineConfig(1, workerName))
+	harness := startStressProcessWithWorkerMux(t, dir)
+	var executor *queryLatencyExecutor
+	if workerLoad > 0 {
+		executor = newQueryLatencyExecutor(workListProfileRows)
+		harness.SetWorkerExecutor(workerName, executor)
+	}
+	defer func() {
+		if executor != nil {
+			executor.release()
+			harness.WaitForTerminalCount(workListProfileRows, queryLatencyWait)
+		}
+		harness.Stop()
+	}()
+
+	expectedRequests := workListProfileRequests(workListProfileRows, workerLoad)
+	harness.SubmitFull(t.Context(), expectedRequests)
+	if workerLoad > 0 {
+		executor.waitForStarts(t, workerLoad)
+	} else {
+		harness.WaitForTerminalCount(workListProfileRows, queryLatencyWait)
+	}
+	// Prime the real HTTP/read path before collecting machine-sensitive samples.
+	// This is an observed request, not time-based synchronization; readiness is
+	// established by the completed public census itself.
+	walkWorkListPages(t, harness, expectedRequests, workerLoad)
+	return repeatWorkListWalks(t, harness, expectedRequests, workerLoad, "worker-contention", workListStabilityRounds)
+}
+
+func runEventGrowthStability(t *testing.T) []workListStabilitySample {
+	t.Helper()
+
+	const (
+		workerName = "work-list-stability-loop-worker"
+		loopState  = "loop"
+	)
+	checkpoints := []int{1, 50, 100, workListProfileAccumulatedDispatches}
+	dir := testutil.ScaffoldFactoryDir(t, accumulatedWorkListProfileConfig(workerName))
+	harness := startStressProcessWithWorkerMux(t, dir)
+	executor := newCheckpointedDispatchExecutor(checkpoints)
+	harness.SetWorkerExecutor(workerName, executor)
+	defer func() {
+		executor.releaseAll()
+		harness.WaitForTerminalCount(workListProfileRows, queryLatencyWait)
+		harness.Stop()
+	}()
+
+	expectedRequests := accumulatedWorkListProfileRequests(workListProfileRows, loopState)
+	harness.SubmitFull(t.Context(), expectedRequests)
+	samples := make([]workListStabilitySample, 0, len(checkpoints))
+	for _, dispatches := range checkpoints {
+		executor.waitForCheckpoint(t, dispatches)
+		// Warm each event-history level through the public endpoint before
+		// recording its repeated-read sample.
+		walkWorkListPages(t, harness, expectedRequests, 1)
+		eventSubscription := measureWorkListEventSubscription(t, harness)
+		updatesDuringWalk := dispatches != checkpoints[len(checkpoints)-1]
+		pages, totalWalk, returnedIDs := walkWorkListPagesWithHook(
+			t,
+			harness,
+			expectedRequests,
+			1,
+			func(pageNumber int) {
+				if pageNumber == 1 && updatesDuringWalk {
+					executor.releaseCheckpoint(dispatches)
+				}
+			},
+		)
+		samples = append(samples, workListStabilitySample{
+			scenario:              "event-growth",
+			round:                 len(samples) + 1,
+			boardRows:             len(returnedIDs),
+			workerLoad:            1,
+			accumulatedDispatches: dispatches,
+			retainedEvents:        eventSubscription.retainedEvents,
+			updatesDuringWalk:     updatesDuringWalk,
+			eventSubscription:     eventSubscription.phaseSample,
+			pages:                 pages,
+			totalWalk:             totalWalk,
+			returnedWorkIDs:       returnedIDs,
+			expectedWorkIDs:       expectedWorkListOrder(expectedRequests, 1),
+			operationEstimates: workListOperationEstimates{
+				snapshotReads:     len(pages),
+				workRowsProjected: len(returnedIDs),
+			},
+		})
+	}
+	return samples
+}
+
+func repeatWorkListWalks(
+	t *testing.T,
+	harness *stressProcessHarness,
+	expectedRequests []work.SubmitRequest,
+	workerLoad int,
+	scenario string,
+	rounds int,
+) []workListStabilitySample {
+	t.Helper()
+	samples := make([]workListStabilitySample, 0, rounds)
+	expectedWorkIDs := expectedWorkListOrder(expectedRequests, workerLoad)
+	for round := 1; round <= rounds; round++ {
+		eventSubscription := measureWorkListEventSubscription(t, harness)
+		pages, totalWalk, returnedIDs := walkWorkListPages(t, harness, expectedRequests, workerLoad)
+		samples = append(samples, workListStabilitySample{
+			scenario:          scenario,
+			round:             round,
+			boardRows:         len(returnedIDs),
+			workerLoad:        workerLoad,
+			retainedEvents:    eventSubscription.retainedEvents,
+			eventSubscription: eventSubscription.phaseSample,
+			pages:             pages,
+			totalWalk:         totalWalk,
+			returnedWorkIDs:   returnedIDs,
+			expectedWorkIDs:   expectedWorkIDs,
+			operationEstimates: workListOperationEstimates{
+				snapshotReads:     len(pages),
+				workRowsProjected: len(returnedIDs),
+			},
+		})
+	}
+	return samples
+}
+
+func assertWorkListStabilitySamples(t *testing.T, samples []workListStabilitySample, enforceTarget bool) {
+	t.Helper()
+	if len(samples) == 0 {
+		t.Fatal("Work list stability profile returned no samples")
+	}
+	baselineIDs := samples[0].returnedWorkIDs
+	baselineEstimates := samples[0].operationEstimates
+	for _, sample := range samples {
+		logWorkListStabilitySample(t, sample)
+		if sample.boardRows != workListProfileRows {
+			t.Errorf("%s round %d returned %d Work rows, want %d", sample.scenario, sample.round, sample.boardRows, workListProfileRows)
+		}
+		if !slices.Equal(sample.returnedWorkIDs, baselineIDs) {
+			t.Errorf("%s round %d Work census changed; first=%v current=%v", sample.scenario, sample.round, baselineIDs, sample.returnedWorkIDs)
+		}
+		if !slices.Equal(sample.returnedWorkIDs, sample.expectedWorkIDs) {
+			t.Errorf("%s round %d returned Work IDs different from expected order", sample.scenario, sample.round)
+		}
+		if sample.operationEstimates != baselineEstimates {
+			t.Errorf("%s round %d operation estimates = %+v, want stable %+v", sample.scenario, sample.round, sample.operationEstimates, baselineEstimates)
+		}
+		if sample.operationEstimates.eventSubscriptions != 0 || sample.operationEstimates.eventRecordsVisited != 0 {
+			t.Errorf("%s round %d revisited canonical history: %+v", sample.scenario, sample.round, sample.operationEstimates)
+		}
+		if enforceTarget {
+			assertWorkListLatencyTimingTarget(t, sample.pages, sample.totalWalk)
+		}
+	}
+}
+
+func logWorkListStabilitySample(t *testing.T, sample workListStabilitySample) {
+	t.Helper()
+	pageDurations := make([]time.Duration, 0, len(sample.pages))
+	for _, page := range sample.pages {
+		pageDurations = append(pageDurations, page.duration)
+	}
+	t.Logf(
+		"work list stability scenario=%s round=%d board_rows=%d worker_load=%d accumulated_dispatches=%d retained_events=%d updates_during_walk=%t pages=%d rows=%d total_walk=%s page_durations=%s event_subscription=%s operation_estimates=snapshot_reads:%d,event_subscriptions:%d,event_records_visited:%d,work_rows_projected:%d first_id=%q last_id=%q",
+		sample.scenario,
+		sample.round,
+		sample.boardRows,
+		sample.workerLoad,
+		sample.accumulatedDispatches,
+		sample.retainedEvents,
+		sample.updatesDuringWalk,
+		len(sample.pages),
+		len(sample.returnedWorkIDs),
+		sample.totalWalk,
+		formatDurationSamples(pageDurations),
+		sample.eventSubscription.duration,
+		sample.operationEstimates.snapshotReads,
+		sample.operationEstimates.eventSubscriptions,
+		sample.operationEstimates.eventRecordsVisited,
+		sample.operationEstimates.workRowsProjected,
+		sample.returnedWorkIDs[0],
+		sample.returnedWorkIDs[len(sample.returnedWorkIDs)-1],
+	)
+}
+
 func accumulatedWorkListProfileConfig(workerName string) *interfaces.FactoryConfig {
 	return &interfaces.FactoryConfig{
 		WorkTypes: []interfaces.WorkTypeConfig{{
@@ -227,18 +470,36 @@ func accumulatedWorkListProfileRequests(rows int, loopState string) []work.Submi
 
 type accumulatedDispatchExecutor struct {
 	target      int
-	started     chan struct{}
-	releaseCh   chan struct{}
-	releaseOnce sync.Once
+	checkpoints map[int]*dispatchCheckpoint
 	mu          sync.Mutex
 	calls       int
 }
 
 func newAccumulatedDispatchExecutor(target int) *accumulatedDispatchExecutor {
+	return newCheckpointedDispatchExecutor([]int{target})
+}
+
+type dispatchCheckpoint struct {
+	reached     chan struct{}
+	reachedOnce sync.Once
+	release     chan struct{}
+	releaseOnce sync.Once
+}
+
+func newCheckpointedDispatchExecutor(checkpoints []int) *accumulatedDispatchExecutor {
+	if len(checkpoints) == 0 {
+		panic("checkpointed dispatch executor requires at least one checkpoint")
+	}
+	checkpointMap := make(map[int]*dispatchCheckpoint, len(checkpoints))
+	for _, checkpoint := range checkpoints {
+		checkpointMap[checkpoint] = &dispatchCheckpoint{
+			reached: make(chan struct{}),
+			release: make(chan struct{}),
+		}
+	}
 	return &accumulatedDispatchExecutor{
-		target:    target,
-		started:   make(chan struct{}),
-		releaseCh: make(chan struct{}),
+		target:      checkpoints[len(checkpoints)-1],
+		checkpoints: checkpointMap,
 	}
 }
 
@@ -246,11 +507,12 @@ func (e *accumulatedDispatchExecutor) Execute(ctx context.Context, dispatch work
 	e.mu.Lock()
 	e.calls++
 	call := e.calls
+	checkpoint := e.checkpoints[call]
 	e.mu.Unlock()
-	if call == e.target {
-		close(e.started)
+	if checkpoint != nil {
+		checkpoint.reachedOnce.Do(func() { close(checkpoint.reached) })
 		select {
-		case <-e.releaseCh:
+		case <-checkpoint.release:
 		case <-ctx.Done():
 			return workers.WorkResult{}, ctx.Err()
 		}
@@ -271,16 +533,48 @@ func (e *accumulatedDispatchExecutor) Execute(ctx context.Context, dispatch work
 }
 
 func (e *accumulatedDispatchExecutor) waitForTarget(t *testing.T) {
+	e.waitForCheckpoint(t, e.target)
+}
+
+func (e *accumulatedDispatchExecutor) waitForCheckpoint(t *testing.T, target int) {
 	t.Helper()
+	e.mu.Lock()
+	checkpoint := e.checkpoints[target]
+	e.mu.Unlock()
+	if checkpoint == nil {
+		t.Fatalf("dispatch executor has no checkpoint %d", target)
+	}
 	select {
-	case <-e.started:
+	case <-checkpoint.reached:
 	case <-time.After(workListProfileTimeout):
-		t.Fatalf("timed out waiting for accumulated dispatch %d", e.target)
+		t.Fatalf("timed out waiting for accumulated dispatch %d", target)
 	}
 }
 
 func (e *accumulatedDispatchExecutor) release() {
-	e.releaseOnce.Do(func() { close(e.releaseCh) })
+	e.releaseCheckpoint(e.target)
+}
+
+func (e *accumulatedDispatchExecutor) releaseCheckpoint(target int) {
+	e.mu.Lock()
+	checkpoint := e.checkpoints[target]
+	e.mu.Unlock()
+	if checkpoint == nil {
+		return
+	}
+	checkpoint.releaseOnce.Do(func() { close(checkpoint.release) })
+}
+
+func (e *accumulatedDispatchExecutor) releaseAll() {
+	e.mu.Lock()
+	checkpoints := make([]*dispatchCheckpoint, 0, len(e.checkpoints))
+	for _, checkpoint := range e.checkpoints {
+		checkpoints = append(checkpoints, checkpoint)
+	}
+	e.mu.Unlock()
+	for _, checkpoint := range checkpoints {
+		checkpoint.releaseOnce.Do(func() { close(checkpoint.release) })
+	}
 }
 
 type eventSubscriptionSample struct {
@@ -382,6 +676,16 @@ func walkWorkListPages(
 	expectedRequests []work.SubmitRequest,
 	workerLoad int,
 ) ([]workListProfilePage, time.Duration, []string) {
+	return walkWorkListPagesWithHook(t, harness, expectedRequests, workerLoad, nil)
+}
+
+func walkWorkListPagesWithHook(
+	t *testing.T,
+	harness *stressProcessHarness,
+	expectedRequests []work.SubmitRequest,
+	workerLoad int,
+	beforePage func(int),
+) ([]workListProfilePage, time.Duration, []string) {
 	t.Helper()
 	expected := make(map[string]struct{}, len(expectedRequests))
 	for _, request := range expectedRequests {
@@ -394,6 +698,9 @@ func walkWorkListPages(
 	var nextToken string
 	startedWalk := time.Now()
 	for pageNumber := 1; ; pageNumber++ {
+		if beforePage != nil {
+			beforePage(pageNumber)
+		}
 		query := url.Values{}
 		query.Set("maxResults", strconv.Itoa(workListProfilePageSize))
 		if nextToken != "" {
@@ -587,13 +894,18 @@ func logWorkListLatencyProfile(t *testing.T, profile workListLatencyProfile) {
 
 func assertWorkListLatencyTarget(t *testing.T, profile workListLatencyProfile) {
 	t.Helper()
-	for _, page := range profile.pages {
+	assertWorkListLatencyTimingTarget(t, profile.pages, profile.totalWalk)
+}
+
+func assertWorkListLatencyTimingTarget(t *testing.T, pages []workListProfilePage, totalWalk time.Duration) {
+	t.Helper()
+	for _, page := range pages {
 		if page.duration >= workListProfilePageLimit {
 			t.Errorf("Work list profile page %d = %s, want < %s", page.number, page.duration, workListProfilePageLimit)
 		}
 	}
-	if profile.totalWalk >= workListProfileWalkLimit {
-		t.Errorf("Work list profile walk = %s, want < %s", profile.totalWalk, workListProfileWalkLimit)
+	if totalWalk >= workListProfileWalkLimit {
+		t.Errorf("Work list profile walk = %s, want < %s", totalWalk, workListProfileWalkLimit)
 	}
 }
 
