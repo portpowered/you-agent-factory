@@ -24,6 +24,7 @@ type FileSystem interface {
 // Reserver atomically selects a unique path under a dated artifact root.
 type Reserver interface {
 	Reserve(string, time.Time, string, string) (string, error)
+	ReserveNamed(string, time.Time, string, string) (string, error)
 }
 
 type reserver struct{ filesystem FileSystem }
@@ -36,13 +37,27 @@ func NewReserver(filesystem FileSystem) (Reserver, error) {
 }
 
 func (r *reserver) Reserve(root string, at time.Time, kind, suffix string) (string, error) {
+	return r.reserve(root, func(collision int) string {
+		return internalartifact.RuntimeArtifactPathWithCollision(
+			root, at, internalartifact.RuntimeArtifactKind(kind), suffix, collision,
+		)
+	})
+}
+
+// ReserveNamed atomically selects a unique caller-named path under a dated
+// artifact root. The extension is appended exactly as supplied.
+func (r *reserver) ReserveNamed(root string, at time.Time, name, ext string) (string, error) {
+	return r.reserve(root, func(collision int) string {
+		return internalartifact.RuntimeNamedArtifactPathWithCollision(root, at, name, ext, collision)
+	})
+}
+
+func (r *reserver) reserve(root string, pathForCollision func(int) string) (string, error) {
 	if root == "" {
 		return "", fmt.Errorf("runtime artifact root is required")
 	}
 	for collision := 0; collision < maxPathCollisions; collision++ {
-		path := internalartifact.RuntimeArtifactPathWithCollision(
-			root, at, internalartifact.RuntimeArtifactKind(kind), suffix, collision,
-		)
+		path := pathForCollision(collision)
 		if err := r.filesystem.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 			return "", fmt.Errorf("create runtime artifact dir %s: %w", filepath.Dir(path), err)
 		}
