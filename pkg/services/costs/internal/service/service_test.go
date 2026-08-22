@@ -147,6 +147,56 @@ func TestQueryNoUsageAndExplicitZeroRemainDistinct(t *testing.T) {
 	}
 }
 
+func TestQueryUnpricedUsageRetainsCorrelationAndCountsRepeatedRows(t *testing.T) {
+	t.Parallel()
+
+	settings := &settingsReader{document: operatorsettings.Document{PriceTable: operatorsettings.PriceTable{
+		Currency: operatorsettings.PriceTableCurrencyUSD,
+		Models: []operatorsettings.PriceTableModel{{
+			Provider: "codex", Model: "known", InputPerMillionTokens: "1", OutputPerMillionTokens: "1",
+		}},
+	}}}
+	rows := []factoryvisualization.RuntimeMetricsUsageRow{
+		usageRow("session", "work-unknown-a", "dispatch-unknown-a", "worker-unknown-a", "codex", "missing", 10, 20, nil, nil),
+		usageRow("session", "work-unknown-b", "dispatch-unknown-b", "worker-unknown-b", "codex", "missing", 30, 40, nil, nil),
+	}
+	query, err := New(settings, metricsQueryStub(rows, nil), logging.NoopLogger{})
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+
+	report, err := query.Query(context.Background(), validRequest())
+	if err != nil {
+		t.Fatalf("Query() error = %v", err)
+	}
+	if report.Status != costs.StatusUnpriced || report.PricedSubtotal != nil {
+		t.Fatalf("report = %#v, want wholly unpriced report without a fabricated amount", report)
+	}
+	wantCoverage := costs.Coverage{
+		EncounteredRows: 2, PricedRows: 0, UnpricedRows: 2,
+		EncounteredProviderModels: 1, PricedProviderModels: 0, UnpricedProviderModels: 1,
+	}
+	if !reflect.DeepEqual(report.Coverage, wantCoverage) {
+		t.Fatalf("coverage = %#v, want %#v", report.Coverage, wantCoverage)
+	}
+	if len(report.LineItems) != 2 {
+		t.Fatalf("line items = %#v, want two diagnostics", report.LineItems)
+	}
+	for _, line := range report.LineItems {
+		assertUnpricedLineRetainsCorrelation(t, line)
+	}
+}
+
+func assertUnpricedLineRetainsCorrelation(t *testing.T, line costs.LineItem) {
+	t.Helper()
+	if line.Status != costs.StatusUnpriced || line.PricedAmount != nil || line.Provider != "CODEX" || line.Model != "missing" {
+		t.Fatalf("unpriced line = %#v, want safe identity and no amount", line)
+	}
+	if line.DispatchID == "" || line.WorkID == "" || line.WorkerSessionID == "" || !strings.Contains(line.Reason, "no configured price") {
+		t.Fatalf("unpriced diagnostic = %#v, want correlation and stable reason", line)
+	}
+}
+
 func TestQueryScopedSelectionAndDeterministicOutput(t *testing.T) {
 	t.Parallel()
 

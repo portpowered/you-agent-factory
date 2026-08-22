@@ -29,7 +29,6 @@ const (
 	runtimeMetricDispatchComplete           = "dispatch.completed"
 	runtimeMetricDispatchDuration           = "dispatch.duration"
 	runtimeMetricDispatchRetries            = "dispatch.retry_count"
-	runtimeMetricDispatchCost               = "dispatch.cost"
 	runtimeMetricProviderRequest            = "provider.requested"
 	runtimeMetricProviderComplete           = "provider.completed"
 	runtimeMetricProviderFailed             = "provider.failed"
@@ -38,7 +37,6 @@ const (
 	runtimeMetricProviderOutputTok          = "provider.output_tokens"
 	runtimeMetricProviderCachedInputTok     = "provider.cached_input_tokens"
 	runtimeMetricProviderReasoningOutputTok = "provider.reasoning_output_tokens"
-	runtimeMetricProviderCost               = "provider.cost"
 	runtimeMetricScriptStarted              = "script.started"
 	runtimeMetricScriptComplete             = "script.completed"
 	runtimeMetricScriptDuration             = "script.duration"
@@ -72,9 +70,6 @@ func (r *Bundle) RecordCompletionMetrics(record interfaces.FactoryCompletionReco
 	r.emitMetricCounter(runtimeMetricDispatchComplete, 1, metricFields)
 	r.emitMetricSample(runtimeMetricDispatchDuration, float64(record.Result.Metrics.Duration.Milliseconds()), "ms", metricFields)
 	r.emitMetricSample(runtimeMetricDispatchRetries, float64(record.Result.Metrics.RetryCount), "", metricFields)
-	if record.Result.Metrics.Cost > 0 {
-		r.emitMetricSample(runtimeMetricDispatchCost, record.Result.Metrics.Cost, "usd", metricFields)
-	}
 	r.emitWorkerBoundaryCompletionMetrics(record.Result, metricFields)
 	if r.dispatchCompleted != nil {
 		r.dispatchCompleted(record.DispatchID)
@@ -149,9 +144,6 @@ func (r *Bundle) emitProviderCompletionMetrics(
 	}
 	if reasoningOutputTokens, ok := providerMetricMetadataFloat(result.Diagnostics, workerexecution.ProviderResponseMetadataReasoningOutputTokens); ok {
 		r.emitMetricSample(runtimeMetricProviderReasoningOutputTok, reasoningOutputTokens, "tokens", providerFields)
-	}
-	if result.Metrics.Cost > 0 {
-		r.emitMetricSample(runtimeMetricProviderCost, result.Metrics.Cost, "usd", providerFields)
 	}
 }
 
