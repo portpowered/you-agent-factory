@@ -338,6 +338,7 @@ type CompletedDispatch struct {
 	Reason                      string                                        `json:"reason,omitempty"`
 	ArtifactVerification        *workerexecution.ExpectedArtifactVerification `json:"artifact_verification,omitempty"`
 	FailureMetadata             *workerexecution.WorkFailureMetadata          `json:"failure_metadata,omitempty"`
+	FailureDetail               *workerexecution.FailureDetail                `json:"failure_detail,omitempty"`
 	ProviderSession             *providers.SessionMetadata                    `json:"provider_session,omitempty"`
 	StartTime                   time.Time                                     `json:"start_time"`
 	EndTime                     time.Time                                     `json:"end_time"`

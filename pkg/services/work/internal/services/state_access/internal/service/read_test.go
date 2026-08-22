@@ -76,7 +76,7 @@ func TestListWorkDerivesSupersessionBeforeCountsAndPagination(t *testing.T) {
 func supersessionReadSnapshot() work.ReadSnapshot {
 	return work.ReadSnapshot{
 		Items: []work.ReadModel{
-			{CursorID: "tok-old", WorkID: "work-old", Name: "same name", State: &work.State{Type: work.StateTypeFailed}},
+			{CursorID: "tok-old", WorkID: "work-old", Name: "same name", State: &work.State{Type: work.StateTypeFailed}, FailureDetail: &work.FailureDetail{Reason: "SETUP_FAILED", Message: "old setup failure"}},
 			{CursorID: "tok-new", WorkID: "work-new", Name: "same name", State: &work.State{Type: work.StateTypeProcessing}},
 			{CursorID: "tok-fresh", WorkID: "work-fresh", Name: "fresh failure", State: &work.State{Type: work.StateTypeFailed}},
 		},
@@ -142,6 +142,9 @@ func assertIncludedSupersessionHistory(t *testing.T, svc *internalservice.Servic
 	if old.SupersededBy != "work-new" {
 		t.Fatalf("old history row SupersededBy = %q, want work-new", old.SupersededBy)
 	}
+	if old.FailureDetail != nil {
+		t.Fatalf("old history row FailureDetail = %#v, want nil for superseded failed Work", old.FailureDetail)
+	}
 
 	got, err := svc.GetWork(context.Background(), "session-1", "work-old")
 	if err != nil {
@@ -149,6 +152,9 @@ func assertIncludedSupersessionHistory(t *testing.T, svc *internalservice.Servic
 	}
 	if got.SupersededBy != "work-new" {
 		t.Fatalf("GetWork(old).SupersededBy = %q, want work-new", got.SupersededBy)
+	}
+	if got.FailureDetail != nil {
+		t.Fatalf("GetWork(old).FailureDetail = %#v, want nil for superseded failed Work", got.FailureDetail)
 	}
 }
 

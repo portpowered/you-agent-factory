@@ -2,6 +2,7 @@ package script_test
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -88,6 +89,96 @@ func TestScriptWorkerNonZeroExitMapsToFailedOutcome(t *testing.T) {
 	}
 
 	assertScriptNonZeroExitDispatchFailure(t, events, scriptNonZeroExitMessage)
+}
+
+// TestScriptWorkerFailureReachesWorkShowThroughRootProcess proves the complete
+// customer path for an actionable setup-workspace failure: the script result
+// is recorded on the dispatch, projected onto failed Work, returned by the
+// session-scoped HTTP read, and rendered by both root-built CLI output modes.
+func TestScriptWorkerFailureReachesWorkShowThroughRootProcess(t *testing.T) {
+	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "script_executor_dir"))
+	testutil.WriteSeedFile(t, dir, "task", []byte("setup-workspace failure payload"))
+	const diagnostic = "repository root is dirty: 2 tracked changes, 1 untracked file; inspect and commit or back up changes"
+
+	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir: dir,
+		Edges: serviceedges.Edges{
+			ScriptCommandRunner: nonZeroExitCommandRunner{stderr: diagnostic, exitCode: 1},
+		},
+	})
+	support.WaitForTerminalStatus(t, server.URL(), 10*time.Second)
+
+	listed := support.ListDefaultSessionWork(t, server.URL())
+	failedWorkID := failedScriptWorkID(t, listed)
+	listItem := workByID(t, listed, failedWorkID)
+	assertWorkFailureDetail(t, listItem.FailureDetail, diagnostic)
+
+	got := support.GetDefaultSessionWorkByID(t, server.URL(), failedWorkID)
+	assertWorkFailureDetail(t, got.FailureDetail, diagnostic)
+
+	dispatches := support.ObserveDispatchEvents(t, support.GetFactoryEventsAt(t, server.URL()))
+	if len(dispatches) != 1 || dispatches[0].Response == nil {
+		t.Fatalf("dispatch observations = %#v, want one failed response", dispatches)
+	}
+	assertWorkFailureDetail(t, dispatches[0].Response.FailureDetail, diagnostic)
+
+	cliProcess := support.BuildProcess(t, serviceedges.Edges{})
+	support.CleanupProcess(t, cliProcess)
+
+	humanInputs := support.FakeInputs(t.Context(), []string{
+		"you", "--server", server.URL(), "work", "show", failedWorkID,
+	})
+	if err := cliProcess.Execute(humanInputs.Input); err != nil {
+		t.Fatalf("root work show human error = %v\nstdout=%s\nstderr=%s", err, humanInputs.Stdout(), humanInputs.Stderr())
+	}
+	if !strings.Contains(humanInputs.Stdout(), "Failure reason:\tinternal_server_error") ||
+		!strings.Contains(humanInputs.Stdout(), "Failure message:\t"+diagnostic) {
+		t.Fatalf("root work show human output = %q, want typed actionable failure", humanInputs.Stdout())
+	}
+
+	jsonInputs := support.FakeInputs(t.Context(), []string{
+		"you", "--server", server.URL(), "--json", "work", "show", failedWorkID,
+	})
+	if err := cliProcess.Execute(jsonInputs.Input); err != nil {
+		t.Fatalf("root work show JSON error = %v\nstdout=%s\nstderr=%s", err, jsonInputs.Stdout(), jsonInputs.Stderr())
+	}
+	var jsonWork factoryapi.Work
+	if err := json.Unmarshal([]byte(jsonInputs.Stdout()), &jsonWork); err != nil {
+		t.Fatalf("decode root work show JSON: %v\nstdout=%s", err, jsonInputs.Stdout())
+	}
+	assertWorkFailureDetail(t, jsonWork.FailureDetail, diagnostic)
+}
+
+func failedScriptWorkID(t *testing.T, listed factoryapi.ListWorkResponse) string {
+	t.Helper()
+	for _, item := range listed.Results {
+		if item.State == nil || item.State.Name != "failed" {
+			continue
+		}
+		if id := support.StringPointerValue(item.WorkId); id != "" {
+			return id
+		}
+	}
+	t.Fatalf("failed script Work missing from listing: %#v", listed.Results)
+	return ""
+}
+
+func workByID(t *testing.T, listed factoryapi.ListWorkResponse, workID string) factoryapi.Work {
+	t.Helper()
+	for _, item := range listed.Results {
+		if support.StringPointerValue(item.WorkId) == workID {
+			return item
+		}
+	}
+	t.Fatalf("Work %q missing from listing: %#v", workID, listed.Results)
+	return factoryapi.Work{}
+}
+
+func assertWorkFailureDetail(t *testing.T, detail *factoryapi.FailureDetail, diagnostic string) {
+	t.Helper()
+	if detail == nil || detail.Reason != factoryapi.WorkFailureTypeInternalServerError || detail.Message != diagnostic {
+		t.Fatalf("Work failure detail = %#v, want internal_server_error/%q", detail, diagnostic)
+	}
 }
 
 // TestScriptWorkerCancellationTerminatesChildProcess proves cancelling a

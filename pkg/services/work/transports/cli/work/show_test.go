@@ -76,6 +76,64 @@ func TestShow_HumanOutputIncludesWorkSummary(t *testing.T) {
 	}
 }
 
+func TestShow_HumanOutputIncludesCurrentFailureDetail(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if err := json.NewEncoder(w).Encode(factoryapi.Work{
+			Name:   "Plan intake",
+			WorkId: stringPtr("work-plan"),
+			State:  &factoryapi.WorkState{Name: "failed", Type: factoryapi.WorkStateTypeFAILED},
+			FailureDetail: &factoryapi.FailureDetail{
+				Reason:  factoryapi.WorkFailureTypeInternalServerError,
+				Message: "repository root is dirty; inspect and commit or back up changes",
+			},
+		}); err != nil {
+			t.Fatalf("encode response: %v", err)
+		}
+	}))
+	defer srv.Close()
+
+	var out bytes.Buffer
+	if err := NewShow(testHTTPProtocol(t))(ShowConfig{
+		Context: context.Background(), Server: serverBase(t, srv), WorkID: "work-plan", Output: &out,
+	}); err != nil {
+		t.Fatalf("Show: %v", err)
+	}
+	want := "Failure reason:\tinternal_server_error\n" +
+		"Failure message:\trepository root is dirty; inspect and commit or back up changes\n"
+	if !strings.Contains(out.String(), want) {
+		t.Fatalf("output = %q, want current failure detail %q", out.String(), want)
+	}
+}
+
+func TestShow_JSONOutputIncludesFailureDetail(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(factoryapi.Work{
+			WorkId: stringPtr("work-json-failed"),
+			FailureDetail: &factoryapi.FailureDetail{
+				Reason:  factoryapi.WorkFailureTypeInternalServerError,
+				Message: "root setup failed",
+			},
+		})
+	}))
+	defer srv.Close()
+
+	var out bytes.Buffer
+	if err := NewShow(testHTTPProtocol(t))(ShowConfig{
+		Context: context.Background(), Server: serverBase(t, srv), WorkID: "work-json-failed", JSON: true, Output: &out,
+	}); err != nil {
+		t.Fatalf("Show: %v", err)
+	}
+	var got factoryapi.Work
+	if err := json.Unmarshal(out.Bytes(), &got); err != nil {
+		t.Fatalf("decode JSON: %v\n%s", err, out.String())
+	}
+	if got.FailureDetail == nil || got.FailureDetail.Reason != factoryapi.WorkFailureTypeInternalServerError || got.FailureDetail.Message != "root setup failed" {
+		t.Fatalf("failure detail = %#v, want structured JSON detail", got.FailureDetail)
+	}
+}
+
 func TestHumanApprovalCompatibilityWrappersDelegateToApprovalTransport(t *testing.T) {
 	var requestPaths []string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

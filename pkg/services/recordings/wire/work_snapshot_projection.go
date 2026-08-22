@@ -66,6 +66,7 @@ func readModelFromWorkItem(
 		StructuredResultPresent:  jsonvalue.Present(item.StructuredResult, item.StructuredResultPresent),
 		Tags:                     work.CloneTags(item.Tags),
 		ExpectedArtifacts:        expectedArtifactsFromWorldItem(item, state),
+		FailureDetail:            currentWorkFailureDetail(item, state),
 	}
 	read.State = workStateFromItem(item, state, inFlight)
 	read.HumanApproval = humanApprovalForWork(item.ID, state)
@@ -79,6 +80,43 @@ func readModelFromWorkItem(
 		})
 	}
 	return read
+}
+
+// currentWorkFailureDetail exposes only the detail for the dispatch that left
+// the Work in its current FAILED state. FailureDetailsByWorkID intentionally
+// retains historical diagnostics for replay, so it must not be projected onto
+// a Work that has since recovered or was never failed.
+func currentWorkFailureDetail(
+	item work.FactoryWorkItem,
+	state factorydefinitions.FactoryWorldState,
+) *work.FailureDetail {
+	if _, failed := state.FailedWorkItemsByID[item.ID]; !failed {
+		return nil
+	}
+	for index := len(state.FailedDispatches) - 1; index >= 0; index-- {
+		dispatch := state.FailedDispatches[index]
+		if !worldDispatchContainsWork(
+			dispatch.WorkItemIDs,
+			dispatch.ConsumedInputs,
+			dispatch.InputWorkItems,
+			dispatch.OutputWorkItems,
+			item.ID,
+		) {
+			continue
+		}
+		return detachedWorkFailureDetail(dispatch.Result.FailureDetail)
+	}
+	if detail, ok := state.FailureDetailsByWorkID[item.ID]; ok {
+		return detachedWorkFailureDetail(detail.FailureDetail)
+	}
+	return nil
+}
+
+func detachedWorkFailureDetail(detail *workers.FailureDetail) *work.FailureDetail {
+	if detail == nil {
+		return nil
+	}
+	return &work.FailureDetail{Reason: string(detail.Reason), Message: detail.Message}
 }
 
 func humanApprovalForWork(workID string, state factorydefinitions.FactoryWorldState) *work.HumanApprovalReadModel {

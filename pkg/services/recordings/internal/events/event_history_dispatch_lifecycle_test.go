@@ -289,6 +289,27 @@ func TestFailureDetailsForResult_FailureMetadataOverridesWorkerErrorReason(t *te
 	}
 }
 
+func TestFailureDetailsForResult_TypedDetailOverridesFallbacks(t *testing.T) {
+	reason, message := failureDetailsForResult(workerexecution.WorkResult{
+		DispatchID:      "dispatch-script-failure",
+		TransitionID:    "build",
+		Outcome:         workerexecution.OutcomeFailed,
+		Error:           "script exited with status 1",
+		FailureMetadata: &workerexecution.WorkFailureMetadata{Type: workerexecution.WorkFailureTypeUnknown},
+		FailureDetail: &workerexecution.FailureDetail{
+			Reason:  workerexecution.WorkFailureTypeInternalServerError,
+			Message: "script exited with status 1: repository root is dirty",
+		},
+	})
+
+	if reason != string(workerexecution.WorkFailureTypeInternalServerError) {
+		t.Fatalf("failure reason = %q, want internal server error", reason)
+	}
+	if message != "script exited with status 1: repository root is dirty" {
+		t.Fatalf("failure message = %q, want typed diagnostic", message)
+	}
+}
+
 func TestFailureDetailsForResult_ClassifierInvalidOutputPreservesRawOutputEvidence(t *testing.T) {
 	reason, message := failureDetailsForResult(workerexecution.WorkResult{
 		DispatchID:   "dispatch-classifier-invalid",

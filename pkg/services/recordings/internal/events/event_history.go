@@ -874,6 +874,14 @@ func failureDetailsForResult(result workers.WorkResult) (string, string) {
 
 	reason := failureReasonForResult(result)
 	message := strings.TrimSpace(result.Error)
+	if result.FailureDetail != nil {
+		if typedReason := strings.TrimSpace(string(result.FailureDetail.Reason)); typedReason != "" {
+			reason = typedReason
+		}
+		if typedMessage := strings.TrimSpace(result.FailureDetail.Message); typedMessage != "" {
+			message = typedMessage
+		}
+	}
 	if message == "" {
 		message = failureMessageUnavailable
 	}

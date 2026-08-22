@@ -304,6 +304,7 @@ func (t *TransitionerSubsystem) buildCompletedDispatch(
 		Reason:                      completedDispatchReason(resolved),
 		ArtifactVerification:        result.ArtifactVerification.Clone(),
 		FailureMetadata:             failureMetadata,
+		FailureDetail:               workerexecution.CloneFailureDetail(result.FailureDetail),
 		ProviderSession:             (result.Continuation).SessionMetadata(),
 		EndTime:                     endTime,
 		ConsumedTokens:              factorytoken.ToWorkerSlice(consumedTokens),

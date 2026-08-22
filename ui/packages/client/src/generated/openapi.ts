@@ -7141,6 +7141,8 @@ export interface components {
       stopSummary?: components["schemas"]["FactoryStopSummary"];
       /** @description Pending HUMAN_APPROVAL request currently owning this Work item, when present. */
       humanApproval?: components["schemas"]["HumanApproval"];
+      /** @description Most recent bounded failure detail when this Work item is currently in a failed state. */
+      failureDetail?: components["schemas"]["FailureDetail"];
     };
     /** @description Ordered canonical content parts for one work item. */
     WorkContent: components["schemas"]["WorkContentPart"][];

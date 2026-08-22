@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"sort"
+	"strings"
 
 	"github.com/portpowered/infinite-you/pkg/platform/jsonvalue"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
@@ -223,11 +224,55 @@ func runtimeWorkItem(
 		readFacts = facts[0]
 	}
 	name := runtimeFirstNonEmpty(token.Color.Name, token.Color.WorkID, token.ID)
-	item := work.ReadModel{CursorID: token.ID, Name: name, WorkID: token.Color.WorkID, RequestID: token.Color.RequestID, WorkTypeName: token.Color.WorkTypeID, State: runtimeWorkState(token, net, inFlight), ChainingTraceDepth: token.Color.ChainingTraceDepth, CurrentChainingTraceID: runtimeFirstNonEmpty(token.Color.CurrentChainingTraceID, token.Color.TraceID), PreviousChainingTraceIDs: append([]string(nil), token.Color.PreviousChainingTraceIDs...), TraceID: token.Color.TraceID, Content: work.CloneWorkContentParts(token.Color.Content), StructuredResult: jsonvalue.Clone(token.Color.StructuredResult), StructuredResultPresent: jsonvalue.Present(token.Color.StructuredResult, token.Color.StructuredResultPresent), Tags: work.CloneTags(token.Color.Tags), ExpectedArtifacts: (factoryruntime.WorkArtifactProjection{}).Project(factoryruntime.WorkArtifactProjectionInput{Token: token, Topology: net, Dispatches: readFacts.dispatches, DispatchHistory: readFacts.dispatchHistory, Results: readFacts.results})}
+	state := runtimeWorkState(token, net, inFlight)
+	item := work.ReadModel{CursorID: token.ID, Name: name, WorkID: token.Color.WorkID, RequestID: token.Color.RequestID, WorkTypeName: token.Color.WorkTypeID, State: state, FailureDetail: runtimeWorkFailureDetail(token.Color.WorkID, state, readFacts.dispatchHistory, readFacts.results), ChainingTraceDepth: token.Color.ChainingTraceDepth, CurrentChainingTraceID: runtimeFirstNonEmpty(token.Color.CurrentChainingTraceID, token.Color.TraceID), PreviousChainingTraceIDs: append([]string(nil), token.Color.PreviousChainingTraceIDs...), TraceID: token.Color.TraceID, Content: work.CloneWorkContentParts(token.Color.Content), StructuredResult: jsonvalue.Clone(token.Color.StructuredResult), StructuredResultPresent: jsonvalue.Present(token.Color.StructuredResult, token.Color.StructuredResultPresent), Tags: work.CloneTags(token.Color.Tags), ExpectedArtifacts: (factoryruntime.WorkArtifactProjection{}).Project(factoryruntime.WorkArtifactProjectionInput{Token: token, Topology: net, Dispatches: readFacts.dispatches, DispatchHistory: readFacts.dispatchHistory, Results: readFacts.results})}
 	for _, relation := range token.Color.Relations {
 		item.Relations = append(item.Relations, work.ReadRelation{Type: relation.Type, SourceWorkName: name, TargetWorkName: runtimeFirstNonEmpty(names[relation.TargetWorkID], relation.TargetWorkID), TargetWorkID: relation.TargetWorkID, RequiredState: relation.RequiredState})
 	}
 	return item
+}
+
+func runtimeWorkFailureDetail(
+	workID string,
+	state *work.State,
+	history []factoryruntime.CompletedDispatch,
+	results []workers.WorkResult,
+) *work.FailureDetail {
+	if strings.TrimSpace(workID) == "" || state == nil || state.Type != work.StateTypeFailed {
+		return nil
+	}
+	for index := len(history) - 1; index >= 0; index-- {
+		dispatch := history[index]
+		if dispatch.Outcome != workers.OutcomeFailed || !runtimeCompletedDispatchContainsWork(dispatch, workID) {
+			continue
+		}
+		if dispatch.FailureDetail != nil {
+			return &work.FailureDetail{Reason: string(dispatch.FailureDetail.Reason), Message: dispatch.FailureDetail.Message}
+		}
+		for resultIndex := len(results) - 1; resultIndex >= 0; resultIndex-- {
+			result := results[resultIndex]
+			if result.DispatchID != dispatch.DispatchID || result.FailureDetail == nil {
+				continue
+			}
+			return &work.FailureDetail{Reason: string(result.FailureDetail.Reason), Message: result.FailureDetail.Message}
+		}
+		return nil
+	}
+	return nil
+}
+
+func runtimeCompletedDispatchContainsWork(dispatch factoryruntime.CompletedDispatch, workID string) bool {
+	for _, token := range dispatch.ConsumedTokens {
+		if token.Color.WorkID == workID {
+			return true
+		}
+	}
+	for _, mutation := range dispatch.OutputMutations {
+		if mutation.TokenID == workID || (mutation.Token != nil && mutation.Token.Color.WorkID == workID) {
+			return true
+		}
+	}
+	return false
 }
 
 func runtimeWorkState(token *workers.Token, net *legacysnapshot.RuntimeTopology, inFlight bool) *work.State {

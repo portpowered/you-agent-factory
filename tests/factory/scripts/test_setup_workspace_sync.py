@@ -38,6 +38,10 @@ def init_local_repo(repo_path):
     readme.write_text("setup-workspace test repo\n", encoding="utf-8")
     subprocess.run(["git", "add", "README.md"], cwd=repo_path, check=True)
     subprocess.run(["git", "commit", "-m", "init"], cwd=repo_path, check=True)
+    (repo_path / ".git" / "info" / "exclude").write_text(
+        "tasks/todo/\n.claude/\n",
+        encoding="utf-8",
+    )
 
 
 def git(args, cwd, check=True):
@@ -72,6 +76,10 @@ def setup_repo_with_origin_main_ahead(local_repo, repo_root):
     git(["push", "origin", "main"], upstream)
 
     git(["clone", str(bare_remote), str(local_repo.name)], repo_root)
+    (local_repo / ".git" / "info" / "exclude").write_text(
+        "tasks/todo/\n.claude/\n",
+        encoding="utf-8",
+    )
     git(["reset", "--hard", "HEAD~1"], local_repo)
     git(["checkout", "-b", "feature-branch"], local_repo)
     (local_repo / "dirty.txt").write_text("unstaged change\n", encoding="utf-8")
@@ -380,9 +388,7 @@ class SetupWorkspaceSyncTest(unittest.TestCase):
             encoding="utf-8",
         )
 
-        original_root = self.module.get_repo_root
         original_restore = self.module.restore_stashed_changes
-        original_argv = self.module.sys.argv
         captured_snapshot = []
         interfering_stash = []
 
@@ -423,26 +429,22 @@ class SetupWorkspaceSyncTest(unittest.TestCase):
             self.assertNotEqual(snapshot_check.returncode, 0)
             return original_restore(repo_path, snapshot_id, scope_label)
 
-        self.module.get_repo_root = lambda: local_repo
         self.module.restore_stashed_changes = invalidate_snapshot
-        self.module.sys.argv = ["setup-workspace.py", prd_name]
         stderr = io.StringIO()
         try:
             with contextlib.redirect_stderr(stderr):
-                with self.assertRaises(SystemExit) as exit_context:
-                    self.module.main()
+                with self.assertRaises(RuntimeError) as raised:
+                    self.module.sync_main(local_repo)
         finally:
-            self.module.get_repo_root = original_root
             self.module.restore_stashed_changes = original_restore
-            self.module.sys.argv = original_argv
 
-        self.assertEqual(exit_context.exception.code, 1)
+        self.assertIn("could not verify snapshot", str(raised.exception))
         self.assertEqual(len(captured_snapshot), 1)
         self.assertEqual(len(interfering_stash), 1)
         snapshot_id = captured_snapshot[0]
         self.assertIn(
-            f"Root sync failed: root main sync could not verify snapshot {snapshot_id}",
-            stderr.getvalue(),
+            f"root main sync could not verify snapshot {snapshot_id}",
+            str(raised.exception),
         )
         self.assertEqual(stash_list(local_repo), [interfering_stash[0], *stack_before])
         self.assertFalse((local_repo / "interfering-only.txt").exists())
@@ -607,7 +609,7 @@ class SetupWorkspaceSyncTest(unittest.TestCase):
         )
         self.assertFalse(any(args and args[0] == "checkout" for args in recorded))
 
-    def test_setup_workspace_exits_zero_through_sync_on_dirty_tree(self):
+    def test_setup_workspace_refuses_dirty_tree_before_sync(self):
         local_repo = self.repo_path / "local"
         setup_repo_with_origin_main_ahead(local_repo, self.repo_path)
 
@@ -628,21 +630,18 @@ class SetupWorkspaceSyncTest(unittest.TestCase):
             check=False,
         )
 
-        self.assertEqual(result.returncode, 0, result.stderr)
-        origin_main_sha = git(
-            ["rev-parse", "refs/remotes/origin/main"],
-            local_repo,
-        ).stdout.strip()
-        local_main_sha = git(
-            ["rev-parse", "refs/heads/main"],
-            local_repo,
-        ).stdout.strip()
-        self.assertEqual(local_main_sha, origin_main_sha)
+        self.assertEqual(result.returncode, 1, result.stdout)
+        self.assertEqual(result.stdout, "")
+        self.assertIn("repository root is dirty", result.stderr.lower())
+        self.assertNotIn("Root sync:", result.stderr)
         self.assertEqual(
             git(["branch", "--show-current"], local_repo).stdout.strip(),
             "feature-branch",
         )
         self.assertIn("?? dirty.txt", git(["status", "--porcelain"], local_repo).stdout)
+        self.assertFalse(
+            (local_repo / ".claude" / "worktrees" / prd_name).exists()
+        )
 
     def test_setup_workspace_continues_after_sync_skip(self):
         init_local_repo(self.repo_path)
@@ -696,18 +695,18 @@ class SetupWorkspaceSyncTest(unittest.TestCase):
             check=False,
         )
 
-        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.returncode, 1, result.stdout)
+        self.assertEqual(result.stdout, "")
+        self.assertIn("repository root is dirty", result.stderr.lower())
         self.assertIn("A  staged.txt", git(["status", "--porcelain"], local_repo).stdout)
         self.assertIn("?? dirty.txt", git(["status", "--porcelain"], local_repo).stdout)
         self.assertEqual(
             staged_file.read_text(encoding="utf-8"),
             "staged change\n",
         )
-        payload = json.loads(result.stdout)
-        worktree_path = Path(payload["worktree"])
-        self.assertTrue(worktree_path.exists())
-        self.assertTrue((worktree_path / "prd.json").exists())
-        self.assertIn("Root sync:", result.stderr)
+        self.assertFalse(
+            (local_repo / ".claude" / "worktrees" / prd_name).exists()
+        )
 
     def test_setup_workspace_reports_stashed_sync_on_dirty_main_checkout(self):
         local_repo = self.repo_path / "local"
@@ -734,11 +733,12 @@ class SetupWorkspaceSyncTest(unittest.TestCase):
             check=False,
         )
 
-        self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertIn("Root sync:", result.stderr)
-        self.assertIn("stashed local changes", result.stderr.lower())
+        self.assertEqual(result.returncode, 1, result.stdout)
+        self.assertEqual(result.stdout, "")
+        self.assertIn("repository root is dirty", result.stderr.lower())
+        self.assertNotIn("Root sync:", result.stderr)
         self.assertIn("?? dirty-main.txt", git(["status", "--porcelain"], local_repo).stdout)
-        self.assertEqual(
+        self.assertNotEqual(
             git(["rev-parse", "refs/heads/main"], local_repo).stdout.strip(),
             git(["rev-parse", "refs/remotes/origin/main"], local_repo).stdout.strip(),
         )

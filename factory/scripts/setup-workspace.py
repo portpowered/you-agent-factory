@@ -27,8 +27,111 @@ IMMUTABLE_OBJECT_ID = re.compile(r"^(?:[0-9a-f]{40}|[0-9a-f]{64})$")
 SNAPSHOT_REF_PREFIX = "refs/factory-snapshots/"
 ROOT_SYNC_LOCK_FILENAME = "setup-workspace-root-sync.lock"
 MAX_ANCESTOR_RESIDUE_PATHS = 20
+MAX_DIRTY_ROOT_SAMPLE_ENTRIES = 12
+MAX_STATUS_FAILURE_DETAILS = 512
+MAX_FAILURE_DETAILS = 1024
+MAX_DISPLAYED_STATUS_PATH_LENGTH = 240
+WINDOWS_RESERVED_PATH_COMPONENT = re.compile(
+    r"(?<![a-z0-9])(?:nul|con|prn|aux|com[1-9]|lpt[1-9])"
+    r"(?:\.[^\\/:*?\"<>|\r\n]*)?(?![a-z0-9])",
+    re.IGNORECASE,
+)
 _ROOT_SYNC_THREAD_LOCKS = {}
 _ROOT_SYNC_THREAD_LOCKS_GUARD = threading.Lock()
+
+
+class DirtyRootError(RuntimeError):
+    """A bounded, already-rendered diagnostic for an operator-owned root."""
+
+
+def raw_failure_details(error):
+    """Return an exception's text without allowing rendering to raise again."""
+    try:
+        return str(error).strip()
+    except Exception as render_error:  # noqa: BLE001 - defensive boundary
+        return (
+            f"{type(error).__name__} details could not be rendered: "
+            f"{type(render_error).__name__}"
+        )
+
+
+def bounded_failure_details(value, limit=MAX_FAILURE_DETAILS):
+    """Safely render and bound command or exception details for the terminal."""
+    details = (
+        raw_failure_details(value)
+        if not isinstance(value, str)
+        else value.strip()
+    )
+    rendered = []
+    for character in details:
+        codepoint = ord(character)
+        if character == "\n":
+            rendered.append("\n")
+        elif character == "\t":
+            rendered.append("\\t")
+        elif character == "\r":
+            rendered.append("\\r")
+        elif (
+            codepoint < 0x20
+            or codepoint == 0x7F
+            or 0xD800 <= codepoint <= 0xDFFF
+        ):
+            rendered.append(f"\\u{codepoint:04x}")
+        else:
+            rendered.append(character)
+
+    result = "".join(rendered)
+    if len(result) <= limit:
+        return result
+    omitted = len(result) - limit
+    suffix = f"... ({omitted} more characters)"
+    return f"{result[: max(0, limit - len(suffix))]}{suffix}"
+
+
+def is_platform_invalid_path_failure(details):
+    """Recognize Git and Windows messages for paths unavailable to the host."""
+    lowered = details.casefold()
+    if "\x00" in lowered or "\\u0000" in lowered:
+        return True
+    if "invalid path" in lowered or "invalid filename" in lowered:
+        return True
+    if "path" in lowered and "invalid" in lowered:
+        return True
+
+    has_reserved_component = bool(WINDOWS_RESERVED_PATH_COMPONENT.search(details))
+    if not has_reserved_component:
+        return False
+    return any(
+        marker in lowered
+        for marker in (
+            "not allowed",
+            "not valid",
+            "cannot create",
+            "could not create",
+            "checkout",
+            "worktree",
+            "windows",
+            "win32",
+        )
+    )
+
+
+def format_stage_failure(stage, error):
+    """Render bounded, actionable failure text while preserving the stage."""
+    raw_details = raw_failure_details(error)
+    details = bounded_failure_details(raw_details)
+    if not details:
+        details = f"unexpected {type(error).__name__} without additional details"
+
+    if is_platform_invalid_path_failure(raw_details):
+        return (
+            f"{stage}: Git rejected a Windows-reserved or otherwise "
+            "platform-invalid path (for example, the literal NUL device name). "
+            "Inspect the reported path, manually back up any needed content, "
+            "then remove or rename that path before retrying; setup-workspace "
+            f"does not modify it automatically. Details: {details}"
+        )
+    return f"{stage}: {details}"
 
 
 def run_git(*args, cwd=None, check=True, env=None):
@@ -38,11 +141,15 @@ def run_git(*args, cwd=None, check=True, env=None):
         cwd=cwd,
         capture_output=True,
         text=True,
+        encoding="utf-8",
+        errors="surrogateescape",
         env=env,
     )
     if check and result.returncode != 0:
         raise RuntimeError(
-            f"git {' '.join(args)} failed (exit {result.returncode}): {result.stderr.strip()}"
+            f"git {bounded_failure_details(' '.join(args))} failed "
+            f"(exit {result.returncode}): "
+            f"{command_failure_details(result)}"
         )
     return result
 
@@ -66,9 +173,177 @@ def working_tree_has_local_changes(repo_path):
     return bool(status.stdout.strip())
 
 
+def truncate_status_details(details):
+    """Keep status-command failures useful without emitting unbounded output."""
+    return bounded_failure_details(details, MAX_STATUS_FAILURE_DETAILS)
+
+
+def parse_porcelain_status(output):
+    """Parse NUL-delimited porcelain-v1 status entries safely."""
+    entries = []
+    tokens = output.split("\0")
+    token_index = 0
+    while token_index < len(tokens):
+        token = tokens[token_index]
+        token_index += 1
+        if not token:
+            continue
+        if len(token) < 4 or token[2] != " ":
+            raise RuntimeError(
+                "git status returned malformed porcelain output"
+            )
+
+        status = token[:2]
+        paths = [token[3:]]
+        if "R" in status or "C" in status:
+            if token_index >= len(tokens) or not tokens[token_index]:
+                raise RuntimeError(
+                    "git status returned an incomplete rename or copy entry"
+                )
+            paths.append(tokens[token_index])
+            token_index += 1
+        entries.append({"status": status, "paths": tuple(paths)})
+
+    return entries
+
+
+def repository_status_entries(repo_path):
+    """Return non-ignored root status entries, or raise a bounded failure."""
+    try:
+        result = run_git(
+            "status",
+            "--porcelain=v1",
+            "-z",
+            "--untracked-files=all",
+            cwd=repo_path,
+            check=False,
+        )
+    except OSError as error:
+        raise RuntimeError(f"could not run git status: {error}") from error
+
+    if result.returncode != 0:
+        details = truncate_status_details(command_failure_details(result))
+        raise RuntimeError(
+            "git status --porcelain=v1 failed "
+            f"(exit {result.returncode}): {details}"
+        )
+
+    try:
+        return parse_porcelain_status(result.stdout)
+    except RuntimeError as error:
+        raise RuntimeError(f"could not inspect repository status: {error}") from error
+
+
+def status_entry_kind(entry):
+    """Return the operator-facing category for one porcelain status entry."""
+    return "untracked" if entry["status"] == "??" else "tracked"
+
+
+def status_entry_sort_key(entry):
+    """Return a stable sort key independent of Git's presentation order."""
+    kind_order = 0 if status_entry_kind(entry) == "tracked" else 1
+    return kind_order, entry["paths"], entry["status"]
+
+
+def status_entry_path(entry):
+    """Render one status path as a safely escaped, bounded display value."""
+    paths = entry["paths"]
+    if "R" in entry["status"] or "C" in entry["status"]:
+        paths = tuple(reversed(paths))
+
+    rendered_paths = []
+    for path in paths:
+        if len(path) > MAX_DISPLAYED_STATUS_PATH_LENGTH:
+            path = (
+                path[: MAX_DISPLAYED_STATUS_PATH_LENGTH - 1]
+                + "…"
+            )
+        rendered_paths.append(json.dumps(path, ensure_ascii=True))
+    return " -> ".join(rendered_paths)
+
+
+def dirty_root_sample(entries):
+    """Select a stable bounded sample while retaining both status categories."""
+    grouped = {
+        "tracked": sorted(
+            (entry for entry in entries if status_entry_kind(entry) == "tracked"),
+            key=status_entry_sort_key,
+        ),
+        "untracked": sorted(
+            (entry for entry in entries if status_entry_kind(entry) == "untracked"),
+            key=status_entry_sort_key,
+        ),
+    }
+
+    sample = [group[0] for group in grouped.values() if group]
+    remaining = [
+        entry
+        for entry in entries
+        if all(entry is not selected for selected in sample)
+    ]
+    remaining.sort(key=status_entry_sort_key)
+    sample.extend(remaining[: max(0, MAX_DIRTY_ROOT_SAMPLE_ENTRIES - len(sample))])
+    sample.sort(key=status_entry_sort_key)
+    return sample
+
+
+def dirty_root_diagnostic(repo_path, entries):
+    """Describe dirty-root evidence and safe manual recovery guidance."""
+    tracked_count = sum(
+        status_entry_kind(entry) == "tracked" for entry in entries
+    )
+    untracked_count = len(entries) - tracked_count
+    sample = dirty_root_sample(entries)
+    omitted_count = len(entries) - len(sample)
+
+    lines = [
+        f"repository root is dirty: {repo_path}",
+        "status counts: "
+        f"total entries={len(entries)}; "
+        f"tracked changes={tracked_count}; "
+        f"untracked files={untracked_count}",
+        "workspace setup stopped before root synchronization, snapshot "
+        "capture, worktree preparation, pruning, or PRD copy",
+        f"status sample (up to {MAX_DIRTY_ROOT_SAMPLE_ENTRIES} entries):",
+    ]
+
+    for kind in ("tracked", "untracked"):
+        lines.append(f"  {kind}:")
+        category_sample = [
+            entry for entry in sample if status_entry_kind(entry) == kind
+        ]
+        if not category_sample:
+            lines.append("    (none)")
+            continue
+        for entry in category_sample:
+            lines.append(
+                f"    {entry['status']} {status_entry_path(entry)}"
+            )
+
+    if omitted_count:
+        lines.append(
+            f"  {omitted_count} additional path(s) omitted from the sample"
+        )
+    lines.append(
+        "Inspect the repository root manually, then commit the changes or "
+        "back them up and restore them manually before retrying."
+    )
+    return "\n".join(lines)
+
+
+def ensure_clean_repository_root(repo_root):
+    """Refuse setup before any root synchronization or workspace mutation."""
+    entries = repository_status_entries(repo_root)
+    if entries:
+        raise DirtyRootError(dirty_root_diagnostic(repo_root, entries))
+
+
 def command_failure_details(result):
     """Return useful stderr/stdout text from a failed git command."""
-    return (result.stderr or result.stdout).strip() or "no details available"
+    return (
+        bounded_failure_details(result.stderr or result.stdout)
+        or "no details available"
+    )
 
 
 def require_git_output(result, description):
@@ -380,9 +655,9 @@ def restore_stashed_changes(repo_path, snapshot_id, scope_label):
             cwd=repo_path, check=False,
         )
         if fallback_result.returncode != 0:
-            details = (fallback_result.stderr or fallback_result.stdout).strip()
-            if not details:
-                details = (apply_result.stderr or apply_result.stdout).strip()
+            details = command_failure_details(fallback_result)
+            if details == "no details available":
+                details = command_failure_details(apply_result)
             # A failed apply leaves a half-applied, possibly conflicted tree.
             # Unmerged index entries make every later snapshot capture fail,
             # which wedges all future workspace setups until a human cleans
@@ -664,11 +939,14 @@ def _sync_main(repo_root):
     fetch_succeeded = fetch_result.returncode == 0
     if not fetch_succeeded:
         if local_main_ref_exists(repo_root):
-            return f"skipped (fetch failed: {fetch_result.stderr.strip()})"
+            return (
+                "skipped (fetch failed: "
+                f"{command_failure_details(fetch_result)})"
+            )
         if not origin_main_ref_exists(repo_root):
             raise RuntimeError(
                 "fetch failed and refs/heads/main is missing: "
-                f"{fetch_result.stderr.strip()}"
+                f"{command_failure_details(fetch_result)}"
             )
 
     remote_sha = resolve_remote_main_sha(repo_root, fetch_succeeded)
@@ -913,8 +1191,11 @@ def copy_standing_rules(repo_root, worktree_path):
     try:
         dest.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(str(source), str(dest))
-    except OSError as e:
-        print(f"Standing-rules copy skipped: {e}", file=sys.stderr)
+    except Exception as e:  # noqa: BLE001 - this optional copy must stay non-fatal
+        print(
+            format_stage_failure("Standing-rules copy skipped", e),
+            file=sys.stderr,
+        )
         return None
 
     return dest
@@ -929,14 +1210,20 @@ def main():
 
     try:
         repo_root = get_repo_root()
-    except RuntimeError as e:
-        print(f"Failed to discover repo root: {e}", file=sys.stderr)
+    except Exception as e:  # noqa: BLE001 - CLI boundary must classify all failures
+        print(format_stage_failure("Failed to discover repo root", e), file=sys.stderr)
         sys.exit(1)
 
     # Locate PRD files.
     prd_json_path = repo_root / "tasks" / "todo" / f"{prd_name}.json"
     if not prd_json_path.exists():
-        print(f"PRD not found: {prd_json_path}", file=sys.stderr)
+        print(
+            format_stage_failure(
+                "Failed to read PRD",
+                f"PRD not found: {prd_json_path}",
+            ),
+            file=sys.stderr,
+        )
         sys.exit(1)
 
     prd_md_path = repo_root / "tasks" / "todo" / f"{prd_name}.md"
@@ -946,8 +1233,8 @@ def main():
     # Read the PRD to catch malformed input; the branch name is the work item name.
     try:
         read_prd(prd_json_path)
-    except (json.JSONDecodeError, OSError) as e:
-        print(f"Failed to read PRD: {e}", file=sys.stderr)
+    except Exception as e:  # noqa: BLE001 - CLI boundary must classify all failures
+        print(format_stage_failure("Failed to read PRD", e), file=sys.stderr)
         sys.exit(1)
 
     branch = f"{prd_name}"
@@ -955,28 +1242,46 @@ def main():
         print("PRD name must not be empty", file=sys.stderr)
         sys.exit(1)
 
+    # Root setup is deliberately fail-closed: the legacy synchronization path
+    # can snapshot and restore local changes, but intake must not mutate an
+    # operator's repository before the lane has even been created.
+    try:
+        ensure_clean_repository_root(repo_root)
+    except DirtyRootError as e:
+        print(f"Root cleanliness check failed: {e}", file=sys.stderr)
+        sys.exit(1)
+    except Exception as e:  # noqa: BLE001 - CLI boundary must classify all failures
+        print(
+            format_stage_failure("Root cleanliness check failed", e),
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
     # Sync main and prune worktrees.
     try:
         sync_outcome = sync_main(repo_root)
         print(f"Root sync: {sync_outcome}", file=sys.stderr)
         prune_worktrees(repo_root)
-    except RuntimeError as e:
-        print(f"Root sync failed: {e}", file=sys.stderr)
+    except Exception as e:  # noqa: BLE001 - CLI boundary must classify all failures
+        print(format_stage_failure("Root sync failed", e), file=sys.stderr)
         sys.exit(1)
 
     # Create or reuse worktree.
     worktree_dir = repo_root / ".claude" / "worktrees" / normalize_branch(branch)
     try:
         reused = create_or_reuse_worktree(repo_root, branch, worktree_dir)
-    except RuntimeError as e:
-        print(f"Worktree preparation failed: {e}", file=sys.stderr)
+    except Exception as e:  # noqa: BLE001 - CLI boundary must classify all failures
+        print(
+            format_stage_failure("Worktree preparation failed", e),
+            file=sys.stderr,
+        )
         sys.exit(1)
 
     # Copy PRD files into worktree.
     try:
         dest_json, dest_md = copy_prd_files(prd_json_path, prd_md_path, worktree_dir)
-    except OSError as e:
-        print(f"PRD copy failed: {e}", file=sys.stderr)
+    except Exception as e:  # noqa: BLE001 - CLI boundary must classify all failures
+        print(format_stage_failure("PRD copy failed", e), file=sys.stderr)
         sys.exit(1)
 
     # Copy the operator standing-rules doc referenced by lane payloads.

@@ -556,6 +556,11 @@ func TestDetachedScriptProcessFailureDoesNotPropagateRetryMetadata(t *testing.T)
 	if result.Result.Outcome != workers.OutcomeFailed || result.Result.Error != "script exited with status 1" {
 		t.Fatalf("result = %#v, want terminal failed result", result.Result)
 	}
+	if result.Result.FailureDetail == nil ||
+		result.Result.FailureDetail.Reason != workers.WorkFailureTypeInternalServerError ||
+		result.Result.FailureDetail.Message != "script exited with status 1" {
+		t.Fatalf("failure detail = %#v, want canonical script diagnostic", result.Result.FailureDetail)
+	}
 }
 
 func TestAttemptLifecycleRejectsConflictingWorkerCorrelation(t *testing.T) {

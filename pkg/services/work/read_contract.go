@@ -59,9 +59,18 @@ type ReadModel struct {
 	StructuredResultPresent bool
 	Tags                    map[string]string
 	Relations               []ReadRelation
+	FailureDetail           *FailureDetail
 	StopSummary             *StopSummary
 	HumanApproval           *HumanApprovalReadModel
 	ExpectedArtifacts       []ExpectedArtifactReadModel
+}
+
+// FailureDetail is the bounded, customer-safe explanation of the dispatch
+// that currently leaves this Work in a failed state. Work owns this detached
+// read shape so transports do not depend on the Workers execution contract.
+type FailureDetail struct {
+	Reason  string
+	Message string
 }
 
 // HumanApprovalReadModel links a Work read to the durable pending operator

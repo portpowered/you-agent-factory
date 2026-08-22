@@ -142,6 +142,7 @@ func providerInvocationFailure(
 		TransitionID:    request.Dispatch.TransitionID,
 		Outcome:         workerexecution.OutcomeFailed,
 		FailureMetadata: result.FailureMetadata,
+		FailureDetail:   workerexecution.CloneFailureDetail(result.FailureDetail),
 		Continuation:    cloneContinuation(result.Continuation),
 	}
 	if result.FailureDetail != nil {

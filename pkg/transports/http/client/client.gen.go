@@ -8054,6 +8054,7 @@ type Work struct {
 
 	// ExpectedArtifacts Effective expected artifact declarations and their latest recorded verification state.
 	ExpectedArtifacts *[]WorkExpectedArtifact `json:"expectedArtifacts,omitempty"`
+	FailureDetail     *FailureDetail          `json:"failureDetail,omitempty"`
 
 	// HumanApproval Safe read-only projection of one durable pending HUMAN_APPROVAL dispatch. The event ledger owns identity and status; display metadata is resolved from the effective factory topology.
 	HumanApproval *HumanApproval `json:"humanApproval,omitempty"`
