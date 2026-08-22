@@ -233,116 +233,91 @@ func TestHandlerPullModelOwnsErrorMapping(t *testing.T) {
 	}
 }
 
-// TestModelsHTTPCharacterizationSuccessResponses pins the complete JSON bodies
-// emitted by the public Models handler. The collaborators are deterministic so
-// this baseline observes the HTTP representation without starting a local
-// model host, downloading assets, or invoking an external executable.
-func TestModelsHTTPCharacterizationSuccessResponses(t *testing.T) {
+// TestModelsHTTPCharacterizationListResponse pins the complete JSON body
+// emitted by GET /models at the public Models handler boundary.
+func TestModelsHTTPCharacterizationListResponse(t *testing.T) {
 	t.Parallel()
+	root := &rootFake{
+		listCatalog: func(context.Context, modelcontract.ListModelsRequest) (modelcontract.ListModelsResult, error) {
+			return modelcontract.ListModelsResult{Models: []modelcontract.Summary{characterizationHTTPModelSummary()}}, nil
+		},
+	}
+	handler := NewHandlerFromRoot(testRootBinding(root), zap.NewNop())
+	recorder := httptest.NewRecorder()
+	handler.ListModels(recorder, httptest.NewRequest(http.MethodGet, "/models", nil))
+	assertModelsHTTPCharacterizationJSON(t, recorder, http.StatusOK, characterizationHTTPListBody)
+}
 
-	t.Run("GET /models", func(t *testing.T) {
-		t.Parallel()
-		root := &rootFake{
-			listCatalog: func(context.Context, modelcontract.ListModelsRequest) (modelcontract.ListModelsResult, error) {
-				return modelcontract.ListModelsResult{
-					Models: []modelcontract.Summary{characterizationHTTPModelSummary()},
-				}, nil
-			},
-		}
-		handler := NewHandlerFromRoot(testRootBinding(root), zap.NewNop())
-		recorder := httptest.NewRecorder()
+func TestModelsHTTPCharacterizationDetailResponse(t *testing.T) {
+	t.Parallel()
+	root := &rootFake{
+		getCatalog: func(context.Context, modelcontract.GetModelRequest) (modelcontract.GetModelResult, error) {
+			return modelcontract.GetModelResult{Model: characterizationHTTPModelDetail()}, nil
+		},
+	}
+	handler := NewHandlerFromRoot(testRootBinding(root), zap.NewNop())
+	recorder := httptest.NewRecorder()
+	handler.GetModel(
+		recorder,
+		httptest.NewRequest(http.MethodGet, "/models/OMNIVOICE_Q4_K_M", nil),
+		"OMNIVOICE_Q4_K_M",
+	)
+	assertModelsHTTPCharacterizationJSON(t, recorder, http.StatusOK, characterizationHTTPDetailBody)
+}
 
-		handler.ListModels(recorder, httptest.NewRequest(http.MethodGet, "/models", nil))
-
-		assertModelsHTTPCharacterizationJSON(t, recorder, http.StatusOK, characterizationHTTPListBody)
-	})
-
-	t.Run("GET /models/OMNIVOICE_Q4_K_M", func(t *testing.T) {
-		t.Parallel()
-		root := &rootFake{
-			getCatalog: func(context.Context, modelcontract.GetModelRequest) (modelcontract.GetModelResult, error) {
-				return modelcontract.GetModelResult{Model: characterizationHTTPModelDetail()}, nil
-			},
-		}
-		handler := NewHandlerFromRoot(testRootBinding(root), zap.NewNop())
-		recorder := httptest.NewRecorder()
-
-		handler.GetModel(
-			recorder,
-			httptest.NewRequest(http.MethodGet, "/models/OMNIVOICE_Q4_K_M", nil),
-			"OMNIVOICE_Q4_K_M",
-		)
-
-		assertModelsHTTPCharacterizationJSON(t, recorder, http.StatusOK, characterizationHTTPDetailBody)
-	})
-
-	t.Run("POST /models/OMNIVOICE_Q4_K_M/invocations", func(t *testing.T) {
-		t.Parallel()
-		invoker := modelInvokerFake{
-			invoke: func(_ context.Context, name string, request modelcontract.Request) (modelcontract.Result, error) {
-				if name != "OMNIVOICE_Q4_K_M" || request.Operation != "TTS" {
-					t.Fatalf("invoke request = (%q, %#v), want OMNIVOICE_Q4_K_M/TTS", name, request)
-				}
-				return modelcontract.Result{
-					ModelName:        name,
-					Worker:           "tts-executor",
-					Operation:        request.Operation,
-					ProviderLocality: string(modelcontract.LocalityLocal),
-					Content: []work.WorkContentPart{{
-						Type:        work.WorkContentPartTypeAudio,
-						File:        "artifacts/output.wav",
-						ContentType: "audio/wav",
+func TestModelsHTTPCharacterizationInvocationResponse(t *testing.T) {
+	t.Parallel()
+	invoker := modelInvokerFake{
+		invoke: func(_ context.Context, name string, request modelcontract.Request) (modelcontract.Result, error) {
+			if name != "OMNIVOICE_Q4_K_M" || request.Operation != "TTS" {
+				t.Fatalf("invoke request = (%q, %#v), want OMNIVOICE_Q4_K_M/TTS", name, request)
+			}
+			return modelcontract.Result{
+				ModelName: name, Worker: "tts-executor", Operation: request.Operation,
+				ProviderLocality: string(modelcontract.LocalityLocal),
+				Content: []work.WorkContentPart{{
+					Type: work.WorkContentPartTypeAudio, File: "artifacts/output.wav", ContentType: "audio/wav",
+				}},
+				Bindings: []modelcontract.ResolvedModelOperationBinding{{
+					Slot: "text", Source: "INPUT", Content: []work.WorkContentPart{{
+						Type: work.WorkContentPartTypeText, Text: "hello world",
 					}},
-					Bindings: []modelcontract.ResolvedModelOperationBinding{{
-						Slot:   "text",
-						Source: "INPUT",
-						Content: []work.WorkContentPart{{
-							Type: work.WorkContentPartTypeText,
-							Text: "hello world",
-						}},
-					}},
-				}, nil
-			},
-		}
-		handler := NewHandlerFromRoot(RootBinding{Models: &rootFake{}, Invoker: invoker}, zap.NewNop())
-		recorder := httptest.NewRecorder()
-		request := httptest.NewRequest(
-			http.MethodPost,
-			"/models/OMNIVOICE_Q4_K_M/invocations",
-			strings.NewReader(`{"operation":"TTS","content":[{"type":"TEXT","text":"hello world"}]}`),
-		)
+				}},
+			}, nil
+		},
+	}
+	handler := NewHandlerFromRoot(RootBinding{Models: &rootFake{}, Invoker: invoker}, zap.NewNop())
+	recorder := httptest.NewRecorder()
+	request := httptest.NewRequest(
+		http.MethodPost, "/models/OMNIVOICE_Q4_K_M/invocations",
+		strings.NewReader(`{"operation":"TTS","content":[{"type":"TEXT","text":"hello world"}]}`),
+	)
+	handler.InvokeModel(recorder, request, "OMNIVOICE_Q4_K_M")
+	assertModelsHTTPCharacterizationJSON(t, recorder, http.StatusOK, characterizationHTTPInvocationBody)
+}
 
-		handler.InvokeModel(recorder, request, "OMNIVOICE_Q4_K_M")
-
-		assertModelsHTTPCharacterizationJSON(t, recorder, http.StatusOK, characterizationHTTPInvocationBody)
-	})
-
-	t.Run("POST /models/OMNIVOICE_Q4_K_M/pull", func(t *testing.T) {
-		t.Parallel()
-		root := &rootFake{
-			pullForScope: func(_ context.Context, request modelcontract.PullModelRequest) (modelcontract.PullResult, error) {
-				return modelcontract.PullResult{
-					ModelName: request.Name, ProviderLocality: string(modelcontract.LocalityLocal), Outcome: "PULLED",
-					CachePath: "/models/OMNIVOICE_Q4_K_M/rev-2026", Revision: "rev-2026",
-					ManagedPullOutcome: "INSTALLED_SUCCESSFULLY", ReadinessState: "READY",
-					DownloadedFiles: []modelcontract.DownloadedFile{
-						{Path: "weights.gguf", Bytes: 42, SHA256: "abc123"},
-						{Path: "config.json", Bytes: 7},
-					},
-				}, nil
-			},
-		}
-		handler := NewHandlerFromRoot(testRootBinding(root), zap.NewNop())
-		recorder := httptest.NewRecorder()
-
-		handler.PullModel(
-			recorder,
-			httptest.NewRequest(http.MethodPost, "/models/OMNIVOICE_Q4_K_M/pull", nil),
-			"OMNIVOICE_Q4_K_M",
-		)
-
-		assertModelsHTTPCharacterizationJSON(t, recorder, http.StatusOK, characterizationHTTPPullBody)
-	})
+func TestModelsHTTPCharacterizationPullResponse(t *testing.T) {
+	t.Parallel()
+	root := &rootFake{
+		pullForScope: func(_ context.Context, request modelcontract.PullModelRequest) (modelcontract.PullResult, error) {
+			return modelcontract.PullResult{
+				ModelName: request.Name, ProviderLocality: string(modelcontract.LocalityLocal), Outcome: "PULLED",
+				CachePath: "/models/OMNIVOICE_Q4_K_M/rev-2026", Revision: "rev-2026",
+				ManagedPullOutcome: "INSTALLED_SUCCESSFULLY", ReadinessState: "READY",
+				DownloadedFiles: []modelcontract.DownloadedFile{
+					{Path: "weights.gguf", Bytes: 42, SHA256: "abc123"}, {Path: "config.json", Bytes: 7},
+				},
+			}, nil
+		},
+	}
+	handler := NewHandlerFromRoot(testRootBinding(root), zap.NewNop())
+	recorder := httptest.NewRecorder()
+	handler.PullModel(
+		recorder,
+		httptest.NewRequest(http.MethodPost, "/models/OMNIVOICE_Q4_K_M/pull", nil),
+		"OMNIVOICE_Q4_K_M",
+	)
+	assertModelsHTTPCharacterizationJSON(t, recorder, http.StatusOK, characterizationHTTPPullBody)
 }
 
 func TestModelsHTTPCharacterizationUnknownModelErrors(t *testing.T) {
