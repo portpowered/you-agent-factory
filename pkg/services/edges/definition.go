@@ -29,7 +29,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/automations"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
-	factoryruntimewire "github.com/portpowered/infinite-you/pkg/services/factory_runtime/wire"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factoryvisualization "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
 	"github.com/portpowered/infinite-you/pkg/services/models"
@@ -136,25 +135,29 @@ type Edges struct {
 		Open(string) (io.ReadCloser, error)
 		Create(string) (io.WriteCloser, error)
 	}
-	FactorySessionsWorkingDirectory                platformfilesystem.WorkingDirectory
-	FactorySessionExecutionOpeningFileSystem       factorysessions.ExecutionOpeningFileSystem
-	FactorySessionDirectoryInspection              factorysessions.DirectoryInspection
-	FactorySessionResolveHomeDirectory             factorysessions.HomeDirectoryResolver
-	FactorySessionResolveLogicalTargetSymlinks     factorysessions.LogicalTargetResolveSymlinks
-	FactorySessionIDGenerator                      factorysessions.SessionIDGenerator
-	FactorySessionRuntimeInstanceIDGenerator       factorysessions.RuntimeInstanceIDGenerator
-	FactorySessionResponseEventIDGenerator         factorysessions.ResponseEventIDGenerator
-	FactorySessionResponseEventRetentionLimits     *factorysessions.ResponseEventRetentionLimits
-	FactorySessionCursorPersistenceFileSystem      factorysessions.CursorPersistenceFileSystem
-	FactorySessionCursorCreateTemporaryFile        factorysessions.CursorPersistenceCreateTemporaryFile
-	FactorySessionRuntimePersistenceFileSystem     factorysessions.RuntimePersistenceFileSystem
-	FactorySessionContractFixtureReader            factorysessions.ContractFixtureReader
-	FactorySessionInvocationInputReader            factorysessions.InvocationInputReader
-	FactorySessionReplayRecordingReader            factorysessions.ReplayRecordingReader
-	FactorySessionInitialWorkReader                factorysessions.InitialWorkReader
-	FactoryRuntimeIDGenerator                      factoryruntime.IDGenerator
-	FactoryRuntimeDirectories                      factoryruntime.RuntimeDirectoryFileSystem
-	FactoryRuntimeInputs                           factoryruntimewire.InputFileSystem
+	FactorySessionsWorkingDirectory            platformfilesystem.WorkingDirectory
+	FactorySessionExecutionOpeningFileSystem   factorysessions.ExecutionOpeningFileSystem
+	FactorySessionDirectoryInspection          factorysessions.DirectoryInspection
+	FactorySessionResolveHomeDirectory         factorysessions.HomeDirectoryResolver
+	FactorySessionResolveLogicalTargetSymlinks factorysessions.LogicalTargetResolveSymlinks
+	FactorySessionIDGenerator                  factorysessions.SessionIDGenerator
+	FactorySessionRuntimeInstanceIDGenerator   factorysessions.RuntimeInstanceIDGenerator
+	FactorySessionResponseEventIDGenerator     factorysessions.ResponseEventIDGenerator
+	FactorySessionResponseEventRetentionLimits *factorysessions.ResponseEventRetentionLimits
+	FactorySessionCursorPersistenceFileSystem  factorysessions.CursorPersistenceFileSystem
+	FactorySessionCursorCreateTemporaryFile    factorysessions.CursorPersistenceCreateTemporaryFile
+	FactorySessionRuntimePersistenceFileSystem factorysessions.RuntimePersistenceFileSystem
+	FactorySessionContractFixtureReader        factorysessions.ContractFixtureReader
+	FactorySessionInvocationInputReader        factorysessions.InvocationInputReader
+	FactorySessionReplayRecordingReader        factorysessions.ReplayRecordingReader
+	FactorySessionInitialWorkReader            factorysessions.InitialWorkReader
+	FactoryRuntimeIDGenerator                  factoryruntime.IDGenerator
+	FactoryRuntimeDirectories                  factoryruntime.RuntimeDirectoryFileSystem
+	FactoryRuntimeInputs                       interface {
+		ReadDir(string) ([]fs.DirEntry, error)
+		ReadFile(string) ([]byte, error)
+		Stat(string) (fs.FileInfo, error)
+	}
 	FactoryRuntimeInputDirectoryWalker             factoryruntime.InputDirectoryWalker
 	FactoryRuntimeWorkflowSources                  factoryruntime.WorkflowSourceFileSystem
 	FactoryRuntimeWorkflowSourceResolveSymlinks    factoryruntime.WorkflowSourceResolveSymlinks

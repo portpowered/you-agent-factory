@@ -48,6 +48,7 @@ func NewCommandEffect(candidate any, clock platformclock.Source) Effect {
 		timeout := effectivePrintTimeout(request.PrintTimeout)
 		commandContext, cancel := context.WithTimeout(normalizeContext(ctx), timeout)
 		defer cancel()
+		commandContext = commanddispatch.WithRequestContext(commandContext, request.ExecuteRequest)
 		result, runErr := runCommand(commandContext, runner, command, observe)
 		effectResult := EffectResult{
 			DurationMillis: clock.Now().Sub(started).Milliseconds(),

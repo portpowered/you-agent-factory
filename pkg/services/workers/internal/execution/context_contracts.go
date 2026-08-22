@@ -102,20 +102,10 @@ func ScriptEventRecorderFromContext(ctx context.Context, fallback workers.Script
 	return fallback
 }
 
-// WithCommandRunnerOverride attaches a runtime-scoped command effect to one
-// detached execution. The override is consumed by the Script Runner only and
-// does not mutate the process-scoped runner registry.
-func WithCommandRunnerOverride(ctx context.Context, runner platformprocess.CommandRunner) context.Context {
-	if ctx == nil || runner == nil {
-		return ctx
-	}
-	return context.WithValue(ctx, commandRunnerOverrideKey{}, runner)
-}
-
 // WithWorkerCommandRunnerOverride is the owner-internal counterpart used by
 // private runner tests and adapters that already operate on the enriched
-// Workers request. Peer services must use WithCommandRunnerOverride with the
-// platform process effect instead.
+// Workers request. Peer services pass platform process effects through the
+// composition boundary instead.
 func WithWorkerCommandRunnerOverride(
 	ctx context.Context,
 	runner workerprocess.CommandRunner,

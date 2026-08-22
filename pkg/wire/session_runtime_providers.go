@@ -1102,6 +1102,8 @@ func provideWorkersProviderTemporaryFileSystem(edges serviceedges.Edges) platfor
 	return platformfilesystem.Local{}
 }
 
+// provideProvidersAgyPTYPlatform projects the Providers-owned PTY effect into
+// the Workers-private invocation seam at the canonical composition boundary.
 func provideProvidersAgyPTYPlatform(edges serviceedges.Edges) (providerswire.AgyPTYPlatformDependencies, error) {
 	allocator, err := provideProvidersAgyPTYAllocator(edges)
 	if err != nil {

@@ -213,7 +213,7 @@ func (runner projectedPlatformCommandRunner) Run(
 	if runner.runner == nil {
 		return platformprocess.CommandResult{}, errors.New("workers projected platform command runner is required")
 	}
-	result, err := runner.runner.Run(ctx, workerRequest(request))
+	result, err := runner.runner.Run(ctx, workerRequest(ctx, request))
 	return result, err
 }
 
@@ -223,7 +223,7 @@ func (runner projectedPlatformCommandRunner) RunStreaming(
 	observer platformprocess.OutputChunkObserver,
 ) (platformprocess.CommandResult, error) {
 	if streaming, ok := runner.runner.(StreamingCommandRunner); ok {
-		return streaming.RunStreaming(ctx, workerRequest(request), observer)
+		return streaming.RunStreaming(ctx, workerRequest(ctx, request), observer)
 	}
 	result, err := runner.Run(ctx, request)
 	publishCompleteOutput(observer, result)
@@ -369,12 +369,23 @@ func platformRequest(request CommandRequest) platformprocess.CommandRequest {
 	}
 }
 
-func workerRequest(request platformprocess.CommandRequest) CommandRequest {
-	return CommandRequest{
+func workerRequest(ctx context.Context, request platformprocess.CommandRequest) CommandRequest {
+	projected := CommandRequest{
 		Command: request.Command, Args: request.Args, Stdin: request.Stdin,
 		Env: request.Env, WorkDir: request.WorkDir,
 		ProcessLifecycleObserver: request.ProcessLifecycleObserver,
 	}
+	if dispatch, ok := work.CommandDispatchFromContext(ctx); ok {
+		base := SubprocessRequestBase(dispatch)
+		base.Command = projected.Command
+		base.Args = projected.Args
+		base.Stdin = projected.Stdin
+		base.Env = projected.Env
+		base.WorkDir = projected.WorkDir
+		base.ProcessLifecycleObserver = projected.ProcessLifecycleObserver
+		return base
+	}
+	return projected
 }
 
 func publishCompleteOutput(observer platformprocess.OutputChunkObserver, result CommandResult) {

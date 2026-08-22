@@ -30,14 +30,6 @@ type PTYSessionConfig struct {
 	HardTimeout     time.Duration
 }
 
-func DefaultPTYSessionConfig() PTYSessionConfig {
-	return PTYSessionConfig{
-		MaxCaptureBytes: DefaultPTYMaxCaptureBytes,
-		IdleTimeout:     DefaultPTYIdleTimeout,
-		HardTimeout:     DefaultPTYHardTimeout,
-	}
-}
-
 // PTYProcessLaunch is the typed subprocess description for one PTY-backed run.
 type PTYProcessLaunch struct {
 	Executable string
