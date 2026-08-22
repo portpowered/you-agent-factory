@@ -309,6 +309,107 @@ func runForOSWithCPU(cfg config, targetOS string, logicalCPUs int) (result cover
 	return runCoverageProfile(cfg, targetOS, logicalCPUs, profilePath)
 }
 
+func runCoverageProfile(cfg config, targetOS string, logicalCPUs int, profilePath string) (result coverageResult, runErr error) {
+	repoRoot, err := repoRootDir()
+	if err != nil {
+		return coverageResult{}, err
+	}
+	selectorVerification := startFunctionalQuarantineSelectorVerification(cfg, targetOS, logicalCPUs, repoRoot)
+	if selectorVerification != nil {
+		selectorVerification.ratchet = startFunctionalQuarantineRatchetVerification(
+			selectorVerification.manifest,
+			cfg.timeout,
+			cfg.short,
+			repoRoot,
+		)
+		defer func() {
+			runErr = errors.Join(runErr, selectorVerification.waitAll())
+		}()
+	}
+
+	var coverPackages []string
+	var testPackages []string
+	var packageDiscovery coveragePackageDiscovery
+	var functionalMetadata []functionalGoListPackage
+	var functionalDiscoveryStarted time.Time
+	var canonicalBlocks map[string]coverageBlock
+	if err := cfg.measureCoveragePhase(coveragePhaseList, func() error {
+		var err error
+		if strings.TrimSpace(cfg.functionalQuarantine) != "" {
+			coverPackages, err = resolveCoverPackages(cfg)
+			if err != nil {
+				return err
+			}
+			testPackages, functionalMetadata, functionalDiscoveryStarted, err = resolveCoverageTestPackages(cfg, repoRoot, selectorVerification)
+			return err
+		}
+		packageDiscovery, coverPackages, testPackages, err = resolveCoverageLaneWithDiscovery(cfg)
+		return err
+	}); err != nil {
+		return coverageResult{}, err
+	}
+
+	var prepared preparedCoverageRun
+	if err := cfg.measureCoveragePhase(coveragePhasePlan, func() error {
+		var err error
+		prepared, err = prepareCoverageRunWithFunctionalMetadata(
+			cfg,
+			targetOS,
+			logicalCPUs,
+			profilePath,
+			coverPackages,
+			testPackages,
+			packageDiscovery.allPackages,
+			functionalMetadata,
+			functionalDiscoveryStarted,
+			selectorVerification,
+		)
+		return err
+	}); err != nil {
+		return coverageResult{}, err
+	}
+
+	runErr = cfg.measureCoveragePhase(coveragePhaseTest, func() error {
+		return executeCoverageInvocationPlan(
+			cfg,
+			prepared.plan,
+			prepared.testPackages,
+			profilePath,
+			prepared.repoRoot,
+			coverPackages,
+			"run go test coverage lane",
+			prepared.expectedFunctionalInventory,
+		)
+	})
+	if runErr != nil {
+		return coverageResult{}, runErr
+	}
+	if err := cfg.measureCoveragePhase(coveragePhaseCanonicalize, func() error {
+		var err error
+		canonicalBlocks, err = canonicalizeCoverageProfileWithBlocks(profilePath, prepared.repoRoot, coverPackages)
+		return err
+	}); err != nil {
+		return coverageResult{}, err
+	}
+
+	var evaluated evaluatedCoverageRun
+	if err := cfg.measureCoveragePhase(coveragePhaseEvaluate, func() error {
+		var err error
+		evaluated, err = evaluateCoverageRun(cfg, profilePath, prepared.repoRoot, coverPackages, canonicalBlocks)
+		return err
+	}); err != nil {
+		return coverageResult{}, err
+	}
+
+	cfg.beginCoveragePhase(coveragePhaseManifest)
+	result, err = applyCoverageManifestGate(cfg, evaluated.result, prepared.repoRoot, evaluated.baselinePackages)
+	if err != nil {
+		cfg.finishCoveragePhase(coveragePhaseManifest, coveragePhaseStatusError)
+		return result, err
+	}
+	return result, nil
+}
+
 func (cfg config) testJobs(targetOS string, logicalCPUs int) int {
 	if cfg.jobs > 0 {
 		return cfg.jobs
@@ -344,6 +445,31 @@ func resolveCoverageLane(cfg config) ([]string, []string, error) {
 		return nil, nil, err
 	}
 	return coverPackages, testPackages, nil
+}
+
+func resolveCoverPackages(cfg config) ([]string, error) {
+	if strings.TrimSpace(cfg.coverpkg) != "" {
+		return splitList(cfg.coverpkg, ",", false), nil
+	}
+	listings, err := listGoPackageListings(defaultCoveragePatterns)
+	if err != nil {
+		return nil, err
+	}
+	return filterCoveragePackageListings(listings, isBackendCoveragePackage, true)
+}
+
+func resolveTestPackages(cfg config) ([]string, error) {
+	if strings.TrimSpace(cfg.packages) != "" {
+		return splitList(cfg.packages, " ", true), nil
+	}
+	switch cfg.suite {
+	case "", unitCoverageSuite:
+		return listGoPackages(unitTestPatterns, isBackendCoveragePackage, false)
+	case functionalCoverageSuite:
+		return listGoPackages(functionalTestPatterns, isFunctionalTestPackage, false)
+	default:
+		return nil, fmt.Errorf("resolve go coverage lane: unsupported suite %q", cfg.suite)
+	}
 }
 
 func listGoPackages(patterns []string, include func(string) bool, requireNonTestGoFiles bool) ([]string, error) {
