@@ -1,4 +1,4 @@
-package factory_visualization_test
+package active_view_lifecycle_test
 
 import (
 	"context"
@@ -110,5 +110,26 @@ func TestVisualizationActiveViewLifecycleThroughPublicProcess(t *testing.T) {
 	}
 	if _, err := visualizationRoot.Join(context.Background(), factoryvisualization.JoinRequest{}); err != nil {
 		t.Fatalf("Join after StopDrain: %v", err)
+	}
+}
+
+func visualizationInertFactoryConfig() map[string]any {
+	return map[string]any{
+		"workTypes": []map[string]any{{
+			"name": "task",
+			"states": []map[string]string{
+				{"name": "init", "type": "INITIAL"},
+				{"name": "complete", "type": "TERMINAL"},
+				{"name": "failed", "type": "FAILED"},
+			},
+		}},
+		"workers": []map[string]string{{"name": "worker-a"}},
+		"workstations": []map[string]any{{
+			"name":      "process",
+			"worker":    "worker-a",
+			"inputs":    []map[string]string{{"workType": "task", "state": "init"}},
+			"outputs":   []map[string]string{{"workType": "task", "state": "complete"}},
+			"onFailure": []map[string]string{{"workType": "task", "state": "failed"}},
+		}},
 	}
 }
