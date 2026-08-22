@@ -647,30 +647,6 @@ func detachedModelProviderSucceeded(result workers.ExecuteResult, executeErr err
 		strings.EqualFold(strings.TrimSpace(result.Failure.Message), "output contract failed")
 }
 
-// detachedModelResponseContent restores structured content that arrived at
-// the request-scoped Execute boundary as one text part. The Work materializer
-// still consumes the raw worker response through WorkResult.Output, while the
-// canonical MODEL_RESPONSE event must expose the same audio/file reference as
-// structured output.
-func detachedModelResponseContent(parts []work.WorkContentPart) []work.WorkContentPart {
-	cloned := work.CloneWorkContentParts(parts)
-	if len(cloned) != 1 || cloned[0].Type.Normalized() != work.WorkContentPartTypeText {
-		return cloned
-	}
-	raw := strings.TrimSpace(cloned[0].Text)
-	if raw == "" {
-		return cloned
-	}
-	decoded, err := work.ContentFromWorkerOutput(raw)
-	if err != nil || len(decoded) == 0 {
-		return cloned
-	}
-	if len(decoded) == 1 && decoded[0].Type.Normalized() == work.WorkContentPartTypeText && decoded[0].Text == raw {
-		return cloned
-	}
-	return decoded
-}
-
 func runtimeModelRecorder(cfg *runtimeConfig) recordings.WorkerEventRecorder {
 	if !runtimeModelRecordingEnabled(cfg) {
 		return nil

@@ -423,13 +423,13 @@ func assertFactoryTTSModelEvents(
 		t.Fatalf("MODEL_RESPONSE payload = %#v, want successful TTS response correlated to %q", response, request.ModelRequestId)
 	}
 	if response.OutputContent == nil || len(*response.OutputContent) != 1 {
-		t.Fatalf("MODEL_RESPONSE outputContent = %#v, want one text-encoded AUDIO part", response.OutputContent)
+		t.Fatalf("MODEL_RESPONSE outputContent = %#v, want one AUDIO part", response.OutputContent)
 	}
-	modelText, err := (*response.OutputContent)[0].AsWorkTextContentPart()
+	modelAudio, err := (*response.OutputContent)[0].AsWorkAudioContentPart()
 	if err != nil {
-		t.Fatalf("MODEL_RESPONSE output as text: %v", err)
+		t.Fatalf("MODEL_RESPONSE output as AUDIO: %v", err)
 	}
-	assertFactoryTTSRawAudioOutput(t, "MODEL_RESPONSE", modelText.Text, wantAudio)
+	assertFactoryTTSAudioShape(t, modelAudio, wantAudio, "MODEL_RESPONSE")
 }
 
 func assertFactoryTTSDispatchResponse(

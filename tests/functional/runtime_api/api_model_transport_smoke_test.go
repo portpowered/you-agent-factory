@@ -12,7 +12,6 @@ import (
 	"path/filepath"
 	"sync"
 	"testing"
-	"time"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
@@ -174,103 +173,6 @@ func TestModelTransportSmoke_ServiceModeStartupAndDirectModelRoutesStayAligned(t
 	assertUnsupportedModelInvocationRejected(t, server.URL())
 }
 
-func TestFactoryWork_ModelResponseRecordsStructuredAudio(t *testing.T) {
-	dir := support.ScaffoldFactory(t, factoryWorkModelTransportSmokeConfig())
-	support.WriteWorkstationConfig(t, dir, "speak", "---\ntype: MODEL_INVOKE\n---\nGenerate speech output.\n")
-
-	audioPath := filepath.Join(t.TempDir(), "factory-work-speech.wav")
-	if err := os.WriteFile(audioPath, []byte("RIFF....WAVEfactory-work-audio"), 0o644); err != nil {
-		t.Fatalf("write audio fixture: %v", err)
-	}
-	provider := &modelTransportSmokeProvider{
-		response: workerexecution.InferenceResponse{
-			Content: mustMarshalFunctionalAudioContentResponse(t, audioPath),
-		},
-	}
-	server := startFunctionalServer(t, dir, false, withProvider(provider))
-
-	traceID := submitGeneratedWork(t, server.URL(), factoryapi.SubmitWorkRequest{
-		Name:         stringPtr("factory-work-model-response"),
-		WorkTypeName: "task",
-		Content: &factoryapi.WorkContent{
-			mustGeneratedFunctionalTextPart(t, "hello from Factory Work"),
-		},
-	})
-	completed := waitForGeneratedWorkAtPlace(t, server.URL(), traceID, "task:complete", 10*time.Second)
-	var completedWork factoryapi.Work
-	for _, item := range completed.Results {
-		if item.TraceId != nil && *item.TraceId == traceID && generatedWorkPlaceID(item) == "task:complete" {
-			completedWork = item
-			break
-		}
-	}
-	if completedWork.Content == nil || len(*completedWork.Content) != 1 {
-		t.Fatalf("completed Factory Work content = %#v, want exactly one audio part", completedWork.Content)
-	}
-	workAudio, err := (*completedWork.Content)[0].AsWorkAudioContentPart()
-	if err != nil {
-		t.Fatalf("decode completed Factory Work audio: %v", err)
-	}
-	if generatedAudioPath(workAudio) != audioPath || stringPointerValue(workAudio.ContentType) != "audio/wav" {
-		t.Fatalf("completed Factory Work audio = %#v, want audio/wav at %s", workAudio, audioPath)
-	}
-
-	var requests []factoryapi.ModelRequestEventPayload
-	var responses []factoryapi.ModelResponseEventPayload
-	events := server.GetFactoryEvents(t)
-	requestIndex, responseIndex := -1, -1
-	var requestEvent, responseEvent factoryapi.FactoryEvent
-	for index, event := range events {
-		switch event.Type {
-		case factoryapi.FactoryEventTypeModelRequest:
-			payload, payloadErr := event.Payload.AsModelRequestEventPayload()
-			if payloadErr == nil && payload.Operation == "TTS" {
-				requests = append(requests, payload)
-				requestIndex, requestEvent = index, event
-			}
-		case factoryapi.FactoryEventTypeModelResponse:
-			payload, payloadErr := event.Payload.AsModelResponseEventPayload()
-			if payloadErr == nil && payload.Operation == "TTS" {
-				responses = append(responses, payload)
-				responseIndex, responseEvent = index, event
-			}
-		}
-	}
-	if len(requests) != 1 || len(responses) != 1 {
-		t.Fatalf("Factory Work TTS model events = requests:%d responses:%d, want one of each", len(requests), len(responses))
-	}
-	if responseIndex <= requestIndex {
-		t.Fatalf("Factory Work TTS model event order = request:%d response:%d, want request before response", requestIndex, responseIndex)
-	}
-	requestDispatchID := stringPointerValue(requestEvent.Context.DispatchId)
-	responseDispatchID := stringPointerValue(responseEvent.Context.DispatchId)
-	if requestDispatchID == "" || requestDispatchID != responseDispatchID {
-		t.Fatalf("Factory Work TTS model event dispatch correlation = request:%q response:%q, want one non-empty id", requestDispatchID, responseDispatchID)
-	}
-	if responses[0].Outcome != factoryapi.InferenceOutcomeSucceeded || responses[0].ModelRequestId != requests[0].ModelRequestId {
-		t.Fatalf("Factory Work TTS model response = %#v, want succeeded response correlated to request %q", responses[0], requests[0].ModelRequestId)
-	}
-	if responses[0].OutputContent == nil || len(*responses[0].OutputContent) != 1 {
-		t.Fatalf("Factory Work TTS response output = %#v, want exactly one audio part", responses[0].OutputContent)
-	}
-	responseAudio, err := (*responses[0].OutputContent)[0].AsWorkAudioContentPart()
-	if err != nil {
-		t.Fatalf("decode Factory Work TTS response audio: %v", err)
-	}
-	if generatedAudioPath(responseAudio) != audioPath || stringPointerValue(responseAudio.ContentType) != "audio/wav" {
-		t.Fatalf("Factory Work TTS response audio = %#v, want audio/wav at %s", responseAudio, audioPath)
-	}
-}
-
-func findModelSummary(results []factoryapi.ModelSummary, name string) (factoryapi.ModelSummary, bool) {
-	for _, result := range results {
-		if result.Name == name {
-			return result, true
-		}
-	}
-	return factoryapi.ModelSummary{}, false
-}
-
 func localCachedModelTransportSmokeConfig() map[string]any {
 	return map[string]any{
 		"name": "cached-local-model-transport",
@@ -365,26 +267,6 @@ func providerBackedModelTransportSmokeConfig() map[string]any {
 			}},
 		}},
 	}
-}
-
-func factoryWorkModelTransportSmokeConfig() map[string]any {
-	cfg := providerBackedModelTransportSmokeConfig()
-	cfg["workstations"] = []map[string]any{{
-		"name":      "speak",
-		"type":      interfaces.WorkstationTypeInvoke,
-		"operation": "TTS",
-		"worker":    "tts-worker",
-		"operationBindings": []map[string]any{{
-			"slot": "text",
-			"selector": map[string]any{
-				"type": interfaces.ModelOperationContentTypeText,
-			},
-		}},
-		"inputs":    []map[string]string{{"workType": "task", "state": "init"}},
-		"outputs":   []map[string]string{{"workType": "task", "state": "complete"}},
-		"onFailure": []map[string]string{{"workType": "task", "state": "failed"}},
-	}}
-	return cfg
 }
 
 func mustMarshalFunctionalAudioContentResponse(t *testing.T, audioPath string) string {

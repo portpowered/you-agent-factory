@@ -1,6 +1,6 @@
 //go:build functionallong
 
-package runtime_api
+package root_composition_test
 
 import (
 	"bytes"
@@ -16,6 +16,7 @@ import (
 	"testing"
 	"time"
 
+	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
@@ -48,13 +49,12 @@ func TestRealLocalInference_OMNIVOICEModelInvokeAndDirectAPIProduceAudio(t *test
 		runcli.ModelCacheDirEnvironment+"="+cacheDir,
 	)
 	unexpectedProvider := support.NewRecordingCommandRunner("unexpected cloud-provider invocation")
-	server := startFunctionalServer(
-		t,
-		dir,
-		false,
-		withEnvironment(environment),
-		withWorkerCommands(unexpectedProvider, nil),
-	)
+	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir:                dir,
+		WaitForServiceModeRuntime: true,
+		Env:                       environment,
+		Edges:                     serviceedges.Edges{ProviderCommandRunner: unexpectedProvider},
+	})
 
 	pull := postJSON[factoryapi.ModelPullResponse](t, server.URL()+"/models/OMNIVOICE_Q4_K_M/pull", nil, "asset pull failure")
 	if pull.ModelName != "OMNIVOICE_Q4_K_M" || pull.CachePath == "" || pull.Revision == "" || len(pull.DownloadedFiles) == 0 {
@@ -109,15 +109,15 @@ func TestRealLocalInference_OMNIVOICEModelInvokeAndDirectAPIProduceAudio(t *test
 	}
 	assertWAVBytes(t, streamBytes, "output validation failure")
 
-	traceID := submitGeneratedWork(t, server.URL(), factoryapi.SubmitWorkRequest{
+	submitted := support.SubmitDefaultSessionWork(t, server.URL(), factoryapi.SubmitWorkRequest{
 		Name:         stringPtr("real-local-model-inference"),
 		WorkTypeName: "speech",
 		Content: &factoryapi.WorkContent{
 			mustGeneratedFunctionalTextPart(t, "hello from factory-level model invoke"),
 		},
 	})
-	work := waitForGeneratedWorkAtPlace(t, server.URL(), traceID, "speech:complete", realLocalInferenceFactoryWaitTimeout())
-	findGeneratedWorkByTraceIDAndPlace(t, work.Results, traceID, "speech:complete")
+	work := waitForGeneratedWorkAtPlace(t, server.URL(), submitted.TraceId, "speech:complete", realLocalInferenceFactoryWaitTimeout())
+	findGeneratedWorkByTraceIDAndPlace(t, work.Results, submitted.TraceId, "speech:complete")
 	eventAudioPath := assertRecordedRealLocalModelEvents(t, server.GetFactoryEvents(t))
 	assertWAVFile(t, eventAudioPath, "output validation failure")
 }
@@ -276,6 +276,100 @@ func findGeneratedWorkByTraceIDAndPlace(t *testing.T, works []factoryapi.Work, t
 	return factoryapi.Work{}
 }
 
+func postJSON[T any](t *testing.T, endpoint string, request any, failurePrefix string) T {
+	t.Helper()
+	var body io.Reader
+	if request != nil {
+		encoded, err := json.Marshal(request)
+		if err != nil {
+			t.Fatalf("%s: marshal request: %v", failurePrefix, err)
+		}
+		body = bytes.NewReader(encoded)
+	}
+	response, err := http.Post(endpoint, "application/json", body)
+	if err != nil {
+		t.Fatalf("%s: POST %s: %v", failurePrefix, endpoint, err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode < http.StatusOK || response.StatusCode >= http.StatusMultipleChoices {
+		payload, _ := io.ReadAll(response.Body)
+		t.Fatalf("%s: POST %s status = %d: %s", failurePrefix, endpoint, response.StatusCode, strings.TrimSpace(string(payload)))
+	}
+	var result T
+	if err := json.NewDecoder(response.Body).Decode(&result); err != nil {
+		t.Fatalf("%s: decode %s response: %v", failurePrefix, endpoint, err)
+	}
+	return result
+}
+
+func waitForGeneratedWorkAtPlace(
+	t *testing.T,
+	baseURL string,
+	traceID string,
+	placeID string,
+	timeout time.Duration,
+) factoryapi.ListWorkResponse {
+	t.Helper()
+	listed, err := support.WaitForObservation(
+		timeout,
+		func() (factoryapi.ListWorkResponse, error) {
+			return support.ListDefaultSessionWork(t, baseURL), nil
+		},
+		func(listed factoryapi.ListWorkResponse) bool {
+			for _, item := range listed.Results {
+				if stringPointerValue(item.TraceId) == traceID && generatedWorkPlaceID(item) == placeID {
+					return true
+				}
+			}
+			return false
+		},
+	)
+	if err != nil {
+		t.Fatalf("timed out waiting for trace %q at %s: %v", traceID, placeID, err)
+	}
+	return listed
+}
+
+func mustGeneratedFunctionalTextPart(t *testing.T, text string) factoryapi.WorkContentPart {
+	t.Helper()
+	part := factoryapi.WorkContentPart{}
+	if err := part.FromWorkTextContentPart(factoryapi.WorkTextContentPart{
+		Type: factoryapi.WorkContentPartTypeTextUpper,
+		Text: text,
+	}); err != nil {
+		t.Fatalf("encode generated text part: %v", err)
+	}
+	return part
+}
+
+func generatedAudioPath(audio factoryapi.WorkAudioContentPart) string {
+	if audio.File != nil && strings.TrimSpace(string(*audio.File)) != "" {
+		return string(*audio.File)
+	}
+	if strings.TrimSpace(string(audio.Url)) != "" {
+		return strings.TrimPrefix(string(audio.Url), "file://")
+	}
+	return ""
+}
+
+func generatedWorkPlaceID(work factoryapi.Work) string {
+	if work.State == nil {
+		return stringPointerValue(work.WorkTypeName) + ":"
+	}
+	return stringPointerValue(work.WorkTypeName) + ":" + work.State.Name
+}
+
+func stringPointerValue[T ~string](value *T) string {
+	if value == nil {
+		return ""
+	}
+	return string(*value)
+}
+
+func stringPtr(value string) *string {
+	return &value
+}
+
 type realLocalModelEventCheck struct {
 	sawTTSRequest bool
 	audioPath     string
@@ -323,90 +417,14 @@ func inspectRecordedRealLocalModelEvents(events []factoryapi.FactoryEvent) realL
 				check.sawTTSRequest = true
 			}
 		case factoryapi.FactoryEventTypeModelResponse:
-			observation := realLocalModelResponseObservation{
-				eventIndex: eventIndex,
-				eventType:  event.Type,
-			}
-			payload, err := event.Payload.AsModelResponseEventPayload()
-			if err != nil {
-				observation.payloadError = err.Error()
-				check.responses = append(check.responses, observation)
-				check.failures = append(check.failures, fmt.Sprintf(
-					"response[%d] MODEL_RESPONSE payload decode failure: %v",
-					eventIndex,
-					err,
-				))
-				continue
-			}
-
-			observation.payloadDecoded = true
-			observation.operation = payload.Operation
-			observation.outcome = payload.Outcome
-			if payload.OutputContent != nil {
-				observation.outputPresent = true
-				observation.outputPartCount = len(*payload.OutputContent)
-				for partIndex, part := range *payload.OutputContent {
-					observation.parts = append(observation.parts, inspectRealLocalModelContentPart(partIndex, part))
-				}
-			}
+			observation, failure, audioPath := inspectRealLocalModelResponse(eventIndex, event)
 			check.responses = append(check.responses, observation)
-
-			if payload.Operation != "TTS" {
-				check.failures = append(check.failures, fmt.Sprintf(
-					"response[%d] MODEL_RESPONSE wrong operation: got %q, want %q",
-					eventIndex,
-					payload.Operation,
-					"TTS",
-				))
-				continue
+			if failure != "" {
+				check.failures = append(check.failures, failure)
 			}
-			if payload.Outcome != factoryapi.InferenceOutcomeSucceeded {
-				check.failures = append(check.failures, fmt.Sprintf(
-					"response[%d] MODEL_RESPONSE non-succeeded outcome: got %q, want %q",
-					eventIndex,
-					payload.Outcome,
-					factoryapi.InferenceOutcomeSucceeded,
-				))
-				continue
+			if audioPath != "" {
+				check.audioPath = audioPath
 			}
-			if payload.OutputContent == nil || len(*payload.OutputContent) != 1 {
-				check.failures = append(check.failures, fmt.Sprintf(
-					"response[%d] MODEL_RESPONSE output-part count: got %s, want exactly 1",
-					eventIndex,
-					formatRealLocalModelOutputPartCount(observation),
-				))
-				continue
-			}
-
-			audio, audioErr := (*payload.OutputContent)[0].AsWorkAudioContentPart()
-			if audioErr != nil {
-				check.failures = append(check.failures, fmt.Sprintf(
-					"response[%d] MODEL_RESPONSE audio-part decode failure: %v",
-					eventIndex,
-					audioErr,
-				))
-				continue
-			}
-			if stringPointerValue(audio.ContentType) != "audio/wav" {
-				check.failures = append(check.failures, fmt.Sprintf(
-					"response[%d] MODEL_RESPONSE audio content-type mismatch: got %q, want %q",
-					eventIndex,
-					stringPointerValue(audio.ContentType),
-					"audio/wav",
-				))
-				continue
-			}
-			responseAudioPath := generatedAudioPath(audio)
-			if strings.TrimSpace(responseAudioPath) == "" {
-				check.failures = append(check.failures, fmt.Sprintf(
-					"response[%d] MODEL_RESPONSE empty file or URL: file=%s url=%s",
-					eventIndex,
-					formatRealLocalModelValue(stringPointerValue(audio.File)),
-					formatRealLocalModelValue(string(audio.Url)),
-				))
-				continue
-			}
-			check.audioPath = responseAudioPath
 		}
 	}
 
@@ -417,6 +435,68 @@ func inspectRecordedRealLocalModelEvents(events []factoryapi.FactoryEvent) realL
 		check.failures = append(check.failures, "no MODEL_RESPONSE event observed")
 	}
 	return check
+}
+
+func inspectRealLocalModelResponse(
+	eventIndex int,
+	event factoryapi.FactoryEvent,
+) (realLocalModelResponseObservation, string, string) {
+	observation := realLocalModelResponseObservation{eventIndex: eventIndex, eventType: event.Type}
+	payload, err := event.Payload.AsModelResponseEventPayload()
+	if err != nil {
+		observation.payloadError = err.Error()
+		return observation, fmt.Sprintf("response[%d] MODEL_RESPONSE payload decode failure: %v", eventIndex, err), ""
+	}
+	observation.payloadDecoded = true
+	observation.operation = payload.Operation
+	observation.outcome = payload.Outcome
+	if payload.OutputContent != nil {
+		observation.outputPresent = true
+		observation.outputPartCount = len(*payload.OutputContent)
+		for partIndex, part := range *payload.OutputContent {
+			observation.parts = append(observation.parts, inspectRealLocalModelContentPart(partIndex, part))
+		}
+	}
+	if payload.Operation != "TTS" {
+		return observation, fmt.Sprintf(
+			"response[%d] MODEL_RESPONSE wrong operation: got %q, want %q",
+			eventIndex, payload.Operation, "TTS",
+		), ""
+	}
+	if payload.Outcome != factoryapi.InferenceOutcomeSucceeded {
+		return observation, fmt.Sprintf(
+			"response[%d] MODEL_RESPONSE non-succeeded outcome: got %q, want %q",
+			eventIndex, payload.Outcome, factoryapi.InferenceOutcomeSucceeded,
+		), ""
+	}
+	if payload.OutputContent == nil || len(*payload.OutputContent) != 1 {
+		return observation, fmt.Sprintf(
+			"response[%d] MODEL_RESPONSE output-part count: got %s, want exactly 1",
+			eventIndex, formatRealLocalModelOutputPartCount(observation),
+		), ""
+	}
+	audio, audioErr := (*payload.OutputContent)[0].AsWorkAudioContentPart()
+	if audioErr != nil {
+		return observation, fmt.Sprintf(
+			"response[%d] MODEL_RESPONSE audio-part decode failure: %v", eventIndex, audioErr,
+		), ""
+	}
+	if stringPointerValue(audio.ContentType) != "audio/wav" {
+		return observation, fmt.Sprintf(
+			"response[%d] MODEL_RESPONSE audio content-type mismatch: got %q, want %q",
+			eventIndex, stringPointerValue(audio.ContentType), "audio/wav",
+		), ""
+	}
+	path := generatedAudioPath(audio)
+	if strings.TrimSpace(path) == "" {
+		return observation, fmt.Sprintf(
+			"response[%d] MODEL_RESPONSE empty file or URL: file=%s url=%s",
+			eventIndex,
+			formatRealLocalModelValue(stringPointerValue(audio.File)),
+			formatRealLocalModelValue(string(audio.Url)),
+		), ""
+	}
+	return observation, "", path
 }
 
 func inspectRealLocalModelContentPart(partIndex int, part factoryapi.WorkContentPart) realLocalModelContentObservation {
@@ -530,131 +610,74 @@ func formatRealLocalModelValue(value string) string {
 }
 
 func TestRecordedRealLocalModelEventDiagnostics(t *testing.T) {
-	validFile := realLocalModelAudioPart(t, "C:/tmp/factory-work.wav", "", "audio/wav")
-	validURL := realLocalModelAudioPart(t, "", "file:///tmp/factory-work.wav", "audio/wav")
-	wrongContentType := realLocalModelAudioPart(t, "C:/tmp/factory-work.mp3", "", "audio/mpeg")
-	malformedAudio := realLocalModelMalformedAudioPart(t)
-
-	outputWithValidFile := factoryapi.WorkContent{validFile}
-	outputWithValidURL := factoryapi.WorkContent{validURL}
-	outputWithTwoParts := factoryapi.WorkContent{validFile, validFile}
-	outputWithMalformedAudio := factoryapi.WorkContent{malformedAudio}
-	outputWithWrongContentType := factoryapi.WorkContent{wrongContentType}
-	outputWithEmptyLocation := factoryapi.WorkContent{realLocalModelAudioPart(t, "", "", "audio/wav")}
-
-	cases := []struct {
-		name     string
-		response *factoryapi.ModelResponseEventPayload
-		want     string
-		wantPath string
-	}{
-		{
-			name: "no model response",
-			want: "no MODEL_RESPONSE event observed",
-		},
-		{
-			name:     "payload decode failure",
-			response: nil,
-			want:     "MODEL_RESPONSE payload decode failure",
-		},
-		{
-			name: "wrong operation",
-			response: &factoryapi.ModelResponseEventPayload{
-				Operation:     "ASR",
-				Outcome:       factoryapi.InferenceOutcomeSucceeded,
-				OutputContent: &outputWithValidFile,
-			},
-			want: "wrong operation",
-		},
-		{
-			name: "wrong outcome",
-			response: &factoryapi.ModelResponseEventPayload{
-				Operation:     "TTS",
-				Outcome:       factoryapi.InferenceOutcomeFailed,
-				OutputContent: &outputWithValidFile,
-			},
-			want: "non-succeeded outcome",
-		},
-		{
-			name: "absent output parts",
-			response: &factoryapi.ModelResponseEventPayload{
-				Operation: "TTS",
-				Outcome:   factoryapi.InferenceOutcomeSucceeded,
-			},
-			want: "output-part count: got absent(0)",
-		},
-		{
-			name: "wrong output part count",
-			response: &factoryapi.ModelResponseEventPayload{
-				Operation:     "TTS",
-				Outcome:       factoryapi.InferenceOutcomeSucceeded,
-				OutputContent: &outputWithTwoParts,
-			},
-			want: "output-part count: got 2",
-		},
-		{
-			name: "audio part decode failure",
-			response: &factoryapi.ModelResponseEventPayload{
-				Operation:     "TTS",
-				Outcome:       factoryapi.InferenceOutcomeSucceeded,
-				OutputContent: &outputWithMalformedAudio,
-			},
-			want: "audio-part decode failure",
-		},
-		{
-			name: "wrong audio content type",
-			response: &factoryapi.ModelResponseEventPayload{
-				Operation:     "TTS",
-				Outcome:       factoryapi.InferenceOutcomeSucceeded,
-				OutputContent: &outputWithWrongContentType,
-			},
-			want: "audio content-type mismatch",
-		},
-		{
-			name: "empty file and URL",
-			response: &factoryapi.ModelResponseEventPayload{
-				Operation:     "TTS",
-				Outcome:       factoryapi.InferenceOutcomeSucceeded,
-				OutputContent: &outputWithEmptyLocation,
-			},
-			want: "empty file or URL",
-		},
-		{
-			name:     "valid file",
-			response: &factoryapi.ModelResponseEventPayload{Operation: "TTS", Outcome: factoryapi.InferenceOutcomeSucceeded, OutputContent: &outputWithValidFile},
-			want:     `eventType=MODEL_RESPONSE operation="TTS" outcome="SUCCEEDED" outputParts=1 parts=[part[0]={type="AUDIO" contentType="audio/wav" file="C:/tmp/factory-work.wav" url=<empty>}`,
-			wantPath: "C:/tmp/factory-work.wav",
-		},
-		{
-			name:     "valid URL",
-			response: &factoryapi.ModelResponseEventPayload{Operation: "TTS", Outcome: factoryapi.InferenceOutcomeSucceeded, OutputContent: &outputWithValidURL},
-			want:     `eventType=MODEL_RESPONSE operation="TTS" outcome="SUCCEEDED" outputParts=1 parts=[part[0]={type="AUDIO" contentType="audio/wav" file=<empty> url="file:///tmp/factory-work.wav"}`,
-			wantPath: "/tmp/factory-work.wav",
-		},
-	}
-
-	for _, testCase := range cases {
+	for _, testCase := range realLocalModelDiagnosticCases(t) {
 		t.Run(testCase.name, func(t *testing.T) {
 			events := []factoryapi.FactoryEvent{realLocalModelRequestEvent(t)}
-			if testCase.name != "no model response" {
+			if testCase.includeResponse {
 				events = append(events, realLocalModelResponseEvent(t, testCase.response))
 			}
 
 			check := inspectRecordedRealLocalModelEvents(events)
 			formatted := formatRealLocalModelEventCheck(check)
-			if testCase.want != "" && !strings.Contains(formatted, testCase.want) {
-				t.Fatalf("diagnostics = %s, want substring %q", formatted, testCase.want)
-			}
-			if testCase.wantPath != "" {
-				if check.audioPath != testCase.wantPath {
-					t.Fatalf("audio path = %q, want %q; diagnostics: %s", check.audioPath, testCase.wantPath, formatted)
-				}
-				return
-			}
 			if !strings.Contains(formatted, testCase.want) {
 				t.Fatalf("diagnostics = %s, want substring %q", formatted, testCase.want)
 			}
+			if testCase.wantPath != "" && check.audioPath != testCase.wantPath {
+				t.Fatalf("audio path = %q, want %q; diagnostics: %s", check.audioPath, testCase.wantPath, formatted)
+			}
 		})
+	}
+}
+
+type realLocalModelDiagnosticCase struct {
+	name            string
+	response        *factoryapi.ModelResponseEventPayload
+	includeResponse bool
+	want            string
+	wantPath        string
+}
+
+type realLocalModelDiagnosticFixtureSet struct {
+	validFile        factoryapi.WorkContent
+	validURL         factoryapi.WorkContent
+	twoParts         factoryapi.WorkContent
+	malformedAudio   factoryapi.WorkContent
+	wrongContentType factoryapi.WorkContent
+	emptyFileAndURL  factoryapi.WorkContent
+}
+
+func realLocalModelDiagnosticFixtures(t *testing.T) realLocalModelDiagnosticFixtureSet {
+	t.Helper()
+	validFilePart := realLocalModelAudioPart(t, "C:/tmp/factory-work.wav", "", "audio/wav")
+	return realLocalModelDiagnosticFixtureSet{
+		validFile:        factoryapi.WorkContent{validFilePart},
+		validURL:         factoryapi.WorkContent{realLocalModelAudioPart(t, "", "file:///tmp/factory-work.wav", "audio/wav")},
+		twoParts:         factoryapi.WorkContent{validFilePart, validFilePart},
+		malformedAudio:   factoryapi.WorkContent{realLocalModelMalformedAudioPart(t)},
+		wrongContentType: factoryapi.WorkContent{realLocalModelAudioPart(t, "C:/tmp/factory-work.mp3", "", "audio/mpeg")},
+		emptyFileAndURL:  factoryapi.WorkContent{realLocalModelAudioPart(t, "", "", "audio/wav")},
+	}
+}
+
+func realLocalModelDiagnosticCases(t *testing.T) []realLocalModelDiagnosticCase {
+	t.Helper()
+	fixtures := realLocalModelDiagnosticFixtures(t)
+	response := func(operation string, outcome factoryapi.InferenceOutcome, output factoryapi.WorkContent) *factoryapi.ModelResponseEventPayload {
+		return &factoryapi.ModelResponseEventPayload{Operation: operation, Outcome: outcome, OutputContent: &output}
+	}
+	succeeded := factoryapi.InferenceOutcomeSucceeded
+	return []realLocalModelDiagnosticCase{
+		{name: "no model response", want: "no MODEL_RESPONSE event observed"},
+		{name: "payload decode failure", includeResponse: true, want: "MODEL_RESPONSE payload decode failure"},
+		{name: "wrong operation", includeResponse: true, response: response("ASR", succeeded, fixtures.validFile), want: "wrong operation"},
+		{name: "wrong outcome", includeResponse: true, response: response("TTS", factoryapi.InferenceOutcomeFailed, fixtures.validFile), want: "non-succeeded outcome"},
+		{name: "absent output parts", includeResponse: true, response: &factoryapi.ModelResponseEventPayload{Operation: "TTS", Outcome: succeeded}, want: "output-part count: got absent(0)"},
+		{name: "wrong output part count", includeResponse: true, response: response("TTS", succeeded, fixtures.twoParts), want: "output-part count: got 2"},
+		{name: "audio part decode failure", includeResponse: true, response: response("TTS", succeeded, fixtures.malformedAudio), want: "audio-part decode failure"},
+		{name: "wrong audio content type", includeResponse: true, response: response("TTS", succeeded, fixtures.wrongContentType), want: "audio content-type mismatch"},
+		{name: "empty file and URL", includeResponse: true, response: response("TTS", succeeded, fixtures.emptyFileAndURL), want: "empty file or URL"},
+		{name: "valid file", includeResponse: true, response: response("TTS", succeeded, fixtures.validFile), want: `eventType=MODEL_RESPONSE operation="TTS" outcome="SUCCEEDED" outputParts=1 parts=[part[0]={type="AUDIO" contentType="audio/wav" file="C:/tmp/factory-work.wav" url=<empty>}`, wantPath: "C:/tmp/factory-work.wav"},
+		{name: "valid URL", includeResponse: true, response: response("TTS", succeeded, fixtures.validURL), want: `eventType=MODEL_RESPONSE operation="TTS" outcome="SUCCEEDED" outputParts=1 parts=[part[0]={type="AUDIO" contentType="audio/wav" file=<empty> url="file:///tmp/factory-work.wav"}`, wantPath: "/tmp/factory-work.wav"},
 	}
 }
 
