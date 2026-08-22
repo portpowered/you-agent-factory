@@ -10,6 +10,7 @@ package internal
 import (
 	"context"
 	"errors"
+	"strings"
 	"sync"
 
 	"github.com/jonboulle/clockwork"
@@ -142,7 +143,10 @@ func newService(
 
 func (s *Service) newScriptPollers() scriptpollers.Service {
 	cursorRecorder := scriptpollers.NewMemoryCursorRecorder()
-	if s.cursorFileSystem != nil {
+	// The process-scoped root has no factory-local base until a runtime is
+	// activated. Keep that inert owner memory-backed rather than allowing an
+	// empty base to resolve durable state relative to the daemon CWD.
+	if strings.TrimSpace(s.defaultFactoryDir) != "" && s.cursorFileSystem != nil {
 		if durable, err := scriptpollerswire.NewDurableCursorRecorder(s.defaultFactoryDir, s.cursorFileSystem); err == nil {
 			cursorRecorder = durable
 		}
@@ -236,6 +240,9 @@ func (s *Service) GetCursor(
 	request automations.GetCursorRequest,
 ) (automations.GetCursorResult, error) {
 	if s != nil && s.scriptPollers != nil && scriptpollers.IsScriptPollerInstanceID(request.InstanceID) {
+		if result, handled, err := s.getCursorFromActiveRuntime(ctx, request); handled {
+			return result, err
+		}
 		return s.scriptPollers.GetCursor(ctx, request)
 	}
 	return s.reconciler.GetCursor(ctx, request)

@@ -57,6 +57,10 @@ func NewDurableCursorRecorder(
 	if files == nil {
 		return nil, errors.New("script poller cursor filesystem is required")
 	}
+	baseDir = strings.TrimSpace(baseDir)
+	if baseDir == "" {
+		return nil, errors.New("script poller cursor base directory is required")
+	}
 	return &durableCursorRecorder{
 		dir:   cursorStateDir(baseDir),
 		files: files,

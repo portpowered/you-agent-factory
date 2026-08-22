@@ -166,6 +166,36 @@ func (s *Service) ActivateRuntime(
 	}, nil
 }
 
+func (s *Service) getCursorFromActiveRuntime(
+	ctx context.Context,
+	request automations.GetCursorRequest,
+) (automations.GetCursorResult, bool, error) {
+	if s == nil {
+		return automations.GetCursorResult{}, false, nil
+	}
+	s.runtimeMu.Lock()
+	instances := make([]*runtimeInstance, 0, len(s.runtimes))
+	for _, instance := range s.runtimes {
+		instances = append(instances, instance)
+	}
+	s.runtimeMu.Unlock()
+
+	for _, instance := range instances {
+		if instance == nil || instance.owner == nil || instance.owner == s {
+			continue
+		}
+		result, err := instance.owner.GetCursor(ctx, request)
+		if err == nil {
+			return result, true, nil
+		}
+		if errors.Is(err, automations.ErrNotFound) {
+			continue
+		}
+		return automations.GetCursorResult{}, true, err
+	}
+	return automations.GetCursorResult{}, false, nil
+}
+
 func (s *Service) StartRuntime(ctx context.Context, runtimeID string) error {
 	runtimeID = strings.TrimSpace(runtimeID)
 	if runtimeID == "" {

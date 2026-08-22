@@ -55,6 +55,15 @@ func TestDurableCursorRecorder_RestartRecoversExactOpaqueFacts(t *testing.T) {
 	}
 }
 
+func TestDurableCursorRecorder_RequiresFactoryLocalBaseDirectory(t *testing.T) {
+	t.Parallel()
+
+	_, err := scriptpollerswire.NewDurableCursorRecorder(" ", osFileSystem{})
+	if err == nil || err.Error() != "script poller cursor base directory is required" {
+		t.Fatalf("NewDurableCursorRecorder(blank base) error = %v, want explicit base-directory failure", err)
+	}
+}
+
 func TestDurableCursorRecorder_PreservesOptimisticSemantics(t *testing.T) {
 	t.Parallel()
 
