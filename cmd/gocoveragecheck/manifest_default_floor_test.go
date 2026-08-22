@@ -31,23 +31,21 @@ func TestCoverageDefaultFloorIsLaneSpecific(t *testing.T) {
 	}
 }
 
-// TestCheckCoverageDefaultFloorEvaluatesUnlistedPackagesPerLane proves the four
-// default-floor cases independently for each lane. The unit and functional rows
-// share the same measured totals wherever the lanes must disagree, so a default
-// bleeding from one lane into the other fails this test.
-func TestCheckCoverageDefaultFloorEvaluatesUnlistedPackagesPerLane(t *testing.T) {
+type coverageDefaultFloorCase struct {
+	name         string
+	lane         string
+	defaultFloor string
+	entries      []coverageManifestEntry
+	totals       packageCoverageTotals
+	wantFailure  string
+	rejectText   string
+}
+
+func TestCheckCoverageDefaultFloorEvaluatesUnlistedUnitPackages(t *testing.T) {
 	t.Parallel()
 
 	unlisted := modulePath + "/pkg/platform/unlisted"
-	tests := []struct {
-		name         string
-		lane         string
-		defaultFloor string
-		entries      []coverageManifestEntry
-		totals       packageCoverageTotals
-		wantFailure  string
-		rejectText   string
-	}{
+	runCoverageDefaultFloorCases(t, unlisted, []coverageDefaultFloorCase{
 		{
 			name:        "unit unlisted below the lane default fails",
 			lane:        "unit",
@@ -72,6 +70,14 @@ func TestCheckCoverageDefaultFloorEvaluatesUnlistedPackagesPerLane(t *testing.T)
 			wantFailure: "package coverage regression: package=" + unlisted + " lane=unit expected-minimum=80.00%",
 			rejectText:  "floor-source=lane-default",
 		},
+	})
+}
+
+func TestCheckCoverageDefaultFloorEvaluatesUnlistedFunctionalPackages(t *testing.T) {
+	t.Parallel()
+
+	unlisted := modulePath + "/pkg/platform/unlisted"
+	runCoverageDefaultFloorCases(t, unlisted, []coverageDefaultFloorCase{
 		{
 			name:        "functional unlisted below the lane default fails",
 			lane:        "functional",
@@ -103,9 +109,13 @@ func TestCheckCoverageDefaultFloorEvaluatesUnlistedPackagesPerLane(t *testing.T)
 			wantFailure: "package coverage regression: package=" + unlisted + " lane=functional expected-minimum=60.00%",
 			rejectText:  "floor-source=lane-default",
 		},
-	}
+	})
+}
 
+func runCoverageDefaultFloorCases(t *testing.T, unlisted string, tests []coverageDefaultFloorCase) {
+	t.Helper()
 	for _, tt := range tests {
+		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
