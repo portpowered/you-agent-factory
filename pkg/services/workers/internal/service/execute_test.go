@@ -3,6 +3,7 @@ package service_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"reflect"
 	"strings"
 	"sync"
@@ -10,9 +11,119 @@ import (
 	"testing"
 	"time"
 
+	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	executeservice "github.com/portpowered/infinite-you/pkg/services/workers/internal/service"
 )
+
+func TestExecuteMaterializesWorkContentBeforeRunnerAndCleansItUp(t *testing.T) {
+	t.Parallel()
+
+	const materializedPath = "C:/attempt-content/image.png"
+	var materializedURL string
+	var cleanupCalls atomic.Int32
+	var runnerCalls atomic.Int32
+	service := mustExecuteServiceWithContentMaterializer(
+		t,
+		&stubRunner{execute: func(
+			_ context.Context,
+			request workers.RunnerExecutionRequest,
+		) (workers.RunnerExecutionResult, error) {
+			runnerCalls.Add(1)
+			if len(request.InputTokens) != 1 {
+				t.Fatalf("input token count = %d, want 1", len(request.InputTokens))
+			}
+			token, ok := request.InputTokens[0].(workers.Token)
+			if !ok || len(token.Color.Content) != 1 {
+				t.Fatalf("runner input token = %#v, want one typed content token", request.InputTokens[0])
+			}
+			part := token.Color.Content[0]
+			if part.File != materializedPath || part.URL != "" {
+				t.Fatalf("runner content = %#v, want materialized file without source URL", part)
+			}
+			if part.ContentType != "image/png" || part.Metadata["origin"] != "submitted-work" {
+				t.Fatalf("runner content metadata = %#v, want content type and metadata preserved", part)
+			}
+			return workers.RunnerExecutionResult{Content: "content accepted"}, nil
+		}},
+		work.ContentMaterializeFunc(func(
+			_ context.Context,
+			rawURL string,
+		) (string, work.ContentCleanup, error) {
+			materializedURL = rawURL
+			return materializedPath, func() { cleanupCalls.Add(1) }, nil
+		}),
+	)
+
+	request := validExecuteRequest("dispatch-content", "attempt-content")
+	request.Target.Environment.WorkingDirectory = "C:/workspace"
+	request.Input.Work = []workers.WorkInput{{
+		Name: "submitted-image",
+		Content: []work.WorkContentPart{{
+			Type:        work.WorkContentPartTypeImage,
+			URL:         "file:///submitted/image.png",
+			ContentType: "image/png",
+			Metadata:    map[string]any{"origin": "submitted-work"},
+		}},
+	}}
+
+	result, err := service.Execute(context.Background(), request)
+	if err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	if result.Outcome != workers.ExecutionOutcomeAccepted {
+		t.Fatalf("outcome = %q, want ACCEPTED", result.Outcome)
+	}
+	if materializedURL != "file:///C:/workspace/submitted/image.png" {
+		t.Fatalf("materialized URL = %q, want dispatch-resolved content URL", materializedURL)
+	}
+	if runnerCalls.Load() != 1 || cleanupCalls.Load() != 1 {
+		t.Fatalf("runner calls = %d, cleanup calls = %d, want one each", runnerCalls.Load(), cleanupCalls.Load())
+	}
+	original := request.Input.Work[0].Content[0]
+	if original.URL != "file:///submitted/image.png" || original.File != "" {
+		t.Fatalf("caller content mutated = %#v, want original URL-only content", original)
+	}
+}
+
+func TestExecuteRejectsUnsafeWorkContentBeforeRunner(t *testing.T) {
+	t.Parallel()
+
+	var runnerCalls atomic.Int32
+	service := mustExecuteServiceWithContentMaterializer(
+		t,
+		&stubRunner{execute: func(
+			context.Context,
+			workers.RunnerExecutionRequest,
+		) (workers.RunnerExecutionResult, error) {
+			runnerCalls.Add(1)
+			return workers.RunnerExecutionResult{Content: "unexpected"}, nil
+		}},
+		work.ContentMaterializeFunc(func(
+			context.Context,
+			string,
+		) (string, work.ContentCleanup, error) {
+			return "", nil, fmt.Errorf("reject private target: %w", work.ErrUnsafeContentURL)
+		}),
+	)
+
+	request := validExecuteRequest("dispatch-unsafe-content", "attempt-unsafe-content")
+	request.Input.Work = []workers.WorkInput{{
+		Name: "private-image",
+		Content: []work.WorkContentPart{{
+			Type: work.WorkContentPartTypeImage,
+			URL:  "http://127.0.0.1/secret.png",
+		}},
+	}}
+
+	_, err := service.Execute(context.Background(), request)
+	if err == nil || !errors.Is(err, work.ErrUnsafeContentURL) {
+		t.Fatalf("Execute() error = %v, want ErrUnsafeContentURL", err)
+	}
+	if runnerCalls.Load() != 0 {
+		t.Fatalf("runner calls = %d, want 0 for unsafe content", runnerCalls.Load())
+	}
+}
 
 func TestExecuteHappyPathPreservesCorrelationAndEmitsTerminalObservation(t *testing.T) {
 	t.Parallel()

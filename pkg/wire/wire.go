@@ -280,7 +280,7 @@ var factoryDefinitionsServicesSet = wire.NewSet(
 )
 
 var workerServiceSet = wire.NewSet(
-	provideStatelessWorkersService,
+	provideStatelessWorkersServiceWithContentMaterializer,
 	provideWorkersAgentToolFileSystem,
 	provideWorkersWorktree,
 	provideWorkersWorktreeRelease,
@@ -304,7 +304,9 @@ var statelessWorkersSet = wire.NewSet(
 	provideWorkersAgentToolFileSystem,
 	provideFactoryInvocationPolicyPorts,
 	provideDecisionEnvelopeService,
-	provideStatelessWorkersService,
+	provideWorkContentHostPlatform,
+	provideContentMaterializer,
+	provideStatelessWorkersServiceWithContentMaterializer,
 )
 
 var mockStatelessWorkersSet = wire.NewSet(
@@ -321,7 +323,9 @@ var mockStatelessWorkersSet = wire.NewSet(
 	provideWorkersAgentToolFileSystem,
 	provideFactoryInvocationPolicyPorts,
 	provideDecisionEnvelopeService,
-	provideMockStatelessWorkersService,
+	provideWorkContentHostPlatform,
+	provideContentMaterializer,
+	provideMockStatelessWorkersServiceWithContentMaterializer,
 )
 
 var cliCommandOperationsSet = wire.NewSet(

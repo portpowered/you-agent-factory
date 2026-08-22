@@ -15,6 +15,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
+	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 
 	workersinternal "github.com/portpowered/infinite-you/pkg/services/workers/internal"
@@ -72,6 +73,42 @@ func NewService(
 	agentToolFiles workers.AgentToolFileSystem,
 	providerOverrides ...providers.Service,
 ) (workers.Service, error) {
+	return NewServiceWithContentMaterializer(
+		agentDependencies,
+		scriptConfig,
+		scriptDependencies,
+		inferenceConfig,
+		inferenceDependencies,
+		observe,
+		logger,
+		clock,
+		worktree,
+		worktreeRelease,
+		temporaryFiles,
+		agentToolFiles,
+		nil,
+		providerOverrides...,
+	)
+}
+
+// NewServiceWithContentMaterializer constructs the production Workers root
+// with the Work-owned materialization capability used before runner execution.
+func NewServiceWithContentMaterializer(
+	agentDependencies AgentDependencies,
+	scriptConfig ScriptConfig,
+	scriptDependencies ScriptDependencies,
+	inferenceConfig InferenceConfig,
+	inferenceDependencies InferenceDependencies,
+	observe workers.ObservationSink,
+	logger logging.Logger,
+	clock func() time.Time,
+	worktree workers.FactoryWorktreePreparer,
+	worktreeRelease func(context.Context, workers.FactoryWorktreePreparation) error,
+	temporaryFiles workers.TemporaryFileSystem,
+	agentToolFiles workers.AgentToolFileSystem,
+	contentMaterializer work.ContentMaterializer,
+	providerOverrides ...providers.Service,
+) (workers.Service, error) {
 	if err := validateConstructionPorts(
 		agentDependencies,
 		scriptConfig,
@@ -96,7 +133,7 @@ func NewService(
 	if len(providerOverrides) > 0 {
 		providerOverride = providerOverrides[0]
 	}
-	executeService, err := executeservice.NewWithProviderOverride(
+	executeService, err := executeservice.NewWithProviderOverrideAndContentMaterializer(
 		runnerRegistry,
 		agentDependencies.Providers,
 		observe,
@@ -108,6 +145,7 @@ func NewService(
 		providerOverride,
 		agentrun.NewLibraryHarnessAdapter(agentToolFiles),
 		agentDependencies.DecisionEnvelopes,
+		contentMaterializer,
 		scriptDependencies.FactoryDocs,
 	)
 	if err != nil {
@@ -136,6 +174,46 @@ func NewMockService(
 	worktreeRelease func(context.Context, workers.FactoryWorktreePreparation) error,
 	temporaryFiles workers.TemporaryFileSystem,
 	agentToolFiles workers.AgentToolFileSystem,
+	providerOverrides ...providers.Service,
+) (workers.Service, error) {
+	return NewMockServiceWithContentMaterializer(
+		agentDependencies,
+		scriptConfig,
+		scriptDependencies,
+		inferenceConfig,
+		inferenceDependencies,
+		mockWorkers,
+		mockDependencies,
+		observe,
+		logger,
+		clock,
+		worktree,
+		worktreeRelease,
+		temporaryFiles,
+		agentToolFiles,
+		nil,
+		providerOverrides...,
+	)
+}
+
+// NewMockServiceWithContentMaterializer constructs the explicit mock-feature
+// Workers root with the Work-owned materialization capability.
+func NewMockServiceWithContentMaterializer(
+	agentDependencies AgentDependencies,
+	scriptConfig ScriptConfig,
+	scriptDependencies ScriptDependencies,
+	inferenceConfig InferenceConfig,
+	inferenceDependencies InferenceDependencies,
+	mockWorkers *workers.MockWorkersConfig,
+	mockDependencies MockDependencies,
+	observe workers.ObservationSink,
+	logger logging.Logger,
+	clock func() time.Time,
+	worktree workers.FactoryWorktreePreparer,
+	worktreeRelease func(context.Context, workers.FactoryWorktreePreparation) error,
+	temporaryFiles workers.TemporaryFileSystem,
+	agentToolFiles workers.AgentToolFileSystem,
+	contentMaterializer work.ContentMaterializer,
 	providerOverrides ...providers.Service,
 ) (workers.Service, error) {
 	if mockWorkers == nil {
@@ -167,7 +245,7 @@ func NewMockService(
 	if len(providerOverrides) > 0 {
 		providerOverride = providerOverrides[0]
 	}
-	executeService, err := executeservice.NewWithProviderOverride(
+	executeService, err := executeservice.NewWithProviderOverrideAndContentMaterializer(
 		runnerRegistry,
 		agentDependencies.Providers,
 		observe,
@@ -179,6 +257,7 @@ func NewMockService(
 		providerOverride,
 		agentrun.NewLibraryHarnessAdapter(agentToolFiles),
 		agentDependencies.DecisionEnvelopes,
+		contentMaterializer,
 		scriptDependencies.FactoryDocs,
 	)
 	if err != nil {

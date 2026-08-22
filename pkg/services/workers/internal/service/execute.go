@@ -84,6 +84,9 @@ func (s *Service) prepareAttempt(
 	if err := s.prepareWorkspace(ctx, request, cleanup); err != nil {
 		return "", err
 	}
+	if err := s.materializeWorkContent(ctx, request, cleanup); err != nil {
+		return "", err
+	}
 	if contextErr := ctx.Err(); contextErr != nil {
 		return "", contextErr
 	}

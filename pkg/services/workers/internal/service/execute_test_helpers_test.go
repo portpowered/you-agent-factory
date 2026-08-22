@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	executeservice "github.com/portpowered/infinite-you/pkg/services/workers/internal/service"
 	"github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners"
@@ -41,6 +42,32 @@ func mustExecuteServiceWithEdges(
 	)
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
+	}
+	return service
+}
+
+func mustExecuteServiceWithContentMaterializer(
+	t *testing.T,
+	runner workers.Runner,
+	materializer work.ContentMaterializer,
+) *executeservice.Service {
+	t.Helper()
+	service, err := executeservice.NewWithProviderOverrideAndContentMaterializer(
+		&staticRunners{runner: runner},
+		nil,
+		nil,
+		nil,
+		func() time.Time { return time.Unix(10, 0) },
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		materializer,
+	)
+	if err != nil {
+		t.Fatalf("NewWithProviderOverrideAndContentMaterializer() error = %v", err)
 	}
 	return service
 }

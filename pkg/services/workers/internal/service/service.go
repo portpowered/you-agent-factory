@@ -8,6 +8,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
+	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners"
 	"github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/executor/agentrun"
@@ -17,16 +18,17 @@ import (
 // registry. It retains no Factory Session, Runtime, dispatch, or attempt state
 // after Execute returns.
 type Service struct {
-	runners          runners.Service
-	providers        providers.Service
-	providerOverride providers.Service
-	observe          workers.ObservationSink
-	logger           logging.Logger
-	clock            func() time.Time
-	worktree         workers.FactoryWorktreePreparer
-	worktreeRelease  func(context.Context, workers.FactoryWorktreePreparation) error
-	temporaryFiles   workers.TemporaryFileSystem
-	factoryDocs      workers.FactoryDocsLoader
+	runners             runners.Service
+	providers           providers.Service
+	providerOverride    providers.Service
+	contentMaterializer work.ContentMaterializer
+	observe             workers.ObservationSink
+	logger              logging.Logger
+	clock               func() time.Time
+	worktree            workers.FactoryWorktreePreparer
+	worktreeRelease     func(context.Context, workers.FactoryWorktreePreparation) error
+	temporaryFiles      workers.TemporaryFileSystem
+	factoryDocs         workers.FactoryDocsLoader
 	// agentRunHarness runs the agent/tool loop for an attempt whose target
 	// declares Tools.AgentLoop. It is immutable process configuration; the loop
 	// itself keeps no state between Execute calls.
@@ -61,6 +63,7 @@ func New(
 		nil,
 		nil,
 		nil,
+		nil,
 		factoryDocs...,
 	)
 }
@@ -92,6 +95,43 @@ func NewWithProviderOverride(
 		worktree,
 		worktreeRelease,
 		temporaryFiles,
+		nil,
+		providerOverride,
+		agentRunHarness,
+		decisionEnvelopes,
+		factoryDocs...,
+	)
+}
+
+// NewWithProviderOverrideAndContentMaterializer constructs an inert Execute
+// capability with the Work-owned content materialization edge used by
+// request-scoped Worker dispatch. The materializer remains a peer capability;
+// Workers does not import Work's private implementation packages.
+func NewWithProviderOverrideAndContentMaterializer(
+	runnerService runners.Service,
+	providersService providers.Service,
+	observe workers.ObservationSink,
+	logger logging.Logger,
+	clock func() time.Time,
+	worktree workers.FactoryWorktreePreparer,
+	worktreeRelease func(context.Context, workers.FactoryWorktreePreparation) error,
+	temporaryFiles workers.TemporaryFileSystem,
+	providerOverride providers.Service,
+	agentRunHarness agentrun.HarnessAdapter,
+	decisionEnvelopes factorydefinitions.DecisionEnvelopeService,
+	contentMaterializer work.ContentMaterializer,
+	factoryDocs ...workers.FactoryDocsLoader,
+) (*Service, error) {
+	return newService(
+		runnerService,
+		providersService,
+		observe,
+		logger,
+		clock,
+		worktree,
+		worktreeRelease,
+		temporaryFiles,
+		contentMaterializer,
 		providerOverride,
 		agentRunHarness,
 		decisionEnvelopes,
@@ -108,6 +148,7 @@ func newService(
 	worktree workers.FactoryWorktreePreparer,
 	worktreeRelease func(context.Context, workers.FactoryWorktreePreparation) error,
 	temporaryFiles workers.TemporaryFileSystem,
+	contentMaterializer work.ContentMaterializer,
 	providerOverride providers.Service,
 	agentRunHarness agentrun.HarnessAdapter,
 	decisionEnvelopes factorydefinitions.DecisionEnvelopeService,
@@ -124,17 +165,18 @@ func newService(
 		docsLoader = factoryDocs[0]
 	}
 	return &Service{
-		runners:           runnerService,
-		providers:         providersService,
-		providerOverride:  providerOverride,
-		observe:           observe,
-		logger:            logging.EnsureLogger(logger),
-		clock:             clock,
-		worktree:          worktree,
-		worktreeRelease:   worktreeRelease,
-		temporaryFiles:    temporaryFiles,
-		factoryDocs:       docsLoader,
-		agentRunHarness:   agentRunHarness,
-		decisionEnvelopes: decisionEnvelopes,
+		runners:             runnerService,
+		providers:           providersService,
+		providerOverride:    providerOverride,
+		contentMaterializer: contentMaterializer,
+		observe:             observe,
+		logger:              logging.EnsureLogger(logger),
+		clock:               clock,
+		worktree:            worktree,
+		worktreeRelease:     worktreeRelease,
+		temporaryFiles:      temporaryFiles,
+		factoryDocs:         docsLoader,
+		agentRunHarness:     agentRunHarness,
+		decisionEnvelopes:   decisionEnvelopes,
 	}, nil
 }

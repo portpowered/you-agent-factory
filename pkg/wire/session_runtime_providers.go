@@ -44,6 +44,7 @@ import (
 	providerswire "github.com/portpowered/infinite-you/pkg/services/providers/wire"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	recordingswire "github.com/portpowered/infinite-you/pkg/services/recordings/wire"
+	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	workerswire "github.com/portpowered/infinite-you/pkg/services/workers/wire"
 	"go.uber.org/zap"
@@ -959,7 +960,7 @@ func provideStatelessWorkersService(
 	agentToolFileSystem workers.AgentToolFileSystem,
 	decisionEnvelopes factorydefinitions.DecisionEnvelopeService,
 ) (workers.Service, error) {
-	return provideStatelessWorkersServiceWithMock(
+	return provideStatelessWorkersServiceWithContentMaterializer(
 		providersService,
 		modelsService,
 		scriptCommandRunner,
@@ -972,6 +973,39 @@ func provideStatelessWorkersService(
 		providerOverride,
 		agentToolFileSystem,
 		decisionEnvelopes,
+		nil,
+	)
+}
+
+func provideStatelessWorkersServiceWithContentMaterializer(
+	providersService providers.Service,
+	modelsService models.Service,
+	scriptCommandRunner factorysessionwire.ScriptCommandRunner,
+	factoryDocsFileSystem platformfilesystem.ReadFileTree,
+	clock factoryruntime.Clock,
+	logger *zap.Logger,
+	worktreePreparer workers.FactoryWorktreePreparer,
+	worktreeRelease func(context.Context, workers.FactoryWorktreePreparation) error,
+	temporaryFiles platformfilesystem.TemporaryFileSystem,
+	providerOverride providerOverrideService,
+	agentToolFileSystem workers.AgentToolFileSystem,
+	decisionEnvelopes factorydefinitions.DecisionEnvelopeService,
+	contentMaterializer work.ContentMaterializer,
+) (workers.Service, error) {
+	return provideStatelessWorkersServiceWithMockAndContentMaterializer(
+		providersService,
+		modelsService,
+		scriptCommandRunner,
+		factoryDocsFileSystem,
+		clock,
+		logger,
+		worktreePreparer,
+		worktreeRelease,
+		temporaryFiles,
+		providerOverride,
+		agentToolFileSystem,
+		decisionEnvelopes,
+		contentMaterializer,
 		nil,
 	)
 }
@@ -994,7 +1028,7 @@ func provideMockStatelessWorkersService(
 	decisionEnvelopes factorydefinitions.DecisionEnvelopeService,
 	mockWorkers *workers.MockWorkersConfig,
 ) (workers.Service, error) {
-	return provideStatelessWorkersServiceWithMock(
+	return provideStatelessWorkersServiceWithMockAndContentMaterializer(
 		providersService,
 		modelsService,
 		scriptCommandRunner,
@@ -1007,6 +1041,7 @@ func provideMockStatelessWorkersService(
 		providerOverride,
 		agentToolFileSystem,
 		decisionEnvelopes,
+		nil,
 		mockWorkers,
 	)
 }
@@ -1026,6 +1061,74 @@ func provideStatelessWorkersServiceWithMock(
 	decisionEnvelopes factorydefinitions.DecisionEnvelopeService,
 	mockWorkers *workers.MockWorkersConfig,
 ) (workers.Service, error) {
+	return provideStatelessWorkersServiceWithMockAndContentMaterializer(
+		providersService,
+		modelsService,
+		scriptCommandRunner,
+		factoryDocsFileSystem,
+		clock,
+		logger,
+		worktreePreparer,
+		worktreeRelease,
+		temporaryFiles,
+		providerOverride,
+		agentToolFileSystem,
+		decisionEnvelopes,
+		nil,
+		mockWorkers,
+	)
+}
+
+func provideMockStatelessWorkersServiceWithContentMaterializer(
+	providersService providers.Service,
+	modelsService models.Service,
+	scriptCommandRunner factorysessionwire.ScriptCommandRunner,
+	factoryDocsFileSystem platformfilesystem.ReadFileTree,
+	clock factoryruntime.Clock,
+	logger *zap.Logger,
+	worktreePreparer workers.FactoryWorktreePreparer,
+	worktreeRelease func(context.Context, workers.FactoryWorktreePreparation) error,
+	temporaryFiles platformfilesystem.TemporaryFileSystem,
+	providerOverride providerOverrideService,
+	agentToolFileSystem workers.AgentToolFileSystem,
+	decisionEnvelopes factorydefinitions.DecisionEnvelopeService,
+	contentMaterializer work.ContentMaterializer,
+	mockWorkers *workers.MockWorkersConfig,
+) (workers.Service, error) {
+	return provideStatelessWorkersServiceWithMockAndContentMaterializer(
+		providersService,
+		modelsService,
+		scriptCommandRunner,
+		factoryDocsFileSystem,
+		clock,
+		logger,
+		worktreePreparer,
+		worktreeRelease,
+		temporaryFiles,
+		providerOverride,
+		agentToolFileSystem,
+		decisionEnvelopes,
+		contentMaterializer,
+		mockWorkers,
+	)
+}
+
+func provideStatelessWorkersServiceWithMockAndContentMaterializer(
+	providersService providers.Service,
+	modelsService models.Service,
+	scriptCommandRunner factorysessionwire.ScriptCommandRunner,
+	factoryDocsFileSystem platformfilesystem.ReadFileTree,
+	clock factoryruntime.Clock,
+	logger *zap.Logger,
+	worktreePreparer workers.FactoryWorktreePreparer,
+	worktreeRelease func(context.Context, workers.FactoryWorktreePreparation) error,
+	temporaryFiles platformfilesystem.TemporaryFileSystem,
+	providerOverride providerOverrideService,
+	agentToolFileSystem workers.AgentToolFileSystem,
+	decisionEnvelopes factorydefinitions.DecisionEnvelopeService,
+	contentMaterializer work.ContentMaterializer,
+	mockWorkers *workers.MockWorkersConfig,
+) (workers.Service, error) {
 	if clock == nil {
 		return nil, fmt.Errorf("construct stateless Workers: clock is required")
 	}
@@ -1035,8 +1138,8 @@ func provideStatelessWorkersServiceWithMock(
 	}
 	scriptRunner := scriptCommandRunner
 	agentDependencies := workerswire.AgentDependencies{
-		Providers: providersService,
-		Publish:   func(workers.ProgressFragment) {},
+		Providers:           providersService,
+		Publish:             func(workers.ProgressFragment) {},
 		// Decision-envelope interpretation belongs to Factory Definitions.
 		// The detached Execute path routes envelope output through this
 		// injected owner instead of re-implementing the contract.
@@ -1059,7 +1162,7 @@ func provideStatelessWorkersServiceWithMock(
 	inferenceDependencies := workerswire.InferenceDependencies{Models: modelsService}
 	loggerValue := logging.NewZapLogger(logger, false)
 	if mockWorkers != nil {
-		return workerswire.NewMockService(
+		return workerswire.NewMockServiceWithContentMaterializer(
 			agentDependencies,
 			scriptConfig,
 			scriptDependencies,
@@ -1074,10 +1177,11 @@ func provideStatelessWorkersServiceWithMock(
 			worktreeRelease,
 			temporaryFiles,
 			agentToolFileSystem,
+			contentMaterializer,
 			providerOverride,
 		)
 	}
-	return workerswire.NewService(
+	return workerswire.NewServiceWithContentMaterializer(
 		agentDependencies,
 		scriptConfig,
 		scriptDependencies,
@@ -1090,6 +1194,7 @@ func provideStatelessWorkersServiceWithMock(
 		worktreeRelease,
 		temporaryFiles,
 		agentToolFileSystem,
+		contentMaterializer,
 		providerOverride,
 	)
 }
