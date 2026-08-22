@@ -205,7 +205,7 @@ func (t *TransitionerSubsystem) mapToCorrespondingTokenMutations(ctx context.Con
 		}
 	}
 
-	arcs, resolved, err := t.calculateArcsForResolvedResult(currentTransition, resolved)
+	arcs, resolved, err := t.calculateArcsForResolvedResult(currentTransition, resolved, consumedTokens)
 	if err != nil {
 		return nil, interfaces.CompletedDispatch{}, nil, err
 	}
@@ -342,26 +342,6 @@ func completedDispatchReason(result resolvedWorkResult) string {
 	default:
 		return ""
 	}
-}
-
-func (t *TransitionerSubsystem) calculateArcsForResolvedResult(currentTransition *petri.Transition, resolved resolvedWorkResult) ([]petri.Arc, resolvedWorkResult, error) {
-	workstation, ok := runtimeWorkstation(currentTransition.Name, t.runtimeConfig)
-	if ok &&
-		workstation != nil &&
-		t.decisionEnvelopes != nil &&
-		t.decisionEnvelopes.UsesGoalRoutingDecisionEnvelope(workstation) {
-		if resolved.outcome == workerexecution.OutcomeAccepted {
-			return matchClassificationLabelArcs(currentTransition, resolved.selectedClassificationLabel, resolved, "decision %q did not match any authored routing route")
-		}
-		arcs, err := calculateArcs(currentTransition, resolved.outcome)
-		return arcs, resolved, err
-	}
-	if !ok || workstation == nil || workstation.Type != interfaces.WorkstationTypeClassify || resolved.outcome != workerexecution.OutcomeAccepted {
-		arcs, err := calculateArcs(currentTransition, resolved.outcome)
-		return arcs, resolved, err
-	}
-
-	return matchClassificationLabelArcs(currentTransition, resolved.output, resolved, "classifier label %q did not match any authored classification route")
 }
 
 func firstDecisionEnvelopeService(

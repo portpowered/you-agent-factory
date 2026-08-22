@@ -83,6 +83,35 @@ func TestTransitioner_ExpectedArtifactFailureUsesFailureDestination(t *testing.T
 	}
 }
 
+func TestTransitioner_TerminalFailureBypassesAuthoredRetryRoute(t *testing.T) {
+	now := time.Date(2026, time.August, 10, 12, 0, 0, 0, time.UTC)
+	net := workerBatchTestNet()
+	net.Transitions["t1"].FailureArcs = []petri.Arc{{ID: "retry", PlaceID: "task:init"}}
+	transitioner := NewTransitioner(net, nil, func() time.Time { return now }, testTokenTransformer(net), nil, nil, nil, testWorkPropagationPolicy())
+	snapshot := workerBatchSnapshot("")
+	snapshot.Results[0] = workerexecution.WorkResult{
+		DispatchID:   "dispatch-1",
+		TransitionID: "t1",
+		Outcome:      workerexecution.OutcomeFailed,
+		Error:        "Codex requires a trusted working directory",
+		FailureMetadata: &workerexecution.WorkFailureMetadata{
+			Family: workerexecution.WorkFailureFamilyTerminal,
+			Type:   workerexecution.WorkFailureTypePermanentBadRequest,
+		},
+	}
+
+	result, err := transitioner.Execute(context.Background(), snapshot)
+	if err != nil {
+		t.Fatalf("Execute returned error: %v", err)
+	}
+	if result == nil || len(result.Mutations) != 1 {
+		t.Fatalf("transitioner result = %#v, want one terminal failure mutation", result)
+	}
+	if got := result.Mutations[0].ToPlace; got != "task:failed" {
+		t.Fatalf("failure mutation destination = %q, want task:failed", got)
+	}
+}
+
 func TestReleaseResourceTokensOnFailure_PreservesConsumedTokenIdentityRegardlessOfInputOrder(t *testing.T) {
 	now := time.Date(2026, time.July, 3, 10, 30, 0, 0, time.UTC)
 	createdAt := now.Add(-2 * time.Hour)

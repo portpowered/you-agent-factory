@@ -535,6 +535,7 @@ func (decoder *decoder) retainFinalContent(value string) (string, bool) {
 
 func (decoder *decoder) declareFailure(record errorRecord) {
 	failure := classifyDeclaredFailure(record)
+	markUnrecognizedProviderRefusal(&failure)
 	known := failure.Kind != providers.ExecuteFailureKindUnknown
 	if decoder.declaredFailure == nil || known || !decoder.declaredKnown {
 		decoder.declaredFailure = &failure

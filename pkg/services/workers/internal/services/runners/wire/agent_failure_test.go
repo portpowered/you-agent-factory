@@ -146,7 +146,7 @@ func TestAgentRunnerPreservesCancellationAndDeadlineContext(t *testing.T) {
 
 func TestAgentRunnerBoundsFailureMessage(t *testing.T) {
 	fake := &failingAgentProvidersFake{failure: providers.ExecuteFailure{
-		Kind:    providers.ExecuteFailureKindUnknown,
+		Kind:    providers.ExecuteFailureKindInvalidRequest,
 		Message: strings.Repeat("ø", 600),
 	}}
 	runner := resolveAgentRunner(t, fake, agentNoopPublisher)

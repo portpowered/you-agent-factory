@@ -38,7 +38,7 @@ const (
 	rejectWorkID             = "mock-reject-work"
 	configuredRejectStdout   = "configured reject stdout"
 	configuredRejectStderr   = "configured reject stderr"
-	stableUnknownProviderErr = "provider error: unknown: Codex reported a terminal error"
+	stableProviderRefusalErr = "provider error: permanent_bad_request: provider rejected the execution request"
 )
 
 // TestMockWorkersReplaceOnlyNamedChildren proves a partial --with-mock-workers
@@ -452,9 +452,9 @@ func assertStableMockRejectDispatch(t *testing.T, observation support.DispatchEv
 	}
 	if payload.ProviderFailure == nil ||
 		payload.ProviderFailure.Type == nil ||
-		string(*payload.ProviderFailure.Type) != string(workerexecution.WorkFailureTypeUnknown) {
+		string(*payload.ProviderFailure.Type) != string(workerexecution.WorkFailureTypePermanentBadRequest) {
 		t.Fatalf(
-			"reject-process provider failure = %#v, want stable unknown provider failure",
+			"reject-process provider failure = %#v, want neutral terminal provider refusal",
 			payload.ProviderFailure,
 		)
 	}
@@ -462,9 +462,9 @@ func assertStableMockRejectDispatch(t *testing.T, observation support.DispatchEv
 		t.Fatal("reject-process dispatch error missing from public response")
 	}
 	errorText := *payload.Error
-	if !strings.Contains(errorText, stableUnknownProviderErr) {
+	if !strings.Contains(errorText, stableProviderRefusalErr) {
 		t.Fatalf(
-			"reject-process error = %q, want stable public unknown provider failure",
+			"reject-process error = %q, want neutral terminal provider refusal",
 			errorText,
 		)
 	}

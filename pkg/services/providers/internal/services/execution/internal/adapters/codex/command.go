@@ -46,7 +46,7 @@ func NewCommandEffect(candidate any, clock platformclock.Source) Effect {
 			return effectResult, nativeCommandError(ctx, runErr)
 		}
 		if result.ExitCode != 0 {
-			return effectResult, exitFailureFromCommandResult(result)
+			return effectResult, exitFailureFromCommandResult(result, request.WorkingDirectory)
 		}
 		return effectResult, nil
 	})

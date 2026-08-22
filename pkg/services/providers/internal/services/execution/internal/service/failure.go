@@ -136,12 +136,16 @@ func normalizeDeclaredFailure(
 	if !knownFailureKind(failure.Kind) {
 		failure.Kind = providers.ExecuteFailureKindUnknown
 	}
-	failure.Message = sanitizeDiagnosticText(
-		failure.Message,
-		maxDiagnosticRunes,
-		request,
-		extraSecrets...,
-	)
+	if safeFailureMessage(failure.Diagnostics) {
+		failure.Message = sanitizeSafeFailureMessage(failure.Message, request, extraSecrets...)
+	} else {
+		failure.Message = sanitizeDiagnosticText(
+			failure.Message,
+			maxDiagnosticRunes,
+			request,
+			extraSecrets...,
+		)
+	}
 	if failure.Message == "" {
 		failure.Message = defaultFailureMessage(failure.Kind)
 	}
@@ -150,6 +154,20 @@ func normalizeDeclaredFailure(
 		failure.Diagnostics = &diagnostics
 	}
 	return failure
+}
+
+func safeFailureMessage(diagnostics *providers.ExecuteDiagnostics) bool {
+	return diagnostics != nil &&
+		diagnostics.Metadata[providers.ExecuteDiagnosticMetadataSafeFailureMessage] == "true"
+}
+
+func sanitizeSafeFailureMessage(
+	value string,
+	request providers.ExecuteRequest,
+	extraSecrets ...string,
+) string {
+	request.WorkingDirectory = ""
+	return sanitizeDiagnosticText(value, maxDiagnosticRunes, request, extraSecrets...)
 }
 
 func lifecycleStageDiagnostics(

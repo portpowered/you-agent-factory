@@ -13,7 +13,7 @@ import (
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
-func TestConfigDrivenRetryLoopBreaker_TripsAfterThreeProcessFailures(t *testing.T) {
+func TestConfigDrivenUnrecognizedProviderRefusalFailsOnce(t *testing.T) {
 	dir := support.ScaffoldFactory(t, map[string]any{
 		"name": "process_failure_breaker",
 		"workTypes": []any{map[string]any{
@@ -44,9 +44,7 @@ func TestConfigDrivenRetryLoopBreaker_TripsAfterThreeProcessFailures(t *testing.
 	support.WriteAgentConfig(t, dir, "processor", support.BuildModelWorkerConfig(modelprovider.ProviderCodex, "test-model"))
 
 	runner := support.NewShapedProviderCommandRunner(
-		platformprocess.CommandResult{ExitCode: 1, Stderr: []byte("first process failed")},
-		platformprocess.CommandResult{ExitCode: 1, Stderr: []byte("second process failed")},
-		platformprocess.CommandResult{ExitCode: 1, Stderr: []byte("third process failed")},
+		platformprocess.CommandResult{ExitCode: 77, Stderr: []byte("future provider refusal: credential=secret")},
 	)
 	_, listed, events := support.RunFactoryToCompletionWithEdgesAndObservations(
 		t,
@@ -60,8 +58,8 @@ func TestConfigDrivenRetryLoopBreaker_TripsAfterThreeProcessFailures(t *testing.
 		"task:init":     0,
 		"task:complete": 0,
 	})
-	if got := runner.CallCount(); got != 3 {
-		t.Fatalf("provider command calls = %d, want three consecutive process failures", got)
+	if got := runner.CallCount(); got != 1 {
+		t.Fatalf("provider command calls = %d, want one terminal process failure", got)
 	}
 
 	observations := support.ObserveDispatchEvents(t, events)
@@ -74,8 +72,8 @@ func TestConfigDrivenRetryLoopBreaker_TripsAfterThreeProcessFailures(t *testing.
 			processFailures++
 		}
 	}
-	if processFailures != 3 {
-		t.Fatalf("failed process dispatches = %d, want three counted failures", processFailures)
+	if processFailures != 1 {
+		t.Fatalf("failed process dispatches = %d, want one terminal refusal", processFailures)
 	}
 }
 

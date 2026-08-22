@@ -292,7 +292,7 @@ func normalizeProvidersFailure(err error, model, provider string) error {
 		return err
 	}
 	normalized := workers.NewProviderError(
-		workersFailureType(failure.Kind),
+		workersFailureType(failure),
 		failure.Message,
 		err,
 	)
@@ -313,8 +313,13 @@ func unsupportedProviderContinuationError(reference providers.SessionRef) error 
 	return normalized
 }
 
-func workersFailureType(kind providers.ExecuteFailureKind) workers.WorkFailureType {
-	switch kind {
+func workersFailureType(failure providers.ExecuteFailure) workers.WorkFailureType {
+	if failure.Kind == providers.ExecuteFailureKindUnknown &&
+		failure.Diagnostics != nil &&
+		failure.Diagnostics.Metadata[providers.ExecuteDiagnosticMetadataUnrecognizedProviderRefusal] == "true" {
+		return workers.WorkFailureTypePermanentBadRequest
+	}
+	switch failure.Kind {
 	case providers.ExecuteFailureKindCanceled:
 		return workers.WorkFailureTypeUnknown
 	case providers.ExecuteFailureKindTimeout:
@@ -328,6 +333,10 @@ func workersFailureType(kind providers.ExecuteFailureKind) workers.WorkFailureTy
 		return workers.WorkFailureTypeThrottled
 	case providers.ExecuteFailureKindMisconfigured:
 		return workers.WorkFailureTypeMisconfigured
+	case providers.ExecuteFailureKindDependency:
+		return workers.WorkFailureTypeUnknown
+	case providers.ExecuteFailureKindUnknown, providers.ExecuteFailureKindSessionNotFound:
+		return workers.WorkFailureTypeUnknown
 	default:
 		return workers.WorkFailureTypeUnknown
 	}
@@ -444,9 +453,22 @@ func failedInvocationResult(attempt int, err error) workers.InvocationResult {
 	}
 }
 
+const providerUnrecognizedRefusalMessage = "provider rejected the execution request"
+
 func providerFailureMessage(providerErr *workers.ProviderError) string {
 	if providerErr == nil {
 		return safeFailureMessage(workers.WorkFailureTypeUnknown)
+	}
+	if providerErr.Diagnostics != nil && providerErr.Diagnostics.Provider != nil {
+		metadata := providerErr.Diagnostics.Provider.ResponseMetadata
+		if metadata[providers.ExecuteDiagnosticMetadataUnrecognizedProviderRefusal] == "true" {
+			return providerUnrecognizedRefusalMessage
+		}
+		if metadata[providers.ExecuteDiagnosticMetadataSafeFailureMessage] == "true" {
+			if message := strings.TrimSpace(providerErr.Message); message != "" {
+				return message
+			}
+		}
 	}
 	// Providers normalizes ExecuteFailure.Message before it crosses into
 	// Workers. ProviderFailureKind is the marker that this is that safe,

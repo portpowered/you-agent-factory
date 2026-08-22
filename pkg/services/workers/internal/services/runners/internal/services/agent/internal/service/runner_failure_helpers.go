@@ -45,19 +45,53 @@ func failureTypeForProviderKind(kind providers.ExecuteFailureKind) workers.WorkF
 		return workers.WorkFailureTypeInternalServerError
 	case providers.ExecuteFailureKindTimeout:
 		return workers.WorkFailureTypeTimeout
+	case providers.ExecuteFailureKindUnknown, providers.ExecuteFailureKindSessionNotFound:
+		return workers.WorkFailureTypeUnknown
 	default:
 		return workers.WorkFailureTypeUnknown
 	}
 }
 
+func failureTypeForProviderFailure(failure providers.ExecuteFailure) workers.WorkFailureType {
+	if isUnrecognizedProviderRefusal(failure) {
+		return workers.WorkFailureTypePermanentBadRequest
+	}
+	return failureTypeForProviderKind(failure.Kind)
+}
+
+func isUnrecognizedProviderRefusal(failure providers.ExecuteFailure) bool {
+	return failure.Kind == providers.ExecuteFailureKindUnknown &&
+		failure.Diagnostics != nil &&
+		failure.Diagnostics.Metadata[providers.ExecuteDiagnosticMetadataUnrecognizedProviderRefusal] == "true"
+}
+
+func hasUnrecognizedProviderRefusalMarker(failure *workers.ProviderError) bool {
+	if failure == nil || failure.Diagnostics == nil {
+		return false
+	}
+	if failure.Diagnostics.Metadata[providers.ExecuteDiagnosticMetadataUnrecognizedProviderRefusal] == "true" {
+		return true
+	}
+	return failure.Diagnostics.Provider != nil &&
+		failure.Diagnostics.Provider.ResponseMetadata[providers.ExecuteDiagnosticMetadataUnrecognizedProviderRefusal] == "true"
+}
+
 const failureMessageRuneLimit = 512
 
 const (
-	agentTimeoutFailureMessage  = "provider invocation timed out"
-	agentCanceledFailureMessage = "provider invocation was canceled"
+	agentTimeoutFailureMessage         = "provider invocation timed out"
+	agentCanceledFailureMessage        = "provider invocation was canceled"
+	unrecognizedProviderFailureMessage = "provider rejected the execution request"
 )
 
-func canonicalAgentFailureMessage(failureType workers.WorkFailureType, providerMessage string) string {
+func canonicalAgentFailureMessage(
+	failure providers.ExecuteFailure,
+	failureType workers.WorkFailureType,
+	providerMessage string,
+) string {
+	if isUnrecognizedProviderRefusal(failure) {
+		return unrecognizedProviderFailureMessage
+	}
 	switch failureType {
 	case workers.WorkFailureTypeTimeout:
 		return agentTimeoutFailureMessage
