@@ -77,6 +77,44 @@ func TestProductionModelsCLICharacterizationJSONBypassesOutputRequirement(t *tes
 	}
 }
 
+// TestProductionModelsCLICharacterizationSuccessExit pins the successful
+// command boundary for the audio projection. The current zero-error exit is
+// characterized, not endorsed: artifact production is supplied by the
+// deterministic Models service test and this test only proves Cobra preserves
+// its success through the public command composition.
+func TestProductionModelsCLICharacterizationSuccessExit(t *testing.T) {
+	var got modelscli.InvokeConfig
+	factory := withTestInjectedPlatformRoles(NewCommandFactory(CommandOperations{ModelsCLI: modelsCLIServiceFunctions{
+		invoke: func(cfg modelscli.InvokeConfig) error {
+			got = cfg
+			_, err := io.WriteString(cfg.Output, "Wrote audio: speech.wav\n")
+			return err
+		},
+	}}))
+	root := factory.NewCommand(
+		func() (string, error) { return t.TempDir(), nil },
+		func(string) (string, bool) { return "", false },
+		nil,
+	)
+	var stdout bytes.Buffer
+	root.SetOut(&stdout)
+	root.SetErr(io.Discard)
+	root.SetArgs([]string{
+		"models", "invoke", "OMNIVOICE_Q4_K_M", "--operation", "TTS",
+		"--text", "hello world", "--output", "speech.wav",
+	})
+
+	if err := root.Execute(); err != nil {
+		t.Fatalf("execute successful Models invoke: %v", err)
+	}
+	if got.OutputPath != "speech.wav" || got.Operation != "TTS" || got.Text != "hello world" {
+		t.Fatalf("successful invoke config = %#v, want output/operation/text bindings", got)
+	}
+	if gotOutput, wantOutput := stdout.String(), "Wrote audio: speech.wav\n"; gotOutput != wantOutput {
+		t.Fatalf("successful invoke stdout = %q, want %q", gotOutput, wantOutput)
+	}
+}
+
 func TestProductionModelsCLICharacterizationRejectsInvalidInputsBeforeService(t *testing.T) {
 	tests := []struct {
 		name string
