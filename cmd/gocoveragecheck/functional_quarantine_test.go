@@ -64,6 +64,12 @@ func TestFunctionalCoverageSelectionSubtractsOnlyDeclaredSelectors(t *testing.T)
 	if precise.RunPattern != "^(?:TestAdded|TestKeep)$" || !slices.Equal(precise.Packages, []string{packageA}) {
 		t.Fatalf("precise run group = %+v, want package A with only retained tests", precise)
 	}
+	if !slices.Equal(selection.SelectedTests[packageA], []string{"TestAdded", "TestKeep"}) {
+		t.Fatalf("selected tests for package A = %v, want retained tests only", selection.SelectedTests[packageA])
+	}
+	if _, found := selection.SelectedTests[packageB]; found {
+		t.Fatalf("selected tests unexpectedly retained package-quarantined package B: %+v", selection.SelectedTests)
+	}
 }
 
 func TestFunctionalQuarantineValidationFailsClosed(t *testing.T) {
@@ -212,40 +218,6 @@ func TestReadFunctionalQuarantineRejectsUnknownFieldsAndTrailingValues(t *testin
 				t.Fatalf("readFunctionalQuarantineFile() error = %v, want substring %q", err, test.want)
 			}
 		})
-	}
-}
-
-func TestDiscoverFunctionalTestInventoryUsesGoListProcessResult(t *testing.T) {
-	originalRunner := commandRunner
-	defer func() { commandRunner = originalRunner }()
-
-	packageA := modulePath + "/tests/functional/alpha"
-	packageB := modulePath + "/tests/functional/beta"
-	var gotInvocation commandInvocation
-	commandRunner = func(invocation commandInvocation) (string, string, error) {
-		gotInvocation = invocation
-		return strings.Join([]string{
-			marshalFunctionalListEvent(goTestListEvent{Action: "start", Package: packageB}),
-			marshalFunctionalListEvent(goTestListEvent{Action: "output", Package: packageB, Output: "TestBeta\n"}),
-			marshalFunctionalListEvent(goTestListEvent{Action: "skip", Package: packageB}),
-			marshalFunctionalListEvent(goTestListEvent{Action: "start", Package: packageA}),
-			marshalFunctionalListEvent(goTestListEvent{Action: "output", Package: packageA, Output: "TestAlpha\nTestAdded\n"}),
-			marshalFunctionalListEvent(goTestListEvent{Action: "pass", Package: packageA}),
-		}, "\n"), "", nil
-	}
-
-	inventory, err := discoverFunctionalTestInventory([]string{packageB, packageA}, 2*time.Minute, true, 4, t.TempDir())
-	if err != nil {
-		t.Fatalf("discoverFunctionalTestInventory() error = %v", err)
-	}
-	if !slices.Equal(inventory.Packages, []string{packageA, packageB}) {
-		t.Fatalf("inventory packages = %v, want sorted package paths", inventory.Packages)
-	}
-	if !slices.Equal(inventory.Tests[packageA], []string{"TestAdded", "TestAlpha"}) || !slices.Equal(inventory.Tests[packageB], []string{"TestBeta"}) {
-		t.Fatalf("inventory tests = %+v, want both package test lists", inventory.Tests)
-	}
-	if gotInvocation.name != "go" || gotInvocation.dir == "" || !slices.Contains(gotInvocation.args, "-list=^Test") || !slices.Contains(gotInvocation.args, "-json") || !slices.Contains(gotInvocation.args, "-short") {
-		t.Fatalf("discovery invocation = %+v, want go test list/json/short process", gotInvocation)
 	}
 }
 

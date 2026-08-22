@@ -5,10 +5,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -50,6 +52,7 @@ type functionalTestInventory struct {
 
 type functionalCoverageSelection struct {
 	Inventory                functionalTestInventory
+	SelectedTests            map[string][]string
 	Groups                   []coverageRunGroup
 	QuarantinedPackageCount  int
 	QuarantinedTestSelectors int
@@ -71,41 +74,112 @@ type goTestListEvent struct {
 	Test    string `json:"Test"`
 }
 
-func resolveFunctionalCoverageSelection(path string, packages []string, timeout time.Duration, short bool, jobs int, repoRoot string) (functionalCoverageSelection, functionalQuarantine, error) {
+func resolveFunctionalCoverageSelection(path string, listPatterns, packages []string, timeout time.Duration, short bool, jobs int, repoRoot string) (functionalCoverageSelection, functionalQuarantine, error) {
+	return resolveFunctionalCoverageSelectionWithMetadataAndVerification(path, listPatterns, packages, timeout, short, jobs, repoRoot, nil, nil)
+}
+
+func resolveFunctionalCoverageSelectionWithMetadata(path string, listPatterns, packages []string, timeout time.Duration, short bool, jobs int, repoRoot string, listedPackages []functionalGoListPackage) (functionalCoverageSelection, functionalQuarantine, error) {
+	return resolveFunctionalCoverageSelectionWithMetadataAndVerification(path, listPatterns, packages, timeout, short, jobs, repoRoot, listedPackages, nil)
+}
+
+func resolveFunctionalCoverageSelectionWithMetadataAndVerification(path string, listPatterns, packages []string, timeout time.Duration, short bool, jobs int, repoRoot string, listedPackages []functionalGoListPackage, selectorVerification *functionalQuarantineSelectorVerification) (functionalCoverageSelection, functionalQuarantine, error) {
 	manifest, err := readFunctionalQuarantineFile(path)
 	if err != nil {
+		if selectorVerification != nil {
+			_ = selectorVerification.waitAll()
+		}
 		return functionalCoverageSelection{}, functionalQuarantine{}, err
 	}
-	inventory, err := discoverFunctionalTestInventory(packages, timeout, short, jobs, repoRoot)
+	var inventory functionalTestInventory
+	if listedPackages == nil {
+		inventory, err = discoverFunctionalTestInventoryWithPatternsAndJobs(listPatterns, packages, jobs, repoRoot)
+	} else {
+		inventory, err = discoverFunctionalTestInventoryFromListedPackagesWithJobs(packages, listedPackages, jobs)
+	}
 	if err != nil {
+		if selectorVerification != nil {
+			_ = selectorVerification.waitAll()
+		}
 		return functionalCoverageSelection{}, functionalQuarantine{}, err
 	}
 	if err := validateFunctionalQuarantine(manifest, inventory); err != nil {
+		if selectorVerification != nil {
+			_ = selectorVerification.waitAll()
+		}
+		return functionalCoverageSelection{}, functionalQuarantine{}, err
+	}
+	if selectorVerification != nil {
+		err = selectorVerification.wait()
+	} else {
+		err = verifyFunctionalTestQuarantineSelectors(manifest, timeout, short, jobs, repoRoot)
+	}
+	if err != nil {
+		if selectorVerification != nil {
+			_ = selectorVerification.waitRatchet()
+		}
 		return functionalCoverageSelection{}, functionalQuarantine{}, err
 	}
 	selection, err := buildFunctionalCoverageSelection(manifest, inventory)
 	if err != nil {
+		if selectorVerification != nil {
+			_ = selectorVerification.waitRatchet()
+		}
 		return functionalCoverageSelection{}, functionalQuarantine{}, err
 	}
 	return selection, manifest, nil
 }
 
 func prepareFunctionalCoverageRun(cfg config, packages []string, targetOS string, logicalCPUs int, repoRoot string) (functionalCoverageSelection, []string, error) {
-	quarantinePath := cfg.functionalQuarantine
-	if !filepath.IsAbs(quarantinePath) {
-		quarantinePath = filepath.Join(repoRoot, quarantinePath)
-	}
-	selection, manifest, err := resolveFunctionalCoverageSelection(
-		quarantinePath,
+	return prepareFunctionalCoverageRunAfterStart(
+		cfg,
 		packages,
-		cfg.timeout,
-		cfg.short,
-		cfg.testJobs(targetOS, logicalCPUs),
+		targetOS,
+		logicalCPUs,
 		repoRoot,
+		nil,
+		startFunctionalDiscovery(strconv.Itoa(len(sortedUniqueStrings(packages)))),
 	)
+}
+
+func prepareFunctionalCoverageRunAfterStart(cfg config, packages []string, targetOS string, logicalCPUs int, repoRoot string, listedPackages []functionalGoListPackage, discoveryStarted time.Time) (functionalCoverageSelection, []string, error) {
+	return prepareFunctionalCoverageRunAfterStartWithVerification(cfg, packages, targetOS, logicalCPUs, repoRoot, listedPackages, discoveryStarted, nil)
+}
+
+func prepareFunctionalCoverageRunAfterStartWithVerification(cfg config, packages []string, targetOS string, logicalCPUs int, repoRoot string, listedPackages []functionalGoListPackage, discoveryStarted time.Time, selectorVerification *functionalQuarantineSelectorVerification) (functionalCoverageSelection, []string, error) {
+	quarantinePath := functionalQuarantinePath(cfg, repoRoot)
+	var selection functionalCoverageSelection
+	var manifest functionalQuarantine
+	var err error
+	if listedPackages == nil {
+		selection, manifest, err = resolveFunctionalCoverageSelectionWithMetadataAndVerification(
+			quarantinePath,
+			packages,
+			packages,
+			cfg.timeout,
+			cfg.short,
+			cfg.testJobs(targetOS, logicalCPUs),
+			repoRoot,
+			nil,
+			selectorVerification,
+		)
+	} else {
+		selection, manifest, err = resolveFunctionalCoverageSelectionWithMetadataAndVerification(
+			quarantinePath,
+			packages,
+			packages,
+			cfg.timeout,
+			cfg.short,
+			cfg.testJobs(targetOS, logicalCPUs),
+			repoRoot,
+			listedPackages,
+			selectorVerification,
+		)
+	}
 	if err != nil {
+		writeFunctionalDiscoveryEnd(discoveryStarted, "failed", functionalTestInventory{})
 		return functionalCoverageSelection{}, nil, err
 	}
+	writeFunctionalDiscoveryEnd(discoveryStarted, "complete", selection.Inventory)
 	fmt.Fprintf(
 		stdoutWriter,
 		"Functional gate: discovered-packages=%d discovered-tests=%d quarantined-packages=%d quarantined-test-selectors=%d package-excluded-tests=%d test-excluded-packages=%d selected-packages=%d selected-tests=%d selection=subtractive quarantine=%s\n",
@@ -119,10 +193,86 @@ func prepareFunctionalCoverageRun(cfg config, packages []string, targetOS string
 		selection.SelectedTestCount,
 		filepath.ToSlash(cfg.functionalQuarantine),
 	)
-	if err := runFunctionalQuarantineRatchet(manifest, cfg.timeout, cfg.short, repoRoot); err != nil {
-		return functionalCoverageSelection{}, nil, err
+	var ratchetErr error
+	if selectorVerification != nil {
+		ratchetErr = selectorVerification.waitRatchet()
+	} else {
+		ratchetErr = runFunctionalQuarantineRatchet(manifest, cfg.timeout, cfg.short, repoRoot)
+	}
+	if ratchetErr != nil {
+		return functionalCoverageSelection{}, nil, ratchetErr
 	}
 	return selection, selectedFunctionalPackages(selection), nil
+}
+
+func resolveCoverageTestPackages(cfg config, repoRoot string, selectorVerification *functionalQuarantineSelectorVerification) ([]string, []functionalGoListPackage, time.Time, error) {
+	if strings.TrimSpace(cfg.functionalQuarantine) == "" {
+		packages, err := resolveTestPackages(cfg)
+		return packages, nil, time.Time{}, err
+	}
+
+	// Keep the expensive retained runtime selector build outside the timed
+	// current-tree inventory interval. Its result is checked again after static
+	// quarantine validation before selection is returned.
+	if selectorVerification != nil {
+		_ = selectorVerification.wait()
+	}
+	discoveryStarted := startFunctionalDiscovery(functionalDiscoveryRequestLabel(cfg))
+	packages, listedPackages, err := resolveFunctionalTestPackagesWithMetadata(cfg, repoRoot)
+	if err != nil {
+		writeFunctionalDiscoveryEnd(discoveryStarted, "failed", functionalTestInventory{})
+		return nil, nil, time.Time{}, err
+	}
+	return packages, listedPackages, discoveryStarted, nil
+}
+
+func prepareCoverageTestPackages(cfg config, packages []string, targetOS string, logicalCPUs int, repoRoot string, listedPackages []functionalGoListPackage, discoveryStarted time.Time) ([]string, *functionalCoverageSelection, error) {
+	return prepareCoverageTestPackagesWithVerification(cfg, packages, targetOS, logicalCPUs, repoRoot, listedPackages, discoveryStarted, nil)
+}
+
+func prepareCoverageTestPackagesWithVerification(cfg config, packages []string, targetOS string, logicalCPUs int, repoRoot string, listedPackages []functionalGoListPackage, discoveryStarted time.Time, selectorVerification *functionalQuarantineSelectorVerification) ([]string, *functionalCoverageSelection, error) {
+	if strings.TrimSpace(cfg.functionalQuarantine) == "" {
+		return packages, nil, nil
+	}
+	selection, selectedPackages, err := prepareFunctionalCoverageRunAfterStartWithVerification(cfg, packages, targetOS, logicalCPUs, repoRoot, listedPackages, discoveryStarted, selectorVerification)
+	if err != nil {
+		return nil, nil, err
+	}
+	return selectedPackages, &selection, nil
+}
+
+func startFunctionalDiscovery(requestedPackages string) time.Time {
+	if strings.TrimSpace(requestedPackages) == "" {
+		requestedPackages = "unknown"
+	}
+	started := time.Now()
+	fmt.Fprintf(stdoutWriter, "Functional discovery: begin requested-packages=%s\n", requestedPackages)
+	return started
+}
+
+func functionalDiscoveryRequestLabel(cfg config) string {
+	if strings.TrimSpace(cfg.packages) == "" {
+		return "current-tree"
+	}
+	return strconv.Itoa(len(splitList(cfg.packages, " ", true)))
+}
+
+func writeFunctionalDiscoveryEnd(started time.Time, status string, inventory functionalTestInventory) {
+	if status == "" {
+		status = "failed"
+	}
+	elapsed := time.Since(started).Seconds()
+	if elapsed < 0 {
+		elapsed = 0
+	}
+	fmt.Fprintf(
+		stdoutWriter,
+		"Functional discovery: end status=%s elapsed=%.3fs discovered-packages=%d discovered-tests=%d\n",
+		status,
+		elapsed,
+		len(inventory.Packages),
+		functionalTestCount(inventory),
+	)
 }
 
 const (
@@ -183,6 +333,10 @@ func (result functionalQuarantineOutcomeResult) allAttemptsPassed() bool {
 }
 
 func runFunctionalQuarantineRatchet(manifest functionalQuarantine, timeout time.Duration, short bool, repoRoot string) error {
+	return runFunctionalQuarantineRatchetWithWriter(manifest, timeout, short, repoRoot, stdoutWriter)
+}
+
+func runFunctionalQuarantineRatchetWithWriter(manifest functionalQuarantine, timeout time.Duration, short bool, repoRoot string, output io.Writer) error {
 	if len(manifest.Entries) == 0 {
 		return nil
 	}
@@ -193,14 +347,14 @@ func runFunctionalQuarantineRatchet(manifest functionalQuarantine, timeout time.
 		measurement, measurementErr := functionalQuarantineMeasurement(entry)
 		if measurementErr != nil {
 			failures = append(failures, fmt.Errorf("functional quarantine ratchet: selector %q has invalid measurement metadata (fail-closed): %w", functionalSelectorDisplay(entry), measurementErr))
-			fmt.Fprintf(stdoutWriter, "Functional quarantine selector: selector=%q bucket=%s observed=validation-error status=fail-closed measurement=%q detail=%q\n", functionalSelectorDisplay(entry), entry.Bucket, entry.Measurement, compactFunctionalQuarantineDetail(measurementErr.Error()))
+			fmt.Fprintf(output, "Functional quarantine selector: selector=%q bucket=%s observed=validation-error status=fail-closed measurement=%q detail=%q\n", functionalSelectorDisplay(entry), entry.Bucket, entry.Measurement, compactFunctionalQuarantineDetail(measurementErr.Error()))
 			continue
 		}
 
 		result, err := runFunctionalQuarantineSelectorWithMeasurementSpec(entry, measurement, timeout, short, repoRoot)
 		if err != nil {
 			failures = append(failures, fmt.Errorf("functional quarantine ratchet: selector %q execution error (fail-closed): %w", functionalSelectorDisplay(entry), err))
-			fmt.Fprintf(stdoutWriter, "Functional quarantine selector: selector=%q bucket=%s observed=execution-error status=fail-closed measurement=%s detail=%q\n", functionalSelectorDisplay(entry), entry.Bucket, measurement.method, compactFunctionalQuarantineDetail(err.Error()))
+			fmt.Fprintf(output, "Functional quarantine selector: selector=%q bucket=%s observed=execution-error status=fail-closed measurement=%s detail=%q\n", functionalSelectorDisplay(entry), entry.Bucket, measurement.method, compactFunctionalQuarantineDetail(err.Error()))
 			continue
 		}
 
@@ -208,7 +362,7 @@ func runFunctionalQuarantineRatchet(manifest functionalQuarantine, timeout time.
 		expected, expectedErr := expectedFunctionalQuarantineOutcome(entry.Bucket)
 		if expectedErr != nil {
 			failures = append(failures, fmt.Errorf("functional quarantine ratchet: selector %q has no expected outcome for bucket %q: %w", functionalSelectorDisplay(entry), entry.Bucket, expectedErr))
-			fmt.Fprintf(stdoutWriter, "Functional quarantine selector: selector=%q bucket=%s observed=%s status=fail-closed measurement=%s detail=%q\n", functionalSelectorDisplay(entry), entry.Bucket, result.Observed, measurement.method, compactFunctionalQuarantineDetail(expectedErr.Error()))
+			fmt.Fprintf(output, "Functional quarantine selector: selector=%q bucket=%s observed=%s status=fail-closed measurement=%s detail=%q\n", functionalSelectorDisplay(entry), entry.Bucket, result.Observed, measurement.method, compactFunctionalQuarantineDetail(expectedErr.Error()))
 			continue
 		}
 
@@ -232,7 +386,7 @@ func runFunctionalQuarantineRatchet(manifest functionalQuarantine, timeout time.
 		} else if status == "unexpected-outcome" {
 			failures = append(failures, fmt.Errorf("functional quarantine ratchet: selector %q observed %s, expected %s for bucket=%s; verify the quarantine bucket and precondition", functionalSelectorDisplay(entry), result.Observed, expected, entry.Bucket))
 		}
-		fmt.Fprintf(stdoutWriter, "Functional quarantine selector: selector=%q bucket=%s expected=%s observed=%s status=%s %s detail=%q\n", functionalSelectorDisplay(entry), entry.Bucket, expected, result.Observed, status, formatFunctionalQuarantineMeasurement(measurement, result.OutcomeCounts), compactFunctionalQuarantineDetail(result.Detail))
+		fmt.Fprintf(output, "Functional quarantine selector: selector=%q bucket=%s expected=%s observed=%s status=%s %s detail=%q\n", functionalSelectorDisplay(entry), entry.Bucket, expected, result.Observed, status, formatFunctionalQuarantineMeasurement(measurement, result.OutcomeCounts), compactFunctionalQuarantineDetail(result.Detail))
 	}
 
 	passCount, failCount, skipCount := 0, 0, 0
@@ -246,7 +400,7 @@ func runFunctionalQuarantineRatchet(manifest functionalQuarantine, timeout time.
 			skipCount++
 		}
 	}
-	fmt.Fprintf(stdoutWriter, "Functional quarantine ratchet: selectors=%d observed-pass=%d observed-fail=%d observed-skip=%d execution-errors=%d\n", len(manifest.Entries), passCount, failCount, skipCount, len(manifest.Entries)-len(results))
+	fmt.Fprintf(output, "Functional quarantine ratchet: selectors=%d observed-pass=%d observed-fail=%d observed-skip=%d execution-errors=%d\n", len(manifest.Entries), passCount, failCount, skipCount, len(manifest.Entries)-len(results))
 	return errors.Join(failures...)
 }
 
@@ -481,59 +635,6 @@ func readFunctionalQuarantineFile(path string) (functionalQuarantine, error) {
 	return manifest, nil
 }
 
-func discoverFunctionalTestInventory(packages []string, timeout time.Duration, short bool, jobs int, repoRoot string) (functionalTestInventory, error) {
-	packages = sortedUniqueStrings(packages)
-	if len(packages) == 0 {
-		return functionalTestInventory{}, errors.New("discover functional tests: no packages were selected")
-	}
-	args := []string{"test", "-list=^Test", "-json", fmt.Sprintf("-p=%d", maxFunctionalDiscoveryJobs(jobs)), "-count=1"}
-	if short {
-		args = append(args, "-short")
-	}
-	args = append(args, fmt.Sprintf("-timeout=%s", timeout))
-	args = append(args, packages...)
-	stdout, stderr, err := runCommand(commandInvocation{
-		name: "go",
-		args: args,
-		env:  os.Environ(),
-		dir:  repoRoot,
-	})
-	if err != nil {
-		detail := mergeGoTestFailureDetail(stderr, stdout)
-		if detail != "" {
-			return functionalTestInventory{}, fmt.Errorf("discover functional tests: %w\n%s", err, detail)
-		}
-		return functionalTestInventory{}, fmt.Errorf("discover functional tests: %w", err)
-	}
-
-	inventory := functionalTestInventory{
-		Packages: packages,
-		Tests:    make(map[string][]string, len(packages)),
-	}
-	for _, packagePath := range packages {
-		inventory.Tests[packagePath] = nil
-	}
-	seenPackages := make(map[string]struct{}, len(packages))
-	if err := parseFunctionalTestList(stdout, inventory, seenPackages); err != nil {
-		return functionalTestInventory{}, err
-	}
-	for _, packagePath := range packages {
-		if _, ok := seenPackages[packagePath]; !ok {
-			return functionalTestInventory{}, fmt.Errorf("discover functional tests: package %q did not report a terminal list event", packagePath)
-		}
-		tests := sortedUniqueStrings(inventory.Tests[packagePath])
-		inventory.Tests[packagePath] = tests
-	}
-	return inventory, nil
-}
-
-func maxFunctionalDiscoveryJobs(jobs int) int {
-	if jobs < 1 {
-		return 1
-	}
-	return jobs
-}
-
 func parseFunctionalTestList(output string, inventory functionalTestInventory, seenPackages map[string]struct{}) error {
 	for _, line := range strings.Split(output, "\n") {
 		line = strings.TrimSpace(line)
@@ -550,7 +651,9 @@ func parseFunctionalTestList(output string, inventory functionalTestInventory, s
 		if _, known := inventory.Tests[event.Package]; !known {
 			return fmt.Errorf("discover functional tests: go test reported unexpected package %q", event.Package)
 		}
-		seenPackages[event.Package] = struct{}{}
+		if event.Test == "" && isFunctionalTestListTerminal(event.Action) {
+			seenPackages[event.Package] = struct{}{}
+		}
 		if event.Test != "" {
 			if err := addFunctionalTestName(inventory.Tests, event.Package, event.Test); err != nil {
 				return err
@@ -569,6 +672,128 @@ func parseFunctionalTestList(output string, inventory functionalTestInventory, s
 		}
 	}
 	return nil
+}
+
+func verifyFunctionalTestQuarantineSelectors(manifest functionalQuarantine, timeout time.Duration, short bool, jobs int, repoRoot string) error {
+	selectorPackages := functionalTestSelectorPackages(manifest)
+	if len(selectorPackages) == 0 {
+		return nil
+	}
+
+	runtimeInventory, err := discoverFunctionalTestInventoryByRuntimeListWithPattern(
+		selectorPackages,
+		functionalTestSelectorListPattern(manifest),
+		timeout,
+		short,
+		jobs,
+		repoRoot,
+	)
+	if err != nil {
+		return err
+	}
+	for _, entry := range manifest.Entries {
+		if entry.Test == "" {
+			continue
+		}
+		if !slices.Contains(runtimeInventory.Tests[entry.Package], entry.Test) {
+			return fmt.Errorf("validate functional quarantine: selector %q is not discoverable in package %q", entry.Test, entry.Package)
+		}
+	}
+	return nil
+}
+
+func functionalTestSelectorPackages(manifest functionalQuarantine) []string {
+	selectorPackages := make([]string, 0)
+	for _, entry := range manifest.Entries {
+		if entry.Test != "" {
+			selectorPackages = append(selectorPackages, entry.Package)
+		}
+	}
+	return sortedUniqueStrings(selectorPackages)
+}
+
+func functionalTestSelectorListPattern(manifest functionalQuarantine) string {
+	testNames := make([]string, 0)
+	for _, entry := range manifest.Entries {
+		if entry.Test != "" {
+			testNames = append(testNames, entry.Test)
+		}
+	}
+	testNames = sortedUniqueStrings(testNames)
+	quoted := make([]string, 0, len(testNames))
+	for _, testName := range testNames {
+		quoted = append(quoted, regexp.QuoteMeta(testName))
+	}
+	return "^(?:" + strings.Join(quoted, "|") + ")$"
+}
+
+func discoverFunctionalTestInventoryByRuntimeListWithPattern(packages []string, listPattern string, timeout time.Duration, short bool, jobs int, repoRoot string) (functionalTestInventory, error) {
+	packages = sortedUniqueStrings(packages)
+	if len(packages) == 0 {
+		return functionalTestInventory{}, errors.New("discover functional tests: no packages were selected for runtime verification")
+	}
+	if strings.TrimSpace(listPattern) == "" {
+		return functionalTestInventory{}, errors.New("discover functional tests: runtime verification list pattern is required")
+	}
+
+	// This retained runtime path verifies test registration for quarantine
+	// selectors only; the coverage and lint lanes own vet execution. Skipping
+	// the redundant vet pass keeps selector verification bounded without
+	// weakening the runtime listing or its fail-closed parsing checks.
+	args := []string{"test", "-vet=off", "-list=" + listPattern, "-json", fmt.Sprintf("-p=%d", maxFunctionalDiscoveryJobs(jobs)), "-count=1"}
+	if short {
+		args = append(args, "-short")
+	}
+	args = append(args, fmt.Sprintf("-timeout=%s", timeout))
+	args = append(args, packages...)
+	stdout, stderr, err := runCommand(commandInvocation{
+		name: "go",
+		args: args,
+		env:  os.Environ(),
+		dir:  repoRoot,
+	})
+	if err != nil {
+		detail := mergeGoTestFailureDetail(stderr, stdout)
+		if detail != "" {
+			return functionalTestInventory{}, fmt.Errorf("discover functional tests: runtime go test list: %w\n%s", err, detail)
+		}
+		return functionalTestInventory{}, fmt.Errorf("discover functional tests: runtime go test list: %w", err)
+	}
+
+	inventory := functionalTestInventory{
+		Packages: packages,
+		Tests:    make(map[string][]string, len(packages)),
+	}
+	for _, packagePath := range packages {
+		inventory.Tests[packagePath] = nil
+	}
+	seenPackages := make(map[string]struct{}, len(packages))
+	if err := parseFunctionalTestList(stdout, inventory, seenPackages); err != nil {
+		return functionalTestInventory{}, err
+	}
+	for _, packagePath := range packages {
+		if _, ok := seenPackages[packagePath]; !ok {
+			return functionalTestInventory{}, fmt.Errorf("discover functional tests: package %q did not report a terminal runtime list event", packagePath)
+		}
+		inventory.Tests[packagePath] = sortedUniqueStrings(inventory.Tests[packagePath])
+	}
+	return inventory, nil
+}
+
+func maxFunctionalDiscoveryJobs(jobs int) int {
+	if jobs < 1 {
+		return 1
+	}
+	return jobs
+}
+
+func isFunctionalTestListTerminal(action string) bool {
+	switch action {
+	case timingOutcomePass, timingOutcomeFail, timingOutcomeSkip:
+		return true
+	default:
+		return false
+	}
 }
 
 func addFunctionalTestName(tests map[string][]string, packagePath, name string) error {
@@ -661,6 +886,7 @@ func buildFunctionalCoverageSelection(manifest functionalQuarantine, inventory f
 
 	selection := functionalCoverageSelection{
 		Inventory:                inventory,
+		SelectedTests:            make(map[string][]string),
 		QuarantinedPackageCount:  len(packageExcluded),
 		QuarantinedTestSelectors: len(manifest.Entries) - len(packageExcluded),
 	}
@@ -682,6 +908,7 @@ func buildFunctionalCoverageSelection(manifest functionalQuarantine, inventory f
 			selection.TestExcludedPackageCount++
 			continue
 		}
+		selection.SelectedTests[packagePath] = append([]string(nil), selectedTests...)
 		pattern := ""
 		if len(excludedTests) > 0 {
 			pattern = exactFunctionalTestRunPattern(selectedTests)
@@ -720,6 +947,15 @@ func selectedFunctionalPackages(selection functionalCoverageSelection) []string 
 		packages = append(packages, group.Packages...)
 	}
 	return sortedUniqueStrings(packages)
+}
+
+func selectedFunctionalTestInventory(selection functionalCoverageSelection) functionalTestInventory {
+	packages := selectedFunctionalPackages(selection)
+	tests := make(map[string][]string, len(packages))
+	for _, packagePath := range packages {
+		tests[packagePath] = append([]string(nil), selection.SelectedTests[packagePath]...)
+	}
+	return functionalTestInventory{Packages: packages, Tests: tests}
 }
 
 func exactFunctionalTestRunPattern(testNames []string) string {

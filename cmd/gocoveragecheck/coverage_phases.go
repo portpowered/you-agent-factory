@@ -5,27 +5,79 @@ import (
 	"fmt"
 	"path/filepath"
 	"strings"
+	"time"
 )
 
 type preparedCoverageRun struct {
-	plan         coverageInvocationPlan
-	repoRoot     string
-	testPackages []string
+	plan                        coverageInvocationPlan
+	repoRoot                    string
+	testPackages                []string
+	expectedFunctionalInventory *functionalTestInventory
 }
 
 func prepareCoverageRun(cfg config, targetOS string, logicalCPUs int, profilePath string, coverPackages []string, testPackages []string, packageUniverse []string) (preparedCoverageRun, error) {
+	return prepareCoverageRunWithFunctionalMetadata(
+		cfg,
+		targetOS,
+		logicalCPUs,
+		profilePath,
+		coverPackages,
+		testPackages,
+		packageUniverse,
+		nil,
+		time.Time{},
+		nil,
+	)
+}
+
+func prepareCoverageRunWithFunctionalMetadata(
+	cfg config,
+	targetOS string,
+	logicalCPUs int,
+	profilePath string,
+	coverPackages []string,
+	testPackages []string,
+	packageUniverse []string,
+	listedPackages []functionalGoListPackage,
+	discoveryStarted time.Time,
+	selectorVerification *functionalQuarantineSelectorVerification,
+) (preparedCoverageRun, error) {
 	repoRoot, err := repoRootDir()
 	if err != nil {
 		return preparedCoverageRun{}, err
 	}
 
 	var functionalSelection *functionalCoverageSelection
+	var expectedFunctionalInventory *functionalTestInventory
 	if strings.TrimSpace(cfg.functionalQuarantine) != "" {
-		selection, selectedPackages, selectionErr := prepareFunctionalCoverageRun(cfg, testPackages, targetOS, logicalCPUs, repoRoot)
+		var selection functionalCoverageSelection
+		var selectedPackages []string
+		if discoveryStarted.IsZero() {
+			selection, selectedPackages, err = prepareFunctionalCoverageRun(cfg, testPackages, targetOS, logicalCPUs, repoRoot)
+		} else {
+			selectedPackages, functionalSelection, err = prepareCoverageTestPackagesWithVerification(
+				cfg,
+				testPackages,
+				targetOS,
+				logicalCPUs,
+				repoRoot,
+				listedPackages,
+				discoveryStarted,
+				selectorVerification,
+			)
+			if err == nil {
+				selection = *functionalSelection
+			}
+		}
+		selectionErr := err
 		if selectionErr != nil {
 			return preparedCoverageRun{}, selectionErr
 		}
-		functionalSelection = &selection
+		if functionalSelection == nil {
+			functionalSelection = &selection
+		}
+		expected := selectedFunctionalTestInventory(selection)
+		expectedFunctionalInventory = &expected
 		testPackages = selectedPackages
 	}
 
@@ -63,7 +115,12 @@ func prepareCoverageRun(cfg config, targetOS string, logicalCPUs int, profilePat
 	if err != nil {
 		return preparedCoverageRun{}, err
 	}
-	return preparedCoverageRun{plan: plan, repoRoot: repoRoot, testPackages: testPackages}, nil
+	return preparedCoverageRun{
+		plan:                        plan,
+		repoRoot:                    repoRoot,
+		testPackages:                testPackages,
+		expectedFunctionalInventory: expectedFunctionalInventory,
+	}, nil
 }
 
 type evaluatedCoverageRun struct {

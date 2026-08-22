@@ -110,6 +110,68 @@ func TestBuildFunctionalTimingSummaryCapturesTopLevelOutcomesAndReasons(t *testi
 	}
 }
 
+func TestValidateFunctionalRuntimeInventoryAcceptsExactSelectedTests(t *testing.T) {
+	t.Parallel()
+
+	pkg := modulePath + "/tests/functional/inventory"
+	expected := functionalTestInventory{
+		Packages: []string{pkg},
+		Tests:    map[string][]string{pkg: {"TestKeep", "TestSkipped"}},
+	}
+	output := strings.Join([]string{
+		goTestEventLine(t, goTestTimingEvent{Action: "start", Package: pkg}),
+		goTestEventLine(t, goTestTimingEvent{Action: timingOutcomePass, Package: pkg, Test: "TestKeep", Elapsed: 0.1}),
+		goTestEventLine(t, goTestTimingEvent{Action: timingOutcomeSkip, Package: pkg, Test: "TestSkipped"}),
+		goTestEventLine(t, goTestTimingEvent{Action: timingOutcomePass, Package: pkg, Elapsed: 0.2}),
+	}, "\n")
+
+	if err := validateFunctionalRuntimeInventory(output, expected); err != nil {
+		t.Fatalf("validateFunctionalRuntimeInventory() error = %v, want exact selected inventory to pass", err)
+	}
+}
+
+func TestValidateFunctionalRuntimeInventoryRejectsMissingPackageTerminalEvent(t *testing.T) {
+	t.Parallel()
+
+	pkg := modulePath + "/tests/functional/inventory"
+	expected := functionalTestInventory{
+		Packages: []string{pkg},
+		Tests:    map[string][]string{pkg: {"TestKeep"}},
+	}
+	output := strings.Join([]string{
+		goTestEventLine(t, goTestTimingEvent{Action: "start", Package: pkg}),
+		goTestEventLine(t, goTestTimingEvent{Action: timingOutcomePass, Package: pkg, Test: "TestKeep", Elapsed: 0.1}),
+	}, "\n")
+
+	err := validateFunctionalRuntimeInventory(output, expected)
+	if err == nil || !strings.Contains(err.Error(), "missing-package-outcomes=1["+pkg+"]") {
+		t.Fatalf("validateFunctionalRuntimeInventory() error = %v, want missing terminal package outcome diagnostic", err)
+	}
+}
+
+func TestValidateFunctionalRuntimeInventoryRejectsMismatch(t *testing.T) {
+	t.Parallel()
+
+	pkg := modulePath + "/tests/functional/inventory"
+	expected := functionalTestInventory{
+		Packages: []string{pkg},
+		Tests:    map[string][]string{pkg: {"TestKeep", "TestMissingAtRuntime"}},
+	}
+	output := strings.Join([]string{
+		goTestEventLine(t, goTestTimingEvent{Action: "start", Package: pkg}),
+		goTestEventLine(t, goTestTimingEvent{Action: timingOutcomePass, Package: pkg, Test: "TestKeep", Elapsed: 0.1}),
+		goTestEventLine(t, goTestTimingEvent{Action: timingOutcomePass, Package: pkg, Test: "TestUnexpectedAtRuntime", Elapsed: 0.1}),
+		goTestEventLine(t, goTestTimingEvent{Action: timingOutcomePass, Package: pkg, Elapsed: 0.2}),
+	}, "\n")
+
+	err := validateFunctionalRuntimeInventory(output, expected)
+	if err == nil || !strings.Contains(err.Error(), "functional runtime inventory mismatch") ||
+		!strings.Contains(err.Error(), "missing-tests=1["+pkg+"#TestMissingAtRuntime]") ||
+		!strings.Contains(err.Error(), "unexpected-tests=1["+pkg+"#TestUnexpectedAtRuntime]") {
+		t.Fatalf("validateFunctionalRuntimeInventory() error = %v, want actionable exact test diff", err)
+	}
+}
+
 func TestBuildFunctionalTimingSummaryConcurrentDurationSemantics(t *testing.T) {
 	t.Parallel()
 

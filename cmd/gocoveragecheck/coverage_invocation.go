@@ -328,7 +328,7 @@ func runGoTestCoverageLane(cfg config, commonArgs []string, testPackages []strin
 	if err != nil {
 		return err
 	}
-	return executeCoverageInvocationPlan(cfg, plan, testPackages, profilePath, repoRoot, coverPackages, failurePrefix)
+	return executeCoverageInvocationPlan(cfg, plan, testPackages, profilePath, repoRoot, coverPackages, failurePrefix, nil)
 }
 
 func runGoTestCoverageLaneWithSelection(cfg config, commonArgs []string, testPackages []string, profilePath string, repoRoot string, coverPackages []string, targetOS string, failurePrefix string, selection functionalCoverageSelection) error {
@@ -336,10 +336,11 @@ func runGoTestCoverageLaneWithSelection(cfg config, commonArgs []string, testPac
 	if err != nil {
 		return err
 	}
-	return executeCoverageInvocationPlan(cfg, plan, testPackages, profilePath, repoRoot, coverPackages, failurePrefix)
+	expectedInventory := selectedFunctionalTestInventory(selection)
+	return executeCoverageInvocationPlan(cfg, plan, testPackages, profilePath, repoRoot, coverPackages, failurePrefix, &expectedInventory)
 }
 
-func executeCoverageInvocationPlan(cfg config, plan coverageInvocationPlan, testPackages []string, profilePath string, repoRoot string, coverPackages []string, failurePrefix string) error {
+func executeCoverageInvocationPlan(cfg config, plan coverageInvocationPlan, testPackages []string, profilePath string, repoRoot string, coverPackages []string, failurePrefix string, expectedFunctionalInventory *functionalTestInventory) error {
 	started := time.Now()
 	snapshotter := configureFunctionalTimingSnapshot(&plan, cfg, testPackages, started, profilePath, repoRoot, coverPackages)
 	if snapshotter != nil {
@@ -380,7 +381,7 @@ func executeCoverageInvocationPlan(cfg config, plan coverageInvocationPlan, test
 	}
 	wallSeconds := time.Since(started).Seconds()
 
-	timingWriteErr := finalizeFunctionalTiming(cfg, snapshotter, stdout.String(), testPackages, wallSeconds, laneErr)
+	timingWriteErr := finalizeFunctionalTiming(cfg, snapshotter, stdout.String(), testPackages, wallSeconds, laneErr, expectedFunctionalInventory)
 
 	var mergeErr error
 	if len(plan.profilePaths) > 1 {
@@ -443,8 +444,9 @@ func configureFunctionalTimingSnapshot(plan *coverageInvocationPlan, cfg config,
 	return snapshotter
 }
 
-func finalizeFunctionalTiming(cfg config, snapshotter *functionalTimingSnapshotter, stdout string, testPackages []string, wallSeconds float64, laneErr error) error {
-	if strings.TrimSpace(cfg.timingOutput) == "" {
+func finalizeFunctionalTiming(cfg config, snapshotter *functionalTimingSnapshotter, stdout string, testPackages []string, wallSeconds float64, laneErr error, expectedFunctionalInventory *functionalTestInventory) error {
+	runtimeInventoryGate := expectedFunctionalInventory != nil
+	if strings.TrimSpace(cfg.timingOutput) == "" && !runtimeInventoryGate {
 		if snapshotter != nil {
 			snapshotter.stopAndWait()
 		}
@@ -459,6 +461,13 @@ func finalizeFunctionalTiming(cfg config, snapshotter *functionalTimingSnapshott
 			timingReason += ": " + compactDiagnosticError(laneErr)
 		}
 	}
+	var inventoryErr error
+	if runtimeInventoryGate {
+		inventoryErr = validateFunctionalRuntimeInventory(stdout, *expectedFunctionalInventory)
+		if inventoryErr != nil && timingReason == "" {
+			timingReason = coverageLaneNoun(cfg.suite) + " runtime inventory validation failed: " + compactDiagnosticError(inventoryErr)
+		}
+	}
 	var err error
 	if snapshotter != nil {
 		err = snapshotter.finish(summary, timingReason)
@@ -468,7 +477,7 @@ func finalizeFunctionalTiming(cfg config, snapshotter *functionalTimingSnapshott
 	if err == nil && cfg.suite == "functional" {
 		writeFunctionalTimingInventorySummary(summary, cfg.short)
 	}
-	return err
+	return errors.Join(err, inventoryErr)
 }
 
 // incompleteTimingCaptureCause names why a capture is partial. The two causes
