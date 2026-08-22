@@ -141,27 +141,88 @@ func runInstalledMCPProcess(
 	command := exec.CommandContext(ctx, "strace", args...)
 	command.Dir = workingDir
 	command.Env = installedProcessEnvironment(homeDir, userProfileDir, workingDir)
-	command.Stdin = strings.NewReader(installedMCPInput())
+	stdin, err := command.StdinPipe()
+	if err != nil {
+		return "", "", "", fmt.Errorf("open installed MCP stdin: %w", err)
+	}
+	stdoutReader, err := command.StdoutPipe()
+	if err != nil {
+		return "", "", "", fmt.Errorf("open installed MCP stdout: %w", err)
+	}
 	var stdout, stderr bytes.Buffer
-	command.Stdout = &stdout
 	command.Stderr = &stderr
-	err := command.Run()
+	if err := command.Start(); err != nil {
+		return "", stderr.String(), "", fmt.Errorf("start installed MCP process: %w", err)
+	}
+
+	reader := bufio.NewReader(stdoutReader)
+	var protocolErr error
+	for _, exchange := range installedMCPExchanges() {
+		if _, err := stdin.Write([]byte(exchange.request + "\n")); err != nil {
+			protocolErr = fmt.Errorf("write MCP request %s: %w", exchange.responseID, err)
+			break
+		}
+		if exchange.responseID == "" {
+			continue
+		}
+		for {
+			line, err := reader.ReadString('\n')
+			trimmed := strings.TrimSpace(line)
+			if trimmed != "" {
+				stdout.WriteString(trimmed)
+				stdout.WriteByte('\n')
+			}
+			if err != nil {
+				protocolErr = fmt.Errorf("read MCP response %s: %w", exchange.responseID, err)
+				break
+			}
+			var envelope struct {
+				ID json.RawMessage `json:"id"`
+			}
+			if err := json.Unmarshal([]byte(trimmed), &envelope); err != nil {
+				protocolErr = fmt.Errorf("decode MCP response %s: %w", exchange.responseID, err)
+				break
+			}
+			if string(bytes.TrimSpace(envelope.ID)) == exchange.responseID {
+				break
+			}
+		}
+		if protocolErr != nil {
+			break
+		}
+	}
+	closeErr := stdin.Close()
+	if protocolErr != nil {
+		_ = command.Process.Kill()
+	}
+	waitErr := command.Wait()
 	trace, readErr := os.ReadFile(tracePath)
 	if readErr != nil {
-		return stdout.String(), stderr.String(), string(trace), fmt.Errorf("read strace output: %w (process error: %v)", readErr, err)
+		return stdout.String(), stderr.String(), string(trace), fmt.Errorf("read strace output: %w (process error: %v)", readErr, waitErr)
 	}
-	return stdout.String(), stderr.String(), string(trace), err
+	if protocolErr != nil {
+		return stdout.String(), stderr.String(), string(trace), protocolErr
+	}
+	if closeErr != nil {
+		return stdout.String(), stderr.String(), string(trace), fmt.Errorf("close MCP stdin: %w", closeErr)
+	}
+	return stdout.String(), stderr.String(), string(trace), waitErr
 }
 
-func installedMCPInput() string {
-	return strings.Join([]string{
-		`{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"fixture-installed-binary","version":"test"}}}`,
-		`{"jsonrpc":"2.0","method":"notifications/initialized"}`,
-		`{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}`,
-		`{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"you.factory_session.start_sync","arguments":{"requestId":"req-petri-success-001","source":{"kind":"FACTORY_ID","factoryId":"customer-support-triage"},"args":{"ticketId":"TKT-2002"}}}}`,
-		`{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"you.factory_session.list","arguments":{"scope":"persisted"}}}`,
-		`{"jsonrpc":"2.0","id":5,"method":"tools/call","params":{"name":"you.factory_session.list_dispatches","arguments":{"sessionId":"dur-sess-petri-success-001"}}}`,
-	}, "\n") + "\n"
+type installedMCPExchange struct {
+	request    string
+	responseID string
+}
+
+func installedMCPExchanges() []installedMCPExchange {
+	return []installedMCPExchange{
+		{request: `{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"fixture-installed-binary","version":"test"}}}`, responseID: "1"},
+		{request: `{"jsonrpc":"2.0","method":"notifications/initialized"}`},
+		{request: `{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}`, responseID: "2"},
+		{request: `{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"you.factory_session.start_sync","arguments":{"requestId":"req-petri-success-001","source":{"kind":"FACTORY_ID","factoryId":"customer-support-triage"},"args":{"ticketId":"TKT-2002"}}}}`, responseID: "3"},
+		{request: `{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"you.factory_session.list","arguments":{"scope":"persisted"}}}`, responseID: "4"},
+		{request: `{"jsonrpc":"2.0","id":5,"method":"tools/call","params":{"name":"you.factory_session.list_dispatches","arguments":{"sessionId":"dur-sess-petri-success-001"}}}`, responseID: "5"},
+	}
 }
 
 func installedProcessEnvironment(homeDir, userProfileDir, workingDir string) []string {
