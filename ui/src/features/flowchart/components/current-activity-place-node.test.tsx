@@ -389,3 +389,70 @@ describe("CurrentActivity work-state node fill by held work", () => {
     );
   });
 });
+
+describe("CurrentActivity work-state progress markers", () => {
+  afterEach(() => {
+    cleanup();
+  });
+
+  it("renders the larger numeric marker as unboxed surface text", () => {
+    const { container } = render(
+      <StatePositionNodeView
+        {...statePositionNodeProps(workStatePlace("PROCESSING"), {
+          tokenCount: 4,
+        })}
+      />,
+    );
+    const marker = container.querySelector<HTMLElement>(
+      '[data-state-work-progress="numeric"]',
+    );
+
+    expect(marker?.className).toContain("min-h-6");
+    expect(marker?.className).toContain("text-base");
+    expect(marker?.className).toContain("text-on-surface");
+    expect(marker?.className).not.toContain("bg-success-container");
+    expect(marker?.className).not.toContain("border-af-success-border");
+  });
+
+  it("renders active dots from an active resolved work-state surface", () => {
+    const { container } = render(
+      <StatePositionNodeView
+        {...statePositionNodeProps(workStatePlace("PROCESSING"), {
+          tokenCount: 2,
+        })}
+      />,
+    );
+    const marker = container.querySelector<HTMLElement>(
+      '[data-state-work-progress="dots"]',
+    );
+    const dots = container.querySelectorAll("[data-state-work-progress-dot]");
+
+    expect(marker?.getAttribute("data-work-progress-state")).toBe("active");
+    for (const dot of dots) {
+      expect(dot.className).toContain("bg-on-surface");
+      expect(dot.getAttribute("data-work-progress-dot-state")).toBe("active");
+    }
+  });
+
+  it("renders idle dots from a terminal resolved work-state surface", () => {
+    const { container } = render(
+      <StatePositionNodeView
+        {...statePositionNodeProps(workStatePlace("TERMINAL"), {
+          tokenCount: 2,
+        })}
+      />,
+    );
+    const marker = container.querySelector<HTMLElement>(
+      '[data-state-work-progress="dots"]',
+    );
+    const dots = container.querySelectorAll("[data-state-work-progress-dot]");
+
+    expect(marker?.getAttribute("data-work-progress-state")).toBe("idle");
+    for (const dot of dots) {
+      expect(dot.className).toContain("bg-surface");
+      expect(dot.className).toContain("border-outline-variant");
+      expect(dot.className).not.toContain("bg-on-surface");
+      expect(dot.getAttribute("data-work-progress-dot-state")).toBe("idle");
+    }
+  });
+});

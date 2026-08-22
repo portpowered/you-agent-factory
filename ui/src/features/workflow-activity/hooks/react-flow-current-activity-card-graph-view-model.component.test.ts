@@ -164,9 +164,14 @@ function renderGraphViewModelWithLayout(
     editor?: Partial<
       Pick<
         Parameters<typeof useCurrentActivityGraphViewModel>[0]["editor"],
-        "activeTool" | "canInteractWithEditor" | "editorMode"
+        | "activeTool"
+        | "canInteractWithEditor"
+        | "editorMode"
+        | "expandedNodeIds"
+        | "nodeResizeControls"
       >
     >;
+    expandedNodeIds?: ReadonlySet<string>;
     renderedLayout?: FactoryLayout;
     selectedWaypointEdgeId?: string | null;
     snapshot?: DashboardSnapshot;
@@ -206,17 +211,29 @@ function renderGraphViewModelWithLayout(
     ({
       currentGraphLayout,
       currentSnapshot,
+      currentExpandedNodeIds,
+      currentRenderedLayout,
     }: {
       currentGraphLayout: GraphLayout;
+      currentExpandedNodeIds?: ReadonlySet<string>;
+      currentRenderedLayout?: FactoryLayout;
       currentSnapshot?: DashboardSnapshot;
     }) =>
       useCurrentActivityGraphViewModel({
         editor: {
           ...editor,
+          expandedNodeIds:
+            currentExpandedNodeIds ??
+            options.expandedNodeIds ??
+            EMPTY_EXPANDED_NODE_IDS,
           graphProjection: {
             ...editor.graphProjection,
             graphLayout: currentGraphLayout,
             positionedGraphLayout: currentGraphLayout,
+            renderedLayout:
+              currentRenderedLayout ??
+              options.renderedLayout ??
+              ({ schemaVersion: 1 } as FactoryLayout),
           },
         } as Parameters<typeof useCurrentActivityGraphViewModel>[0]["editor"],
         now: 0,
@@ -232,12 +249,15 @@ function renderGraphViewModelWithLayout(
       }),
     {
       initialProps: {
+        currentExpandedNodeIds: options.expandedNodeIds,
         currentGraphLayout: graphLayout,
         currentSnapshot: snapshot,
       },
     },
   );
 }
+
+const EMPTY_EXPANDED_NODE_IDS = new Set<string>();
 
 function snapshotWithGraphOverlay(
   input: {
@@ -1373,6 +1393,57 @@ function workstationResizeLayout(): GraphLayout {
   };
 }
 
+function semanticNodeResizeLayout(): GraphLayout {
+  return {
+    edges: [],
+    height: 520,
+    nodes: [
+      {
+        column: 0,
+        height: 160,
+        nodeId: "workstation:review",
+        nodeKind: "workstation",
+        row: 0,
+        width: 220,
+        workstationNodeId: "review",
+        x: 120,
+        y: 80,
+      },
+      {
+        column: 0,
+        height: 86,
+        nodeId: "place:story:queued",
+        nodeKind: "state_position",
+        place: {
+          kind: "work_state",
+          place_id: "story:queued",
+          state_category: "INITIAL",
+          state_value: "queued",
+          type_id: "story",
+        },
+        row: 1,
+        width: 164,
+        x: 120,
+        y: 300,
+      },
+      {
+        column: 1,
+        displayLabel: "Runbook",
+        fileType: "DOC",
+        height: 86,
+        nodeId: "doc:factory/docs/runbook.md",
+        nodeKind: "doc",
+        row: 0,
+        targetPath: "factory/docs/runbook.md",
+        width: 168,
+        x: 420,
+        y: 80,
+      },
+    ],
+    width: 720,
+  };
+}
+
 function nodeResizeControls(
   result: { current: CurrentActivityGraphViewModelResult },
   nodeId: string,
@@ -1488,6 +1559,35 @@ describe("current activity graph live node resize", () => {
     expect(expanded()).toBe(true);
   });
 
+  it("requests the expanded content variant for every resized semantic node family", () => {
+    const { result } = renderGraphViewModelWithLayout(
+      semanticNodeResizeLayout(),
+    );
+    const nodeIDs = [
+      "workstation:review",
+      "place:story:queued",
+      "doc:factory/docs/runbook.md",
+    ];
+
+    const expanded = (nodeId: string) =>
+      (
+        result.current.nodes.find((node) => node.id === nodeId)?.data as
+          | { expanded?: boolean }
+          | undefined
+      )?.expanded;
+
+    for (const nodeId of nodeIDs) {
+      expect(expanded(nodeId)).toBe(false);
+      act(() => {
+        nodeResizeControls(result, nodeId)?.onResizeEnd?.({
+          height: 220,
+          width: 240,
+        });
+      });
+      expect(expanded(nodeId)).toBe(true);
+    }
+  });
+
   it("does not resize while the editor cannot be interacted with", () => {
     const { result } = renderGraphViewModelWithLayout(
       workstationResizeLayout(),
@@ -1496,6 +1596,108 @@ describe("current activity graph live node resize", () => {
 
     expect(nodeResizeControls(result, "workstation:review")).toBeUndefined();
     expect(result.current.nodes[0]?.width).toBe(220);
+  });
+});
+
+describe("current activity graph host-controlled resize", () => {
+  it("projects host-committed expansion for a non-workstation node", () => {
+    const placeNodeId = "place:story:queued";
+    const hostResizeController = {
+      enabled: true,
+      onResizeEnd: vi.fn(),
+    };
+    const { rerender, result } = renderGraphViewModelWithLayout(
+      semanticNodeResizeLayout(),
+      {
+        editor: { nodeResizeControls: hostResizeController },
+      },
+    );
+    const expanded = () =>
+      (
+        result.current.nodes.find((node) => node.id === placeNodeId)?.data as
+          | { expanded?: boolean }
+          | undefined
+      )?.expanded;
+
+    expect(expanded()).toBe(false);
+
+    act(() => {
+      nodeResizeControls(result, placeNodeId)?.onResizeEnd?.({
+        height: 220,
+        width: 240,
+      });
+    });
+
+    expect(hostResizeController.onResizeEnd).toHaveBeenCalledWith(
+      {
+        family: "work-state",
+        nodeId: placeNodeId,
+        position: { x: 120, y: 300 },
+      },
+      { height: 220, width: 240 },
+    );
+    expect(expanded()).toBe(true);
+
+    rerender({
+      currentExpandedNodeIds: new Set([placeNodeId]),
+      currentGraphLayout: semanticNodeResizeLayout(),
+    });
+
+    expect(expanded()).toBe(true);
+  });
+
+  it("drops the local resize projection after the host undoes the authored size", () => {
+    const placeNodeId = "place:story:queued";
+    const hostResizeController = {
+      enabled: true,
+      onResizeEnd: vi.fn(),
+    };
+    const { rerender, result } = renderGraphViewModelWithLayout(
+      semanticNodeResizeLayout(),
+      {
+        editor: { nodeResizeControls: hostResizeController },
+      },
+    );
+    const expanded = () =>
+      (
+        result.current.nodes.find((node) => node.id === placeNodeId)?.data as
+          | { expanded?: boolean }
+          | undefined
+      )?.expanded;
+
+    act(() => {
+      nodeResizeControls(result, placeNodeId)?.onResizeEnd?.({
+        height: 220,
+        width: 240,
+      });
+    });
+    expect(expanded()).toBe(true);
+
+    rerender({
+      currentExpandedNodeIds: new Set([placeNodeId]),
+      currentGraphLayout: semanticNodeResizeLayout(),
+      currentRenderedLayout: {
+        nodes: [
+          {
+            id: placeNodeId,
+            position: { x: 120, y: 300 },
+            size: { height: 220, width: 240 },
+          },
+        ],
+        schemaVersion: 1,
+      },
+    });
+    expect(expanded()).toBe(true);
+
+    rerender({
+      currentExpandedNodeIds: new Set(),
+      currentGraphLayout: semanticNodeResizeLayout(),
+      currentRenderedLayout: {
+        nodes: [{ id: placeNodeId, position: { x: 120, y: 300 } }],
+        schemaVersion: 1,
+      },
+    });
+    expect(expanded()).toBe(false);
   });
 });
 // Component lane: requires DOM APIs.

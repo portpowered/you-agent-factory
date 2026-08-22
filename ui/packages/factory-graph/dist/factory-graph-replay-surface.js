@@ -80,7 +80,8 @@ function semanticNode(node, input) {
         position: input.position,
     };
     switch (node.kind) {
-        case "worker":
+        case "worker": {
+            const workerType = input.source.factory.workers?.find((worker) => worker.name === node.label || worker.id === node.entityId)?.type;
             return {
                 ...base,
                 data: {
@@ -91,10 +92,12 @@ function semanticNode(node, input) {
                     muted: false,
                     place: { place_id: node.id, state_value: node.label },
                     selectedWorker: input.selected,
+                    ...(workerType ? { workerType } : {}),
                 },
                 id: node.id,
                 type: "worker",
             };
+        }
         case "work-type":
             return {
                 ...base,

@@ -994,22 +994,27 @@ export const MixedWorkstationSemantics = {
       ],
       ["Logical route", "Logical move"],
       ["Agent worker", "Agent"],
-      ["execute-goal", "Repeater"],
-      ["Script cron", "Cron"],
-      ["Poller source", "Default scheduler"],
+      ["execute-goal", "Agent"],
+      ["Script cron", "Script"],
+      ["Poller source", "Poller"],
     ] as const;
 
     for (const [name, semanticLabel] of expectedNodes) {
       const button = await canvas.findByRole("button", {
         name: `Select ${name} workstation`,
       });
-      const semanticLabelElement = Array.from(
+      const semanticTitle = button.querySelector<HTMLElement>(
+        "[data-workstation-title]",
+      );
+      if (!semanticTitle) {
+        throw new Error(`Expected a semantic title for ${name}`);
+      }
+      await expect(semanticTitle).toHaveAttribute("title", semanticLabel);
+      await expect(
         button.querySelectorAll(
           "[data-workstation-runtime-label], [data-workstation-scheduling-label]",
         ),
-      ).find((element) => element.textContent?.trim() === semanticLabel);
-      await expect(semanticLabelElement).toBeInTheDocument();
-      await expect(semanticLabelElement).toBeVisible();
+      ).toHaveLength(0);
     }
 
     const loopTitle = await canvas.findByText("goal-loop-breaker", {
@@ -1018,32 +1023,34 @@ export const MixedWorkstationSemantics = {
     const loopNode = loopTitle.closest(".react-flow__node");
     expect(loopNode).toBeTruthy();
     const loopScope = within(loopNode as HTMLElement);
-    await expect(loopScope.getByText("Loop breaker")).toBeVisible();
-    await expect(loopScope.getByText("execute-goal")).toBeVisible();
-    await expect(loopScope.getByText("3")).toBeVisible();
-    await expect(loopScope.getByText("Logical move")).toBeVisible();
+    await expect(loopScope.getByText("Breaker")).toBeVisible();
 
     const guardCard = loopNode?.querySelector("[data-workstation-guard-card]");
     expect(guardCard).toBeTruthy();
+    expect(guardCard?.getAttribute("data-workstation-guard-type")).toBe(
+      "VISIT_COUNT",
+    );
     const guardRows = loopNode?.querySelectorAll(
       "[data-workstation-guard-row]",
     );
-    expect(guardRows).toHaveLength(2);
+    expect(guardRows).toHaveLength(0);
+    expect(guardCard?.className).toContain("text-on-surface");
+    for (const boxedClass of [
+      "rounded-sm",
+      "border",
+      "bg-warning-container",
+      "px-1.5",
+      "py-0.5",
+    ]) {
+      expect(guardCard?.className).not.toContain(boxedClass);
+    }
     expectWorkstationContentContained(loopNode as HTMLElement);
 
-    for (const value of loopNode?.querySelectorAll<HTMLElement>(
-      "[data-workstation-guard-target], [data-workstation-guard-limit]",
-    ) ?? []) {
-      const style = getComputedStyle(value);
-      expect(style.overflow).toBe("hidden");
-      expect(style.textOverflow).toBe("ellipsis");
-      expect(style.whiteSpace).toBe("nowrap");
-    }
-
-    const defaultScheduler = await canvas.findByText("Default scheduler", {
-      exact: true,
+    const defaultSchedulerButton = await canvas.findByRole("button", {
+      name: "Select Poller source workstation",
     });
-    const defaultSchedulerNode = defaultScheduler.closest(".react-flow__node");
+    const defaultSchedulerNode =
+      defaultSchedulerButton.closest(".react-flow__node");
     expect(defaultSchedulerNode).toBeTruthy();
     expectWorkstationContentContained(defaultSchedulerNode as HTMLElement);
   },
@@ -1121,6 +1128,18 @@ export const StatePositionOneActive = {
     expect(
       article.querySelectorAll("[data-state-work-progress-dot]"),
     ).toHaveLength(1);
+    const activeMarker = article.querySelector<HTMLElement>(
+      '[data-state-work-progress="dots"]',
+    );
+    expect(activeMarker?.getAttribute("data-work-progress-state")).toBe(
+      "active",
+    );
+    for (const dot of article.querySelectorAll(
+      "[data-state-work-progress-dot]",
+    )) {
+      expect(dot.className).toContain("bg-on-surface");
+      expect(dot.getAttribute("data-work-progress-dot-state")).toBe("active");
+    }
     expectNoImplementationLabels(canvasElement);
   },
 };
@@ -1168,6 +1187,23 @@ export const StatePositionFourActive = {
     await expect(
       article.querySelector("[data-state-work-progress='numeric']"),
     ).toBeVisible();
+    const numericMarker = article.querySelector<HTMLElement>(
+      '[data-state-work-progress="numeric"]',
+    );
+    if (!(numericMarker instanceof HTMLElement)) {
+      throw new Error("Expected the numeric work-progress marker to render");
+    }
+    expect(numericMarker?.className).toContain("min-h-6");
+    expect(numericMarker?.className).toContain("text-base");
+    expect(numericMarker?.className).toContain("text-on-surface");
+    expect(numericMarker.getBoundingClientRect().height).toBeGreaterThanOrEqual(
+      24,
+    );
+    expect(Number.parseFloat(getComputedStyle(numericMarker).fontSize)).toBe(
+      16,
+    );
+    expect(numericMarker?.className).not.toContain("bg-success-container");
+    expect(numericMarker?.className).not.toContain("border-af-success-border");
     expect(
       article.querySelector("[data-state-work-progress='dots']"),
     ).toBeNull();
@@ -1259,7 +1295,12 @@ export const StatePositionLongLabels = {
 
 export const StatePositionTerminalAndFailed = {
   render: () => (
-    <CurrentActivityStory snapshot={semanticWorkflowDashboardSnapshot} />
+    <CurrentActivityStory
+      snapshot={snapshotWithStateCounts({
+        "story:blocked": 2,
+        "story:complete": 2,
+      })}
+    />
   ),
   play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
     const canvas = within(canvasElement);
@@ -1282,6 +1323,19 @@ export const StatePositionTerminalAndFailed = {
     await expect(within(failedArticle).getByText("blocked")).toBeVisible();
     expect(terminalArticle.textContent).not.toContain("Terminal");
     expect(failedArticle.textContent).not.toContain("Failed");
+    for (const article of [terminalArticle, failedArticle]) {
+      const marker = article.querySelector<HTMLElement>(
+        '[data-state-work-progress="dots"]',
+      );
+      expect(marker?.getAttribute("data-work-progress-state")).toBe("idle");
+      for (const dot of article.querySelectorAll(
+        "[data-state-work-progress-dot]",
+      )) {
+        expect(dot.className).toContain("bg-surface");
+        expect(dot.className).toContain("border-outline-variant");
+        expect(dot.getAttribute("data-work-progress-dot-state")).toBe("idle");
+      }
+    }
     const legend = await expandGraphLegend(canvasElement);
     await expect(
       within(legend).getByRole("img", {

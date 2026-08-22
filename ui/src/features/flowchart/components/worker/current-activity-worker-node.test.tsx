@@ -131,6 +131,27 @@ describe("CurrentActivity worker node layout", () => {
       container.querySelector("[data-worker-label-zone]")?.className,
     ).toContain("h-full");
   });
+
+  it("renders worker execution details after resize", () => {
+    const { container } = renderWorkerNode({
+      expanded: true,
+      runnerId: "codex",
+      workerType: "MODEL_WORKER",
+    });
+
+    expect(
+      container.querySelector('[data-factory-graph-expanded-content="worker"]'),
+    ).toBeTruthy();
+    expect(
+      container.querySelector(
+        '[data-factory-graph-expanded-field="worker-type"]',
+      )?.textContent,
+    ).toBe("MODEL_WORKER");
+    expect(
+      container.querySelector('[data-factory-graph-expanded-field="runner"]')
+        ?.textContent,
+    ).toBe("codex");
+  });
 });
 
 describe("CurrentActivity worker node icons", () => {
@@ -177,7 +198,7 @@ describe("CurrentActivity worker node icons", () => {
       activeFlow: true,
       iconClassName: "text-warning",
       name: "active",
-      surfaceClassName: "!bg-warning-container",
+      surfaceClassName: "!bg-warning",
       surface: "active",
     },
   ] as const)(

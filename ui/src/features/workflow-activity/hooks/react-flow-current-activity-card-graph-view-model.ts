@@ -10,7 +10,7 @@ import {
   type FactoryGraphNodeDimensions,
   resolveFactoryGraphNodeResizeDimensions,
 } from "@you-agent-factory/factory-graph";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
   DashboardActiveExecution,
   DashboardSnapshot,
@@ -55,6 +55,7 @@ const EMPTY_TRANSIENT_NODE_POSITIONS = new Map<
   { x: number; y: number }
 >();
 const EMPTY_RESIZE_DIMENSIONS = new Map<string, FactoryGraphNodeDimensions>();
+const EMPTY_EXPANDED_NODE_IDS = new Set<string>();
 
 export type CurrentActivityGraphRenderProjection = {
   canonicalLayoutViewport: { x: number; y: number; zoom: number } | null;
@@ -76,6 +77,7 @@ export type CurrentActivityGraphViewModelEditorInput = Omit<
     readonly { x: number; y: number }[]
   >;
   graphProjection: CurrentActivityGraphRenderProjection;
+  expandedNodeIds?: ReadonlySet<string>;
   handleConnectionAnchorClick: CurrentActivityEditorState["onConnectionAnchorClick"];
   selectedWaypointEdgeId?: string | null;
   validationTargets?: CurrentActivityEditorState["validationTargets"];
@@ -203,6 +205,7 @@ function useCurrentActivityBaseNodes({
 }
 
 function useCurrentActivityNodeResizeState(input: {
+  committedDimensionsByNodeId: ReadonlyMap<string, FactoryGraphNodeDimensions>;
   editor: CurrentActivityGraphViewModelEditorInput;
   graphKey: string;
   locale?: string;
@@ -214,6 +217,9 @@ function useCurrentActivityNodeResizeState(input: {
     dimensions: FactoryGraphNodeDimensions;
     nodeId: string;
   } | null>(null);
+  const previousCommittedDimensionsRef = useRef(
+    input.committedDimensionsByNodeId,
+  );
 
   const previewDimensions = useCallback(
     (
@@ -271,9 +277,10 @@ function useCurrentActivityNodeResizeState(input: {
         // Dropping the preview and committing in the same handler keeps both
         // updates in one render, so the node never flashes its old size.
         setLiveResize(null);
-        if (!hostController) {
-          updateDimensions(target, dimensions);
-        }
+        // Keep the committed presentation projection even when a host also
+        // persists the authored layout. The host callback owns canonical
+        // state; this local map owns the expanded rendering contract.
+        updateDimensions(target, dimensions);
         hostController?.onResizeEnd(target, dimensions);
       },
     }),
@@ -291,6 +298,36 @@ function useCurrentActivityNodeResizeState(input: {
     setLiveResize(null);
   }, [input.graphKey, controller.enabled]);
 
+  useEffect(() => {
+    const previousDimensions = previousCommittedDimensionsRef.current;
+    const committedDimensions = input.committedDimensionsByNodeId;
+    previousCommittedDimensionsRef.current = committedDimensions;
+
+    if (hostController === undefined) {
+      return;
+    }
+
+    setDimensionsByNodeId((currentDimensions) => {
+      let nextDimensions: Map<string, FactoryGraphNodeDimensions> | null = null;
+
+      for (const [nodeId] of currentDimensions) {
+        const previous = previousDimensions.get(nodeId);
+        const committed = committedDimensions.get(nodeId);
+        if (
+          previous?.height === committed?.height &&
+          previous?.width === committed?.width
+        ) {
+          continue;
+        }
+
+        nextDimensions ??= new Map(currentDimensions);
+        nextDimensions.delete(nodeId);
+      }
+
+      return nextDimensions ?? currentDimensions;
+    });
+  }, [hostController, input.committedDimensionsByNodeId]);
+
   // The live map stays separate from the committed one so an in-progress drag
   // paints the new geometry without also flipping the node into its expanded
   // content variant and back when the drag settles.
@@ -304,9 +341,7 @@ function useCurrentActivityNodeResizeState(input: {
 
   return {
     controller,
-    dimensionsByNodeId: hostController
-      ? EMPTY_RESIZE_DIMENSIONS
-      : dimensionsByNodeId,
+    dimensionsByNodeId,
     liveDimensionsByNodeId,
   };
 }
@@ -336,6 +371,7 @@ function useCurrentActivityGraphNodePresentation(
   graphSelection: FactoryGraphEditorSelectionController,
   dimensionsByNodeId: ReadonlyMap<string, FactoryGraphNodeDimensions>,
   liveDimensionsByNodeId: ReadonlyMap<string, FactoryGraphNodeDimensions>,
+  expandedNodeIds: ReadonlySet<string>,
   positionChangesEnabled: boolean,
 ) {
   const basePositionKey = useMemo(
@@ -439,28 +475,51 @@ function useCurrentActivityGraphNodePresentation(
           position: transientPositionsByNodeId.get(node.id) ?? node.position,
           selected: graphSelection.isNodeSelected(node.id),
         };
-        // Overriding `data` across the whole union would sever the link
-        // between each node's `type` and its `data`; only the workstation
-        // view has an expanded content variant, so narrow before stamping it.
-        if (node.type === "workstation") {
-          return {
-            ...node,
-            ...presentation,
-            data: { ...node.data, expanded: resizedDimensions !== undefined },
-          };
-        }
-        return { ...node, ...presentation };
+        return projectCurrentActivityNodePresentation(
+          node,
+          presentation,
+          resizedDimensions !== undefined || expandedNodeIds.has(node.id),
+        );
       }),
     [
       baseNodes,
       dimensionsByNodeId,
       graphSelection,
+      expandedNodeIds,
       liveDimensionsByNodeId,
       transientPositionsByNodeId,
     ],
   );
 
   return { displayNodes, handleNodesChange };
+}
+
+type CurrentActivityNodePresentation = {
+  height?: number;
+  measured?: FactoryGraphNodeDimensions;
+  position: { x: number; y: number };
+  selected: boolean;
+  width?: number;
+};
+
+/**
+ * Preserve the React Flow node/data discriminant while adding presentation
+ * state shared by every semantic node family. Each factory-graph data
+ * contract declares `expanded`, but TypeScript cannot retain that invariant
+ * through a spread over the discriminated union without this narrow helper.
+ */
+function projectCurrentActivityNodePresentation<
+  Node extends CurrentActivityNode,
+>(
+  node: Node,
+  presentation: CurrentActivityNodePresentation,
+  expanded: boolean,
+): Node {
+  return {
+    ...node,
+    ...presentation,
+    data: { ...node.data, expanded },
+  } as Node;
 }
 
 function useCurrentActivityGraphEdges({
@@ -594,6 +653,19 @@ export function useCurrentActivityGraphViewModel({
     renderedLayout,
     visibleGraphEdges,
   } = editor.graphProjection;
+  const committedDimensionsByNodeId = useMemo(() => {
+    const dimensionsByNodeId = new Map<string, FactoryGraphNodeDimensions>();
+    for (const node of renderedLayout.nodes ?? []) {
+      if (node.size === undefined) {
+        continue;
+      }
+      dimensionsByNodeId.set(node.id, {
+        height: node.size.height,
+        width: node.size.width,
+      });
+    }
+    return dimensionsByNodeId;
+  }, [renderedLayout]);
   const graphKey = useMemo(
     () => currentActivityGraphKey(graphLayout),
     [graphLayout],
@@ -647,6 +719,7 @@ export function useCurrentActivityGraphViewModel({
   const graphSelectionEnabled =
     !editor.editorMode || editor.activeTool !== "delete";
   const nodeResizeState = useCurrentActivityNodeResizeState({
+    committedDimensionsByNodeId,
     editor,
     graphKey,
     locale,
@@ -681,6 +754,7 @@ export function useCurrentActivityGraphViewModel({
       graphSelection,
       nodeResizeState.dimensionsByNodeId,
       nodeResizeState.liveDimensionsByNodeId,
+      editor.expandedNodeIds ?? EMPTY_EXPANDED_NODE_IDS,
       editor.editorMode && editor.canInteractWithEditor,
     );
   const { handleEdgesChange } = useCurrentActivityGraphEdgePresentation(

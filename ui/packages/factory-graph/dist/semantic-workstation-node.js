@@ -2,7 +2,7 @@ import { jsx as _jsx, jsxs as _jsxs, Fragment as _Fragment } from "react/jsx-run
 import { GraphNodeButton } from "@you-agent-factory/components/graphs";
 import { FactoryGraphNodeShell, } from "./semantic-node-shell.js";
 import { factoryGraphNodeHoverClassName, factoryGraphNodeSurfaceClassName, factoryGraphNodeWrappedTextClassName, } from "./semantic-node-style.js";
-import { FactoryGraphWorkProgressMarker } from "./semantic-place-nodes.js";
+import { FactoryGraphWorkProgressMarker } from "./semantic-work-progress-marker.js";
 import { factoryGraphActiveItemsLabel as activeItemsLabel, factoryGraphClassNames as classNames, factoryGraphDurationText as durationText, factoryGraphGraphDuration as graphDuration, factoryGraphSelectWorkstationLabel as selectWorkstationLabel, factoryGraphWorkItemLabel as workItemLabel, factoryGraphWorkItemLabelClassName as workItemLabelClassName, factoryGraphWorkstationPresentation as workstationPresentation, factoryGraphWorkstationTitleClassName as workstationTitleClassName, } from "./semantic-workstation-presentation.js";
 import { resolveFactoryGraphVisualState } from "./visual-state.js";
 import { factoryGraphWorkProgressMode } from "./work-progress-presentation.js";
@@ -29,9 +29,7 @@ export function FactoryGraphWorkstationNodeView({ data, selected: reactFlowSelec
     });
     const className = classNames(factoryGraphNodeSurfaceClassName("workstation"), "min-w-0 w-full justify-start overflow-hidden border-2", factoryGraphNodeHoverClassName({ muted: data.muted, selected }, "primary"), "border-info-border", presentation.borderClassName, data.selectedWorkID !== null &&
         "border-info-border shadow-af-info-selected");
-    return (_jsx(FactoryGraphNodeShell, { className: className, handles: data.handles, interactionOverlay: data.interactionOverlay, nodeType: "workstation", resizeControls: data.resizeControls
-            ? { ...data.resizeControls, isVisible: true }
-            : undefined, visualState: {
+    return (_jsx(FactoryGraphNodeShell, { className: className, handles: data.handles, interactionOverlay: data.interactionOverlay, nodeType: "workstation", resizeControls: data.resizeControls, visualState: {
             activeWork: data.active,
             focused: data.focused,
             lifecycle: data.active ? "PROCESSING" : undefined,
@@ -82,10 +80,10 @@ export function FactoryGraphWorkstationGuardedControlCard({ locale, presentation
     if (presentation.controlRole !== "LOOP_BREAKER" || !control)
         return null;
     const label = locale === "zh-CN" ? "断路器" : "Breaker";
-    return (_jsx("span", { className: "min-w-0 max-w-full shrink truncate whitespace-nowrap rounded-sm border border-af-warning-border bg-warning-container px-1.5 py-0.5 text-[0.62rem] font-semibold leading-none text-on-warning-container", "data-workstation-control-role": presentation.controlRole, "data-workstation-guard-card": true, "data-workstation-guard-type": control.guardType, title: label, children: label }));
+    return (_jsx("span", { className: "min-w-0 max-w-full shrink truncate whitespace-nowrap text-[0.62rem] font-semibold leading-none text-on-surface", "data-workstation-control-role": presentation.controlRole, "data-workstation-guard-card": true, "data-workstation-guard-type": control.guardType, title: label, children: label }));
 }
 function Overflow({ locale, total, visible, }) {
     if (total <= visible)
         return null;
-    return (_jsx(FactoryGraphWorkProgressMarker, { ariaLabel: activeItemsLabel(total, locale), className: "mt-1 flex min-h-7 w-full rounded-lg px-3 py-1 text-base", count: total, "data-workstation-work-progress": "numeric", kind: "numeric" }));
+    return (_jsx(FactoryGraphWorkProgressMarker, { ariaLabel: activeItemsLabel(total, locale), className: "mt-1 flex min-h-7 w-full px-3 py-1", count: total, "data-workstation-work-progress": "numeric", kind: "numeric" }));
 }

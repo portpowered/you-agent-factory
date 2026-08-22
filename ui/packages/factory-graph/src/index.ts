@@ -83,6 +83,7 @@ export {
   graphSemanticIconLabel,
 } from "./semantic-icon.js";
 export {
+  FactoryGraphNodeExpandedContent,
   type FactoryGraphNodeHandle,
   FactoryGraphNodeShell,
   type FactoryGraphNodeShellProps,
@@ -117,7 +118,6 @@ export {
   type FactoryGraphStatePositionNode,
   type FactoryGraphStatePositionNodeData,
   FactoryGraphStatePositionNodeView,
-  FactoryGraphWorkProgressMarker,
 } from "./semantic-place-nodes.js";
 export {
   FactoryGraphNodeBadge,
@@ -132,6 +132,10 @@ export {
   type FactoryGraphWorkTypeNodeData,
   FactoryGraphWorkTypeNodeView,
 } from "./semantic-support-nodes.js";
+export {
+  FactoryGraphWorkProgressMarker,
+  type FactoryGraphWorkProgressMarkerProps,
+} from "./semantic-work-progress-marker.js";
 export {
   type FactoryGraphActiveExecution,
   FactoryGraphWorkstationGuardedControlCard,

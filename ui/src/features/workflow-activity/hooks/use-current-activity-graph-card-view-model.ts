@@ -42,6 +42,15 @@ export function useCurrentActivityGraphCardViewModel(
   const graphProjection = currentActivityGraphRenderProjection(
     editorGraphProjection,
   );
+  const expandedNodeIds = useMemo(
+    () =>
+      new Set(
+        (graphProjection.renderedLayout.nodes ?? [])
+          .filter((node) => node.size !== undefined)
+          .map((node) => node.id),
+      ),
+    [graphProjection.renderedLayout],
+  );
   const resizeLayoutNode = publicEditor.layoutControls.resizeNode;
   const nodeResizeControls = useMemo<CurrentActivityNodeResizeController>(
     () => ({
@@ -71,6 +80,7 @@ export function useCurrentActivityGraphCardViewModel(
       activeTool: publicEditor.editorControls.activeTool,
       canInteractWithEditor: publicEditor.editorControls.canInteract,
       editorMode: publicEditor.editorControls.isEditing,
+      expandedNodeIds,
       graphProjection,
       handleConnectionAnchorClick: connectionControls.handleAnchorClick,
       nodeResizeControls,

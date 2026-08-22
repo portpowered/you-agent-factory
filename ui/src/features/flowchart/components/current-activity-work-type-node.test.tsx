@@ -81,4 +81,18 @@ describe("WorkTypeNodeView", () => {
         .getAttribute("aria-pressed"),
     ).toBe("true");
   });
+
+  it("renders the work-type identity projection after resize", () => {
+    const { container } = renderWorkTypeNode({ expanded: true });
+
+    expect(
+      container.querySelector(
+        '[data-factory-graph-expanded-content="work-type"]',
+      ),
+    ).toBeTruthy();
+    expect(
+      container.querySelector('[data-factory-graph-expanded-field="place-id"]')
+        ?.textContent,
+    ).toBe("work-type:story");
+  });
 });

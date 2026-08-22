@@ -459,6 +459,7 @@ describe("ReactFlowCurrentActivityCard coverage", () => {
         graphLayout: { edges: [], height: 0, nodes: [], width: 0 },
         pendingAdditionEdgeIds: new Set<string>(),
         positionedGraphLayout: { edges: [], height: 0, nodes: [], width: 0 },
+        renderedLayout: { schemaVersion: 1 },
         visibleGraphEdges: [],
       },
       handleConnectionAnchorClick: vi.fn(),

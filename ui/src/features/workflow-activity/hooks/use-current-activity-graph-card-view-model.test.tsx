@@ -246,6 +246,42 @@ describe("useCurrentActivityGraphCardViewModel node resize actions", () => {
     );
     expect(result.current.editorControls.isEditing).toBe(true);
   });
+
+  it("forwards authored node sizes as expanded presentation state", () => {
+    const graphController = graphControllerFixture();
+    graphController.graphProjection.renderedLayout = {
+      nodes: [
+        {
+          id: "place:story:queued",
+          position: { x: 10, y: 20 },
+          size: { height: 220, width: 240 },
+        },
+      ],
+      schemaVersion: 1,
+    };
+
+    renderHook(() =>
+      useCurrentActivityGraphCardViewModel({
+        graphController,
+        locale: "en",
+        now: Date.parse("2026-06-10T00:00:00Z"),
+        onSelectDoc: vi.fn(),
+        onSelectResource: vi.fn(),
+        onSelectStateNode: vi.fn(),
+        onSelectWorkID: vi.fn(),
+        onSelectWorker: vi.fn(),
+        onSelectWorkstation: vi.fn(),
+        onSelectWorkType: vi.fn(),
+        selection: null,
+        snapshot: { factory: undefined } as never,
+      } as never),
+    );
+
+    expect(
+      graphViewModelMock.useCurrentActivityGraphViewModel.mock.calls[0]?.[0]
+        ?.editor.expandedNodeIds,
+    ).toEqual(new Set(["place:story:queued"]));
+  });
 });
 
 describe("useCurrentActivityGraphCardViewModel visual groups", () => {

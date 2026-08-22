@@ -1,9 +1,10 @@
 import type { Node, NodeProps } from "@xyflow/react";
 import { GraphNodeButton } from "@you-agent-factory/components/graphs";
-import type { ComponentPropsWithoutRef, ReactNode } from "react";
+import type { ReactNode } from "react";
 import type { FactoryGraphNodeInteractionOverlay } from "./node-interaction-overlay.js";
 import type { FactoryGraphNodeResizeControlsProps } from "./node-resize-controls.js";
 import {
+  FactoryGraphNodeExpandedContent,
   type FactoryGraphNodeHandle,
   FactoryGraphNodeShell,
   type FactoryGraphPlaceNodeType,
@@ -21,6 +22,7 @@ import {
 } from "./semantic-place-content.js";
 import { FactoryGraphPlaceTokenCount } from "./semantic-place-token-count.js";
 import type { FactoryGraphPlaceRef } from "./semantic-support-nodes.js";
+import { FactoryGraphWorkProgressMarker } from "./semantic-work-progress-marker.js";
 import { resolveFactoryGraphVisualState } from "./visual-state.js";
 import { factoryGraphWorkProgressMode } from "./work-progress-presentation.js";
 import {
@@ -38,6 +40,7 @@ export interface FactoryGraphSemanticPlaceRef extends FactoryGraphPlaceRef {
 export interface FactoryGraphBasePlaceNodeData extends Record<string, unknown> {
   activeFlow: boolean;
   activeItemLabels: string[];
+  expanded?: boolean;
   focused?: boolean;
   factoryGraphNodeId?: string;
   handles: FactoryGraphNodeHandle[];
@@ -92,6 +95,7 @@ function FactoryGraphPlaceNodeView({
   const selectable =
     data.place.kind === "work_state" && data.onSelectStateNode !== undefined;
   const stateNode = data.place.kind === "work_state";
+  const isExpanded = data.expanded === true;
   const nodeType: FactoryGraphPlaceNodeType = stateNode
     ? "statePosition"
     : data.place.kind === "resource"
@@ -127,6 +131,8 @@ function FactoryGraphPlaceNodeView({
   });
   const content = stateNode ? (
     <FactoryGraphStatePositionContent
+      activeItemLabels={data.activeItemLabels}
+      expanded={isExpanded}
       locale={data.locale}
       place={data.place}
       tokenCount={data.tokenCount}
@@ -134,6 +140,7 @@ function FactoryGraphPlaceNodeView({
     />
   ) : (
     <FactoryGraphStaticPlaceContent
+      expanded={isExpanded}
       locale={data.locale}
       place={data.place}
       tokenCount={data.tokenCount}
@@ -146,11 +153,7 @@ function FactoryGraphPlaceNodeView({
       handles={data.handles}
       interactionOverlay={data.interactionOverlay}
       nodeType={nodeType}
-      resizeControls={
-        data.resizeControls
-          ? { ...data.resizeControls, isVisible: selected }
-          : undefined
-      }
+      resizeControls={data.resizeControls}
       visualState={{
         activeFlow: data.activeFlow,
         activeWork: holdsWork,
@@ -189,11 +192,15 @@ function FactoryGraphPlaceNodeView({
 }
 
 function FactoryGraphStatePositionContent({
+  activeItemLabels,
+  expanded,
   locale,
   place,
   tokenCount,
   visualState,
 }: {
+  activeItemLabels: string[];
+  expanded: boolean;
   locale?: string;
   place: FactoryGraphSemanticPlaceRef;
   tokenCount: number;
@@ -232,22 +239,33 @@ function FactoryGraphStatePositionContent({
         data-state-marker-zone
         title={label}
       >
-        {stateMarkers(tokenCount, locale) ?? (
+        {stateMarkers(tokenCount, locale, visualState) ?? (
           <span className="sr-only">
             {activeItemCountLabel(tokenCount, locale)}
           </span>
         )}
       </span>
+      {expanded ? (
+        <FactoryGraphNodeExpandedContent family="work-state">
+          <span data-factory-graph-expanded-field="active-items">
+            {activeItemLabels.length > 0
+              ? activeItemLabels.join(", ")
+              : activeItemCountLabel(tokenCount, locale)}
+          </span>
+        </FactoryGraphNodeExpandedContent>
+      ) : null}
     </>
   );
 }
 
 function FactoryGraphStaticPlaceContent({
+  expanded,
   locale,
   place,
   tokenCount,
   visualState,
 }: {
+  expanded: boolean;
   locale?: string;
   place: FactoryGraphSemanticPlaceRef;
   tokenCount: number;
@@ -288,6 +306,13 @@ function FactoryGraphStaticPlaceContent({
             count={tokenCount}
           />
         </span>
+        {expanded ? (
+          <FactoryGraphNodeExpandedContent family="constraint">
+            <span data-factory-graph-expanded-field="place-id">
+              {place.place_id}
+            </span>
+          </FactoryGraphNodeExpandedContent>
+        ) : null}
       </div>
     );
   return (
@@ -318,17 +343,28 @@ function FactoryGraphStaticPlaceContent({
           count={tokenCount}
         />
       </span>
+      {expanded ? (
+        <FactoryGraphNodeExpandedContent family="resource">
+          <span data-factory-graph-expanded-field="place-id">
+            {place.place_id}
+          </span>
+        </FactoryGraphNodeExpandedContent>
+      ) : null}
     </div>
   );
 }
 
-function stateMarkers(count: number, locale?: string): ReactNode {
+function stateMarkers(
+  count: number,
+  locale: string | undefined,
+  visualState: ReturnType<typeof resolveFactoryGraphVisualState>,
+): ReactNode {
   const mode = factoryGraphWorkProgressMode(count);
   if (mode === "empty") return null;
   return mode === "total" ? (
     <FactoryGraphWorkProgressMarker
       ariaLabel={activeItemCountLabel(count, locale)}
-      className="inline-flex min-h-5 min-w-8 rounded-full px-2 text-sm"
+      className="min-w-8 px-2"
       count={count}
       data-state-work-progress="numeric"
       kind="numeric"
@@ -340,78 +376,9 @@ function stateMarkers(count: number, locale?: string): ReactNode {
       data-state-work-progress="dots"
       dotCount={count}
       dotDataAttribute="data-state-work-progress-dot"
+      active={visualState.surface === "active"}
       kind="dots"
     />
-  );
-}
-
-export function FactoryGraphWorkProgressMarker(
-  props:
-    | ({
-        ariaLabel: string;
-        className?: string;
-        count: number;
-        kind: "numeric";
-      } & ComponentPropsWithoutRef<"span">)
-    | ({
-        ariaLabel: string;
-        className?: string;
-        dotClassName?: string;
-        dotCount: number;
-        dotDataAttribute: string;
-        kind: "dots";
-        suffix?: ReactNode;
-      } & ComponentPropsWithoutRef<"span">),
-) {
-  if (props.kind === "numeric") {
-    const { ariaLabel, className, count, kind: _kind, ...rest } = props;
-    return (
-      <span
-        aria-label={ariaLabel}
-        className={classNames(
-          "items-center justify-center border border-af-success-border bg-success-container font-mono font-bold leading-none text-success",
-          className,
-        )}
-        role="status"
-        {...rest}
-      >
-        {count}
-      </span>
-    );
-  }
-  const {
-    ariaLabel,
-    className,
-    dotClassName = "h-2 w-2",
-    dotCount,
-    dotDataAttribute,
-    kind: _kind,
-    suffix,
-    ...rest
-  } = props;
-  return (
-    <span
-      aria-label={ariaLabel}
-      className={classNames(
-        "items-center justify-center border border-af-success-border bg-success-container",
-        className,
-      )}
-      role="status"
-      {...rest}
-    >
-      {Array.from({ length: dotCount }, (_, index) => `dot-${index}`).map(
-        (key, index) => (
-          <span
-            key={key}
-            aria-hidden="true"
-            className={classNames("rounded-full bg-success", dotClassName)}
-            data-current-activity-work-progress-dot={String(index)}
-            {...{ [dotDataAttribute]: String(index) }}
-          />
-        ),
-      )}
-      {suffix}
-    </span>
   );
 }
 

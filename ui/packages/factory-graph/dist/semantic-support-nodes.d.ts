@@ -12,6 +12,7 @@ export interface FactoryGraphPlaceRef {
 }
 export interface FactoryGraphWorkerNodeData extends Record<string, unknown> {
     activeFlow: boolean;
+    expanded?: boolean;
     focused?: boolean;
     factoryGraphNodeId?: string;
     handles: FactoryGraphNodeHandle[];
@@ -30,6 +31,7 @@ export interface FactoryGraphWorkerNodeData extends Record<string, unknown> {
 export type FactoryGraphWorkerNode = Node<FactoryGraphWorkerNodeData, "worker">;
 export interface FactoryGraphWorkTypeNodeData extends Record<string, unknown> {
     activeFlow: boolean;
+    expanded?: boolean;
     focused?: boolean;
     factoryGraphNodeId?: string;
     handles: FactoryGraphNodeHandle[];
@@ -48,6 +50,7 @@ export interface FactoryGraphWorkTypeNodeData extends Record<string, unknown> {
 export type FactoryGraphWorkTypeNode = Node<FactoryGraphWorkTypeNodeData, "workType">;
 export interface FactoryGraphResourceNodeData extends Record<string, unknown> {
     activeFlow: boolean;
+    expanded?: boolean;
     focused?: boolean;
     factoryGraphNodeId?: string;
     handles: FactoryGraphNodeHandle[];
@@ -64,13 +67,13 @@ export interface FactoryGraphResourceNodeData extends Record<string, unknown> {
 }
 export type FactoryGraphResourceNode = Node<FactoryGraphResourceNodeData, "resource">;
 /** Original Factory worker node, with host-owned worker selection. */
-export declare function FactoryGraphWorkerNodeView({ data, selected: reactFlowSelected, }: NodeProps<FactoryGraphWorkerNode>): import("react").JSX.Element;
+export declare function FactoryGraphWorkerNodeView({ data, selected: reactFlowSelected, }: NodeProps<FactoryGraphWorkerNode>): import("react/jsx-runtime").JSX.Element;
 /** Original Factory work-type node, with host-owned selection and validation. */
-export declare function FactoryGraphWorkTypeNodeView({ data, selected: reactFlowSelected, }: NodeProps<FactoryGraphWorkTypeNode>): import("react").JSX.Element;
+export declare function FactoryGraphWorkTypeNodeView({ data, selected: reactFlowSelected, }: NodeProps<FactoryGraphWorkTypeNode>): import("react/jsx-runtime").JSX.Element;
 /** Original Factory resource node, with host-owned resource selection. */
-export declare function FactoryGraphResourceNodeView({ data, selected: reactFlowSelected, }: NodeProps<FactoryGraphResourceNode>): import("react").JSX.Element;
+export declare function FactoryGraphResourceNodeView({ data, selected: reactFlowSelected, }: NodeProps<FactoryGraphResourceNode>): import("react/jsx-runtime").JSX.Element;
 export declare function FactoryGraphNodeBadge({ children, className, tone, weight, ...rest }: ComponentPropsWithoutRef<"span"> & {
     children: ReactNode;
     tone?: "danger" | "info" | "neutral" | "success" | "warning";
     weight?: "body" | "label";
-}): import("react").JSX.Element;
+}): import("react/jsx-runtime").JSX.Element;

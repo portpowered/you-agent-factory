@@ -5,6 +5,7 @@ import { type FactoryGraphNodeHandle } from "./semantic-node-shell.js";
 export interface FactoryGraphDocNodeData extends Record<string, unknown> {
     activeFlow?: boolean;
     displayLabel: string;
+    expanded?: boolean;
     focused?: boolean;
     factoryGraphNodeId?: string;
     fileType?: string;
@@ -21,4 +22,4 @@ export interface FactoryGraphDocNodeData extends Record<string, unknown> {
 }
 export type FactoryGraphDocNode = Node<FactoryGraphDocNodeData, "doc">;
 /** Original Factory document node, with host-owned selection callback. */
-export declare function FactoryGraphDocNodeView({ data, selected: reactFlowSelected, }: NodeProps<FactoryGraphDocNode>): import("react").JSX.Element;
+export declare function FactoryGraphDocNodeView({ data, selected: reactFlowSelected, }: NodeProps<FactoryGraphDocNode>): import("react/jsx-runtime").JSX.Element;

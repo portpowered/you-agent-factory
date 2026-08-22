@@ -12,7 +12,7 @@ import {
   factoryGraphNodeSurfaceClassName,
   factoryGraphNodeWrappedTextClassName,
 } from "./semantic-node-style.js";
-import { FactoryGraphWorkProgressMarker } from "./semantic-place-nodes.js";
+import { FactoryGraphWorkProgressMarker } from "./semantic-work-progress-marker.js";
 import {
   factoryGraphActiveItemsLabel as activeItemsLabel,
   factoryGraphClassNames as classNames,
@@ -122,11 +122,7 @@ export function FactoryGraphWorkstationNodeView({
       handles={data.handles}
       interactionOverlay={data.interactionOverlay}
       nodeType="workstation"
-      resizeControls={
-        data.resizeControls
-          ? { ...data.resizeControls, isVisible: true }
-          : undefined
-      }
+      resizeControls={data.resizeControls}
       visualState={{
         activeWork: data.active,
         focused: data.focused,
@@ -433,7 +429,7 @@ export function FactoryGraphWorkstationGuardedControlCard({
   const label = locale === "zh-CN" ? "断路器" : "Breaker";
   return (
     <span
-      className="min-w-0 max-w-full shrink truncate whitespace-nowrap rounded-sm border border-af-warning-border bg-warning-container px-1.5 py-0.5 text-[0.62rem] font-semibold leading-none text-on-warning-container"
+      className="min-w-0 max-w-full shrink truncate whitespace-nowrap text-[0.62rem] font-semibold leading-none text-on-surface"
       data-workstation-control-role={presentation.controlRole}
       data-workstation-guard-card
       data-workstation-guard-type={control.guardType}
@@ -457,7 +453,7 @@ function Overflow({
   return (
     <FactoryGraphWorkProgressMarker
       ariaLabel={activeItemsLabel(total, locale)}
-      className="mt-1 flex min-h-7 w-full rounded-lg px-3 py-1 text-base"
+      className="mt-1 flex min-h-7 w-full px-3 py-1"
       count={total}
       data-workstation-work-progress="numeric"
       kind="numeric"
