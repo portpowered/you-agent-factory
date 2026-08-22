@@ -3,6 +3,8 @@ package cli
 import (
 	"encoding/json"
 	"fmt"
+	"math/big"
+	"sort"
 	"strings"
 
 	generatedclient "github.com/portpowered/infinite-you/pkg/transports/http/client"
@@ -24,8 +26,11 @@ func renderHumanCosts(report generatedclient.CostsReport) string {
 	renderCostsScope(&output, report.Scope)
 	fmt.Fprintf(&output, "Currency: %s\n", report.Currency)
 	fmt.Fprintf(&output, "Status: %s\n", report.Status)
+	renderCostSummary(&output, "", string(report.Status), report.KnownCost)
 	renderPricedAmount(&output, "Priced subtotal", report.PricedSubtotal)
+	renderTokenCounts(&output, "", report.TokenTotals)
 	renderCoverage(&output, report.Coverage)
+	renderUnpricedCoverage(&output, report.UnpricedDispatchCount, report.UnpricedPairs)
 	fmt.Fprintln(&output)
 
 	renderRollupDimension(&output, "Work items", rollupViews(report.WorkItems))
@@ -52,6 +57,34 @@ func renderPricedAmount(output *strings.Builder, label string, amount *string) {
 	fmt.Fprintf(output, "%s (USD): %s\n", label, *amount)
 }
 
+func renderCostSummary(output *strings.Builder, indent, status string, knownCost *string) {
+	switch status {
+	case "PARTIAL":
+		fmt.Fprintf(output, "%sCost (USD): %s + ?? unknown\n", indent, formatHumanUSD(knownCost))
+	case "UNPRICED":
+		fmt.Fprintf(output, "%sCost (USD): ?? unknown\n", indent)
+	case "NO_USAGE":
+		fmt.Fprintf(output, "%sCost (USD): no usage\n", indent)
+	default:
+		fmt.Fprintf(output, "%sCost (USD): %s\n", indent, formatHumanUSD(knownCost))
+	}
+}
+
+// formatHumanUSD rounds an exact API decimal to cents with math/big's
+// deterministic half-away-from-zero rule. The API retains the unrounded
+// decimal; this conversion is only for human-readable USD output.
+func formatHumanUSD(amount *string) string {
+	if amount == nil {
+		return "?? unknown"
+	}
+	raw := strings.TrimSpace(*amount)
+	value, ok := new(big.Rat).SetString(raw)
+	if !ok || value.Sign() < 0 {
+		return "?? unknown"
+	}
+	return "$" + value.FloatString(2)
+}
+
 func renderCoverage(output *strings.Builder, coverage generatedclient.CostsCoverage) {
 	fmt.Fprintf(output, "Coverage: rows priced %d/%d; provider/models priced %d/%d\n",
 		coverage.PricedRows, coverage.EncounteredRows,
@@ -59,24 +92,21 @@ func renderCoverage(output *strings.Builder, coverage generatedclient.CostsCover
 }
 
 type humanRollup struct {
-	Key                   string
-	Status                string
-	PricedSubtotal        *string
-	Coverage              generatedclient.CostsCoverage
-	InputTokens           *int64
-	CachedInputTokens     *int64
-	OutputTokens          *int64
-	ReasoningOutputTokens *int64
+	Key            string
+	Status         string
+	KnownCost      *string
+	PricedSubtotal *string
+	Coverage       generatedclient.CostsCoverage
+	TokenTotals    generatedclient.CostsTokenTotals
 }
 
 func rollupViews(rollups []generatedclient.CostsRollup) []humanRollup {
 	views := make([]humanRollup, 0, len(rollups))
 	for _, rollup := range rollups {
 		views = append(views, humanRollup{
-			Key: rollup.Key, Status: string(rollup.Status), PricedSubtotal: rollup.PricedSubtotal,
-			Coverage: rollup.Coverage, InputTokens: rollup.InputTokens,
-			CachedInputTokens: rollup.CachedInputTokens, OutputTokens: rollup.OutputTokens,
-			ReasoningOutputTokens: rollup.ReasoningOutputTokens,
+			Key: rollup.Key, Status: string(rollup.Status), KnownCost: rollup.KnownCost,
+			PricedSubtotal: rollup.PricedSubtotal, Coverage: rollup.Coverage,
+			TokenTotals: rollup.TokenTotals,
 		})
 	}
 	return views
@@ -87,9 +117,8 @@ func providerModelViews(rollups []generatedclient.CostsProviderModelRollup) []hu
 	for _, rollup := range rollups {
 		views = append(views, humanRollup{
 			Key: rollup.Provider + "/" + rollup.Model, Status: string(rollup.Status),
-			PricedSubtotal: rollup.PricedSubtotal, Coverage: rollup.Coverage,
-			InputTokens: rollup.InputTokens, CachedInputTokens: rollup.CachedInputTokens,
-			OutputTokens: rollup.OutputTokens, ReasoningOutputTokens: rollup.ReasoningOutputTokens,
+			KnownCost: rollup.KnownCost, PricedSubtotal: rollup.PricedSubtotal,
+			Coverage: rollup.Coverage, TokenTotals: rollup.TokenTotals,
 		})
 	}
 	return views
@@ -100,11 +129,12 @@ func renderRollupDimension(output *strings.Builder, name string, rollups []human
 	for _, rollup := range rollups {
 		fmt.Fprintf(output, "  %s:\n", displayValue(rollup.Key))
 		fmt.Fprintf(output, "    Status: %s\n", rollup.Status)
+		renderCostSummary(output, "    ", rollup.Status, rollup.KnownCost)
 		renderPricedAmount(output, "    Priced subtotal", rollup.PricedSubtotal)
 		fmt.Fprintf(output, "    Coverage: rows priced %d/%d; provider/models priced %d/%d\n",
 			rollup.Coverage.PricedRows, rollup.Coverage.EncounteredRows,
 			rollup.Coverage.PricedProviderModels, rollup.Coverage.EncounteredProviderModels)
-		renderTokenCounts(output, "    ", rollup.InputTokens, rollup.CachedInputTokens, rollup.OutputTokens, rollup.ReasoningOutputTokens)
+		renderTokenCounts(output, "    ", rollup.TokenTotals)
 	}
 }
 
@@ -125,15 +155,51 @@ func renderUnpricedItems(output *strings.Builder, items []generatedclient.CostsL
 		if item.Reason != nil && strings.TrimSpace(*item.Reason) != "" {
 			fmt.Fprintf(output, "    Reason: %s\n", *item.Reason)
 		}
-		renderTokenCounts(output, "    ", item.InputTokens, item.CachedInputTokens, item.OutputTokens, item.ReasoningOutputTokens)
+		renderTokenCounts(output, "    ", generatedclient.CostsTokenTotals{
+			TotalTokens:           sumTokenClasses(item.InputTokens, item.OutputTokens),
+			InputTokens:           item.InputTokens,
+			CachedInputTokens:     item.CachedInputTokens,
+			OutputTokens:          item.OutputTokens,
+			ReasoningOutputTokens: item.ReasoningOutputTokens,
+		})
 	}
 }
 
-func renderTokenCounts(output *strings.Builder, indent string, input, cached, outputTokens, reasoning *int64) {
-	fmt.Fprintf(output, "%sInput tokens: %s\n", indent, displayInt64(input))
-	fmt.Fprintf(output, "%sCached-input tokens: %s\n", indent, displayInt64(cached))
-	fmt.Fprintf(output, "%sOutput tokens: %s\n", indent, displayInt64(outputTokens))
-	fmt.Fprintf(output, "%sReasoning-output tokens: %s\n", indent, displayInt64(reasoning))
+func renderUnpricedCoverage(output *strings.Builder, dispatchCount int, pairs []generatedclient.CostsUnpricedPair) {
+	fmt.Fprintf(output, "Unpriced dispatches: %d\n", dispatchCount)
+	fmt.Fprintf(output, "Unpriced provider/models: %d\n", len(pairs))
+	for _, pair := range orderedUnpricedPairs(pairs) {
+		fmt.Fprintf(output, "  %s/%s: %d dispatches\n",
+			displayPointer(pair.Provider), displayPointer(pair.Model), pair.DispatchCount)
+	}
+}
+
+func orderedUnpricedPairs(pairs []generatedclient.CostsUnpricedPair) []generatedclient.CostsUnpricedPair {
+	ordered := append([]generatedclient.CostsUnpricedPair(nil), pairs...)
+	sort.SliceStable(ordered, func(i, j int) bool {
+		return unpricedPairKey(ordered[i]) < unpricedPairKey(ordered[j])
+	})
+	return ordered
+}
+
+func unpricedPairKey(pair generatedclient.CostsUnpricedPair) string {
+	return displayPointer(pair.Provider) + "/" + displayPointer(pair.Model)
+}
+
+func renderTokenCounts(output *strings.Builder, indent string, totals generatedclient.CostsTokenTotals) {
+	fmt.Fprintf(output, "%sTotal tokens: %s\n", indent, displayInt64(totals.TotalTokens))
+	fmt.Fprintf(output, "%sInput tokens: %s\n", indent, displayInt64(totals.InputTokens))
+	fmt.Fprintf(output, "%sCached-input tokens: %s\n", indent, displayInt64(totals.CachedInputTokens))
+	fmt.Fprintf(output, "%sOutput tokens: %s\n", indent, displayInt64(totals.OutputTokens))
+	fmt.Fprintf(output, "%sReasoning-output tokens: %s\n", indent, displayInt64(totals.ReasoningOutputTokens))
+}
+
+func sumTokenClasses(input, output *int64) *int64 {
+	if input == nil || output == nil {
+		return nil
+	}
+	total := *input + *output
+	return &total
 }
 
 func displayInt64(value *int64) string {
