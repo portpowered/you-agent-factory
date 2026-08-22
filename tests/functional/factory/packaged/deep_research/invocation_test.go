@@ -7,17 +7,203 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/portpowered/infinite-you/internal/testutil"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
+	"github.com/portpowered/infinite-you/pkg/root"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
+
+// TestPackagedDeepResearchStaleNamedInvocationRefreshesThroughCustomerProcess
+// proves the automatic upgrade route at the customer boundary. The stale
+// definition is deliberately written after the first initialization, so the
+// second Process.Execute must reconcile it before named-command composition.
+func TestPackagedDeepResearchStaleNamedInvocationRefreshesThroughCustomerProcess(t *testing.T) {
+	homeDir := t.TempDir()
+	workingDirectory := t.TempDir()
+	providerResult := platformprocess.CommandResult{
+		Stdout: support.CodexSuccessStdout("deep research provider reached"),
+	}
+	provider := testutil.NewProviderCommandRunner(providerResult, providerResult)
+	process, err := root.BuildProcess(t.Context(), serviceedges.Edges{
+		ProviderCommandRunner: provider,
+	})
+	if err != nil {
+		t.Fatalf("root.BuildProcess() error = %v", err)
+	}
+	support.CleanupProcess(t, process)
+	environment := deepResearchCustomerEnvironment(homeDir)
+	factoryDir := support.InstallPackagedFactoryWithProcess(
+		t,
+		process,
+		environment,
+		workingDirectory,
+		factorydefinitions.PackagedDeepResearchFactoryName,
+	)
+	factoryPath := filepath.Join(factoryDir, factorydefinitions.FactoryConfigFile)
+	currentPayload, err := os.ReadFile(factoryPath)
+	if err != nil {
+		t.Fatalf("read current deep-research materialization: %v", err)
+	}
+	stalePayload := staleDeepResearchPayload(currentPayload)
+	if err := os.WriteFile(factoryPath, stalePayload, 0o600); err != nil {
+		t.Fatalf("write stale deep-research materialization: %v", err)
+	}
+	assertDeepResearchExternalNames(t, stalePayload, "model-provider", "model", "researchDepth", "maxSubagents")
+
+	commandArgs := []string{
+		"you", "run", "--named", factorydefinitions.PackagedDeepResearchFactoryName,
+		"--maxSubagents", "0", "What is a Petri net?",
+	}
+	inputs := support.FakeInputs(t.Context(), commandArgs)
+	inputs.Input.Env = environment
+	inputs.Input.WorkingDirectory = workingDirectory
+	invocationErr := process.Execute(inputs.Input)
+	if invocationErr != nil && strings.Contains(invocationErr.Error(), "cli.composition.long-name-collision") {
+		t.Fatalf(
+			"refreshed named deep-research invocation still returned the stale composition collision: %v\nstdout:\n%s\nstderr:\n%s",
+			invocationErr,
+			inputs.Stdout(),
+			inputs.Stderr(),
+		)
+	}
+
+	activePayload, err := os.ReadFile(factoryPath)
+	if err != nil {
+		t.Fatalf("read refreshed deep-research materialization: %v", err)
+	}
+	assertDeepResearchExternalNames(t, activePayload, "research-model-provider", "research-model", "research-depth", "max-subagents")
+	assertDeepResearchExternalNamesAbsent(t, activePayload, "model-provider", "model", "researchDepth", "maxSubagents")
+
+	backupRoot := filepath.Join(filepath.Dir(filepath.Dir(factoryDir)), ".you-packaged-backups")
+	backupEntries, err := os.ReadDir(backupRoot)
+	if err != nil {
+		t.Fatalf("read packaged Factory backup root %s: %v", backupRoot, err)
+	}
+	var backupDirs []string
+	for _, entry := range backupEntries {
+		if entry.IsDir() {
+			backupDirs = append(backupDirs, filepath.Join(backupRoot, entry.Name()))
+		}
+	}
+	if len(backupDirs) != 1 {
+		t.Fatalf("packaged Factory backup directories = %v, want exactly one preserved prior copy", backupDirs)
+	}
+	backupPayload, err := os.ReadFile(filepath.Join(backupDirs[0], factorydefinitions.FactoryConfigFile))
+	if err != nil {
+		t.Fatalf("read preserved stale deep-research backup: %v", err)
+	}
+	if !bytes.Equal(backupPayload, stalePayload) {
+		t.Fatalf("preserved stale backup differs from the complete pre-refresh factory.json")
+	}
+	if filepath.Clean(backupDirs[0]) == filepath.Clean(factoryDir) {
+		t.Fatalf("backup path %s is still the active Factory path", backupDirs[0])
+	}
+	structuredArgs := []string{
+		"you", "--json", "run", "--named", factorydefinitions.PackagedDeepResearchFactoryName,
+		"--maxSubagents", "0", "What is a Petri net?",
+	}
+	structuredInputs := support.FakeInputs(t.Context(), structuredArgs)
+	structuredInputs.Input.Env = environment
+	structuredInputs.Input.WorkingDirectory = workingDirectory
+	if err := process.Execute(structuredInputs.Input); err != nil {
+		t.Fatalf(
+			"structured refreshed named deep-research invocation error = %v\nstdout:\n%s\nstderr:\n%s",
+			err,
+			structuredInputs.Stdout(),
+			structuredInputs.Stderr(),
+		)
+	}
+	structuredResponse := support.DecodeInvocationResponseJSON(t, structuredInputs.Stdout())
+	if structuredResponse.Status != factoryapi.InvocationTerminalStatusCompleted {
+		t.Fatalf("structured refreshed invocation status = %q, want COMPLETED", structuredResponse.Status)
+	}
+	if provider.CallCount() != 2 {
+		t.Fatalf("provider calls = %d, want one lead synthesis for each command after --maxSubagents 0", provider.CallCount())
+	}
+	request := provider.LastRequest()
+	if request.Command != "codex" {
+		t.Fatalf("provider command = %q, want codex", request.Command)
+	}
+	if !strings.Contains(string(request.Stdin), "What is a Petri net?") {
+		t.Fatalf("provider prompt = %q, want the exact customer topic", string(request.Stdin))
+	}
+	t.Logf(
+		"customer command %q refreshed %s and reached provider; backup=%s; invocation_error=%v; stdout=%q; stderr=%q; structured_command=%q; structured_status=%q; structured_provider_result=%t",
+		strings.Join(commandArgs, " "),
+		factoryPath,
+		backupDirs[0],
+		invocationErr,
+		inputs.Stdout(),
+		inputs.Stderr(),
+		strings.Join(structuredArgs, " "),
+		structuredResponse.Status,
+		strings.Contains(structuredInputs.Stdout(), "deep research provider reached"),
+	)
+}
+
+func deepResearchCustomerEnvironment(homeDir string) []string {
+	environment := make([]string, 0, len(os.Environ())+4)
+	for _, entry := range os.Environ() {
+		name := strings.SplitN(entry, "=", 2)[0]
+		switch {
+		case strings.EqualFold(name, "HOME"), strings.EqualFold(name, "USERPROFILE"),
+			strings.EqualFold(name, "YOU_DEFAULT_WORKER_MODEL_PROVIDER"), strings.EqualFold(name, "YOU_DEFAULT_WORKER_MODEL"):
+			continue
+		default:
+			environment = append(environment, entry)
+		}
+	}
+	return append(
+		environment,
+		"HOME="+homeDir,
+		"USERPROFILE="+homeDir,
+		"YOU_DEFAULT_WORKER_MODEL_PROVIDER=CODEX",
+		"YOU_DEFAULT_WORKER_MODEL=gpt-5",
+	)
+}
+
+func staleDeepResearchPayload(currentPayload []byte) []byte {
+	stalePayload := append([]byte(nil), currentPayload...)
+	for _, replacement := range []struct{ current, stale string }{
+		{current: "research-model-provider", stale: "model-provider"},
+		{current: "research-model", stale: "model"},
+		{current: "research-depth", stale: "researchDepth"},
+		{current: "max-subagents", stale: "maxSubagents"},
+	} {
+		stalePayload = bytes.ReplaceAll(stalePayload, []byte(replacement.current), []byte(replacement.stale))
+	}
+	return stalePayload
+}
+
+func assertDeepResearchExternalNames(t testing.TB, payload []byte, names ...string) {
+	t.Helper()
+	content := string(payload)
+	for _, name := range names {
+		if !strings.Contains(content, `"externalName": "`+name+`"`) {
+			t.Fatalf("definition is missing externalName %q", name)
+		}
+	}
+}
+
+func assertDeepResearchExternalNamesAbsent(t testing.TB, payload []byte, names ...string) {
+	t.Helper()
+	content := string(payload)
+	for _, name := range names {
+		if strings.Contains(content, `"externalName": "`+name+`"`) {
+			t.Fatalf("definition still contains stale externalName %q", name)
+		}
+	}
+}
 
 // TestPackagedDeepResearchRequiredInputCompletes proves that invoking the
 // packaged @you/deep-research Factory with only the required research topic
