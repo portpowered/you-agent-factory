@@ -122,6 +122,7 @@ jobs:
       - name: Run browserless component tests
         env:
           UI_COMPONENT_MAX_DURATION_MS: "300000"
+          UI_COMPONENT_TEST_MAX_WORKERS: "4"
         run: make ui-component-test
 
   ui-coverage:
