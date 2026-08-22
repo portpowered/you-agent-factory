@@ -234,6 +234,7 @@ func factoryAPIFromInternalConfig(cfg *interfaces.FactoryConfig) (factoryapi.Fac
 
 	return factoryapi.Factory{
 		Name:                factoryReferenceName(cfg),
+		Runner:              runnerIDPtrIfNotEmpty(cfg.Runner),
 		Description:         NameValueAPIFromInternal(cfg.Description),
 		Id:                  stringPtrIfNotEmpty(cfg.Project),
 		Version:             hybridLogicalTimestampPtr(cfg.Version),
@@ -504,6 +505,7 @@ func invocationExampleArgsAPIFromInternal(args map[string]interface{}, path stri
 
 func factoryInternalFromAPI(apiCfg factoryapi.Factory) (interfaces.FactoryConfig, error) {
 	cfg := interfaces.FactoryConfig{Name: string(apiCfg.Name)}
+	cfg.Runner = enumStringValue(apiCfg.Runner)
 	if err := mapFactoryMetadataInternalFromAPI(&cfg, apiCfg.Description, apiCfg.Examples); err != nil {
 		return interfaces.FactoryConfig{}, err
 	}

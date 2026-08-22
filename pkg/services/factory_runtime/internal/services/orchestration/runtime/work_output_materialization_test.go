@@ -902,9 +902,13 @@ func TestRecordDetachedAgentRunResponsePreservesSafeDiagnosticsAndTranscript(t *
 			Type: work.WorkContentPartTypeText,
 			Text: "completed",
 		}}},
-		Diagnostics: &workers.SafeDiagnostics{Provider: &workers.SafeProviderDiagnostic{
-			Provider: "codex",
-		}},
+		Diagnostics: &workers.SafeDiagnostics{
+			Provider: &workers.SafeProviderDiagnostic{Provider: "codex"},
+			Metadata: map[string]string{
+				workers.AgentRunMetadataExecutionBehavior: workers.AgentRunExecutionBehavior,
+				workers.AgentRunMetadataToolPolicy:        "ENABLED",
+			},
+		},
 		Metrics: workers.ExecutionMetrics{Duration: 1250 * time.Millisecond},
 	}
 
@@ -929,9 +933,13 @@ func TestRecordDetachedAgentRunResponsePreservesSafeDiagnosticsAndTranscript(t *
 	if diagnostics.AgentRun == nil || len(diagnostics.AgentRun.Transcript) != 3 {
 		t.Fatalf("agent-run diagnostics = %#v, want system/user/assistant transcript", diagnostics.AgentRun)
 	}
-	if diagnostics.AgentRun.Transcript[0].Summary != "Reasoning effort: low" ||
+	if diagnostics.AgentRun.ToolPolicy != "ENABLED" {
+		t.Fatalf("agent-run tool policy = %q, want ENABLED", diagnostics.AgentRun.ToolPolicy)
+	}
+	if diagnostics.AgentRun.Transcript[0].Role != "system" ||
+		!strings.HasPrefix(diagnostics.AgentRun.Transcript[0].Summary, "sha256:") ||
 		diagnostics.AgentRun.Transcript[2].Summary != "completed" {
-		t.Fatalf("transcript = %#v, want interpolated prompt and output", diagnostics.AgentRun.Transcript)
+		t.Fatalf("transcript = %#v, want hashed prompt metadata and output", diagnostics.AgentRun.Transcript)
 	}
 }
 

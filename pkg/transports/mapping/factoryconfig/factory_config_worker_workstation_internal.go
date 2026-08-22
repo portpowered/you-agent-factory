@@ -222,6 +222,7 @@ func workstationInternalFromAPI(workstation factoryapi.Workstation, fieldPath st
 		ID:                    stringValue(workstation.Id),
 		Name:                  workstation.Name,
 		WorkerTypeName:        stringValue(workstation.Worker),
+		Runner:                enumStringValue(workstation.Runner),
 		Operation:             stringValue(workstation.Operation),
 		OperationBindings:     workstationOperationBindingsInternalFromAPI(workstation.OperationBindings),
 		Type:                  internalFactoryWorkstationTypeFromPublic(workstation.Type),

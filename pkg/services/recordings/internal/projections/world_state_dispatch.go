@@ -63,6 +63,8 @@ func (r *factoryWorldReducer) applyDispatchCreated(event interfaces.FactoryEvent
 		DispatchID:              dispatchID,
 		TransitionID:            payload.TransitionID,
 		Workstation:             r.workstationRefForTransition(payload.TransitionID),
+		RunnerID:                runnerIDFromDispatchMetadata(payload.Metadata),
+		RunnerSelectionSource:   runnerSelectionSource(payload.Metadata),
 		ExpectedArtifactContext: cloneExpectedArtifactTemplateContext(payload.ExpectedArtifactContext),
 		Provider:                worker.Provider,
 		Model:                   worker.Model,
@@ -87,6 +89,20 @@ func (r *factoryWorldReducer) applyDispatchCreated(event interfaces.FactoryEvent
 	for _, traceID := range dispatch.TraceIDs {
 		r.addTraceDispatch(traceID, dispatchID)
 	}
+}
+
+func runnerIDFromDispatchMetadata(metadata *interfaces.DispatchRequestEventMetadata) string {
+	if metadata == nil {
+		return ""
+	}
+	return stringValue(metadata.RunnerID)
+}
+
+func runnerSelectionSource(metadata *interfaces.DispatchRequestEventMetadata) workerexecution.RunnerSelectionSource {
+	if metadata == nil || metadata.RunnerSelectionSource == nil {
+		return ""
+	}
+	return *metadata.RunnerSelectionSource
 }
 
 func (r *factoryWorldReducer) applyWorkerExecutionEvent(event interfaces.FactoryEvent) error {
@@ -394,6 +410,8 @@ func (r *factoryWorldReducer) dispatchCompletionFromResponse(
 		DispatchID:              dispatchID,
 		TransitionID:            payload.TransitionID,
 		Workstation:             dispatch.Workstation,
+		RunnerID:                dispatch.RunnerID,
+		RunnerSelectionSource:   dispatch.RunnerSelectionSource,
 		ExpectedArtifactContext: cloneExpectedArtifactTemplateContext(dispatch.ExpectedArtifactContext),
 		StartedTick:             dispatch.StartedTick,
 		CompletedTick:           event.Context.Tick,

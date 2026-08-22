@@ -213,6 +213,14 @@ func stringPtrIfNotEmpty(value string) *string {
 	return optional.NonEmptyStringPtr(value)
 }
 
+func runnerIDPtrIfNotEmpty(value string) *factoryapi.RunnerID {
+	if strings.TrimSpace(value) == "" {
+		return nil
+	}
+	runner := factoryapi.RunnerID(value)
+	return &runner
+}
+
 func stringSlicePtr(values []string) *[]string {
 	return optional.CopiedStringsPtr(values)
 }
