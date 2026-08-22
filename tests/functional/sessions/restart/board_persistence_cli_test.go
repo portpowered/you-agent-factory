@@ -158,6 +158,56 @@ func TestBoardPersistenceCLIRestartAfterHardKillWithMissingBoardRecording(t *tes
 	}, 30*time.Second)
 }
 
+// TestBoardPersistenceCLIRestartWithCorruptBoardRecordingFails proves that a
+// present-but-invalid current-board artifact is not treated as an interrupted
+// write. The child process is intentional so the assertion covers the actual
+// operator-facing startup diagnostic emitted by the real CLI.
+func TestBoardPersistenceCLIRestartWithCorruptBoardRecordingFails(t *testing.T) {
+	cliContext, cancel := context.WithTimeout(t.Context(), 30*time.Second)
+	defer cancel()
+	scenario := newBoardPersistenceScenario(t, cliContext)
+	corruptPayload := []byte(`{"schemaVersion":"recordings.portable-artifact.v1","summary":{}}`)
+	if err := os.WriteFile(scenario.recordPath, corruptPayload, 0o600); err != nil {
+		t.Fatalf("write corrupt current-board recording: %v", err)
+	}
+
+	daemon := startBoardPersistenceDaemonProcess(
+		t,
+		scenario.binaryPath,
+		scenario.factoryDir,
+		scenario.homeDir,
+		scenario.recordPath,
+		scenario.releasePath,
+	)
+	defer daemon.cleanup()
+	waitForBoardPersistenceDaemonExit(t, daemon, 20*time.Second)
+	if daemon.waitError() == nil {
+		t.Fatal("corrupt current-board recording process exited successfully")
+	}
+	output := daemon.stdout.String() + daemon.stderr.String()
+	for _, fragment := range []string{
+		"CURRENT_BOARD_RECORDING_CORRUPT",
+		"CORRUPT_HISTORY",
+		filepath.Base(scenario.recordPath),
+		"preserve the artifact",
+		"replace it from a trusted backup",
+	} {
+		if !strings.Contains(output, fragment) {
+			t.Fatalf("corrupt recording startup output = %q, want fragment %q", output, fragment)
+		}
+	}
+	if strings.Contains(output, "board contents were lost") || strings.Contains(output, "empty board was initialized") {
+		t.Fatalf("corrupt recording was reported as recoverable absence: %q", output)
+	}
+	contents, err := os.ReadFile(scenario.recordPath)
+	if err != nil {
+		t.Fatalf("read corrupt current-board recording after failed startup: %v", err)
+	}
+	if !bytes.Equal(contents, corruptPayload) {
+		t.Fatal("failed startup changed the corrupt recording; artifact must remain available for investigation")
+	}
+}
+
 type boardPersistenceScenario struct {
 	binaryPath            string
 	factoryDir            string
@@ -461,6 +511,18 @@ func startBoardPersistenceDaemon(
 	binaryPath, factoryDir, homeDir, recordPath, releasePath string,
 ) *boardPersistenceDaemon {
 	t.Helper()
+	daemon := startBoardPersistenceDaemonProcess(t, binaryPath, factoryDir, homeDir, recordPath, releasePath)
+	waitForBoardDaemonReady(t, daemon, 45*time.Second)
+	daemon.sessionID = waitForBoardSessionID(t, daemon.baseURL, 30*time.Second)
+	t.Logf("isolated daemon live session ID: %q", daemon.sessionID)
+	return daemon
+}
+
+func startBoardPersistenceDaemonProcess(
+	t *testing.T,
+	binaryPath, factoryDir, homeDir, recordPath, releasePath string,
+) *boardPersistenceDaemon {
+	t.Helper()
 	address := reserveBoardPersistenceAddress(t)
 	command := exec.CommandContext(
 		t.Context(),
@@ -502,10 +564,20 @@ func startBoardPersistenceDaemon(
 		close(daemon.done)
 	}()
 	t.Cleanup(daemon.cleanup)
-	waitForBoardDaemonReady(t, daemon, 45*time.Second)
-	daemon.sessionID = waitForBoardSessionID(t, daemon.baseURL, 30*time.Second)
-	t.Logf("isolated daemon live session ID: %q", daemon.sessionID)
 	return daemon
+}
+
+func waitForBoardPersistenceDaemonExit(t *testing.T, daemon *boardPersistenceDaemon, timeout time.Duration) {
+	t.Helper()
+	// A startup failure is observed through the real child-process exit rather
+	// than a fixed sleep; this is the process-boundary behavior under test.
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
+	select {
+	case <-daemon.done:
+	case <-timer.C:
+		t.Fatalf("corrupt-recording daemon did not exit within %s\nstdout=%s\nstderr=%s", timeout, daemon.stdout.String(), daemon.stderr.String())
+	}
 }
 
 func (daemon *boardPersistenceDaemon) kill(t *testing.T) {
