@@ -178,45 +178,40 @@ workflow. Global `--server` selects the Factory API; global `--json` emits the
 API-shaped report. A route failure returns an error without a partial success
 document.
 
-### Configure The Price Table
+### Provider-Owned Price Facts
 
-The operator price table lives in `~/.you-agent-factory/config.json` under
-`priceTable`. Rates are USD per one million tokens and must be decimal strings:
+Costs uses the immutable, Providers-owned price table shipped with the
+application. It is not operator configuration, and editing
+`~/.you-agent-factory/config.json` does not change cost valuation. Maintainers
+add a row only for a provider/model pair observed in live metrics after finding
+an authoritative vendor price. Every row records USD-per-million-token rates,
+the source URL, and an ISO-8601 as-of date. The current shipped row is
+`codex/gpt-5-codex`; its source is the
+[OpenAI GPT-5-Codex pricing page](https://developers.openai.com/api/docs/models/gpt-5-codex),
+dated 2026-08-21.
 
-```json
-{
-  "priceTable": {
-    "currency": "USD",
-    "models": [
-      {
-        "provider": "CODEX",
-        "model": "gpt-5",
-        "inputPerMillionTokens": "2.5",
-        "cachedInputPerMillionTokens": "0.5",
-        "outputPerMillionTokens": "5.25",
-        "reasoningOutputPerMillionTokens": "10"
-      }
-    ]
-  }
-}
-```
-
-Input and output rates are required for every table entry. Cached-input and
-reasoning-output rates are optional, but a measured token class with no rate
-is `UNPRICED`. An omitted token measurement is distinct from an explicit zero;
-an explicit zero rate is valid and produces an exact `"0"` amount. Missing
-provider/model identity or an absent model entry also remains `UNPRICED`.
-Cached input is deducted from total input, and reasoning output is deducted
-from total output before the corresponding rates are applied.
+Input and output rates are required for every row. Cached-input and
+reasoning-output rates are optional; a measured class with no explicit rate is
+`UNPRICED`. When a subclass intentionally uses the standard input or output
+rate, the provider data declares that equality explicitly. An omitted token
+measurement is distinct from an explicit zero, and an explicit zero rate is
+valid. Missing provider/model identity or an absent price row remains
+`UNPRICED`. Cached input is deducted from total input, and reasoning output is
+deducted from total output before the corresponding rates are applied.
 
 ### Cost Report Fields And Status
 
-The JSON report contains `scope`, `currency`, `status`, `priced_subtotal`,
-`coverage`, `line_items`, `work_items`, `worker_sessions`, `provider_models`,
-and `factory_sessions`. Every money field is an exact decimal string; absent
-amounts are omitted rather than reported as zero. Arrays are deterministic.
-`coverage` reports `encountered_rows`, `priced_rows`, `unpriced_rows`, and the
-matching encountered/priced/unpriced distinct `provider_models` counts.
+The JSON report and every rollup contain `status`, `currency`, nullable exact
+decimal `known_cost`, `token_totals`, `unpriced_dispatch_count`, and
+deterministically ordered `unpriced_pairs` as separate fields. `token_totals`
+always contains `total_tokens`, `input_tokens`, `output_tokens`,
+`cached_input_tokens`, and `reasoning_output_tokens`; total tokens is input
+plus output and does not double-count the subclasses. Every money field is an
+exact decimal string; unknown amounts are null or absent according to the
+field contract and are never substituted with zero. The deprecated
+`priced_subtotal` remains available for compatibility. Arrays are
+deterministic. `coverage` reports encountered, priced, and unpriced rows and
+distinct provider/models.
 
 `PRICED` means every usage row is valued, `PARTIAL` means some rows are valued,
 `UNPRICED` means usage exists but no row is valued, and `NO_USAGE` means no
@@ -225,8 +220,12 @@ identity and all observed input, cached-input, output, and reasoning-output
 counts, plus an actionable `reason` when it is unpriced. Rollups cover all four
 dimensions: Work, Worker Session, provider/model, and Factory Session.
 
-The table is operator-authored reporting configuration. The command does not
-fetch live vendor pricing, query provider billing, or enforce billing limits.
+Human output makes coverage explicit: fully priced usage shows the exact
+rounded USD amount and token totals, unpriced usage shows `?? unknown` and
+never `$0.00`, and mixed usage uses the form `$X.XX + ?? unknown`. Mixed and
+unpriced reports also list the unpriced dispatch count and each provider/model
+pair, including unknown identities. The command does not fetch live vendor
+pricing, query provider billing, or enforce billing limits.
 
 ## Related Topics
 

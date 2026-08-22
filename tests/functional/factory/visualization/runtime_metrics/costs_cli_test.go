@@ -21,7 +21,6 @@ func TestMetricsCostsCLITraversesProductionHTTPRoute(t *testing.T) {
 	homeDir := t.TempDir()
 	factoryDir := support.ScaffoldSingleStepFactory(t, "costs-cli-functional")
 	const sessionID = "costs-session-functional"
-	writeCostsFunctionalOperatorConfig(t, homeDir)
 	writeCostsFunctionalMetrics(t, homeDir, sessionID)
 
 	environment := append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
@@ -64,8 +63,8 @@ func TestMetricsCostsCLITraversesProductionHTTPRoute(t *testing.T) {
 	if report.Status != generatedclient.CostsReportStatus("PARTIAL") {
 		t.Fatalf("report status = %q, want PARTIAL", report.Status)
 	}
-	if report.PricedSubtotal == nil || *report.PricedSubtotal != "15.175" {
-		t.Fatalf("priced subtotal = %v, want exact 15.175 USD", report.PricedSubtotal)
+	if report.PricedSubtotal == nil || *report.PricedSubtotal != "21.1375" {
+		t.Fatalf("priced subtotal = %v, want exact 21.1375 USD", report.PricedSubtotal)
 	}
 	if report.Coverage.EncounteredRows != 2 || report.Coverage.PricedRows != 1 ||
 		report.Coverage.UnpricedRows != 1 || report.Coverage.EncounteredProviderModels != 2 ||
@@ -84,18 +83,6 @@ func TestMetricsCostsCLITraversesProductionHTTPRoute(t *testing.T) {
 	functionalevidence.Covers(t, "cli/you.metrics.costs")
 }
 
-func writeCostsFunctionalOperatorConfig(t *testing.T, homeDir string) {
-	t.Helper()
-	path := filepath.Join(homeDir, ".you-agent-factory", "config.json")
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		t.Fatalf("create operator config directory: %v", err)
-	}
-	const config = `{"priceTable":{"currency":"USD","models":[{"provider":"CODEX","model":"gpt-5","inputPerMillionTokens":"2.5","outputPerMillionTokens":"5.25","cachedInputPerMillionTokens":"0.5","reasoningOutputPerMillionTokens":"10"}]}}`
-	if err := os.WriteFile(path, []byte(config), 0o600); err != nil {
-		t.Fatalf("write operator price table: %v", err)
-	}
-}
-
 func writeCostsFunctionalMetrics(t *testing.T, homeDir, sessionID string) {
 	t.Helper()
 	root := platformmetrics.RuntimeMetricsRoot(homeDir)
@@ -104,7 +91,7 @@ func writeCostsFunctionalMetrics(t *testing.T, homeDir, sessionID string) {
 			"metric_name": metricName, "value": value, "unit": "tokens",
 			"session_id": sessionID, "runtime_instance_id": "runtime-costs-functional",
 			"work_id": "work-known", "dispatch_id": "dispatch-known",
-			"worker_session_id": "worker-known", "provider": "CODEX", "model": "gpt-5",
+			"worker_session_id": "worker-known", "provider": "CODEX", "model": "gpt-5-codex",
 			"workstation": "build", "worker_type": "processor",
 		}
 	}
