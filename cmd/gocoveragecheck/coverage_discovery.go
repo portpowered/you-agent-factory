@@ -15,16 +15,20 @@ import (
 // one invocation; it is never persisted between checker runs.
 type coveragePackageListing struct {
 	importPath   string
+	directory    string
+	packageName  string
 	goFiles      int
 	hasGoFiles   bool
 	testGoFiles  []string
 	xTestGoFiles []string
 }
 
-const coverageUnitGoListJSONFields = "-json=ImportPath,GoFiles,TestGoFiles,XTestGoFiles,Incomplete,Error"
+const coverageUnitGoListJSONFields = "-json=ImportPath,Dir,Name,GoFiles,TestGoFiles,XTestGoFiles,Incomplete,Error"
 
 type coverageGoListPackage struct {
 	ImportPath   string
+	Dir          string
+	Name         string
 	GoFiles      []string
 	TestGoFiles  []string
 	XTestGoFiles []string
@@ -38,7 +42,8 @@ type coverageGoListPackageError struct {
 }
 
 type coveragePackageDiscovery struct {
-	allPackages []string
+	allPackages      []string
+	unitPackageFiles []coveragePackageListing
 }
 
 func resolveCoverageLaneWithDiscovery(cfg config) (coveragePackageDiscovery, []string, []string, error) {
@@ -108,6 +113,7 @@ func resolveCoverageLaneWithDiscoveryForOS(cfg config, targetOS string) (coverag
 	discovery := coveragePackageDiscovery{}
 	if unitDefaultDiscovery {
 		discovery.allPackages = allListedPackagePaths(listings)
+		discovery.unitPackageFiles = append([]coveragePackageListing(nil), listings...)
 	}
 	return discovery, coverPackages, testPackages, nil
 }
@@ -241,6 +247,8 @@ func decodeUnitGoListPackages(stdout string) ([]coveragePackageListing, error) {
 		}
 		listings = append(listings, coveragePackageListing{
 			importPath:   pkg.ImportPath,
+			directory:    pkg.Dir,
+			packageName:  pkg.Name,
 			goFiles:      len(pkg.GoFiles),
 			hasGoFiles:   true,
 			testGoFiles:  append([]string(nil), pkg.TestGoFiles...),
@@ -278,7 +286,7 @@ func mergeUnitGoListPackages(listings []coveragePackageListing) ([]coveragePacka
 			byImportPath[listing.importPath] = listing
 			continue
 		}
-		if previous.goFiles != listing.goFiles || !slices.Equal(previous.testGoFiles, listing.testGoFiles) || !slices.Equal(previous.xTestGoFiles, listing.xTestGoFiles) {
+		if previous.directory != listing.directory || previous.packageName != listing.packageName || previous.goFiles != listing.goFiles || !slices.Equal(previous.testGoFiles, listing.testGoFiles) || !slices.Equal(previous.xTestGoFiles, listing.xTestGoFiles) {
 			return nil, fmt.Errorf("list build-aware unit packages: go list returned contradictory metadata for package %q", listing.importPath)
 		}
 	}

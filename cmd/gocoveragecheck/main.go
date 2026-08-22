@@ -402,6 +402,7 @@ func runCoverageProfile(cfg config, targetOS string, logicalCPUs int, profilePat
 			functionalMetadata,
 			functionalDiscoveryStarted,
 			selectorVerification,
+			packageDiscovery.unitPackageFiles,
 		)
 		return err
 	}); err != nil {

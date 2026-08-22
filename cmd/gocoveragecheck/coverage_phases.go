@@ -27,6 +27,7 @@ func prepareCoverageRun(cfg config, targetOS string, logicalCPUs int, profilePat
 		nil,
 		time.Time{},
 		nil,
+		nil,
 	)
 }
 
@@ -41,6 +42,7 @@ func prepareCoverageRunWithFunctionalMetadata(
 	listedPackages []functionalGoListPackage,
 	discoveryStarted time.Time,
 	selectorVerification *functionalQuarantineSelectorVerification,
+	unitPackageFiles []coveragePackageListing,
 ) (preparedCoverageRun, error) {
 	repoRoot, err := repoRootDir()
 	if err != nil {
@@ -105,6 +107,13 @@ func prepareCoverageRunWithFunctionalMetadata(
 		fmt.Sprintf("-timeout=%s", cfg.timeout),
 	)
 	testPackageArgs := compactUnitTestPackageArgs(cfg, testPackages, targetOS, packageUniverse)
+	unitCoverageImportCleanup := func() error { return nil }
+	if len(unitPackageFiles) > 0 && strings.TrimSpace(cfg.packages) == "" && strings.TrimSpace(cfg.coverpkg) == "" && (cfg.suite == "" || cfg.suite == unitCoverageSuite) {
+		unitCoverageImportCleanup, err = prepareUnitCoverageImportFile(testPackages, unitPackageFiles)
+		if err != nil {
+			return preparedCoverageRun{}, err
+		}
+	}
 
 	var plan coverageInvocationPlan
 	if functionalSelection == nil {
@@ -113,7 +122,14 @@ func prepareCoverageRunWithFunctionalMetadata(
 		plan, err = planGoTestCoverageLaneWithSelection(coverageTestArgs, profilePath, cfg, targetOS, *functionalSelection)
 	}
 	if err != nil {
+		if cleanupErr := unitCoverageImportCleanup(); cleanupErr != nil {
+			return preparedCoverageRun{}, errors.Join(err, cleanupErr)
+		}
 		return preparedCoverageRun{}, err
+	}
+	planCleanup := plan.cleanup
+	plan.cleanup = func() error {
+		return errors.Join(planCleanup(), unitCoverageImportCleanup())
 	}
 	return preparedCoverageRun{
 		plan:                        plan,

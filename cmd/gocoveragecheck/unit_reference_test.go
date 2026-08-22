@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"runtime"
 	"slices"
 	"strings"
@@ -42,9 +43,12 @@ type unitCoverageReference struct {
 	timingPackages     []string
 	testOccurrences    map[string]int
 	testOutcomes       map[string]string
+	coveragePackages   []string
+	coveragePackageArg string
 	coverageProfile    []byte
 	coverageBlocks     map[string]coverageBlock
 	coverageSummary    *coverageSummaryJSON
+	manifestPath       string
 	testInvocationArgs []string
 	stdout             string
 	stderr             string
@@ -54,11 +58,16 @@ func TestUnitCoverageReferenceCapturesUnfilteredContract(t *testing.T) {
 	fixture := writeUnitCoverageReferenceFixture(t)
 	assertUnitCoverageReferenceMetadata(t, fixture)
 
-	passing := captureUnitCoverageReference(t, fixture, "passing", false, "")
+	passing := captureUnitCoverageReference(t, fixture, "passing", false, "", false)
+	filteredPassing := captureUnitCoverageReference(t, fixture, "passing", false, "", true)
 	assertPassingUnitCoverageReference(t, fixture, passing)
+	assertUnitCoverageReferenceExecutionSets(t, fixture, passing, filteredPassing)
+	assertUnitCoverageReferenceEquivalent(t, "passing", passing, filteredPassing)
 
-	floorFailure := captureUnitCoverageReference(t, fixture, "floor-failure", false, fixture.internalPackage)
+	floorFailure := captureUnitCoverageReference(t, fixture, "floor-failure", false, fixture.internalPackage, false)
+	filteredFloorFailure := captureUnitCoverageReference(t, fixture, "floor-failure", false, fixture.internalPackage, true)
 	assertUnitCoverageReferenceHasSameExecution(t, fixture, passing, floorFailure)
+	assertUnitCoverageReferenceEquivalent(t, "floor-failure", floorFailure, filteredFloorFailure)
 	if floorFailure.exitCode != 1 {
 		t.Fatalf("floor-failure exit code = %d, want 1", floorFailure.exitCode)
 	}
@@ -72,7 +81,9 @@ func TestUnitCoverageReferenceCapturesUnfilteredContract(t *testing.T) {
 		t.Fatalf("floor-failure stderr = %q, want manifest floor diagnostic", floorFailure.stderr)
 	}
 
-	testFailure := captureUnitCoverageReference(t, fixture, "test-failure", true, "")
+	testFailure := captureUnitCoverageReference(t, fixture, "test-failure", true, "", false)
+	filteredTestFailure := captureUnitCoverageReference(t, fixture, "test-failure", true, "", true)
+	assertUnitCoverageReferenceEquivalent(t, "test-failure", testFailure, filteredTestFailure)
 	if testFailure.exitCode != 1 {
 		t.Fatalf("test-failure exit code = %d, want 1", testFailure.exitCode)
 	}
@@ -311,7 +322,7 @@ func sortedUnitReferencePackageNames(packages map[string]unitReferenceGoListPack
 	return names
 }
 
-func captureUnitCoverageReference(t *testing.T, fixture unitCoverageReferenceFixture, label string, failTest bool, floorPackage string) unitCoverageReference {
+func captureUnitCoverageReference(t *testing.T, fixture unitCoverageReferenceFixture, label string, failTest bool, floorPackage string, filtered bool) unitCoverageReference {
 	t.Helper()
 	previousFailureValue, hadFailureValue := os.LookupEnv(unitReferenceFailureEnvironment)
 	if err := os.Setenv(unitReferenceFailureEnvironment, map[bool]string{true: "1", false: "0"}[failTest]); err != nil {
@@ -345,7 +356,11 @@ func captureUnitCoverageReference(t *testing.T, fixture unitCoverageReferenceFix
 		}
 	}()
 
-	artifactRoot := filepath.Join(fixture.root, "artifacts", label)
+	mode := "unfiltered"
+	if filtered {
+		mode = "filtered"
+	}
+	artifactRoot := filepath.Join(fixture.root, "artifacts", label+"-"+mode)
 	if err := os.MkdirAll(artifactRoot, 0o755); err != nil {
 		t.Fatalf("create unit reference artifacts: %v", err)
 	}
@@ -362,9 +377,8 @@ func captureUnitCoverageReference(t *testing.T, fixture unitCoverageReferenceFix
 		}
 		return originalRunner(invocation)
 	}
-	stdout, stderr, exitCode := runMainForTest(t, []string{
+	args := []string{
 		"-suite=unit",
-		"-packages=" + strings.Join(fixture.packages, " "),
 		"-min=0",
 		"-jobs=1",
 		"-short=false",
@@ -372,7 +386,11 @@ func captureUnitCoverageReference(t *testing.T, fixture unitCoverageReferenceFix
 		"-profile=" + profilePath,
 		"-json-output=" + coverageSummaryPath,
 		"-timing-output=" + timingSummaryPath,
-	}, runner)
+	}
+	if !filtered {
+		args = append(args, "-packages="+strings.Join(fixture.packages, " "))
+	}
+	stdout, stderr, exitCode := runMainForTest(t, args, runner)
 
 	var timing functionalTimingSummaryJSON
 	readUnitReferenceJSON(t, timingSummaryPath, &timing)
@@ -382,6 +400,8 @@ func captureUnitCoverageReference(t *testing.T, fixture unitCoverageReferenceFix
 		timingPackages:     unitReferenceTimingPackages(timing),
 		testOccurrences:    unitReferenceTestOccurrences(timing),
 		testOutcomes:       unitReferenceTestOutcomes(timing),
+		coveragePackageArg: unitReferenceCoverageArgument(testInvocationArgs),
+		manifestPath:       manifestPath,
 		testInvocationArgs: testInvocationArgs,
 		stdout:             stdout,
 		stderr:             stderr,
@@ -392,6 +412,7 @@ func captureUnitCoverageReference(t *testing.T, fixture unitCoverageReferenceFix
 			t.Fatalf("decode unit reference coverage summary: %v", err)
 		}
 		reference.coverageSummary = &summary
+		reference.coveragePackages = sortedUnitReferencePackageNamesFromSummary(summary.Packages)
 		reference.coverageProfile, err = os.ReadFile(profilePath)
 		if err != nil {
 			t.Fatalf("read unit reference canonical coverage profile: %v", err)
@@ -474,6 +495,16 @@ func unitReferenceTestOutcomes(summary functionalTimingSummaryJSON) map[string]s
 		outcomes[test.Package+"#"+test.Test] = test.Outcome
 	}
 	return outcomes
+}
+
+func unitReferenceCoverageArgument(args []string) string {
+	for _, arg := range args {
+		if !strings.HasPrefix(arg, "-coverpkg=") {
+			continue
+		}
+		return strings.TrimPrefix(arg, "-coverpkg=")
+	}
+	return ""
 }
 
 func assertPassingUnitCoverageReference(t *testing.T, fixture unitCoverageReferenceFixture, reference unitCoverageReference) {
@@ -561,6 +592,89 @@ func sortedUnitReferencePackageNamesFromSummary(packages []packageCoverageJSON) 
 	}
 	slices.Sort(names)
 	return names
+}
+
+func assertUnitCoverageReferenceExecutionSets(t *testing.T, fixture unitCoverageReferenceFixture, unfiltered unitCoverageReference, filtered unitCoverageReference) {
+	t.Helper()
+	if !slices.Equal(unfiltered.timingPackages, fixture.packages) {
+		t.Fatalf("unfiltered timing packages = %v, want coverage fixture packages %v", unfiltered.timingPackages, fixture.packages)
+	}
+	wantFiltered := []string{fixture.externalPackage, fixture.internalPackage, fixture.platformPackage}
+	slices.Sort(wantFiltered)
+	if !slices.Equal(filtered.timingPackages, wantFiltered) {
+		t.Fatalf("filtered timing packages = %v, want exactly build-selected test packages %v", filtered.timingPackages, wantFiltered)
+	}
+	for name, reference := range map[string]unitCoverageReference{
+		"unfiltered": unfiltered,
+		"filtered":   filtered,
+	} {
+		if !slices.Equal(reference.coveragePackages, fixture.packages) {
+			t.Fatalf("%s coverage packages = %v, want unchanged measurement universe %v", name, reference.coveragePackages, fixture.packages)
+		}
+		if reference.coveragePackageArg == "" {
+			t.Fatalf("%s go test args = %v, want a coverpkg argument", name, reference.testInvocationArgs)
+		}
+	}
+}
+
+func assertUnitCoverageReferenceEquivalent(t *testing.T, label string, expected unitCoverageReference, actual unitCoverageReference) {
+	t.Helper()
+	if actual.exitCode != expected.exitCode {
+		t.Fatalf("%s exit status changed: expected=%d actual=%d", label, expected.exitCode, actual.exitCode)
+	}
+	if !maps.Equal(actual.testOccurrences, expected.testOccurrences) {
+		t.Fatalf("%s top-level test occurrence counts changed: expected=%v actual=%v", label, expected.testOccurrences, actual.testOccurrences)
+	}
+	if !maps.Equal(actual.testOutcomes, expected.testOutcomes) {
+		t.Fatalf("%s top-level test outcomes changed: expected=%v actual=%v", label, expected.testOutcomes, actual.testOutcomes)
+	}
+	if actual.timing.Version != expected.timing.Version || actual.timing.Complete != expected.timing.Complete ||
+		actual.timing.TestCount != expected.timing.TestCount || actual.timing.TestPassCount != expected.timing.TestPassCount ||
+		actual.timing.TestFailCount != expected.timing.TestFailCount || actual.timing.TestSkipCount != expected.timing.TestSkipCount {
+		t.Fatalf("%s timing test verdict changed: expected=%+v actual=%+v", label, expected.timing, actual.timing)
+	}
+	if !slices.Equal(actual.coveragePackages, expected.coveragePackages) {
+		t.Fatalf("%s coverage measurement universe changed: expected=%v actual=%v", label, expected.coveragePackages, actual.coveragePackages)
+	}
+	if actual.coveragePackageArg != expected.coveragePackageArg {
+		t.Fatalf("%s coverpkg argument changed: expected=%q actual=%q", label, expected.coveragePackageArg, actual.coveragePackageArg)
+	}
+	blocksEqual := maps.Equal(actual.coverageBlocks, expected.coverageBlocks)
+	if !blocksEqual {
+		t.Fatalf("%s canonical coverage blocks or counts changed: blocks_equal=%t expected_blocks=%d actual_blocks=%d expected_totals=%v actual_totals=%v", label, blocksEqual, len(expected.coverageBlocks), len(actual.coverageBlocks), coverageTotals(expected.coverageBlocks), coverageTotals(actual.coverageBlocks))
+	}
+	if !maps.Equal(coverageTotals(actual.coverageBlocks), coverageTotals(expected.coverageBlocks)) {
+		t.Fatalf("%s per-package coverage totals changed", label)
+	}
+	if !reflect.DeepEqual(normalizeUnitReferenceSummary(actual.coverageSummary, actual.manifestPath), normalizeUnitReferenceSummary(expected.coverageSummary, expected.manifestPath)) {
+		t.Fatalf("%s coverage verdict, manifest, or floor decision changed:\nexpected=%+v\nactual=%+v", label, expected.coverageSummary, actual.coverageSummary)
+	}
+}
+
+func normalizeUnitReferenceSummary(summary *coverageSummaryJSON, manifestPath string) *coverageSummaryJSON {
+	if summary == nil {
+		return nil
+	}
+	normalized := *summary
+	if summary.Complete {
+		normalized.MeasurementReason = ""
+	} else {
+		// A failed go test includes package-result prose in this diagnostic;
+		// importing test-free packages changes that prose's percentage even
+		// though the partial canonical measurements and decisions are equal.
+		normalized.MeasurementReason = "<incomplete coverage>"
+	}
+	normalized.PackageFloorFindings = normalizeUnitReferenceDiagnostics(summary.PackageFloorFindings, manifestPath)
+	normalized.ManifestDiagnostics = normalizeUnitReferenceDiagnostics(summary.ManifestDiagnostics, manifestPath)
+	return &normalized
+}
+
+func normalizeUnitReferenceDiagnostics(diagnostics []string, manifestPath string) []string {
+	normalized := slices.Clone(diagnostics)
+	for index, diagnostic := range normalized {
+		normalized[index] = strings.ReplaceAll(diagnostic, manifestPath, "<coverage-manifest>")
+	}
+	return normalized
 }
 
 func assertUnitCoverageReferenceHasSameExecution(t *testing.T, fixture unitCoverageReferenceFixture, expected unitCoverageReference, actual unitCoverageReference) {
