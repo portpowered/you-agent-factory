@@ -68,6 +68,34 @@ func (f *factoryImpl) GetEngineStateSnapshot(ctx context.Context) (*interfaces.E
 	return &snap, nil
 }
 
+// GetWorkStateSnapshot returns the published runtime boundary needed by the
+// Work read adapter. Work list reads do not need enablement, uptime, or the
+// unrelated Factory world-state projection; keeping those calculations out of
+// this path avoids replaying the complete canonical history for every page.
+func (f *factoryImpl) GetWorkStateSnapshot(ctx context.Context) (*interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], error) {
+	if f == nil || f.engine == nil {
+		return nil, factory.ErrNotRunning
+	}
+	if ctx != nil {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+	}
+	runtimeSnap := f.engine.GetRuntimeStateSnapshot()
+	runtimeSnap.Topology = f.topology
+	if f.eventHistory != nil {
+		runtimeSnap.StreamGenerationID = f.eventHistory.StreamGenerationID()
+	}
+	f.mu.RLock()
+	currentState := f.state
+	f.mu.RUnlock()
+	runtimeSnap.FactoryState = string(currentState)
+	if currentState == interfaces.FactoryStatePaused {
+		runtimeSnap.LifecycleControlStatus = string(interfaces.FactorySessionLifecycleStatusPaused)
+	}
+	return &runtimeSnap, nil
+}
+
 // CleanInvocationSnapshot projects the engine-owned invocation facts into the
 // narrow transport contract. The raw snapshot remains entirely inside the
 // Factory Runtime implementation package.

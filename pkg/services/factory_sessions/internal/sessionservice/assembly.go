@@ -23,6 +23,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/sessionregistry"
 	factorysessioncontracts "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire/contracts"
 	"github.com/portpowered/infinite-you/pkg/services/models"
+	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"go.uber.org/zap"
 )
@@ -51,6 +52,8 @@ type Assembly struct {
 	responseStreams              responsestreamservice.Service
 	detachedMu                   sync.RWMutex
 	detachedGateways             map[string]factorysessions.Service
+	workAdmissionsMu             sync.Mutex
+	workAdmissions               map[string]*workAdmissionProjection
 	detachedGatewayOrder         []string
 }
 
@@ -108,6 +111,7 @@ func NewAssembly(
 		identity:                     identityService,
 		responseStreams:              responseStreamService,
 		detachedGateways:             make(map[string]factorysessions.Service),
+		workAdmissions:               make(map[string]*workAdmissionProjection),
 	}
 }
 
@@ -130,14 +134,47 @@ func (a *Assembly) Resolve(sessionID string) *livesession.LiveSession {
 func (a *Assembly) ResolveWorkRuntime(sessionID string) (work.Runtime, error) {
 	session := a.Resolve(sessionID)
 	if session == nil || runtimebinding.ServiceForSession(session) == nil {
+		a.releaseWorkAdmissionProjection(sessionID)
 		return nil, fmt.Errorf("%w: %s", factorysessions.ErrSessionNotFound, sessionID)
 	}
 	ingress, _ := runtimebinding.WorkAndEventIngressForLiveRuntime(session.Runtime)
+	var ledger recordings.Ledger
+	if bundle := runtimebinding.BundleFromSession(session); bundle != nil {
+		ledger = bundle.RecordingLedger()
+	}
 	return workRuntimeAdapter{
-		sessionID: sessionID,
-		runtime:   runtimebinding.ServiceForSession(session),
-		ingress:   ingress,
+		sessionID:  sessionID,
+		runtime:    runtimebinding.ServiceForSession(session),
+		ingress:    ingress,
+		admissions: a.workAdmissionProjection(sessionID, ledger),
 	}, nil
+}
+
+func (a *Assembly) workAdmissionProjection(sessionID string, ledger recordings.Ledger) *workAdmissionProjection {
+	if a == nil {
+		return nil
+	}
+	a.workAdmissionsMu.Lock()
+	if a.workAdmissions == nil {
+		a.workAdmissions = make(map[string]*workAdmissionProjection)
+	}
+	projection := a.workAdmissions[sessionID]
+	if projection == nil {
+		projection = newWorkAdmissionProjection(sessionID)
+		a.workAdmissions[sessionID] = projection
+	}
+	a.workAdmissionsMu.Unlock()
+	projection.Bind(ledger)
+	return projection
+}
+
+func (a *Assembly) releaseWorkAdmissionProjection(sessionID string) {
+	if a == nil {
+		return
+	}
+	a.workAdmissionsMu.Lock()
+	delete(a.workAdmissions, sessionID)
+	a.workAdmissionsMu.Unlock()
 }
 
 func (a *Assembly) WithRuntimeRead(read func(*factorysessions.LiveRuntime) error) error {
@@ -294,6 +331,7 @@ func (a *Assembly) Complete(
 	if runtime == nil {
 		return nil, nil, nil, nil, nil, fmt.Errorf("Factory Sessions runtime is required")
 	}
+	runtime.releaseWorkAdmissionProjection = a.releaseWorkAdmissionProjection
 	gateway := NewWithLiveChangeCoordinator(
 		SessionServiceHost(runtime),
 		a.state,

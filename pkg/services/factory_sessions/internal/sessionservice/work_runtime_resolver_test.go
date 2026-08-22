@@ -2,8 +2,10 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -17,6 +19,7 @@ import (
 	sessionruntime "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtime"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/sessionregistry"
 	"github.com/portpowered/infinite-you/pkg/services/models"
+	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
@@ -674,5 +677,270 @@ func TestWorkRuntimeAdapterDetachesFactorySessionStopSummary(t *testing.T) {
 	summary.LatestDispatch.FailureDetail.Message = "mutated"
 	if got.LatestDispatch.FailureDetail.Message != "provider failed" {
 		t.Fatalf("projection retained Factory Sessions alias: %#v", got)
+	}
+}
+
+type admissionProjectionLedger struct {
+	mu               sync.Mutex
+	events           []recordings.FactoryEvent
+	recorders        []func(recordings.FactoryEvent)
+	recorderAdds     int
+	streamGeneration string
+}
+
+func (ledger *admissionProjectionLedger) CanonicalEvents() []recordings.FactoryEvent {
+	ledger.mu.Lock()
+	defer ledger.mu.Unlock()
+	return append([]recordings.FactoryEvent(nil), ledger.events...)
+}
+
+func (ledger *admissionProjectionLedger) Subscribe(
+	context.Context,
+	*recordings.FactoryEventReconnectCursor,
+	recordings.FactoryEventReconnectScope,
+) (recordings.FactoryEventStream, error) {
+	return recordings.FactoryEventStream{}, nil
+}
+
+func (ledger *admissionProjectionLedger) StreamGenerationID() string {
+	ledger.mu.Lock()
+	defer ledger.mu.Unlock()
+	return ledger.streamGeneration
+}
+
+func (ledger *admissionProjectionLedger) AddEventRecorder(recorder func(recordings.FactoryEvent)) {
+	ledger.mu.Lock()
+	ledger.recorderAdds++
+	ledger.recorders = append(ledger.recorders, recorder)
+	prefix := append([]recordings.FactoryEvent(nil), ledger.events...)
+	ledger.mu.Unlock()
+	for _, event := range prefix {
+		recorder(event)
+	}
+}
+
+func (ledger *admissionProjectionLedger) AddEventTypeRecorder(func(recordings.FactoryEventType)) {}
+
+func (ledger *admissionProjectionLedger) AppendRecordedEvent(event recordings.FactoryEvent) {
+	ledger.mu.Lock()
+	ledger.events = append(ledger.events, event)
+	recorders := append([]func(recordings.FactoryEvent){}, ledger.recorders...)
+	ledger.mu.Unlock()
+	for _, recorder := range recorders {
+		recorder(event)
+	}
+}
+
+func (ledger *admissionProjectionLedger) recorderCount() int {
+	ledger.mu.Lock()
+	defer ledger.mu.Unlock()
+	return ledger.recorderAdds
+}
+
+func TestWorkAdmissionProjectionSeedsAppliesAndRebindsToReplacementLedger(t *testing.T) {
+	t.Parallel()
+
+	first := &admissionProjectionLedger{}
+	first.AppendRecordedEvent(admissionProjectionEvent(t, "event-1", "session-1", 1,
+		work.WorkRequestEventWork{Name: "first", WorkID: "work-1"},
+	))
+	projection := newWorkAdmissionProjection("session-1")
+	projection.Bind(first)
+
+	assertAdmissions(t, projection.Snapshot(), []work.WorkAdmission{{WorkID: "work-1", Name: "first", Order: 0}})
+	if got := first.recorderCount(); got != 1 {
+		t.Fatalf("initial recorder registrations = %d, want 1", got)
+	}
+
+	first.AppendRecordedEvent(admissionProjectionEvent(t, "event-other", "session-2", 2,
+		work.WorkRequestEventWork{Name: "other", WorkID: "work-other"},
+	))
+	first.AppendRecordedEvent(admissionProjectionEvent(t, "event-2", "session-1", 3,
+		work.WorkRequestEventWork{Name: "second", WorkID: "work-2"},
+		work.WorkRequestEventWork{Name: "third", WorkID: "work-3"},
+	))
+	first.AppendRecordedEvent(admissionProjectionEvent(t, "event-2", "session-1", 3,
+		work.WorkRequestEventWork{Name: "second", WorkID: "work-2"},
+		work.WorkRequestEventWork{Name: "third", WorkID: "work-3"},
+	))
+	projection.Bind(first)
+
+	assertAdmissions(t, projection.Snapshot(), []work.WorkAdmission{
+		{WorkID: "work-1", Name: "first", Order: 0},
+		{WorkID: "work-2", Name: "second", Order: 1},
+		{WorkID: "work-3", Name: "third", Order: 2},
+	})
+	if got := first.recorderCount(); got != 1 {
+		t.Fatalf("repeated recorder registrations = %d, want 1", got)
+	}
+
+	second := &admissionProjectionLedger{}
+	second.AppendRecordedEvent(admissionProjectionEvent(t, "event-1", "session-1", 1,
+		work.WorkRequestEventWork{Name: "first", WorkID: "work-1"},
+	))
+	second.AppendRecordedEvent(admissionProjectionEvent(t, "event-2", "session-1", 3,
+		work.WorkRequestEventWork{Name: "second", WorkID: "work-2"},
+		work.WorkRequestEventWork{Name: "third", WorkID: "work-3"},
+	))
+	second.AppendRecordedEvent(admissionProjectionEvent(t, "event-4", "session-1", 4,
+		work.WorkRequestEventWork{Name: "recovered", WorkID: "work-4"},
+	))
+	projection.Bind(second)
+	assertAdmissions(t, projection.Snapshot(), []work.WorkAdmission{
+		{WorkID: "work-1", Name: "first", Order: 0},
+		{WorkID: "work-2", Name: "second", Order: 1},
+		{WorkID: "work-3", Name: "third", Order: 2},
+		{WorkID: "work-4", Name: "recovered", Order: 3},
+	})
+	if got := second.recorderCount(); got != 1 {
+		t.Fatalf("replacement recorder registrations = %d, want 1", got)
+	}
+	first.AppendRecordedEvent(admissionProjectionEvent(t, "event-stale", "session-1", 5,
+		work.WorkRequestEventWork{Name: "stale", WorkID: "work-stale"},
+	))
+	second.AppendRecordedEvent(admissionProjectionEvent(t, "event-5", "session-1", 5,
+		work.WorkRequestEventWork{Name: "current", WorkID: "work-5"},
+	))
+	assertAdmissions(t, projection.Snapshot(), []work.WorkAdmission{
+		{WorkID: "work-1", Name: "first", Order: 0},
+		{WorkID: "work-2", Name: "second", Order: 1},
+		{WorkID: "work-3", Name: "third", Order: 2},
+		{WorkID: "work-4", Name: "recovered", Order: 3},
+		{WorkID: "work-5", Name: "current", Order: 4},
+	})
+
+	detached := projection.Snapshot()
+	detached[0].Name = "mutated"
+	if got := projection.Snapshot()[0].Name; got != "first" {
+		t.Fatalf("projection admission name = %q after detached mutation, want first", got)
+	}
+}
+
+func TestWorkAdmissionProjectionSupportsConcurrentSnapshotsAndAppends(t *testing.T) {
+	t.Parallel()
+
+	ledger := &admissionProjectionLedger{}
+	projection := newWorkAdmissionProjection("session-1")
+	projection.Bind(ledger)
+
+	const eventCount = 200
+	var readers sync.WaitGroup
+	for range 8 {
+		readers.Add(1)
+		go func() {
+			defer readers.Done()
+			for range 250 {
+				_ = projection.Snapshot()
+			}
+		}()
+	}
+	for index := 0; index < eventCount; index++ {
+		ledger.AppendRecordedEvent(admissionProjectionEvent(
+			t, "event-"+strconv.Itoa(index), "session-1", index+1,
+			work.WorkRequestEventWork{Name: "work", WorkID: "work-" + strconv.Itoa(index)},
+		))
+	}
+	readers.Wait()
+
+	if got := len(projection.Snapshot()); got != eventCount {
+		t.Fatalf("projection admissions = %d, want %d", got, eventCount)
+	}
+}
+
+func TestWorkRuntimeSnapshotPrefersFastPublishedBoundary(t *testing.T) {
+	t.Parallel()
+
+	runtime := &fastWorkSnapshotRuntime{fastSnapshot: &legacysnapshot.Snapshot{}}
+	snapshot, err := workRuntimeSnapshot(context.Background(), runtime)
+	if err != nil {
+		t.Fatalf("workRuntimeSnapshot() error = %v, want nil", err)
+	}
+	if snapshot != runtime.fastSnapshot {
+		t.Fatalf("workRuntimeSnapshot() = %p, want fast snapshot %p", snapshot, runtime.fastSnapshot)
+	}
+	if !runtime.fastCalled {
+		t.Fatal("fast Work snapshot provider was not called")
+	}
+	if runtime.engineCalled {
+		t.Fatal("aggregate engine snapshot provider was called")
+	}
+}
+
+func TestResolveWorkRuntimeReleasesProjectionAfterSessionDisappears(t *testing.T) {
+	t.Parallel()
+
+	assembly := &Assembly{
+		workAdmissions: map[string]*workAdmissionProjection{
+			"closed": newWorkAdmissionProjection("closed"),
+		},
+	}
+	if _, err := assembly.ResolveWorkRuntime("closed"); !errors.Is(err, factorysessions.ErrSessionNotFound) {
+		t.Fatalf("ResolveWorkRuntime() error = %v, want ErrSessionNotFound", err)
+	}
+	assembly.workAdmissionsMu.Lock()
+	_, retained := assembly.workAdmissions["closed"]
+	assembly.workAdmissionsMu.Unlock()
+	if retained {
+		t.Fatal("closed session admission projection was retained")
+	}
+}
+
+type fastWorkSnapshotRuntime struct {
+	factory.Service
+	fastSnapshot *legacysnapshot.Snapshot
+	fastCalled   bool
+	engineCalled bool
+}
+
+func (runtime *fastWorkSnapshotRuntime) GetEngineStateSnapshot(context.Context) (*legacysnapshot.Snapshot, error) {
+	runtime.engineCalled = true
+	return nil, errors.New("aggregate snapshot should not be called")
+}
+
+func (runtime *fastWorkSnapshotRuntime) GetWorkStateSnapshot(context.Context) (*legacysnapshot.Snapshot, error) {
+	runtime.fastCalled = true
+	return runtime.fastSnapshot, nil
+}
+
+func admissionProjectionEvent(
+	t testing.TB,
+	id string,
+	sessionID string,
+	sequence int,
+	items ...work.WorkRequestEventWork,
+) recordings.FactoryEvent {
+	t.Helper()
+	payload, err := json.Marshal(work.WorkRequestEventPayload{
+		Type:  work.WorkRequestTypeFactoryRequestBatch,
+		Works: items,
+	})
+	if err != nil {
+		t.Fatalf("marshal Work admission event: %v", err)
+	}
+	return recordings.FactoryEvent{
+		Id:      id,
+		Type:    interfaces.FactoryEventTypeWorkRequest,
+		Payload: payload,
+		Context: recordings.FactoryEventContext{
+			Sequence: sequence,
+			SessionID: func() *string {
+				if sessionID == "" {
+					return nil
+				}
+				return &sessionID
+			}(),
+		},
+	}
+}
+
+func assertAdmissions(t testing.TB, got, want []work.WorkAdmission) {
+	t.Helper()
+	if len(got) != len(want) {
+		t.Fatalf("admissions = %#v, want %#v", got, want)
+	}
+	for index := range want {
+		if got[index] != want[index] {
+			t.Fatalf("admission[%d] = %#v, want %#v", index, got[index], want[index])
+		}
 	}
 }

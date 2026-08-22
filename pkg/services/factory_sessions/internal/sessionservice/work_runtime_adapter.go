@@ -5,8 +5,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"reflect"
 	"sort"
+	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/portpowered/infinite-you/pkg/platform/jsonvalue"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
@@ -15,6 +18,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/legacysnapshot"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimebinding"
 	sessionprojection "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/sessionprojection"
+	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workers "github.com/portpowered/infinite-you/pkg/services/workers"
 )
@@ -27,6 +31,10 @@ type workRuntimeAdapter struct {
 	// ingress is the Work-submission boundary declared when Factory Sessions
 	// bound the runtime. It retires with factoryruntime.APIFactory.
 	ingress factoryruntime.APIFactory
+	// admissions is the session-scoped canonical Work admission projection.
+	// It is initialized by Assembly from the runtime's ledger and advances from
+	// appended events instead of replaying the full event history per read.
+	admissions *workAdmissionProjection
 }
 
 func (a workRuntimeAdapter) SubmitWorkRequest(ctx context.Context, request work.WorkRequest) (work.WorkRequestSubmitResult, error) {
@@ -78,7 +86,7 @@ func (a workRuntimeAdapter) ReadWorkSnapshot(ctx context.Context) (work.ReadSnap
 	if err != nil {
 		return work.ReadSnapshot{}, err
 	}
-	snapshot, err := legacyObservation.GetEngineStateSnapshot(ctx)
+	snapshot, err := workRuntimeSnapshot(ctx, legacyObservation)
 	if err != nil {
 		return work.ReadSnapshot{}, err
 	}
@@ -98,12 +106,136 @@ func (a workRuntimeAdapter) ReadWorkSnapshot(ctx context.Context) (work.ReadSnap
 		item.StopSummary = runtimeWorkStopSummary(sessionprojection.ProjectWorkStopSummary(a.sessionID, snapshot, token, sessionSummary))
 		result.Items = append(result.Items, item)
 	}
-	admissions, err := a.readWorkAdmissions(ctx)
-	if err != nil {
-		return work.ReadSnapshot{}, err
+	if a.admissions != nil {
+		result.Admissions = a.admissions.Snapshot()
+	} else {
+		admissions, err := a.readWorkAdmissions(ctx)
+		if err != nil {
+			return work.ReadSnapshot{}, err
+		}
+		result.Admissions = admissions
 	}
-	result.Admissions = admissions
 	return result, nil
+}
+
+func workRuntimeSnapshot(
+	ctx context.Context,
+	observation legacysnapshot.Provider,
+) (*legacysnapshot.Snapshot, error) {
+	if fast, ok := observation.(legacysnapshot.WorkProvider); ok {
+		return fast.GetWorkStateSnapshot(ctx)
+	}
+	return observation.GetEngineStateSnapshot(ctx)
+}
+
+// workAdmissionProjection is the session-scoped admission read view used by
+// Work list reads. The canonical ledger replays its existing prefix once when
+// it is bound, then applies only newly appended Work Request events. Readers
+// receive a detached copy and never hold the projection lock while selecting
+// or mapping Work rows.
+type workAdmissionProjection struct {
+	sessionID string
+
+	mu         sync.RWMutex
+	admissions []work.WorkAdmission
+	seenEvents map[string]struct{}
+	binding    *workAdmissionProjectionBinding
+}
+
+type workAdmissionProjectionBinding struct {
+	ledger recordings.Ledger
+}
+
+func newWorkAdmissionProjection(sessionID string) *workAdmissionProjection {
+	return &workAdmissionProjection{
+		sessionID:  strings.TrimSpace(sessionID),
+		seenEvents: make(map[string]struct{}),
+	}
+}
+
+// Bind attaches the projection to one canonical ledger. AddEventRecorder
+// replays the ledger prefix synchronously, which makes initialization and
+// catch-up visible before the first Work read. Rebinding replaces the view with
+// the replacement ledger's prefix; callbacks retained by the old ledger are
+// ignored so a stopped runtime cannot repopulate the new session view.
+func (p *workAdmissionProjection) Bind(ledger recordings.Ledger) {
+	if p == nil || ledger == nil {
+		return
+	}
+	binding := &workAdmissionProjectionBinding{ledger: ledger}
+	p.mu.Lock()
+	if p.binding != nil && sameLedger(p.binding.ledger, ledger) {
+		p.mu.Unlock()
+		return
+	}
+	p.binding = binding
+	p.admissions = nil
+	p.seenEvents = make(map[string]struct{})
+	p.mu.Unlock()
+	ledger.AddEventRecorder(func(event factorydefinitions.FactoryEvent) {
+		p.applyEvent(binding, event)
+	})
+}
+
+// Snapshot returns the current admission facts without exposing mutable
+// projection storage to Work's query path.
+func (p *workAdmissionProjection) Snapshot() []work.WorkAdmission {
+	if p == nil {
+		return nil
+	}
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	return append([]work.WorkAdmission(nil), p.admissions...)
+}
+
+func (p *workAdmissionProjection) applyEvent(
+	binding *workAdmissionProjectionBinding,
+	event factorydefinitions.FactoryEvent,
+) {
+	if p == nil || event.Type != factorydefinitions.FactoryEventTypeWorkRequest {
+		return
+	}
+	admissions := workAdmissionsFromFactoryEvents(p.sessionID, []factorydefinitions.FactoryEvent{event})
+	if len(admissions) == 0 {
+		return
+	}
+	eventKey := workAdmissionEventKey(event)
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.binding != binding {
+		return
+	}
+	if eventKey != "" {
+		if _, seen := p.seenEvents[eventKey]; seen {
+			return
+		}
+		p.seenEvents[eventKey] = struct{}{}
+	}
+	for _, admission := range admissions {
+		admission.Order = len(p.admissions)
+		p.admissions = append(p.admissions, admission)
+	}
+}
+
+func workAdmissionEventKey(event factorydefinitions.FactoryEvent) string {
+	if event.Id != "" {
+		return "id:" + event.Id
+	}
+	if event.Context.Sequence == 0 && len(event.Payload) == 0 {
+		return ""
+	}
+	return string(event.Type) + ":" + strconv.Itoa(event.Context.Sequence) + ":" + string(event.Payload)
+}
+
+func sameLedger(left, right recordings.Ledger) bool {
+	if left == nil || right == nil {
+		return left == right
+	}
+	leftValue, rightValue := reflect.ValueOf(left), reflect.ValueOf(right)
+	if leftValue.Type() != rightValue.Type() || !leftValue.Type().Comparable() {
+		return false
+	}
+	return leftValue.Interface() == rightValue.Interface()
 }
 
 func (a workRuntimeAdapter) readWorkAdmissions(ctx context.Context) ([]work.WorkAdmission, error) {

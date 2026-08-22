@@ -96,7 +96,9 @@ type workListProfilePage struct {
 }
 
 type workListOperationEstimates struct {
-	snapshotReads       int
+	snapshotReads int
+	// Work admission history is session-projected, so page reads do not open
+	// event subscriptions or visit the retained event prefix.
 	eventSubscriptions  int
 	eventRecordsVisited int
 	workRowsProjected   int
@@ -145,10 +147,8 @@ func runWorkListLatencyProfile(t *testing.T, workerLoad int) workListLatencyProf
 		returnedWorkIDs:   returnedIDs,
 		expectedWorkIDs:   submitRequestWorkIDs(expectedIDs),
 		operationEstimates: workListOperationEstimates{
-			snapshotReads:       len(pages),
-			eventSubscriptions:  len(pages),
-			eventRecordsVisited: len(pages) * eventSubscription.retainedEvents,
-			workRowsProjected:   len(returnedIDs),
+			snapshotReads:     len(pages),
+			workRowsProjected: len(returnedIDs),
 		},
 	}
 }
@@ -191,10 +191,8 @@ func runAccumulatedWorkListLatencyProfile(t *testing.T) workListLatencyProfile {
 		returnedWorkIDs:       returnedIDs,
 		expectedWorkIDs:       submitRequestWorkIDs(expectedRequests),
 		operationEstimates: workListOperationEstimates{
-			snapshotReads:       len(pages),
-			eventSubscriptions:  len(pages),
-			eventRecordsVisited: len(pages) * eventSubscription.retainedEvents,
-			workRowsProjected:   len(returnedIDs),
+			snapshotReads:     len(pages),
+			workRowsProjected: len(returnedIDs),
 		},
 	}
 }
