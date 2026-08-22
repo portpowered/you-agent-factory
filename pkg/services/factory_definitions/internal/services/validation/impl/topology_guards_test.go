@@ -687,3 +687,147 @@ func TestRulePollerWorkstations_AcceptsScriptAndHostedWorkers(t *testing.T) {
 		t.Fatalf("expected no findings, got %v", findings)
 	}
 }
+
+func TestRuleGuards_LogicalRoundTripAcceptsDistinctKnownPairAndHigherBackstop(t *testing.T) {
+	cfg := testBaseConfig()
+	cfg.Workstations = []factorydefinitions.FactoryWorkstationConfig{
+		{Name: "process"},
+		{Name: "review"},
+		{
+			Name: "review-loop-breaker",
+			Guards: []factorydefinitions.GuardConfig{{
+				Type:        factorydefinitions.GuardTypeVisitCount,
+				Workstation: "review",
+				MaxVisits:   12,
+				LogicalRoundTrip: &factorydefinitions.LogicalRoundTripConfig{
+					Workstations: []string{"process", "review"},
+					MaxRawVisits: 24,
+				},
+			}},
+		},
+	}
+
+	if findings := ruleGuards(cfg); len(findings) != 0 {
+		t.Fatalf("valid logical round-trip guard produced findings: %#v", findings)
+	}
+}
+
+func TestRuleGuards_LogicalRoundTripRejectsInvalidPairAndBackstop(t *testing.T) {
+	tests := []struct {
+		name string
+		cfg  factorydefinitions.LogicalRoundTripConfig
+		want string
+	}{
+		{
+			name: "duplicate pair member",
+			cfg: factorydefinitions.LogicalRoundTripConfig{
+				Workstations: []string{"process", "process"}, MaxRawVisits: 24,
+			},
+			want: "guard-visit-count-round-trip-pair",
+		},
+		{
+			name: "unknown pair member",
+			cfg: factorydefinitions.LogicalRoundTripConfig{
+				Workstations: []string{"process", "missing"}, MaxRawVisits: 24,
+			},
+			want: "guard-visit-count-round-trip-workstation",
+		},
+		{
+			name: "non-positive raw ceiling",
+			cfg: factorydefinitions.LogicalRoundTripConfig{
+				Workstations: []string{"process", "review"}, MaxRawVisits: 0,
+			},
+			want: "guard-visit-count-round-trip-backstop",
+		},
+		{
+			name: "raw ceiling not higher than logical limit",
+			cfg: factorydefinitions.LogicalRoundTripConfig{
+				Workstations: []string{"process", "review"}, MaxRawVisits: 12,
+			},
+			want: "guard-visit-count-round-trip-backstop",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := testBaseConfig()
+			cfg.Workstations = []factorydefinitions.FactoryWorkstationConfig{
+				{Name: "process"},
+				{Name: "review"},
+				{
+					Name: "review-loop-breaker",
+					Guards: []factorydefinitions.GuardConfig{{
+						Type: factorydefinitions.GuardTypeVisitCount, Workstation: "review", MaxVisits: 12,
+						LogicalRoundTrip: &tt.cfg,
+					}},
+				},
+			}
+			findings := ruleGuards(cfg)
+			assertFindingExists(t, findings, tt.want)
+		})
+	}
+}
+
+func TestValidate_ReviewRepeaterContinueTopologyWithBoundedLoopBreaker(t *testing.T) {
+	cfg := &factorydefinitions.FactoryConfig{
+		WorkTypes: []factorydefinitions.WorkTypeConfig{
+			{
+				Name: "task",
+				States: []factorydefinitions.StateConfig{
+					{Name: "init", Type: factorydefinitions.StateTypeInitial},
+					{Name: "in-review", Type: factorydefinitions.StateTypeProcessing},
+					{Name: "to-complete", Type: factorydefinitions.StateTypeProcessing},
+					{Name: "complete", Type: factorydefinitions.StateTypeTerminal},
+					{Name: "failed", Type: factorydefinitions.StateTypeFailed},
+				},
+			},
+			{
+				Name: "review",
+				States: []factorydefinitions.StateConfig{
+					{Name: "init", Type: factorydefinitions.StateTypeInitial},
+					{Name: "complete", Type: factorydefinitions.StateTypeTerminal},
+					{Name: "fin", Type: factorydefinitions.StateTypeFailed},
+				},
+			},
+		},
+		Workstations: []factorydefinitions.FactoryWorkstationConfig{
+			{
+				Name: "review",
+				Kind: factorydefinitions.WorkstationKindRepeater,
+				Inputs: []factorydefinitions.IOConfig{
+					{WorkTypeName: "task", StateName: "in-review"},
+					{WorkTypeName: "review", StateName: "init"},
+				},
+				Outputs: []factorydefinitions.IOConfig{
+					{WorkTypeName: "task", StateName: "to-complete"},
+					{WorkTypeName: "review", StateName: "complete"},
+				},
+				OnContinue: []factorydefinitions.IOConfig{
+					{WorkTypeName: "task", StateName: "in-review"},
+					{WorkTypeName: "review", StateName: "init"},
+				},
+				OnRejection: []factorydefinitions.IOConfig{{WorkTypeName: "task", StateName: "init"}},
+				OnFailure: []factorydefinitions.IOConfig{
+					{WorkTypeName: "task", StateName: "failed"},
+					{WorkTypeName: "review", StateName: "fin"},
+				},
+			},
+			{
+				Name:    "review-loop-breaker",
+				Type:    factorydefinitions.WorkstationTypeLogical,
+				Inputs:  []factorydefinitions.IOConfig{{WorkTypeName: "task", StateName: "in-review"}},
+				Outputs: []factorydefinitions.IOConfig{{WorkTypeName: "task", StateName: "failed"}},
+				Guards: []factorydefinitions.GuardConfig{{
+					Type:        factorydefinitions.GuardTypeVisitCount,
+					Workstation: "review",
+					MaxVisits:   10,
+				}},
+			},
+		},
+	}
+
+	result := Validate(cfg)
+	if len(result.Targets) != 0 {
+		t.Fatalf("review hold topology produced validation targets: %#v", result.Targets)
+	}
+}

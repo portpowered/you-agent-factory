@@ -1,6 +1,8 @@
 package impl
 
 import (
+	"fmt"
+	"strings"
 	"testing"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
@@ -400,5 +402,201 @@ func TestWorkerReasoningEffortTargetsAcceptsXHighAndRejectsUnknown(t *testing.T)
 		targets[0].Code != CodeWorkerUnsupportedReasoningEffort ||
 		targets[0].Path != "factory.workers[0](implementer).reasoningEffort" {
 		t.Fatalf("invalid targets = %#v, want reasoning effort diagnostic", targets)
+	}
+}
+
+type sameNameAllChildrenCompleteJoinArityTest struct {
+	name         string
+	inputs       []factorydefinitions.IOConfig
+	wantFinding  bool
+	wantArity    int
+	messageParts []string
+}
+
+var sameNameAllChildrenCompleteJoinArityTests = []sameNameAllChildrenCompleteJoinArityTest{
+	{
+		name: "one input remains accepted",
+		inputs: []factorydefinitions.IOConfig{
+			{WorkTypeName: "parent", StateName: "ready"},
+		},
+	},
+	{
+		name: "two input same-name join remains accepted",
+		inputs: []factorydefinitions.IOConfig{
+			{WorkTypeName: "parent", StateName: "ready"},
+			{
+				WorkTypeName: "same",
+				StateName:    "ready",
+				Guard: &factorydefinitions.InputGuardConfig{
+					Type:       factorydefinitions.GuardTypeSameName,
+					MatchInput: "parent",
+				},
+			},
+		},
+	},
+	{
+		name: "two input child-complete join remains accepted",
+		inputs: []factorydefinitions.IOConfig{
+			{WorkTypeName: "parent", StateName: "ready"},
+			{
+				WorkTypeName: "child",
+				StateName:    "complete",
+				Guard: &factorydefinitions.InputGuardConfig{
+					Type:        factorydefinitions.GuardTypeAllChildrenComplete,
+					ParentInput: "parent",
+				},
+			},
+		},
+	},
+	{
+		name: "two input combined join remains accepted",
+		inputs: []factorydefinitions.IOConfig{
+			{
+				WorkTypeName: "parent",
+				StateName:    "ready",
+				Guard: &factorydefinitions.InputGuardConfig{
+					Type:       factorydefinitions.GuardTypeSameName,
+					MatchInput: "child",
+				},
+			},
+			{
+				WorkTypeName: "child",
+				StateName:    "complete",
+				Guard: &factorydefinitions.InputGuardConfig{
+					Type:        factorydefinitions.GuardTypeAllChildrenComplete,
+					ParentInput: "parent",
+				},
+			},
+		},
+	},
+	{
+		name: "three input same-name plus child-complete join is rejected",
+		inputs: []factorydefinitions.IOConfig{
+			{WorkTypeName: "parent", StateName: "ready"},
+			{
+				WorkTypeName: "same",
+				StateName:    "ready",
+				Guard: &factorydefinitions.InputGuardConfig{
+					Type:       factorydefinitions.GuardTypeSameName,
+					MatchInput: "parent",
+				},
+			},
+			{
+				WorkTypeName: "child",
+				StateName:    "complete",
+				Guard: &factorydefinitions.InputGuardConfig{
+					Type:        factorydefinitions.GuardTypeAllChildrenComplete,
+					ParentInput: "parent",
+				},
+			},
+		},
+		wantFinding: true,
+		wantArity:   3,
+		messageParts: []string{
+			`workstation "fan-in"`,
+			"unsupported SAME_NAME plus ALL_CHILDREN_COMPLETE join arity",
+			"observed arity is 3 inputs",
+			"at most 2 inputs are supported",
+			"Split the fan-in into supported two-input workstation stages",
+			"reduce the joined inputs",
+		},
+	},
+	{
+		name: "four input same-name plus child-complete join is rejected",
+		inputs: append([]factorydefinitions.IOConfig{
+			{WorkTypeName: "parent", StateName: "ready"},
+			{
+				WorkTypeName: "same",
+				StateName:    "ready",
+				Guard: &factorydefinitions.InputGuardConfig{
+					Type:       factorydefinitions.GuardTypeSameName,
+					MatchInput: "parent",
+				},
+			},
+			{
+				WorkTypeName: "child",
+				StateName:    "complete",
+				Guard: &factorydefinitions.InputGuardConfig{
+					Type:        factorydefinitions.GuardTypeAllChildrenComplete,
+					ParentInput: "parent",
+				},
+			},
+		}, factorydefinitions.IOConfig{WorkTypeName: "extra", StateName: "ready"}),
+		wantFinding: true,
+		wantArity:   4,
+	},
+	{
+		name: "three input same-name without child-complete remains accepted",
+		inputs: []factorydefinitions.IOConfig{
+			{WorkTypeName: "parent", StateName: "ready"},
+			{
+				WorkTypeName: "same",
+				StateName:    "ready",
+				Guard: &factorydefinitions.InputGuardConfig{
+					Type:       factorydefinitions.GuardTypeSameName,
+					MatchInput: "parent",
+				},
+			},
+			{WorkTypeName: "extra", StateName: "ready"},
+		},
+	},
+	{
+		name: "three input child-complete without same-name remains accepted",
+		inputs: []factorydefinitions.IOConfig{
+			{WorkTypeName: "parent", StateName: "ready"},
+			{
+				WorkTypeName: "child",
+				StateName:    "complete",
+				Guard: &factorydefinitions.InputGuardConfig{
+					Type:        factorydefinitions.GuardTypeAllChildrenComplete,
+					ParentInput: "parent",
+				},
+			},
+			{WorkTypeName: "extra", StateName: "ready"},
+		},
+	},
+}
+
+func TestConfigValidator_UnsupportedSameNameAllChildrenCompleteJoinArity(t *testing.T) {
+	for _, tt := range sameNameAllChildrenCompleteJoinArityTests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := testBaseConfig()
+			cfg.Workstations = []factorydefinitions.FactoryWorkstationConfig{{
+				Name:   "fan-in",
+				Inputs: tt.inputs,
+			}}
+
+			result := NewConfigValidator(nil).Validate(cfg)
+			var finding *Finding
+			for index := range result.Findings {
+				if result.Findings[index].Rule == "same-name-all-children-complete-join-arity" {
+					finding = &result.Findings[index]
+					break
+				}
+			}
+
+			if !tt.wantFinding {
+				if finding != nil {
+					t.Fatalf("unexpected unsupported join arity finding: %#v", *finding)
+				}
+				return
+			}
+			if finding == nil {
+				t.Fatalf("expected unsupported join arity finding, got %#v", result.Findings)
+			}
+			if finding.Severity != SeverityError {
+				t.Fatalf("finding severity = %q, want %q", finding.Severity, SeverityError)
+			}
+			wantPath := "workstations[0](fan-in).inputs"
+			if finding.Path != wantPath {
+				t.Fatalf("finding path = %q, want %q", finding.Path, wantPath)
+			}
+			if tt.messageParts != nil && !containsAll(finding.Message, tt.messageParts...) {
+				t.Fatalf("finding message = %q, want parts %v", finding.Message, tt.messageParts)
+			}
+			if !strings.Contains(finding.Message, fmt.Sprintf("observed arity is %d inputs", tt.wantArity)) {
+				t.Fatalf("finding message = %q, want arity %d", finding.Message, tt.wantArity)
+			}
+		})
 	}
 }
