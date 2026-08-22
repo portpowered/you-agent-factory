@@ -99,7 +99,6 @@ func TestResolvedWorkListPublicCommandPreservesRoutesOutputsAndDiagnostics(t *te
 			}},
 			PaginationContext: &factoryapi.PaginationContext{
 				MaxResults: 1,
-				NextToken:  &nextToken,
 			},
 		}); err != nil {
 			t.Fatalf("encode response: %v", err)
@@ -152,7 +151,7 @@ func TestResolvedWorkListPublicCommandPreservesRoutesOutputsAndDiagnostics(t *te
 	if err := json.Unmarshal(output.Bytes(), &response); err != nil {
 		t.Fatalf("JSON output = %q: %v", output.String(), err)
 	}
-	assertResolvedListResponse(t, response, nextToken)
+	assertResolvedListResponse(t, response)
 	if strings.Contains(output.String(), "work list request") {
 		t.Fatalf("stdout contains diagnostics: %q", output.String())
 	}
@@ -936,17 +935,13 @@ func assertResolvedListQuery(t *testing.T, query url.Values, want map[string]str
 func assertResolvedListResponse(
 	t *testing.T,
 	response factoryapi.ListWorkResponse,
-	nextToken string,
 ) {
 	t.Helper()
 	if len(response.Results) != 1 {
 		t.Fatalf("JSON results = %#v, want one", response.Results)
 	}
-	if response.PaginationContext == nil || response.PaginationContext.NextToken == nil {
-		t.Fatalf("JSON pagination = %#v, want next token", response.PaginationContext)
-	}
-	if *response.PaginationContext.NextToken != nextToken {
-		t.Fatalf("JSON next token = %q, want %q", *response.PaginationContext.NextToken, nextToken)
+	if response.PaginationContext == nil || response.PaginationContext.NextToken != nil {
+		t.Fatalf("JSON pagination = %#v, want exhausted response", response.PaginationContext)
 	}
 }
 

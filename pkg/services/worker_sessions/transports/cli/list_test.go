@@ -321,86 +321,97 @@ func TestListTopLevelSupportsRepeatedStatesAndPositiveLimit(t *testing.T) {
 }
 
 func TestListTopLevelIsBoundedAndResumesWithExplicitNextToken(t *testing.T) {
-	var requests []url.Values
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		requests = append(requests, r.URL.Query())
-		w.Header().Set("Content-Type", "application/json")
-		nextToken := "cursor-2"
-		if r.URL.Query().Get("nextToken") == "" {
-			_ = json.NewEncoder(w).Encode(factoryapi.ListWorkerSessionsResponse{
-				Sessions: []factoryapi.WorkerSessionObservation{{
-					WorkerSessionId: "worker-session-1",
-					AttemptId:       "attempt-1",
-				}},
-				PaginationContext: &factoryapi.PaginationContext{MaxResults: 1, NextToken: &nextToken},
-			})
-			return
-		}
-		if got := r.URL.Query().Get("nextToken"); got != nextToken {
-			t.Fatalf("continuation token = %q, want %q", got, nextToken)
-		}
-		_ = json.NewEncoder(w).Encode(factoryapi.ListWorkerSessionsResponse{
+	server, requests := newBoundedWorkerSessionServer(t)
+	defer server.Close()
+
+	first := runBoundedWorkerSessionList(t, server.URL, "")
+	assertBoundedWorkerSessionPage(t, first, "worker-session-1", "cursor-2")
+	assertBoundedWorkerSessionRequest(t, (*requests)[0], "")
+
+	second := runBoundedWorkerSessionList(t, server.URL, "cursor-2")
+	assertBoundedWorkerSessionPage(t, second, "worker-session-2", "")
+	assertBoundedWorkerSessionRequest(t, (*requests)[1], "cursor-2")
+	if len(*requests) != 2 {
+		t.Fatalf("explicit continuation made %d total requests, want two", len(*requests))
+	}
+}
+
+func newBoundedWorkerSessionServer(t *testing.T) (*httptest.Server, *[]url.Values) {
+	t.Helper()
+	requests := []url.Values{}
+	nextToken := "cursor-2"
+	pages := map[string]factoryapi.ListWorkerSessionsResponse{
+		"": {
+			Sessions: []factoryapi.WorkerSessionObservation{{
+				WorkerSessionId: "worker-session-1",
+				AttemptId:       "attempt-1",
+			}},
+			PaginationContext: &factoryapi.PaginationContext{MaxResults: 1, NextToken: &nextToken},
+		},
+		nextToken: {
 			Sessions: []factoryapi.WorkerSessionObservation{{
 				WorkerSessionId: "worker-session-2",
 				AttemptId:       "attempt-2",
 			}},
 			PaginationContext: &factoryapi.PaginationContext{MaxResults: 1},
-		})
+		},
+	}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		query := r.URL.Query()
+		requests = append(requests, query)
+		page, ok := pages[query.Get("nextToken")]
+		if !ok {
+			t.Fatalf("unexpected continuation token %q", query.Get("nextToken"))
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(page)
 	}))
-	defer server.Close()
+	return server, &requests
+}
 
-	var firstOutput bytes.Buffer
+func runBoundedWorkerSessionList(t *testing.T, server string, nextToken string) factoryapi.ListWorkerSessionsResponse {
+	t.Helper()
+	var output bytes.Buffer
 	if err := NewList(testHTTPProtocol(t))(ListConfig{
-		Context: context.Background(), Server: server.URL,
-		MaxResults: 1, MaxResultsSet: true, OutputFormat: "json", Output: &firstOutput,
+		Context: context.Background(), Server: server,
+		MaxResults: 1, MaxResultsSet: true, NextToken: nextToken, OutputFormat: "json", Output: &output,
 	}); err != nil {
-		t.Fatalf("first bounded List() error = %v", err)
+		t.Fatalf("bounded List() error = %v", err)
 	}
-	var first factoryapi.ListWorkerSessionsResponse
-	if err := json.Unmarshal(firstOutput.Bytes(), &first); err != nil {
-		t.Fatalf("decode first JSON output: %v; output=%q", err, firstOutput.String())
+	var response factoryapi.ListWorkerSessionsResponse
+	if err := json.Unmarshal(output.Bytes(), &response); err != nil {
+		t.Fatalf("decode JSON output: %v; output=%q", err, output.String())
 	}
-	if len(first.Sessions) != 1 || first.Sessions[0].WorkerSessionId != "worker-session-1" {
-		t.Fatalf("first page = %#v, want worker-session-1", first.Sessions)
-	}
-	if first.PaginationContext == nil || first.PaginationContext.NextToken == nil || *first.PaginationContext.NextToken != "cursor-2" {
-		t.Fatalf("first pagination = %#v, want cursor-2", first.PaginationContext)
-	}
-	if len(requests) != 1 {
-		t.Fatalf("first invocation made %d requests, want one bounded page", len(requests))
-	}
-	if got := requests[0].Get("maxResults"); got != "1" {
-		t.Fatalf("first maxResults = %q, want 1", got)
-	}
-	if got := requests[0].Get("nextToken"); got != "" {
-		t.Fatalf("first nextToken = %q, want omitted", got)
-	}
+	return response
+}
 
-	var secondOutput bytes.Buffer
-	if err := NewList(testHTTPProtocol(t))(ListConfig{
-		Context: context.Background(), Server: server.URL,
-		MaxResults: 1, MaxResultsSet: true, NextToken: "cursor-2", OutputFormat: "json", Output: &secondOutput,
-	}); err != nil {
-		t.Fatalf("explicit continuation List() error = %v", err)
+func assertBoundedWorkerSessionPage(t *testing.T, response factoryapi.ListWorkerSessionsResponse, wantID string, wantNextToken string) {
+	t.Helper()
+	if len(response.Sessions) != 1 || response.Sessions[0].WorkerSessionId != wantID {
+		t.Fatalf("page = %#v, want %s", response.Sessions, wantID)
 	}
-	var second factoryapi.ListWorkerSessionsResponse
-	if err := json.Unmarshal(secondOutput.Bytes(), &second); err != nil {
-		t.Fatalf("decode second JSON output: %v; output=%q", err, secondOutput.String())
+	if response.PaginationContext == nil {
+		t.Fatal("pagination context = nil")
 	}
-	if len(second.Sessions) != 1 || second.Sessions[0].WorkerSessionId != "worker-session-2" {
-		t.Fatalf("second page = %#v, want worker-session-2", second.Sessions)
+	if wantNextToken == "" {
+		if response.PaginationContext.NextToken != nil {
+			t.Fatalf("pagination context = %#v, want exhausted page", response.PaginationContext)
+		}
+		return
 	}
-	if second.PaginationContext == nil || second.PaginationContext.NextToken != nil {
-		t.Fatalf("second pagination = %#v, want exhausted page", second.PaginationContext)
+	if response.PaginationContext.NextToken == nil || *response.PaginationContext.NextToken != wantNextToken {
+		t.Fatalf("pagination context = %#v, want %s", response.PaginationContext, wantNextToken)
 	}
-	if len(requests) != 2 {
-		t.Fatalf("explicit continuation made %d total requests, want two", len(requests))
+}
+
+func assertBoundedWorkerSessionRequest(t *testing.T, query url.Values, wantNextToken string) {
+	t.Helper()
+	if got := query.Get("maxResults"); got != "1" {
+		t.Fatalf("maxResults = %q, want 1", got)
 	}
-	if got := requests[1].Get("maxResults"); got != "1" {
-		t.Fatalf("second maxResults = %q, want 1", got)
-	}
-	if got := requests[1].Get("nextToken"); got != "cursor-2" {
-		t.Fatalf("second nextToken = %q, want cursor-2", got)
+	if got := query.Get("nextToken"); got != wantNextToken {
+		t.Fatalf("nextToken = %q, want %q", got, wantNextToken)
 	}
 }
 
