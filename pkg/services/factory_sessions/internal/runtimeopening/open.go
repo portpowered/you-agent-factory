@@ -277,7 +277,11 @@ func openRuntime(
 		resumeInput = &input
 	}
 	var restoredWorldState *factorydefinitions.FactoryWorldState
-	if load.ReplayArtifact == nil {
+	// A portable resume input owns its selected-history reconstruction. Only a
+	// direct live opening should restore the current board recording; applying
+	// that restart-only probe to an explicit resume artifact would reject valid
+	// replay fixtures that intentionally have no current-board recording.
+	if load.ReplayArtifact == nil && resumeInput == nil {
 		allowMissingBoardHistory := false
 		if strings.TrimSpace(configured.Recordings.RecordPath) != "" {
 			allowMissingBoardHistory, err = currentBoardHistoryMayBeUninitialized(

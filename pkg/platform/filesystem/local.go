@@ -3,17 +3,10 @@
 package filesystem
 
 import (
-	"errors"
 	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
-	"time"
-)
-
-const (
-	localReplaceAttempts = 20
-	localReplaceDelay    = 10 * time.Millisecond
 )
 
 // Local exposes the host filesystem effects selected by Wire. The replacement
@@ -101,55 +94,6 @@ func (Local) Remove(path string) error                     { return os.Remove(pa
 func (Local) RemoveAll(path string) error                  { return os.RemoveAll(path) }
 func (Local) Chmod(path string, mode fs.FileMode) error    { return os.Chmod(path, mode) }
 func (Local) Rename(oldPath, newPath string) error         { return os.Rename(oldPath, newPath) }
-
-// RenameReplacing publishes oldPath at newPath. Windows cannot rename over an
-// existing file, so the replacement path retries the remove-and-rename window
-// that can be held briefly by antivirus or indexing processes.
-func (local Local) RenameReplacing(oldPath, newPath string) error {
-	return renameReplacing(
-		oldPath,
-		newPath,
-		local.AllowRenameReplacement,
-		local.Rename,
-		local.Remove,
-		local.Stat,
-	)
-}
-
-func renameReplacing(
-	oldPath string,
-	newPath string,
-	allowReplacement bool,
-	rename func(string, string) error,
-	remove func(string) error,
-	stat func(string) (fs.FileInfo, error),
-) error {
-	lastErr := rename(oldPath, newPath)
-	if lastErr == nil {
-		return nil
-	}
-	if !allowReplacement || !errors.Is(lastErr, os.ErrExist) {
-		return lastErr
-	}
-	if _, err := stat(oldPath); err != nil {
-		return lastErr
-	}
-	for range localReplaceAttempts {
-		if _, err := stat(oldPath); err != nil {
-			return lastErr
-		}
-		if err := remove(newPath); err != nil && !errors.Is(err, os.ErrNotExist) {
-			lastErr = err
-		} else {
-			lastErr = rename(oldPath, newPath)
-			if lastErr == nil {
-				return nil
-			}
-		}
-		time.Sleep(localReplaceDelay)
-	}
-	return lastErr
-}
 func (Local) WriteFile(path string, data []byte, mode fs.FileMode) error {
 	return os.WriteFile(path, data, mode)
 }

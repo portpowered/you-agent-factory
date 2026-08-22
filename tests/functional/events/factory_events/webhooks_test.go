@@ -289,6 +289,98 @@ func assertFunctionalDurableAppenderFailurePaths(t *testing.T) {
 	}
 }
 
+func TestFunctionalLocalFilesystemPublishesReplacementAndTemporaryFiles(t *testing.T) {
+	t.Parallel()
+
+	local := platformfilesystem.Local{AllowRenameReplacement: true}
+	dir := t.TempDir()
+	workingDirectory, err := local.Getwd()
+	if err != nil || strings.TrimSpace(workingDirectory) == "" {
+		t.Fatalf("Getwd() = %q, %v; want a non-empty working directory", workingDirectory, err)
+	}
+	absolutePath, err := local.Abs(filepath.Join(dir, "artifact.json"))
+	if err != nil || !filepath.IsAbs(absolutePath) {
+		t.Fatalf("Abs(artifact path) = %q, %v; want an absolute path", absolutePath, err)
+	}
+
+	temporary, err := local.CreateTemp(dir, "functional-artifact-*")
+	if err != nil {
+		t.Fatalf("CreateTemp() error = %v", err)
+	}
+	if temporary.Name() == "" {
+		t.Fatal("CreateTemp() returned a temporary file without a name")
+	}
+	if _, err := temporary.WriteString("temporary artifact"); err != nil {
+		t.Fatalf("temporary WriteString() error = %v", err)
+	}
+	if err := temporary.Close(); err != nil {
+		t.Fatalf("temporary Close() error = %v", err)
+	}
+	if err := local.Remove(temporary.Name()); err != nil {
+		t.Fatalf("Remove(temporary artifact) error = %v", err)
+	}
+	createdPath := filepath.Join(dir, "created-artifact.json")
+	created, err := local.Create(createdPath)
+	if err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
+	if _, err := created.Write([]byte("created artifact")); err != nil {
+		t.Fatalf("Create().Write() error = %v", err)
+	}
+	if err := created.Close(); err != nil {
+		t.Fatalf("Create().Close() error = %v", err)
+	}
+	opened, err := local.Open(createdPath)
+	if err != nil {
+		t.Fatalf("Open() error = %v", err)
+	}
+	openedContents, err := io.ReadAll(opened)
+	if err != nil {
+		t.Fatalf("Open().Read() error = %v", err)
+	}
+	if err := opened.Close(); err != nil {
+		t.Fatalf("Open().Close() error = %v", err)
+	}
+	if got, want := string(openedContents), "created artifact"; got != want {
+		t.Fatalf("opened contents = %q, want %q", got, want)
+	}
+	if err := local.AppendDurable(os.DevNull, []byte("discarded artifact\n")); err == nil {
+		t.Fatal("AppendDurable(os.DevNull) succeeded, want durable-flush error")
+	}
+
+	sourcePath := filepath.Join(dir, "next-recording.json")
+	destinationPath := filepath.Join(dir, "recording.json")
+	if err := local.WriteFile(sourcePath, []byte("new recording"), 0o600); err != nil {
+		t.Fatalf("WriteFile(source) error = %v", err)
+	}
+	if _, err := local.Readlink(sourcePath); err == nil {
+		t.Fatal("Readlink(regular file) succeeded, want a non-symlink error")
+	}
+	if err := local.WriteFile(destinationPath, []byte("old recording"), 0o600); err != nil {
+		t.Fatalf("WriteFile(destination) error = %v", err)
+	}
+	matches, err := local.Glob(filepath.Join(dir, "*.json"))
+	if err != nil {
+		t.Fatalf("Glob() error = %v", err)
+	}
+	if len(matches) != 3 {
+		t.Fatalf("Glob() matches = %#v, want the three JSON artifacts", matches)
+	}
+	if err := local.RenameReplacing(sourcePath, destinationPath); err != nil {
+		t.Fatalf("RenameReplacing() error = %v", err)
+	}
+	contents, err := local.ReadFile(destinationPath)
+	if err != nil {
+		t.Fatalf("ReadFile(replaced destination) error = %v", err)
+	}
+	if got, want := string(contents), "new recording"; got != want {
+		t.Fatalf("replaced destination contents = %q, want %q", got, want)
+	}
+	if err := local.RenameReplacing(filepath.Join(dir, "missing-recording.json"), destinationPath); err == nil {
+		t.Fatal("RenameReplacing(missing source) succeeded, want an error")
+	}
+}
+
 type functionalWebhookRequest struct {
 	path    string
 	eventID string
