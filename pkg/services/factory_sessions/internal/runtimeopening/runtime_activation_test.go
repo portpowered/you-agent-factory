@@ -105,6 +105,41 @@ func TestRestoreCurrentBoardStatePreservesDetachedMixedWorkProjection(t *testing
 	}
 }
 
+func TestRestoreCurrentBoardStateScopesArtifactReferenceToFactorySession(t *testing.T) {
+	t.Parallel()
+
+	const basePath = "/recordings/factory-session-__factory_session_id__-1.json"
+	for _, tc := range []struct {
+		name      string
+		sessionID string
+		wantPath  string
+	}{
+		{name: "default session", sessionID: "~default", wantPath: "/recordings/factory-session-~default-1.json"},
+		{name: "named session", sessionID: "session-a", wantPath: "/recordings/factory-session-session-a-1.json"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			reader := &historicalBoardReaderStub{result: recordings.HistoricalRecordingQueryResult{
+				WorldState: recordings.WorldStateView{
+					SchemaVersion: recordings.WorldStateViewSchemaV1,
+					Scope:         recordings.CanonicalEventScope{FactorySessionID: tc.sessionID},
+					Payload:       "{}",
+				},
+			}}
+			if _, err := restoreCurrentBoardState(reader, basePath, tc.sessionID, false); err != nil {
+				t.Fatalf("restore current board: %v", err)
+			}
+			artifact := string(reader.request.Recording.Artifact)
+			if artifact != tc.wantPath {
+				t.Fatalf("artifact reference = %q, want %q", artifact, tc.wantPath)
+			}
+			if strings.Contains(artifact, "__") {
+				t.Fatalf("artifact reference contains unresolved session token: %q", artifact)
+			}
+		})
+	}
+}
+
 func TestRestoreCurrentBoardStateFailsClosedForCorruptHistory(t *testing.T) {
 	t.Parallel()
 

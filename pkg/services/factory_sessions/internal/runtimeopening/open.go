@@ -825,6 +825,7 @@ func restoreCurrentBoardState(
 	if recordPath == "" {
 		return nil, nil
 	}
+	recordPath = factoryruntime.SessionScopedRecordPath(recordPath, sessionID)
 	if service == nil {
 		return nil, fmt.Errorf("restore current Factory Session board: Recordings history is unavailable")
 	}
