@@ -139,6 +139,29 @@ func TestCheckCoverageDefaultFloorEvaluatesUnlistedPackagesPerLane(t *testing.T)
 	}
 }
 
+// TestCheckCoverageDefaultFloorSkipsUnlistedFunctionalPackageWithoutStatements
+// keeps the empty-denominator case separate from the measurable functional
+// 0/100 regression above: a package with no statements remains vacuously
+// passing even under the positive functional default.
+func TestCheckCoverageDefaultFloorSkipsUnlistedFunctionalPackageWithoutStatements(t *testing.T) {
+	t.Parallel()
+
+	unlisted := modulePath + "/pkg/platform/unlisted"
+	manifest := coverageManifest{
+		Version: coverageManifestVersion,
+		Lane:    "functional",
+	}
+	totals := map[string]packageCoverageTotals{unlisted: {}}
+
+	if failures := checkCoverageDefaultFloor(manifest, totals, "minimums.json", nil); len(failures) != 0 {
+		t.Fatalf("default-floor failures = %v, want none for a zero-statement package", failures)
+	}
+	gates := coverageManifestGatedPackages(manifest, totals)
+	if _, ok := gates[unlisted]; ok {
+		t.Fatalf("default-floor gate = %+v, want no gate for a zero-statement package", gates[unlisted])
+	}
+}
+
 // TestCheckCoverageDefaultFloorNamesTheDefaultRemedy proves the diagnostic
 // explains which floor was applied and how to override it.
 func TestCheckCoverageDefaultFloorNamesTheDefaultRemedy(t *testing.T) {
