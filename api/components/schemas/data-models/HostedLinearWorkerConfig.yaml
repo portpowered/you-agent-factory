@@ -1,6 +1,6 @@
 description: Provider-specific poller configuration for the built-in hosted Linear worker.
 type: object
-additionalProperties: false
+additionalProperties: true
 properties:
   pollInterval:
     type: string

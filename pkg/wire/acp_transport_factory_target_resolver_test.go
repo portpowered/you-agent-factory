@@ -40,6 +40,7 @@ func operatorDefaultsResolverForTest(t *testing.T) operatorsettings.DefaultsReso
 		provideOperatorSettingsCreateTemporaryFile(edges),
 		provideOperatorSettingsProviderCatalog(providersRoot),
 		provideOperatorConfigDecoder(),
+		provideOperatorConfigDiagnosticsDecoder(),
 		provideOperatorConfigEncoder(),
 		provideOperatorSettingsIDGenerator(edges),
 		providersRoot,

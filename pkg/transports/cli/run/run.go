@@ -336,7 +336,7 @@ func Open(
 		presentationOwner = presentations[0]
 	}
 	return open(ctx, cfg, buildRunner, invocation, presentation, prepareWorkTarget,
-		loadMockWorkers, buildRuntimeRequest, presentationOwner, nil)
+		loadMockWorkers, nil, buildRuntimeRequest, presentationOwner, nil)
 }
 
 // OpenWithVisualizationOwner is the canonical CLI composition entrypoint.
@@ -355,7 +355,28 @@ func OpenWithVisualizationOwner(
 	visualizations factoryvisualization.RuntimeSinkOwner,
 ) (*Operation, error) {
 	return open(ctx, cfg, buildRunner, invocation, presentation, prepareWorkTarget,
-		loadMockWorkers, buildRuntimeRequest, presentations, visualizations)
+		loadMockWorkers, nil, buildRuntimeRequest, presentations, visualizations)
+}
+
+// OpenWithVisualizationOwnerAndDiagnostics is the canonical composition entry
+// point when the mock-worker loader also reports ignored forward-compatible
+// fields. The older Open functions remain available for callers that provide
+// only the established loader contract.
+func OpenWithVisualizationOwnerAndDiagnostics(
+	ctx context.Context,
+	cfg RunConfig,
+	buildRunner RuntimeRunnerBuilder,
+	invocation InvocationOperation,
+	presentation factoryvisualization.ResponsePresentation,
+	prepareWorkTarget work.SingleWorkTargetPreparation,
+	loadMockWorkers workers.MockWorkersConfigLoader,
+	loadMockWorkersWithDiagnostics workers.MockWorkersConfigDiagnosticsLoader,
+	buildRuntimeRequest RuntimeOpeningRequestFactory,
+	presentations factorysessions.OpeningPresentationOwner,
+	visualizations factoryvisualization.RuntimeSinkOwner,
+) (*Operation, error) {
+	return open(ctx, cfg, buildRunner, invocation, presentation, prepareWorkTarget,
+		loadMockWorkers, loadMockWorkersWithDiagnostics, buildRuntimeRequest, presentations, visualizations)
 }
 
 func open(
@@ -366,6 +387,7 @@ func open(
 	presentation factoryvisualization.ResponsePresentation,
 	prepareWorkTarget work.SingleWorkTargetPreparation,
 	loadMockWorkers workers.MockWorkersConfigLoader,
+	loadMockWorkersWithDiagnostics workers.MockWorkersConfigDiagnosticsLoader,
 	buildRuntimeRequest RuntimeOpeningRequestFactory,
 	presentationOwner factorysessions.OpeningPresentationOwner,
 	visualizations factoryvisualization.RuntimeSinkOwner,
@@ -385,9 +407,18 @@ func open(
 		return nil, err
 	}
 
-	mockWorkersConfig, err := loadSelectedMockWorkersConfig(cfg, loadMockWorkers)
+	mockWorkersConfig, ignoredJSONPaths, err := loadSelectedMockWorkersConfigWithDiagnostics(
+		cfg, loadMockWorkers, loadMockWorkersWithDiagnostics,
+	)
 	if err != nil {
 		return nil, err
+	}
+	if len(ignoredJSONPaths) > 0 {
+		logger.Warn(
+			"workers.mock_workers_config.unknown_fields_ignored",
+			zap.String("path", cfg.MockWorkersConfigPath),
+			zap.Strings("json_paths", ignoredJSONPaths),
+		)
 	}
 
 	requestedPort := cfg.Port
@@ -616,13 +647,27 @@ func loadSelectedMockWorkersConfig(
 	cfg RunConfig,
 	load workers.MockWorkersConfigLoader,
 ) (*workers.MockWorkersConfig, error) {
+	config, _, err := loadSelectedMockWorkersConfigWithDiagnostics(cfg, load, nil)
+	return config, err
+}
+
+func loadSelectedMockWorkersConfigWithDiagnostics(
+	cfg RunConfig,
+	load workers.MockWorkersConfigLoader,
+	loadWithDiagnostics workers.MockWorkersConfigDiagnosticsLoader,
+) (*workers.MockWorkersConfig, []string, error) {
 	if !cfg.MockWorkersEnabled {
-		return nil, nil
+		return nil, nil, nil
+	}
+	if loadWithDiagnostics != nil {
+		config, diagnostics, err := loadWithDiagnostics(cfg.MockWorkersConfigPath)
+		return config, diagnostics.Paths(), err
 	}
 	if load == nil {
-		return nil, fmt.Errorf("load mock workers config: Workers config loader is required")
+		return nil, nil, fmt.Errorf("load mock workers config: Workers config loader is required")
 	}
-	return load(cfg.MockWorkersConfigPath)
+	config, err := load(cfg.MockWorkersConfigPath)
+	return config, nil, err
 }
 
 func resolveRecordPathForRun(cfg RunConfig) (resolvedRunRecordPath, error) {

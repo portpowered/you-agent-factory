@@ -8,34 +8,65 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"reflect"
+	"sort"
+	"strconv"
 	"strings"
 
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
-// Decode strictly decodes one generated GlobalConfig document and maps it to
-// normalized Operator Settings values.
+// Decode decodes one generated GlobalConfig document and maps it to normalized
+// Operator Settings values. Unknown object fields are ignored; use
+// DecodeWithDiagnostics when the owning caller needs their safe JSON paths.
 func Decode(data []byte) (operatorsettings.Config, error) {
+	config, _, err := DecodeWithDiagnostics(data)
+	return config, err
+}
+
+// DecodeWithDiagnostics decodes one generated GlobalConfig document, maps it
+// to normalized Operator Settings values, and reports sorted unique paths for
+// unknown object fields. Known-field validation and exactly-one-document
+// enforcement remain strict.
+func DecodeWithDiagnostics(
+	data []byte,
+) (operatorsettings.Config, operatorsettings.ConfigDecodeDiagnostics, error) {
 	decoder := json.NewDecoder(bytes.NewReader(data))
-	decoder.DisallowUnknownFields()
+
+	var raw json.RawMessage
+	if err := decoder.Decode(&raw); err != nil {
+		return operatorsettings.Config{}, operatorsettings.ConfigDecodeDiagnostics{}, fmt.Errorf("decode generated global config: %w", err)
+	}
+	normalized, err := canonicalizeKnownJSONFieldNames(raw)
+	if err != nil {
+		return operatorsettings.Config{}, operatorsettings.ConfigDecodeDiagnostics{}, fmt.Errorf("decode generated global config: %w", err)
+	}
 
 	var generated *factoryapi.GlobalConfig
-	if err := decoder.Decode(&generated); err != nil {
-		return operatorsettings.Config{}, fmt.Errorf("decode generated global config: %w", err)
+	if err := json.Unmarshal(normalized, &generated); err != nil {
+		return operatorsettings.Config{}, operatorsettings.ConfigDecodeDiagnostics{}, fmt.Errorf("decode generated global config: %w", err)
 	}
 	if generated == nil {
-		return operatorsettings.Config{}, fmt.Errorf("decode generated global config: expected a JSON object")
+		return operatorsettings.Config{}, operatorsettings.ConfigDecodeDiagnostics{}, fmt.Errorf("decode generated global config: expected a JSON object")
 	}
 	if err := requireEOF(decoder); err != nil {
-		return operatorsettings.Config{}, err
+		return operatorsettings.Config{}, operatorsettings.ConfigDecodeDiagnostics{}, err
 	}
 
 	config, err := mapConfig(*generated)
 	if err != nil {
-		return operatorsettings.Config{}, err
+		return operatorsettings.Config{}, operatorsettings.ConfigDecodeDiagnostics{}, err
 	}
-	return config.Normalize()
+	config, err = config.Normalize()
+	if err != nil {
+		return operatorsettings.Config{}, operatorsettings.ConfigDecodeDiagnostics{}, err
+	}
+	paths, err := collectUnknownJSONPaths(data)
+	if err != nil {
+		return operatorsettings.Config{}, operatorsettings.ConfigDecodeDiagnostics{}, fmt.Errorf("decode generated global config: %w", err)
+	}
+	return config, operatorsettings.ConfigDecodeDiagnostics{IgnoredJSONPaths: paths}, nil
 }
 
 func requireEOF(decoder *json.Decoder) error {
@@ -47,6 +78,253 @@ func requireEOF(decoder *json.Decoder) error {
 		return fmt.Errorf("decode generated global config: %w", err)
 	}
 	return fmt.Errorf("decode generated global config: unexpected trailing JSON")
+}
+
+var globalConfigRawMessageType = reflect.TypeOf(json.RawMessage{})
+
+type jsonField struct {
+	name string
+	typ  reflect.Type
+}
+
+// canonicalizeKnownJSONFieldNames restores encoding/json's case-insensitive
+// struct-field matching before handing the value to generated models whose
+// AdditionalProperties codecs use exact map keys. This keeps legacy customer
+// spellings such as backendScopeId equivalent to backendScopeID while leaving
+// unknown keys untouched for diagnostics and generated-model tolerance.
+func canonicalizeKnownJSONFieldNames(raw json.RawMessage) ([]byte, error) {
+	decoder := json.NewDecoder(bytes.NewReader(raw))
+	decoder.UseNumber()
+	var value any
+	if err := decoder.Decode(&value); err != nil {
+		return nil, err
+	}
+	value = canonicalizeKnownJSONFieldNamesForType(value, reflect.TypeOf(factoryapi.GlobalConfig{}))
+	return json.Marshal(value)
+}
+
+func canonicalizeKnownJSONFieldNamesForType(value any, typ reflect.Type) any {
+	if value == nil || typ == nil {
+		return value
+	}
+	typ = dereferenceJSONType(typ)
+	if typ == globalConfigRawMessageType {
+		return value
+	}
+
+	switch typ.Kind() {
+	case reflect.Map:
+		return canonicalizeKnownJSONFieldNamesForMap(value, typ)
+	case reflect.Slice, reflect.Array:
+		return canonicalizeKnownJSONFieldNamesForSequence(value, typ)
+	case reflect.Struct:
+		return canonicalizeKnownJSONFieldNamesForStruct(value, typ)
+	default:
+		return value
+	}
+}
+
+func canonicalizeKnownJSONFieldNamesForMap(value any, typ reflect.Type) any {
+	object, ok := value.(map[string]any)
+	if !ok || typ.Key().Kind() != reflect.String {
+		return value
+	}
+	normalized := make(map[string]any, len(object))
+	for key, child := range object {
+		normalized[key] = canonicalizeKnownJSONFieldNamesForType(child, typ.Elem())
+	}
+	return normalized
+}
+
+func canonicalizeKnownJSONFieldNamesForSequence(value any, typ reflect.Type) any {
+	values, ok := value.([]any)
+	if !ok {
+		return value
+	}
+	normalized := make([]any, len(values))
+	for index, item := range values {
+		normalized[index] = canonicalizeKnownJSONFieldNamesForType(item, typ.Elem())
+	}
+	return normalized
+}
+
+func canonicalizeKnownJSONFieldNamesForStruct(value any, typ reflect.Type) any {
+	object, ok := value.(map[string]any)
+	if !ok {
+		return value
+	}
+	fields := jsonFields(typ)
+	normalized := make(map[string]any, len(object))
+	for key, child := range object {
+		field, known := fields[strings.ToLower(key)]
+		if !known {
+			normalized[key] = child
+			continue
+		}
+		normalized[field.name] = canonicalizeKnownJSONFieldNamesForType(child, field.typ)
+	}
+	return normalized
+}
+
+func collectUnknownJSONPaths(data []byte) ([]string, error) {
+	value, err := decodeOneJSONValue(data)
+	if err != nil {
+		return nil, err
+	}
+	var paths []string
+	collectUnknownJSONPathsForType(value, reflect.TypeOf(factoryapi.GlobalConfig{}), "$", &paths)
+	return sortedUniqueJSONPaths(paths), nil
+}
+
+func decodeOneJSONValue(data []byte) (any, error) {
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.UseNumber()
+	var value any
+	if err := decoder.Decode(&value); err != nil {
+		return nil, err
+	}
+	var trailing json.RawMessage
+	if err := decoder.Decode(&trailing); err != io.EOF {
+		if err == nil {
+			return nil, fmt.Errorf("unexpected trailing JSON value")
+		}
+		return nil, err
+	}
+	return value, nil
+}
+
+func collectUnknownJSONPathsForType(value any, typ reflect.Type, path string, paths *[]string) {
+	if value == nil || typ == nil {
+		return
+	}
+	typ = dereferenceJSONType(typ)
+	if typ == globalConfigRawMessageType {
+		return
+	}
+
+	switch typ.Kind() {
+	case reflect.Map:
+		collectUnknownJSONPathsForMap(value, typ, path, paths)
+	case reflect.Slice, reflect.Array:
+		collectUnknownJSONPathsForSequence(value, typ, path, paths)
+	case reflect.Struct:
+		collectUnknownJSONPathsForStruct(value, typ, path, paths)
+	}
+}
+
+func dereferenceJSONType(typ reflect.Type) reflect.Type {
+	for typ.Kind() == reflect.Pointer {
+		typ = typ.Elem()
+	}
+	return typ
+}
+
+func collectUnknownJSONPathsForMap(value any, typ reflect.Type, path string, paths *[]string) {
+	object, ok := value.(map[string]any)
+	if !ok || typ.Key().Kind() != reflect.String {
+		return
+	}
+	for key, child := range object {
+		collectUnknownJSONPathsForType(child, typ.Elem(), appendJSONPath(path, key), paths)
+	}
+}
+
+func collectUnknownJSONPathsForSequence(value any, typ reflect.Type, path string, paths *[]string) {
+	values, ok := value.([]any)
+	if !ok {
+		return
+	}
+	for index, item := range values {
+		collectUnknownJSONPathsForType(item, typ.Elem(), path+"["+strconv.Itoa(index)+"]", paths)
+	}
+}
+
+func collectUnknownJSONPathsForStruct(value any, typ reflect.Type, path string, paths *[]string) {
+	object, ok := value.(map[string]any)
+	if !ok {
+		return
+	}
+	fields := jsonFieldTypes(typ)
+	for key, child := range object {
+		fieldPath := appendJSONPath(path, key)
+		fieldType, known := fields[strings.ToLower(key)]
+		if !known {
+			*paths = append(*paths, fieldPath)
+			continue
+		}
+		collectUnknownJSONPathsForType(child, fieldType, fieldPath, paths)
+	}
+}
+
+func jsonFieldTypes(typ reflect.Type) map[string]reflect.Type {
+	fields := jsonFields(typ)
+	types := make(map[string]reflect.Type, len(fields))
+	for key, field := range fields {
+		types[key] = field.typ
+	}
+	return types
+}
+
+func jsonFields(typ reflect.Type) map[string]jsonField {
+	fields := make(map[string]jsonField)
+	for index := 0; index < typ.NumField(); index++ {
+		field := typ.Field(index)
+		if field.PkgPath != "" {
+			continue
+		}
+		tag := field.Tag.Get("json")
+		if tag == "-" {
+			continue
+		}
+		name := strings.Split(tag, ",")[0]
+		if name == "" {
+			name = field.Name
+		}
+		fields[strings.ToLower(name)] = jsonField{name: name, typ: field.Type}
+	}
+	return fields
+}
+
+func appendJSONPath(path, key string) string {
+	if isSimpleJSONPathKey(key) {
+		return path + "." + key
+	}
+	return path + "[" + strconv.Quote(key) + "]"
+}
+
+func isSimpleJSONPathKey(key string) bool {
+	if key == "" {
+		return false
+	}
+	for index, character := range key {
+		if (character >= 'a' && character <= 'z') ||
+			(character >= 'A' && character <= 'Z') ||
+			(character >= '0' && character <= '9' && index > 0) ||
+			character == '_' || character == '-' {
+			continue
+		}
+		return false
+	}
+	return true
+}
+
+func sortedUniqueJSONPaths(paths []string) []string {
+	if len(paths) == 0 {
+		return nil
+	}
+	unique := make(map[string]struct{}, len(paths))
+	for _, path := range paths {
+		path = strings.TrimSpace(path)
+		if path != "" {
+			unique[path] = struct{}{}
+		}
+	}
+	result := make([]string, 0, len(unique))
+	for path := range unique {
+		result = append(result, path)
+	}
+	sort.Strings(result)
+	return result
 }
 
 // pkgmaintcheck:ignore-cyclomatic-complexity pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption

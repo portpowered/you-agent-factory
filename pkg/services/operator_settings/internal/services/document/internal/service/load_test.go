@@ -63,7 +63,6 @@ func TestLoadDocument_MalformedBytesFailClosedWithoutPartialDocument(t *testing.
 	}{
 		{name: "malformed-json", data: `{"defaults":`},
 		{name: "trailing-json", data: `{} {}`},
-		{name: "unknown-top-level", data: `{"unexpected":true}`},
 		{name: "null-document", data: `null`},
 	} {
 		t.Run(test.name, func(t *testing.T) {
@@ -82,6 +81,33 @@ func TestLoadDocument_MalformedBytesFailClosedWithoutPartialDocument(t *testing.
 				t.Fatalf("LoadDocument() = %#v, want zero result on malformed load", loaded)
 			}
 		})
+	}
+}
+
+func TestLoadDocument_UnknownFieldsPreserveKnownDocumentAndPaths(t *testing.T) {
+	t.Parallel()
+
+	path := filepath.Join(t.TempDir(), "config.json")
+	service := newDocumentLoadService(t, map[string][]byte{
+		path: []byte(`{
+			"defaults": {"workerModelProvider": "codex", "workerModel": "gpt-5", "futureDefault": "secret"},
+			"futureTopLevel": true
+		}`),
+	})
+
+	loaded, err := service.LoadDocument(operatorsettings.LoadDocumentRequest{Path: path})
+	if err != nil {
+		t.Fatalf("LoadDocument() = %v", err)
+	}
+	if loaded.Document.Defaults != (operatorsettings.DocumentDefaults{
+		WorkerModelProvider: "codex",
+		WorkerModel:         "gpt-5",
+	}) {
+		t.Fatalf("known defaults = %#v, want codex/gpt-5", loaded.Document.Defaults)
+	}
+	wantPaths := []string{"$.defaults.futureDefault", "$.futureTopLevel"}
+	if got := loaded.IgnoredJSONPaths; !reflect.DeepEqual(got, wantPaths) {
+		t.Fatalf("ignored JSON paths = %#v, want %#v", got, wantPaths)
 	}
 }
 
@@ -146,6 +172,7 @@ func newDocumentLoadService(t *testing.T, files map[string][]byte) *internalserv
 			t.Fatal("provider catalog is unexpected during load")
 			return "", false
 		},
+		globalconfigmapping.DecodeWithDiagnostics,
 	)
 }
 

@@ -13,11 +13,13 @@ var errDocumentOwnerUnavailable = errors.New("operator settings document owner i
 // Service keeps document load/update/persist behavior behind the
 // Operator Settings-owned document capability.
 type Service struct {
-	files      operatorsettings.FileSystem
-	createTemp operatorsettings.CreateTemporaryFile
-	decoder    operatorsettings.ConfigDecoder
-	encoder    operatorsettings.ConfigEncoder
-	providers  operatorsettings.ProviderCatalog
+	files             operatorsettings.FileSystem
+	createTemp        operatorsettings.CreateTemporaryFile
+	decoder           operatorsettings.ConfigDecoder
+	encoder           operatorsettings.ConfigEncoder
+	providers         operatorsettings.ProviderCatalog
+	diagnosticDecoder operatorsettings.ConfigDiagnosticsDecoder
+	preserveUnknown   operatorsettings.ConfigDocumentPreserver
 }
 
 var _ settingsdocument.Service = (*Service)(nil)
@@ -31,13 +33,46 @@ func New(
 	decoder operatorsettings.ConfigDecoder,
 	encoder operatorsettings.ConfigEncoder,
 	providers operatorsettings.ProviderCatalog,
+	diagnosticDecoders ...operatorsettings.ConfigDiagnosticsDecoder,
 ) *Service {
+	return newService(files, createTemp, decoder, encoder, providers, nil, diagnosticDecoders...)
+}
+
+// NewWithPreserver constructs the private document owner with the optional
+// compatibility-preservation port used by production Operator Settings.
+func NewWithPreserver(
+	files operatorsettings.FileSystem,
+	createTemp operatorsettings.CreateTemporaryFile,
+	decoder operatorsettings.ConfigDecoder,
+	encoder operatorsettings.ConfigEncoder,
+	providers operatorsettings.ProviderCatalog,
+	preserveUnknown operatorsettings.ConfigDocumentPreserver,
+	diagnosticDecoders ...operatorsettings.ConfigDiagnosticsDecoder,
+) *Service {
+	return newService(files, createTemp, decoder, encoder, providers, preserveUnknown, diagnosticDecoders...)
+}
+
+func newService(
+	files operatorsettings.FileSystem,
+	createTemp operatorsettings.CreateTemporaryFile,
+	decoder operatorsettings.ConfigDecoder,
+	encoder operatorsettings.ConfigEncoder,
+	providers operatorsettings.ProviderCatalog,
+	preserveUnknown operatorsettings.ConfigDocumentPreserver,
+	diagnosticDecoders ...operatorsettings.ConfigDiagnosticsDecoder,
+) *Service {
+	var diagnosticDecoder operatorsettings.ConfigDiagnosticsDecoder
+	if len(diagnosticDecoders) > 0 {
+		diagnosticDecoder = diagnosticDecoders[0]
+	}
 	return &Service{
-		files:      files,
-		createTemp: createTemp,
-		decoder:    decoder,
-		encoder:    encoder,
-		providers:  providers,
+		files:             files,
+		createTemp:        createTemp,
+		decoder:           decoder,
+		encoder:           encoder,
+		providers:         providers,
+		diagnosticDecoder: diagnosticDecoder,
+		preserveUnknown:   preserveUnknown,
 	}
 }
 
@@ -51,8 +86,24 @@ func (service *Service) RebindDocumentOwner(
 	decoder operatorsettings.ConfigDecoder,
 	encoder operatorsettings.ConfigEncoder,
 	providers operatorsettings.ProviderCatalog,
+	diagnosticDecoders ...operatorsettings.ConfigDiagnosticsDecoder,
 ) operatorsettings.DocumentOwner {
-	return New(files, createTemp, decoder, encoder, providers)
+	return New(files, createTemp, decoder, encoder, providers, diagnosticDecoders...)
+}
+
+// RebindDocumentOwnerWithPreserver returns a new owner over compatibility
+// adapter ports while retaining the production unknown-field preservation
+// policy.
+func (service *Service) RebindDocumentOwnerWithPreserver(
+	files operatorsettings.FileSystem,
+	createTemp operatorsettings.CreateTemporaryFile,
+	decoder operatorsettings.ConfigDecoder,
+	encoder operatorsettings.ConfigEncoder,
+	providers operatorsettings.ProviderCatalog,
+	preserveUnknown operatorsettings.ConfigDocumentPreserver,
+	diagnosticDecoders ...operatorsettings.ConfigDiagnosticsDecoder,
+) operatorsettings.DocumentOwner {
+	return NewWithPreserver(files, createTemp, decoder, encoder, providers, preserveUnknown, diagnosticDecoders...)
 }
 
 func (service *Service) LoadDocument(

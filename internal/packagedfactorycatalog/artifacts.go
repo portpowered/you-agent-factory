@@ -128,7 +128,7 @@ func validateArtifactSchema(schema *jsonschema.Schema, payload []byte) error {
 
 func validateArtifactEquivalence(sourcePath, slug string, jsonPayload, yamlJSON []byte) error {
 	mapper := factorymapping.NewFactoryConfigMapper()
-	jsonFactory, err := mapper.Expand(jsonPayload)
+	jsonFactory, err := mapper.ExpandStrict(jsonPayload)
 	if err != nil {
 		return fmt.Errorf(
 			"%s: equivalence: decode portable JSON artifact through canonical Factory boundary: %w",
@@ -136,7 +136,7 @@ func validateArtifactEquivalence(sourcePath, slug string, jsonPayload, yamlJSON 
 			err,
 		)
 	}
-	yamlFactory, err := mapper.Expand(yamlJSON)
+	yamlFactory, err := mapper.ExpandStrict(yamlJSON)
 	if err != nil {
 		return fmt.Errorf(
 			"%s: equivalence: decode portable YAML artifact through canonical Factory boundary: %w",

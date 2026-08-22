@@ -73,7 +73,7 @@ func TestWorkerPortableRecordingRoundTripPreservesFidelityMatrix(t *testing.T) {
 	}
 }
 
-func TestWorkerPortableRecordingRejectsOrderingFidelityIntegrityAndUnknownFields(t *testing.T) {
+func TestWorkerPortableRecordingRejectsInvalidFactsAndReportsUnknownFields(t *testing.T) {
 	portable, err := workerRecordingCodec.BuildWorkerPortableRecording(portableSnapshot(t, "snapshot", "codex", "codex"))
 	if err != nil {
 		t.Fatal(err)
@@ -126,9 +126,109 @@ func TestWorkerPortableRecordingRejectsOrderingFidelityIntegrityAndUnknownFields
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := workerRecordingCodec.DecodeWorkerPortableRecording(unknown); !errors.Is(err, ErrWorkerPortableRecording) {
-		t.Fatalf("unknown field error = %v, want malformed portable recording", err)
+	decoded, diagnostics, err := workerRecordingCodec.DecodeWorkerPortableRecordingWithDiagnostics(unknown)
+	if err != nil {
+		t.Fatalf("DecodeWorkerPortableRecordingWithDiagnostics() error = %v, want additive field accepted", err)
 	}
+	if !reflect.DeepEqual(diagnostics.Paths(), []string{"$.unsupportedField"}) {
+		t.Fatalf("ignored paths = %#v, want top-level path", diagnostics.Paths())
+	}
+	if !reflect.DeepEqual(decoded, portable) {
+		t.Fatalf("known decoded recording changed: want=%#v got=%#v", portable, decoded)
+	}
+}
+
+func TestWorkerPortableRecordingReportsNestedDraftFutureFields(t *testing.T) {
+	portable, err := workerRecordingCodec.BuildWorkerPortableRecording(portableSnapshot(t, "snapshot", "codex", "codex"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	encoded, err := workerRecordingCodec.EncodeWorkerPortableRecording(portable)
+	if err != nil {
+		t.Fatal(err)
+	}
+	unknown, withUnknown := workerRecordingWithNestedFutureFields(t, encoded)
+
+	decoded, diagnostics, err := workerRecordingCodec.DecodeWorkerPortableRecordingWithDiagnostics(unknown)
+	if err != nil {
+		t.Fatalf("DecodeWorkerPortableRecordingWithDiagnostics() error = %v", err)
+	}
+	wantPaths := []string{
+		"$.records[1].payload.futureDraftField",
+		"$.records[1].payload.payload.futureNestedField",
+	}
+	if !reflect.DeepEqual(diagnostics.Paths(), wantPaths) {
+		t.Fatalf("ignored paths = %#v, want %#v", diagnostics.Paths(), wantPaths)
+	}
+	if !reflect.DeepEqual(decoded.Records, withUnknown.Records) {
+		t.Fatalf("known Worker records changed after additive draft fields")
+	}
+	if _, err := workerRecordingCodec.ReplayWorkerPortableRecording(decoded); err != nil {
+		t.Fatalf("ReplayWorkerPortableRecording() error = %v, want additive draft fields replayed", err)
+	}
+}
+
+func workerRecordingWithNestedFutureFields(
+	t *testing.T,
+	encoded []byte,
+) ([]byte, WorkerPortableRecording) {
+	t.Helper()
+	document := mustJSONMap(t, encoded)
+	records := mustJSONSlice(t, document["records"])
+	record := mustJSONMap(t, records[1])
+	draft := mustJSONMap(t, record["payload"])
+	draft["futureDraftField"] = json.RawMessage(`true`)
+	nestedPayload := mustJSONMap(t, draft["payload"])
+	nestedPayload["futureNestedField"] = json.RawMessage(`"ignored"`)
+	draft["payload"] = mustMarshalJSON(t, nestedPayload)
+	record["payload"] = mustMarshalJSON(t, draft)
+	records[1] = mustMarshalJSON(t, record)
+	document["records"] = mustMarshalJSON(t, records)
+
+	unknown := mustMarshalJSON(t, document)
+	var withUnknown WorkerPortableRecording
+	if err := json.Unmarshal(unknown, &withUnknown); err != nil {
+		t.Fatal(err)
+	}
+	withUnknown.Integrity.Digest = mustWorkerPortableRecordingDigest(t, withUnknown)
+	document["integrity"] = mustMarshalJSON(t, withUnknown.Integrity)
+	return mustMarshalJSON(t, document), withUnknown
+}
+
+func mustJSONMap(t *testing.T, payload []byte) map[string]json.RawMessage {
+	t.Helper()
+	var value map[string]json.RawMessage
+	if err := json.Unmarshal(payload, &value); err != nil {
+		t.Fatal(err)
+	}
+	return value
+}
+
+func mustJSONSlice(t *testing.T, payload []byte) []json.RawMessage {
+	t.Helper()
+	var value []json.RawMessage
+	if err := json.Unmarshal(payload, &value); err != nil {
+		t.Fatal(err)
+	}
+	return value
+}
+
+func mustMarshalJSON(t *testing.T, value any) []byte {
+	t.Helper()
+	payload, err := json.Marshal(value)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return payload
+}
+
+func mustWorkerPortableRecordingDigest(t *testing.T, recording WorkerPortableRecording) string {
+	t.Helper()
+	digest, err := workerPortableRecordingDigest(recording)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return digest
 }
 
 func TestWorkerPortableRecordingRejectsProviderOutputBeforeBinding(t *testing.T) {

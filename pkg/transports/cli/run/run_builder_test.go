@@ -435,6 +435,18 @@ func runWithTestRuntimeRunnerAndMockWorkersLoader(
 	builder testRuntimeRunnerOpener,
 	loadMockWorkers workers.MockWorkersConfigLoader,
 ) error {
+	return runWithTestRuntimeRunnerAndMockWorkersDiagnosticsLoader(
+		ctx, cfg, builder, loadMockWorkers, nil,
+	)
+}
+
+func runWithTestRuntimeRunnerAndMockWorkersDiagnosticsLoader(
+	ctx context.Context,
+	cfg RunConfig,
+	builder testRuntimeRunnerOpener,
+	loadMockWorkers workers.MockWorkersConfigLoader,
+	loadMockWorkersWithDiagnostics workers.MockWorkersConfigDiagnosticsLoader,
+) error {
 	cfg = ensureTestRecordingsCLI(cfg)
 	if cfg.WorkRequestFileLoader == nil && cfg.WorkFile != "" {
 		cfg.WorkRequestFileLoader = loadRunTestWorkRequestFile
@@ -451,7 +463,7 @@ func runWithTestRuntimeRunnerAndMockWorkersLoader(
 	factory.presentations = newTestOpeningPresentationOwner()
 	presentation := testResponsePresentation()
 	factory.visualizationSink = runVisualizationSink(normalizeRunInvocationMode(cfg), presentation)
-	operation, err := Open(
+	operation, err := OpenWithVisualizationOwnerAndDiagnostics(
 		ctx,
 		cfg,
 		factory.BuildRunner,
@@ -459,8 +471,10 @@ func runWithTestRuntimeRunnerAndMockWorkersLoader(
 		presentation,
 		prepareSingleWorkTargetForTest,
 		loadMockWorkers,
+		loadMockWorkersWithDiagnostics,
 		testRuntimeOpeningRequestFactory,
 		factory.presentations,
+		nil,
 	)
 	if err != nil {
 		return err

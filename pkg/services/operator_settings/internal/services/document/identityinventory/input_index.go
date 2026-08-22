@@ -9,7 +9,7 @@ func ProjectInputInventory() InputInventory {
 
 	return InputInventory{
 		FormatVersion:       InputInventoryFormatVersion,
-		UnknownFieldPolicy:  "EnsureLocalBackendScope decodes the generated closed GlobalConfig contract and rejects unknown fields before identity reuse or persistence",
+		UnknownFieldPolicy:  "EnsureLocalBackendScope accepts unknown object fields through the tolerant GlobalConfig decoder; known-field validation and exactly one JSON document remain strict, with ignored paths available to the owning caller",
 		SiblingPreservation: "persistBackendScopeID re-encodes the generated GlobalConfig contract and preserves decoded defaults and workerPresets",
 		Cases:               cases,
 	}

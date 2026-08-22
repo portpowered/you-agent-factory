@@ -37,10 +37,11 @@ func TestFactoryConfigMapper_ExpandRejectsRetiredCronIntervalField(t *testing.T)
 	}
 }
 
-func TestFactoryConfigMapper_ExpandRejectsUnsupportedGeneratedBoundaryField(t *testing.T) {
+func TestFactoryConfigMapper_ExpandAcceptsUnsupportedGeneratedBoundaryFieldWithDiagnostic(t *testing.T) {
 	mapper := NewFactoryConfigMapper()
 
 	raw := []byte(`{
+		"name":"future",
 		"workTypes": [{"name":"story","states":[{"name":"init","type":"INITIAL"},{"name":"complete","type":"TERMINAL"}]}],
 		"workers": [{"name":"executor"}],
 		"workstations": [{
@@ -52,15 +53,12 @@ func TestFactoryConfigMapper_ExpandRejectsUnsupportedGeneratedBoundaryField(t *t
 		}]
 	}`)
 
-	_, err := mapper.Expand(raw)
-	if err == nil {
-		t.Fatal("expected unsupported workstation field to be rejected")
+	_, diagnostics, err := mapper.ExpandWithDiagnostics(raw)
+	if err != nil {
+		t.Fatalf("ExpandWithDiagnostics() error = %v", err)
 	}
-	if !strings.Contains(err.Error(), generatedFactoryBoundaryErrorPrefix) {
-		t.Fatalf("expected generated boundary context, got %v", err)
-	}
-	if !strings.Contains(err.Error(), `json: unknown field "unsupported_field"`) {
-		t.Fatalf("expected generated boundary unknown-field error, got %v", err)
+	if got := diagnostics.Paths(); len(got) != 1 || got[0] != "$.workstations[0].unsupported_field" {
+		t.Fatalf("ignored JSON paths = %#v, want workstation path", got)
 	}
 }
 

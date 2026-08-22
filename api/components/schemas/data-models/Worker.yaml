@@ -2,7 +2,12 @@ description: >-
   A reusable worker definition that tells the factory how a workstation
   should execute work, such as through a model-backed agent or a script.
 type: object
-additionalProperties: false
+additionalProperties: true
+# `promptFile` belongs to a Workstation and was retired from Worker definitions.
+# Keep this fixed semantic boundary closed while allowing other additive fields.
+not:
+  required:
+    - promptFile
 required:
   - name
 properties:

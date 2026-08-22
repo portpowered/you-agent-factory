@@ -99,6 +99,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	}
 	providerCatalog := provideOperatorSettingsProviderCatalog(service)
 	configDecoder := provideOperatorConfigDecoder()
+	configDiagnosticsDecoder := provideOperatorConfigDiagnosticsDecoder()
 	configEncoder := provideOperatorConfigEncoder()
 	idGenerator := provideOperatorSettingsIDGenerator(edges2)
 	logger, err := logging.NewDefaultLogger()
@@ -106,7 +107,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 		return nil, err
 	}
 	loggingLogger := provideOperatorSettingsLogger(logger)
-	operatorsettingsService, err := provideOperatorSettingsService(fileSystem, createTemporaryFile, providerCatalog, configDecoder, configEncoder, idGenerator, service, loggingLogger)
+	operatorsettingsService, err := provideOperatorSettingsService(fileSystem, createTemporaryFile, providerCatalog, configDecoder, configDiagnosticsDecoder, configEncoder, idGenerator, service, loggingLogger)
 	if err != nil {
 		return nil, err
 	}
@@ -516,13 +517,13 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	cancelWorkerSessionOperation := provideCancelWorkerSessionOperation(wireStandardCLIHTTPProtocol, wireLocalWorkerSessionsBoundary)
 	terminateWorkerSessionOperation := provideTerminateWorkerSessionOperation(wireStandardCLIHTTPProtocol, wireLocalWorkerSessionsBoundary)
 	mockWorkersConfigFileSystem := provideWorkersMockWorkersConfigFileSystem(edges2)
-	mockWorkersConfigLoader, err := workers.NewMockWorkersConfigLoader(mockWorkersConfigFileSystem)
+	mockWorkersConfigDiagnosticsLoader, err := provideWorkersMockWorkersConfigDiagnosticsLoader(mockWorkersConfigFileSystem)
 	if err != nil {
 		return nil, err
 	}
 	runtimeOpeningRequestFactory := provideRuntimeOpeningRequestFactory()
 	v81 := wire3.NewRuntimeSinkOwner()
-	runOpener := provideRunOpener(singleWorkTargetPreparation, mockWorkersConfigLoader, runtimeOpeningRequestFactory, openingPresentationOwner, v81)
+	runOpener := provideRunOpener(singleWorkTargetPreparation, mockWorkersConfigDiagnosticsLoader, runtimeOpeningRequestFactory, openingPresentationOwner, v81)
 	managedRunnerFactory := provideManagedRunnerFactory()
 	runtimeRunnerBuilder, err := application.NewRuntimeRunnerBuilder(managedRunnerFactory)
 	if err != nil {
@@ -856,6 +857,7 @@ var servicesSet = wire5.NewSet(
 	provideACPServer,
 	provideACPWireRecorder,
 	provideOperatorConfigDecoder,
+	provideOperatorConfigDiagnosticsDecoder,
 	provideOperatorConfigEncoder,
 	provideSystemInitializationInspectPath,
 	provideSystemInitializationLegacyFactoryMigrationFileSystem,
@@ -865,7 +867,9 @@ var servicesSet = wire5.NewSet(
 	provideAPIServerStarter,
 	provideRuntimeHostOperation,
 	provideProcessRuntimeFactory, wire.NewLifecyclePlanOperation, provideFactoryVisualizationFactory,
-	provideResponsePresentation, wire3.NewRuntimeSinkOwner, wire.NewOpeningPresentationOwner, provideWorkContentStagingService, work.NewContentPreparation, work.NewRequestPreparationService, work.NewSingleWorkTargetPreparation, work.NewListRequestPreparation, work.NewFactoryRequestBatchPreparation, work.NewInvocationInputPreparation, provideWorkersMockWorkersConfigFileSystem, workers.NewMockWorkersConfigLoader, provideRuntimeArtifactClock,
+	provideResponsePresentation, wire3.NewRuntimeSinkOwner, wire.NewOpeningPresentationOwner, provideWorkContentStagingService, work.NewContentPreparation, work.NewRequestPreparationService, work.NewSingleWorkTargetPreparation, work.NewListRequestPreparation, work.NewFactoryRequestBatchPreparation, work.NewInvocationInputPreparation, provideWorkersMockWorkersConfigFileSystem,
+	provideWorkersMockWorkersConfigDiagnosticsLoader,
+	provideRuntimeArtifactClock,
 	provideRuntimeArtifactIDGenerator,
 	provideRuntimeArtifactPathReserver,
 	provideRuntimeArtifactRootResolver,

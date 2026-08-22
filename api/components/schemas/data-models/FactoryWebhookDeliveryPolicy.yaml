@@ -1,5 +1,5 @@
 type: object
-additionalProperties: false
+additionalProperties: true
 description: >-
   Bounded outbound delivery policy. Durations use Go duration syntax. Omitted
   values resolve to a 10 second request timeout, 5 total attempts, 1 second

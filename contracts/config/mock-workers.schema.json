@@ -43,7 +43,7 @@
       "type": "object"
     },
     "mockWorker": {
-      "additionalProperties": false,
+      "additionalProperties": true,
       "allOf": [
         {
           "if": {
@@ -106,7 +106,7 @@
       "type": "object"
     },
     "rejectConfig": {
-      "additionalProperties": false,
+      "additionalProperties": true,
       "description": "Optional observable output for a rejected mock result when runType is reject.",
       "properties": {
         "exitCode": {
@@ -128,7 +128,7 @@
       "type": "object"
     },
     "scriptConfig": {
-      "additionalProperties": false,
+      "additionalProperties": true,
       "description": "Declares the local script a script mock executes through the shared command-runner boundary.",
       "properties": {
         "args": {
@@ -172,7 +172,7 @@
       "type": "object"
     },
     "workInput": {
-      "additionalProperties": false,
+      "additionalProperties": true,
       "description": "Narrows a mock-worker match by consumed work input. Omitted selector fields do not constrain that dimension.",
       "properties": {
         "channel": {
@@ -202,7 +202,7 @@
   },
   "$id": "https://schemas.portpowered.com/you/config/mock-workers.schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "additionalProperties": false,
+  "additionalProperties": true,
   "contract": {
     "entrySelectionPolicy": "first matching mockWorkers[] entry wins; there is no response-sequence or multi-hit authoring surface beyond that first-match selection",
     "examples": [
@@ -1051,9 +1051,9 @@
       }
     ],
     "runTypeUnionSummary": "runType is required on every mockWorkers[] entry and selects which nested config shape Validate enforces",
-    "unknownFieldPolicy": "ParseMockWorkersConfig uses json.Decoder.DisallowUnknownFields and rejects unknown top-level keys, unknown nested keys, and trailing JSON values"
+    "unknownFieldPolicy": "ParseMockWorkersConfig ignores unknown object fields and reports sorted unique JSON paths; known-field validation and exactly one JSON document remain strict"
   },
-  "description": "The strict mock-worker dispatch configuration accepted by ParseMockWorkersConfig. mockWorkers[] entries are matched in array order and the first matching entry wins. Unmatched dispatches follow unmatchedDispatchPolicy.",
+  "description": "The forward-compatible mock-worker dispatch configuration accepted by ParseMockWorkersConfig. Unknown object fields are ignored with path-only diagnostics; known fields remain validated. mockWorkers[] entries are matched in array order and the first matching entry wins. Unmatched dispatches follow unmatchedDispatchPolicy.",
   "examples": [
     {
       "mockWorkers": []

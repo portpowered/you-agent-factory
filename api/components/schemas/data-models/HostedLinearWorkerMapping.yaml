@@ -1,6 +1,6 @@
 description: Deterministic issue-to-work mapping fields owned by a hosted Linear worker.
 type: object
-additionalProperties: false
+additionalProperties: true
 properties:
   workType:
     type: string

@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -268,6 +269,7 @@ func TestReadInvokeRequestCoversInputFailures(t *testing.T) {
 		{name: "file reader missing", config: InvokeConfig{ExecutionJSON: "request.json"}, want: "WORKER_SESSION_INPUT_FAILED"},
 		{name: "file read failure", config: InvokeConfig{ExecutionJSON: "request.json", ReadFile: func(string) ([]byte, error) { return nil, errors.New("read failed") }}, want: "WORKER_SESSION_INPUT_FAILED"},
 		{name: "malformed JSON", config: InvokeConfig{ExecutionJSON: "{"}, want: "WORKER_SESSION_INPUT_INVALID"},
+		{name: "known field type", config: InvokeConfig{ExecutionJSON: `{"requestId":17}`}, want: "WORKER_SESSION_INPUT_INVALID"},
 		{name: "trailing JSON", config: InvokeConfig{ExecutionJSON: "{} {}"}, want: "WORKER_SESSION_INPUT_INVALID"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
@@ -288,6 +290,91 @@ func TestReadInvokeRequestCoversInputFailures(t *testing.T) {
 	}
 	if fromFile.RequestId != "request" {
 		t.Fatalf("readInvokeRequest(file) request ID = %q, want request", fromFile.RequestId)
+	}
+}
+
+func TestReadInvokeRequestWithDiagnosticsReportsSortedPathsAndPreservesKnownFields(t *testing.T) {
+	decoded, err := readInvokeRequestWithDiagnostics(InvokeConfig{ExecutionJSON: `{
+		"futureTopLevel": "top-secret",
+		"requestId": "request",
+		"workerSessionId": "session",
+		"execution": {
+			"workstationName": "review",
+			"futureExecution": "execution-secret",
+			"dispatch": {
+				"dispatchId": "dispatch",
+				"workstationName": "review",
+				"futureDispatch": "dispatch-secret"
+			},
+			"userMessage": "message"
+		}
+	}`})
+	if err != nil {
+		t.Fatalf("readInvokeRequestWithDiagnostics() error = %v", err)
+	}
+	if decoded.Request.RequestId != "request" || decoded.Request.Execution.WorkstationName != "review" ||
+		decoded.Request.Execution.Dispatch.DispatchId != "dispatch" || decoded.Request.Execution.UserMessage == nil ||
+		*decoded.Request.Execution.UserMessage != "message" {
+		t.Fatalf("decoded known fields = %#v, want preserved request values", decoded.Request)
+	}
+	wantPaths := []string{"$.execution.dispatch.futureDispatch", "$.execution.futureExecution", "$.futureTopLevel"}
+	if got := decoded.IgnoredJSONPaths; !reflect.DeepEqual(got, wantPaths) {
+		t.Fatalf("ignored JSON paths = %#v, want %#v", got, wantPaths)
+	}
+	if strings.Contains(strings.Join(decoded.IgnoredJSONPaths, " "), "secret") {
+		t.Fatalf("ignored JSON paths contained a payload value: %#v", decoded.IgnoredJSONPaths)
+	}
+}
+
+func TestNormalizeInvokeRequestRejectsMissingKnownExecutionFields(t *testing.T) {
+	_, err := normalizeInvokeRequest(InvokeConfig{
+		ExecutionJSON: `{"requestId":"request","workerSessionId":"session"}`,
+		GenerateID:    func() string { return "generated" },
+	})
+	if err == nil || !strings.Contains(err.Error(), "WORKER_SESSION_INVOKE_INVALID") {
+		t.Fatalf("normalizeInvokeRequest() = %v, want missing-known-field validation failure", err)
+	}
+}
+
+func TestInvokeLocalFutureExecutionFieldsWarnOnStderrAfterSuccess(t *testing.T) {
+	boundary := &invokeLocalFake{startResult: workersessions.StartResult{Session: workersessions.Session{
+		ID: "future-session", State: workersessions.StateRunning,
+	}}}
+	var stdout, stderr bytes.Buffer
+	err := NewInvoke(nil, boundary)(InvokeConfig{
+		Context: context.Background(), Output: &stdout, Diagnostics: &stderr, OutputFormat: "json", Async: true,
+		ExecutionJSON: `{
+			"requestId": "future-request",
+			"workerSessionId": "future-session",
+			"futureTopLevel": "top-secret",
+			"execution": {
+				"workstationName": "review",
+				"futureExecution": {"value": "execution-secret"},
+				"dispatch": {
+					"dispatchId": "future-dispatch",
+					"workstationName": "review",
+					"futureDispatch": "dispatch-secret"
+				},
+				"userMessage": "message"
+			}
+		}`,
+	})
+	if err != nil {
+		t.Fatalf("future-field invoke error = %v", err)
+	}
+	var result invokeResult
+	if err := json.Unmarshal(stdout.Bytes(), &result); err != nil {
+		t.Fatalf("decode invoke result: %v; stdout=%q", err, stdout.String())
+	}
+	if !result.Accepted || result.WorkerSessionID != "future-session" || result.State != "RUNNING" {
+		t.Fatalf("invoke result = %#v, want successful known operation", result)
+	}
+	wantWarning := "warning: ignored unknown direct Worker execution fields at $.execution.dispatch.futureDispatch, $.execution.futureExecution, $.futureTopLevel\n"
+	if got := stderr.String(); got != wantWarning {
+		t.Fatalf("stderr warning = %q, want %q", got, wantWarning)
+	}
+	if strings.Contains(stderr.String(), "secret") {
+		t.Fatalf("stderr warning leaked an ignored field value: %q", stderr.String())
 	}
 }
 

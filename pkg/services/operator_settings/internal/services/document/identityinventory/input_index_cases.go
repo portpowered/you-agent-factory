@@ -131,13 +131,20 @@ func ensureScopeRejectInputCases() []InputCase {
 			ErrorFragments: []string{"parse operator config"},
 		},
 		{
-			ID:             "invalid-unknown-sibling",
-			Category:       categoryEnsureScope,
-			Entrypoint:     entrypointEnsureLocalBackendScope,
-			Outcome:        outcomeReject,
-			Fixture:        "valid/unknown-sibling.json",
-			Description:    "the generated closed GlobalConfig contract rejects unknown top-level siblings",
-			ErrorFragments: []string{"parse operator config", "unknownTopLevel"},
+			ID:          "valid-unknown-sibling",
+			Category:    categoryEnsureScope,
+			Entrypoint:  entrypointEnsureLocalBackendScope,
+			Outcome:     outcomeAccept,
+			Fixture:     "valid/unknown-sibling.json",
+			Description: "unknown top-level siblings are ignored while backend scope generation remains usable",
+			ExpectedScope: &ScopeExpectation{
+				Outcome:          operatorsettings.BackendScopeOutcomeGenerated,
+				RequireLocalUUID: true,
+			},
+			PersistedFileExpectation: &PersistedFileExpectation{
+				BackendScopeIDMatchesResolved: true,
+				PreservesDefaults:             true,
+			},
 		},
 	}
 }

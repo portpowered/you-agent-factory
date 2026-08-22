@@ -243,7 +243,8 @@ type DecodeArtifactRequest struct {
 
 // DecodeArtifactResult contains the validated detached artifact envelope.
 type DecodeArtifactResult struct {
-	Artifact ArtifactEnvelope
+	Artifact         ArtifactEnvelope
+	IgnoredJSONPaths []string
 }
 
 // SummarizeArtifactRequest inspects one detached artifact envelope.
@@ -279,7 +280,8 @@ type ReadArtifactRequest struct {
 // ReadArtifactResult contains the validated detached artifact envelope read
 // from the public destination.
 type ReadArtifactResult struct {
-	Artifact ArtifactEnvelope
+	Artifact         ArtifactEnvelope
+	IgnoredJSONPaths []string
 }
 
 // ReplayArtifactErrorKind distinguishes typed RecordingReplayArtifacts

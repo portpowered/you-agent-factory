@@ -117,6 +117,7 @@ func TestProvideSystemInitializationServiceComposedInitializeCreatesThenSkipsPac
 		provideOperatorSettingsCreateTemporaryFile(edges),
 		provideOperatorSettingsProviderCatalog(providersRoot),
 		decoder,
+		provideOperatorConfigDiagnosticsDecoder(),
 		encoder,
 		provideOperatorSettingsIDGenerator(edges),
 		providersRoot,

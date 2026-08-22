@@ -117,7 +117,7 @@ func TestObserveHTTP_RejectsMalformedJSONBeforeRoot(t *testing.T) {
 	}
 }
 
-func TestObserveHTTP_RejectsUnknownFieldsBeforeRoot(t *testing.T) {
+func TestObserveHTTP_AcceptsUnknownFieldsBeforeRoot(t *testing.T) {
 	t.Parallel()
 
 	root := &observeVisualizationRootFake{}
@@ -126,15 +126,15 @@ func TestObserveHTTP_RejectsUnknownFieldsBeforeRoot(t *testing.T) {
 		zap.NewNop(),
 	)
 
-	_, err := handler.ObserveHTTP(
+	response, err := handler.ObserveHTTP(
 		context.Background(),
 		strings.NewReader(`{"mode":"RETAINED_THEN_LIVE","extra":true}`),
 	)
-	if err == nil {
-		t.Fatal("ObserveHTTP unknown field = nil, want error")
+	if err != nil {
+		t.Fatalf("ObserveHTTP unknown field: %v", err)
 	}
-	if root.observeInvoked {
-		t.Fatal("unknown-field Observe HTTP request must not invoke root")
+	if !root.observeInvoked || response.View.TickCount != 0 {
+		t.Fatalf("root invocation/response = %v/%#v, want successful known request", root.observeInvoked, response)
 	}
 }
 

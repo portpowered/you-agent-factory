@@ -12,36 +12,37 @@ import (
 // Recordings-owned internal Worker capture package and are re-exported here
 // as the customer-facing service vocabulary.
 type (
-	WorkerSessionRecordingService         = recordingcontracts.WorkerSessionRecordingService
-	WorkerSessionRecording                = recordingcontracts.WorkerSessionRecording
-	WorkerSessionRecordingFinalizer       = recordingcontracts.WorkerSessionRecordingFinalizer
-	WorkerSessionRecordingRequest         = workerrecording.WorkerSessionRecordingRequest
-	WorkerRecordingRecord                 = workerrecording.WorkerRecordingRecord
-	WorkerRecordingReader                 = recordingcontracts.WorkerRecordingReader
-	WorkerRecordingProjectionReader       = recordingcontracts.WorkerRecordingProjectionReader
-	WorkerRecordingFailure                = workerrecording.WorkerRecordingFailure
-	WorkerRecordingFailureWriter          = recordingcontracts.WorkerRecordingFailureWriter
-	WorkerRecordingWriter                 = recordingcontracts.WorkerRecordingWriter
-	WorkerRecordingSnapshot               = workerrecording.WorkerRecordingSnapshot
-	WorkerSessionRecordingSnapshot        = workerrecording.WorkerSessionRecordingSnapshot
-	WorkerRecordingStatus                 = workerrecording.WorkerRecordingStatus
-	WorkerRecordingHistory                = workerrecording.WorkerRecordingHistory
-	WorkerRecordingTerminal               = workerrecording.WorkerRecordingTerminal
-	WorkerRecordingProjection             = workerrecording.WorkerRecordingProjection
-	WorkerRecordingReplayRequest          = workerrecording.WorkerRecordingReplayRequest
-	WorkerRecordingReplayResult           = workerrecording.WorkerRecordingReplayResult
-	WorkerPortableRecording               = workerrecording.WorkerPortableRecording
-	WorkerPortableRecordingIdentity       = workerrecording.WorkerPortableRecordingIdentity
-	WorkerPortableRecordingLifecycle      = workerrecording.WorkerPortableRecordingLifecycle
-	WorkerPortableRecordingCorrelation    = workerrecording.WorkerPortableRecordingCorrelation
-	WorkerPortableProviderAttribution     = workerrecording.WorkerPortableProviderAttribution
-	WorkerPortableTerminal                = workerrecording.WorkerPortableTerminal
-	WorkerPortableRecord                  = workerrecording.WorkerPortableRecord
-	WorkerPortableRecordingIntegrity      = workerrecording.WorkerPortableRecordingIntegrity
-	WorkerPortableRecordingDiagnostic     = workerrecording.WorkerPortableRecordingDiagnostic
-	WorkerPortableRecordingDiagnosticCode = workerrecording.WorkerPortableRecordingDiagnosticCode
-	WorkerRecordingCodec                  = workerrecording.WorkerRecordingCodec
-	WorkerRecordingService                = workerrecording.Service
+	WorkerSessionRecordingService            = recordingcontracts.WorkerSessionRecordingService
+	WorkerSessionRecording                   = recordingcontracts.WorkerSessionRecording
+	WorkerSessionRecordingFinalizer          = recordingcontracts.WorkerSessionRecordingFinalizer
+	WorkerSessionRecordingRequest            = workerrecording.WorkerSessionRecordingRequest
+	WorkerRecordingRecord                    = workerrecording.WorkerRecordingRecord
+	WorkerRecordingReader                    = recordingcontracts.WorkerRecordingReader
+	WorkerRecordingProjectionReader          = recordingcontracts.WorkerRecordingProjectionReader
+	WorkerRecordingFailure                   = workerrecording.WorkerRecordingFailure
+	WorkerRecordingFailureWriter             = recordingcontracts.WorkerRecordingFailureWriter
+	WorkerRecordingWriter                    = recordingcontracts.WorkerRecordingWriter
+	WorkerRecordingSnapshot                  = workerrecording.WorkerRecordingSnapshot
+	WorkerSessionRecordingSnapshot           = workerrecording.WorkerSessionRecordingSnapshot
+	WorkerRecordingStatus                    = workerrecording.WorkerRecordingStatus
+	WorkerRecordingHistory                   = workerrecording.WorkerRecordingHistory
+	WorkerRecordingTerminal                  = workerrecording.WorkerRecordingTerminal
+	WorkerRecordingProjection                = workerrecording.WorkerRecordingProjection
+	WorkerRecordingReplayRequest             = workerrecording.WorkerRecordingReplayRequest
+	WorkerRecordingReplayResult              = workerrecording.WorkerRecordingReplayResult
+	WorkerPortableRecording                  = workerrecording.WorkerPortableRecording
+	WorkerPortableRecordingIdentity          = workerrecording.WorkerPortableRecordingIdentity
+	WorkerPortableRecordingLifecycle         = workerrecording.WorkerPortableRecordingLifecycle
+	WorkerPortableRecordingCorrelation       = workerrecording.WorkerPortableRecordingCorrelation
+	WorkerPortableProviderAttribution        = workerrecording.WorkerPortableProviderAttribution
+	WorkerPortableTerminal                   = workerrecording.WorkerPortableTerminal
+	WorkerPortableRecord                     = workerrecording.WorkerPortableRecord
+	WorkerPortableRecordingIntegrity         = workerrecording.WorkerPortableRecordingIntegrity
+	WorkerPortableRecordingDiagnostic        = workerrecording.WorkerPortableRecordingDiagnostic
+	WorkerPortableRecordingDiagnosticCode    = workerrecording.WorkerPortableRecordingDiagnosticCode
+	WorkerPortableRecordingDecodeDiagnostics = workerrecording.WorkerPortableRecordingDecodeDiagnostics
+	WorkerRecordingCodec                     = workerrecording.WorkerRecordingCodec
+	WorkerRecordingService                   = workerrecording.Service
 )
 
 const (

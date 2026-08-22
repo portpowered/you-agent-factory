@@ -7,13 +7,16 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strings"
 	"testing"
 
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factorysessionshttp "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/http"
+	httpcompat "github.com/portpowered/infinite-you/pkg/transports/http/compat"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zaptest/observer"
 )
 
 func TestHandlerFromRoot_OpenFactorySessionEncodesRootResult(t *testing.T) {
@@ -48,6 +51,49 @@ func TestHandlerFromRoot_OpenFactorySessionEncodesRootResult(t *testing.T) {
 	}
 	if response.Session == nil || response.Session.Id != "session-open-alpha" {
 		t.Fatalf("session = %#v, want encoded open session", response.Session)
+	}
+}
+
+func TestHandlerFromRoot_OpenFactorySessionAcceptsUnknownFieldsWithWarning(t *testing.T) {
+	t.Parallel()
+
+	core, logs := observer.New(zap.WarnLevel)
+	root := &httpSessionsRootFake{
+		onOpen: func(_ context.Context, request factorysessions.OpenRequest) (*factorysessions.OpenResult, error) {
+			if request.FolderPath != "/workspace/alpha" {
+				t.Fatalf("folderPath = %q, want /workspace/alpha", request.FolderPath)
+			}
+			return &factorysessions.OpenResult{SessionID: "session-open-alpha"}, nil
+		},
+	}
+	handler := factorysessionshttp.NewHandlerFromRoot(factorysessionshttp.RootBinding{Sessions: root}, zap.New(core))
+	recorder := httptest.NewRecorder()
+	handler.OpenFactorySession(
+		recorder,
+		httptest.NewRequest(
+			http.MethodPost,
+			"/factory-sessions/open",
+			strings.NewReader(`{"folderPath":"/workspace/alpha","future":{"value":"secret"}}`),
+		),
+	)
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200: %s", recorder.Code, recorder.Body.String())
+	}
+	if warning := recorder.Header().Get("Warning"); !strings.Contains(warning, "299") || !strings.Contains(warning, "$.future") {
+		t.Fatalf("Warning = %q, want code 299 and $.future", warning)
+	}
+	entries := logs.All()
+	if len(entries) != 1 {
+		t.Fatalf("warning log count = %d, want one", len(entries))
+	}
+	fields := entries[0].ContextMap()
+	if fields["warning_code"] != int64(httpcompat.WarningCode) || fields["boundary"] != "factory_sessions.http" ||
+		fields["operation"] != "open_factory_session" {
+		t.Fatalf("warning fields = %#v, want HTTP compatibility metadata", fields)
+	}
+	if got, ok := fields["json_paths"].([]interface{}); !ok || !reflect.DeepEqual(got, []interface{}{"$.future"}) {
+		t.Fatalf("json_paths = %#v, want [$.future]", fields["json_paths"])
 	}
 }
 

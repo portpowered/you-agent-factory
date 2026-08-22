@@ -59,12 +59,19 @@ func runDecodeGlobalConfigCase(t *testing.T, inputCase operatorconfig.InputCase)
 	t.Helper()
 
 	data := readFixture(t, inputCase.Fixture)
-	cfg, err := globalconfigmapping.Decode(data)
+	cfg, diagnostics, err := globalconfigmapping.DecodeWithDiagnostics(data)
 	if inputCase.Outcome == "accept" {
 		if err != nil {
 			t.Fatalf("DecodeGlobalConfig() error = %v, want accept", err)
 		}
 		assertConfigExpectation(t, cfg, inputCase.ExpectedConfig)
+		if inputCase.ExpectedConfig != nil {
+			gotPaths := strings.Join(diagnostics.Paths(), "\n")
+			wantPaths := strings.Join(inputCase.ExpectedConfig.IgnoredJSONPaths, "\n")
+			if gotPaths != wantPaths {
+				t.Fatalf("ignored JSON paths = %#v, want %#v", diagnostics.Paths(), inputCase.ExpectedConfig.IgnoredJSONPaths)
+			}
+		}
 		return
 	}
 	if err == nil {

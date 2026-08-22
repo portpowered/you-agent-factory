@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -140,6 +141,69 @@ func TestDirectWorkerSessionInvokeContinueLocalPreservesSessionAndLineage(t *tes
 
 	assertLocalTerminalWorkerSessionControls(t, ctx, process, env, workingDirectory)
 	functionalevidence.Covers(t, "cli/you.worker-sessions.continue", "cli/you.worker-sessions.invoke")
+}
+
+func TestDirectWorkerSessionInvokeExecutionFileToleratesFutureFields(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	runner := testutil.NewProviderCommandRunner(
+		platformprocess.CommandResult{Stdout: directCodexSessionOutput("future-file-thread", "future-file output COMPLETE")},
+	)
+	process := support.BuildProcess(t, serviceedges.Edges{ProviderCommandRunner: runner})
+	support.CleanupProcess(t, process)
+
+	executionPath := filepath.Join(t.TempDir(), "future-execution.json")
+	executionDocument := `{
+		"requestId": "future-file-request",
+		"workerSessionId": "future-file-session",
+		"futureTopLevel": "top-secret",
+		"execution": {
+			"workstationName": "direct",
+			"futureExecution": {"value": "execution-secret"},
+			"dispatch": {
+				"dispatchId": "future-file-dispatch",
+				"workstationName": "direct",
+				"workerType": "direct-worker",
+				"futureDispatch": "dispatch-secret"
+			},
+			"workerType": "direct-worker",
+			"runnerId": "codex",
+			"modelProvider": "codex",
+			"model": "functional-model",
+			"userMessage": "future-file prompt"
+		}
+	}`
+	if err := os.WriteFile(executionPath, []byte(executionDocument), 0o600); err != nil {
+		t.Fatalf("write future direct Worker execution file: %v", err)
+	}
+
+	inputs := support.FakeInputs(ctx, []string{
+		"you", "--json", "worker-sessions", "invoke", "--execution", executionPath,
+	})
+	homeDir := t.TempDir()
+	inputs.Input.Env = append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
+	inputs.Input.WorkingDirectory = t.TempDir()
+	if err := process.Execute(inputs.Input); err != nil {
+		t.Fatalf("future direct Worker execution: %v\nstdout:\n%s\nstderr:\n%s", err, inputs.Stdout(), inputs.Stderr())
+	}
+
+	var result directWorkerSessionCLIResult
+	decodeDirectWorkerSessionResult(t, inputs.Stdout(), &result)
+	if !result.Accepted || result.RequestID != "future-file-request" ||
+		result.WorkerSessionID != "future-file-session" || result.State != "COMPLETED" ||
+		!strings.Contains(result.Output, "future-file output COMPLETE") {
+		t.Fatalf("future direct Worker result = %#v, want successful known execution", result)
+	}
+	wantWarning := "warning: ignored unknown direct Worker execution fields at $.execution.dispatch.futureDispatch, $.execution.futureExecution, $.futureTopLevel"
+	if !strings.Contains(inputs.Stderr(), wantWarning) {
+		t.Fatalf("stderr = %q, want sorted compatibility warning %q", inputs.Stderr(), wantWarning)
+	}
+	if strings.Contains(inputs.Stderr(), "secret") {
+		t.Fatalf("stderr compatibility warning leaked ignored field values: %q", inputs.Stderr())
+	}
+	if strings.TrimSpace(inputs.Stdout()) == "" || strings.Contains(inputs.Stdout(), "futureTopLevel") {
+		t.Fatalf("stdout = %q, want normal structured result without ignored fields", inputs.Stdout())
+	}
 }
 
 // WSR-FT-015: root.BuildProcess/Process.Execute admits a paused Worker

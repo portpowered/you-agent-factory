@@ -1,5 +1,5 @@
 type: object
-additionalProperties: false
+additionalProperties: true
 description: Exact operator-authored rates for one provider and model identity.
 required:
   - provider

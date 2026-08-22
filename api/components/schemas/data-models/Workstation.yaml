@@ -3,7 +3,13 @@ description: >-
   work states, run a worker or logical move, and emit the next work
   states.
 type: object
-additionalProperties: false
+additionalProperties: true
+# `join` was retired when fan-in moved to explicit Work inputs and guards. Keep
+# the workstation object open for additive fields without reviving that
+# removed execution semantic.
+not:
+  required:
+    - join
 required:
   - name
   - inputs

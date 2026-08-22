@@ -6,6 +6,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -19,6 +20,8 @@ import (
 	"github.com/portpowered/infinite-you/pkg/transports/cli/terminalpolicy"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zaptest/observer"
 )
 
 func TestRun_RedirectedHumanResponseStreamConsumesOnlyCanonicalTypedEvents(t *testing.T) {
@@ -453,6 +456,56 @@ func TestRun_WithMockWorkersConfigPathLoadsConfigBeforeServiceStart(t *testing.T
 	}
 	if got[0].RejectConfig == nil || got[0].RejectConfig.ExitCode == nil || *got[0].RejectConfig.ExitCode != 42 {
 		t.Fatalf("reject config = %#v, want exit code 42", got[0].RejectConfig)
+	}
+}
+
+func TestRun_WithMockWorkersDiagnosticsLoaderWarnsWithSortedPaths(t *testing.T) {
+	originalBuilder := openTestRuntimeRunner
+	t.Cleanup(func() {
+		openTestRuntimeRunner = originalBuilder
+	})
+	openTestRuntimeRunner = func(context.Context, *testRuntimeSelections, serviceedges.Edges) (factoryServiceRunner, error) {
+		return stubFactoryService{run: func(context.Context) error { return nil }}, nil
+	}
+
+	core, observed := observer.New(zap.WarnLevel)
+	logger := zap.New(core)
+	loadWithDiagnostics := workers.MockWorkersConfigDiagnosticsLoader(func(path string) (*workers.MockWorkersConfig, workers.MockWorkersConfigDecodeDiagnostics, error) {
+		if path != "mock-workers-future.json" {
+			t.Fatalf("diagnostics loader path = %q, want mock-workers-future.json", path)
+		}
+		return &workers.MockWorkersConfig{MockWorkers: []workers.MockWorkerConfig{{RunType: workers.MockWorkerRunTypeAccept}}}, workers.MockWorkersConfigDecodeDiagnostics{
+			IgnoredJSONPaths: []string{"$.zFuture", "$.mockWorkers[0].futureEntry", "$.aFuture", "$.zFuture"},
+		}, nil
+	})
+
+	err := runWithTestRuntimeRunnerAndMockWorkersDiagnosticsLoader(
+		context.Background(),
+		RunConfig{
+			DisableDefaultRecording: true,
+			Logger:                  logger,
+			MockWorkersEnabled:      true,
+			MockWorkersConfigPath:   "mock-workers-future.json",
+		},
+		nil,
+		nil,
+		loadWithDiagnostics,
+	)
+	if err != nil {
+		t.Fatalf("runWithTestRuntimeRunnerAndMockWorkersDiagnosticsLoader() error = %v", err)
+	}
+
+	entries := observed.FilterMessage("workers.mock_workers_config.unknown_fields_ignored").All()
+	if len(entries) != 1 {
+		t.Fatalf("compatibility warning count = %d, want 1", len(entries))
+	}
+	fields := entries[0].ContextMap()
+	wantPaths := []interface{}{"$.aFuture", "$.mockWorkers[0].futureEntry", "$.zFuture"}
+	if got, ok := fields["json_paths"].([]interface{}); !ok || !reflect.DeepEqual(got, wantPaths) {
+		t.Fatalf("warning json_paths = %#v, want %#v", fields["json_paths"], wantPaths)
+	}
+	if strings.Contains(entries[0].Message, "secret") {
+		t.Fatalf("compatibility warning leaked ignored field value: %q", entries[0].Message)
 	}
 }
 

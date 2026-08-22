@@ -32,9 +32,10 @@ type InputCase struct {
 
 // ConfigExpectation records expected generated-document decode/load outputs.
 type ConfigExpectation struct {
-	BackendScopeID string           `json:"backendScopeID,omitempty"`
-	Defaults       DefaultsSnapshot `json:"defaults"`
-	WorkerPresets  []WorkerPreset   `json:"workerPresets,omitempty"`
+	BackendScopeID   string           `json:"backendScopeID,omitempty"`
+	Defaults         DefaultsSnapshot `json:"defaults"`
+	WorkerPresets    []WorkerPreset   `json:"workerPresets,omitempty"`
+	IgnoredJSONPaths []string         `json:"ignoredJSONPaths,omitempty"`
 }
 
 // DefaultsSnapshot is the trimmed defaults shape asserted by inventory table tests.

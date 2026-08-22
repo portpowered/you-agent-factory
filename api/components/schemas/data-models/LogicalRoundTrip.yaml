@@ -1,6 +1,6 @@
 type: object
 description: Optional paired workstation policy for charging one logical visit per process/review round trip.
-additionalProperties: false
+additionalProperties: true
 required:
   - workstations
   - maxRawVisits

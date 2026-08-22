@@ -1,5 +1,5 @@
 type: object
-additionalProperties: false
+additionalProperties: true
 description: >-
   Optional operator overlay for one model. Omitted fields preserve a built-in
   definition; new model names must provide every field.

@@ -78,7 +78,7 @@ func familiesWithParser(globalParser ParseFunc) []Family {
 		},
 		{
 			ID:                   FamilyFactory,
-			ParserID:             "pkg/transports/mapping/factoryconfig.FactoryConfigMapper.Expand",
+			ParserID:             "pkg/transports/mapping/factoryconfig.FactoryConfigMapper.ExpandStrict",
 			parser:               parseFactory,
 			CanonicalOwnerPath:   "api/openapi.yaml#/components/schemas/Factory",
 			SchemaProjectionPath: "contracts/config/factory.schema.json",
@@ -201,6 +201,6 @@ func parseMockWorkers(payload []byte) error {
 }
 
 func parseFactory(payload []byte) error {
-	_, err := factorymapping.NewFactoryConfigMapper().Expand(payload)
+	_, err := factorymapping.NewFactoryConfigMapper().ExpandStrict(payload)
 	return err
 }

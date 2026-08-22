@@ -6459,7 +6459,7 @@ components:
           $ref: '#/components/schemas/ExpectedArtifactVerificationReason'
     ExpectedArtifactTemplateContext:
       type: object
-      additionalProperties: false
+      additionalProperties: true
       description: Stable, non-host context used when rendering expected-artifact patterns. Filesystem paths, environment variables, and Factory documentation are not part of this replayable vocabulary.
       properties:
         inputs:
@@ -6475,7 +6475,7 @@ components:
           description: Stable Factory Session identifier for the dispatch.
     ExpectedArtifactTemplateInput:
       type: object
-      additionalProperties: false
+      additionalProperties: true
       description: Stable replay-safe input value available to an expected-artifact template. This is intentionally smaller than the workstation prompt input surface so completion verification and historical Work reads can use the same values.
       properties:
         name:
@@ -6734,7 +6734,7 @@ components:
         - Reconciliation facts were produced by the runtime reconciler after a stream drop.
     SessionStartedEventPayload:
       type: object
-      additionalProperties: false
+      additionalProperties: true
       description: Session execution start recorded on the canonical factory event stream. Session and orchestrator identity live in FactoryEvent.context; this payload carries replay-safe factory and source facts only.
       required:
         - startedAt
@@ -6791,7 +6791,7 @@ components:
     SessionLifecycleControlEventPayload:
       type: object
       additionalProperties: false
-      description: Durable Factory Session lifecycle control recorded on the canonical factory event stream. Session identity lives in FactoryEvent.context; this payload carries replay-safe control facts only.
+      description: Durable Factory Session lifecycle control recorded on the canonical factory event stream. Session identity lives in FactoryEvent.context; this payload carries replay-safe control facts only. Its operation and outcome shape is intentionally closed because it is a fixed control contract, not an extensible event metadata bag.
       required:
         - operation
         - outcome
@@ -9424,7 +9424,7 @@ components:
           description: Terminal capacity decision recorded by the runtime.
     RunRequestEventPayload:
       type: object
-      additionalProperties: false
+      additionalProperties: true
       required:
         - recordedAt
         - factory
@@ -9657,7 +9657,7 @@ components:
     DispatchWorkerSessionAssociationEventPayload:
       type: object
       additionalProperties: false
-      description: Canonical association between one Factory dispatch and the Worker Session allocated to execute it. Dispatch identity remains authoritative in FactoryEvent.context.dispatchId and is not repeated in this payload.
+      description: 'Canonical association between one Factory dispatch and the Worker Session allocated to execute it. Dispatch identity remains authoritative in FactoryEvent.context.dispatchId and is not repeated in this payload. This public projection intentionally remains closed: canonical recording data may retain execution-only model and reasoningEffort facts, but this event serves only the Worker Session identity.'
       required:
         - workerSessionId
       properties:
@@ -11383,7 +11383,7 @@ components:
             $ref: '#/components/schemas/Workstation'
     FactoryWebhook:
       type: object
-      additionalProperties: false
+      additionalProperties: true
       required:
         - name
         - enabled
@@ -11415,7 +11415,7 @@ components:
           description: Optional bounded delivery policy. Omitted fields use the documented defaults.
     FactoryWebhookFilter:
       type: object
-      additionalProperties: false
+      additionalProperties: true
       required:
         - eventTypes
       description: Canonical event filter for one outbound webhook subscription.
@@ -11448,7 +11448,7 @@ components:
         - INTERRUPTED
     FactoryWebhookDeliveryPolicy:
       type: object
-      additionalProperties: false
+      additionalProperties: true
       description: Bounded outbound delivery policy. Durations use Go duration syntax. Omitted values resolve to a 10 second request timeout, 5 total attempts, 1 second initial backoff, 2.0 multiplier, and 30 second maximum backoff.
       properties:
         requestTimeout:
@@ -11551,7 +11551,7 @@ components:
           description: Inline JavaScript workflow source text.
     FactoryInvocationSignature:
       type: object
-      additionalProperties: false
+      additionalProperties: true
       description: Canonical callable argument contract for invoking one factory. When present, CLI, API, dashboard, docs, and packaged-factory surfaces should discover and normalize invocation inputs from this shared schema instead of transport- or factory-specific argument definitions.
       properties:
         parameters:
@@ -11569,7 +11569,7 @@ components:
           description: Optional customer-facing hint for the factory's primary output shape.
     FactoryInvocationParameter:
       type: object
-      additionalProperties: false
+      additionalProperties: true
       required:
         - name
       description: One canonical invocation parameter declared on a factory.
@@ -11622,7 +11622,7 @@ components:
             $ref: '#/components/schemas/FactoryInvocationParameterBinding'
     FactoryInvocationParameterBinding:
       type: object
-      additionalProperties: false
+      additionalProperties: true
       required:
         - kind
       description: One public binding that exposes a parameter to callers.
@@ -11670,7 +11670,7 @@ components:
         - COLLECT
     FactoryInvocationOutputContract:
       type: object
-      additionalProperties: false
+      additionalProperties: true
       description: Customer-facing output hint for a factory invocation signature.
       properties:
         mode:
@@ -11698,7 +11698,7 @@ components:
         - JSON
     FactoryInvocationExample:
       type: object
-      additionalProperties: false
+      additionalProperties: true
       required:
         - name
         - description
@@ -11728,7 +11728,7 @@ components:
               type: string
     InvocationReturn:
       type: object
-      additionalProperties: false
+      additionalProperties: true
       required:
         - policy
       description: Factory-authored policy for selecting the primary result returned by CLI and API invocations. When omitted from a Factory, runtimes use the documented SUBMITTED_WORK_TERMINAL fallback.
@@ -11792,7 +11792,7 @@ components:
             $ref: '#/components/schemas/BundledFile'
     RequiredTool:
       type: object
-      additionalProperties: false
+      additionalProperties: true
       required:
         - name
         - command
@@ -11814,7 +11814,7 @@ components:
             type: string
     BundledFile:
       type: object
-      additionalProperties: false
+      additionalProperties: true
       required:
         - type
         - targetPath
@@ -11839,7 +11839,7 @@ components:
           $ref: '#/components/schemas/BundledFileContent'
     BundledFileContent:
       type: object
-      additionalProperties: false
+      additionalProperties: true
       required:
         - encoding
         - inline
@@ -11855,7 +11855,7 @@ components:
           description: Inline bundled file content carried in the manifest. SCRIPT and DOC files under factory/scripts/ and factory/docs/ may be discovered during flatten, but supported root helper paths such as Makefile are bundled only when they appear as explicit ROOT_HELPER entries in bundledFiles.
     InputType:
       type: object
-      additionalProperties: false
+      additionalProperties: true
       description: Declared types of inputs. Used to force the inputs of a certain work type to be of a certain shape, like a specific JSON structure.
       required:
         - name
@@ -11974,7 +11974,10 @@ components:
     Worker:
       description: A reusable worker definition that tells the factory how a workstation should execute work, such as through a model-backed agent or a script.
       type: object
-      additionalProperties: false
+      additionalProperties: true
+      not:
+        required:
+          - promptFile
       required:
         - name
       properties:
@@ -12958,7 +12961,7 @@ components:
       pattern: ^(?:ACP|SCRIPT_WRAP|\$\{[A-Za-z0-9_.-]+\}|[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*)$
     ModelOperation:
       type: object
-      additionalProperties: false
+      additionalProperties: true
       required:
         - name
       description: One provider-agnostic operation exposed by a model worker, such as `TTS`.
@@ -12977,7 +12980,7 @@ components:
             $ref: '#/components/schemas/ModelOperationSlot'
     ModelOperationSlot:
       type: object
-      additionalProperties: false
+      additionalProperties: true
       required:
         - name
         - contentTypes
@@ -13027,7 +13030,10 @@ components:
     Workstation:
       description: A processing step in the factory graph. Workstations consume authored work states, run a worker or logical move, and emit the next work states.
       type: object
-      additionalProperties: false
+      additionalProperties: true
+      not:
+        required:
+          - join
       required:
         - name
         - inputs
@@ -13164,7 +13170,7 @@ components:
         - decision-envelope
     ClassificationRoute:
       type: object
-      additionalProperties: false
+      additionalProperties: true
       required:
         - label
         - outputs
@@ -13180,7 +13186,7 @@ components:
     WorkstationLimits:
       type: object
       description: Retry and execution ceilings applied to one workstation definition.
-      additionalProperties: false
+      additionalProperties: true
       properties:
         maxRetries:
           type: integer
@@ -13224,7 +13230,7 @@ components:
     WorkstationCron:
       type: object
       description: Trigger timing for scheduled workstations. Provide exactly one of a five-field cron schedule or a positive duration in every; Factory validation enforces the exclusive choice.
-      additionalProperties: false
+      additionalProperties: true
       properties:
         schedule:
           type: string
@@ -13316,7 +13322,7 @@ components:
     WorkstationIO:
       type: object
       description: One authored work-state reference consumed or emitted by a workstation.
-      additionalProperties: false
+      additionalProperties: true
       required:
         - workType
         - state
@@ -13830,7 +13836,7 @@ components:
               location: STATES
     GlobalConfig:
       type: object
-      additionalProperties: false
+      additionalProperties: true
       description: Shared operator configuration stored in .you-agent-factory/config.json.
       properties:
         backendScopeID:
@@ -13853,7 +13859,7 @@ components:
             $ref: '#/components/schemas/GlobalConfigWorkerPreset'
     GlobalConfigDefaults:
       type: object
-      additionalProperties: false
+      additionalProperties: true
       description: Operator defaults that participate independently in file, environment, and flag precedence.
       properties:
         workerModelProvider:
@@ -13864,7 +13870,7 @@ components:
           description: Default worker model name.
     GlobalConfigPriceTable:
       type: object
-      additionalProperties: false
+      additionalProperties: true
       description: Operator-authored USD rates per one million tokens. Omit this property to use an empty table; no provider or model prices are supplied by default.
       required:
         - currency
@@ -13882,7 +13888,7 @@ components:
             $ref: '#/components/schemas/GlobalConfigPriceTableModel'
     GlobalConfigPriceTableModel:
       type: object
-      additionalProperties: false
+      additionalProperties: true
       description: Exact operator-authored rates for one provider and model identity.
       required:
         - provider
@@ -13917,7 +13923,7 @@ components:
           description: Optional non-negative USD rate per one million reasoning output tokens.
     GlobalConfigRuntime:
       type: object
-      additionalProperties: false
+      additionalProperties: true
       description: Runtime observability settings loaded from operator configuration before command-line overrides.
       properties:
         logging:
@@ -13930,7 +13936,7 @@ components:
           description: Runtime metrics storage settings. Omitted values use the documented production defaults.
     GlobalConfigRuntimeArtifactSettings:
       type: object
-      additionalProperties: false
+      additionalProperties: true
       description: Rolling-file storage settings for one runtime observability artifact.
       properties:
         directory:
@@ -13963,7 +13969,7 @@ components:
         $ref: '#/components/schemas/GlobalConfigModel'
     GlobalConfigModel:
       type: object
-      additionalProperties: false
+      additionalProperties: true
       description: Optional operator overlay for one model. Omitted fields preserve a built-in definition; new model names must provide every field.
       properties:
         source:
@@ -13997,7 +14003,7 @@ components:
         - ASR
     GlobalConfigWorkerPreset:
       type: object
-      additionalProperties: false
+      additionalProperties: true
       description: Named worker model selection available to Factory Session runtime opening.
       required:
         - id
@@ -14335,7 +14341,7 @@ components:
       pattern: ^[A-Z][A-Z0-9_]*$
     WorkstationOperationBindingSelector:
       type: object
-      additionalProperties: false
+      additionalProperties: true
       description: Selector fields used to resolve one content part from ordered runtime input.
       properties:
         slot:
@@ -14353,7 +14359,7 @@ components:
           description: Match a content part by its role field.
     WorkstationOperationBinding:
       type: object
-      additionalProperties: false
+      additionalProperties: true
       required:
         - slot
       description: One workstation-authored binding for a provider-agnostic model-operation input slot.
@@ -14396,7 +14402,7 @@ components:
         - DEFAULT
     ExpectedArtifact:
       type: object
-      additionalProperties: false
+      additionalProperties: true
       description: One expected output declaration relative to the dispatch workspace. Pattern is a workspace-relative literal path or glob and may use the replay-safe dispatch template fields `.Inputs` (the replay-safe fields are documented by `ExpectedArtifactTemplateInput`), `.Context.Project`, and `.Context.SessionID` inside a Go template action. Prompt-only fields, host paths, environment variables, and Factory documentation are not supported.
       required:
         - name
@@ -14837,7 +14843,7 @@ components:
     HostedLinearWorkerMapping:
       description: Deterministic issue-to-work mapping fields owned by a hosted Linear worker.
       type: object
-      additionalProperties: false
+      additionalProperties: true
       properties:
         workType:
           type: string
@@ -14848,7 +14854,7 @@ components:
     HostedLinearWorkerClaim:
       description: Optional claim-related configuration that v1 hosted Linear workers explicitly allow.
       type: object
-      additionalProperties: false
+      additionalProperties: true
       properties:
         assigneeField:
           type: string
@@ -14856,7 +14862,7 @@ components:
     HostedLinearWorkerConfig:
       description: Provider-specific poller configuration for the built-in hosted Linear worker.
       type: object
-      additionalProperties: false
+      additionalProperties: true
       properties:
         pollInterval:
           type: string
@@ -14928,7 +14934,7 @@ components:
     LogicalRoundTrip:
       type: object
       description: Optional paired workstation policy for charging one logical visit per process/review round trip.
-      additionalProperties: false
+      additionalProperties: true
       required:
         - workstations
         - maxRawVisits
@@ -15031,7 +15037,7 @@ components:
             minLength: 1
     GlobalConfigACPSettings:
       type: object
-      additionalProperties: false
+      additionalProperties: true
       properties:
         integrations:
           type: array
@@ -15042,7 +15048,7 @@ components:
           $ref: '#/components/schemas/GlobalConfigACPAgentProfile'
     GlobalConfigWorkers:
       type: object
-      additionalProperties: false
+      additionalProperties: true
       properties:
         acp:
           $ref: '#/components/schemas/GlobalConfigACPSettings'

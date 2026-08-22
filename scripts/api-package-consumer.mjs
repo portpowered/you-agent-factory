@@ -202,7 +202,12 @@ function requireObject(value, message) {
 	return value;
 }
 
-function requireConfigurationSchema(document, specifier, expectedID) {
+function requireConfigurationSchema(
+	document,
+	specifier,
+	expectedID,
+	expectedAdditionalProperties,
+) {
 	const schema = requireObject(
 		document,
 		`[api-package-consumer] export is not a JSON Schema object: ${specifier}`,
@@ -211,7 +216,7 @@ function requireConfigurationSchema(document, specifier, expectedID) {
 		schema.$schema !== "https://json-schema.org/draft/2020-12/schema" ||
 		schema.$id !== expectedID ||
 		schema.type !== "object" ||
-		schema.additionalProperties !== false ||
+		schema.additionalProperties !== expectedAdditionalProperties ||
 		typeof schema.properties !== "object"
 	) {
 		throw new Error(
@@ -340,6 +345,7 @@ async function verifyJSONArtifactSemantics({
 			document,
 			specifier,
 			"https://schemas.portpowered.com/you/config/you-config.schema.json",
+			true,
 		);
 		if (!schema.properties.defaults || !schema.properties.workerPresets) {
 			throw new Error(
@@ -353,6 +359,7 @@ async function verifyJSONArtifactSemantics({
 			document,
 			specifier,
 			"https://schemas.portpowered.com/you/config/factory.schema.json",
+			false,
 		);
 		if (
 			!schema.required?.includes("name") ||
@@ -401,6 +408,7 @@ async function verifyJSONArtifactSemantics({
 			document,
 			specifier,
 			"https://schemas.portpowered.com/you/config/mock-workers.schema.json",
+			true,
 		);
 		const mockWorker = schema.$defs?.mockWorker;
 		if (

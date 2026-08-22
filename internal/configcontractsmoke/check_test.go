@@ -27,9 +27,6 @@ func testGlobalParser(payload []byte) error {
 	if err := json.Unmarshal(payload, &document); err != nil {
 		return err
 	}
-	if _, ok := document["unexpectedTopLevel"]; ok {
-		return fmt.Errorf("unexpectedTopLevel")
-	}
 	if strings.Contains(string(payload), "Other_Provider") {
 		return fmt.Errorf("modelProvider")
 	}

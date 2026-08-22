@@ -10,7 +10,7 @@ import (
 )
 
 // Service is the singular document subservice contract for the Operator
-// Settings root. It owns strict load, semantic update, and atomic persist of
+// Settings root. It owns tolerant-and-diagnostic load, semantic update, and atomic persist of
 // the operator document behind the parent-private boundary.
 type Service interface {
 	LoadDocument(operatorsettings.LoadDocumentRequest) (operatorsettings.LoadDocumentResult, error)

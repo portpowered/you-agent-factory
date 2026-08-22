@@ -19,25 +19,31 @@ var invocationInterpolationPlaceholderPattern = regexp.MustCompile(`^\$\{[A-Za-z
 // GeneratedFactoryFromOpenAPIJSON converts an OpenAPI-compatible factory JSON
 // payload into the generated Factory boundary model.
 func GeneratedFactoryFromOpenAPIJSON(data []byte) (factoryapi.Factory, error) {
-	boundary, err := decodeGeneratedFactoryBoundaryJSON(data)
+	factory, _, err := GeneratedFactoryFromOpenAPIJSONWithDiagnostics(data)
 	if err != nil {
 		return factoryapi.Factory{}, err
 	}
-	return boundary.generated, nil
+	return factory, nil
+}
+
+// GeneratedFactoryFromOpenAPIJSONWithDiagnostics converts an OpenAPI-compatible
+// Factory payload and returns safe paths for ignored forward-compatible fields.
+func GeneratedFactoryFromOpenAPIJSONWithDiagnostics(
+	data []byte,
+) (factoryapi.Factory, FactoryDecodeDiagnostics, error) {
+	boundary, err := decodeGeneratedFactoryBoundaryJSON(data)
+	if err != nil {
+		return factoryapi.Factory{}, FactoryDecodeDiagnostics{}, err
+	}
+	return boundary.generated, FactoryDecodeDiagnostics{
+		IgnoredJSONPaths: boundary.diagnostics.Paths(),
+	}, nil
 }
 
 // FactoryConfigFromOpenAPIJSON converts an OpenAPI-compatible factory JSON payload
 // into the internal config representation used by runtime mappers and tests.
 func FactoryConfigFromOpenAPIJSON(data []byte) (*interfaces.FactoryConfig, error) {
-	generated, err := GeneratedFactoryFromOpenAPIJSON(data)
-	if err != nil {
-		return nil, err
-	}
-	cfg, err := FactoryConfigFromOpenAPI(generated)
-	if err != nil {
-		return nil, err
-	}
-	return &cfg, nil
+	return defaultFactoryConfigMapper.Expand(data)
 }
 
 // MarshalCanonicalFactoryConfig serializes factory config using camelCase keys across

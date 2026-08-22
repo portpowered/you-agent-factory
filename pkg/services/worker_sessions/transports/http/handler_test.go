@@ -728,7 +728,6 @@ func TestStartWorkerSessionRejectsMalformedOrUnboundedInputBeforeService(t *test
 	}{
 		{name: "missing request id", body: `{"workerSessionId":"worker-1","execution":{"workstationName":"swe","dispatch":{"dispatchId":"dispatch-1","workstationName":"swe"}}}`},
 		{name: "retry budget too large", body: `{"requestId":"request-1","workerSessionId":"worker-1","retry":{"maxAttempts":17},"execution":{"workstationName":"swe","dispatch":{"dispatchId":"dispatch-1","workstationName":"swe"}}}`},
-		{name: "unknown field", body: `{"requestId":"request-1","workerSessionId":"worker-1","unexpected":true,"execution":{"workstationName":"swe","dispatch":{"dispatchId":"dispatch-1","workstationName":"swe"}}}`},
 	} {
 		t.Run(testCase.name, func(t *testing.T) {
 			service := &fakeObservationService{}

@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -45,6 +46,44 @@ func TestReplayInputLoaderClassifiesPortableRecording(t *testing.T) {
 	}
 	if got := result.Portable.Session.ID; got != "session-js-001" {
 		t.Fatalf("Portable.Session.ID = %q, want session-js-001", got)
+	}
+}
+
+func TestReplayInputLoaderReturnsPortableDecodeDiagnostics(t *testing.T) {
+	t.Parallel()
+
+	path := testpath.MustRepoPathFromCaller(
+		t,
+		0,
+		"pkg", "services", "recordings", "internal", "artifacts", "testdata", "valid-v2.json",
+	)
+	payload, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var document map[string]json.RawMessage
+	if err := json.Unmarshal(payload, &document); err != nil {
+		t.Fatal(err)
+	}
+	document["futureReplayField"] = json.RawMessage(`true`)
+	payload, err = json.Marshal(document)
+	if err != nil {
+		t.Fatal(err)
+	}
+	loader := recordingswire.NewReplayInputLoader(
+		func(string) ([]byte, error) { return payload, nil },
+		nil,
+		logging.NoopLogger{},
+	)
+	result, err := loader.LoadReplayInput(recordings.LoadReplayInputRequest{Path: "recording.json"})
+	if err != nil {
+		t.Fatalf("LoadReplayInput() error = %v", err)
+	}
+	if result.Diagnostics == nil {
+		t.Fatal("replay diagnostics = nil, want ignored future-field path")
+	}
+	if !reflect.DeepEqual(result.Diagnostics.IgnoredJSONPaths, []string{"$.futureReplayField"}) {
+		t.Fatalf("ignored paths = %#v, want future replay path", result.Diagnostics.IgnoredJSONPaths)
 	}
 }
 

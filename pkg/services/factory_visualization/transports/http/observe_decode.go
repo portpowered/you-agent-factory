@@ -4,6 +4,7 @@ import (
 	"io"
 
 	factoryvisualization "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
+	httpcompat "github.com/portpowered/infinite-you/pkg/transports/http/compat"
 )
 
 type observeHTTPDecodeError struct {
@@ -18,19 +19,19 @@ func (e observeHTTPDecodeError) Unwrap() error {
 	return e.cause
 }
 
-func decodeObserveHTTPRequest(body io.Reader) (factoryvisualization.ObserveRequest, error) {
-	req, err := decodeStrictJSON[ObserveHTTPRequest](body)
+func decodeObserveHTTPRequest(body io.Reader) (factoryvisualization.ObserveRequest, httpcompat.Diagnostics, error) {
+	decoded, err := decodeJSONWithDiagnostics[ObserveHTTPRequest](body)
 	if err != nil {
-		return factoryvisualization.ObserveRequest{}, observeHTTPDecodeError{cause: err}
+		return factoryvisualization.ObserveRequest{}, decoded.Diagnostics, observeHTTPDecodeError{cause: err}
 	}
 	rootReq := factoryvisualization.ObserveRequest{
-		Mode: factoryvisualization.ObserveMode(req.Mode),
+		Mode: factoryvisualization.ObserveMode(decoded.Value.Mode),
 	}
-	if req.Reconnect != nil {
+	if decoded.Value.Reconnect != nil {
 		rootReq.Reconnect = &factoryvisualization.ObserveReconnectCursor{
-			AfterEventID:  req.Reconnect.AfterEventID,
-			AfterSequence: req.Reconnect.AfterSequence,
+			AfterEventID:  decoded.Value.Reconnect.AfterEventID,
+			AfterSequence: decoded.Value.Reconnect.AfterSequence,
 		}
 	}
-	return rootReq, nil
+	return rootReq, decoded.Diagnostics, nil
 }

@@ -1,6 +1,6 @@
 {
   "formatVersion": "system-config-input/v1",
-  "unknownFieldPolicy": "EnsureLocalBackendScope decodes the generated closed GlobalConfig contract and rejects unknown fields before identity reuse or persistence",
+  "unknownFieldPolicy": "EnsureLocalBackendScope accepts unknown object fields through the tolerant GlobalConfig decoder; known-field validation and exactly one JSON document remain strict, with ignored paths available to the owning caller",
   "siblingPreservation": "persistBackendScopeID re-encodes the generated GlobalConfig contract and preserves decoded defaults and workerPresets",
   "cases": [
     {
@@ -108,16 +108,20 @@
       ]
     },
     {
-      "id": "invalid-unknown-sibling",
+      "id": "valid-unknown-sibling",
       "category": "ensure-scope",
       "entrypoint": "EnsureLocalBackendScope",
-      "outcome": "reject",
+      "outcome": "accept",
       "fixture": "valid/unknown-sibling.json",
-      "description": "the generated closed GlobalConfig contract rejects unknown top-level siblings",
-      "errorFragments": [
-        "parse operator config",
-        "unknownTopLevel"
-      ]
+      "description": "unknown top-level siblings are ignored while backend scope generation remains usable",
+      "expectedScope": {
+        "outcome": "generated",
+        "requireLocalUUID": true
+      },
+      "persistedFileExpectation": {
+        "backendScopeIDMatchesResolved": true,
+        "preservesDefaults": true
+      }
     },
     {
       "id": "invalid-persist-empty-scope",

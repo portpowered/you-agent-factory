@@ -108,8 +108,14 @@ func NewInvoke(transport clihttp.Protocol, local LocalInvokeBoundary, effects ..
 }
 
 type normalizedInvokeRequest struct {
-	API     factoryapi.WorkerSessionStartRequest
-	Service workersessions.StartRequest
+	API              factoryapi.WorkerSessionStartRequest
+	Service          workersessions.StartRequest
+	IgnoredJSONPaths []string
+}
+
+type invokeRequestDecodeResult struct {
+	Request          factoryapi.WorkerSessionStartRequest
+	IgnoredJSONPaths []string
 }
 
 type invokeResult struct {
@@ -173,10 +179,11 @@ func validateInvokeConfig(config InvokeConfig) error {
 }
 
 func normalizeInvokeRequest(config InvokeConfig) (normalizedInvokeRequest, error) {
-	request, err := readInvokeRequest(config)
+	decoded, err := readInvokeRequestWithDiagnostics(config)
 	if err != nil {
 		return normalizedInvokeRequest{}, err
 	}
+	request := decoded.Request
 	if err := applyInvokeOverrides(&request, config); err != nil {
 		return normalizedInvokeRequest{}, err
 	}
@@ -192,7 +199,11 @@ func normalizeInvokeRequest(config InvokeConfig) (normalizedInvokeRequest, error
 	if err != nil {
 		return normalizedInvokeRequest{}, newCLIError("WORKER_SESSION_INVOKE_INVALID", "failed to normalize direct Worker execution request", err)
 	}
-	return normalizedInvokeRequest{API: normalizedAPI, Service: serviceRequest}, nil
+	return normalizedInvokeRequest{
+		API:              normalizedAPI,
+		Service:          serviceRequest,
+		IgnoredJSONPaths: decoded.IgnoredJSONPaths,
+	}, nil
 }
 
 func applyInvokeOverrides(request *factoryapi.WorkerSessionStartRequest, config InvokeConfig) error {
@@ -312,49 +323,6 @@ func ensureInvokeIdentities(request *factoryapi.WorkerSessionStartRequest, gener
 	return nil
 }
 
-func readInvokeRequest(config InvokeConfig) (factoryapi.WorkerSessionStartRequest, error) {
-	input := strings.TrimSpace(config.ExecutionJSON)
-	if input == "" {
-		return factoryapi.WorkerSessionStartRequest{}, nil
-	}
-	var data []byte
-	if input == "-" {
-		if config.Stdin == nil {
-			return factoryapi.WorkerSessionStartRequest{}, newCLIError("WORKER_SESSION_INPUT_MISSING", "--execution - requires JSON on stdin", nil)
-		}
-		var err error
-		data, err = io.ReadAll(config.Stdin)
-		if err != nil {
-			return factoryapi.WorkerSessionStartRequest{}, newCLIError("WORKER_SESSION_INPUT_FAILED", "failed to read direct Worker execution from stdin", err)
-		}
-	} else if strings.HasPrefix(input, "{") {
-		data = []byte(input)
-	} else {
-		var err error
-		if config.ReadFile == nil {
-			return factoryapi.WorkerSessionStartRequest{}, newCLIError("WORKER_SESSION_INPUT_FAILED", "direct Worker execution file reader is unavailable", nil)
-		}
-		data, err = config.ReadFile(input)
-		if err != nil {
-			return factoryapi.WorkerSessionStartRequest{}, newCLIError("WORKER_SESSION_INPUT_FAILED", "failed to read direct Worker execution file", err)
-		}
-	}
-	var request factoryapi.WorkerSessionStartRequest
-	decoder := json.NewDecoder(bytes.NewReader(data))
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(&request); err != nil {
-		return factoryapi.WorkerSessionStartRequest{}, newCLIError("WORKER_SESSION_INPUT_INVALID", "direct Worker execution input is not valid JSON", err)
-	}
-	var trailing any
-	if err := decoder.Decode(&trailing); err != io.EOF {
-		if err == nil {
-			err = errors.New("multiple JSON values")
-		}
-		return factoryapi.WorkerSessionStartRequest{}, newCLIError("WORKER_SESSION_INPUT_INVALID", "direct Worker execution input must contain exactly one JSON object", err)
-	}
-	return request, nil
-}
-
 func resolveInvokeMessage(config InvokeConfig) (string, error) {
 	if len(config.Prompt) > 0 {
 		parts := make([]string, len(config.Prompt))
@@ -387,7 +355,7 @@ func invokeLocal(config InvokeConfig, request normalizedInvokeRequest, jsonOutpu
 			EventTopic:      string(workersessions.Topic(admitted.Session.ID)),
 			Observation:     observationGuidance(admitted.Session.ID),
 		}
-		return writeInvokeResult(config, jsonOutput, result, false)
+		return writeInvokeResultWithCompatibilityWarning(config, jsonOutput, result, false, request.IgnoredJSONPaths)
 	}
 
 	started, err := config.Local.Start(config.Context, request.Service)
@@ -404,7 +372,11 @@ func invokeLocal(config InvokeConfig, request normalizedInvokeRequest, jsonOutpu
 	if err := terminalInvokeError(capture); err != nil {
 		return emitInvokeCLIError(config, jsonOutput, err)
 	}
-	return writeInvokeResult(config, jsonOutput, invokeResultFromCapture(request.Service.RequestID, started.Session.ID, capture), true)
+	return writeInvokeResultWithCompatibilityWarning(
+		config, jsonOutput,
+		invokeResultFromCapture(request.Service.RequestID, started.Session.ID, capture), true,
+		request.IgnoredJSONPaths,
+	)
 }
 
 func waitLocalTerminal(ctx context.Context, boundary LocalObservationBoundary, workerSessionID string) (invokeCapture, error) {
@@ -449,7 +421,7 @@ func invokeRemote(config InvokeConfig, request normalizedInvokeRequest, jsonOutp
 		Observation:     observationGuidance(admitted.WorkerSessionId),
 	}
 	if config.Async {
-		return writeInvokeResult(config, jsonOutput, result, false)
+		return writeInvokeResultWithCompatibilityWarning(config, jsonOutput, result, false, request.IgnoredJSONPaths)
 	}
 	capture, err := waitRemoteTerminal(config, admitted.WorkerSessionId)
 	if err != nil {
@@ -465,7 +437,7 @@ func invokeRemote(config InvokeConfig, request normalizedInvokeRequest, jsonOutp
 	if capture.HasStructured {
 		result.StructuredResult = capture.StructuredResult
 	}
-	return writeInvokeResult(config, jsonOutput, result, true)
+	return writeInvokeResultWithCompatibilityWarning(config, jsonOutput, result, true, request.IgnoredJSONPaths)
 }
 
 func admitRemoteWorkerSession(config InvokeConfig, request normalizedInvokeRequest) (factoryapi.WorkerSessionStartResponse, error) {

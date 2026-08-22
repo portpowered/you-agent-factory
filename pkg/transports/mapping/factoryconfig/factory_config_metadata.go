@@ -24,7 +24,8 @@ func NewFactoryConfigMapper() *FactoryConfigMapper {
 }
 
 type generatedFactoryBoundary struct {
-	generated factoryapi.Factory
+	generated   factoryapi.Factory
+	diagnostics FactoryDecodeDiagnostics
 }
 
 const generatedFactoryBoundaryErrorPrefix = "decode factory generated-schema boundary"
@@ -32,7 +33,15 @@ const generatedFactoryBoundaryErrorPrefix = "decode factory generated-schema bou
 // Expand parses and normalizes a user-provided factory payload into the internal
 // canonical configuration representation.
 func (m *FactoryConfigMapper) Expand(data []byte) (*interfaces.FactoryConfig, error) {
-	boundary, err := decodeGeneratedFactoryBoundaryJSON(data)
+	cfg, _, err := m.ExpandWithDiagnostics(data)
+	return cfg, err
+}
+
+// ExpandStrict parses a Factory payload for repository-internal catalog and
+// packaging tooling. Customer-facing loading must use Expand or
+// ExpandWithDiagnostics so additive fields remain forward compatible.
+func (m *FactoryConfigMapper) ExpandStrict(data []byte) (*interfaces.FactoryConfig, error) {
+	boundary, err := decodeGeneratedFactoryBoundaryJSONWithPolicy(data, true)
 	if err != nil {
 		return nil, err
 	}
@@ -44,7 +53,34 @@ func (m *FactoryConfigMapper) Expand(data []byte) (*interfaces.FactoryConfig, er
 	return &cfg, nil
 }
 
+// ExpandWithDiagnostics parses and normalizes a user-provided factory payload,
+// retaining safe paths for fields that were ignored as forward-compatible
+// additions.
+func (m *FactoryConfigMapper) ExpandWithDiagnostics(
+	data []byte,
+) (*interfaces.FactoryConfig, FactoryDecodeDiagnostics, error) {
+	boundary, err := decodeGeneratedFactoryBoundaryJSON(data)
+	if err != nil {
+		return nil, FactoryDecodeDiagnostics{}, err
+	}
+
+	cfg, err := FactoryConfigFromOpenAPI(boundary.generated)
+	if err != nil {
+		return nil, FactoryDecodeDiagnostics{}, err
+	}
+	cfg.SetIgnoredJSONPaths(boundary.diagnostics.Paths())
+	diagnostics := FactoryDecodeDiagnostics{IgnoredJSONPaths: boundary.diagnostics.Paths()}
+	return &cfg, diagnostics, nil
+}
+
 func decodeGeneratedFactoryBoundaryJSON(data []byte) (generatedFactoryBoundary, error) {
+	return decodeGeneratedFactoryBoundaryJSONWithPolicy(data, false)
+}
+
+func decodeGeneratedFactoryBoundaryJSONWithPolicy(
+	data []byte,
+	rejectUnknownFields bool,
+) (generatedFactoryBoundary, error) {
 	if err := retiredboundary.RejectGeneratedBoundaryAliases(data); err != nil {
 		return generatedFactoryBoundary{}, fmt.Errorf("%s: %w", generatedFactoryBoundaryErrorPrefix, err)
 	}
@@ -64,19 +100,42 @@ func decodeGeneratedFactoryBoundaryJSON(data []byte) (generatedFactoryBoundary, 
 	if err := validatePortableLayoutBoundaryJSON(normalizedData); err != nil {
 		return generatedFactoryBoundary{}, fmt.Errorf("%s: %w", generatedFactoryBoundaryErrorPrefix, err)
 	}
+	ignoredJSONPaths, err := collectUnknownFactoryJSONPaths(normalizedData)
+	if err != nil {
+		return generatedFactoryBoundary{}, fmt.Errorf("%s: %w", generatedFactoryBoundaryErrorPrefix, err)
+	}
+	if rejectUnknownFields && len(ignoredJSONPaths) > 0 {
+		return generatedFactoryBoundary{}, fmt.Errorf(
+			"%s: json: unknown field %q",
+			generatedFactoryBoundaryErrorPrefix,
+			jsonFieldNameFromPath(ignoredJSONPaths[0]),
+		)
+	}
 
-	apiCfg, err := decodeGeneratedFactoryBoundary(normalizedData)
+	apiCfg, err := decodeGeneratedFactoryBoundaryWithPolicy(normalizedData, rejectUnknownFields)
 	if err != nil {
 		return generatedFactoryBoundary{}, fmt.Errorf("%s: %w", generatedFactoryBoundaryErrorPrefix, err)
 	}
 	return generatedFactoryBoundary{
 		generated: apiCfg,
+		diagnostics: FactoryDecodeDiagnostics{
+			IgnoredJSONPaths: ignoredJSONPaths,
+		},
 	}, nil
 }
 
-func decodeGeneratedFactoryBoundary(data []byte) (factoryapi.Factory, error) {
+func jsonFieldNameFromPath(path string) string {
+	if index := strings.LastIndex(path, "."); index >= 0 && index+1 < len(path) {
+		return path[index+1:]
+	}
+	return path
+}
+
+func decodeGeneratedFactoryBoundaryWithPolicy(data []byte, rejectUnknownFields bool) (factoryapi.Factory, error) {
 	decoder := json.NewDecoder(bytes.NewReader(data))
-	decoder.DisallowUnknownFields()
+	if rejectUnknownFields {
+		decoder.DisallowUnknownFields()
+	}
 
 	var apiCfg factoryapi.Factory
 	if err := decoder.Decode(&apiCfg); err != nil {
@@ -86,6 +145,19 @@ func decodeGeneratedFactoryBoundary(data []byte) (factoryapi.Factory, error) {
 		return factoryapi.Factory{}, err
 	}
 	if err := validateGeneratedFactoryBoundary(apiCfg); err != nil {
+		return factoryapi.Factory{}, err
+	}
+	return apiCfg, nil
+}
+
+func decodeAuthoredFactoryBoundary(data []byte) (factoryapi.Factory, error) {
+	decoder := json.NewDecoder(bytes.NewReader(data))
+
+	var apiCfg factoryapi.Factory
+	if err := decoder.Decode(&apiCfg); err != nil {
+		return factoryapi.Factory{}, fmt.Errorf("unmarshal factory api model: %w", err)
+	}
+	if err := ensureFactoryBoundaryEOF(decoder); err != nil {
 		return factoryapi.Factory{}, err
 	}
 	return apiCfg, nil

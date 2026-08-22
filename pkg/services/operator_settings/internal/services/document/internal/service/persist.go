@@ -2,8 +2,10 @@ package service
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"path/filepath"
 	"strings"
 
@@ -35,6 +37,17 @@ func (service *Service) persistDocument(
 	data, err := service.marshalDocument(request.Document)
 	if err != nil {
 		return err
+	}
+	if service.preserveUnknown != nil {
+		original, readErr := service.files.ReadFile(path)
+		if readErr == nil {
+			data, err = service.preserveUnknown(original, data)
+			if err != nil {
+				return fmt.Errorf("preserve forward-compatible operator document fields: %w", err)
+			}
+		} else if !errors.Is(readErr, fs.ErrNotExist) {
+			return fmt.Errorf("read existing operator document for compatibility preservation: %w", readErr)
+		}
 	}
 	if err := ctx.Err(); err != nil {
 		return fmt.Errorf("persist operator document: %w", err)

@@ -15,6 +15,7 @@ import (
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	recordings "github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/recordings/internal/canonical"
+	"github.com/portpowered/infinite-you/pkg/services/recordings/internal/jsoncompat"
 )
 
 // Service owns read-only reconstruction of one existing recording artifact.
@@ -58,7 +59,7 @@ func (service *Service) QueryHistoricalRecording(
 		}
 		return recordings.HistoricalRecordingQueryResult{}, historicalQueryError(kind, identity, "", err)
 	}
-	events, selectedTick, status, err := decodeHistoricalArtifact(payload, identity)
+	events, selectedTick, status, ignoredJSONPaths, err := decodeHistoricalArtifact(payload, identity)
 	if err != nil {
 		return recordings.HistoricalRecordingQueryResult{}, err
 	}
@@ -87,6 +88,7 @@ func (service *Service) QueryHistoricalRecording(
 		Recording:           identity,
 		Status:              status,
 		Events:              append([]recordings.CanonicalEvent(nil), events...),
+		IgnoredJSONPaths:    append([]string(nil), ignoredJSONPaths...),
 		WorldState:          state.WorldState,
 		WorkstationRequests: workstationRequests,
 		Dispatches:          dispatches,
@@ -114,12 +116,12 @@ type legacyArtifactDocument struct {
 func decodeHistoricalArtifact(
 	payload []byte,
 	identity recordings.HistoricalRecordingIdentity,
-) ([]recordings.CanonicalEvent, int, recordings.RecordingStatusFacts, error) {
+) ([]recordings.CanonicalEvent, int, recordings.RecordingStatusFacts, []string, error) {
 	var header struct {
 		SchemaVersion string `json:"schemaVersion"`
 	}
 	if err := json.Unmarshal(payload, &header); err != nil {
-		return nil, 0, recordings.RecordingStatusFacts{}, historicalQueryError(
+		return nil, 0, recordings.RecordingStatusFacts{}, nil, historicalQueryError(
 			recordings.HistoricalRecordingQueryErrorCorruptHistory, identity, "", err,
 		)
 	}
@@ -127,44 +129,38 @@ func decodeHistoricalArtifact(
 		return decodePortableArtifact(payload, identity)
 	}
 	if header.SchemaVersion != factorydefinitions.ReplayV1SourceFormat {
-		return nil, 0, recordings.RecordingStatusFacts{}, historicalQueryError(
+		return nil, 0, recordings.RecordingStatusFacts{}, nil, historicalQueryError(
 			recordings.HistoricalRecordingQueryErrorCorruptHistory, identity, "", nil,
 		)
 	}
-	return decodeLegacyArtifact(payload, identity)
+	events, selectedTick, status, err := decodeLegacyArtifact(payload, identity)
+	return events, selectedTick, status, nil, err
 }
 
 func decodePortableArtifact(
 	payload []byte,
 	identity recordings.HistoricalRecordingIdentity,
-) ([]recordings.CanonicalEvent, int, recordings.RecordingStatusFacts, error) {
+) ([]recordings.CanonicalEvent, int, recordings.RecordingStatusFacts, []string, error) {
 	var artifact recordings.PortableArtifact
-	decoder := json.NewDecoder(bytes.NewReader(payload))
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(&artifact); err != nil {
-		return nil, 0, recordings.RecordingStatusFacts{}, historicalQueryError(
-			recordings.HistoricalRecordingQueryErrorCorruptHistory, identity, "", err,
-		)
-	}
-	var trailing any
-	if err := decoder.Decode(&trailing); err != io.EOF {
-		return nil, 0, recordings.RecordingStatusFacts{}, historicalQueryError(
+	diagnostics, err := jsoncompat.Decode(payload, &artifact)
+	if err != nil {
+		return nil, 0, recordings.RecordingStatusFacts{}, nil, historicalQueryError(
 			recordings.HistoricalRecordingQueryErrorCorruptHistory, identity, "", err,
 		)
 	}
 	if err := validatePortableArtifact(artifact, identity); err != nil {
-		return nil, 0, recordings.RecordingStatusFacts{}, historicalQueryError(
+		return nil, 0, recordings.RecordingStatusFacts{}, nil, historicalQueryError(
 			recordings.HistoricalRecordingQueryErrorCorruptHistory, identity, "", err,
 		)
 	}
 	events := append([]recordings.CanonicalEvent(nil), artifact.Events...)
 	if err := validateHistoricalEvents(identity, events); err != nil {
-		return nil, 0, recordings.RecordingStatusFacts{}, err
+		return nil, 0, recordings.RecordingStatusFacts{}, nil, err
 	}
 	selectedTick := maxHistoricalTick(events)
 	status := historicalRecordingStatus(identity, artifact.Summary.State, events)
 	status.Failures = append([]recordings.RecordingFailure(nil), artifact.Summary.Failures...)
-	return events, selectedTick, status, nil
+	return events, selectedTick, status, diagnostics.Paths(), nil
 }
 
 func validatePortableArtifact(

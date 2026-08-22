@@ -3,6 +3,7 @@ package apisurface
 import (
 	"fmt"
 	"io"
+	"sort"
 	"strings"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
@@ -16,6 +17,65 @@ type FactoryRuntimeTaxonomyEntry struct {
 	Name   string `json:"name"`
 	Type   string `json:"type"`
 	Worker string `json:"worker,omitempty"`
+}
+
+// FactoryConfigIgnoredFieldWarningCode identifies a forward-compatible field
+// that was ignored while decoding a customer-authored Factory Definition.
+const FactoryConfigIgnoredFieldWarningCode = interfaces.FactoryConfigIgnoredFieldWarningCode
+
+// FactoryConfigDecodeWarning is the safe public warning shape used by Factory
+// validation output. It intentionally contains a path and no decoded value.
+type FactoryConfigDecodeWarning struct {
+	Code string `json:"code"`
+	Path string `json:"path"`
+}
+
+// FactoryConfigDecodeWarnings maps ignored paths into deterministic warning
+// records for transport output.
+func FactoryConfigDecodeWarnings(paths []string) []FactoryConfigDecodeWarning {
+	unique := make(map[string]struct{}, len(paths))
+	for _, path := range paths {
+		path = strings.TrimSpace(path)
+		if path != "" {
+			unique[path] = struct{}{}
+		}
+	}
+	ordered := make([]string, 0, len(unique))
+	for path := range unique {
+		ordered = append(ordered, path)
+	}
+	sort.Strings(ordered)
+	warnings := make([]FactoryConfigDecodeWarning, 0, len(ordered))
+	for _, path := range ordered {
+		warnings = append(warnings, FactoryConfigDecodeWarning{
+			Code: FactoryConfigIgnoredFieldWarningCode,
+			Path: path,
+		})
+	}
+	return warnings
+}
+
+// RenderFactoryConfigDecodeWarnings writes the human-readable compatibility
+// warnings produced by Factory config validation.
+func RenderFactoryConfigDecodeWarnings(paths []string, output io.Writer) error {
+	warnings := FactoryConfigDecodeWarnings(paths)
+	if len(warnings) == 0 {
+		return nil
+	}
+	if _, err := fmt.Fprintln(output, "Warnings:"); err != nil {
+		return err
+	}
+	for _, warning := range warnings {
+		if _, err := fmt.Fprintf(
+			output,
+			"  warning: ignored unknown Factory field at %s (%s)\n",
+			warning.Path,
+			warning.Code,
+		); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // FactoryRuntimeTaxonomySummary projects authored worker and workstation taxonomy

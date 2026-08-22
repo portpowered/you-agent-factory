@@ -629,6 +629,7 @@ func newACPCLIOwnerRoots(t *testing.T) (operatorsettings.Service, providers.Serv
 		provideOperatorSettingsCreateTemporaryFile(edges),
 		provideOperatorSettingsProviderCatalog(providersRoot),
 		provideOperatorConfigDecoder(),
+		provideOperatorConfigDiagnosticsDecoder(),
 		provideOperatorConfigEncoder(),
 		provideOperatorSettingsIDGenerator(edges),
 		providersRoot,

@@ -48,7 +48,7 @@ func ValidateWithServices(
 	if err != nil {
 		return err
 	}
-	factory, err := factoryconfig.DecodeAuthoredFactoryAPI(source.Data)
+	factory, decodeDiagnostics, err := factoryconfig.DecodeAuthoredFactoryAPIWithDiagnostics(source.Data)
 	if err != nil {
 		return authoredSourceError(source, err)
 	}
@@ -72,10 +72,12 @@ func ValidateWithServices(
 			Valid    bool                                     `json:"valid"`
 			Targets  []factoryapi.FactoryValidationTarget     `json:"targets"`
 			Taxonomy []apisurface.FactoryRuntimeTaxonomyEntry `json:"taxonomy"`
+			Warnings []apisurface.FactoryConfigDecodeWarning  `json:"warnings,omitempty"`
 		}{
 			Valid:    len(apiResult.Targets) == 0,
 			Targets:  apiResult.Targets,
 			Taxonomy: apisurface.FactoryRuntimeTaxonomySummary(factory),
+			Warnings: apisurface.FactoryConfigDecodeWarnings(decodeDiagnostics.Paths()),
 		}
 		if err := json.NewEncoder(cfg.Output).Encode(payload); err != nil {
 			return err
@@ -89,6 +91,12 @@ func ValidateWithServices(
 		return nil
 	}
 
+	if err := apisurface.RenderFactoryConfigDecodeWarnings(
+		decodeDiagnostics.Paths(),
+		cfg.Output,
+	); err != nil {
+		return authoredSourceError(source, err)
+	}
 	if err := apisurface.RenderFactoryValidationHuman(factory, apiResult, cfg.Output); err != nil {
 		return authoredSourceError(source, err)
 	}

@@ -2,6 +2,7 @@ package configcore
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"io"
 	"io/fs"
@@ -104,6 +105,83 @@ func TestOperatorConfigCore_ModelOverlaysRoundTripAndReportTypedFailures(t *test
 				t.Fatalf("configuration failure = %#v, want model=%q field=%q", failure, test.wantModel, test.wantField)
 			}
 		})
+	}
+}
+
+func TestOperatorConfigCore_FutureFieldsWarnAndSurviveConfigRewrite(t *testing.T) {
+	initial := []byte(`{
+  "backendScopeID": "scope-functional-compat",
+  "defaults": {
+    "workerModelProvider": "codex",
+    "workerModel": "before",
+    "futureDefault": {"enabled": true}
+  },
+  "models": {
+    "llm": {"source": "hf://example/model", "futureModel": "preserve"}
+  },
+  "futureRoot": {"version": 2, "secret": "not-a-diagnostic"}
+}`)
+
+	config, diagnostics, err := globalconfigmapping.DecodeWithDiagnostics(initial)
+	if err != nil {
+		t.Fatalf("DecodeWithDiagnostics() error = %v", err)
+	}
+	if config.BackendScopeID != "scope-functional-compat" || config.Defaults.WorkerModel != "before" {
+		t.Fatalf("known configuration = %#v, want identity and defaults preserved", config)
+	}
+	wantPaths := []string{
+		"$.defaults.futureDefault",
+		"$.futureRoot",
+		"$.models.llm.futureModel",
+	}
+	paths := diagnostics.Paths()
+	if !reflect.DeepEqual(paths, wantPaths) {
+		t.Fatalf("ignored JSON paths = %#v, want %#v", paths, wantPaths)
+	}
+	if strings.Contains(strings.Join(paths, "\n"), "secret") {
+		t.Fatalf("ignored JSON paths leaked a future value: %#v", paths)
+	}
+
+	canonical, err := globalconfigmapping.Encode(config)
+	if err != nil {
+		t.Fatalf("Encode() error = %v", err)
+	}
+	preserved, err := globalconfigmapping.PreserveUnknownFields(initial, canonical)
+	if err != nil {
+		t.Fatalf("PreserveUnknownFields() error = %v", err)
+	}
+	var document map[string]any
+	if err := json.Unmarshal(preserved, &document); err != nil {
+		t.Fatalf("decode rewritten configuration: %v", err)
+	}
+	if !reflect.DeepEqual(document["futureRoot"], map[string]any{"version": float64(2), "secret": "not-a-diagnostic"}) {
+		t.Fatalf("futureRoot after rewrite = %#v, want preserved future object", document["futureRoot"])
+	}
+	defaults, ok := document["defaults"].(map[string]any)
+	if !ok || !reflect.DeepEqual(defaults["futureDefault"], map[string]any{"enabled": true}) {
+		t.Fatalf("defaults after rewrite = %#v, want preserved future child", document["defaults"])
+	}
+	models, ok := document["models"].(map[string]any)
+	if !ok || !reflect.DeepEqual(models["llm"].(map[string]any)["futureModel"], "preserve") {
+		t.Fatalf("models after rewrite = %#v, want preserved future child", document["models"])
+	}
+
+	omittedContainer, err := globalconfigmapping.PreserveUnknownFields(
+		[]byte(`{"runtime":{"logging":{"futureLogging":{"enabled":true}},"futureRuntime":"keep"}}`),
+		[]byte(`{"defaults":{"workerModel":"after"}}`),
+	)
+	if err != nil {
+		t.Fatalf("PreserveUnknownFields(omitted runtime) error = %v", err)
+	}
+	var omittedDocument map[string]any
+	if err := json.Unmarshal(omittedContainer, &omittedDocument); err != nil {
+		t.Fatalf("decode omitted runtime rewrite: %v", err)
+	}
+	runtime, ok := omittedDocument["runtime"].(map[string]any)
+	if !ok || runtime["futureRuntime"] != "keep" || !reflect.DeepEqual(runtime["logging"], map[string]any{
+		"futureLogging": map[string]any{"enabled": true},
+	}) {
+		t.Fatalf("runtime after omitted-container rewrite = %#v, want preserved future values", omittedDocument["runtime"])
 	}
 }
 

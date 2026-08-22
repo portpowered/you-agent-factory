@@ -1,5 +1,5 @@
 type: object
-additionalProperties: false
+additionalProperties: true
 description: >-
   Session execution start recorded on the canonical factory event stream.
   Session and orchestrator identity live in FactoryEvent.context; this payload

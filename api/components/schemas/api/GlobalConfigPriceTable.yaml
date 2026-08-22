@@ -1,5 +1,5 @@
 type: object
-additionalProperties: false
+additionalProperties: true
 description: >-
   Operator-authored USD rates per one million tokens. Omit this property to
   use an empty table; no provider or model prices are supplied by default.

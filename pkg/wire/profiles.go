@@ -44,6 +44,7 @@ import (
 	modelshttp "github.com/portpowered/infinite-you/pkg/services/models/transports/http"
 	modelswire "github.com/portpowered/infinite-you/pkg/services/models/wire"
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
+	globalconfigmapping "github.com/portpowered/infinite-you/pkg/services/operator_settings/transports/globalconfig"
 	settingswire "github.com/portpowered/infinite-you/pkg/services/operator_settings/wire"
 	providersessionshttp "github.com/portpowered/infinite-you/pkg/services/provider_sessions/transports/http"
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
@@ -281,6 +282,7 @@ func provideOperatorSettingsService(
 	createTemp operatorsettings.CreateTemporaryFile,
 	providerCatalog operatorsettings.ProviderCatalog,
 	decode operatorsettings.ConfigDecoder,
+	diagnosticDecode operatorsettings.ConfigDiagnosticsDecoder,
 	encode operatorsettings.ConfigEncoder,
 	idGenerator operatorsettings.IDGenerator,
 	providersRoot providers.Service,
@@ -288,11 +290,13 @@ func provideOperatorSettingsService(
 ) (operatorsettings.Service, error) {
 	return settingswire.NewServiceFromConfigDocument(
 		operatorsettings.ConfigDocumentService{
-			Files:      files,
-			CreateTemp: createTemp,
-			Providers:  providerCatalog,
-			Decoder:    decode,
-			Encoder:    encode,
+			Files:                 files,
+			CreateTemp:            createTemp,
+			Providers:             providerCatalog,
+			Decoder:               decode,
+			DiagnosticDecoder:     diagnosticDecode,
+			Encoder:               encode,
+			PreserveUnknownFields: globalconfigmapping.PreserveUnknownFields,
 		},
 		providersRoot,
 		idGenerator,
@@ -804,27 +808,6 @@ func provideStdioApplicationOpener(
 
 func provideLifecycleRunnerFactory() lifecycle.RunnerFactory {
 	return lifecycle.NewRunner
-}
-
-func provideRunOpener(
-	prepareWorkTarget work.SingleWorkTargetPreparation,
-	loadMockWorkers workers.MockWorkersConfigLoader,
-	buildRuntimeRequest runcli.RuntimeOpeningRequestFactory,
-	presentations factorysessions.OpeningPresentationOwner,
-	visualizations factoryvisualization.RuntimeSinkOwner,
-) runcli.Opener {
-	return func(
-		ctx context.Context,
-		cfg runcli.RunConfig,
-		buildRunner runcli.RuntimeRunnerBuilder,
-		invocation runcli.InvocationOperation,
-		presentation factoryvisualization.ResponsePresentation,
-	) (*runcli.Operation, error) {
-		return runcli.OpenWithVisualizationOwner(
-			ctx, cfg, buildRunner, invocation, presentation,
-			prepareWorkTarget, loadMockWorkers, buildRuntimeRequest, presentations, visualizations,
-		)
-	}
 }
 
 func provideRunInvocationOperation(

@@ -215,8 +215,8 @@ func TestFactoryConfigSmoke_RepresentativeFactoryDirectoryRejectsLegacyCopy(t *t
 	if !strings.Contains(err.Error(), "decode factory generated-schema boundary") {
 		t.Fatalf("expected generated boundary context, got %v", err)
 	}
-	if !strings.Contains(err.Error(), `json: unknown field "work_types"`) {
-		t.Fatalf("expected work_types rejection, got %v", err)
+	if !strings.Contains(err.Error(), `work_types is not supported; use workTypes`) {
+		t.Fatalf("expected work_types retirement guidance, got %v", err)
 	}
 }
 

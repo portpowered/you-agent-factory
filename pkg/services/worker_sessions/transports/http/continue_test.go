@@ -10,6 +10,7 @@ import (
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zaptest/observer"
 )
 
 func TestContinueWorkerSessionReturnsAcceptedLineageAfterAdmission(t *testing.T) {
@@ -57,14 +58,42 @@ func TestContinueWorkerSessionRejectsMalformedPayloadBeforeService(t *testing.T)
 		"requestId":"request-1",
 		"successorWorkerSessionId":"successor-1",
 		"followUpInput":"follow up",
-		"unexpected":true
-	}`)), factoryapi.WorkerSessionID("source-1"))
+	`)), factoryapi.WorkerSessionID("source-1"))
 
 	if recorder.Code != http.StatusBadRequest {
 		t.Fatalf("status = %d, want 400; body=%s", recorder.Code, recorder.Body.String())
 	}
 	if service.continueCalled {
 		t.Fatal("Worker Sessions Continue was called for malformed input")
+	}
+}
+
+func TestContinueWorkerSessionAcceptsUnknownFieldsWithWarning(t *testing.T) {
+	core, logs := observer.New(zap.WarnLevel)
+	service := &fakeObservationService{}
+	handler := NewHandler(NewAdapterWithStartAndContinue(service, service, service, workServiceStub{}), zap.New(core))
+	recorder := httptest.NewRecorder()
+	handler.ContinueWorkerSession(recorder, httptest.NewRequest(http.MethodPost, "/worker-sessions/source-1/continue", strings.NewReader(`{
+		"requestId":"request-1",
+		"successorWorkerSessionId":"successor-1",
+		"followUpInput":"follow up",
+		"future":{"value":"secret"}
+	}`)), factoryapi.WorkerSessionID("source-1"))
+
+	if recorder.Code != http.StatusAccepted {
+		t.Fatalf("status = %d, want 202: %s", recorder.Code, recorder.Body.String())
+	}
+	if !service.continueCalled || service.continueRequest.RequestID != "request-1" ||
+		service.continueRequest.SourceWorkerSessionID != "source-1" {
+		t.Fatalf("continue request = %#v, want known fields preserved", service.continueRequest)
+	}
+	if warning := recorder.Header().Get("Warning"); !strings.Contains(warning, "299") || !strings.Contains(warning, "$.future") {
+		t.Fatalf("Warning = %q, want code 299 and $.future", warning)
+	}
+	entries := logs.All()
+	if len(entries) != 1 || entries[0].ContextMap()["boundary"] != "worker_sessions.http" ||
+		entries[0].ContextMap()["operation"] != "continue_worker_session" {
+		t.Fatalf("warning logs = %#v, want continue compatibility warning", entries)
 	}
 }
 
@@ -147,8 +176,7 @@ func TestInterruptWorkerSessionRejectsMalformedPayloadBeforeService(t *testing.T
 		"requestId":"request-1",
 		"successorWorkerSessionId":"successor-1",
 		"replacementMessage":"replace",
-		"unexpected":true
-	}`)), factoryapi.WorkerSessionID("source-1"))
+	`)), factoryapi.WorkerSessionID("source-1"))
 
 	if recorder.Code != http.StatusBadRequest {
 		t.Fatalf("status = %d, want 400; body=%s", recorder.Code, recorder.Body.String())
@@ -162,6 +190,35 @@ func TestInterruptWorkerSessionRejectsMalformedPayloadBeforeService(t *testing.T
 	}
 	if service.interruptCalled {
 		t.Fatal("Worker Sessions Interrupt was called for malformed input")
+	}
+}
+
+func TestInterruptWorkerSessionAcceptsUnknownFieldsWithWarning(t *testing.T) {
+	core, logs := observer.New(zap.WarnLevel)
+	service := &fakeObservationService{}
+	handler := NewHandler(NewAdapterWithStartAndContinueAndInterrupt(service, service, service, service, workServiceStub{}), zap.New(core))
+	recorder := httptest.NewRecorder()
+	handler.InterruptWorkerSession(recorder, httptest.NewRequest(http.MethodPost, "/worker-sessions/source-1/interrupt", strings.NewReader(`{
+		"requestId":"request-1",
+		"successorWorkerSessionId":"successor-1",
+		"replacementMessage":"replace",
+		"future":{"value":"secret"}
+	}`)), factoryapi.WorkerSessionID("source-1"))
+
+	if recorder.Code != http.StatusAccepted {
+		t.Fatalf("status = %d, want 202: %s", recorder.Code, recorder.Body.String())
+	}
+	if !service.interruptCalled || service.interruptRequest.RequestID != "request-1" ||
+		service.interruptRequest.SourceWorkerSessionID != "source-1" {
+		t.Fatalf("interrupt request = %#v, want known fields preserved", service.interruptRequest)
+	}
+	if warning := recorder.Header().Get("Warning"); !strings.Contains(warning, "299") || !strings.Contains(warning, "$.future") {
+		t.Fatalf("Warning = %q, want code 299 and $.future", warning)
+	}
+	entries := logs.All()
+	if len(entries) != 1 || entries[0].ContextMap()["boundary"] != "worker_sessions.http" ||
+		entries[0].ContextMap()["operation"] != "interrupt_worker_session" {
+		t.Fatalf("warning logs = %#v, want interrupt compatibility warning", entries)
 	}
 }
 

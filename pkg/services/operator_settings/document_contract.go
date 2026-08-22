@@ -220,9 +220,10 @@ func (request LoadDocumentRequest) Validate() error {
 
 // LoadDocumentResult is the detached outcome of one document load.
 type LoadDocumentResult struct {
-	Document Document
-	Path     string
-	Found    bool
+	Document         Document
+	Path             string
+	Found            bool
+	IgnoredJSONPaths []string
 }
 
 // DocumentProviderModelUpdate distinguishes omitted defaults from explicitly

@@ -1,5 +1,5 @@
 type: object
-additionalProperties: false
+additionalProperties: true
 required:
   - eventTypes
 description: Canonical event filter for one outbound webhook subscription.

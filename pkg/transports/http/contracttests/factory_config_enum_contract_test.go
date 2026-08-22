@@ -45,14 +45,49 @@ func TestGlobalConfigContract_AcceptsSupportedDocumentShapes(t *testing.T) {
 	}
 }
 
+func TestGlobalConfigContract_AcceptsAdditiveFieldsAtEvolvingBoundaries(t *testing.T) {
+	schema := requireOpenAPI3ComponentSchema(t, loadValidatedOpenAPIContract(t), "GlobalConfig")
+	assertGlobalConfigValidates(t, schema, `{
+		"futureTopLevel": {"introducedBy": "newer-you"},
+		"defaults": {
+			"workerModelProvider": "codex",
+			"futureDefaults": {"enabled": true}
+		},
+		"priceTable": {
+			"currency": "USD",
+			"models": [{
+				"provider": "codex",
+				"model": "gpt-5",
+				"inputPerMillionTokens": "1",
+				"outputPerMillionTokens": "2",
+				"futureRate": {"source": "newer-you"}
+			}],
+			"futurePriceTable": true
+		},
+		"runtime": {
+			"logging": {"maxSizeMB": 10, "futureLogging": "retained"},
+			"futureRuntime": {"mode": "expanded"}
+		},
+		"models": {
+			"future-model": {"source": "local", "futureModel": true}
+		},
+		"workers": {"acp": {"futureACP": {"enabled": true}}},
+		"workerPresets": [{
+			"id": "build",
+			"modelProvider": "codex",
+			"futurePreset": {"revision": 2}
+		}]
+	}`)
+}
+
 func TestGlobalConfigContract_RejectsUnsupportedDocumentShapes(t *testing.T) {
 	schema := requireOpenAPI3ComponentSchema(t, loadValidatedOpenAPIContract(t), "GlobalConfig")
 	for _, test := range []struct {
 		name    string
 		payload string
 	}{
-		{name: "unknown top-level field", payload: `{"unknown":true}`},
-		{name: "free-form defaults field", payload: `{"defaults":{"provider":"codex"}}`},
+		{name: "invalid known defaults type", payload: `{"defaults":{"workerModelProvider":true}}`},
+		{name: "invalid known runtime constraint", payload: `{"runtime":{"logging":{"maxSizeMB":0}}}`},
 		{name: "missing preset id", payload: `{"workerPresets":[{"modelProvider":"codex"}]}`},
 		{name: "blank preset id", payload: `{"workerPresets":[{"id":"   ","modelProvider":"codex"}]}`},
 		{name: "Unicode-whitespace preset id", payload: `{"workerPresets":[{"id":"\u00a0","modelProvider":"codex"}]}`},
@@ -67,18 +102,23 @@ func TestGlobalConfigContract_RejectsUnsupportedDocumentShapes(t *testing.T) {
 	}
 }
 
-func TestGlobalConfigContract_UsesClosedNamedComponents(t *testing.T) {
+func TestGlobalConfigContract_UsesOpenNamedComponents(t *testing.T) {
 	doc := loadValidatedOpenAPIContract(t)
 	globalConfig := requireOpenAPI3ComponentSchema(t, doc, "GlobalConfig")
 	defaults := requireOpenAPI3ComponentSchema(t, doc, "GlobalConfigDefaults")
 	preset := requireOpenAPI3ComponentSchema(t, doc, "GlobalConfigWorkerPreset")
 	provider := requireOpenAPI3ComponentSchema(t, doc, "GlobalConfigWorkerPresetModelProvider")
 
-	for name, schema := range map[string]*openapi3.Schema{
-		"GlobalConfig": globalConfig, "GlobalConfigDefaults": defaults, "GlobalConfigWorkerPreset": preset,
+	for name := range map[string]struct{}{
+		"GlobalConfig": {}, "GlobalConfigDefaults": {}, "GlobalConfigPriceTable": {},
+		"GlobalConfigPriceTableModel": {}, "GlobalConfigRuntime": {},
+		"GlobalConfigRuntimeArtifactSettings": {}, "GlobalConfigModel": {},
+		"GlobalConfigWorkers": {}, "GlobalConfigACPSettings": {},
+		"GlobalConfigWorkerPreset": {},
 	} {
-		if schema.AdditionalProperties.Has == nil || *schema.AdditionalProperties.Has {
-			t.Fatalf("%s must set additionalProperties to false", name)
+		schema := requireOpenAPI3ComponentSchema(t, doc, name)
+		if schema.AdditionalProperties.Has == nil || !*schema.AdditionalProperties.Has {
+			t.Fatalf("%s must set additionalProperties to true", name)
 		}
 	}
 	assertOpenAPI3PropertyRef(t, globalConfig, "GlobalConfig", "defaults", "#/components/schemas/GlobalConfigDefaults")

@@ -1,7 +1,6 @@
 package http
 
 import (
-	"bytes"
 	"encoding/json"
 	"errors"
 	"io"
@@ -12,12 +11,15 @@ import (
 	factorysessionexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 
+	httpcompat "github.com/portpowered/infinite-you/pkg/transports/http/compat"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/pkg/transports/mapping/factorysession"
 	"github.com/portpowered/infinite-you/pkg/transports/mapping/optional"
 
 	"go.uber.org/zap"
 )
+
+const factorySessionsHTTPBoundary = "factory_sessions.http"
 
 func (s *Server) writeJSON(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json")
@@ -63,18 +65,10 @@ func errorFamilyForStatus(status int) factoryapi.ErrorFamily {
 	}
 }
 
-type requestFieldValidationError struct {
-	message string
-}
-
-func (e requestFieldValidationError) Error() string {
-	return e.message
-}
-
 func requestFieldValidationMessage(err error) (string, bool) {
-	var validationErr requestFieldValidationError
+	var validationErr httpcompat.RequestFieldValidationError
 	if errors.As(err, &validationErr) {
-		return validationErr.message, true
+		return validationErr.Message, true
 	}
 	return "", false
 }
@@ -102,39 +96,23 @@ func (s *Server) writeUnsupportedMediaTypeError(w http.ResponseWriter) {
 	s.writeError(w, http.StatusUnsupportedMediaType, "unsupported media type", "UNSUPPORTED_MEDIA_TYPE")
 }
 
-func ensureSingleJSONObject(dec *json.Decoder) error {
-	if err := dec.Decode(&struct{}{}); err != io.EOF {
-		if err == nil {
-			return requestFieldValidationError{message: "request payload must contain one JSON object"}
-		}
-		return err
-	}
-	return nil
-}
-
 func decodeStrictJSON[T any](body io.Reader) (T, error) {
-	var zero T
-	data, err := io.ReadAll(body)
-	if err != nil {
-		return zero, err
-	}
-
-	decoder := json.NewDecoder(bytes.NewReader(data))
-	decoder.DisallowUnknownFields()
-
-	var req T
-	if err := decoder.Decode(&req); err != nil {
-		return zero, err
-	}
-	if err := ensureSingleJSONObject(decoder); err != nil {
-		return zero, err
-	}
-	return req, nil
+	result, err := decodeJSONWithDiagnostics[T](body)
+	return result.Value, err
 }
 
-// DecodeStrictJSON decodes exactly one JSON object and rejects unknown fields.
+func decodeJSONWithDiagnostics[T any](body io.Reader) (httpcompat.DecodeResult[T], error) {
+	return httpcompat.Decode[T](body)
+}
+
+// DecodeStrictJSON decodes exactly one JSON object; compatibility-aware
+// handlers also retain diagnostics for ignored fields.
 func DecodeStrictJSON[T any](body io.Reader) (T, error) {
 	return decodeStrictJSON[T](body)
+}
+
+func (s *Adapter) writeCompatibilityWarning(w http.ResponseWriter, operation string, paths []string) {
+	httpcompat.ApplyWarning(w, s.logger, factorySessionsHTTPBoundary, operation, paths)
 }
 
 func stringValue(value *string) string {
@@ -188,6 +166,15 @@ func (s *Server) writeLifecycleControlSuccess(
 	w http.ResponseWriter,
 	response factoryapi.FactorySessionLifecycleControlResponse,
 ) {
+	s.writeLifecycleControlSuccessWithDiagnostics(w, response, nil)
+}
+
+func (s *Server) writeLifecycleControlSuccessWithDiagnostics(
+	w http.ResponseWriter,
+	response factoryapi.FactorySessionLifecycleControlResponse,
+	paths []string,
+) {
+	s.writeCompatibilityWarning(w, "factory_session_lifecycle_control", paths)
 	s.writeJSON(
 		w,
 		factorysession.LifecycleControlSuccessStatus(factorysession.LifecycleControlResultFromAPI(response)),
@@ -207,7 +194,7 @@ func (s *Server) handleDurableLifecycleControl(
 		return
 	}
 
-	control, err := decodeLifecycleControlRequest(r.Body, s.sessionRequests)
+	control, diagnostics, err := decodeLifecycleControlRequestWithDiagnostics(r.Body, s.sessionRequests)
 	if err != nil {
 		if message, ok := requestFieldValidationMessage(err); ok {
 			s.writeError(w, http.StatusBadRequest, message, "BAD_REQUEST")
@@ -236,7 +223,7 @@ func (s *Server) handleDurableLifecycleControl(
 		return
 	}
 
-	s.writeLifecycleControlSuccess(w, response)
+	s.writeLifecycleControlSuccessWithDiagnostics(w, response, diagnostics.Paths())
 }
 
 func (s *Server) handleLiveLifecycleControl(
@@ -246,7 +233,7 @@ func (s *Server) handleLiveLifecycleControl(
 	operation string,
 	invoke func(apisurface.LiveSessionAPI, factorysessionexecution.ControlRequest) (factoryapi.FactorySessionLifecycleControlResponse, error),
 ) {
-	control, err := decodeLifecycleControlRequest(r.Body, s.sessionRequests)
+	control, diagnostics, err := decodeLifecycleControlRequestWithDiagnostics(r.Body, s.sessionRequests)
 	if err != nil {
 		if message, ok := requestFieldValidationMessage(err); ok {
 			s.writeError(w, http.StatusBadRequest, message, "BAD_REQUEST")
@@ -257,7 +244,7 @@ func (s *Server) handleLiveLifecycleControl(
 	}
 
 	if s.liveControl != nil {
-		s.invokeRootLiveLifecycleControl(w, r.Context(), sessionID, operation, control)
+		s.invokeRootLiveLifecycleControl(w, r.Context(), sessionID, operation, control, diagnostics.Paths())
 		return
 	}
 
@@ -280,52 +267,60 @@ func (s *Server) handleLiveLifecycleControl(
 		return
 	}
 
-	s.writeLifecycleControlSuccess(w, response)
+	s.writeLifecycleControlSuccessWithDiagnostics(w, response, diagnostics.Paths())
 }
 
 func decodeOptionalLifecycleControlRequest(body io.Reader) (factoryapi.FactorySessionLifecycleControlRequest, error) {
-	return decodeOptionalJSONRequest(body, func() factoryapi.FactorySessionLifecycleControlRequest {
+	result, err := decodeOptionalLifecycleControlRequestWithDiagnostics(body)
+	return result.Value, err
+}
+
+func decodeOptionalLifecycleControlRequestWithDiagnostics(body io.Reader) (httpcompat.DecodeResult[factoryapi.FactorySessionLifecycleControlRequest], error) {
+	return decodeOptionalJSONWithDiagnostics(body, func() factoryapi.FactorySessionLifecycleControlRequest {
 		return factoryapi.FactorySessionLifecycleControlRequest{}
 	})
 }
 
 func decodeOptionalApproveRequest(body io.Reader) (factoryapi.FactorySessionApproveRequest, error) {
-	return decodeOptionalJSONRequest(body, func() factoryapi.FactorySessionApproveRequest {
+	result, err := decodeOptionalApproveRequestWithDiagnostics(body)
+	return result.Value, err
+}
+
+func decodeOptionalApproveRequestWithDiagnostics(body io.Reader) (httpcompat.DecodeResult[factoryapi.FactorySessionApproveRequest], error) {
+	return decodeOptionalJSONWithDiagnostics(body, func() factoryapi.FactorySessionApproveRequest {
 		return factoryapi.FactorySessionApproveRequest{}
 	})
 }
 
 func decodeOptionalRetryDispatchRequest(body io.Reader) (factoryapi.FactorySessionRetryDispatchRequest, error) {
-	return decodeOptionalJSONRequest(body, func() factoryapi.FactorySessionRetryDispatchRequest {
+	result, err := decodeOptionalRetryDispatchRequestWithDiagnostics(body)
+	return result.Value, err
+}
+
+func decodeOptionalRetryDispatchRequestWithDiagnostics(body io.Reader) (httpcompat.DecodeResult[factoryapi.FactorySessionRetryDispatchRequest], error) {
+	return decodeOptionalJSONWithDiagnostics(body, func() factoryapi.FactorySessionRetryDispatchRequest {
 		return factoryapi.FactorySessionRetryDispatchRequest{}
 	})
 }
 
 func decodeOptionalInterruptDispatchRequest(body io.Reader) (factoryapi.FactorySessionInterruptDispatchRequest, error) {
-	return decodeOptionalJSONRequest(body, func() factoryapi.FactorySessionInterruptDispatchRequest {
+	result, err := decodeOptionalInterruptDispatchRequestWithDiagnostics(body)
+	return result.Value, err
+}
+
+func decodeOptionalInterruptDispatchRequestWithDiagnostics(body io.Reader) (httpcompat.DecodeResult[factoryapi.FactorySessionInterruptDispatchRequest], error) {
+	return decodeOptionalJSONWithDiagnostics(body, func() factoryapi.FactorySessionInterruptDispatchRequest {
 		return factoryapi.FactorySessionInterruptDispatchRequest{}
 	})
 }
 
 func decodeOptionalJSONRequest[T any](body io.Reader, zero func() T) (T, error) {
-	data, err := io.ReadAll(body)
-	if err != nil {
-		return zero(), err
-	}
-	trimmed := bytes.TrimSpace(data)
-	if len(trimmed) == 0 {
-		return zero(), nil
-	}
-	decoder := json.NewDecoder(bytes.NewReader(trimmed))
-	decoder.DisallowUnknownFields()
-	var req T
-	if err := decoder.Decode(&req); err != nil {
-		return zero(), err
-	}
-	if err := ensureSingleJSONObject(decoder); err != nil {
-		return zero(), err
-	}
-	return req, nil
+	result, err := decodeOptionalJSONWithDiagnostics(body, zero)
+	return result.Value, err
+}
+
+func decodeOptionalJSONWithDiagnostics[T any](body io.Reader, zero func() T) (httpcompat.DecodeResult[T], error) {
+	return httpcompat.DecodeOptional(body, zero)
 }
 
 func (s *Server) handleDurableApproveControl(
@@ -339,7 +334,7 @@ func (s *Server) handleDurableApproveControl(
 		return
 	}
 
-	approve, err := decodeApproveFactorySessionRequest(r.Body, s.sessionRequests)
+	approve, diagnostics, err := decodeApproveFactorySessionRequestWithDiagnostics(r.Body, s.sessionRequests)
 	if err != nil {
 		if message, ok := requestFieldValidationMessage(err); ok {
 			s.writeError(w, http.StatusBadRequest, message, "BAD_REQUEST")
@@ -367,7 +362,7 @@ func (s *Server) handleDurableApproveControl(
 		return
 	}
 
-	s.writeLifecycleControlSuccess(w, response)
+	s.writeLifecycleControlSuccessWithDiagnostics(w, response, diagnostics.Paths())
 }
 
 func (s *Server) handleDurableRetryDispatchControl(
@@ -381,7 +376,7 @@ func (s *Server) handleDurableRetryDispatchControl(
 		return
 	}
 
-	retry, err := decodeRetryDispatchRequest(r.Body, s.sessionRequests)
+	retry, diagnostics, err := decodeRetryDispatchRequestWithDiagnostics(r.Body, s.sessionRequests)
 	if err != nil {
 		if message, ok := requestFieldValidationMessage(err); ok {
 			s.writeError(w, http.StatusBadRequest, message, "BAD_REQUEST")
@@ -409,7 +404,7 @@ func (s *Server) handleDurableRetryDispatchControl(
 		return
 	}
 
-	s.writeLifecycleControlSuccess(w, response)
+	s.writeLifecycleControlSuccessWithDiagnostics(w, response, diagnostics.Paths())
 }
 
 func (s *Server) ApproveFactorySession(w http.ResponseWriter, r *http.Request, sessionID factoryapi.SessionID) {
@@ -495,7 +490,7 @@ func (s *Server) handleDurableInterruptDispatchControl(
 		return
 	}
 
-	interrupt, err := decodeInterruptDispatchRequest(r.Body, s.sessionRequests)
+	interrupt, diagnostics, err := decodeInterruptDispatchRequestWithDiagnostics(r.Body, s.sessionRequests)
 	if err != nil {
 		if message, ok := requestFieldValidationMessage(err); ok {
 			s.writeError(w, http.StatusBadRequest, message, "BAD_REQUEST")
@@ -523,5 +518,5 @@ func (s *Server) handleDurableInterruptDispatchControl(
 		return
 	}
 
-	s.writeLifecycleControlSuccess(w, response)
+	s.writeLifecycleControlSuccessWithDiagnostics(w, response, diagnostics.Paths())
 }

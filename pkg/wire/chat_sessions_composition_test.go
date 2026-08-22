@@ -144,6 +144,7 @@ func newTestOperatorSettingsService(t *testing.T, logger logging.Logger) operato
 		provideOperatorSettingsCreateTemporaryFile(edges),
 		provideOperatorSettingsProviderCatalog(providersRoot),
 		provideOperatorConfigDecoder(),
+		provideOperatorConfigDiagnosticsDecoder(),
 		provideOperatorConfigEncoder(),
 		provideOperatorSettingsIDGenerator(edges),
 		providersRoot,

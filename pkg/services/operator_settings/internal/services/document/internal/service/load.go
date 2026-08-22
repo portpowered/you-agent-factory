@@ -42,7 +42,15 @@ func (service *Service) loadDocument(
 		}
 	}
 
-	config, err := service.decoder(data)
+	var config operatorsettings.Config
+	var ignoredJSONPaths []string
+	if service.diagnosticDecoder != nil {
+		var diagnostics operatorsettings.ConfigDecodeDiagnostics
+		config, diagnostics, err = service.diagnosticDecoder(data)
+		ignoredJSONPaths = diagnostics.Paths()
+	} else {
+		config, err = service.decoder(data)
+	}
 	if err != nil {
 		return operatorsettings.LoadDocumentResult{}, operatorsettings.DocumentFailure{
 			Kind:    operatorsettings.DocumentFailureKindMalformed,
@@ -51,8 +59,9 @@ func (service *Service) loadDocument(
 		}
 	}
 	return operatorsettings.LoadDocumentResult{
-		Document: documentFromConfig(config),
-		Path:     path,
-		Found:    true,
+		Document:         documentFromConfig(config),
+		Path:             path,
+		Found:            true,
+		IgnoredJSONPaths: ignoredJSONPaths,
 	}, nil
 }

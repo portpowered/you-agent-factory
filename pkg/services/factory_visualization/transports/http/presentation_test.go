@@ -173,7 +173,7 @@ func TestOpenPresentationHTTP_RejectsMalformedJSONBeforeRoot(t *testing.T) {
 	}
 }
 
-func TestPresentProgressHTTP_RejectsUnknownFieldsBeforeRoot(t *testing.T) {
+func TestPresentProgressHTTP_AcceptsUnknownFieldsBeforeRoot(t *testing.T) {
 	t.Parallel()
 
 	root := &presentationVisualizationRootFake{}
@@ -186,11 +186,11 @@ func TestPresentProgressHTTP_RejectsUnknownFieldsBeforeRoot(t *testing.T) {
 		context.Background(),
 		strings.NewReader(`{"session_id":"presentation-1","records":[],"extra":true}`),
 	)
-	if err == nil {
-		t.Fatal("PresentProgressHTTP unknown field = nil, want error")
+	if err != nil {
+		t.Fatalf("PresentProgressHTTP unknown field: %v", err)
 	}
-	if root.presentInvoked {
-		t.Fatal("unknown-field PresentProgress HTTP request must not invoke root")
+	if !root.presentInvoked || root.lastPresentSessionID != "presentation-1" {
+		t.Fatal("unknown-field PresentProgress HTTP request did not invoke root with known fields")
 	}
 }
 

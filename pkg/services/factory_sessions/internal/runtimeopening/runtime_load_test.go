@@ -15,6 +15,7 @@ import (
 	"github.com/portpowered/infinite-you/internal/testpath"
 	"github.com/portpowered/infinite-you/internal/testutil/factorydefinitionfixtures"
 	"github.com/portpowered/infinite-you/internal/testutil/factoryfixtures"
+	"github.com/portpowered/infinite-you/internal/testutil/testdeps"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorydefinitionswire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
@@ -26,6 +27,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	factorymapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 )
 
 type runtimeLoadPortableFailureCase struct {
@@ -270,6 +272,57 @@ func TestLoadRuntimeRejectsMissingReplayInputCapability(t *testing.T) {
 	)
 	if err == nil {
 		t.Fatal("missing replay input capability error = nil")
+	}
+}
+
+func TestLoadRuntimeLogsIgnoredFactoryFieldPathsWithoutValues(t *testing.T) {
+	t.Parallel()
+
+	directory := t.TempDir()
+	config := &factorydefinitions.FactoryConfig{Name: "future-fields"}
+	config.SetIgnoredJSONPaths([]string{
+		"$.workers[0].futurePolicy",
+		"$.logicalRoundTrip",
+	})
+	loaded, err := factorydefinitionfixtures.NewLoadedSource(directory, config, nil, nil)
+	if err != nil {
+		t.Fatalf("NewLoadedSource: %v", err)
+	}
+	logger, observed := testdeps.CapturingZapLogger(zapcore.InfoLevel)
+	_, err = LoadRuntime(
+		directory,
+		"",
+		"",
+		operatorconfig.ResolvedDefaults{},
+		nil,
+		RuntimeRoot{FactoryRootDir: directory, BaseLogger: logger},
+		func(string, factorydefinitions.WorkstationLoader) (factorydefinitions.MutableLoadedFactorySource, error) {
+			return loaded, nil
+		},
+		nil,
+		nil,
+		nil,
+		nil,
+		func(base *zap.Logger, _, _, _ string) *zap.Logger { return base },
+	)
+	if err != nil {
+		t.Fatalf("LoadRuntime: %v", err)
+	}
+
+	records := observed.FilterMessage("ignored unknown Factory Definition fields").All()
+	if len(records) != 1 {
+		t.Fatalf("warning records = %d, want 1", len(records))
+	}
+	context := records[0].ContextMap()
+	if context["code"] != "FACTORY_CONFIG_UNKNOWN_FIELDS_IGNORED" {
+		t.Fatalf("warning code = %#v", context["code"])
+	}
+	paths, ok := context["ignored_json_paths"].([]interface{})
+	if !ok || len(paths) != 2 || paths[0] != "$.logicalRoundTrip" || paths[1] != "$.workers[0].futurePolicy" {
+		t.Fatalf("warning paths = %#v, want sorted paths", context["ignored_json_paths"])
+	}
+	if strings.Contains(records[0].Message, "secret") || strings.Contains(fmt.Sprint(context), "secret") {
+		t.Fatalf("warning leaked an ignored value: message=%q context=%#v", records[0].Message, context)
 	}
 }
 

@@ -303,6 +303,65 @@ func TestValidate_RejectsReservedInvocationFlagWithActionableCompositionTarget(t
 	}
 }
 
+func TestValidateReportsIgnoredFutureFieldPathsWithoutValues(t *testing.T) {
+	path, loadSource := validateFixture(`{
+  "name": "future-fields",
+  "logicalRoundTrip": {"mode": "v2", "secret": "must-not-leak"},
+  "workers": [{"name": "worker", "futurePolicy": {"mode": "v2"}}]
+}`)
+
+	var human strings.Builder
+	if err := ValidateWithServices(
+		ValidateConfig{Context: context.Background(), Path: path, Output: &human},
+		testTopologyFactoryDefinitionValidator(factorydefinitions.ValidationResult{}),
+		loadSource,
+	); err != nil {
+		t.Fatalf("ValidateWithServices human: %v", err)
+	}
+	text := human.String()
+	for _, want := range []string{
+		"Warnings:",
+		"warning: ignored unknown Factory field at $.logicalRoundTrip",
+		"warning: ignored unknown Factory field at $.workers[0].futurePolicy",
+		"Factory validation passed.",
+	} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("human output = %q, want substring %q", text, want)
+		}
+	}
+	if strings.Contains(text, "must-not-leak") {
+		t.Fatalf("human output leaked ignored value: %q", text)
+	}
+
+	var structured bytes.Buffer
+	if err := ValidateWithServices(
+		ValidateConfig{Context: context.Background(), Path: path, JSON: true, Output: &structured},
+		testTopologyFactoryDefinitionValidator(factorydefinitions.ValidationResult{}),
+		loadSource,
+	); err != nil {
+		t.Fatalf("ValidateWithServices JSON: %v", err)
+	}
+	var payload struct {
+		Warnings []struct {
+			Code string `json:"code"`
+			Path string `json:"path"`
+		} `json:"warnings"`
+	}
+	if err := json.Unmarshal(structured.Bytes(), &payload); err != nil {
+		t.Fatalf("decode structured validation output: %v", err)
+	}
+	if len(payload.Warnings) != 2 ||
+		payload.Warnings[0].Path != "$.logicalRoundTrip" ||
+		payload.Warnings[1].Path != "$.workers[0].futurePolicy" {
+		t.Fatalf("warnings = %#v, want deterministic paths", payload.Warnings)
+	}
+	for _, warning := range payload.Warnings {
+		if warning.Code == "" {
+			t.Fatalf("warning = %#v, want code", warning)
+		}
+	}
+}
+
 func TestValidate_JSONReportsReservedInvocationFlagIdentityAndPath(t *testing.T) {
 	path, loadSource := validateFixture(reservedInvocationFlagFactoryJSON("model"))
 

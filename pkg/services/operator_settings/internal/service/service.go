@@ -20,15 +20,16 @@ import (
 
 // Service fulfills the published Operator Settings root contract.
 type Service struct {
-	document    settingsdocument.Service
-	resolution  resolution.Service
-	files       operatorsettings.FileSystem
-	createTemp  operatorsettings.CreateTemporaryFile
-	decoder     operatorsettings.ConfigDecoder
-	encoder     operatorsettings.ConfigEncoder
-	idGenerator operatorsettings.IDGenerator
-	logger      logging.Logger
-	writeMu     sync.Mutex
+	document          settingsdocument.Service
+	resolution        resolution.Service
+	files             operatorsettings.FileSystem
+	createTemp        operatorsettings.CreateTemporaryFile
+	decoder           operatorsettings.ConfigDecoder
+	diagnosticDecoder operatorsettings.ConfigDiagnosticsDecoder
+	encoder           operatorsettings.ConfigEncoder
+	idGenerator       operatorsettings.IDGenerator
+	logger            logging.Logger
+	writeMu           sync.Mutex
 }
 
 var _ operatorsettings.Service = (*Service)(nil)
@@ -46,6 +47,7 @@ func New(
 	encoder operatorsettings.ConfigEncoder,
 	idGenerator operatorsettings.IDGenerator,
 	logger logging.Logger,
+	diagnosticDecoders ...operatorsettings.ConfigDiagnosticsDecoder,
 ) (operatorsettings.Service, error) {
 	if documentService == nil {
 		return nil, fmt.Errorf("construct Operator Settings: document is required")
@@ -53,15 +55,20 @@ func New(
 	if resolutionService == nil {
 		return nil, fmt.Errorf("construct Operator Settings: resolution is required")
 	}
+	var diagnosticDecoder operatorsettings.ConfigDiagnosticsDecoder
+	if len(diagnosticDecoders) > 0 {
+		diagnosticDecoder = diagnosticDecoders[0]
+	}
 	return &Service{
-		document:    documentService,
-		resolution:  resolutionService,
-		files:       files,
-		createTemp:  createTemp,
-		decoder:     decoder,
-		encoder:     encoder,
-		idGenerator: idGenerator,
-		logger:      logging.EnsureLogger(logger),
+		document:          documentService,
+		resolution:        resolutionService,
+		files:             files,
+		createTemp:        createTemp,
+		decoder:           decoder,
+		diagnosticDecoder: diagnosticDecoder,
+		encoder:           encoder,
+		idGenerator:       idGenerator,
+		logger:            logging.EnsureLogger(logger),
 	}, nil
 }
 
@@ -71,7 +78,12 @@ func (s *Service) LoadDocument(
 	if s == nil || s.document == nil {
 		return operatorsettings.LoadDocumentResult{}, fmt.Errorf("operator settings document service is required")
 	}
-	return s.document.LoadDocument(request)
+	result, err := s.document.LoadDocument(request)
+	if err != nil {
+		return operatorsettings.LoadDocumentResult{}, err
+	}
+	s.warnIgnoredJSONFields("load_document", result.Path, result.IgnoredJSONPaths)
+	return result, nil
 }
 
 func (s *Service) ApplyDocumentUpdate(
@@ -105,7 +117,17 @@ func (s *Service) LoadFileConfig(path string) (operatorsettings.Config, error) {
 	if s.decoder == nil {
 		return operatorsettings.Config{}, fmt.Errorf("operator settings decoder is required")
 	}
-	return loadFileConfig(s.files, s.decoder, path)
+	config, ignoredJSONPaths, err := loadFileConfigWithDiagnostics(
+		s.files,
+		s.decoder,
+		path,
+		s.diagnosticDecoder,
+	)
+	if err != nil {
+		return operatorsettings.Config{}, err
+	}
+	s.warnIgnoredJSONFields("load_file_config", path, ignoredJSONPaths)
+	return config, nil
 }
 
 func (s *Service) ResolveFromHomeWithEnvironment(
@@ -281,6 +303,7 @@ func (s *Service) resolveACPAgentProfile(path string) (operatorsettings.ACPAgent
 	if err != nil {
 		return operatorsettings.ACPAgentProfile{}, err
 	}
+	s.warnIgnoredJSONFields("resolve_acp_agent_profile", loaded.Path, loaded.IgnoredJSONPaths)
 	profile := loaded.Document.Workers.ACP.AgentProfile
 	if profile == nil {
 		return operatorsettings.DefaultACPAgentProfile(), nil
@@ -429,6 +452,7 @@ func (s *Service) mutateDocument(
 	if err != nil {
 		return operatorsettings.Document{}, err
 	}
+	s.warnIgnoredJSONFields("mutate_document", loaded.Path, loaded.IgnoredJSONPaths)
 	candidate, err := update(loaded.Document)
 	if err != nil {
 		return operatorsettings.Document{}, err
@@ -437,6 +461,19 @@ func (s *Service) mutateDocument(
 		return operatorsettings.Document{}, err
 	}
 	return candidate, nil
+}
+
+func (s *Service) warnIgnoredJSONFields(operation, path string, ignoredJSONPaths []string) {
+	paths := (operatorsettings.ConfigDecodeDiagnostics{IgnoredJSONPaths: ignoredJSONPaths}).Paths()
+	if len(paths) == 0 {
+		return
+	}
+	s.logger.Warn(
+		"operator_settings.config.unknown_fields_ignored",
+		"operation", operation,
+		"path", path,
+		"json_paths", paths,
+	)
 }
 
 func documentConfig(document operatorsettings.Document) operatorsettings.Config {

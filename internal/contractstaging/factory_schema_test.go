@@ -280,6 +280,71 @@ func TestFactorySchemaAcceptsExactProviderPlaceholdersAndRejectsOtherStrings(t *
 	}
 }
 
+func TestFactorySchemaAcceptsAdditiveFieldsAtEvolvingBoundaries(t *testing.T) {
+	t.Parallel()
+
+	repositoryRoot := testpath.MustRepoPathFromCaller(t, 0)
+	payload := testArtifactsForRepository(t, repositoryRoot)[contractstaging.FactorySchemaAuthoredPath]
+	var schemaDocument any
+	if err := json.Unmarshal(payload, &schemaDocument); err != nil {
+		t.Fatalf("decode Factory schema: %v", err)
+	}
+	compiler := jsonschema.NewCompiler()
+	compiler.DefaultDraft(jsonschema.Draft2020)
+	if err := compiler.AddResource(contractstaging.FactorySchemaAuthoredPath, schemaDocument); err != nil {
+		t.Fatalf("register Factory schema: %v", err)
+	}
+	schema, err := compiler.Compile(contractstaging.FactorySchemaAuthoredPath)
+	if err != nil {
+		t.Fatalf("compile Factory schema: %v", err)
+	}
+
+	document := map[string]any{
+		"name": "future-compatible",
+		"workers": []any{
+			map[string]any{
+				"name":          "worker",
+				"modelProvider": "CODEX",
+				"futureWorker":  map[string]any{"revision": 2},
+			},
+		},
+		"workstations": []any{
+			map[string]any{
+				"name": "step",
+				"inputs": []any{
+					map[string]any{
+						"workType":    "default",
+						"state":       "initial",
+						"futureInput": true,
+					},
+				},
+				"limits": map[string]any{
+					"maxRetries":   1,
+					"futureLimits": map[string]any{"mode": "expanded"},
+				},
+				"futureWorkstation": true,
+			},
+		},
+		"invocationSignature": map[string]any{
+			"parameters":     []any{},
+			"futureContract": map[string]any{"revision": 2},
+		},
+	}
+	if err := schema.Validate(document); err != nil {
+		t.Fatalf("Factory schema rejected additive future fields: %v", err)
+	}
+
+	invalid := map[string]any{
+		"name": "invalid-known-provider",
+		"workers": []any{
+			map[string]any{"name": "worker", "modelProvider": "MYSTERY"},
+		},
+	}
+	if err := schema.Validate(invalid); err == nil {
+		t.Fatal("Factory schema accepted an invalid known modelProvider")
+	}
+}
+
 func TestFactorySchemaGenerationLeavesAuthoredAndStagedDigestsStableOnSecondRun(t *testing.T) {
 	t.Parallel()
 	defer contractstaging.LockRepositoryStagingForTest()()
