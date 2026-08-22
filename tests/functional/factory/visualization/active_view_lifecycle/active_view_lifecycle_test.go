@@ -35,6 +35,9 @@ func TestVisualizationActiveViewLifecycleThroughPublicProcess(t *testing.T) {
 	defer server.Stop(t)
 
 	var visualizationRoot factoryvisualization.Root
+	// The injected root observer is the deterministic publication signal. The
+	// bounded fallback is only a startup deadlock watchdog because the public
+	// process boundary exposes no synchronous root-publication result.
 	select {
 	case visualizationRoot = <-rootPublished:
 	case <-time.After(5 * time.Second):
@@ -97,6 +100,11 @@ func TestVisualizationActiveViewLifecycleThroughPublicProcess(t *testing.T) {
 	if stopped.State != factoryvisualization.LifecycleStateStopped {
 		t.Fatalf("StopDrain state = %q, want %q", stopped.State, factoryvisualization.LifecycleStateStopped)
 	}
+	// StopDrain joins the live subscription before returning, but the public
+	// sink contract exposes no separate completion signal for delivery of its
+	// final presentation. The sink channel is the deterministic observation;
+	// this bounded fallback only turns a broken final-delivery path into a test
+	// failure instead of hanging the functional suite.
 	select {
 	case finalView := <-viewPresentations:
 		if finalView.ObservedAt.IsZero() {
