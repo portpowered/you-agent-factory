@@ -137,7 +137,7 @@ func RenderComparison(matrices []*CapabilityMatrix, rows []Row) string {
 	out.WriteString("# ACP capability comparison\n\n")
 	out.WriteString("Computed from captured transcripts by `acpbaseline compare`. ")
 	out.WriteString("Every **GAP** row is a work item: a capability at least one third-party ")
-	out.WriteString("agent exhibits and `you serve acp` does not.\n\n")
+	out.WriteString("agent exhibits and `you server acp` does not.\n\n")
 
 	out.WriteString("Captures compared:\n\n")
 	for _, matrix := range matrices {
@@ -184,7 +184,7 @@ func RenderComparison(matrices []*CapabilityMatrix, rows []Row) string {
 				continue
 			}
 			out.WriteString(fmt.Sprintf(
-				"- `you serve acp` does not exhibit `%s`, which %s does. Decide whether to implement it or record why it does not apply.\n",
+				"- `you server acp` does not exhibit `%s`, which %s does. Decide whether to implement it or record why it does not apply.\n",
 				row.Capability, strings.Join(othersWith(row, agents), ", ")))
 		}
 	}

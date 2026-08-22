@@ -647,11 +647,11 @@ ACP_BASELINE_ARTIFACTS ?= .artifacts/acp-baseline
 
 .PHONY: acp-baseline-self acp-baseline-capture acp-baseline-compare acp-baseline-check
 
-# Capture our own `you serve acp` through the shared scenario scripts. Needs no
+# Capture our own `you server acp` through the shared scenario scripts. Needs no
 # external agent and no provider credentials, so it is safe anywhere.
 acp-baseline-self:
 	$(GO) build -o $(ACP_BASELINE_ARTIFACTS)/you ./cmd/factory
-	$(GO) run ./cmd/acpbaseline capture -agent '$(ACP_BASELINE_ARTIFACTS)/you serve acp' \
+	$(GO) run ./cmd/acpbaseline capture -agent '$(ACP_BASELINE_ARTIFACTS)/you server acp' \
 		-name you -out $(ACP_BASELINE_ARTIFACTS) -publish $(ACP_BASELINE_DIR)/you/$(shell date -u +%Y-%m-%d)
 
 # Capture a third-party ACP agent. Requires that agent installed and

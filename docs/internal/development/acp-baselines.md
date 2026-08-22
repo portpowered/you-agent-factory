@@ -1,7 +1,7 @@
 # ACP baseline capture runbook
 
 How to record what a real ACP agent does on the wire, and diff it against
-`you serve acp`.
+`you server acp`.
 
 This exists so "are we correct?" is answered by a computed comparison rather
 than an opinion. The captures live in

@@ -330,10 +330,10 @@ func (h *serveACPControlHarness) finish(t *testing.T) {
 	select {
 	case <-h.command.Done():
 		if err := h.command.Err(); err != nil {
-			t.Fatalf("Process.Execute(serve acp) error = %v; stderr=%s", err, h.stderr.String())
+			t.Fatalf("Process.Execute(you server acp) error = %v; stderr=%s", err, h.stderr.String())
 		}
 	case <-time.After(5 * time.Second):
-		t.Fatal("Process.Execute(serve acp) did not return after stdin EOF")
+		t.Fatal("Process.Execute(you server acp) did not return after stdin EOF")
 	}
 	h.command.AcceptError()
 	if err := h.stdoutWrite.Close(); err != nil {

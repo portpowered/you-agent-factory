@@ -455,7 +455,7 @@ func (server *standaloneMCPServer) close(t *testing.T) {
 		_ = server.stdinWrite.Close()
 		err := <-server.serveErr
 		if err != nil && !errors.Is(err, context.Canceled) && !errors.Is(err, io.EOF) && !strings.Contains(err.Error(), "file already closed") {
-			t.Errorf("fixture-backed MCP serve shutdown: %v", err)
+			t.Errorf("fixture-backed MCP server shutdown: %v", err)
 		}
 	})
 }

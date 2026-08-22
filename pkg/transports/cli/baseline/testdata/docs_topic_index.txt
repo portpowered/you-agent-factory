@@ -14,11 +14,11 @@ sessions	Live factory sessions: session list, session show, pause and resume, fa
 metrics	Factory Runtime token, dispatch, failure, and latency metrics with deterministic grouping and Factory Session scope.
 orchestrators	Factory, FactoryOrchestrator, FactorySession, Dispatch, FactoryArtifact, FactoryEvent, and dynamic workflow aliases.
 javascript-workflows	Supported JavaScript authoring, equivalent CLI/API/MCP execution, worker presets, capability boundaries, and runnable examples.
-mcp	Canonical you mcp serve install path, preview tool catalog, scope boundaries, and automation-backed checks.
+mcp	Canonical you server mcp install path, preview tool catalog, scope boundaries, and automation-backed checks.
 workstations	Workstation kinds, route fields, runtime step behavior, and scoped execution settings.	workstation
 workers	Worker types, model providers, script workers, and worker configuration.
 providers	Worker/provider selection, model capabilities and limits, Factory configuration, AGY caveats, ACP lifecycle, and JavaScript usage.	acp
-serve-acp	Canonical you serve acp ACP-agent host command, stdio channel contract, clean shutdown, and minimal client configuration.
+serve-acp	Canonical you server acp ACP-agent host command, stdio channel contract, clean shutdown, and minimal client configuration.
 resources	Resource capacity, bounded concurrency, and workstation resource requirements.
 models	Local and hosted model setup for workers and CLI model commands.
 batch-inputs	Batch input files, request shape, dependencies, and validation.	batch-work

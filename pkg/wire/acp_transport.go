@@ -201,7 +201,7 @@ const (
 //
 // The environment is read here, in the composition root, rather than inside
 // the transport or any service. The recorder writes only to its own file
-// handle, so it structurally cannot reach the protocol stream that `you serve
+// handle, so it structurally cannot reach the protocol stream that `you server
 // acp` reserves on stdout.
 func provideACPWireRecorder(
 	edges serviceedges.Edges,

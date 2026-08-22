@@ -5,7 +5,7 @@
 // opinion. To do that it drives a target agent with a raw JSON-RPC client --
 // deliberately not the ACP SDK -- so an undocumented field or an unrecognized
 // method survives into the transcript instead of being decoded away. The same
-// scenarios drive our own `you serve acp`, so a matrix row can never compare
+// scenarios drive our own `you server acp`, so a matrix row can never compare
 // "what we asked them" against "what we asked ourselves".
 package acpbaseline
 

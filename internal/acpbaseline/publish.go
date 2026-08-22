@@ -165,7 +165,7 @@ func publishable(manifest *Manifest) *Manifest {
 		published.TranscriptFiles[scenario] = filepath.Base(path)
 	}
 	// The agent argv names a local binary. Publishing the basename keeps the
-	// capture reproducible ("this was our own serve acp") without recording
+	// capture reproducible ("this was our own server acp") without recording
 	// where on the operator's disk it happened to live.
 	published.Command = nil
 	for _, argument := range manifest.Command {

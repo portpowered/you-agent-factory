@@ -36,11 +36,11 @@ concept owners below when you need the complete customer-facing contract.
 | `metrics` | Factory Runtime metrics and exact operator-configured cost rollups with deterministic grouping, coverage, and Factory Session scope | [Metrics](metrics.md) |
 | `orchestrators` | Factory orchestrator identity, FactorySession runtime nouns, dispatch/artifact/event aliases | [Orchestrators](orchestrators.md) |
 | `javascript-workflows` | Supported JavaScript authoring, equivalent CLI/API/MCP execution, worker presets, host boundaries, and runnable examples | [JavaScript workflows](javascript-workflows.md) |
-| `mcp` | `you mcp serve` host setup, backing modes, first-use smoke, and troubleshooting | [MCP host setup](mcp.md) |
+| `mcp` | `you server mcp` host setup, backing modes, first-use smoke, and troubleshooting | [MCP host setup](mcp.md) |
 | `workstations` | Workstation kinds, routes, runtime fields, and scoped execution settings | [Workstations](workstations.md) |
 | `workers` | Worker quick reference | [Workers](workers.md) |
 | `providers` | Canonical worker/provider selection, model capabilities and limits, Factory versus ad-hoc configuration, AGY caveats, ACP integrations, and JavaScript usage | [Providers and ACP agents](providers.md) |
-| `serve-acp` | `you serve acp` ACP-agent host command, stdio channel contract, clean shutdown, and minimal client configuration | [Host You as an ACP agent](serve-acp.md) |
+| `serve-acp` | `you server acp` ACP-agent host command, stdio channel contract, clean shutdown, and minimal client configuration | [Host You as an ACP agent](serve-acp.md) |
 | `resources` | Bounded-concurrency quick reference | [Resources](resources.md) and [Config](config.md) |
 | `models` | Model discovery, readiness, pull, invocation, and Factory execution boundaries | [Models](models.md) |
 | `batch-inputs` | Batch-request quick reference | [Batch inputs](batch-inputs.md) |
@@ -97,7 +97,7 @@ filesystem work around that invocation.
 - [JavaScript workflows](javascript-workflows.md) owns the supported JavaScript
   authoring surface, equivalent execution and inspection flows, child worker
   preset rules, host-capability boundary, and executable examples.
-- [MCP host setup](mcp.md) owns the canonical `you mcp serve` host
+- [MCP host setup](mcp.md) owns the canonical `you server mcp` host
   configuration, backing modes, first-use smoke, and troubleshooting.
 - [Workstations](workstations.md) owns workstation kinds, route fields, runtime
   step behavior, prompt/runtime fields, and workstation-scoped execution
@@ -110,7 +110,7 @@ filesystem work around that invocation.
   configured model roles, provider-specific effort and modality/tool limits,
   Factory versus ad-hoc configuration, AGY caveats, ACP installation, and
   provider lifecycle commands.
-- [Host You as an ACP agent](serve-acp.md) owns the canonical `you serve acp`
+- [Host You as an ACP agent](serve-acp.md) owns the canonical `you server acp`
   ACP-agent host command, its stdio channel contract, clean shutdown
   expectations, and a minimal client configuration example.
 - [Workstations](workstations.md) owns `AGENT_RUN` versus `INFERENCE_RUN`

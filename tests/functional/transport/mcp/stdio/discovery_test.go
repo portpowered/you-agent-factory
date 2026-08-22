@@ -114,8 +114,8 @@ func TestMCPDiscoveryContainsCanonicalFactorySessionTools(t *testing.T) {
 	}
 }
 
-// TestMCPStdioRuntimeRejectsMissingHomeEnvironment proves runtime-backed you mcp
-// serve fails with a customer-visible home diagnostic before stdio initialize when
+// TestMCPStdioRuntimeRejectsMissingHomeEnvironment proves runtime-backed you
+// server mcp fails with a customer-visible home diagnostic before stdio initialize when
 // HOME and USERPROFILE are absent from the process environment.
 func TestMCPStdioRuntimeRejectsMissingHomeEnvironment(t *testing.T) {
 	process := support.BuildProcess(t, serviceedges.Edges{})
@@ -126,12 +126,12 @@ func TestMCPStdioRuntimeRejectsMissingHomeEnvironment(t *testing.T) {
 	inputs.WorkingDirectory = t.TempDir()
 	err := process.Execute(inputs.Input)
 	if err == nil || !strings.Contains(err.Error(), "home directory is not defined in the supplied environment") {
-		t.Fatalf("Process.Execute(mcp serve --runtime) error = %v, want missing-home diagnostic", err)
+		t.Fatalf("Process.Execute(you server mcp --runtime) error = %v, want missing-home diagnostic", err)
 	}
 }
 
 // TestMCPStdioRuntimeRejectsInvalidRuntimeProjectRoot proves runtime-backed you
-// mcp serve rejects a project root that cannot resolve a factory layout before
+// server mcp rejects a project root that cannot resolve a factory layout before
 // stdio initialize succeeds.
 func TestMCPStdioRuntimeRejectsInvalidRuntimeProjectRoot(t *testing.T) {
 	process := support.BuildProcess(t, serviceedges.Edges{})
@@ -144,7 +144,7 @@ func TestMCPStdioRuntimeRejectsInvalidRuntimeProjectRoot(t *testing.T) {
 	inputs.WorkingDirectory = projectRoot
 	err := process.Execute(inputs.Input)
 	if err == nil || !strings.Contains(err.Error(), "factory layout not found") {
-		t.Fatalf("Process.Execute(mcp serve --runtime) error = %v, want factory layout diagnostic", err)
+		t.Fatalf("Process.Execute(you server mcp --runtime) error = %v, want factory layout diagnostic", err)
 	}
 }
 
@@ -403,9 +403,9 @@ func closeMCPServer(t *testing.T, serveErr <-chan error) {
 	select {
 	case err := <-serveErr:
 		if err != nil && err != io.EOF && !errors.Is(err, context.Canceled) && !strings.Contains(err.Error(), "file already closed") {
-			t.Fatalf("MCP serve: %v", err)
+			t.Fatalf("MCP server: %v", err)
 		}
 	case <-time.After(5 * time.Second):
-		t.Fatal("MCP serve did not shut down after stdin closed")
+		t.Fatal("MCP server did not shut down after stdin closed")
 	}
 }

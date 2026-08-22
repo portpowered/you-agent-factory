@@ -196,7 +196,7 @@ func finishTranscriptConversation(
 	}
 	<-command.Done()
 	if err := command.Err(); err != nil {
-		t.Fatalf("Process.Execute(serve acp) error = %v", err)
+		t.Fatalf("Process.Execute(you server acp) error = %v", err)
 	}
 	if err := stdoutWrite.Close(); err != nil {
 		t.Fatalf("close stdout: %v", err)
@@ -493,7 +493,7 @@ func TestServeACPDoesNotRecordFailedOutboundFrame(t *testing.T) {
 		WorkingDirectory: cwd,
 	})
 	if err == nil || !strings.Contains(err.Error(), "connection ended with an error") {
-		t.Fatalf("serve acp Execute() error = %v, want the public connection-error diagnostic", err)
+		t.Fatalf("you server acp Execute() error = %v, want the public connection-error diagnostic", err)
 	}
 
 	records := readWireTranscript(t, home)
@@ -541,7 +541,7 @@ func TestServeACPWireTranscriptIsOwnerReadableOnly(t *testing.T) {
 		Context:          t.Context(),
 		WorkingDirectory: cwd,
 	}); err != nil {
-		t.Fatalf("serve acp Execute() error = %v", err)
+		t.Fatalf("you server acp Execute() error = %v", err)
 	}
 
 	transcripts := wireTranscriptFiles(t, filepath.Join(home, ".you-agent-factory", "acp-wire"))
