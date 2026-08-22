@@ -149,6 +149,33 @@ func TestPriceTableNormalizeRoundTripsCanonicalIdentitiesAndExplicitZero(t *test
 	}
 }
 
+func TestDefaultPriceTableContainsSourcedObservedModel(t *testing.T) {
+	t.Parallel()
+
+	table := defaultPriceTable()
+	if table.Currency != PriceTableCurrencyUSD || len(table.Models) != 1 {
+		t.Fatalf("defaultPriceTable() = %#v, want one USD model", table)
+	}
+
+	normalized, err := table.Normalize()
+	if err != nil {
+		t.Fatalf("defaultPriceTable().Normalize() = %v", err)
+	}
+	model := normalized.Models[0]
+	if model.Provider != "CODEX" || model.Model != "gpt-5-codex" {
+		t.Fatalf("default model identity = %#v, want CODEX/gpt-5-codex", model)
+	}
+	if model.InputPerMillionTokens != "1.25" || model.OutputPerMillionTokens != "10" {
+		t.Fatalf("default base rates = %#v, want 1.25/10", model)
+	}
+	if model.CachedInputPerMillionTokens == nil || *model.CachedInputPerMillionTokens != "0.125" {
+		t.Fatalf("default cached-input rate = %#v, want explicit 0.125", model.CachedInputPerMillionTokens)
+	}
+	if model.ReasoningOutputPerMillionTokens == nil || *model.ReasoningOutputPerMillionTokens != "10" {
+		t.Fatalf("default reasoning-output rate = %#v, want explicit output-equivalent 10", model.ReasoningOutputPerMillionTokens)
+	}
+}
+
 func TestPriceTableNormalizeRejectsInvalidEntries(t *testing.T) {
 	t.Parallel()
 

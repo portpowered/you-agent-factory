@@ -94,7 +94,25 @@ type PriceTableModel struct {
 }
 
 func defaultPriceTable() PriceTable {
-	return PriceTable{Currency: PriceTableCurrencyUSD, Models: []PriceTableModel{}}
+	// Observed in the live 2026-08-22 metrics day: codex/gpt-5-codex had
+	// 192 usage rows. The local codex/OMNIVOICE_Q4_K_M model had 12 rows but
+	// has no authoritative published token price, so it remains unpriced.
+	// The other observed pairs were test fixtures, not shipped factory models.
+	// Source: https://developers.openai.com/api/docs/models/gpt-5-codex
+	// Source as-of: 2026-08-21. The source publishes $1.25 input, $0.125
+	// cached input, and $10 output per million tokens. It does not publish a
+	// separate reasoning-output rate; reasoning is intentionally represented at
+	// the standard output rate rather than silently treated as free or unknown.
+	reasoningRate := "10"
+	cachedInputRate := "0.125"
+	return PriceTable{Currency: PriceTableCurrencyUSD, Models: []PriceTableModel{{
+		Provider:                        "CODEX",
+		Model:                           "gpt-5-codex",
+		InputPerMillionTokens:           "1.25",
+		OutputPerMillionTokens:          "10",
+		CachedInputPerMillionTokens:     &cachedInputRate,
+		ReasoningOutputPerMillionTokens: &reasoningRate,
+	}}}
 }
 
 // Clone returns a detached price table whose model slice and optional rates do
