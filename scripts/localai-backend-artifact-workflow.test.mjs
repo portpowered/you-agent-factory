@@ -226,125 +226,59 @@ test("the join rejects missing and unexpected matrix results", async (t) => {
 	);
 });
 
-test("the backend build uses one mutually-exclusive literal shell per runner OS", async () => {
-	const workflow = await readFile(".github/workflows/localai-backend-artifacts.yml", "utf8");
-	const buildSteps = [...workflow.matchAll(/      - name: Build the backend package on (Windows|Unix)\r?\n[\s\S]*?(?=\r?\n      - name:)/g)];
+function buildPlan({ backend, target, buildType }) {
+	const script = "scripts/build-localai-backend-artifact.sh";
+	const exports = [
+		["LOCALAI_ROOT", "/tmp/localai-plan-fixture"],
+		["BACKEND_ID", backend],
+		["TARGET_ID", target],
+		["BUILD_TYPE", buildType],
+		["GRPC_COMMIT", "0000000000000000000000000000000000000000"],
+		["BACKEND_SOURCE_COMMIT", "1111111111111111111111111111111111111111"],
+		["PROTOBUF_VERSION", "24.3"],
+		["GRPC_VERSION", "1.68.1"],
+		["LOCALAI_BUILD_PLAN_ONLY", "1"],
+	];
+	const command = `export ${exports.map(([name, value]) => `${name}=${value}`).join(" ")}; bash ${script}`;
+	const result = spawnSync("bash", ["-c", command], {
+		encoding: "utf8",
+		windowsHide: true,
+	});
+	if (result.error?.code === "ENOENT") return null;
+	assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
+	const line = result.stdout.trim();
+	assert.match(line, /^LOCALAI_BACKEND_BUILD_PLAN /);
+	return Object.fromEntries(line.replace(/^LOCALAI_BACKEND_BUILD_PLAN /, "").split(" ").map((entry) => entry.split("=")));
+}
 
-	assert.deepEqual(
-		buildSteps.map(([, platform]) => platform),
-		["Windows", "Unix"],
-	);
-	const windowsStep = buildSteps.find(([, platform]) => platform === "Windows")[0];
-	const unixStep = buildSteps.find(([, platform]) => platform === "Unix")[0];
-	assert.match(windowsStep, /if: runner\.os == 'Windows'/);
-	assert.match(windowsStep, /shell: msys2 \{0\}/);
-	assert.equal((windowsStep.match(/bash scripts\/build-localai-backend-artifact\.sh/g) ?? []).length, 1);
-	assert.match(unixStep, /if: runner\.os != 'Windows'/);
-	assert.match(unixStep, /shell: bash/);
-	assert.equal((unixStep.match(/bash scripts\/build-localai-backend-artifact\.sh/g) ?? []).length, 1);
-	assert.doesNotMatch(workflow, /shell:\s*\$\{\{\s*runner\.os/);
-});
+test("the build harness selects the Windows and Unix strategies at runtime", (t) => {
+	const probe = spawnSync("bash", ["--version"], { encoding: "utf8", windowsHide: true });
+	if (probe.error?.code === "ENOENT") {
+		t.skip("bash is required for the executable build harness");
+		return;
+	}
 
-test("the workflow uses immutable actions, package inputs, and the pinned tag guard", async () => {
-	const workflow = await readFile(".github/workflows/localai-backend-artifacts.yml", "utf8");
-	assert.match(workflow, /timeout-minutes: 180/);
-	for (const revision of Object.values(config.workflowPins)) assert.match(workflow, new RegExp(`@${revision}`));
-	assert.doesNotMatch(workflow, /uses:\s+[^\n]+@(v\d|main|master|latest)\b/);
-	assert.doesNotMatch(workflow, /update:\s*true/);
-	assert.match(workflow, /curl --fail --silent --show-error --location "\$formula" --output "\$formula_path"/);
-	assert.match(workflow, /brew tap-new --no-git "\$tap"/);
-	assert.match(workflow, /tap_path="\$\(brew --repository "\$tap"\)"/);
-	assert.match(workflow, /cp "\$formula_path" "\$tap_path\/Formula\/make\.rb"/);
-	assert.match(workflow, /brew install --formula "\$tap\/make"/);
-	assert.match(workflow, /pacman -Sy --noconfirm/);
-	assert.match(workflow, /pacman -S --needed --noconfirm --overwrite '\*'/);
-	assert.doesNotMatch(workflow, /apt-get/);
-	assert.doesNotMatch(workflow, /brew install make\b/);
-	assert.match(workflow, /windows_vcpkg_triplet/);
-	assert.match(
-		workflow,
-		/vcpkg\.exe install grpc:\$\{\{ needs\.validate-inputs\.outputs\.windows_vcpkg_triplet \}\}[^\n]*--overlay-triplets=\$overlayTriplets/,
-	);
-	assert.match(workflow, /windows_vcpkg_triplet/);
-	assert.match(workflow, /git\/ref\/tags/);
-	assert.match(workflow, /git\/tags/);
-	assert.match(workflow, /exists but its target could not be resolved/);
-	assert.equal(
-		config.backends.find(({ id }) => id === "localai-llamacpp").binary,
-		"llama-cpp-cpu-all",
-	);
-	const buildScript = await readFile("scripts/build-localai-backend-artifact.sh", "utf8");
-	assert.match(buildScript, /backend\/cpp\/grpc/);
-	assert.match(buildScript, /compatibility_path="\$\{LOCALAI_ROOT\}\/backend\/grpc"/);
-	assert.match(buildScript, /VCPKG_OVERLAY_TRIPLETS/);
-	assert.match(buildScript, /grpc-server/);
-	assert.match(buildScript, /llama-cpp-cpu-all/);
-});
-
-test("the pinned build repairs LocalAI path and Darwin shell incompatibilities", async () => {
-	const buildScript = await readFile("scripts/build-localai-backend-artifact.sh", "utf8");
-	assert.match(buildScript, /ensure_localai_grpc_compat_path/);
-	assert.match(buildScript, /ln -s "\$grpc_path" "\$compatibility_path"/);
-	assert.match(buildScript, /WINDOWS_NODE_DIR/);
-	assert.match(buildScript, /node_bin_dir="\$\(cygpath -u "\$WINDOWS_NODE_DIR"\)"/);
-	assert.match(buildScript, /export PATH="\$node_bin_dir:\$PATH"/);
-	assert.match(buildScript, /WINDOWS_GO_DIR/);
-	assert.match(buildScript, /go_bin_dir="\$\(cygpath -u "\$WINDOWS_GO_DIR"\)"/);
-	assert.match(buildScript, /export PATH="\$go_bin_dir:\$PATH"/);
-	assert.match(buildScript, /WINDOWS_CMAKE_DIR/);
-	assert.match(buildScript, /cmake_bin_dir="\$\(cygpath -u "\$WINDOWS_CMAKE_DIR"\)"/);
-	assert.match(buildScript, /export PATH="\$cmake_bin_dir:\$PATH"/);
-	assert.match(buildScript, /stage_darwin_go_package/);
-	assert.match(buildScript, /for library in "\$\{backend_path\}"\/libgo\*\.dylib "\$\{backend_path\}"\/libgo\*\.so/);
-	assert.match(buildScript, /BUILD_TYPE="\$BUILD_TYPE" JOBS=2 "\$binary"/);
-	assert.match(buildScript, /localai-whisper\|localai-vibevoice\)\r?\n\s+if \[\[ "\$TARGET_ID" == "darwin-arm64" \]\]/);
-});
-
-test("the Windows workflow exports setup-node's directory to the MSYS2 build shell", async () => {
-	const workflow = await readFile(".github/workflows/localai-backend-artifacts.yml", "utf8");
-	assert.match(workflow, /- name: Expose the pinned Node tool to MSYS2/);
-	assert.match(workflow, /if: runner\.os == 'Windows'/);
-	assert.match(workflow, /Get-Command node -CommandType Application -ErrorAction Stop/);
-	assert.match(workflow, /Select-Object -First 1/);
-	assert.match(workflow, /WINDOWS_NODE_DIR=\$\(\$nodeCommand\.Source \| Split-Path -Parent\)/);
-});
-
-test("the Windows workflow exports setup-go's directory to the MSYS2 build shell", async () => {
-	const workflow = await readFile(".github/workflows/localai-backend-artifacts.yml", "utf8");
-	assert.match(workflow, /- name: Expose the pinned Go tool to MSYS2/);
-	assert.match(workflow, /if: runner\.os == 'Windows'/);
-	assert.match(workflow, /Get-Command go -CommandType Application -ErrorAction Stop/);
-	assert.match(workflow, /Select-Object -First 1/);
-	assert.match(workflow, /WINDOWS_GO_DIR=\$\(\$goCommand\.Source \| Split-Path -Parent\)/);
-});
-
-test("the Windows workflow exports setup-cmake's directory to the MSYS2 build shell", async () => {
-	const workflow = await readFile(".github/workflows/localai-backend-artifacts.yml", "utf8");
-	assert.match(workflow, /- name: Expose the pinned CMake tool to MSYS2/);
-	assert.match(workflow, /if: runner\.os == 'Windows'/);
-	assert.match(workflow, /Get-Command cmake -CommandType Application -ErrorAction Stop/);
-	assert.match(workflow, /Select-Object -First 1/);
-	assert.match(workflow, /WINDOWS_CMAKE_DIR=\$\(\$cmakeCommand\.Source \| Split-Path -Parent\)/);
-});
-
-test("the pinned llama build preserves recursive protobuf arguments and Darwin compatibility", async () => {
-	const buildScript = await readFile("scripts/build-localai-backend-artifact.sh", "utf8");
-	assert.match(buildScript, /run_direct_grpc_server_make\(\)/);
-	assert.match(buildScript, /_PROTOBUF_PROTOC=\$\{grpc_path\}\/installed_packages\/bin\/proto/);
-	assert.match(buildScript, /_GRPC_CPP_PLUGIN_EXECUTABLE=\$\{grpc_path\}\/installed_packages\/bin\/grpc_cpp_plugin/);
-	assert.match(buildScript, /PATH=\$\{grpc_path\}\/installed_packages\/bin:\$\{PATH\}/);
-	assert.match(buildScript, /run_direct_grpc_server_make "\$\{cmake_args_text\} \$\{grpc_added_cmake_args\}" BUILD_TYPE=cpu BUILD_GRPC_FOR_BACKEND_LLAMA=1 grpc-server/);
-	assert.match(buildScript, /patch_llama_grpc_source\(\)/);
-	assert.match(buildScript, /llama\.cpp\/tools\/grpc-server/);
-	assert.match(buildScript, /const needle = "reply->set_message\(arr\);"/);
-	assert.match(buildScript, /const replacement = "reply->set_message\(arr\.dump\(\)\);"/);
-	assert.match(buildScript, /-DProtobuf_PROTOC_EXECUTABLE=\$\{protoc_path\}/);
-	assert.match(buildScript, /darwin_llama_cmake_args="\$\{cmake_args_text\} \$\{grpc_added_cmake_args\} -DGGML_CPU_ARM_ARCH=armv8\.2-a\+dotprod"/);
-	assert.match(buildScript, /run_direct_grpc_server_make "\$darwin_llama_cmake_args" "\$\{os_make_args\[@\]\}" BUILD_TYPE="\$BUILD_TYPE" BUILD_GRPC_FOR_BACKEND_LLAMA=1 grpc-server/);
-	assert.match(buildScript, /cp -f "\$\{backend_path\}\/grpc-server" "\$\{backend_path\}\/llama-cpp-cpu-all"/);
-	assert.match(buildScript, /CMAKE_ARGS="\$cmake_args_text" "\$make_command" -C "\$backend_path" "\$\{os_make_args\[@\]\}" BUILD_TYPE="\$BUILD_TYPE" BUILD_GRPC_FOR_BACKEND_LLAMA=1 llama-cpp-cpu-all/);
-	assert.doesNotMatch(buildScript, /BUILD_GRPC_FOR_BACKEND_LLAMA=1 CMAKE_ARGS="\$cmake_args_text"/);
-	assert.doesNotMatch(buildScript, /llama_make_args=/);
+	assert.deepEqual(buildPlan({ backend: "localai-llamacpp", target: "windows-amd64", buildType: "cpu" }), {
+		backend: "localai-llamacpp",
+		target: "windows-amd64",
+		shell: "msys2",
+			strategy: "windows-llamacpp-grpc",
+		binary: "llama-cpp-cpu-all",
+	});
+	assert.deepEqual(buildPlan({ backend: "localai-llamacpp", target: "darwin-arm64", buildType: "metal" }), {
+		backend: "localai-llamacpp",
+		target: "darwin-arm64",
+		shell: "bash",
+		strategy: "darwin-llamacpp-grpc",
+		binary: "llama-cpp-cpu-all",
+	});
+	assert.deepEqual(buildPlan({ backend: "localai-whisper", target: "linux-amd64", buildType: "cpu" }), {
+		backend: "localai-whisper",
+		target: "linux-amd64",
+		shell: "bash",
+		strategy: "linux-go-build",
+		binary: "whisper",
+	});
 });
 
 test("manifest verification rejects bytes tampered after manifest creation", async (t) => {

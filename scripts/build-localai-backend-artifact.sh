@@ -102,14 +102,6 @@ verify_host_toolchain() {
 	esac
 }
 
-verify_host_toolchain
-
-node "$workflow_script" verify-source \
-	--config "$config_path" \
-	--localai-root "$LOCALAI_ROOT" \
-	--backend "$BACKEND_ID" \
-	--target "$TARGET_ID"
-
 backend_path=""
 binary=""
 case "$BACKEND_ID" in
@@ -130,6 +122,54 @@ case "$BACKEND_ID" in
 		exit 1
 		;;
 esac
+
+build_shell="bash"
+if [[ "$TARGET_ID" == "windows-amd64" ]]; then
+	build_shell="msys2"
+fi
+
+build_strategy=""
+case "$TARGET_ID:$BACKEND_ID" in
+	windows-amd64:localai-llamacpp)
+		build_strategy="windows-llamacpp-grpc"
+		;;
+	windows-amd64:localai-whisper)
+		build_strategy="windows-whisper"
+		;;
+	windows-amd64:localai-vibevoice)
+		build_strategy="windows-vibevoice"
+		;;
+	darwin-arm64:localai-llamacpp)
+		build_strategy="darwin-llamacpp-grpc"
+		;;
+	linux-amd64:localai-llamacpp)
+		build_strategy="linux-llamacpp-package"
+		;;
+	darwin-arm64:localai-whisper|darwin-arm64:localai-vibevoice)
+		build_strategy="darwin-go-package"
+		;;
+	linux-amd64:localai-whisper|linux-amd64:localai-vibevoice)
+		build_strategy="linux-go-build"
+		;;
+	*)
+		echo "unsupported backend/target: ${BACKEND_ID}/${TARGET_ID}" >&2
+		exit 1
+		;;
+esac
+
+if [[ "${LOCALAI_BUILD_PLAN_ONLY:-0}" == "1" ]]; then
+	printf 'LOCALAI_BACKEND_BUILD_PLAN backend=%s target=%s shell=%s strategy=%s binary=%s\n' \
+		"$BACKEND_ID" "$TARGET_ID" "$build_shell" "$build_strategy" "$binary"
+	exit 0
+fi
+
+verify_host_toolchain
+
+node "$workflow_script" verify-source \
+	--config "$config_path" \
+	--localai-root "$LOCALAI_ROOT" \
+	--backend "$BACKEND_ID" \
+	--target "$TARGET_ID"
 
 rm -rf "${backend_path}/package"
 
@@ -403,74 +443,67 @@ if [[ "$BACKEND_ID" == "localai-llamacpp" ]]; then
 	patch_llama_grpc_source
 fi
 
-if [[ "$TARGET_ID" == "windows-amd64" ]]; then
+case "$build_strategy" in
+	windows-llamacpp-grpc)
 	mkdir -p "${backend_path}/package"
-	case "$BACKEND_ID" in
-		localai-llamacpp)
-			# The upstream package target is Unix-only. Build its gRPC target with
-			# the static Windows toolchain and stage it under the canonical
-			# llama-cpp-cpu-all entrypoint used by the package contract.
-			run_direct_grpc_server_make "${cmake_args_text} ${grpc_added_cmake_args}" BUILD_TYPE=cpu BUILD_GRPC_FOR_BACKEND_LLAMA=1 grpc-server
-			mkdir -p "${backend_path}/package"
-			built_binary="$(find "$backend_path" -maxdepth 3 -type f \( -name 'grpc-server.exe' -o -name 'grpc-server' \) -size +0c -print -quit)"
-			[[ -n "$built_binary" ]] || { echo "Windows llama gRPC executable was not produced" >&2; exit 1; }
-			cp -f "$built_binary" "${backend_path}/package/${binary}.exe"
-			;;
-		localai-whisper)
-			"$make_command" -C "$backend_path" sources/whisper.cpp
-			cmake -S "$backend_path" -B "${backend_path}/build-windows" -G "MinGW Makefiles" "${cmake_args[@]}" -DGGML_NATIVE=OFF
-			cmake --build "${backend_path}/build-windows" --config Release --target gowhisper
-			go build -C "$backend_path" -o "${backend_path}/package/${binary}.exe" ./
-			find "${backend_path}/build-windows" -type f -name 'libgowhisper*.dll' -size +0c -exec cp {} "${backend_path}/package/" \;
-			;;
-		localai-vibevoice)
-			"$make_command" -C "$backend_path" sources/vibevoice.cpp
-			cmake -S "$backend_path" -B "${backend_path}/build-windows" -G "MinGW Makefiles" "${cmake_args[@]}" -DGGML_NATIVE=OFF -DVIBEVOICE_BUILD_TESTS=OFF -DVIBEVOICE_BUILD_EXAMPLES=OFF
-			cmake --build "${backend_path}/build-windows" --config Release --target govibevoicecpp
-			go build -C "$backend_path" -o "${backend_path}/package/${binary}.exe" ./
-			find "${backend_path}/build-windows" -type f -name 'libgovibevoicecpp*.dll' -size +0c -exec cp {} "${backend_path}/package/" \;
-			;;
-		*)
-			echo "unsupported Windows backend: $BACKEND_ID" >&2
-			exit 1
-			;;
-	esac
+	# The upstream package target is Unix-only. Build its gRPC target with
+	# the static Windows toolchain and stage it under the canonical
+	# llama-cpp-cpu-all entrypoint used by the package contract.
+	run_direct_grpc_server_make "${cmake_args_text} ${grpc_added_cmake_args}" BUILD_TYPE=cpu BUILD_GRPC_FOR_BACKEND_LLAMA=1 grpc-server
+	mkdir -p "${backend_path}/package"
+	built_binary="$(find "$backend_path" -maxdepth 3 -type f \( -name 'grpc-server.exe' -o -name 'grpc-server' \) -size +0c -print -quit)"
+	[[ -n "$built_binary" ]] || { echo "Windows llama gRPC executable was not produced" >&2; exit 1; }
+	cp -f "$built_binary" "${backend_path}/package/${binary}.exe"
 	stage_windows_runtime "${backend_path}/package"
-	else
-	case "$BACKEND_ID" in
-	localai-llamacpp)
-		if [[ "$TARGET_ID" == "darwin-arm64" ]]; then
-			# The pinned CPU-all target always appends GGML_CPU_ALL_VARIANTS=ON,
-			# which cannot be combined with GGML_CPU_ARM_ARCH. Build the same
-			# pinned grpc-server directly with a generic Darwin arm64 setting, then
-			# retain the existing CPU-all executable name and package contract.
-			darwin_llama_cmake_args="${cmake_args_text} ${grpc_added_cmake_args} -DGGML_CPU_ARM_ARCH=armv8.2-a+dotprod"
-			run_direct_grpc_server_make "$darwin_llama_cmake_args" "${os_make_args[@]}" BUILD_TYPE="$BUILD_TYPE" BUILD_GRPC_FOR_BACKEND_LLAMA=1 grpc-server
-			test -s "${backend_path}/grpc-server"
-			cp -f "${backend_path}/grpc-server" "${backend_path}/llama-cpp-cpu-all"
-			stage_darwin_llama_package
-		else
-			CMAKE_ARGS="$cmake_args_text" "$make_command" -C "$backend_path" "${os_make_args[@]}" BUILD_TYPE="$BUILD_TYPE" BUILD_GRPC_FOR_BACKEND_LLAMA=1 llama-cpp-cpu-all
-			# package.sh copies llama-cpp-*; remove the build directory so only
-			# the real executable, run script, and runtime libraries are staged.
-			rm -rf "${backend_path}/llama-cpp-cpu-all-build"
-			"$make_command" -C "$backend_path" "${os_make_args[@]}" BUILD_TYPE="$BUILD_TYPE" package
-		fi
+	;;
+	windows-whisper)
+	mkdir -p "${backend_path}/package"
+	"$make_command" -C "$backend_path" sources/whisper.cpp
+	cmake -S "$backend_path" -B "${backend_path}/build-windows" -G "MinGW Makefiles" "${cmake_args[@]}" -DGGML_NATIVE=OFF
+	cmake --build "${backend_path}/build-windows" --config Release --target gowhisper
+	go build -C "$backend_path" -o "${backend_path}/package/${binary}.exe" ./
+	find "${backend_path}/build-windows" -type f -name 'libgowhisper*.dll' -size +0c -exec cp {} "${backend_path}/package/" \;
+	stage_windows_runtime "${backend_path}/package"
+	;;
+	windows-vibevoice)
+	mkdir -p "${backend_path}/package"
+	"$make_command" -C "$backend_path" sources/vibevoice.cpp
+	cmake -S "$backend_path" -B "${backend_path}/build-windows" -G "MinGW Makefiles" "${cmake_args[@]}" -DGGML_NATIVE=OFF -DVIBEVOICE_BUILD_TESTS=OFF -DVIBEVOICE_BUILD_EXAMPLES=OFF
+	cmake --build "${backend_path}/build-windows" --config Release --target govibevoicecpp
+	go build -C "$backend_path" -o "${backend_path}/package/${binary}.exe" ./
+	find "${backend_path}/build-windows" -type f -name 'libgovibevoicecpp*.dll' -size +0c -exec cp {} "${backend_path}/package/" \;
+	stage_windows_runtime "${backend_path}/package"
+	;;
+	darwin-llamacpp-grpc)
+	# The pinned CPU-all target always appends GGML_CPU_ALL_VARIANTS=ON,
+	# which cannot be combined with GGML_CPU_ARM_ARCH. Build the same
+	# pinned grpc-server directly with a generic Darwin arm64 setting, then
+	# retain the existing CPU-all executable name and package contract.
+	darwin_llama_cmake_args="${cmake_args_text} ${grpc_added_cmake_args} -DGGML_CPU_ARM_ARCH=armv8.2-a+dotprod"
+	run_direct_grpc_server_make "$darwin_llama_cmake_args" "${os_make_args[@]}" BUILD_TYPE="$BUILD_TYPE" BUILD_GRPC_FOR_BACKEND_LLAMA=1 grpc-server
+	test -s "${backend_path}/grpc-server"
+	cp -f "${backend_path}/grpc-server" "${backend_path}/llama-cpp-cpu-all"
+	stage_darwin_llama_package
+	;;
+	linux-llamacpp-package)
+	CMAKE_ARGS="$cmake_args_text" "$make_command" -C "$backend_path" "${os_make_args[@]}" BUILD_TYPE="$BUILD_TYPE" BUILD_GRPC_FOR_BACKEND_LLAMA=1 llama-cpp-cpu-all
+	# package.sh copies llama-cpp-*; remove the build directory so only
+	# the real executable, run script, and runtime libraries are staged.
+	rm -rf "${backend_path}/llama-cpp-cpu-all-build"
+	"$make_command" -C "$backend_path" "${os_make_args[@]}" BUILD_TYPE="$BUILD_TYPE" package
+	;;
+	darwin-go-package)
+	"$make_command" -C "$backend_path" "${os_make_args[@]}" BUILD_TYPE="$BUILD_TYPE" JOBS=2 "$binary"
+	stage_darwin_go_package
+	;;
+	linux-go-build)
+	"$make_command" -C "$backend_path" "${os_make_args[@]}" BUILD_TYPE="$BUILD_TYPE" build
 		;;
-		localai-whisper|localai-vibevoice)
-			if [[ "$TARGET_ID" == "darwin-arm64" ]]; then
-				"$make_command" -C "$backend_path" "${os_make_args[@]}" BUILD_TYPE="$BUILD_TYPE" JOBS=2 "$binary"
-				stage_darwin_go_package
-			else
-				"$make_command" -C "$backend_path" "${os_make_args[@]}" BUILD_TYPE="$BUILD_TYPE" build
-			fi
-			;;
-		*)
-			echo "unsupported Unix backend: $BACKEND_ID" >&2
-			exit 1
-			;;
-	esac
-fi
+	*)
+		echo "unsupported build strategy: $build_strategy" >&2
+		exit 1
+		;;
+esac
 
 package_root="${backend_path}/package"
 node "$workflow_script" verify-payload \

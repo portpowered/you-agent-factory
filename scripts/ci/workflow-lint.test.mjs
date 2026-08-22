@@ -87,3 +87,27 @@ test("actionlint rejects runner context in shell when the pinned binary is avail
 	assert.notEqual(result.status, 0);
 	assert.match(`${result.stdout}\n${result.stderr}`, /context "runner" is not allowed here/);
 });
+
+test("the checked-in workflow set passes the executable schema-lint gate", (t) => {
+	const actionlint = process.env.ACTIONLINT_BIN || "actionlint";
+	const version = spawnSync(actionlint, ["-version"], { encoding: "utf8", windowsHide: true });
+	if (version.error) {
+		t.skip("actionlint is installed by the hosted workflow-lint job");
+		return;
+	}
+
+	const messages = [];
+	const result = runWorkflowLint({
+		actionlint,
+		workflowDirectory: join(process.cwd(), ".github", "workflows"),
+		log(message) {
+			messages.push(message);
+		},
+	});
+	assert.equal(result.status, 0);
+	assert.ok(result.workflowFiles.length > 0);
+	assert.deepEqual(messages, [
+		`WORKFLOW_LINT_FILE_COUNT=${result.workflowFiles.length}`,
+		`WORKFLOW_LINT_OK files=${result.workflowFiles.length}`,
+	]);
+});
