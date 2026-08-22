@@ -3,6 +3,7 @@ package cli
 import (
 	"context"
 	"io"
+	"os"
 
 	models "github.com/portpowered/infinite-you/pkg/services/models"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/clihttp"
@@ -30,6 +31,7 @@ type OutputTemporaryFile interface {
 // supplies the host implementation.
 type OutputFileSystem interface {
 	CreateTemp(string, string) (OutputTemporaryFile, error)
+	Inspect(string) (os.FileInfo, error)
 	Remove(string) error
 	Rename(string, string) error
 }

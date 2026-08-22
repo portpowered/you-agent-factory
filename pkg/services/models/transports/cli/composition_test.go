@@ -719,6 +719,10 @@ func (localOutputFileSystem) CreateTemp(dir, pattern string) (modelscli.OutputTe
 	return os.CreateTemp(dir, pattern)
 }
 
+func (localOutputFileSystem) Inspect(path string) (os.FileInfo, error) {
+	return os.Stat(path)
+}
+
 func (localOutputFileSystem) Remove(path string) error {
 	return os.Remove(path)
 }

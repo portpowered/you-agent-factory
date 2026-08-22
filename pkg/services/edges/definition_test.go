@@ -545,6 +545,22 @@ func TestMergeAppliesModelAssetAndHostEffectReplacements(t *testing.T) {
 	}
 }
 
+func TestMergeAppliesCLIOutputInspectionReplacement(t *testing.T) {
+	t.Parallel()
+
+	defaultErr := errors.New("default inspect")
+	replacementErr := errors.New("replacement inspect")
+	defaultInspect := func(string) (fs.FileInfo, error) { return nil, defaultErr }
+	replacementInspect := func(string) (fs.FileInfo, error) { return nil, replacementErr }
+	merged := Merge(
+		Edges{ModelCLIOutputInspectPath: defaultInspect},
+		Edges{ModelCLIOutputInspectPath: replacementInspect},
+	)
+	if _, err := merged.ModelCLIOutputInspectPath("mapped.out"); !errors.Is(err, replacementErr) {
+		t.Fatalf("merged ModelCLIOutputInspectPath error = %v, want replacement error", err)
+	}
+}
+
 func TestMergeReplacesAndPreservesRecordingArtifactReadEffect(t *testing.T) {
 	t.Parallel()
 

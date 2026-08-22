@@ -39,6 +39,7 @@ func TestModelsCLIOutputFileSystemUsesExplicitEdges(t *testing.T) {
 	t.Parallel()
 
 	createCalled := false
+	inspectCalled := false
 	removeCalled := false
 	renameCalled := false
 	fileSystem := provideModelsCLIOutputFileSystem(serviceedges.Edges{
@@ -49,6 +50,10 @@ func TestModelsCLIOutputFileSystemUsesExplicitEdges(t *testing.T) {
 		}, error) {
 			createCalled = true
 			return os.CreateTemp(dir, pattern)
+		},
+		ModelCLIOutputInspectPath: func(path string) (os.FileInfo, error) {
+			inspectCalled = true
+			return os.Stat(path)
 		},
 		ModelCLIOutputRemovePath: func(path string) error {
 			removeCalled = true
@@ -76,11 +81,14 @@ func TestModelsCLIOutputFileSystemUsesExplicitEdges(t *testing.T) {
 	if err := fileSystem.Rename(temporaryPath, destination); err != nil {
 		t.Fatalf("Rename() error = %v", err)
 	}
+	if _, err := fileSystem.Inspect(destination); err != nil {
+		t.Fatalf("Inspect() error = %v", err)
+	}
 	if err := fileSystem.Remove(destination); err != nil {
 		t.Fatalf("Remove() error = %v", err)
 	}
-	if !createCalled || !renameCalled || !removeCalled {
-		t.Fatalf("edge calls = create:%v rename:%v remove:%v, want all true", createCalled, renameCalled, removeCalled)
+	if !createCalled || !inspectCalled || !renameCalled || !removeCalled {
+		t.Fatalf("edge calls = create:%v inspect:%v rename:%v remove:%v, want all true", createCalled, inspectCalled, renameCalled, removeCalled)
 	}
 }
 

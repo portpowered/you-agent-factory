@@ -390,10 +390,25 @@ func TestModelsGenericCLIOutputModesReachJoinedRootThroughProcess(t *testing.T) 
 			t.Fatalf("mapped output %s = %q, %v; want %q", test.path, data, err, test.want)
 		}
 	}
-	if !strings.Contains(output.String(), `"name":"usage"`) || hostLauncher.Calls() != 2 {
+	assertMappedGenericCLIResponse(t, &output)
+	if hostLauncher.Calls() != 2 {
 		t.Fatalf("mapped output response/effects = %q, starts %d; want metadata and one start per invocation", output.String(), hostLauncher.Calls())
 	}
 	closeRootProcess(t, process, "close multi-output root process")
+}
+
+func assertMappedGenericCLIResponse(t testing.TB, output *bytes.Buffer) {
+	t.Helper()
+	var response factoryapi.GenericModelInvocationResponse
+	if err := json.Unmarshal(output.Bytes(), &response); err != nil {
+		t.Fatalf("decode mapped output response: %v\n%s", err, output.String())
+	}
+	if len(response.Outputs) != 2 || response.Outputs[0].Name != "text" || response.Outputs[0].Content == nil || *response.Outputs[0].Content != "mapped outputs" {
+		t.Fatalf("mapped output inline metadata = %#v, want text bytes", response.Outputs)
+	}
+	if response.Outputs[0].ContentType == nil || *response.Outputs[0].ContentType != "text/plain" || response.Outputs[1].MediaType == nil || *response.Outputs[1].MediaType != "application/json" {
+		t.Fatalf("mapped output media metadata = %#v, want text/plain and application/json", response.Outputs)
+	}
 }
 
 func executeRootModelsCLI(

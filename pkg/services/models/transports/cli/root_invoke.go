@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
 	"path/filepath"
 	"strings"
 
@@ -183,6 +184,16 @@ type genericCLIOutputMapping struct {
 	path string
 }
 
+type genericCLIOutputStage struct {
+	targetPath string
+	temporary  string
+}
+
+type genericCLIOutputBackup struct {
+	targetPath string
+	backupPath string
+}
+
 func parseGenericCLIOutputMappings(values []string) ([]genericCLIOutputMapping, error) {
 	mappings := make([]genericCLIOutputMapping, 0, len(values))
 	seen := make(map[string]struct{}, len(values))
@@ -262,42 +273,167 @@ func (service *rootService) writeGenericCLIOutputMappings(cfg InvokeConfig, resu
 	if len(result.Outputs) != len(mappings) {
 		return fmt.Errorf("model invocation returned %d outputs for %d explicit output mappings", len(result.Outputs), len(mappings))
 	}
-	type stagedOutput struct {
-		targetPath string
-		temporary  string
-	}
-	staged := make([]stagedOutput, 0, len(result.Outputs))
+	staged := make([]genericCLIOutputStage, 0, len(result.Outputs))
+	backups := make([]genericCLIOutputBackup, 0, len(result.Outputs))
+	published := 0
+	committed := false
 	defer func() {
+		if committed {
+			removeGenericCLIOutputBackups(service.outputFileSystem, backups)
+		} else {
+			rollbackGenericCLIOutputPublication(service.outputFileSystem, staged, backups, published)
+		}
 		for _, output := range staged {
 			if output.temporary != "" {
 				_ = service.outputFileSystem.Remove(output.temporary)
 			}
 		}
 	}()
-	for _, output := range result.Outputs {
-		mapping, ok := bySlot[output.Name]
-		if !ok {
-			return fmt.Errorf("model invocation returned unmapped output slot %q", output.Name)
-		}
-		if output.Content == "" {
-			return fmt.Errorf("output slot %q has no inline bytes for mapped publication", output.Name)
-		}
-		temporary, err := stageGenericCLIOutputFile(cfg.Context, service.outputFileSystem, mapping.path, []byte(output.Content))
-		if err != nil {
-			return fmt.Errorf("write mapped output %q: %w", output.Name, err)
-		}
-		staged = append(staged, stagedOutput{targetPath: mapping.path, temporary: temporary})
+	staged, err = stageGenericCLIOutputs(cfg.Context, service.outputFileSystem, result, bySlot)
+	if err != nil {
+		return err
 	}
 	if err := cfg.Context.Err(); err != nil {
 		return err
 	}
+	backups, err = backupGenericCLIOutputTargets(cfg.Context, service.outputFileSystem, mappings)
+	if err != nil {
+		return err
+	}
+	published, err = publishGenericCLIOutputs(cfg.Context, service.outputFileSystem, result, staged)
+	if err != nil {
+		return err
+	}
+	if err := json.NewEncoder(cfg.Output).Encode(genericInvocationResponseFromInferenceResult(result)); err != nil {
+		return err
+	}
+	committed = true
+	return nil
+}
+
+func stageGenericCLIOutputs(
+	ctx context.Context,
+	fileSystem OutputFileSystem,
+	result modelinference.InvokeModelResult,
+	bySlot map[string]genericCLIOutputMapping,
+) ([]genericCLIOutputStage, error) {
+	staged := make([]genericCLIOutputStage, 0, len(result.Outputs))
+	for _, output := range result.Outputs {
+		mapping, ok := bySlot[output.Name]
+		if !ok {
+			return staged, fmt.Errorf("model invocation returned unmapped output slot %q", output.Name)
+		}
+		if output.Content == "" {
+			return staged, fmt.Errorf("output slot %q has no inline bytes for mapped publication", output.Name)
+		}
+		temporary, err := stageGenericCLIOutputFile(ctx, fileSystem, mapping.path, []byte(output.Content))
+		if err != nil {
+			return staged, fmt.Errorf("write mapped output %q: %w", output.Name, err)
+		}
+		staged = append(staged, genericCLIOutputStage{targetPath: mapping.path, temporary: temporary})
+	}
+	return staged, nil
+}
+
+func publishGenericCLIOutputs(
+	ctx context.Context,
+	fileSystem OutputFileSystem,
+	result modelinference.InvokeModelResult,
+	staged []genericCLIOutputStage,
+) (int, error) {
+	published := 0
 	for index, output := range staged {
-		if err := service.outputFileSystem.Rename(output.temporary, output.targetPath); err != nil {
-			return fmt.Errorf("publish mapped output %q: %w", result.Outputs[index].Name, err)
+		if err := ctx.Err(); err != nil {
+			return published, err
+		}
+		if err := fileSystem.Rename(output.temporary, output.targetPath); err != nil {
+			return published, fmt.Errorf("publish mapped output %q: %w", result.Outputs[index].Name, err)
 		}
 		staged[index].temporary = ""
+		published++
 	}
-	return json.NewEncoder(cfg.Output).Encode(genericInvocationResponseFromInferenceResult(result))
+	return published, nil
+}
+
+func backupGenericCLIOutputTargets(
+	ctx context.Context,
+	fileSystem OutputFileSystem,
+	mappings []genericCLIOutputMapping,
+) ([]genericCLIOutputBackup, error) {
+	backups := make([]genericCLIOutputBackup, 0, len(mappings))
+	for _, mapping := range mappings {
+		if err := ctx.Err(); err != nil {
+			return backups, err
+		}
+		_, err := fileSystem.Inspect(mapping.path)
+		switch {
+		case err == nil:
+			backupPath, backupErr := reserveGenericCLIOutputPath(ctx, fileSystem, mapping.path)
+			if backupErr != nil {
+				return backups, fmt.Errorf("prepare mapped output %q backup: %w", mapping.slot, backupErr)
+			}
+			if backupErr = fileSystem.Rename(mapping.path, backupPath); backupErr != nil {
+				_ = fileSystem.Remove(backupPath)
+				return backups, fmt.Errorf("backup mapped output %q: %w", mapping.slot, backupErr)
+			}
+			backups = append(backups, genericCLIOutputBackup{targetPath: mapping.path, backupPath: backupPath})
+		case errors.Is(err, os.ErrNotExist):
+			continue
+		default:
+			return backups, fmt.Errorf("inspect mapped output %q: %w", mapping.slot, err)
+		}
+	}
+	return backups, nil
+}
+
+func reserveGenericCLIOutputPath(
+	ctx context.Context,
+	fileSystem OutputFileSystem,
+	targetPath string,
+) (string, error) {
+	if err := ctx.Err(); err != nil {
+		return "", err
+	}
+	temporary, err := fileSystem.CreateTemp(filepath.Dir(targetPath), ".you-model-output-backup-*")
+	if err != nil {
+		return "", err
+	}
+	if temporary == nil {
+		return "", fmt.Errorf("create backup temporary file returned no named handle")
+	}
+	backupPath := temporary.Name()
+	if strings.TrimSpace(backupPath) == "" {
+		_ = temporary.Close()
+		return "", fmt.Errorf("create backup temporary file returned no named handle")
+	}
+	if err := temporary.Close(); err != nil {
+		_ = fileSystem.Remove(backupPath)
+		return "", err
+	}
+	if err := fileSystem.Remove(backupPath); err != nil {
+		return "", err
+	}
+	return backupPath, nil
+}
+
+func rollbackGenericCLIOutputPublication(
+	fileSystem OutputFileSystem,
+	staged []genericCLIOutputStage,
+	backups []genericCLIOutputBackup,
+	published int,
+) {
+	for index := published - 1; index >= 0; index-- {
+		_ = fileSystem.Remove(staged[index].targetPath)
+	}
+	for index := len(backups) - 1; index >= 0; index-- {
+		_ = fileSystem.Rename(backups[index].backupPath, backups[index].targetPath)
+	}
+}
+
+func removeGenericCLIOutputBackups(fileSystem OutputFileSystem, backups []genericCLIOutputBackup) {
+	for _, backup := range backups {
+		_ = fileSystem.Remove(backup.backupPath)
+	}
 }
 
 func stageGenericCLIOutputFile(ctx context.Context, fileSystem OutputFileSystem, path string, data []byte) (string, error) {

@@ -476,6 +476,10 @@ func provideModelsCLIOutputFileSystem(edges serviceedges.Edges) modelscli.Output
 			return os.CreateTemp(dir, pattern)
 		}
 	}
+	inspectPath := edges.ModelCLIOutputInspectPath
+	if inspectPath == nil {
+		inspectPath = os.Stat
+	}
 	removePath := edges.ModelCLIOutputRemovePath
 	if removePath == nil {
 		removePath = os.Remove
@@ -495,19 +499,25 @@ func provideModelsCLIOutputFileSystem(edges serviceedges.Edges) modelscli.Output
 			}
 			return modelCLIOutputTemporaryFile{next: temporary}, nil
 		},
-		removePath: removePath,
-		renamePath: renamePath,
+		inspectPath: inspectPath,
+		removePath:  removePath,
+		renamePath:  renamePath,
 	}
 }
 
 type modelCLIOutputFileSystem struct {
-	createTemp func(string, string) (modelscli.OutputTemporaryFile, error)
-	removePath func(string) error
-	renamePath func(string, string) error
+	createTemp  func(string, string) (modelscli.OutputTemporaryFile, error)
+	inspectPath func(string) (os.FileInfo, error)
+	removePath  func(string) error
+	renamePath  func(string, string) error
 }
 
 func (fileSystem modelCLIOutputFileSystem) CreateTemp(dir, pattern string) (modelscli.OutputTemporaryFile, error) {
 	return fileSystem.createTemp(dir, pattern)
+}
+
+func (fileSystem modelCLIOutputFileSystem) Inspect(path string) (os.FileInfo, error) {
+	return fileSystem.inspectPath(path)
 }
 
 func (fileSystem modelCLIOutputFileSystem) Remove(path string) error {
