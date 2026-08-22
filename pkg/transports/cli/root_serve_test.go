@@ -15,6 +15,7 @@ import (
 	startupcli "github.com/portpowered/infinite-you/pkg/initializer/process"
 	acpwire "github.com/portpowered/infinite-you/pkg/transports/acp/wire"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/clidiag"
+	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 )
 
@@ -49,51 +50,62 @@ func (f *fakeACPServer) Serve(ctx context.Context, in io.Reader, out io.Writer) 
 func TestServerFamily_VisibleInRootHelpAndDistinctFromWorkersAcpAndMCP(t *testing.T) {
 	root := withTestInjectedPlatformRoles(CommandFactory{ModelsCLI: rootModelsCLI}).NewCommand(nil, nil, nil)
 
-	serverCmd, _, err := root.Find([]string{"server"})
-	if err != nil {
-		t.Fatalf("find %q: %v", "you server", err)
-	}
-	if !serverCmd.Runnable() {
-		t.Fatal("you server must remain runnable")
-	}
-	acpCmd, _, err := root.Find([]string{"server", "acp"})
-	if err != nil {
-		t.Fatalf("find %q: %v", "you server acp", err)
-	}
-	if !acpCmd.Runnable() {
-		t.Fatal("you server acp must be runnable")
-	}
-
-	mcpCmd, _, err := root.Find([]string{"server", "mcp"})
-	if err != nil {
-		t.Fatalf("find %q: %v", "you server mcp", err)
-	}
-	if !mcpCmd.Runnable() {
-		t.Fatal("you server mcp must be runnable")
-	}
+	requireRunnableCommand(t, root, "you server", "server")
+	acpCmd := requireRunnableCommand(t, root, "you server acp", "server", "acp")
+	mcpCmd := requireRunnableCommand(t, root, "you server mcp", "server", "mcp")
 	if mcpCmd == acpCmd {
 		t.Fatal("you server mcp must remain distinct from you server acp")
 	}
 
+	assertRetiredServerPathsAbsent(t, root)
+	assertRetiredServerFamiliesAbsent(t, root)
+
+	workersACP := requireCommand(t, root, "you workers acp", "workers", "acp")
+	if workersACP == acpCmd {
+		t.Fatal("you workers acp must remain a distinct command from you server acp")
+	}
+
+	assertServerHelpListsChildren(t, root)
+}
+
+func requireCommand(t *testing.T, root *cobra.Command, display string, path ...string) *cobra.Command {
+	t.Helper()
+	cmd, _, err := root.Find(path)
+	if err != nil {
+		t.Fatalf("find %q: %v", display, err)
+	}
+	return cmd
+}
+
+func requireRunnableCommand(t *testing.T, root *cobra.Command, display string, path ...string) *cobra.Command {
+	t.Helper()
+	cmd := requireCommand(t, root, display, path...)
+	if !cmd.Runnable() {
+		t.Fatalf("%s must be runnable", display)
+	}
+	return cmd
+}
+
+func assertRetiredServerPathsAbsent(t *testing.T, root *cobra.Command) {
+	t.Helper()
 	for _, retired := range [][]string{{"serve", "acp"}, {"mcp", "serve"}, {"acp", "serve"}} {
 		if found, _, findErr := root.Find(retired); findErr == nil && found != root {
 			t.Fatalf("retired command path %q must not remain reachable", strings.Join(retired, " "))
 		}
 	}
+}
+
+func assertRetiredServerFamiliesAbsent(t *testing.T, root *cobra.Command) {
+	t.Helper()
 	for _, sub := range root.Commands() {
 		if sub.Name() == "mcp" || sub.Name() == "serve" {
 			t.Fatalf("retired top-level command %q must not remain registered", sub.Name())
 		}
 	}
+}
 
-	workersACP, _, err := root.Find([]string{"workers", "acp"})
-	if err != nil {
-		t.Fatalf("find %q: %v", "you workers acp", err)
-	}
-	if workersACP == acpCmd {
-		t.Fatal("you workers acp must remain a distinct command from you server acp")
-	}
-
+func assertServerHelpListsChildren(t *testing.T, root *cobra.Command) {
+	t.Helper()
 	var help bytes.Buffer
 	root.SetOut(&help)
 	root.SetErr(io.Discard)
