@@ -23,8 +23,7 @@ function coverageArtifact() {
 			{ package: "pkg/near", coveragePercent: 80.5, packageFloor: 80 },
 			{ package: "pkg/regressed", coveragePercent: 40, packageFloor: 70 },
 			{ package: "pkg/ungated", coveragePercent: 12, packageFloor: null },
-			// The functional lane holds unlisted packages to a 0.00 default
-			// floor. Those can never regress through it.
+			// An explicitly zero-floor package cannot regress through its floor.
 			{ package: "pkg/lane-default", coveragePercent: 0, packageFloor: 0 },
 		],
 	};

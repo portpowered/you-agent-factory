@@ -79,9 +79,9 @@ function summarizeCoverageArtifact(coverage, limits) {
 	// representation error, never a real shortfall.
 	const allViolations = ranked.filter((entry) => entry.headroom < -HEADROOM_EPSILON);
 	// Coverage is never negative, so a package sitting on a 0% floor cannot
-	// regress through it. Both lanes hold packages without an explicit manifest
-	// entry to a 0.00 default floor, so including those would crowd every
-	// genuinely close package out of the table.
+	// regress through it. Unlisted packages in the functional lane now use a
+	// positive 15.00 default (unit uses 50.00), while explicit zero floors
+	// remain report-only for this near-floor table.
 	const contenders = ranked.filter(
 		(entry) => entry.headroom >= -HEADROOM_EPSILON && entry.floor > 0,
 	);

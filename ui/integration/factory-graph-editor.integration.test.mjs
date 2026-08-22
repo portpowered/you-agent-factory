@@ -613,7 +613,7 @@ describe.concurrent("factory graph editor browser integration", () => {
         });
         await addEntityMenu
           .getByRole("button", { name: "Workstation" })
-          .click();
+          .evaluate((button) => button.click());
 
         const addDialog = browserPage.page.getByRole("dialog", {
           name: "Add workstation",

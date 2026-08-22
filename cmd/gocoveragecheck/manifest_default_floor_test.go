@@ -14,15 +14,15 @@ func TestCoverageDefaultFloorIsLaneSpecific(t *testing.T) {
 	if got := laneDefaultCoverageFloor("unit").String(); got != "50.00" {
 		t.Fatalf("unit lane default = %s, want 50.00", got)
 	}
-	if got := laneDefaultCoverageFloor("functional").String(); got != "0.00" {
-		t.Fatalf("functional lane default = %s, want 0.00", got)
+	if got := laneDefaultCoverageFloor("functional").String(); got != "15.00" {
+		t.Fatalf("functional lane default = %s, want 15.00", got)
 	}
 	unitManifest := coverageManifest{Lane: "unit"}
 	if got := unitManifest.defaultFloor().String(); got != "50.00" {
 		t.Fatalf("unit manifest without defaultFloorPercent = %s, want the unit lane default", got)
 	}
 	functionalManifest := coverageManifest{Lane: "functional"}
-	if got := functionalManifest.defaultFloor().String(); got != "0.00" {
+	if got := functionalManifest.defaultFloor().String(); got != "15.00" {
 		t.Fatalf("functional manifest without defaultFloorPercent = %s, want the functional lane default", got)
 	}
 	declared := coverageManifest{Lane: "functional", DefaultFloorPercent: json.RawMessage("25.00")}
@@ -31,23 +31,21 @@ func TestCoverageDefaultFloorIsLaneSpecific(t *testing.T) {
 	}
 }
 
-// TestCheckCoverageDefaultFloorEvaluatesUnlistedPackagesPerLane proves the four
-// default-floor cases independently for each lane. The unit and functional rows
-// share the same measured totals wherever the lanes must disagree, so a default
-// bleeding from one lane into the other fails this test.
-func TestCheckCoverageDefaultFloorEvaluatesUnlistedPackagesPerLane(t *testing.T) {
+type coverageDefaultFloorCase struct {
+	name         string
+	lane         string
+	defaultFloor string
+	entries      []coverageManifestEntry
+	totals       packageCoverageTotals
+	wantFailure  string
+	rejectText   string
+}
+
+func TestCheckCoverageDefaultFloorEvaluatesUnlistedUnitPackages(t *testing.T) {
 	t.Parallel()
 
 	unlisted := modulePath + "/pkg/platform/unlisted"
-	tests := []struct {
-		name         string
-		lane         string
-		defaultFloor string
-		entries      []coverageManifestEntry
-		totals       packageCoverageTotals
-		wantFailure  string
-		rejectText   string
-	}{
+	runCoverageDefaultFloorCases(t, unlisted, []coverageDefaultFloorCase{
 		{
 			name:        "unit unlisted below the lane default fails",
 			lane:        "unit",
@@ -72,15 +70,29 @@ func TestCheckCoverageDefaultFloorEvaluatesUnlistedPackagesPerLane(t *testing.T)
 			wantFailure: "package coverage regression: package=" + unlisted + " lane=unit expected-minimum=80.00%",
 			rejectText:  "floor-source=lane-default",
 		},
+	})
+}
+
+func TestCheckCoverageDefaultFloorEvaluatesUnlistedFunctionalPackages(t *testing.T) {
+	t.Parallel()
+
+	unlisted := modulePath + "/pkg/platform/unlisted"
+	runCoverageDefaultFloorCases(t, unlisted, []coverageDefaultFloorCase{
 		{
-			name:   "functional unlisted at the unit-failing measurement passes its 0.00 default",
-			lane:   "functional",
-			totals: packageCoverageTotals{coveredStatements: 40, totalStatements: 100},
+			name:        "functional unlisted below the lane default fails",
+			lane:        "functional",
+			totals:      packageCoverageTotals{coveredStatements: 0, totalStatements: 100},
+			wantFailure: "package coverage regression: package=" + unlisted + " lane=functional floor-source=lane-default expected-minimum=15.00% actual=0.0000% delta=-15.0000 percentage-points covered=0/100 statements",
 		},
 		{
-			name:   "functional unlisted with no covered statements passes",
+			name:   "functional unlisted at the lane default passes",
 			lane:   "functional",
-			totals: packageCoverageTotals{coveredStatements: 0, totalStatements: 100},
+			totals: packageCoverageTotals{coveredStatements: 15, totalStatements: 100},
+		},
+		{
+			name:   "functional unlisted above the lane default passes",
+			lane:   "functional",
+			totals: packageCoverageTotals{coveredStatements: 40, totalStatements: 100},
 		},
 		{
 			name:         "functional unlisted below a declared default fails",
@@ -97,9 +109,13 @@ func TestCheckCoverageDefaultFloorEvaluatesUnlistedPackagesPerLane(t *testing.T)
 			wantFailure: "package coverage regression: package=" + unlisted + " lane=functional expected-minimum=60.00%",
 			rejectText:  "floor-source=lane-default",
 		},
-	}
+	})
+}
 
+func runCoverageDefaultFloorCases(t *testing.T, unlisted string, tests []coverageDefaultFloorCase) {
+	t.Helper()
 	for _, tt := range tests {
+		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
@@ -130,6 +146,29 @@ func TestCheckCoverageDefaultFloorEvaluatesUnlistedPackagesPerLane(t *testing.T)
 				t.Fatalf("failure = %q, did not expect %q", joined, tt.rejectText)
 			}
 		})
+	}
+}
+
+// TestCheckCoverageDefaultFloorSkipsUnlistedFunctionalPackageWithoutStatements
+// keeps the empty-denominator case separate from the measurable functional
+// 0/100 regression above: a package with no statements remains vacuously
+// passing even under the positive functional default.
+func TestCheckCoverageDefaultFloorSkipsUnlistedFunctionalPackageWithoutStatements(t *testing.T) {
+	t.Parallel()
+
+	unlisted := modulePath + "/pkg/platform/unlisted"
+	manifest := coverageManifest{
+		Version: coverageManifestVersion,
+		Lane:    "functional",
+	}
+	totals := map[string]packageCoverageTotals{unlisted: {}}
+
+	if failures := checkCoverageDefaultFloor(manifest, totals, "minimums.json", nil); len(failures) != 0 {
+		t.Fatalf("default-floor failures = %v, want none for a zero-statement package", failures)
+	}
+	gates := coverageManifestGatedPackages(manifest, totals)
+	if _, ok := gates[unlisted]; ok {
+		t.Fatalf("default-floor gate = %+v, want no gate for a zero-statement package", gates[unlisted])
 	}
 }
 

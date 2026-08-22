@@ -1177,7 +1177,13 @@ func (c *client) RequestPermission(ctx context.Context, request acpsdk.RequestPe
 	if ctx.Err() != nil {
 		return acpsdk.RequestPermissionResponse{Outcome: acpsdk.NewRequestPermissionOutcomeCancelled()}, nil
 	}
+	// The SDK invokes this callback from its connection reader while the
+	// per-turn policy is reset by the execution goroutine. Snapshot the policy
+	// under the same lock as reset so a permission request cannot observe an
+	// unsynchronized or stale turn value.
+	c.mu.Lock()
 	want := c.skipPermissions
+	c.mu.Unlock()
 	for _, option := range request.Options {
 		allow := option.Kind == acpsdk.PermissionOptionKindAllowOnce || option.Kind == acpsdk.PermissionOptionKindAllowAlways
 		if allow == want {
