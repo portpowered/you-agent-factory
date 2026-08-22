@@ -10,6 +10,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	internalartifact "github.com/portpowered/infinite-you/pkg/platform/internal/runtimeartifact"
 )
 
 type localFileSystem struct{}
@@ -93,11 +95,7 @@ func TestReserverReserveNamedUsesUTCNameAndOrderedCollisions(t *testing.T) {
 		filepath.Join(wantParent, "session-2.jsonl"),
 		filepath.Join(wantParent, "session-3.jsonl"),
 	}
-	for index, path := range []string{first, second, third} {
-		if path != wantPaths[index] {
-			t.Errorf("ReserveNamed candidate %d = %q, want %q", index, path, wantPaths[index])
-		}
-	}
+	assertNamedReservationPaths(t, []string{first, second, third}, wantPaths)
 	if got, err := os.ReadFile(first); err != nil || string(got) != "first" {
 		t.Fatalf("first artifact = %q, %v; want preserved contents", got, err)
 	}
@@ -110,6 +108,15 @@ func TestReserverReserveNamedUsesUTCNameAndOrderedCollisions(t *testing.T) {
 	}
 	if runtime.GOOS != "windows" && info.Mode().Perm() != 0o600 {
 		t.Fatalf("named artifact mode = %#o, want %#o", info.Mode().Perm(), 0o600)
+	}
+}
+
+func assertNamedReservationPaths(t *testing.T, got, want []string) {
+	t.Helper()
+	for index, path := range got {
+		if path != want[index] {
+			t.Errorf("ReserveNamed candidate %d = %q, want %q", index, path, want[index])
+		}
 	}
 }
 
@@ -157,6 +164,86 @@ func TestReserverReserveNamedReturnsNonCollisionFailures(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestReserverReserveNamedExhaustsAtCollisionBound(t *testing.T) {
+	filesystem := &namedReservationExhaustionFileSystem{}
+	reserver, err := NewReserver(filesystem)
+	if err != nil {
+		t.Fatalf("NewReserver: %v", err)
+	}
+
+	root := t.TempDir()
+	at := time.Date(2026, time.May, 29, 4, 45, 3, 0, time.UTC)
+	path, err := reserver.ReserveNamed(root, at, "session", ".jsonl")
+	if !errors.Is(err, ErrNamedReservationExhausted) {
+		t.Fatalf("ReserveNamed error = %v, want ErrNamedReservationExhausted", err)
+	}
+	if path != "" {
+		t.Fatalf("ReserveNamed path = %q, want empty path", path)
+	}
+	if len(filesystem.opened) != maxPathCollisions {
+		t.Fatalf("OpenFile calls = %d, want %d", len(filesystem.opened), maxPathCollisions)
+	}
+
+	wantFirst := filepath.Join(root, "2026", "05", "29", "session.jsonl")
+	wantLast := filepath.Join(root, "2026", "05", "29", "session-1000.jsonl")
+	if filesystem.opened[0] != wantFirst {
+		t.Fatalf("first exhausted candidate = %q, want %q", filesystem.opened[0], wantFirst)
+	}
+	if filesystem.opened[len(filesystem.opened)-1] != wantLast {
+		t.Fatalf("last exhausted candidate = %q, want %q", filesystem.opened[len(filesystem.opened)-1], wantLast)
+	}
+	for _, path := range filesystem.opened {
+		if filepath.Base(path) == "session-1001.jsonl" {
+			t.Fatalf("candidate walk exceeded bound with %q", path)
+		}
+	}
+}
+
+func TestReserverReserveNamedSharesCalendarDirectoryWithLogsAndMetrics(t *testing.T) {
+	root := t.TempDir()
+	at := time.Date(2026, time.May, 29, 23, 45, 3, 0, time.FixedZone("PDT", -7*60*60))
+	reserver, err := NewReserver(localFileSystem{})
+	if err != nil {
+		t.Fatalf("NewReserver: %v", err)
+	}
+
+	namedPath, err := reserver.ReserveNamed(root, at, "session", ".jsonl")
+	if err != nil {
+		t.Fatalf("ReserveNamed: %v", err)
+	}
+	logPath := internalartifact.RuntimeArtifactPath(root, at, internalartifact.RuntimeArtifactKindLog, "runtime")
+	metricsPath := internalartifact.RuntimeArtifactPath(root, at, internalartifact.RuntimeArtifactKindMetrics, "session-runtime")
+	wantDir := filepath.Join(root, "2026", "05", "30")
+	for name, path := range map[string]string{
+		"log":     logPath,
+		"metrics": metricsPath,
+		"named":   namedPath,
+	} {
+		if got := filepath.Dir(path); got != wantDir {
+			t.Errorf("%s parent = %q, want %q", name, got, wantDir)
+		}
+	}
+	if filepath.Dir(logPath) != internalartifact.RuntimeLogsDatedDir(root, at) {
+		t.Fatalf("log parent = %q, want platform log dated directory", filepath.Dir(logPath))
+	}
+	if filepath.Dir(metricsPath) != internalartifact.RuntimeMetricsDatedDir(root, at) {
+		t.Fatalf("metrics parent = %q, want platform metrics dated directory", filepath.Dir(metricsPath))
+	}
+}
+
+type namedReservationExhaustionFileSystem struct {
+	opened []string
+}
+
+func (filesystem *namedReservationExhaustionFileSystem) MkdirAll(string, fs.FileMode) error {
+	return nil
+}
+
+func (filesystem *namedReservationExhaustionFileSystem) OpenFile(path string, _ int, _ fs.FileMode) (io.WriteCloser, error) {
+	filesystem.opened = append(filesystem.opened, path)
+	return nil, fs.ErrExist
 }
 
 type reserveNamedFailureFileSystem struct {

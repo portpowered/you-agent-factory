@@ -15,6 +15,10 @@ import (
 
 const maxPathCollisions = 1000
 
+// ErrNamedReservationExhausted indicates that every bounded candidate for a
+// caller-named runtime artifact was already occupied.
+var ErrNamedReservationExhausted = errors.New("named runtime artifact reservation exhausted")
+
 // FileSystem is the exact filesystem effect used to reserve artifact paths.
 type FileSystem interface {
 	MkdirAll(string, fs.FileMode) error
@@ -41,7 +45,7 @@ func (r *reserver) Reserve(root string, at time.Time, kind, suffix string) (stri
 		return internalartifact.RuntimeArtifactPathWithCollision(
 			root, at, internalartifact.RuntimeArtifactKind(kind), suffix, collision,
 		)
-	})
+	}, nil)
 }
 
 // ReserveNamed atomically selects a unique caller-named path under a dated
@@ -49,10 +53,10 @@ func (r *reserver) Reserve(root string, at time.Time, kind, suffix string) (stri
 func (r *reserver) ReserveNamed(root string, at time.Time, name, ext string) (string, error) {
 	return r.reserve(root, func(collision int) string {
 		return internalartifact.RuntimeNamedArtifactPathWithCollision(root, at, name, ext, collision)
-	})
+	}, ErrNamedReservationExhausted)
 }
 
-func (r *reserver) reserve(root string, pathForCollision func(int) string) (string, error) {
+func (r *reserver) reserve(root string, pathForCollision func(int) string, exhaustion error) (string, error) {
 	if root == "" {
 		return "", fmt.Errorf("runtime artifact root is required")
 	}
@@ -78,6 +82,9 @@ func (r *reserver) reserve(root string, pathForCollision func(int) string) (stri
 		if !errors.Is(err, fs.ErrExist) {
 			return "", fmt.Errorf("reserve runtime artifact %s: %w", path, err)
 		}
+	}
+	if exhaustion != nil {
+		return "", fmt.Errorf("%w under %s", exhaustion, root)
 	}
 	return "", fmt.Errorf("runtime artifact path collision budget exhausted under %s", root)
 }
