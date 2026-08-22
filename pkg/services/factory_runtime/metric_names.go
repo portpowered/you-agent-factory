@@ -2,18 +2,18 @@ package factory
 
 // Canonical Factory Runtime metric names.
 const (
-	RuntimeLifecycleStarted               = "runtime.lifecycle.started"
-	RuntimeLifecycleStopped               = "runtime.lifecycle.stopped"
-	RuntimeStateActive                    = "runtime.state.active"
-	RuntimeStateIdle                      = "runtime.state.idle"
-	RuntimeStatePaused                    = "runtime.state.paused"
-	RuntimeStateFailed                    = "runtime.state.failed"
-	RuntimeQueueInFlight                  = "runtime.queue.in_flight"
-	RuntimeQueueSubmissionCount           = "queue.submission_count"
-	RuntimeDispatchStarted                = "dispatch.started"
-	RuntimeDispatchComplete               = "dispatch.completed"
-	RuntimeDispatchDuration               = "dispatch.duration"
-	RuntimeDispatchRetries                = "dispatch.retry_count"
+	RuntimeLifecycleStarted     = "runtime.lifecycle.started"
+	RuntimeLifecycleStopped     = "runtime.lifecycle.stopped"
+	RuntimeStateActive          = "runtime.state.active"
+	RuntimeStateIdle            = "runtime.state.idle"
+	RuntimeStatePaused          = "runtime.state.paused"
+	RuntimeStateFailed          = "runtime.state.failed"
+	RuntimeQueueInFlight        = "runtime.queue.in_flight"
+	RuntimeQueueSubmissionCount = "queue.submission_count"
+	RuntimeDispatchStarted      = "dispatch.started"
+	RuntimeDispatchComplete     = "dispatch.completed"
+	RuntimeDispatchDuration     = "dispatch.duration"
+	RuntimeDispatchRetries      = "dispatch.retry_count"
 	// RuntimeDispatchCost and RuntimeProviderCost remain recognized names for
 	// historical records. The runtime host does not emit them because the
 	// Costs service values canonical token rows and no read model consumes
