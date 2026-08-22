@@ -632,7 +632,7 @@ func provideRuntimeMetricsQueryCapability(
 
 // provideProviderPriceTableReader exposes the immutable pricing facts owned by
 // Providers. It is separate from the configurable Operator Settings document.
-func provideProviderPriceTableReader() (providers.PriceTableReaderFunc, error) {
+func provideProviderPriceTableReader() (costs.PriceTableReader, error) {
 	return providerswire.NewPriceTableReader()
 }
 
