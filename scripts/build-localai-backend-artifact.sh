@@ -27,6 +27,10 @@ if [[ "$TARGET_ID" == "windows-amd64" ]] && command -v cygpath >/dev/null 2>&1; 
 		go_bin_dir="$(cygpath -u "$WINDOWS_GO_DIR")"
 		export PATH="$go_bin_dir:$PATH"
 	fi
+	if [[ -n "${WINDOWS_CMAKE_DIR:-}" ]]; then
+		cmake_bin_dir="$(cygpath -u "$WINDOWS_CMAKE_DIR")"
+		export PATH="$cmake_bin_dir:$PATH"
+	fi
 	if [[ -n "${VCPKG_ROOT:-}" ]]; then
 		VCPKG_ROOT="$(cygpath -u "$VCPKG_ROOT")"
 		export VCPKG_ROOT

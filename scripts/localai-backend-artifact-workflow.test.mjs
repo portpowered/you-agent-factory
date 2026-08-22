@@ -291,6 +291,9 @@ test("the pinned build repairs LocalAI path and Darwin shell incompatibilities",
 	assert.match(buildScript, /WINDOWS_GO_DIR/);
 	assert.match(buildScript, /go_bin_dir="\$\(cygpath -u "\$WINDOWS_GO_DIR"\)"/);
 	assert.match(buildScript, /export PATH="\$go_bin_dir:\$PATH"/);
+	assert.match(buildScript, /WINDOWS_CMAKE_DIR/);
+	assert.match(buildScript, /cmake_bin_dir="\$\(cygpath -u "\$WINDOWS_CMAKE_DIR"\)"/);
+	assert.match(buildScript, /export PATH="\$cmake_bin_dir:\$PATH"/);
 	assert.match(buildScript, /stage_darwin_go_package/);
 	assert.match(buildScript, /for library in "\$\{backend_path\}"\/libgo\*\.dylib "\$\{backend_path\}"\/libgo\*\.so/);
 	assert.match(buildScript, /BUILD_TYPE="\$BUILD_TYPE" JOBS=2 "\$binary"/);
@@ -313,6 +316,15 @@ test("the Windows workflow exports setup-go's directory to the MSYS2 build shell
 	assert.match(workflow, /Get-Command go -CommandType Application -ErrorAction Stop/);
 	assert.match(workflow, /Select-Object -First 1/);
 	assert.match(workflow, /WINDOWS_GO_DIR=\$\(\$goCommand\.Source \| Split-Path -Parent\)/);
+});
+
+test("the Windows workflow exports setup-cmake's directory to the MSYS2 build shell", async () => {
+	const workflow = await readFile(".github/workflows/localai-backend-artifacts.yml", "utf8");
+	assert.match(workflow, /- name: Expose the pinned CMake tool to MSYS2/);
+	assert.match(workflow, /if: runner\.os == 'Windows'/);
+	assert.match(workflow, /Get-Command cmake -CommandType Application -ErrorAction Stop/);
+	assert.match(workflow, /Select-Object -First 1/);
+	assert.match(workflow, /WINDOWS_CMAKE_DIR=\$\(\$cmakeCommand\.Source \| Split-Path -Parent\)/);
 });
 
 test("the pinned llama build preserves recursive protobuf arguments and Darwin compatibility", async () => {

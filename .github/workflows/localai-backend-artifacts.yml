@@ -116,6 +116,13 @@ jobs:
         with:
           cmakeVersion: ${{ needs.validate-inputs.outputs.cmake_version }}
 
+      - name: Expose the pinned CMake tool to MSYS2
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $cmakeCommand = Get-Command cmake -CommandType Application -ErrorAction Stop | Select-Object -First 1
+          "WINDOWS_CMAKE_DIR=$($cmakeCommand.Source | Split-Path -Parent)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
       - name: Install GNU Make on Apple Silicon
         if: runner.os == 'macOS'
         shell: bash
