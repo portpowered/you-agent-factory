@@ -536,8 +536,40 @@ func newWireFoldPreservationService(t *testing.T, options ...foldPreservationOpt
 	loader := composition.Loader()
 	namedPaths := composition.NamedPaths()
 	fileSystem := platformfilesystem.Local{}
+	packagedDefinitions := foldPreservationPackagedDefinitions()
+	packagedCatalog := newFoldPreservationPackagedCatalog(
+		t,
+		ports.packagedCatalog,
+		packagedDefinitions,
+	)
+	listEffective := newFoldPreservationEffectiveCatalog(
+		t,
+		composition,
+		packagedDefinitions,
+	)
+	applySupportedFiles, applyStarterWork, _ := factorydefinitiontestcomposition.PortableOperations(fileSystem)
+	requiredToolChecker := ports.requiredToolChecker
+	if requiredToolChecker == nil {
+		requiredToolChecker = stubRequiredToolChecker{}
+	}
 
-	packagedDefinitions := []factorydefinitions.PackagedDefinition{{
+	return newWireFoldPreservationRoot(
+		t,
+		validator,
+		persistence,
+		loader,
+		applySupportedFiles,
+		applyStarterWork,
+		namedPaths,
+		fileSystem,
+		listEffective,
+		packagedCatalog,
+		requiredToolChecker,
+	)
+}
+
+func foldPreservationPackagedDefinitions() []factorydefinitions.PackagedDefinition {
+	return []factorydefinitions.PackagedDefinition{{
 		Name:    "@you/fold-preservation",
 		Project: "fold-preservation",
 		JSON:    []byte(factoryfixtures.CrossPathValidAlphaFactoryJSON),
@@ -545,14 +577,32 @@ func newWireFoldPreservationService(t *testing.T, options ...foldPreservationOpt
 			factorydefinitions.PackagedFactoryFormatJSON,
 		},
 	}}
-	packagedCatalog := ports.packagedCatalog
-	if packagedCatalog.List == nil || packagedCatalog.Resolve == nil {
-		var err error
-		packagedCatalog, err = factorydefinitionsinternal.NewPackagedFactoryCatalog(packagedDefinitions)
-		if err != nil {
-			t.Fatalf("NewPackagedFactoryCatalog() error = %v", err)
-		}
+}
+
+func newFoldPreservationPackagedCatalog(
+	t *testing.T,
+	catalog factorydefinitions.PackagedFactoryCatalogOperations,
+	definitions []factorydefinitions.PackagedDefinition,
+) factorydefinitions.PackagedFactoryCatalogOperations {
+	t.Helper()
+
+	if catalog.List != nil && catalog.Resolve != nil {
+		return catalog
 	}
+	var err error
+	catalog, err = factorydefinitionsinternal.NewPackagedFactoryCatalog(definitions)
+	if err != nil {
+		t.Fatalf("NewPackagedFactoryCatalog() error = %v", err)
+	}
+	return catalog
+}
+
+func newFoldPreservationEffectiveCatalog(
+	t *testing.T,
+	composition factorydefinitiontestcomposition.Composition,
+	packagedDefinitions []factorydefinitions.PackagedDefinition,
+) factorydefinitions.EffectiveFactoryCatalogOperation {
+	t.Helper()
 
 	discovery, err := factorydefinitionsinternal.NewEffectiveCatalogDiscovery(
 		composition.NamedFactoryCatalog().ListNamedFactories,
@@ -569,13 +619,23 @@ func newWireFoldPreservationService(t *testing.T, options ...foldPreservationOpt
 	if err != nil {
 		t.Fatalf("NewEffectiveCatalog() error = %v", err)
 	}
+	return listEffective
+}
 
-	applySupportedFiles, applyStarterWork, _ := factorydefinitiontestcomposition.PortableOperations(fileSystem)
-
-	requiredToolChecker := ports.requiredToolChecker
-	if requiredToolChecker == nil {
-		requiredToolChecker = stubRequiredToolChecker{}
-	}
+func newWireFoldPreservationRoot(
+	t *testing.T,
+	validator factorydefinitions.Validator,
+	persistence factorydefinitions.Persistence,
+	loader *factorydefinitionswire.Loader,
+	applySupportedFiles factorydefinitions.PortableBundledFilesApplier,
+	applyStarterWork factorydefinitions.FactoryStarterWorkApplier,
+	namedPaths factorydefinitions.NamedPathResolver,
+	fileSystem platformfilesystem.Local,
+	listEffective factorydefinitions.EffectiveFactoryCatalogOperation,
+	packagedCatalog factorydefinitions.PackagedFactoryCatalogOperations,
+	requiredToolChecker factorydefinitions.RequiredToolChecker,
+) factorydefinitions.Service {
+	t.Helper()
 
 	service, err := factorydefinitionswire.NewService(
 		stubSessionHost{},
