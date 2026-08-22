@@ -16,21 +16,23 @@ import (
 	automationinternal "github.com/portpowered/infinite-you/pkg/services/automations/internal"
 	hostedsources "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/hosted_sources"
 	hostedsourceswire "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/hosted_sources/wire"
+	scriptpollers "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/script_pollers"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"go.uber.org/zap"
 )
 
 // HostedSourceInputs is the cohesive set of external effects needed to
-// compose hosted-source implementations inside the Automations owner. The
-// application graph selects these effects once; it never constructs or passes
-// a hosted-source service into Runtime opening.
+// compose Automations-owned hosted-source and cursor-persistence
+// implementations. The application graph selects these effects once; it
+// never constructs or passes a hosted-source service into Runtime opening.
 type HostedSourceInputs struct {
-	Clock           automations.HostedLinearClock
-	HTTPClient      automations.HostedLinearHTTPDoer
-	SecretResolver  automations.HostedLinearSecretResolver
-	LinearEndpoint  string
-	CheckpointStore automations.HostedLinearCheckpointStore
+	Clock            automations.HostedLinearClock
+	HTTPClient       automations.HostedLinearHTTPDoer
+	SecretResolver   automations.HostedLinearSecretResolver
+	LinearEndpoint   string
+	CheckpointStore  automations.HostedLinearCheckpointStore
+	CursorFileSystem scriptpollers.CursorPersistenceFileSystem
 }
 
 // NewRoot constructs the singular Automations root. Hosted-source mechanics
@@ -46,6 +48,9 @@ func NewRoot(
 	resolveTemplates workers.TemplateFieldResolver,
 	executionPolicy factorydefinitions.WorkstationExecutionPolicyService,
 ) (automations.Root, error) {
+	if hosted.CursorFileSystem == nil {
+		return automations.Root{}, fmt.Errorf("construct Automations: script poller cursor filesystem is required")
+	}
 	service, err := newService(
 		logger,
 		clock,
@@ -55,6 +60,7 @@ func NewRoot(
 		composeHostedPollers(logger, hosted),
 		resolveTemplates,
 		executionPolicy,
+		hosted.CursorFileSystem,
 	)
 	if err != nil {
 		return automations.Root{}, err
@@ -85,6 +91,7 @@ func NewService(
 		hostedPollers,
 		resolveTemplates,
 		executionPolicy,
+		nil,
 	)
 	if err != nil {
 		return nil, err
@@ -101,6 +108,7 @@ func newService(
 	hostedPollers automations.HostedPollers,
 	resolveTemplates workers.TemplateFieldResolver,
 	executionPolicy factorydefinitions.WorkstationExecutionPolicyService,
+	cursorFileSystem scriptpollers.CursorPersistenceFileSystem,
 ) (*automationinternal.Service, error) {
 	if err := validateDirectDependencies(
 		logger,
@@ -113,7 +121,7 @@ func newService(
 		return nil, err
 	}
 
-	service := automationinternal.NewService(
+	service := automationinternal.NewWithCursorFileSystem(
 		logger,
 		clock,
 		commandRunner,
@@ -122,6 +130,7 @@ func newService(
 		hostedPollers,
 		resolveTemplates,
 		executionPolicy,
+		cursorFileSystem,
 	)
 	if service == nil {
 		return nil, fmt.Errorf("construct Automations: implementation rejected its dependencies")

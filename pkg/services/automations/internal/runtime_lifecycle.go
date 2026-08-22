@@ -322,9 +322,9 @@ func (s *Service) buildRuntimeInstance(
 	if strings.TrimSpace(workflowID) == "" {
 		workflowID = s.workflowID
 	}
-	owner := New(
+	owner := NewWithCursorFileSystem(
 		s.logger(), s.clock, s.commandRunner(), workflowID, request.Snapshot.FactoryDir,
-		s.hostedPollers, s.resolveTemplates, s.executionPolicy,
+		s.hostedPollers, s.resolveTemplates, s.executionPolicy, s.cursorFileSystem,
 	)
 	if owner == nil {
 		return nil, runtimeLifecycleError(

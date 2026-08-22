@@ -14,6 +14,7 @@ import (
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	automations "github.com/portpowered/infinite-you/pkg/services/automations"
 	hostedsourceswire "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/hosted_sources/wire"
+	scriptpollers "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/script_pollers"
 	automationswire "github.com/portpowered/infinite-you/pkg/services/automations/wire"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/work"
@@ -349,10 +350,11 @@ func TestNewRootComposesHostedEffectsAndPublishesRuntimeCapabilities(t *testing.
 		"automations-root",
 		"",
 		automationswire.HostedSourceInputs{
-			Clock:           ports.clock,
-			SecretResolver:  func(context.Context, automations.HostedRuntimePaths, string) (string, error) { return "secret", nil },
-			LinearEndpoint:  "",
-			CheckpointStore: store,
+			Clock:            ports.clock,
+			SecretResolver:   func(context.Context, automations.HostedRuntimePaths, string) (string, error) { return "secret", nil },
+			LinearEndpoint:   "",
+			CheckpointStore:  store,
+			CursorFileSystem: platformfilesystem.Local{},
 		},
 		ports.resolveTemplates,
 		ports.executionPolicy,
@@ -363,6 +365,158 @@ func TestNewRootComposesHostedEffectsAndPublishesRuntimeCapabilities(t *testing.
 	if root.Operations == nil || root.Lifecycle == nil || root.Runtime == nil {
 		t.Fatalf("NewRoot() = %#v, want operations, lifecycle, and runtime capabilities", root)
 	}
+}
+
+func TestNewRootRequiresCursorPersistenceEffect(t *testing.T) {
+	t.Parallel()
+
+	ports := validConstructionPorts(t)
+	store, err := automationswire.NewHostedLinearCheckpointStore(platformfilesystem.Local{})
+	if err != nil {
+		t.Fatalf("NewHostedLinearCheckpointStore() error = %v", err)
+	}
+	_, err = automationswire.NewRoot(
+		ports.logger,
+		ports.clock,
+		ports.commandRunner,
+		"automations-root",
+		"",
+		automationswire.HostedSourceInputs{
+			Clock:           ports.clock,
+			SecretResolver:  func(context.Context, automations.HostedRuntimePaths, string) (string, error) { return "secret", nil },
+			CheckpointStore: store,
+		},
+		ports.resolveTemplates,
+		ports.executionPolicy,
+	)
+	if err == nil || err.Error() != "construct Automations: script poller cursor filesystem is required" {
+		t.Fatalf("NewRoot() error = %v, want missing cursor persistence effect", err)
+	}
+}
+
+func TestNewRootUsesDurableCursorRecorderAcrossReconstruction(t *testing.T) {
+	t.Parallel()
+
+	baseDir := t.TempDir()
+	ports := validConstructionPorts(t)
+	store, err := automationswire.NewHostedLinearCheckpointStore(platformfilesystem.Local{})
+	if err != nil {
+		t.Fatalf("NewHostedLinearCheckpointStore() error = %v", err)
+	}
+	inputs := automationswire.HostedSourceInputs{
+		Clock:            ports.clock,
+		SecretResolver:   func(context.Context, automations.HostedRuntimePaths, string) (string, error) { return "secret", nil },
+		CheckpointStore:  store,
+		CursorFileSystem: platformfilesystem.Local{},
+	}
+	first, err := automationswire.NewRoot(
+		ports.logger,
+		ports.clock,
+		cursorCommandRunner{stdout: durableCursorStdout},
+		"workflow-durable-root",
+		baseDir,
+		inputs,
+		ports.resolveTemplates,
+		ports.executionPolicy,
+	)
+	if err != nil {
+		t.Fatalf("NewRoot(first): %v", err)
+	}
+	operation, ok := first.Operations.(interface {
+		RunScriptPoller(
+			context.Context,
+			workers.CommandRunner,
+			factorydefinitions.RuntimeConfigLookup,
+			factorydefinitions.FactoryWorkstationConfig,
+			*factorydefinitions.FactoryWorkerConfig,
+			automations.WorkRequestSubmitter,
+		) error
+	})
+	if !ok {
+		t.Fatal("NewRoot(first) operations do not expose script-poller execution")
+	}
+	poller := factorydefinitions.FactoryWorkstationConfig{
+		Name:           "durable-poller",
+		Kind:           factorydefinitions.WorkstationKindPoller,
+		WorkerTypeName: "durable-script",
+	}
+	worker := &factorydefinitions.FactoryWorkerConfig{
+		Name:    "durable-script",
+		Type:    factorydefinitions.WorkerTypeScript,
+		Command: "poller.sh",
+	}
+	if err := operation.RunScriptPoller(
+		context.Background(),
+		cursorCommandRunner{stdout: durableCursorStdout},
+		cursorRuntimeConfig{factoryDir: baseDir, worker: worker, workstation: poller},
+		poller,
+		worker,
+		func(context.Context, work.WorkRequest) error { return nil },
+	); err == nil {
+		t.Fatal("RunScriptPoller() error = nil, want terminal poller exit after commit")
+	}
+
+	second, err := automationswire.NewRoot(
+		ports.logger,
+		ports.clock,
+		cursorCommandRunner{stdout: durableCursorStdout},
+		"workflow-durable-root",
+		baseDir,
+		inputs,
+		ports.resolveTemplates,
+		ports.executionPolicy,
+	)
+	if err != nil {
+		t.Fatalf("NewRoot(second): %v", err)
+	}
+	instanceID := scriptpollers.SupervisionFor("workflow-durable-root", poller.Name).InstanceID
+	got, err := second.GetCursor(context.Background(), automations.GetCursorRequest{InstanceID: instanceID})
+	if err != nil {
+		t.Fatalf("second.GetCursor(): %v", err)
+	}
+	if got.AutomationID != "workflow-durable-root" || got.InstanceID != instanceID ||
+		got.Cursor != "durable-cursor" || got.Checkpoint != "durable-checkpoint" {
+		t.Fatalf("second.GetCursor() = %+v, want exact recovered cursor facts", got)
+	}
+}
+
+const durableCursorStdout = `{"requestId":"durable-request","type":"FACTORY_REQUEST_BATCH","works":[{"name":"durable-work","workTypeName":"task"}],"cursor":"durable-cursor","checkpoint":"durable-checkpoint"}`
+
+type cursorCommandRunner struct {
+	stdout string
+}
+
+func (r cursorCommandRunner) Run(context.Context, workers.CommandRequest) (workers.CommandResult, error) {
+	return workers.CommandResult{Stdout: []byte(r.stdout)}, nil
+}
+
+type cursorRuntimeConfig struct {
+	factoryDir  string
+	worker      *factorydefinitions.FactoryWorkerConfig
+	workstation factorydefinitions.FactoryWorkstationConfig
+}
+
+func (c cursorRuntimeConfig) FactoryDir() string { return c.factoryDir }
+
+func (c cursorRuntimeConfig) RuntimeBaseDir() string { return c.factoryDir }
+
+func (c cursorRuntimeConfig) FactoryConfig() *factorydefinitions.FactoryConfig {
+	return &factorydefinitions.FactoryConfig{}
+}
+
+func (c cursorRuntimeConfig) Worker(name string) (*factorydefinitions.FactoryWorkerConfig, bool) {
+	if c.worker != nil && c.worker.Name == name {
+		return c.worker, true
+	}
+	return nil, false
+}
+
+func (c cursorRuntimeConfig) Workstation(name string) (*factorydefinitions.FactoryWorkstationConfig, bool) {
+	if c.workstation.Name == name {
+		workstation := c.workstation
+		return &workstation, true
+	}
+	return nil, false
 }
 
 func TestNewServiceConstructsInertRoot(t *testing.T) {
