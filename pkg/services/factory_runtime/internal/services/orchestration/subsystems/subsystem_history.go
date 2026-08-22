@@ -94,7 +94,7 @@ func buildHistory(consumedTokens []factorytoken.Token, result *workerexecution.W
 	history.TotalVisits[result.TransitionID]++
 
 	switch result.Outcome {
-	case workerexecution.OutcomeAccepted, workerexecution.OutcomeContinue, workerexecution.OutcomeRejected:
+	case workerexecution.OutcomeAccepted, workerexecution.OutcomeContinue, workerexecution.OutcomeRejected, workerexecution.OutcomeCanceled:
 		// Reset consecutive failures — the worker didn't fail.
 		history.ConsecutiveFailures[result.TransitionID] = 0
 	case workerexecution.OutcomeFailed:

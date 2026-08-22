@@ -390,6 +390,18 @@ func TestLoggingCommandRunnerAndStatusProjection(t *testing.T) {
 	if got := commandResultStatus(context.Background(), CommandResult{ExitCode: 1}, nil); got != "failed" {
 		t.Fatalf("commandResultStatus(exit) = %q", got)
 	}
+	if got := commandResultStatus(context.Background(), CommandResult{
+		ExitCode:           0,
+		CancellationReason: CancellationReasonSuperseded,
+	}, context.Canceled); got != "canceled" {
+		t.Fatalf("commandResultStatus(superseded exit zero) = %q, want canceled", got)
+	}
+	if got := commandResultStatus(context.Background(), CommandResult{
+		ExitCode:           0,
+		CancellationReason: CancellationReasonProcessGone,
+	}, context.Canceled); got != "error" {
+		t.Fatalf("commandResultStatus(process gone) = %q, want error", got)
+	}
 }
 
 func TestCommandRunnerWithLoggingPreservesExecRunnerLogger(t *testing.T) {

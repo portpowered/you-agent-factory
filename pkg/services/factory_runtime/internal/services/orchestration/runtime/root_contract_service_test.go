@@ -609,9 +609,10 @@ func TestFactoryImpl_RunCancellationAbsorbsLateCanceledResult(t *testing.T) {
 		t.Fatalf("cancelled Runtime outbox state = %#v, want STOPPED/CANCELLED", state)
 	}
 	snapshot := impl.engine.GetRuntimeStateSnapshot()
-	if len(snapshot.Results) != 1 || snapshot.Results[0].Outcome != workers.OutcomeFailed ||
-		snapshot.Results[0].Error != workers.ErrWorkstationDispatchCanceled.Error() {
-		t.Fatalf("absorbed late cancellation results = %#v, want retained FAILED cancellation result", snapshot.Results)
+	for _, result := range snapshot.Results {
+		if result.Outcome == workers.OutcomeFailed || result.FailureMetadata != nil || result.FailureDetail != nil {
+			t.Fatalf("absorbed late cancellation result became failure: %#v", result)
+		}
 	}
 }
 

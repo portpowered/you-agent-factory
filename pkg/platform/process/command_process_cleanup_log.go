@@ -26,32 +26,38 @@ const (
 )
 
 type commandProcessCleanupContext struct {
-	logger logging.Logger
-	req    CommandRequest
-	reason commandProcessCleanupReason
+	logger             logging.Logger
+	req                CommandRequest
+	reason             commandProcessCleanupReason
+	cancellationReason CancellationReason
 }
 
-func newCommandProcessCleanupContext(logger logging.Logger, req CommandRequest, reason commandProcessCleanupReason) commandProcessCleanupContext {
-	return commandProcessCleanupContext{
-		logger: logging.EnsureLogger(logger),
-		req:    req,
-		reason: reason,
+func newCommandProcessCleanupContext(
+	logger logging.Logger,
+	req CommandRequest,
+	reason commandProcessCleanupReason,
+	cancellationReasons ...CancellationReason,
+) commandProcessCleanupContext {
+	cleanup := commandProcessCleanupContext{logger: logging.EnsureLogger(logger), req: req, reason: reason}
+	if len(cancellationReasons) > 0 {
+		cleanup.cancellationReason = cancellationReasons[0]
 	}
+	return cleanup
 }
 
 func (c commandProcessCleanupContext) logStarted(supervisorID int) {
 	c.logger.Info("command runner: cleanup started",
-		commandRunnerCleanupLogFields(c.req, "command_runner.cleanup_started", c.reason, supervisorID, "status", "started")...)
+		commandRunnerCleanupLogFields(c.req, "command_runner.cleanup_started", c.reason, supervisorID, c.cancellationReason, "status", "started")...)
 }
 
 func (c commandProcessCleanupContext) logGraceful(supervisorID int) {
 	c.logger.Verbose("command runner: cleanup graceful termination",
-		commandRunnerCleanupLogFields(c.req, "command_runner.cleanup_graceful", c.reason, supervisorID, "status", "graceful")...)
+		commandRunnerCleanupLogFields(c.req, "command_runner.cleanup_graceful", c.reason, supervisorID, c.cancellationReason, "status", "graceful")...)
 }
 
 func (c commandProcessCleanupContext) logForceKill(supervisorID int) {
 	c.logger.Info("command runner: cleanup force kill",
-		commandRunnerCleanupLogFields(c.req, "command_runner.cleanup_force_kill", c.reason, supervisorID, "status", "force_kill")...)
+		commandRunnerCleanupLogFields(c.req, "command_runner.cleanup_force_kill", c.reason, supervisorID, c.cancellationReason, "status", "force_kill")...)
 }
 
 func (c commandProcessCleanupContext) logCompleted(outcome commandProcessCleanupOutcome, supervisorID int, err error, detail string) {
@@ -60,6 +66,7 @@ func (c commandProcessCleanupContext) logCompleted(outcome commandProcessCleanup
 		"command_runner.cleanup_completed",
 		c.reason,
 		supervisorID,
+		c.cancellationReason,
 		"status", string(outcome),
 		"outcome", string(outcome),
 	)
@@ -89,12 +96,17 @@ func (c commandProcessCleanupContext) logCompleted(outcome commandProcessCleanup
 	}
 }
 
-func commandRunnerCleanupLogFields(req CommandRequest, eventName string, reason commandProcessCleanupReason, supervisorID int, extra ...any) []any {
+func commandRunnerCleanupLogFields(req CommandRequest, eventName string, reason commandProcessCleanupReason, supervisorID int, cancellationReason CancellationReason, extra ...any) []any {
 	fields := []any{
 		"event_name", eventName,
 		"cleanup_reason", string(reason),
 		"command", req.Command,
 		"args_count", len(req.Args),
+	}
+	if reason == commandProcessCleanupReasonCancel {
+		// The caller supplied reason is intentionally bounded and contains no
+		// command payload or process output.
+		fields = append(fields, "cancellation_reason", string(firstCancellationReason(cancellationReason, CancellationReasonCanceled)))
 	}
 	if req.WorkDir != "" {
 		fields = append(fields, "working_dir", req.WorkDir)

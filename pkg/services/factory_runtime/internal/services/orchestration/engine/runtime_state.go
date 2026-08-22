@@ -84,6 +84,7 @@ func deepCopyCompletedDispatch(d interfaces.CompletedDispatch) interfaces.Comple
 	cp := d
 	cp.ExpectedArtifactContext = cloneExpectedArtifactTemplateContext(d.ExpectedArtifactContext)
 	cp.ArtifactVerification = d.ArtifactVerification.Clone()
+	cp.Cancellation = d.Cancellation.Clone()
 	cp.FailureDetail = workerexecution.CloneFailureDetail(d.FailureDetail)
 	cp.ProviderSession = (d.ProviderSession).Clone()
 	cp.ConsumedTokens = cloneWorkerTokens(d.ConsumedTokens)
@@ -104,6 +105,7 @@ func cloneExpectedArtifactTemplateContext(
 
 func deepCopyWorkResult(result workerexecution.WorkResult) workerexecution.WorkResult {
 	cp := result
+	cp.Cancellation = result.Cancellation.Clone()
 	if result.Continuation != nil {
 		continuation := result.Continuation.Clone()
 		cp.Continuation = &continuation

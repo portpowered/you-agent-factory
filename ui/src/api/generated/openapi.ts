@@ -4882,6 +4882,7 @@ export interface components {
     };
     /** @description Customer-visible dispatch completion event. Output work is represented with the same Work schema used by request submission rather than token or marking-mutation internals. FactoryEvent.context owns dispatch, trace, and work identity; workstation and worker topology must be derived from the matching dispatch-request event plus the initial structure. Provider-attempt session and safe diagnostic facts stay on inference response events instead of being copied onto dispatch completion payloads. */
     DispatchResponseEventPayload: {
+      cancellation?: components["schemas"]["DispatchCancellation"];
       completionId?: string;
       transitionId: string;
       /**
@@ -7569,6 +7570,11 @@ export interface components {
       matchInput?: string;
       /** @description For dynamic fanout input guards, the workstation that spawns the children for count tracking. */
       spawnedBy?: string;
+    };
+    /** @description Explicit dispatch lifecycle intent. A canceled or superseded dispatch is not a business execution failure and must not route its Work through failure arcs. */
+    DispatchCancellation: {
+      /** @enum {string} */
+      reason: DispatchCancellationReason;
     };
     GlobalConfigACPIntegration: {
       /** @description Stable settings-entry identity. This is distinct from the provider name selected by a Worker. */
@@ -11126,6 +11132,8 @@ export const WorkOutcome = {
   WorkOutcomeRejected: "REJECTED",
   // The workstation could not complete because execution crashed, timed out, or hit a system error.
   WorkOutcomeFailed: "FAILED",
+  // The dispatch was deliberately canceled or superseded before producing a business result.
+  WorkOutcomeCanceled: "CANCELED",
 } as const;
 export type WorkOutcome = (typeof WorkOutcome)[keyof typeof WorkOutcome];
 export const WorkFailureFamily = {
@@ -11925,6 +11933,12 @@ export const WorkstationGuardType = {
 } as const;
 export type WorkstationGuardType =
   (typeof WorkstationGuardType)[keyof typeof WorkstationGuardType];
+export const DispatchCancellationReason = {
+  CANCELED: "CANCELED",
+  SUPERSEDED: "SUPERSEDED",
+} as const;
+export type DispatchCancellationReason =
+  (typeof DispatchCancellationReason)[keyof typeof DispatchCancellationReason];
 export const GlobalConfigACPIntegrationTransport = {
   stdio: "stdio",
 } as const;

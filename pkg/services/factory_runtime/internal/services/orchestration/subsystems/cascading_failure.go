@@ -125,7 +125,8 @@ func (cf *CascadingFailureSubsystem) Execute(_ context.Context, snapshot *interf
 }
 
 func shouldRouteTerminalFailureToFailedState(result resolvedWorkResult) bool {
-	if result.outcome != workerexecution.OutcomeFailed || result.failureMetadata == nil {
+	if result.cancellation != nil || result.outcome == workerexecution.OutcomeCanceled ||
+		result.outcome != workerexecution.OutcomeFailed || result.failureMetadata == nil {
 		return false
 	}
 	// Cancellation is a terminal dispatch lifecycle result, but its late-result

@@ -170,6 +170,9 @@ func (observer processLifecycleObserver) ProcessExited(platformprocess.ProcessIn
 	if observer.supervision == nil {
 		return
 	}
+	if observer.supervision.cancellationRequested() {
+		return
+	}
 	observer.supervision.markProcessGone()
 	_, _ = observer.supervision.cancelExecution()
 }
@@ -283,6 +286,7 @@ func dispatchResultFromExecute(
 		DispatchID:                  request.Execution.Dispatch.DispatchID,
 		TransitionID:                request.Execution.Dispatch.TransitionID,
 		Outcome:                     workers.OutcomeAccepted,
+		Cancellation:                result.Cancellation.Clone(),
 		Output:                      primaryText(result.Output.Primary),
 		StructuredResult:            result.StructuredResult,
 		StructuredResultPresent:     result.StructuredResultPresent,
@@ -296,6 +300,9 @@ func dispatchResultFromExecute(
 			RetryCount: result.Metrics.RetryCount,
 		},
 		Diagnostics: result.Diagnostics.ToWorkDiagnostics(),
+	}
+	if workResult.Cancellation == nil {
+		workResult.Cancellation = result.Cancellation.Clone()
 	}
 	terminal := workers.WorkstationDispatchTerminalOutcomeCompleted
 	reconciliationReason := workers.WorkstationDispatchReconciliationReason("")
@@ -312,6 +319,10 @@ func dispatchResultFromExecute(
 	if executeErr != nil {
 		if errors.Is(executeErr, context.Canceled) || result.Outcome == workers.ExecutionOutcomeCanceled {
 			terminal = workers.WorkstationDispatchTerminalOutcomeCanceled
+			workResult.Outcome = workers.OutcomeCanceled
+			if workResult.Cancellation == nil {
+				workResult.Cancellation = workers.NewDispatchCancellation(workers.DispatchCancellationReasonCanceled)
+			}
 			workResult.Error = workers.ErrWorkstationDispatchCanceled.Error()
 			executeErr = errors.Join(workers.ErrWorkstationDispatchCanceled, executeErr)
 		} else {
@@ -322,6 +333,13 @@ func dispatchResultFromExecute(
 			if errors.Is(executeErr, workers.ErrWorkstationDispatchProcessGone) {
 				reconciliationReason = workers.WorkstationDispatchReconciliationReasonProcessGone
 			}
+		}
+	}
+	if workResult.Cancellation != nil {
+		workResult.Outcome = workers.OutcomeCanceled
+		terminal = workers.WorkstationDispatchTerminalOutcomeCanceled
+		if workResult.Error == "" {
+			workResult.Error = workers.ErrWorkstationDispatchCanceled.Error()
 		}
 	}
 	switch result.Outcome {
@@ -335,11 +353,23 @@ func dispatchResultFromExecute(
 			terminal = workers.WorkstationDispatchTerminalOutcomeFailed
 		}
 	case workers.ExecutionOutcomeCanceled:
-		workResult.Outcome = workers.OutcomeFailed
+		workResult.Outcome = workers.OutcomeCanceled
 		terminal = workers.WorkstationDispatchTerminalOutcomeCanceled
+		if workResult.Cancellation == nil {
+			workResult.Cancellation = workers.NewDispatchCancellation(workers.DispatchCancellationReasonCanceled)
+		}
 		if workResult.Error == "" {
 			workResult.Error = workers.ErrWorkstationDispatchCanceled.Error()
 		}
+	}
+	if terminal == workers.WorkstationDispatchTerminalOutcomeCanceled {
+		workResult.Outcome = workers.OutcomeCanceled
+		workResult.Output = ""
+		workResult.StructuredResult = nil
+		workResult.StructuredResultPresent = false
+		workResult.Continuation = nil
+		workResult.FailureDetail = nil
+		workResult.FailureMetadata = nil
 	}
 	output := result.Output.Clone()
 	return workers.WorkstationDispatchResult{
@@ -347,6 +377,7 @@ func dispatchResultFromExecute(
 		WorkstationName:      request.WorkstationName,
 		TerminalOutcome:      terminal,
 		ReconciliationReason: reconciliationReason,
+		Cancellation:         workResult.Cancellation.Clone(),
 		Result:               workResult,
 		ProposedOutput:       &output,
 	}, executeErr
@@ -377,7 +408,8 @@ func canceledDispatchResult(request workers.WorkstationDispatchRequest) (workers
 		Result: workers.WorkResult{
 			DispatchID:   request.Execution.Dispatch.DispatchID,
 			TransitionID: request.Execution.Dispatch.TransitionID,
-			Outcome:      workers.OutcomeFailed,
+			Outcome:      workers.OutcomeCanceled,
+			Cancellation: workers.NewDispatchCancellation(workers.DispatchCancellationReasonCanceled),
 			Error:        workers.ErrWorkstationDispatchCanceled.Error(),
 		},
 	}, workers.ErrWorkstationDispatchCanceled

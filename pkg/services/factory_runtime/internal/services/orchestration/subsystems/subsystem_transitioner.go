@@ -54,6 +54,7 @@ type resolvedWorkResult struct {
 	err                         string
 	feedback                    string
 	failureMetadata             *workerexecution.WorkFailureMetadata
+	cancellation                *workerexecution.DispatchCancellation
 }
 
 type generatedBatchWork struct {
@@ -168,6 +169,10 @@ func (t *TransitionerSubsystem) mapToCorrespondingTokenMutations(ctx context.Con
 	history := buildHistory(consumedTokens, result, candidateWorkID(t.netDefinition, result.TransitionID, consumedTokens))
 	now := t.now()
 	inputColors := tokenColorsFromTokens(consumedTokens)
+	if resolved.cancellation != nil || resolved.outcome == workerexecution.OutcomeCanceled {
+		mutations := t.restoreCanceledDispatchMutations(snapshot, result.DispatchID, resolved, now)
+		return mutations, t.buildCompletedDispatch(snapshot, result, resolved, consumedTokens, mutations, now), nil, nil
+	}
 	//TODO: the intermittent failure arc should be denoted as a preconstructed output, teh calculate arcs function should be a mapping of arcs for a current workstation/transition, and one such mapping would be the intermitten failure arc.
 
 	if shouldRequeueIntermittentFailureResult(resolved) {
@@ -261,6 +266,61 @@ func transitionRoutingError(ctx context.Context, transitionID string, outcome wo
 	return fmt.Errorf("transition %s has no arcs for outcome %s", transitionID, outcome)
 }
 
+// restoreCanceledDispatchMutations releases the exact CONSUME claims held by
+// a dispatch that was canceled before producing a business result. The
+// dispatcher already removed those tokens from the marking; restoring the
+// held claims makes cancellation lossless while avoiding any failure arc.
+func (t *TransitionerSubsystem) restoreCanceledDispatchMutations(
+	snapshot *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net],
+	dispatchID string,
+	result resolvedWorkResult,
+	now time.Time,
+) []interfaces.MarkingMutation {
+	entry := completedDispatchEntry(snapshot, dispatchID)
+	if entry == nil || len(entry.HeldMutations) == 0 {
+		return nil
+	}
+	tokens := make(map[string]factorytoken.Token, len(entry.ConsumedTokens))
+	for _, workerToken := range entry.ConsumedTokens {
+		token := factorytoken.FromWorker(workerToken)
+		tokens[token.ID] = token
+	}
+	mutations := make([]interfaces.MarkingMutation, 0, len(entry.HeldMutations))
+	for _, held := range entry.HeldMutations {
+		if held.Type != interfaces.MutationConsume {
+			continue
+		}
+		token, ok := tokens[held.TokenID]
+		if !ok {
+			continue
+		}
+		restored := factorytoken.Clone(token)
+		if held.FromPlace != "" {
+			restored.PlaceID = held.FromPlace
+		}
+		restored.EnteredAt = now
+		mutations = append(mutations, interfaces.MarkingMutation{
+			Type:     interfaces.MutationCreate,
+			TokenID:  restored.ID,
+			ToPlace:  restored.PlaceID,
+			NewToken: workerTokenPointer(&restored),
+			Reason: fmt.Sprintf(
+				"restore %s dispatch claim for canceled result (%s)",
+				restored.ID,
+				completedDispatchCancellationReason(result),
+			),
+		})
+	}
+	return mutations
+}
+
+func completedDispatchCancellationReason(result resolvedWorkResult) string {
+	if result.cancellation == nil || result.cancellation.Reason == "" {
+		return string(workerexecution.DispatchCancellationReasonCanceled)
+	}
+	return string(result.cancellation.Reason)
+}
+
 func effectiveGeneratedWorkItemLimit(limits interfaces.WorkstationLimits, inputColors []factorytoken.Color) int {
 	maximum := limits.MaxGeneratedWorkItems
 	argumentName := strings.TrimSpace(limits.MaxGeneratedWorkItemsArgument)
@@ -300,6 +360,7 @@ func (t *TransitionerSubsystem) buildCompletedDispatch(
 		DispatchID:                  result.DispatchID,
 		TransitionID:                result.TransitionID,
 		Outcome:                     resolved.outcome,
+		Cancellation:                resolved.cancellation.Clone(),
 		SelectedClassificationLabel: resolved.selectedClassificationLabel,
 		Reason:                      completedDispatchReason(resolved),
 		ArtifactVerification:        result.ArtifactVerification.Clone(),
@@ -314,6 +375,10 @@ func (t *TransitionerSubsystem) buildCompletedDispatch(
 			resolved.outcome,
 			mutations,
 		),
+	}
+	if resolved.outcome == workerexecution.OutcomeCanceled {
+		completed.FailureMetadata = nil
+		completed.FailureDetail = nil
 	}
 	if dispatchEntry == nil {
 		return completed
@@ -334,6 +399,11 @@ func cloneExpectedArtifactTemplateContext(
 
 func completedDispatchReason(result resolvedWorkResult) string {
 	switch result.outcome {
+	case workerexecution.OutcomeCanceled:
+		if result.cancellation != nil && result.cancellation.Reason != "" {
+			return string(result.cancellation.Reason)
+		}
+		return string(workerexecution.DispatchCancellationReasonCanceled)
 	case workerexecution.OutcomeFailed:
 		return result.err
 	case workerexecution.OutcomeContinue:
@@ -475,8 +545,16 @@ func resolveWorkResult(transition *petri.Transition, result *workerexecution.Wor
 		err:                         result.Error,
 		feedback:                    result.Feedback,
 		failureMetadata:             result.FailureMetadata,
+		cancellation:                result.Cancellation.Clone(),
+	}
+	if resolved.cancellation != nil || resolved.outcome == workerexecution.OutcomeCanceled {
+		if resolved.cancellation == nil {
+			resolved.cancellation = workerexecution.NewDispatchCancellation(workerexecution.DispatchCancellationReasonCanceled)
+		}
+		resolved.outcome = workerexecution.OutcomeCanceled
 	}
 	if workstation, ok := runtimeWorkstation(transition.Name, runtimeConfig); ok && workstation != nil &&
+		resolved.cancellation == nil &&
 		len(workstation.StopWords) > 0 &&
 		strings.TrimSpace(workstation.OutcomeFormat) != interfaces.WorkstationOutcomeFormatDecisionEnvelope {
 		resolved.outcome = evaluateStopWords(workstation.StopWords, result.Output)
@@ -726,6 +804,8 @@ func (t *TransitionerSubsystem) logArcSelection(transitionID string, outcome wor
 		t.logger.Info("transitioner: result rejected", "transitionID", transitionID)
 	case workerexecution.OutcomeFailed:
 		t.logger.Info("transitioner: result failed", "transitionID", transitionID)
+	case workerexecution.OutcomeCanceled:
+		t.logger.Info("transitioner: result canceled", "transitionID", transitionID)
 	}
 }
 
@@ -761,6 +841,8 @@ func calculateArcs(currentTransition *petri.Transition, outcome workerexecution.
 		return currentTransition.RejectionArcs, nil
 	case workerexecution.OutcomeFailed:
 		return currentTransition.FailureArcs, nil
+	case workerexecution.OutcomeCanceled:
+		return nil, nil
 	default:
 		return nil, fmt.Errorf("unknown outcome %s", outcome)
 	}

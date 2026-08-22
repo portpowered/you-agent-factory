@@ -2,6 +2,7 @@ package runtime
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	pathpkg "path"
 	"path/filepath"
@@ -287,6 +288,7 @@ func workstationDispatchResultFromExecute(
 		DispatchID:                  dispatch.DispatchID,
 		TransitionID:                dispatch.TransitionID,
 		Outcome:                     workers.OutcomeAccepted,
+		Cancellation:                result.Cancellation.Clone(),
 		Output:                      primaryOutputText(result.Output.Primary),
 		StructuredResult:            jsonvalue.Clone(result.StructuredResult),
 		StructuredResultPresent:     jsonvalue.Present(result.StructuredResult, result.StructuredResultPresent),
@@ -311,8 +313,11 @@ func workstationDispatchResultFromExecute(
 		workResult.Outcome = workers.OutcomeFailed
 		terminal = workers.WorkstationDispatchTerminalOutcomeFailed
 	case workers.ExecutionOutcomeCanceled:
-		workResult.Outcome = workers.OutcomeFailed
+		workResult.Outcome = workers.OutcomeCanceled
 		terminal = workers.WorkstationDispatchTerminalOutcomeCanceled
+		if workResult.Cancellation == nil {
+			workResult.Cancellation = workers.NewDispatchCancellation(workers.DispatchCancellationReasonCanceled)
+		}
 	default:
 		if result.Outcome != workers.ExecutionOutcomeAccepted {
 			workResult.Outcome = workers.OutcomeFailed
@@ -329,6 +334,17 @@ func workstationDispatchResultFromExecute(
 			}
 		}
 	}
+	if workResult.Cancellation != nil {
+		workResult.Outcome = workers.OutcomeCanceled
+		terminal = workers.WorkstationDispatchTerminalOutcomeCanceled
+	}
+	if errors.Is(executeErr, context.Canceled) || errors.Is(executeErr, workers.ErrWorkstationDispatchCanceled) {
+		workResult.Outcome = workers.OutcomeCanceled
+		terminal = workers.WorkstationDispatchTerminalOutcomeCanceled
+		if workResult.Cancellation == nil {
+			workResult.Cancellation = workers.NewDispatchCancellation(workers.DispatchCancellationReasonCanceled)
+		}
+	}
 	if executeErr != nil && terminal != workers.WorkstationDispatchTerminalOutcomeCanceled {
 		terminal = workers.WorkstationDispatchTerminalOutcomeFailed
 		workResult.Outcome = workers.OutcomeFailed
@@ -339,12 +355,23 @@ func workstationDispatchResultFromExecute(
 	if terminal == workers.WorkstationDispatchTerminalOutcomeCanceled && strings.TrimSpace(workResult.Error) == "" {
 		workResult.Error = workers.ErrWorkstationDispatchCanceled.Error()
 	}
+	if terminal == workers.WorkstationDispatchTerminalOutcomeCanceled {
+		workResult.Outcome = workers.OutcomeCanceled
+		workResult.Output = ""
+		workResult.StructuredResult = nil
+		workResult.StructuredResultPresent = false
+		workResult.Continuation = nil
+		workResult.FailureDetail = nil
+		workResult.FailureMetadata = nil
+		proposedOutput = workers.ProposedOutput{}
+	}
 	reconciliationReason := processGoneDispatchResult(&workResult, &terminal, executeErr)
 	return workers.WorkstationDispatchResult{
 		DispatchID:           dispatch.DispatchID,
 		WorkstationName:      request.WorkstationName,
 		TerminalOutcome:      terminal,
 		ReconciliationReason: reconciliationReason,
+		Cancellation:         workResult.Cancellation.Clone(),
 		Result:               workResult,
 		ProposedOutput:       &proposedOutput,
 	}, executeErr
@@ -496,6 +523,17 @@ func applyMaterializedWorkerOutput(
 	proposals workerexecution.ProposedOutput,
 	fromDetachedOutput bool,
 ) workerexecution.WorkResult {
+	if result.Cancellation != nil || result.Outcome == workerexecution.OutcomeCanceled {
+		result.Outcome = workerexecution.OutcomeCanceled
+		if result.Cancellation == nil {
+			result.Cancellation = workerexecution.NewDispatchCancellation(workerexecution.DispatchCancellationReasonCanceled)
+		}
+		result.Output = ""
+		result.StructuredResult = nil
+		result.StructuredResultPresent = false
+		result.RecordedOutputWork = nil
+		return result
+	}
 	if len(proposals.ProposedWork) == 0 &&
 		(!fromDetachedOutput || !hasMaterializableOutput(proposals)) {
 		return result

@@ -242,6 +242,11 @@ func (e *FactoryEngine) retireCompletedDispatches(results []workerexecution.Work
 
 func completedDispatchReasonFromResult(result workerexecution.WorkResult) string {
 	switch result.Outcome {
+	case workerexecution.OutcomeCanceled:
+		if result.Cancellation != nil {
+			return string(result.Cancellation.Reason)
+		}
+		return string(workerexecution.DispatchCancellationReasonCanceled)
 	case workerexecution.OutcomeFailed:
 		return result.Error
 	case workerexecution.OutcomeContinue:
@@ -255,6 +260,16 @@ func completedDispatchReasonFromResult(result workerexecution.WorkResult) string
 
 func workResultForCompletedDispatch(result workerexecution.WorkResult, completed interfaces.CompletedDispatch) workerexecution.WorkResult {
 	result.Outcome = completed.Outcome
+	result.Cancellation = completed.Cancellation.Clone()
+	if completed.Outcome == workerexecution.OutcomeCanceled {
+		result.Error = completed.Reason
+		result.FailureDetail = nil
+		result.FailureMetadata = nil
+		result.RecordedOutputWork = nil
+		result.Output = ""
+		result.StructuredResult = nil
+		result.StructuredResultPresent = false
+	}
 	result.SelectedClassificationLabel = completed.SelectedClassificationLabel
 	if completed.FailureDetail != nil {
 		result.FailureDetail = workerexecution.CloneFailureDetail(completed.FailureDetail)

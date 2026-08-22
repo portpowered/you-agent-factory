@@ -5,12 +5,14 @@ import (
 	"testing"
 	"time"
 
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/orchestrators/petri"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/scheduler"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/state"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/subsystems"
 	factorytoken "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/token"
+	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/token_transformer"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
@@ -77,6 +79,96 @@ func TestEngine_SameWorkObserveAndConsumeDispatchesInOneTick(t *testing.T) {
 	assertHeldMutationTokens(t, recordedByTransition, running, "observe-work", "slot-token")
 }
 
+func TestEngine_SameTickSupersededLoserRestoresResourcesWhileWinnerCompletes(t *testing.T) {
+	net := sameWorkObserveConsumeNet()
+	marking := petri.NewMarking("test-wf")
+	now := time.Date(2026, time.August, 22, 12, 0, 0, 0, time.UTC)
+	marking.AddToken(testDispatchToken("work-token", "task:init", factorytoken.DataTypeWork, now))
+	marking.AddToken(testDispatchToken("slot-token", "slot:available", factorytoken.DataTypeResource, now))
+
+	dispatcher := subsystems.NewDispatcher(
+		net,
+		scheduler.NewWorkInQueueScheduler(2, nil),
+		nil, nil, nil, func() time.Time { return now }, nextTestDispatchID(),
+	)
+	transitioner := subsystems.NewTransitioner(
+		net,
+		nil,
+		func() time.Time { return now },
+		token_transformer.New(net.Places, net.WorkTypes, petri.NewWorkIDGenerator()),
+		nil, nil, nil,
+		factorydefinitions.WorkPropagationPolicyFunc(func(*factorydefinitions.FactoryWorkstationConfig) factorydefinitions.WorkPropagationMode {
+			return factorydefinitions.WorkPropagationModeOutputAsPayload
+		}),
+	)
+	hook := newTestDispatchResultHook()
+	var forwarded []work.WorkDispatch
+	engine := newTestFactoryEngine(net, marking, []subsystems.Subsystem{dispatcher, transitioner},
+		WithDispatchResultHook(hook),
+		WithDispatchHandler(func(dispatch work.WorkDispatch) { forwarded = append(forwarded, dispatch) }),
+	)
+
+	if err := engine.Tick(context.Background()); err != nil {
+		t.Fatalf("initial Tick() error: %v", err)
+	}
+	if len(forwarded) != 2 {
+		t.Fatalf("same-tick dispatches = %d, want winner and loser", len(forwarded))
+	}
+
+	for _, dispatch := range forwarded {
+		result := workerexecution.WorkResult{
+			DispatchID:   dispatch.DispatchID,
+			TransitionID: dispatch.TransitionID,
+		}
+		switch dispatch.TransitionID {
+		case "consume-work":
+			result.Outcome = workerexecution.OutcomeAccepted
+		case "observe-work":
+			// This is the command-cleanup result after the compatible loser is
+			// force-killed. The explicit marker is what keeps exit-code/process
+			// cleanup facts from being interpreted as a Work failure.
+			result.Outcome = workerexecution.OutcomeCanceled
+			result.Cancellation = workerexecution.NewDispatchCancellation(workerexecution.DispatchCancellationReasonSuperseded)
+		default:
+			t.Fatalf("unexpected transition %q", dispatch.TransitionID)
+		}
+		hook.results = append(hook.results, result)
+	}
+
+	if err := engine.Tick(context.Background()); err != nil {
+		t.Fatalf("result Tick() error: %v", err)
+	}
+	markingSnapshot := engine.GetMarking()
+	if got := len(markingSnapshot.TokensInPlace("task:failed")); got != 0 {
+		t.Fatalf("failed Work tokens = %d, want none after superseded loser cleanup", got)
+	}
+	if got := len(markingSnapshot.TokensInPlace("task:complete")); got != 1 {
+		t.Fatalf("completed Work tokens = %d, want winner completion", got)
+	}
+	if got := len(markingSnapshot.TokensInPlace("slot:available")); got != 1 {
+		t.Fatalf("restored resource tokens = %d, want canceled loser resource claim restored", got)
+	}
+
+	history := engine.runtimeState.DispatchHistory
+	if len(history) != 2 {
+		t.Fatalf("dispatch history = %#v, want winner and superseded loser", history)
+	}
+	var sawWinner, sawLoser bool
+	for _, completed := range history {
+		switch completed.TransitionID {
+		case "consume-work":
+			sawWinner = completed.Outcome == workerexecution.OutcomeAccepted
+		case "observe-work":
+			sawLoser = completed.Outcome == workerexecution.OutcomeCanceled &&
+				completed.Cancellation != nil &&
+				completed.Cancellation.Reason == workerexecution.DispatchCancellationReasonSuperseded
+		}
+	}
+	if !sawWinner || !sawLoser {
+		t.Fatalf("dispatch history = %#v, want accepted winner and SUPERSEDED loser", history)
+	}
+}
+
 func sameWorkObserveConsumeNet() *state.Net {
 	net := buildTestNet()
 	resource := &state.ResourceDef{ID: "slot", Name: "Slot", Capacity: 1}
@@ -85,7 +177,8 @@ func sameWorkObserveConsumeNet() *state.Net {
 	net.Places[resourcePlace.ID] = resourcePlace
 	net.Transitions["consume-work"] = &petri.Transition{
 		ID: "consume-work", Name: "Consume Work", WorkerType: "worker-a",
-		InputArcs: []petri.Arc{{ID: "consume-work-input", Name: "work", PlaceID: "task:init", Direction: petri.ArcInput, Mode: interfaces.ArcModeConsume, Cardinality: petri.ArcCardinality{Mode: petri.CardinalityOne}}},
+		InputArcs:  []petri.Arc{{ID: "consume-work-input", Name: "work", PlaceID: "task:init", Direction: petri.ArcInput, Mode: interfaces.ArcModeConsume, Cardinality: petri.ArcCardinality{Mode: petri.CardinalityOne}}},
+		OutputArcs: []petri.Arc{{ID: "consume-work-output", Name: "complete", PlaceID: "task:complete", Direction: petri.ArcOutput, Cardinality: petri.ArcCardinality{Mode: petri.CardinalityOne}}},
 	}
 	net.Transitions["observe-work"] = &petri.Transition{
 		ID: "observe-work", Name: "Observe Work", WorkerType: "worker-b",

@@ -664,6 +664,7 @@ type ProviderContinuationRef = providers.ContinuationRef
 type ExecuteResult struct {
 	Correlation             ExecutionCorrelation
 	Outcome                 ExecutionOutcome
+	Cancellation            *DispatchCancellation
 	Output                  ProposedOutput
 	StructuredResult        any
 	StructuredResultPresent bool
@@ -862,6 +863,7 @@ func (failure ExecutionFailure) Clone() ExecutionFailure {
 
 func (result ExecuteResult) Clone() ExecuteResult {
 	clone := result
+	clone.Cancellation = result.Cancellation.Clone()
 	clone.Output = result.Output.Clone()
 	clone.StructuredResult = jsonvalue.Clone(result.StructuredResult)
 	clone.StructuredResultPresent = jsonvalue.Present(result.StructuredResult, result.StructuredResultPresent)

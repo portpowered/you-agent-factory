@@ -75,11 +75,27 @@ func commandOutputDetailsLogFields(req CommandRequest, result CommandResult, dur
 	return []any{"event_name", workLogEventCommandRunnerOutputDetails, "status", "verbose", "command", req.Command, "exit_code", result.ExitCode, "duration_ms", duration.Milliseconds(), "stdout_bytes", len(result.Stdout), "stderr_bytes", len(result.Stderr)}
 }
 func commandResultStatus(ctx context.Context, result CommandResult, err error) string {
+	reason := firstCancellationReason(result.CancellationReason, CancellationReasonFromContext(ctx))
 	if err != nil {
 		if errors.Is(err, context.DeadlineExceeded) || ctx.Err() == context.DeadlineExceeded {
 			return "timed_out"
 		}
+		if reason == CancellationReasonProcessGone {
+			return "error"
+		}
+		if reason != "" {
+			return "canceled"
+		}
+		if errors.Is(err, context.Canceled) {
+			return "canceled"
+		}
 		return "error"
+	}
+	if reason == CancellationReasonProcessGone {
+		return "error"
+	}
+	if reason != "" {
+		return "canceled"
 	}
 	if result.ExitCode != 0 {
 		return "failed"

@@ -91,9 +91,10 @@ type CommandRequest struct {
 
 // CommandResult captures the observable output and exit status from a command.
 type CommandResult struct {
-	Stdout   []byte
-	Stderr   []byte
-	ExitCode int
+	Stdout             []byte
+	Stderr             []byte
+	ExitCode           int
+	CancellationReason CancellationReason
 }
 
 // WindowsCommandLineLimit is the maximum number of UTF-16 code units, including
@@ -224,7 +225,7 @@ func (r ExecCommandRunner) run(
 	streaming bool,
 ) (CommandResult, error) {
 	if err := ctx.Err(); err != nil {
-		return CommandResult{}, err
+		return CommandResult{CancellationReason: CancellationReasonFromContext(ctx)}, err
 	}
 	cmd, stdout, stderr, err := r.prepareCommand(req, observer, streaming)
 	if err != nil {
@@ -262,7 +263,8 @@ func (r ExecCommandRunner) run(
 	)
 	defer processMonitor.stopAndWait()
 
-	cancelCleanup := newCommandProcessCleanupContext(cleanupLogger, req, commandProcessCleanupReasonCancel)
+	cancellationReason := CancellationReasonFromContext(ctx)
+	cancelCleanup := newCommandProcessCleanupContext(cleanupLogger, req, commandProcessCleanupReasonCancel, cancellationReason)
 	postRunCleanup := newCommandProcessCleanupContext(cleanupLogger, req, commandProcessCleanupReasonPostRun)
 
 	var runErr error
@@ -273,8 +275,9 @@ func (r ExecCommandRunner) run(
 		waitForCommandCancellation(waitCh, r.Clock, cleanupLogger, req)
 		closeCommandProcessTree(cmd, tree, r.Clock, postRunCleanup)
 		return CommandResult{
-			Stdout: stdout.Bytes(),
-			Stderr: stderr.Bytes(),
+			Stdout:             stdout.Bytes(),
+			Stderr:             stderr.Bytes(),
+			CancellationReason: firstCancellationReason(cancellationReason, CancellationReasonFromContext(ctx)),
 		}, ctx.Err()
 	}
 	closeCommandProcessTree(cmd, tree, r.Clock, postRunCleanup)
@@ -285,6 +288,7 @@ func (r ExecCommandRunner) run(
 	}
 	if runErr != nil {
 		if ctx.Err() != nil {
+			result.CancellationReason = CancellationReasonFromContext(ctx)
 			return result, ctx.Err()
 		}
 		return r.resultFromWaitError(result, runErr, cleanupLogger, req)

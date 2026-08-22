@@ -10298,6 +10298,8 @@ components:
         - outcome
       description: Customer-visible dispatch completion event. Output work is represented with the same Work schema used by request submission rather than token or marking-mutation internals. FactoryEvent.context owns dispatch, trace, and work identity; workstation and worker topology must be derived from the matching dispatch-request event plus the initial structure. Provider-attempt session and safe diagnostic facts stay on inference response events instead of being copied onto dispatch completion payloads.
       properties:
+        cancellation:
+          $ref: '#/components/schemas/DispatchCancellation'
         completionId:
           type: string
         transitionId:
@@ -10480,16 +10482,19 @@ components:
         - WorkOutcomeContinue
         - WorkOutcomeRejected
         - WorkOutcomeFailed
+        - WorkOutcomeCanceled
       enum:
         - ACCEPTED
         - CONTINUE
         - REJECTED
         - FAILED
+        - CANCELED
       x-enum-descriptions:
         - The workstation accepted the input and completed its intended work.
         - The workstation made partial progress and should follow the continue route for another iteration.
         - The workstation completed normally but rejected the input for business reasons.
         - The workstation could not complete because execution crashed, timed out, or hit a system error.
+        - The dispatch was deliberately canceled or superseded before producing a business result.
     WorkFailureFamily:
       type: string
       description: Stable machine-readable failure family used to decide retry and routing behavior for failed work.
@@ -15331,6 +15336,18 @@ components:
         spawnedBy:
           type: string
           description: For dynamic fanout input guards, the workstation that spawns the children for count tracking.
+    DispatchCancellation:
+      type: object
+      additionalProperties: false
+      required:
+        - reason
+      description: Explicit dispatch lifecycle intent. A canceled or superseded dispatch is not a business execution failure and must not route its Work through failure arcs.
+      properties:
+        reason:
+          type: string
+          enum:
+            - CANCELED
+            - SUPERSEDED
     GlobalConfigACPIntegration:
       type: object
       additionalProperties: false

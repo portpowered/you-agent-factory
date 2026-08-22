@@ -97,6 +97,12 @@ const (
 	FACTORYSESSION     CostsScopeKind = "FACTORY_SESSION"
 )
 
+// Defines values for DispatchCancellationReason.
+const (
+	CANCELED   DispatchCancellationReason = "CANCELED"
+	SUPERSEDED DispatchCancellationReason = "SUPERSEDED"
+)
+
 // Defines values for DispatchReconciliationSource.
 const (
 	DURABLESTATE      DispatchReconciliationSource = "DURABLE_STATE"
@@ -1310,6 +1316,7 @@ const (
 // Defines values for WorkOutcome.
 const (
 	WorkOutcomeAccepted WorkOutcome = "ACCEPTED"
+	WorkOutcomeCanceled WorkOutcome = "CANCELED"
 	WorkOutcomeContinue WorkOutcome = "CONTINUE"
 	WorkOutcomeFailed   WorkOutcome = "FAILED"
 	WorkOutcomeRejected WorkOutcome = "REJECTED"
@@ -1874,6 +1881,14 @@ type Diagnostics struct {
 	Workers *map[string]SafeWorkDiagnostics `json:"workers,omitempty"`
 }
 
+// DispatchCancellation Explicit dispatch lifecycle intent. A canceled or superseded dispatch is not a business execution failure and must not route its Work through failure arcs.
+type DispatchCancellation struct {
+	Reason DispatchCancellationReason `json:"reason"`
+}
+
+// DispatchCancellationReason defines model for DispatchCancellation.Reason.
+type DispatchCancellationReason string
+
 // DispatchConsumedWorkRef Ordered reference to one consumed work item on a dispatch boundary. Dispatch-request payloads keep only the consumed work identity here; work type, trace, display, and other work facts must be derived from prior WORK_REQUEST events plus FactoryEvent.context.
 type DispatchConsumedWorkRef struct {
 	// WorkId Canonical work identity for one consumed dispatch input.
@@ -2009,7 +2024,10 @@ type DispatchRequestEventPayload struct {
 type DispatchResponseEventPayload struct {
 	// ArtifactVerification Stable terminal verification summary emitted when a successful worker does not satisfy its effective expected artifact declarations.
 	ArtifactVerification *ExpectedArtifactVerification `json:"artifactVerification,omitempty"`
-	CompletionId         *string                       `json:"completionId,omitempty"`
+
+	// Cancellation Explicit dispatch lifecycle intent. A canceled or superseded dispatch is not a business execution failure and must not route its Work through failure arcs.
+	Cancellation *DispatchCancellation `json:"cancellation,omitempty"`
+	CompletionId *string               `json:"completionId,omitempty"`
 
 	// CurrentChainingTraceId Deprecated compatibility copy of the dispatch chaining-trace identifier; prefer FactoryEvent.context.currentChainingTraceId.
 	// Deprecated: this property has been marked as deprecated upstream, but no `x-deprecated-reason` was set

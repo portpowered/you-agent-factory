@@ -278,6 +278,7 @@ type ScriptResponseEventPayload struct {
 type DispatchResponseEventPayload struct {
 	CompletionID                *string                       `json:"completionId,omitempty"`
 	CurrentChainingTraceID      *string                       `json:"currentChainingTraceId,omitempty"`
+	Cancellation                *DispatchCancellation         `json:"cancellation,omitempty"`
 	DurationMillis              *int64                        `json:"durationMillis,omitempty"`
 	Error                       *string                       `json:"error,omitempty"`
 	ArtifactVerification        *ExpectedArtifactVerification `json:"artifactVerification,omitempty"`
@@ -355,6 +356,7 @@ type WorkMetricsEventPayload struct {
 // carried by Factory event payloads and world-state projections.
 type WorkstationResult struct {
 	Outcome                     string                        `json:"outcome"`
+	Cancellation                *DispatchCancellation         `json:"cancellation,omitempty"`
 	Output                      string                        `json:"output,omitempty"`
 	Error                       string                        `json:"error,omitempty"`
 	Feedback                    string                        `json:"feedback,omitempty"`
@@ -394,6 +396,7 @@ func (value *WorkstationResult) UnmarshalJSON(data []byte) error {
 
 func CloneWorkstationResult(result WorkstationResult) WorkstationResult {
 	clone := result
+	clone.Cancellation = result.Cancellation.Clone()
 	clone.ArtifactVerification = result.ArtifactVerification.Clone()
 	clone.FailureDetail = CloneFailureDetail(result.FailureDetail)
 	clone.FailureMetadata = CloneWorkFailureMetadata(result.FailureMetadata)
@@ -419,6 +422,7 @@ type WorkResult struct {
 	DispatchID                  string                        `json:"dispatch_id"`
 	TransitionID                string                        `json:"transition_id"`
 	Outcome                     WorkOutcome                   `json:"outcome"`
+	Cancellation                *DispatchCancellation         `json:"cancellation,omitempty"`
 	Output                      string                        `json:"output,omitempty"`
 	StructuredResult            any                           `json:"structuredResult,omitempty"`
 	RecordedOutputWork          []work.FactoryWorkItem        `json:"recorded_output_work,omitempty"`
@@ -482,6 +486,9 @@ const (
 	OutcomeRejected WorkOutcome = "REJECTED"
 	// OutcomeFailed means execution crashed, timed out, or hit a system error.
 	OutcomeFailed WorkOutcome = "FAILED"
+	// OutcomeCanceled means the dispatch stopped deliberately before producing
+	// a business result. Runtime does not route it through failure arcs.
+	OutcomeCanceled WorkOutcome = "CANCELED"
 )
 
 // WorkMetrics captures performance data from a worker execution.

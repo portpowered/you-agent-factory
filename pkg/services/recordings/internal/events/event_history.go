@@ -616,6 +616,7 @@ func (h *FactoryEventHistory) RecordWorkstationResponse(tick int, result workers
 		}),
 		workers.DispatchResponseEventPayload{
 			TransitionID:                result.TransitionID,
+			Cancellation:                result.Cancellation.Clone(),
 			CurrentChainingTraceID:      stringPtrIfNotEmpty(workers.CurrentChainingTraceID(completed.ConsumedTokens, interfaces.SystemTimeWorkTypeID)),
 			PreviousChainingTraceIDs:    stringSlicePtr(workers.PreviousChainingTraceIDs(completed.ConsumedTokens)),
 			Outcome:                     result.Outcome,
