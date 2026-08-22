@@ -371,6 +371,7 @@ func openRuntime(
 		startupRuntime.RuntimeLogger(),
 		runtimebuildService,
 		startupRuntime,
+		modelsBind.Scope,
 		startupSpec,
 		runtimeLifecycle,
 		runtimeSidecars,

@@ -22,6 +22,7 @@ import (
 	responsestreamservice "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/response_stream"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/sessionregistry"
 	factorysessioncontracts "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire/contracts"
+	"github.com/portpowered/infinite-you/pkg/services/models"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"go.uber.org/zap"
 )
@@ -169,6 +170,7 @@ func (a *Assembly) Complete(
 	logger *zap.Logger,
 	runtimeBuild runtimeports.RuntimeReplacementBuilder,
 	startupRuntime runtimeports.RuntimeInstance,
+	modelsScope models.RuntimeScopeRef,
 	startupSpec factoryruntime.SessionBuildSpec,
 	runtimeLifecycle runtimeports.RuntimeLifecycle,
 	runtimeSidecars factorysessions.RuntimeSidecars,
@@ -261,6 +263,7 @@ func (a *Assembly) Complete(
 		logger,
 		runtimeBuild,
 		startupRuntime,
+		modelsScope,
 		runtimeLifecycle,
 		runtimeSidecars,
 		durableExecution,

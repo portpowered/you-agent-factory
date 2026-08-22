@@ -4,6 +4,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync"
 	"time"
@@ -18,6 +19,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimeports"
 	durableexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/durable_execution"
 	identity "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/identity"
+	"github.com/portpowered/infinite-you/pkg/services/models"
 
 	"go.uber.org/zap"
 )
@@ -60,6 +62,7 @@ type SessionRuntime struct {
 	sessionState     *sessionruntime.Service
 	sessionGateway   sessionGateway
 	runtimeBuild     runtimeports.RuntimeReplacementBuilder
+	modelsScope      models.RuntimeScopeRef
 	runtimeLifecycle runtimeports.RuntimeLifecycle
 	runtimeSidecars  RuntimeSidecars
 	factoryRootDir   string
@@ -127,7 +130,29 @@ func (fs *SessionRuntime) buildReplacementFactoryRuntime(
 	if err != nil {
 		return nil, err
 	}
+	if err := fs.bindModelsRuntimeScope(bundle); err != nil {
+		return nil, errors.Join(err, bundle.CloseArtifacts())
+	}
 	return bundle, nil
+}
+
+func (fs *SessionRuntime) bindModelsRuntimeScope(bundle runtimeports.RuntimeInstance) error {
+	if fs == nil || fs.modelsScope.IsZero() {
+		return nil
+	}
+	if bundle == nil {
+		return fmt.Errorf("replacement Factory Runtime is unavailable")
+	}
+	binder, ok := bundle.(interface {
+		BindModelsRuntimeScope(models.RuntimeScopeRef) error
+	})
+	if !ok {
+		return fmt.Errorf("replacement Factory Runtime does not support Models runtime scope binding")
+	}
+	if err := binder.BindModelsRuntimeScope(fs.modelsScope); err != nil {
+		return fmt.Errorf("bind Models runtime scope to replacement Factory Runtime: %w", err)
+	}
+	return nil
 }
 
 func (fs *SessionRuntime) StartDefaultRuntime(

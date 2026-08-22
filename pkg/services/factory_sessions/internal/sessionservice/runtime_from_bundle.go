@@ -11,6 +11,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimeports"
 	durableexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/durable_execution"
 	identity "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/identity"
+	"github.com/portpowered/infinite-you/pkg/services/models"
 	"go.uber.org/zap"
 )
 
@@ -23,6 +24,7 @@ func NewSessionRuntime(
 	logger *zap.Logger,
 	runtimeBuild runtimeports.RuntimeReplacementBuilder,
 	startupBundle runtimeports.RuntimeInstance,
+	modelsScope models.RuntimeScopeRef,
 	runtimeLifecycle runtimeports.RuntimeLifecycle,
 	runtimeSidecars RuntimeSidecars,
 	durableExecution durableexecution.Service,
@@ -66,7 +68,8 @@ func NewSessionRuntime(
 		worldStateProjector:        worldStateProjector,
 		invocationMetricsRecorder:  invocationMetricsRecorder,
 		baseLogger:                 baseLogger, logger: logger, clock: clock,
-		runtimeBuild: runtimeBuild, runtimeLifecycle: runtimeLifecycle, runtimeSidecars: runtimeSidecars,
+		runtimeBuild: runtimeBuild, modelsScope: modelsScope,
+		runtimeLifecycle: runtimeLifecycle, runtimeSidecars: runtimeSidecars,
 		durableExecution:             durableExecution,
 		definitions:                  factoryDefinitions,
 		newJavaScriptCheckpointStore: newJavaScriptCheckpointStore,

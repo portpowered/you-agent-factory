@@ -16,7 +16,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/orchestrators/petri"
 	dispatchplanning "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/dispatch_planning"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/state"
-	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
@@ -531,130 +530,12 @@ func TestOrderedRuntimeWorkDispatchTokensUsesAuthoredInputAndResourceOrder(t *te
 
 func TestResolveExecutionRequestUsesDirectInputTokensForAuthoredPrompt(t *testing.T) {
 	t.Parallel()
-
-	const (
-		workstationName = "execute-tts"
-		workerName      = "tts-executor"
-		promptTemplate  = "For Work {{ (index .Inputs 0).WorkID }}, read the complete bound text input."
-		workID          = "work-tts-1"
-		boundText       = "The release is ready."
-	)
-	modelScope, err := (modelprovider.RuntimeScopeRef{}).Parse("factory-session:models")
-	if err != nil {
-		t.Fatalf("parse Models scope: %v", err)
-	}
-
-	var renderedTokens []workers.Token
-	cfg := &runtimeConfig{
-		modelRuntimeScope: modelScope,
-		newID:             func() string { return "attempt-1" },
-		promptRenderer: runtimePromptRendererFunc(func(
-			prompt string,
-			tokens []workers.Token,
-			_ *workers.Context,
-		) (string, error) {
-			if prompt != promptTemplate {
-				t.Fatalf("prompt template = %q, want authored template", prompt)
-			}
-			renderedTokens = append([]workers.Token(nil), tokens...)
-			if len(tokens) != 1 || tokens[0].Color.WorkID != workID ||
-				len(tokens[0].Color.Content) != 1 || tokens[0].Color.Content[0].Text != boundText {
-				t.Fatalf("prompt tokens = %#v, want WorkID %q with complete bound text", tokens, workID)
-			}
-			return "For Work " + tokens[0].Color.WorkID + ", read: " + tokens[0].Color.Content[0].Text, nil
-		}),
-		runtimeConfig: runtimefixtures.RuntimeDefinitionLookupFixture{
-			Workstations: map[string]*interfaces.FactoryWorkstationConfig{
-				workstationName: {
-					Name:           workstationName,
-					Type:           interfaces.WorkstationTypeInference,
-					WorkerTypeName: workerName,
-					PromptTemplate: promptTemplate,
-					Inputs: []interfaces.IOConfig{{
-						WorkTypeName: "task",
-						StateName:    "ready",
-					}},
-				},
-			},
-			Workers: map[string]*interfaces.FactoryWorkerConfig{
-				workerName: {
-					Name:          workerName,
-					Type:          interfaces.WorkerTypeInference,
-					Model:         "OMNIVOICE_Q4_K_M",
-					ModelProvider: "CODEX",
-					ModelLocality: modelprovider.RuntimeModelLocalityLocal,
-					Resources: []interfaces.ResourceConfig{{
-						Name: "omnivoice-cache", Capacity: 1,
-					}},
-				},
-			},
-			Factory: &interfaces.FactoryConfig{Resources: []interfaces.ResourceConfig{{
-				Name: "omnivoice-cache", Type: interfaces.ResourceTypeModel, Capacity: 1,
-				Model: "OMNIVOICE_Q4_K_M", Backend: "LLAMACPP", LoadPolicy: "ON_DEMAND",
-			}}},
-		},
-	}
-
-	token := workers.Token{ID: "token-1", State: "ready", Color: workers.Color{
-		WorkID:     workID,
-		WorkTypeID: "task",
-		RequestID:  "request-1",
-		DataType:   workers.DataTypeWork,
-		Content: []work.WorkContentPart{{
-			Type: work.WorkContentPartTypeText,
-			Text: boundText,
-			Slot: "text",
-		}},
-	}}
-	request := workers.WorkstationDispatchRequest{
-		WorkstationName: workstationName,
-		Execution: workers.WorkstationExecutionRequest{
-			WorkerName:       workerName,
-			WorkerType:       interfaces.WorkerTypeInference,
-			RunnerID:         workers.RunnerIDCodex,
-			FactorySessionID: "session-1",
-			RuntimeID:        "runtime-1",
-			GenerationID:     "generation-1",
-			InputTokens:      workers.InputTokens(token),
-			Dispatch: work.WorkDispatch{
-				DispatchID:      "dispatch-1",
-				WorkstationName: workstationName,
-				WorkerType:      workerName,
-				Execution: work.ExecutionMetadata{
-					RequestID: "request-1",
-					WorkIDs:   []string{workID},
-				},
-			},
-		},
-	}
-
+	cfg, request, modelScope := directInputPromptRuntimeFixture(t)
 	executeRequest, err := executeRequestFromWorkstationRequest(cfg, request)
 	if err != nil {
 		t.Fatalf("executeRequestFromWorkstationRequest() error = %v", err)
 	}
-	if len(renderedTokens) != 1 || renderedTokens[0].Color.WorkID != workID {
-		t.Fatalf("rendered tokens = %#v, want direct input token", renderedTokens)
-	}
-	if got := executeRequest.Target.Prompt.UserMessage; got != "For Work "+workID+", read: "+boundText {
-		t.Fatalf("rendered user message = %q, want WorkID and complete bound text", got)
-	}
-	if len(executeRequest.Input.Work) != 1 || executeRequest.Input.Work[0].WorkID != workID ||
-		len(executeRequest.Input.Work[0].Content) != 1 || executeRequest.Input.Work[0].Content[0].Text != boundText {
-		t.Fatalf("detached Work inputs = %#v, want canonical per-input Work", executeRequest.Input.Work)
-	}
-	if len(workers.WorkDispatchInputTokens(executeRequest.Input.Dispatch)) != 1 {
-		t.Fatalf("detached dispatch inputs = %#v, want direct input token bridged into dispatch", executeRequest.Input.Dispatch.InputTokens)
-	}
-	if executeRequest.Input.ModelRuntime == nil ||
-		executeRequest.Input.ModelRuntime.Scope != modelScope ||
-		executeRequest.Input.ModelRuntime.Worker.Name != workerName ||
-		executeRequest.Input.ModelRuntime.Worker.Model != "OMNIVOICE_Q4_K_M" ||
-		len(executeRequest.Input.ModelRuntime.Worker.Resources) != 1 ||
-		executeRequest.Input.ModelRuntime.Worker.Resources[0].Name != "omnivoice-cache" ||
-		len(executeRequest.Input.ModelRuntime.Resources) != 1 ||
-		executeRequest.Input.ModelRuntime.Resources[0].Backend != "LLAMACPP" {
-		t.Fatalf("managed Models projection = %#v, want opened scope and authored worker", executeRequest.Input.ModelRuntime)
-	}
+	assertDirectInputPromptExecuteRequest(t, executeRequest, modelScope)
 }
 
 func TestAttemptLifecycleAllowsExplicitRetryAfterTerminal(t *testing.T) {

@@ -161,6 +161,10 @@ func overwritePackagedTTSFactoryWithProviderFakeTopology(t *testing.T, factoryDi
 	overwritePackagedTTSFactoryTopology(t, factoryDir, scaffoldPackagedTTSLikeFactory)
 }
 
+func overwritePackagedTTSFactoryWithCommandRunnerTopology(t *testing.T, factoryDir string) {
+	overwritePackagedTTSFactoryTopology(t, factoryDir, scaffoldPackagedTTSLikeFactory)
+}
+
 func overwritePackagedTTSFactoryWithOptionalVoiceAndFormatTopology(t *testing.T, factoryDir string) {
 	overwritePackagedTTSFactoryTopology(t, factoryDir, scaffoldPackagedTTSLikeFactoryWithOptionalVoiceAndFormat)
 }
