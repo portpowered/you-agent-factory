@@ -33,7 +33,9 @@ func TestPackagedTTSNoServerPromptUsesCanonicalInputContract(t *testing.T) {
 		homeDir,
 		factorydefinitions.PackagedTTSFactoryName,
 	)
+	factoryDir = support.CopyFactoryAsNamed(t, factoryDir, homeDir, "@test/tts")
 	overwritePackagedTTSFactoryWithCommandRunnerTopology(t, factoryDir)
+	factoryName := "@test/tts"
 	audioPath := filepath.Join(t.TempDir(), "packaged-tts-command-runner.wav")
 	if err := os.WriteFile(audioPath, []byte(packagedTTSFakeAudioFixture), 0o644); err != nil {
 		t.Fatalf("write command-runner audio fixture: %v", err)
@@ -50,7 +52,7 @@ func TestPackagedTTSNoServerPromptUsesCanonicalInputContract(t *testing.T) {
 	runner := support.NewShapedProviderCommandRunner(platformprocess.CommandResult{Stdout: audioContent})
 	inputs := support.FakeInputs(t.Context(), []string{
 		"you", "--json", "run",
-		"--named", factorydefinitions.PackagedTTSFactoryName,
+		"--named", factoryName,
 		"--no-record",
 		"--output", "primary",
 		"--to", text,

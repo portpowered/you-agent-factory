@@ -6,7 +6,6 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
-	"reflect"
 	"runtime"
 	"strings"
 	"testing"
@@ -27,12 +26,6 @@ import (
 	factorymapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig"
 	authoredmapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig/authored"
 )
-
-type directoryEntrySnapshot struct {
-	Contents []byte
-	Mode     fs.FileMode
-	IsDir    bool
-}
 
 func packagedScriptsTestPersistence() factorydefinitions.PackagedFactoryPersistence {
 	validator := factoryvalidation.New(nil)
@@ -100,56 +93,6 @@ func packagedScriptsTestPersistence() factorydefinitions.PackagedFactoryPersiste
 		panic(err)
 	}
 	return persistence
-}
-
-func snapshotDirectoryContents(t *testing.T, root string) map[string]directoryEntrySnapshot {
-	t.Helper()
-	snapshot := map[string]directoryEntrySnapshot{}
-	if err := filepath.WalkDir(root, func(path string, entry fs.DirEntry, walkErr error) error {
-		if walkErr != nil {
-			return walkErr
-		}
-		info, err := entry.Info()
-		if err != nil {
-			return err
-		}
-		relative, err := filepath.Rel(root, path)
-		if err != nil {
-			return err
-		}
-		value := directoryEntrySnapshot{Mode: info.Mode(), IsDir: entry.IsDir()}
-		if info.Mode().IsRegular() {
-			value.Contents, err = os.ReadFile(path)
-			if err != nil {
-				return err
-			}
-		}
-		snapshot[filepath.ToSlash(relative)] = value
-		return nil
-	}); err != nil {
-		t.Fatalf("snapshot directory: %v", err)
-	}
-	return snapshot
-}
-
-func assertDirectorySnapshotUnchanged(t *testing.T, root string, before map[string]directoryEntrySnapshot) {
-	t.Helper()
-	after := snapshotDirectoryContents(t, root)
-	if reflect.DeepEqual(before, after) {
-		return
-	}
-	for path, want := range before {
-		if got, ok := after[path]; !ok {
-			t.Errorf("directory entry %q was removed", path)
-		} else if !reflect.DeepEqual(want, got) {
-			t.Errorf("directory entry %q changed: before=%#v after=%#v", path, want, got)
-		}
-	}
-	for path := range after {
-		if _, ok := before[path]; !ok {
-			t.Errorf("directory entry %q was added", path)
-		}
-	}
 }
 
 func TestEnsurePackagedFactories_InstallsAssembledScriptsThinExecutableAndBacksUpEdits(t *testing.T) {
