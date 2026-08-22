@@ -80,3 +80,5 @@ func assertFactoryHasNoTopLevelExhaustionRules(t *testing.T, dir string) {
 		t.Fatalf("factory.json unexpectedly includes top-level exhaustion_rules: %#v", rules)
 	}
 }
+
+var _ = functionallongCompileProbeIntentionalError
