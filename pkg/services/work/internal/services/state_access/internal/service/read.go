@@ -210,6 +210,12 @@ func annotatedReadModels(snapshot work.ReadSnapshot) []work.ReadModel {
 	for index, item := range annotatedItems {
 		if index < len(models) {
 			models[index].SupersededBy = item.SupersededBy
+			if item.SupersededBy != "" {
+				// A superseded failed attempt is historical context, not the
+				// current failure for this Work name. Do not expose its detail
+				// through the public read projection.
+				models[index].FailureDetail = nil
+			}
 		}
 	}
 	return models
