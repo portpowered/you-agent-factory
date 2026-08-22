@@ -12,7 +12,6 @@ import (
 	"io/fs"
 	"path/filepath"
 	"regexp"
-	"sort"
 )
 
 const (
@@ -30,11 +29,37 @@ var (
 // without interpreting their names, labels, units, or values.
 type RuntimeMetricRecord map[string]any
 
-// Reader is the narrow read boundary consumed by higher-level observability
-// services. The reader is stateless; callers supply the artifact root for each
-// operation.
+// Reader is the narrow streaming read boundary consumed by higher-level
+// observability services. The reader is stateless; callers supply the artifact
+// root and record visitor for each operation.
 type Reader interface {
-	Read(context.Context, string) ([]RuntimeMetricRecord, error)
+	Stream(context.Context, string, func(RuntimeMetricRecord) error) error
+}
+
+// RuntimeMetricsReadError is a safe, typed failure from metrics discovery or
+// decoding. The cause remains available to errors.Is/errors.As callers while
+// the rendered message contains only operation and path context.
+type RuntimeMetricsReadError struct {
+	Operation string
+	Path      string
+	Cause     error
+}
+
+func (err *RuntimeMetricsReadError) Error() string {
+	if err == nil {
+		return ""
+	}
+	if err.Path == "" {
+		return fmt.Sprintf("%s: %v", err.Operation, err.Cause)
+	}
+	return fmt.Sprintf("%s %q: %v", err.Operation, err.Path, err.Cause)
+}
+
+func (err *RuntimeMetricsReadError) Unwrap() error {
+	if err == nil {
+		return nil
+	}
+	return err.Cause
 }
 
 // ArtifactFileSystem supplies the policy-free filesystem effects needed to
@@ -46,7 +71,7 @@ type ArtifactFileSystem interface {
 	Open(string) (io.ReadCloser, error)
 }
 
-// RuntimeMetricsReader reads complete JSONL records from the active and
+// RuntimeMetricsReader streams complete JSONL records from the active and
 // retained runtime metrics artifacts below a supplied root.
 type RuntimeMetricsReader struct {
 	filesystem ArtifactFileSystem
@@ -63,62 +88,59 @@ func NewRuntimeMetricsReader(filesystem ArtifactFileSystem) (*RuntimeMetricsRead
 	return &RuntimeMetricsReader{filesystem: filesystem}, nil
 }
 
-// Read discovers metric artifacts below root and returns their complete JSON
+// Read is a compatibility helper that collects the stream into memory. The
+// production query uses Stream so a growing metrics store does not retain all
+// decoded records at once. A failed read never returns partial records.
+func (r *RuntimeMetricsReader) Read(ctx context.Context, root string) ([]RuntimeMetricRecord, error) {
+	records := make([]RuntimeMetricRecord, 0)
+	err := r.Stream(ctx, root, func(record RuntimeMetricRecord) error {
+		records = append(records, record)
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return records, nil
+}
+
+// Stream discovers metric artifacts below root and visits complete JSONL
 // records in deterministic artifact and line order. An incomplete final line
 // is tolerated because an active writer may be interrupted during a write.
-func (r *RuntimeMetricsReader) Read(ctx context.Context, root string) ([]RuntimeMetricRecord, error) {
+func (r *RuntimeMetricsReader) Stream(
+	ctx context.Context,
+	root string,
+	visit func(RuntimeMetricRecord) error,
+) error {
 	if r == nil || r.filesystem == nil {
-		return nil, errors.New("read runtime metrics: filesystem is required")
+		return &RuntimeMetricsReadError{Operation: "read runtime metrics", Cause: errors.New("filesystem is required")}
+	}
+	if visit == nil {
+		return &RuntimeMetricsReadError{Operation: "read runtime metrics", Cause: errors.New("record visitor is required")}
 	}
 	if ctx == nil {
 		ctx = context.Background()
 	}
 	if err := ctx.Err(); err != nil {
-		return nil, fmt.Errorf("read runtime metrics: %w", err)
+		return &RuntimeMetricsReadError{Operation: "read runtime metrics", Cause: err}
 	}
-
-	artifacts, err := discoverRuntimeMetricsArtifacts(ctx, root, r.filesystem)
-	if err != nil {
-		return nil, err
-	}
-	records := make([]RuntimeMetricRecord, 0)
-	for _, path := range artifacts {
-		if err := ctx.Err(); err != nil {
-			return records, fmt.Errorf("read runtime metrics artifact %q: %w", path, err)
-		}
-		artifactRecords, err := readRuntimeMetricsArtifact(ctx, path, r.filesystem)
-		records = append(records, artifactRecords...)
-		if err != nil {
-			return records, err
-		}
-	}
-	return records, nil
-}
-
-func discoverRuntimeMetricsArtifacts(
-	ctx context.Context,
-	root string,
-	filesystem ArtifactFileSystem,
-) ([]string, error) {
 	if root == "" {
-		return nil, errors.New("read runtime metrics: root is required")
+		return &RuntimeMetricsReadError{Operation: "read runtime metrics", Cause: errors.New("root is required")}
 	}
 	root = filepath.Clean(root)
-	info, err := filesystem.Stat(root)
+	info, err := r.filesystem.Stat(root)
 	if err != nil {
-		return nil, fmt.Errorf("read runtime metrics root %q: %w", root, err)
+		return &RuntimeMetricsReadError{Operation: "read runtime metrics root", Path: root, Cause: err}
 	}
 	if !info.IsDir() {
-		return nil, fmt.Errorf("read runtime metrics root %q: not a directory", root)
+		return &RuntimeMetricsReadError{Operation: "read runtime metrics root", Path: root, Cause: errors.New("not a directory")}
 	}
 
-	artifacts := make([]string, 0)
-	err = filesystem.WalkDir(root, func(path string, entry fs.DirEntry, walkErr error) error {
+	err = r.filesystem.WalkDir(root, func(path string, entry fs.DirEntry, walkErr error) error {
 		if ctxErr := ctx.Err(); ctxErr != nil {
 			return ctxErr
 		}
 		if walkErr != nil {
-			return fmt.Errorf("inspect runtime metrics path %q: %w", path, walkErr)
+			return &RuntimeMetricsReadError{Operation: "inspect runtime metrics path", Path: path, Cause: walkErr}
 		}
 		if entry.IsDir() || entry.Type()&fs.ModeSymlink != 0 || !isRuntimeMetricsArtifact(entry.Name()) {
 			return nil
@@ -126,14 +148,15 @@ func discoverRuntimeMetricsArtifacts(
 		if !entry.Type().IsRegular() {
 			return nil
 		}
-		artifacts = append(artifacts, path)
-		return nil
+		return readRuntimeMetricsArtifact(ctx, path, r.filesystem, visit)
 	})
 	if err != nil {
-		return nil, fmt.Errorf("discover runtime metrics under %q: %w", root, err)
+		if _, ok := err.(*RuntimeMetricsReadError); ok {
+			return err
+		}
+		return &RuntimeMetricsReadError{Operation: "discover runtime metrics under", Path: root, Cause: err}
 	}
-	sort.Strings(artifacts)
-	return artifacts, nil
+	return nil
 }
 
 func isRuntimeMetricsArtifact(name string) bool {
@@ -144,14 +167,19 @@ func readRuntimeMetricsArtifact(
 	ctx context.Context,
 	path string,
 	filesystem ArtifactFileSystem,
-) (records []RuntimeMetricRecord, returnErr error) {
+	visit func(RuntimeMetricRecord) error,
+) (returnErr error) {
 	file, err := filesystem.Open(path)
 	if err != nil {
-		return nil, fmt.Errorf("read runtime metrics artifact %q: %w", path, err)
+		return &RuntimeMetricsReadError{Operation: "read runtime metrics artifact", Path: path, Cause: err}
 	}
 	defer func() {
 		if closeErr := file.Close(); returnErr == nil && closeErr != nil {
-			returnErr = fmt.Errorf("read runtime metrics artifact %q: close: %w", path, closeErr)
+			returnErr = &RuntimeMetricsReadError{
+				Operation: "close runtime metrics artifact",
+				Path:      path,
+				Cause:     closeErr,
+			}
 		}
 	}()
 
@@ -160,48 +188,64 @@ func readRuntimeMetricsArtifact(
 	if filepath.Ext(path) == ".gz" {
 		gzipReader, err = gzip.NewReader(file)
 		if err != nil {
-			return nil, fmt.Errorf("read runtime metrics artifact %q: open gzip decoder: %w", path, err)
+			return &RuntimeMetricsReadError{
+				Operation: "open gzip decoder for runtime metrics artifact",
+				Path:      path,
+				Cause:     err,
+			}
 		}
 		defer func() {
 			if closeErr := gzipReader.Close(); returnErr == nil && closeErr != nil {
-				returnErr = fmt.Errorf("read runtime metrics artifact %q: close gzip decoder: %w", path, closeErr)
+				returnErr = &RuntimeMetricsReadError{
+					Operation: "close gzip decoder for runtime metrics artifact",
+					Path:      path,
+					Cause:     closeErr,
+				}
 			}
 		}()
 		source = gzipReader
 	}
 
-	records, err = readRuntimeMetricsJSONL(ctx, source)
+	err = readRuntimeMetricsJSONL(ctx, source, visit)
 	if err != nil {
-		return records, fmt.Errorf("read runtime metrics artifact %q: %w", path, err)
+		if _, ok := err.(*RuntimeMetricsReadError); ok {
+			return err
+		}
+		return &RuntimeMetricsReadError{Operation: "decode runtime metrics artifact", Path: path, Cause: err}
 	}
-	return records, nil
+	return nil
 }
 
-func readRuntimeMetricsJSONL(ctx context.Context, source io.Reader) ([]RuntimeMetricRecord, error) {
+func readRuntimeMetricsJSONL(
+	ctx context.Context,
+	source io.Reader,
+	visit func(RuntimeMetricRecord) error,
+) error {
 	reader := bufio.NewReader(source)
-	records := make([]RuntimeMetricRecord, 0)
 	lineNumber := 0
 	for {
 		if err := ctx.Err(); err != nil {
-			return records, err
+			return err
 		}
 		line, readErr := reader.ReadBytes('\n')
 		lineNumber++
 		if readErr != nil && !errors.Is(readErr, io.EOF) {
-			return records, readErr
+			return readErr
 		}
 		if len(bytes.TrimSpace(line)) > 0 {
 			record, decodeErr := decodeRuntimeMetricRecord(line)
 			if decodeErr != nil {
 				if errors.Is(readErr, io.EOF) {
-					return records, nil
+					return nil
 				}
-				return records, fmt.Errorf("line %d: malformed JSON: %w", lineNumber, decodeErr)
+				return fmt.Errorf("line %d: malformed JSON: %w", lineNumber, decodeErr)
 			}
-			records = append(records, record)
+			if err := visit(record); err != nil {
+				return err
+			}
 		}
 		if errors.Is(readErr, io.EOF) {
-			return records, nil
+			return nil
 		}
 	}
 }

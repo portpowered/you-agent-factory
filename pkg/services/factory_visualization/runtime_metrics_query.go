@@ -6,9 +6,9 @@ import (
 	platformmetrics "github.com/portpowered/infinite-you/pkg/platform/metrics"
 )
 
-// RuntimeMetricsReader is the narrow Platform Metrics read capability
+// RuntimeMetricsReader is the narrow Platform Metrics streaming capability
 // consumed by the stateless query. The query owns metric interpretation; the
-// reader only returns decoded JSON objects from bounded artifacts.
+// reader only discovers artifacts and visits decoded JSON objects.
 type RuntimeMetricsReader = platformmetrics.Reader
 
 // RuntimeMetricRecord is the decoded, uninterpreted record supplied by the

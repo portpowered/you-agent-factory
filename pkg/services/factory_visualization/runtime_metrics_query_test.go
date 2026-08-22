@@ -610,6 +610,35 @@ func TestRuntimeMetricsQueryLeavesEmptyDurationsAbsentAndReportsReaderFailuresSa
 	}
 }
 
+func TestRuntimeMetricsQueryDiscardsPartialAggregateAfterStreamFailure(t *testing.T) {
+	t.Parallel()
+
+	streamErr := errors.New("artifact stream stopped")
+	reader := &runtimeMetricsReaderStub{
+		records: []factoryvisualization.RuntimeMetricRecord{
+			metricRecord("provider.input_tokens", 9, "session-a", "runtime-a", "workstation-a", "worker-a", "provider-a", "", "tokens"),
+		},
+		streamErr:      streamErr,
+		streamErrAfter: 1,
+	}
+	query, err := factoryvisualizationwire.NewRuntimeMetricsQuery(reader, logging.NoopLogger{})
+	if err != nil {
+		t.Fatalf("NewRuntimeMetricsQuery() error = %v", err)
+	}
+
+	result, err := query.QueryRuntimeMetrics(context.Background(), factoryvisualization.RuntimeMetricsQueryRequest{MetricsRoot: t.TempDir()})
+	if err == nil || !errors.Is(err, streamErr) {
+		t.Fatalf("QueryRuntimeMetrics() error = %v, want stream failure %v", err, streamErr)
+	}
+	var queryErr *factoryvisualization.RuntimeMetricsQueryError
+	if !errors.As(err, &queryErr) || queryErr.Kind != factoryvisualization.RuntimeMetricsQueryReadFailed {
+		t.Fatalf("QueryRuntimeMetrics() error = %v, want typed read failure", err)
+	}
+	if !reflect.DeepEqual(result, factoryvisualization.RuntimeMetricsQueryResult{}) {
+		t.Fatalf("partial query result = %#v, want zero result on stream failure", result)
+	}
+}
+
 func TestRuntimeMetricsQueryValidatesReaderAndRoot(t *testing.T) {
 	t.Parallel()
 
@@ -870,17 +899,33 @@ func assertDuration(t *testing.T, duration *factoryvisualization.RuntimeMetricsD
 }
 
 type runtimeMetricsReaderStub struct {
-	records []factoryvisualization.RuntimeMetricRecord
-	err     error
-	calls   int
+	records        []factoryvisualization.RuntimeMetricRecord
+	err            error
+	streamErr      error
+	streamErrAfter int
+	calls          int
 }
 
-func (r *runtimeMetricsReaderStub) Read(context.Context, string) ([]factoryvisualization.RuntimeMetricRecord, error) {
+func (r *runtimeMetricsReaderStub) Stream(ctx context.Context, _ string, visit func(factoryvisualization.RuntimeMetricRecord) error) error {
 	r.calls++
 	if r.err != nil {
-		return nil, r.err
+		return r.err
 	}
-	return append([]factoryvisualization.RuntimeMetricRecord(nil), r.records...), nil
+	for index, record := range r.records {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		if err := visit(record); err != nil {
+			return err
+		}
+		if r.streamErr != nil && index+1 >= r.streamErrAfter {
+			return r.streamErr
+		}
+	}
+	if r.streamErr != nil {
+		return r.streamErr
+	}
+	return nil
 }
 
 type queryLogger struct {

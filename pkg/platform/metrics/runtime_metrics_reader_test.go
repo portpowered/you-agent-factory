@@ -58,8 +58,8 @@ func TestRuntimeMetricsReaderRejectsMalformedCompleteLineWithArtifactContext(t *
 	if err == nil {
 		t.Fatal("Read() error = nil, want malformed complete-line error")
 	}
-	if len(got) != 1 || got[0]["record_id"] != "valid" {
-		t.Fatalf("records returned with malformed line = %#v, want earlier complete record", got)
+	if len(got) != 0 {
+		t.Fatalf("records returned with malformed line = %#v, want no partial result", got)
 	}
 	message := err.Error()
 	for _, want := range []string{filepath.Base(path), "line 2", "malformed JSON"} {
@@ -123,6 +123,43 @@ func TestRuntimeMetricsReaderHonorsCancellationAndMissingRoot(t *testing.T) {
 	}
 }
 
+func TestRuntimeMetricsReaderStreamsCancellationAndClosesArtifact(t *testing.T) {
+	root := t.TempDir()
+	path := filepath.Join(root, readerActiveName)
+	if err := os.WriteFile(path, []byte(
+		`{"record_id":"first"}`+"\n"+`{"record_id":"second"}`+"\n",
+	), 0o600); err != nil {
+		t.Fatalf("WriteFile(%q): %v", path, err)
+	}
+
+	filesystem := &trackingArtifactFileSystem{}
+	reader, err := NewRuntimeMetricsReader(filesystem)
+	if err != nil {
+		t.Fatalf("NewRuntimeMetricsReader() error = %v", err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	visited := 0
+	err = reader.Stream(ctx, root, func(RuntimeMetricRecord) error {
+		visited++
+		cancel()
+		return nil
+	})
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("Stream() error = %v, want context.Canceled", err)
+	}
+	if visited != 1 {
+		t.Fatalf("visited records = %d, want cancellation before the second record", visited)
+	}
+	if filesystem.opened != 1 || filesystem.closed != 1 {
+		t.Fatalf("artifact handles opened=%d closed=%d, want one closed handle", filesystem.opened, filesystem.closed)
+	}
+	var readErr *RuntimeMetricsReadError
+	if !errors.As(err, &readErr) {
+		t.Fatalf("Stream() error = %v, want typed RuntimeMetricsReadError", err)
+	}
+}
+
 func TestRuntimeMetricsReaderRequiresFilesystem(t *testing.T) {
 	if reader, err := NewRuntimeMetricsReader(nil); reader != nil || err == nil {
 		t.Fatalf("NewRuntimeMetricsReader(nil) = (%#v, %v), want construction failure", reader, err)
@@ -136,6 +173,33 @@ func newRuntimeMetricsReader(t *testing.T) *RuntimeMetricsReader {
 		t.Fatalf("NewRuntimeMetricsReader() error = %v", err)
 	}
 	return reader
+}
+
+type trackingArtifactFileSystem struct {
+	platformfilesystem.Local
+	opened int
+	closed int
+}
+
+func (filesystem *trackingArtifactFileSystem) Open(path string) (io.ReadCloser, error) {
+	file, err := filesystem.Local.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	filesystem.opened++
+	return trackingArtifactFile{ReadCloser: file, close: func() { filesystem.closed++ }}, nil
+}
+
+type trackingArtifactFile struct {
+	io.ReadCloser
+	close func()
+}
+
+func (file trackingArtifactFile) Close() error {
+	if file.close != nil {
+		file.close()
+	}
+	return file.ReadCloser.Close()
 }
 
 func installReaderFixtureTree(t *testing.T) string {
