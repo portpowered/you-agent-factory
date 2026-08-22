@@ -373,7 +373,6 @@ func runCoverageProfile(cfg config, targetOS string, logicalCPUs int, profilePat
 	var functionalDiscoveryStarted time.Time
 	var canonicalBlocks map[string]coverageBlock
 	if err := cfg.measureCoveragePhase(coveragePhaseList, func() error {
-		var err error
 		if strings.TrimSpace(cfg.functionalQuarantine) != "" {
 			coverPackages, err = resolveCoverPackages(cfg)
 			if err != nil {
@@ -382,7 +381,7 @@ func runCoverageProfile(cfg config, targetOS string, logicalCPUs int, profilePat
 			testPackages, functionalMetadata, functionalDiscoveryStarted, err = resolveCoverageTestPackages(cfg, repoRoot, selectorVerification)
 			return err
 		}
-		packageDiscovery, coverPackages, testPackages, err = resolveCoverageLaneWithDiscovery(cfg)
+		packageDiscovery, coverPackages, testPackages, err = resolveCoverageLaneWithDiscoveryForOS(cfg, targetOS)
 		return err
 	}); err != nil {
 		return coverageResult{}, err
@@ -390,15 +389,14 @@ func runCoverageProfile(cfg config, targetOS string, logicalCPUs int, profilePat
 
 	var prepared preparedCoverageRun
 	if err := cfg.measureCoveragePhase(coveragePhasePlan, func() error {
-		var err error
-		prepared, err = prepareCoverageRunWithFunctionalMetadata(
+		prepared, err = prepareCoverageProfileRun(
 			cfg,
 			targetOS,
 			logicalCPUs,
 			profilePath,
 			coverPackages,
 			testPackages,
-			packageDiscovery.allPackages,
+			packageDiscovery,
 			functionalMetadata,
 			functionalDiscoveryStarted,
 			selectorVerification,
@@ -447,6 +445,33 @@ func runCoverageProfile(cfg config, targetOS string, logicalCPUs int, profilePat
 		return result, err
 	}
 	return result, nil
+}
+
+func prepareCoverageProfileRun(
+	cfg config,
+	targetOS string,
+	logicalCPUs int,
+	profilePath string,
+	coverPackages []string,
+	testPackages []string,
+	packageDiscovery coveragePackageDiscovery,
+	functionalMetadata []functionalGoListPackage,
+	functionalDiscoveryStarted time.Time,
+	selectorVerification *functionalQuarantineSelectorVerification,
+) (preparedCoverageRun, error) {
+	return prepareCoverageRunWithFunctionalMetadata(
+		cfg,
+		targetOS,
+		logicalCPUs,
+		profilePath,
+		coverPackages,
+		testPackages,
+		packageDiscovery.allPackages,
+		functionalMetadata,
+		functionalDiscoveryStarted,
+		selectorVerification,
+		packageDiscovery.unitPackageFiles,
+	)
 }
 
 func (cfg config) testJobs(targetOS string, logicalCPUs int) int {

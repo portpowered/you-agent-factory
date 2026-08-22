@@ -237,6 +237,15 @@ func fakeGoListScenario(scenario string, args []string) (string, string, error) 
 	if scenario == "go-list-fails-without-detail" {
 		return "", "", fmt.Errorf("exit status 9")
 	}
+	if slicesContains(args, coverageUnitGoListJSONFields) {
+		if scenario == "go-list-excluded-packages-only" {
+			return strings.Join([]string{
+				`{"ImportPath":"` + modulePath + `/pkg/transports/http/client","GoFiles":["client.go"]}`,
+				`{"ImportPath":"` + modulePath + `/internal/testutil/runtimefixtures","GoFiles":["fixture.go"]}`,
+			}, "\n"), "", nil
+		}
+		return "", "", fmt.Errorf("unexpected JSON go list scenario: %s", scenario)
+	}
 	if scenario == "go-list-excluded-packages-only" {
 		return modulePath + "/pkg/transports/http/client\n" + modulePath + "/internal/testutil/runtimefixtures\n", "", nil
 	}
