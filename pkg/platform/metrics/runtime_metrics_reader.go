@@ -29,17 +29,23 @@ var (
 // without interpreting their names, labels, units, or values.
 type RuntimeMetricRecord map[string]any
 
-// Reader is the narrow streaming read boundary consumed by higher-level
-// observability services. The reader is stateless; callers supply the artifact
-// root and record visitor for each operation.
+// Reader is the original collecting read boundary consumed by higher-level
+// observability services. It remains the required compatibility contract for
+// injected readers; callers that can use streaming should opt into one of the
+// capability interfaces below.
 type Reader interface {
+	Read(context.Context, string) ([]RuntimeMetricRecord, error)
+}
+
+// StreamingReader is an optional capability for visiting records without
+// collecting the complete metrics store in memory.
+type StreamingReader interface {
 	Stream(context.Context, string, func(RuntimeMetricRecord) error) error
 }
 
-// SelectedReader is the optional selective extension of Reader. Keeping the
-// original Stream method on Reader preserves the small compatibility boundary
-// for callers that do not need selection, while production readers can prune
-// artifacts and envelopes before materializing records.
+// SelectedReader is an optional selective streaming capability. Production
+// readers can prune artifacts and envelopes before materializing records while
+// legacy Read-only readers remain valid through the Reader contract.
 type SelectedReader interface {
 	StreamSelected(context.Context, string, StreamSelection, func(RuntimeMetricRecord) error) error
 }
@@ -117,6 +123,7 @@ type RuntimeMetricsReader struct {
 }
 
 var _ Reader = (*RuntimeMetricsReader)(nil)
+var _ StreamingReader = (*RuntimeMetricsReader)(nil)
 var _ SelectedReader = (*RuntimeMetricsReader)(nil)
 
 // NewRuntimeMetricsReader constructs the stateless runtime metrics reader
@@ -164,35 +171,55 @@ func (r *RuntimeMetricsReader) StreamSelected(
 	selection StreamSelection,
 	visit func(RuntimeMetricRecord) error,
 ) error {
-	if r == nil || r.filesystem == nil {
-		return &RuntimeMetricsReadError{Operation: "read runtime metrics", Cause: errors.New("filesystem is required")}
+	ctx, root, err := r.prepareStream(ctx, root, visit)
+	if err != nil {
+		return err
 	}
-	if visit == nil {
-		return &RuntimeMetricsReadError{Operation: "read runtime metrics", Cause: errors.New("record visitor is required")}
+	err = r.filesystem.WalkDir(root, r.selectedWalk(ctx, selection, visit))
+	return wrapRuntimeMetricsWalkError(root, err)
+}
+
+func (r *RuntimeMetricsReader) prepareStream(
+	ctx context.Context,
+	root string,
+	visit func(RuntimeMetricRecord) error,
+) (context.Context, string, error) {
+	switch {
+	case r == nil || r.filesystem == nil:
+		return nil, "", &RuntimeMetricsReadError{Operation: "read runtime metrics", Cause: errors.New("filesystem is required")}
+	case visit == nil:
+		return nil, "", &RuntimeMetricsReadError{Operation: "read runtime metrics", Cause: errors.New("record visitor is required")}
 	}
 	if ctx == nil {
 		ctx = context.Background()
 	}
 	if err := ctx.Err(); err != nil {
-		return &RuntimeMetricsReadError{Operation: "read runtime metrics", Cause: err}
+		return nil, "", &RuntimeMetricsReadError{Operation: "read runtime metrics", Cause: err}
 	}
 	if root == "" {
-		return &RuntimeMetricsReadError{Operation: "read runtime metrics", Cause: errors.New("root is required")}
+		return nil, "", &RuntimeMetricsReadError{Operation: "read runtime metrics", Cause: errors.New("root is required")}
 	}
 	root = filepath.Clean(root)
 	info, err := r.filesystem.Stat(root)
 	if err != nil {
-		return &RuntimeMetricsReadError{Operation: "read runtime metrics root", Path: root, Cause: err}
+		return nil, root, &RuntimeMetricsReadError{Operation: "read runtime metrics root", Path: root, Cause: err}
 	}
 	if !info.IsDir() {
-		return &RuntimeMetricsReadError{Operation: "read runtime metrics root", Path: root, Cause: errors.New("not a directory")}
+		return nil, root, &RuntimeMetricsReadError{Operation: "read runtime metrics root", Path: root, Cause: errors.New("not a directory")}
 	}
+	return ctx, root, nil
+}
 
-	err = r.filesystem.WalkDir(root, func(path string, entry fs.DirEntry, walkErr error) error {
+func (r *RuntimeMetricsReader) selectedWalk(
+	ctx context.Context,
+	selection StreamSelection,
+	visit func(RuntimeMetricRecord) error,
+) fs.WalkDirFunc {
+	return func(path string, entry fs.DirEntry, walkErr error) error {
 		if ctxErr := ctx.Err(); ctxErr != nil {
 			return ctxErr
 		}
-		if selection.Stats != nil && entry != nil && entry.IsDir() {
+		if entry != nil && entry.IsDir() && selection.Stats != nil {
 			selection.Stats.DirectoriesVisited++
 		}
 		if walkErr != nil {
@@ -204,24 +231,31 @@ func (r *RuntimeMetricsReader) StreamSelected(
 			}
 			return nil
 		}
-		if entry.IsDir() || entry.Type()&fs.ModeSymlink != 0 || !isRuntimeMetricsArtifact(entry.Name()) {
-			return nil
-		}
-		if !entry.Type().IsRegular() {
+		if !isReadableRuntimeMetricsEntry(entry) {
 			return nil
 		}
 		if selection.Stats != nil {
 			selection.Stats.ArtifactsVisited++
 		}
 		return readRuntimeMetricsArtifact(ctx, path, r.filesystem, selection, visit)
-	})
-	if err != nil {
-		if _, ok := err.(*RuntimeMetricsReadError); ok {
-			return err
-		}
-		return &RuntimeMetricsReadError{Operation: "discover runtime metrics under", Path: root, Cause: err}
 	}
-	return nil
+}
+
+func isReadableRuntimeMetricsEntry(entry fs.DirEntry) bool {
+	return !entry.IsDir() &&
+		entry.Type()&fs.ModeSymlink == 0 &&
+		entry.Type().IsRegular() &&
+		isRuntimeMetricsArtifact(entry.Name())
+}
+
+func wrapRuntimeMetricsWalkError(root string, err error) error {
+	if err == nil {
+		return nil
+	}
+	if _, ok := err.(*RuntimeMetricsReadError); ok {
+		return err
+	}
+	return &RuntimeMetricsReadError{Operation: "discover runtime metrics under", Path: root, Cause: err}
 }
 
 func isRuntimeMetricsArtifact(name string) bool {
@@ -306,40 +340,43 @@ func readRuntimeMetricsJSONL(
 		if readErr != nil && !errors.Is(readErr, io.EOF) {
 			return readErr
 		}
-		if len(bytes.TrimSpace(line)) > 0 {
-			if selection.IncludeEnvelope != nil {
-				envelope, selected, envelopeErr := selectRuntimeMetricEnvelope(path, line, selection)
-				if envelopeErr != nil {
-					if errors.Is(readErr, io.EOF) {
-						return nil
-					}
-					return envelopeErr
-				}
-				if !selected || !selection.IncludeEnvelope(envelope) {
-					if errors.Is(readErr, io.EOF) {
-						return nil
-					}
-					continue
-				}
-			}
-			record, decodeErr := decodeRuntimeMetricRecord(line)
-			if decodeErr != nil {
-				if errors.Is(readErr, io.EOF) {
-					return nil
-				}
-				return fmt.Errorf("line %d: malformed JSON: %w", lineNumber, decodeErr)
-			}
-			if selection.Stats != nil {
-				selection.Stats.RecordsDecoded++
-			}
-			if err := visit(record); err != nil {
-				return err
-			}
+		ignoreOnEOF, lineErr := processRuntimeMetricsLine(path, line, lineNumber, selection, visit)
+		if lineErr != nil && !(ignoreOnEOF && errors.Is(readErr, io.EOF)) {
+			return lineErr
 		}
 		if errors.Is(readErr, io.EOF) {
 			return nil
 		}
 	}
+}
+
+func processRuntimeMetricsLine(
+	path string,
+	line []byte,
+	lineNumber int,
+	selection StreamSelection,
+	visit func(RuntimeMetricRecord) error,
+) (bool, error) {
+	if len(bytes.TrimSpace(line)) == 0 {
+		return false, nil
+	}
+	if selection.IncludeEnvelope != nil {
+		envelope, selected, err := selectRuntimeMetricEnvelope(path, line, selection)
+		if err != nil {
+			return true, err
+		}
+		if !selected || !selection.IncludeEnvelope(envelope) {
+			return false, nil
+		}
+	}
+	record, err := decodeRuntimeMetricRecord(line)
+	if err != nil {
+		return true, fmt.Errorf("line %d: malformed JSON: %w", lineNumber, err)
+	}
+	if selection.Stats != nil {
+		selection.Stats.RecordsDecoded++
+	}
+	return false, visit(record)
 }
 
 func selectRuntimeMetricEnvelope(

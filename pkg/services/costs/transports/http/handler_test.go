@@ -124,16 +124,23 @@ func runTimedOutCostsLoad(t *testing.T, requestCount int) {
 	}))
 	defer server.Close()
 
-	type result struct {
-		status int
-		err    error
-		body   []byte
-	}
-	results := make(chan result, requestCount)
+	results := make(chan timedCostsResult, requestCount)
+	launchTimedCostsRequests(server, requestCount, results)
+	awaitTimedCostsQueries(t, started, requestCount)
+	assertTimedCostsResults(t, results, requestCount, queryTimeout)
+}
+
+type timedCostsResult struct {
+	status int
+	err    error
+	body   []byte
+}
+
+func launchTimedCostsRequests(server *httptest.Server, requestCount int, results chan<- timedCostsResult) {
 	for i := 0; i < requestCount; i++ {
 		go func() {
 			response, err := server.Client().Get(server.URL + "/metrics/costs")
-			item := result{err: err}
+			item := timedCostsResult{err: err}
 			if response != nil {
 				item.status = response.StatusCode
 				item.body, item.err = io.ReadAll(response.Body)
@@ -142,7 +149,10 @@ func runTimedOutCostsLoad(t *testing.T, requestCount int) {
 			results <- item
 		}()
 	}
+}
 
+func awaitTimedCostsQueries(t *testing.T, started <-chan struct{}, requestCount int) {
+	t.Helper()
 	for i := 0; i < requestCount; i++ {
 		select {
 		case <-started:
@@ -150,29 +160,46 @@ func runTimedOutCostsLoad(t *testing.T, requestCount int) {
 			t.Fatalf("request %d did not reach the canonical costs query", i+1)
 		}
 	}
+}
+
+func assertTimedCostsResults(t *testing.T, results <-chan timedCostsResult, requestCount int, queryTimeout time.Duration) {
+	t.Helper()
 	completionDeadline := time.After(2 * time.Second)
 	for i := 0; i < requestCount; i++ {
-		select {
-		case got := <-results:
-			if got.err != nil {
-				t.Fatalf("costs request %d error after server timeout: %v", i+1, got.err)
-			}
-			if got.status != http.StatusGatewayTimeout {
-				t.Fatalf("costs request %d status = %d, want %d", i+1, got.status, http.StatusGatewayTimeout)
-			}
-			var response factoryapi.ErrorResponse
-			if err := json.Unmarshal(got.body, &response); err != nil {
-				t.Fatalf("costs request %d timeout body: %v", i+1, err)
-			}
-			if response.Code != factoryapi.ErrorResponseCode("COSTS_QUERY_TIMEOUT") || !strings.Contains(response.Message, queryTimeout.String()) {
-				t.Fatalf("costs request %d timeout response = %#v, want typed timeout with %s", i+1, response, queryTimeout)
-			}
-			if strings.Contains(string(got.body), "line_items") || strings.Contains(string(got.body), "priced_subtotal") {
-				t.Fatalf("costs request %d emitted partial report content: %s", i+1, got.body)
-			}
-		case <-completionDeadline:
+		got, completed := awaitTimedCostsResult(results, completionDeadline)
+		if !completed {
 			t.Fatalf("costs request %d did not complete after the server timeout", i+1)
 		}
+		assertTimedCostsResult(t, got, i+1, queryTimeout)
+	}
+}
+
+func awaitTimedCostsResult(results <-chan timedCostsResult, deadline <-chan time.Time) (timedCostsResult, bool) {
+	select {
+	case result := <-results:
+		return result, true
+	case <-deadline:
+		return timedCostsResult{}, false
+	}
+}
+
+func assertTimedCostsResult(t *testing.T, got timedCostsResult, requestNumber int, queryTimeout time.Duration) {
+	t.Helper()
+	if got.err != nil {
+		t.Fatalf("costs request %d error after server timeout: %v", requestNumber, got.err)
+	}
+	if got.status != http.StatusGatewayTimeout {
+		t.Fatalf("costs request %d status = %d, want %d", requestNumber, got.status, http.StatusGatewayTimeout)
+	}
+	var response factoryapi.ErrorResponse
+	if err := json.Unmarshal(got.body, &response); err != nil {
+		t.Fatalf("costs request %d timeout body: %v", requestNumber, err)
+	}
+	if response.Code != factoryapi.ErrorResponseCode("COSTS_QUERY_TIMEOUT") || !strings.Contains(response.Message, queryTimeout.String()) {
+		t.Fatalf("costs request %d timeout response = %#v, want typed timeout with %s", requestNumber, response, queryTimeout)
+	}
+	if strings.Contains(string(got.body), "line_items") || strings.Contains(string(got.body), "priced_subtotal") {
+		t.Fatalf("costs request %d emitted partial report content: %s", requestNumber, got.body)
 	}
 }
 

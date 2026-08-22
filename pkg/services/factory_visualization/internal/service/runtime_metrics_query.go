@@ -107,12 +107,7 @@ func (q *metricsQuery) QueryRuntimeMetrics(
 		}
 		return nil
 	}
-	var streamErr error
-	if selectedReader, ok := q.reader.(platformmetrics.SelectedReader); ok {
-		streamErr = selectedReader.StreamSelected(ctx, root, selection, visit)
-	} else {
-		streamErr = q.reader.Stream(ctx, root, visit)
-	}
+	streamErr := q.streamRecords(ctx, root, selection, visit)
 	if callbackErr != nil {
 		return RuntimeMetricsQueryResult{}, callbackErr
 	}
@@ -135,6 +130,38 @@ func (q *metricsQuery) QueryRuntimeMetrics(
 	}
 
 	return q.finishQuery(accumulator, root, sessionID, runtimeID, considered)
+}
+
+func (q *metricsQuery) streamRecords(
+	ctx context.Context,
+	root string,
+	selection platformmetrics.StreamSelection,
+	visit func(RuntimeMetricRecord) error,
+) error {
+	if selectedReader, ok := q.reader.(platformmetrics.SelectedReader); ok {
+		return selectedReader.StreamSelected(ctx, root, selection, visit)
+	}
+	if streamingReader, ok := q.reader.(platformmetrics.StreamingReader); ok {
+		return streamingReader.Stream(ctx, root, visit)
+	}
+	return q.readRecords(ctx, root, visit)
+}
+
+func (q *metricsQuery) readRecords(
+	ctx context.Context,
+	root string,
+	visit func(RuntimeMetricRecord) error,
+) error {
+	records, err := q.reader.Read(ctx, root)
+	if err != nil {
+		return err
+	}
+	for _, record := range records {
+		if err := visit(record); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (q *metricsQuery) addRecord(
@@ -253,34 +280,73 @@ func runtimeMetricsStreamSelection(
 ) (platformmetrics.StreamSelection, error) {
 	startTimeUTC = startTimeUTC.UTC()
 	endTimeUTC = endTimeUTC.UTC()
-	if !startTimeUTC.IsZero() && !endTimeUTC.IsZero() && startTimeUTC.After(endTimeUTC) {
-		return platformmetrics.StreamSelection{}, &RuntimeMetricsQueryError{
-			Kind:    RuntimeMetricsQueryInvalidInput,
-			Message: "query Factory Runtime metrics: start time must not be after end time",
-		}
+	if err := validateMetricsTimeWindow(startTimeUTC, endTimeUTC); err != nil {
+		return platformmetrics.StreamSelection{}, err
 	}
 
 	selection := platformmetrics.StreamSelection{}
-	if sessionID != "" || runtimeID != "" || !startTimeUTC.IsZero() || !endTimeUTC.IsZero() {
+	if needsMetricsPathSelection(sessionID, runtimeID, startTimeUTC, endTimeUTC) {
 		selection.Path = runtimeMetricsPathSelector(root, sessionID, runtimeID, startTimeUTC, endTimeUTC)
 	}
-	if sessionID != "" || runtimeID != "" || !projection.allDimensions {
+	if needsMetricsEnvelopeSelection(sessionID, runtimeID, projection) {
 		selection.EnvelopeFields = []string{"metric_name", "session_id", "runtime_instance_id"}
-		selection.IncludeEnvelope = func(envelope platformmetrics.RuntimeMetricRecordEnvelope) bool {
-			if sessionID != "" && envelope.Fields["session_id"] != sessionID {
-				return false
-			}
-			if runtimeID != "" && envelope.Fields["runtime_instance_id"] != runtimeID {
-				return false
-			}
-			if projection.allDimensions {
-				return true
-			}
-			_, supported := projection.metricNames[envelope.Fields["metric_name"]]
-			return supported
-		}
+		selection.IncludeEnvelope = runtimeMetricsEnvelopeSelector(sessionID, runtimeID, projection)
 	}
 	return selection, nil
+}
+
+func validateMetricsTimeWindow(startTimeUTC, endTimeUTC time.Time) error {
+	if startTimeUTC.IsZero() || endTimeUTC.IsZero() || !startTimeUTC.After(endTimeUTC) {
+		return nil
+	}
+	return &RuntimeMetricsQueryError{
+		Kind:    RuntimeMetricsQueryInvalidInput,
+		Message: "query Factory Runtime metrics: start time must not be after end time",
+	}
+}
+
+func needsMetricsPathSelection(sessionID, runtimeID string, startTimeUTC, endTimeUTC time.Time) bool {
+	return sessionID != "" || runtimeID != "" || !startTimeUTC.IsZero() || !endTimeUTC.IsZero()
+}
+
+func needsMetricsEnvelopeSelection(sessionID, runtimeID string, projection metricsProjection) bool {
+	return sessionID != "" || runtimeID != "" || !projection.allDimensions
+}
+
+func runtimeMetricsEnvelopeSelector(
+	sessionID string,
+	runtimeID string,
+	projection metricsProjection,
+) func(platformmetrics.RuntimeMetricRecordEnvelope) bool {
+	return func(envelope platformmetrics.RuntimeMetricRecordEnvelope) bool {
+		return runtimeMetricsEnvelopeMatchesScope(envelope, sessionID, runtimeID) &&
+			runtimeMetricsEnvelopeMatchesProjection(envelope, projection)
+	}
+}
+
+func runtimeMetricsEnvelopeMatchesScope(
+	envelope platformmetrics.RuntimeMetricRecordEnvelope,
+	sessionID string,
+	runtimeID string,
+) bool {
+	if sessionID != "" && envelope.Fields["session_id"] != sessionID {
+		return false
+	}
+	if runtimeID != "" && envelope.Fields["runtime_instance_id"] != runtimeID {
+		return false
+	}
+	return true
+}
+
+func runtimeMetricsEnvelopeMatchesProjection(
+	envelope platformmetrics.RuntimeMetricRecordEnvelope,
+	projection metricsProjection,
+) bool {
+	if projection.allDimensions {
+		return true
+	}
+	_, supported := projection.metricNames[envelope.Fields["metric_name"]]
+	return supported
 }
 
 func runtimeMetricsPathSelector(

@@ -22,61 +22,57 @@ func TestRuntimeMetricsSelectionReducesSessionProjectionAndDateWork(t *testing.T
 		t.Fatalf("NewRuntimeMetricsReader() error = %v", err)
 	}
 
-	allProjection, err := newMetricsProjection("")
-	if err != nil {
-		t.Fatalf("newMetricsProjection(all) error = %v", err)
-	}
-	allSelection, err := runtimeMetricsStreamSelection(root, "", "", time.Time{}, time.Time{}, allProjection)
-	if err != nil {
-		t.Fatalf("runtimeMetricsStreamSelection(all) error = %v", err)
-	}
-	allStats := &platformmetrics.RuntimeMetricsReadStats{}
-	allSelection.Stats = allStats
-	if err := reader.StreamSelected(context.Background(), root, allSelection, func(platformmetrics.RuntimeMetricRecord) error { return nil }); err != nil {
-		t.Fatalf("StreamSelected(all) error = %v", err)
-	}
-
-	sessionSelection, err := runtimeMetricsStreamSelection(root, "session-a", "", time.Time{}, time.Time{}, allProjection)
-	if err != nil {
-		t.Fatalf("runtimeMetricsStreamSelection(session) error = %v", err)
-	}
-	sessionStats := &platformmetrics.RuntimeMetricsReadStats{}
-	sessionSelection.Stats = sessionStats
-	if err := reader.StreamSelected(context.Background(), root, sessionSelection, func(platformmetrics.RuntimeMetricRecord) error { return nil }); err != nil {
-		t.Fatalf("StreamSelected(session) error = %v", err)
-	}
-
-	providerProjection, err := newMetricsProjection("provider")
-	if err != nil {
-		t.Fatalf("newMetricsProjection(provider) error = %v", err)
-	}
-	providerSelection, err := runtimeMetricsStreamSelection(root, "", "", time.Time{}, time.Time{}, providerProjection)
-	if err != nil {
-		t.Fatalf("runtimeMetricsStreamSelection(provider) error = %v", err)
-	}
-	providerStats := &platformmetrics.RuntimeMetricsReadStats{}
-	providerSelection.Stats = providerStats
-	if err := reader.StreamSelected(context.Background(), root, providerSelection, func(platformmetrics.RuntimeMetricRecord) error { return nil }); err != nil {
-		t.Fatalf("StreamSelected(provider) error = %v", err)
-	}
-
-	windowSelection, err := runtimeMetricsStreamSelection(
+	allStats := collectSelectionStats(t, reader, root, "", "", time.Time{}, time.Time{}, "")
+	sessionStats := collectSelectionStats(t, reader, root, "session-a", "", time.Time{}, time.Time{}, "")
+	providerStats := collectSelectionStats(t, reader, root, "", "", time.Time{}, time.Time{}, "provider")
+	windowStats := collectSelectionStats(
+		t,
+		reader,
 		root,
 		"",
 		"",
 		time.Date(2026, time.August, 21, 0, 0, 0, 0, time.UTC),
 		time.Date(2026, time.August, 22, 0, 0, 0, 0, time.UTC),
-		allProjection,
+		"",
 	)
-	if err != nil {
-		t.Fatalf("runtimeMetricsStreamSelection(window) error = %v", err)
-	}
-	windowStats := &platformmetrics.RuntimeMetricsReadStats{}
-	windowSelection.Stats = windowStats
-	if err := reader.StreamSelected(context.Background(), root, windowSelection, func(platformmetrics.RuntimeMetricRecord) error { return nil }); err != nil {
-		t.Fatalf("StreamSelected(window) error = %v", err)
-	}
+	assertSelectionWorkReduction(t, allStats, sessionStats, providerStats, windowStats)
+}
 
+func collectSelectionStats(
+	t *testing.T,
+	reader platformmetrics.SelectedReader,
+	root string,
+	sessionID string,
+	runtimeID string,
+	startTimeUTC time.Time,
+	endTimeUTC time.Time,
+	groupBy string,
+) *platformmetrics.RuntimeMetricsReadStats {
+	t.Helper()
+	projection, err := newMetricsProjection(groupBy)
+	if err != nil {
+		t.Fatalf("newMetricsProjection(%q) error = %v", groupBy, err)
+	}
+	selection, err := runtimeMetricsStreamSelection(root, sessionID, runtimeID, startTimeUTC, endTimeUTC, projection)
+	if err != nil {
+		t.Fatalf("runtimeMetricsStreamSelection(%q) error = %v", groupBy, err)
+	}
+	stats := &platformmetrics.RuntimeMetricsReadStats{}
+	selection.Stats = stats
+	if err := reader.StreamSelected(context.Background(), root, selection, func(platformmetrics.RuntimeMetricRecord) error { return nil }); err != nil {
+		t.Fatalf("StreamSelected(%q) error = %v", groupBy, err)
+	}
+	return stats
+}
+
+func assertSelectionWorkReduction(
+	t *testing.T,
+	allStats *platformmetrics.RuntimeMetricsReadStats,
+	sessionStats *platformmetrics.RuntimeMetricsReadStats,
+	providerStats *platformmetrics.RuntimeMetricsReadStats,
+	windowStats *platformmetrics.RuntimeMetricsReadStats,
+) {
+	t.Helper()
 	if sessionStats.ArtifactsOpened >= allStats.ArtifactsOpened || sessionStats.RecordsDecoded >= allStats.RecordsDecoded {
 		t.Fatalf("session selection work = %#v, all work = %#v; want fewer opened artifacts and decoded records", sessionStats, allStats)
 	}

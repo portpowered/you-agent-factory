@@ -69,6 +69,21 @@ func TestRuntimeMetricsQueryProviderProjectionSkipsUsageFamiliesAndOtherDimensio
 		usageMetricRecord("provider.reasoning_output_tokens", 1, "session-a", "runtime-a", "work-a", "dispatch-a", "worker-session-a", "provider-a", "model-a"),
 		metricRecord("dispatch.completed", 1, "session-a", "runtime-a", "work-a", "worker-a", "provider-a", "", "count"),
 	}, "")
+	query := newRuntimeMetricsQueryForTest(t)
+	provider := queryRuntimeMetricsForGroup(t, query, root, factoryvisualization.RuntimeMetricsGroupByProvider)
+	assertProviderMetricsProjection(t, provider)
+	repeatedProvider := queryRuntimeMetricsForGroup(t, query, root, factoryvisualization.RuntimeMetricsGroupByProvider)
+	if !reflect.DeepEqual(repeatedProvider, provider) {
+		t.Fatalf("provider projection is not deterministic: first=%#v repeated=%#v", provider, repeatedProvider)
+	}
+	all := queryRuntimeMetricsForGroup(t, query, root, "")
+	if len(all.UsageRows) != 1 || all.UsageRows[0].CachedInputTokens == nil || *all.UsageRows[0].CachedInputTokens != 2 {
+		t.Fatalf("all projection usage rows = %#v, want cached-input usage preserved", all.UsageRows)
+	}
+}
+
+func newRuntimeMetricsQueryForTest(t *testing.T) factoryvisualization.RuntimeMetricsQuery {
+	t.Helper()
 	reader, err := platformmetrics.NewRuntimeMetricsReader(platformfilesystem.Local{})
 	if err != nil {
 		t.Fatalf("NewRuntimeMetricsReader() error = %v", err)
@@ -77,14 +92,28 @@ func TestRuntimeMetricsQueryProviderProjectionSkipsUsageFamiliesAndOtherDimensio
 	if err != nil {
 		t.Fatalf("NewRuntimeMetricsQuery() error = %v", err)
 	}
+	return query
+}
 
-	provider, err := query.QueryRuntimeMetrics(context.Background(), factoryvisualization.RuntimeMetricsQueryRequest{
+func queryRuntimeMetricsForGroup(
+	t *testing.T,
+	query factoryvisualization.RuntimeMetricsQuery,
+	root string,
+	groupBy string,
+) factoryvisualization.RuntimeMetricsQueryResult {
+	t.Helper()
+	result, err := query.QueryRuntimeMetrics(context.Background(), factoryvisualization.RuntimeMetricsQueryRequest{
 		MetricsRoot: root,
-		GroupBy:     factoryvisualization.RuntimeMetricsGroupByProvider,
+		GroupBy:     groupBy,
 	})
 	if err != nil {
-		t.Fatalf("QueryRuntimeMetrics(provider) error = %v", err)
+		t.Fatalf("QueryRuntimeMetrics(%q) error = %v", groupBy, err)
 	}
+	return result
+}
+
+func assertProviderMetricsProjection(t *testing.T, provider factoryvisualization.RuntimeMetricsQueryResult) {
+	t.Helper()
 	if provider.Totals.InputTokens != 4 || provider.Totals.CompletedDispatches != 1 {
 		t.Fatalf("provider totals = %#v, want input 4 and one completed dispatch", provider.Totals)
 	}
@@ -93,24 +122,6 @@ func TestRuntimeMetricsQueryProviderProjectionSkipsUsageFamiliesAndOtherDimensio
 	}
 	if len(provider.Workstations) != 0 || len(provider.WorkerTypes) != 0 || len(provider.UsageRows) != 0 {
 		t.Fatalf("provider projection retained irrelevant output: workstations=%#v workers=%#v usage=%#v", provider.Workstations, provider.WorkerTypes, provider.UsageRows)
-	}
-	repeatedProvider, err := query.QueryRuntimeMetrics(context.Background(), factoryvisualization.RuntimeMetricsQueryRequest{
-		MetricsRoot: root,
-		GroupBy:     factoryvisualization.RuntimeMetricsGroupByProvider,
-	})
-	if err != nil {
-		t.Fatalf("QueryRuntimeMetrics(provider repeated) error = %v", err)
-	}
-	if !reflect.DeepEqual(repeatedProvider, provider) {
-		t.Fatalf("provider projection is not deterministic: first=%#v repeated=%#v", provider, repeatedProvider)
-	}
-
-	all, err := query.QueryRuntimeMetrics(context.Background(), factoryvisualization.RuntimeMetricsQueryRequest{MetricsRoot: root})
-	if err != nil {
-		t.Fatalf("QueryRuntimeMetrics(all) error = %v", err)
-	}
-	if len(all.UsageRows) != 1 || all.UsageRows[0].CachedInputTokens == nil || *all.UsageRows[0].CachedInputTokens != 2 {
-		t.Fatalf("all projection usage rows = %#v, want cached-input usage preserved", all.UsageRows)
 	}
 }
 
@@ -711,6 +722,34 @@ func TestRuntimeMetricsQueryValidatesReaderAndRoot(t *testing.T) {
 	}
 }
 
+func TestRuntimeMetricsQueryFallsBackToReadOnlyReader(t *testing.T) {
+	t.Parallel()
+
+	reader := &readOnlyRuntimeMetricsReaderStub{records: []factoryvisualization.RuntimeMetricRecord{
+		metricRecord("provider.input_tokens", 4, "session-a", "runtime-a", "work-a", "worker-a", "provider-a", "", "tokens"),
+		metricRecord("provider.input_tokens", 9, "session-b", "runtime-b", "work-b", "worker-b", "provider-b", "", "tokens"),
+	}}
+	query, err := factoryvisualizationwire.NewRuntimeMetricsQuery(reader, logging.NoopLogger{})
+	if err != nil {
+		t.Fatalf("NewRuntimeMetricsQuery() error = %v", err)
+	}
+
+	result, err := query.QueryRuntimeMetrics(context.Background(), factoryvisualization.RuntimeMetricsQueryRequest{
+		MetricsRoot: "legacy-reader-root",
+		SessionID:   "session-a",
+		GroupBy:     factoryvisualization.RuntimeMetricsGroupByProvider,
+	})
+	if err != nil {
+		t.Fatalf("QueryRuntimeMetrics() error = %v", err)
+	}
+	if reader.calls != 1 {
+		t.Fatalf("Read calls = %d, want one", reader.calls)
+	}
+	if result.Totals.InputTokens != 4 || len(result.Providers) != 1 || result.Providers[0].Key != "provider-a" {
+		t.Fatalf("legacy reader result = %#v, want session-a/provider-a only", result)
+	}
+}
+
 func TestRuntimeMetricsQueryBuildsDeterministicCorrelatedUsageRows(t *testing.T) {
 	t.Parallel()
 
@@ -961,6 +1000,17 @@ type runtimeMetricsReaderStub struct {
 	calls          int
 }
 
+func (r *runtimeMetricsReaderStub) Read(ctx context.Context, _ string) ([]factoryvisualization.RuntimeMetricRecord, error) {
+	r.calls++
+	if r.err != nil {
+		return nil, r.err
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	return append([]factoryvisualization.RuntimeMetricRecord(nil), r.records...), nil
+}
+
 func (r *runtimeMetricsReaderStub) Stream(ctx context.Context, _ string, visit func(factoryvisualization.RuntimeMetricRecord) error) error {
 	r.calls++
 	if r.err != nil {
@@ -981,6 +1031,16 @@ func (r *runtimeMetricsReaderStub) Stream(ctx context.Context, _ string, visit f
 		return r.streamErr
 	}
 	return nil
+}
+
+type readOnlyRuntimeMetricsReaderStub struct {
+	records []factoryvisualization.RuntimeMetricRecord
+	calls   int
+}
+
+func (r *readOnlyRuntimeMetricsReaderStub) Read(context.Context, string) ([]factoryvisualization.RuntimeMetricRecord, error) {
+	r.calls++
+	return append([]factoryvisualization.RuntimeMetricRecord(nil), r.records...), nil
 }
 
 type queryLogger struct {
