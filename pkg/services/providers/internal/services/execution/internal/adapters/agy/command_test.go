@@ -220,6 +220,32 @@ func TestCommandEffectUsesFiveMinutePrintTimeoutByDefault(t *testing.T) {
 	}
 }
 
+func TestCommandEffectPreservesTypedSeparateEffortRejection(t *testing.T) {
+	t.Parallel()
+
+	runner := testutil.NewProviderCommandRunner(platformprocess.CommandResult{
+		Stderr:   []byte("Agy does not support a separate reasoning effort"),
+		ExitCode: 1,
+	})
+	effect := newAgyCommandEffect(workers.AdaptCommandRunner(runner))
+	_, err := effect.Execute(context.Background(), execution.ContinuationRequest{
+		ExecuteRequest: providers.ExecuteRequest{
+			Provider:         providers.IDAntigravity,
+			AttemptID:        "agy-typed-rejection",
+			Model:            "gemini-3.6-flash-medium",
+			WorkingDirectory: t.TempDir(),
+			UserMessage:      "force a provider rejection",
+		},
+	}, func([]byte) error { return nil })
+	var failure providers.ExecuteFailure
+	if !errors.As(err, &failure) || failure.Kind != providers.ExecuteFailureKindInvalidRequest {
+		t.Fatalf("Execute() error = %#v, want typed invalid-request failure", err)
+	}
+	if failure.Message != "Agy does not support a separate reasoning effort." {
+		t.Fatalf("failure message = %q, want safe provider rejection", failure.Message)
+	}
+}
+
 func TestCommandEffectRejectsUnsupportedModelAndEffortBeforeLaunch(t *testing.T) {
 	t.Parallel()
 

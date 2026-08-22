@@ -59,10 +59,7 @@ func NewCommandEffect(candidate any, clock platformclock.Source) Effect {
 			return effectResult, nativeCommandError(commandContext, runErr)
 		}
 		if result.ExitCode != 0 {
-			return effectResult, providers.ExecuteFailure{
-				Kind:    providers.ExecuteFailureKindUnknown,
-				Message: fmt.Sprintf("Agy execution exited with code %d.", result.ExitCode),
-			}
+			return effectResult, commandFailure(result)
 		}
 		return effectResult, nil
 	})

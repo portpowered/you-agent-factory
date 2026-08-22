@@ -132,6 +132,103 @@ func TestJavaScriptAntigravityChildUsesModelEmbeddedEffortThroughRootProcess(t *
 	}
 }
 
+func TestJavaScriptAntigravityCommandRejectionRemainsTypedThroughRootProcess(t *testing.T) {
+	const rejection = "Agy does not support a separate reasoning effort."
+
+	dir := support.ScaffoldFactory(t, overridesFactoryConfig())
+	runner := testutil.NewProviderCommandRunner(platformprocess.CommandResult{
+		Stderr:   []byte(rejection),
+		ExitCode: 1,
+	})
+	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir:                dir,
+		WaitForServiceModeRuntime: true,
+		Edges:                     serviceedges.Edges{ProviderCommandRunner: runner},
+	})
+	t.Cleanup(func() { server.Stop(t) })
+
+	started := startOverridesWorkflow(t, server.URL(), "javascript-antigravity-rejection", `return (async function () {
+  return await agent.run({
+    prompt: "force the provider rejection",
+    label: "javascript-antigravity-rejection",
+    modelProvider: "ANTIGRAVITY",
+    model: "gemini-3.6-flash-medium",
+    skipPermissions: true
+  });
+})();`)
+	if started.Status != factoryapi.FactorySessionDurableLifecycleStatusFailed {
+		t.Fatalf("session status = %q, want FAILED; result=%#v", started.Status, started.Result)
+	}
+	if runner.CallCount() != 1 {
+		t.Fatalf("provider command calls = %d, want one genuine Agy command attempt", runner.CallCount())
+	}
+	request := runner.LastRequest()
+	if request.Command != "agy" || !containsArgPair(request.Args, "--model", agyJavaScriptChildModel) {
+		t.Fatalf("provider command request = %#v, want Agy with the requested model", request)
+	}
+	assertUnavailableFactoryResult(t, started.Result)
+	durableResult := support.GetJSON[factoryapi.FactorySessionResult](
+		t,
+		strings.TrimSuffix(server.URL(), "/")+"/factory-sessions/"+started.SessionId+"/results?mode=final",
+	)
+	assertUnavailableFactoryResult(t, &durableResult)
+	assertReadableAntigravityEvent(t, support.GetFactoryEventsForSessionAt(t, server.URL(), started.SessionId), rejection)
+
+	session := readOverridesDurableSession(t, server.URL(), started.SessionId)
+	if session.FailureDetail == nil || !strings.Contains(session.FailureDetail.Message, rejection) {
+		t.Fatalf("session failure detail = %#v, want typed provider rejection", session.FailureDetail)
+	}
+	assertNoGoMapFailure(t, session.FailureDetail.Message)
+
+	dispatches := support.GetJSON[factoryapi.ListFactorySessionDispatchesResponse](
+		t,
+		strings.TrimSuffix(server.URL(), "/")+"/factory-sessions/"+started.SessionId+"/dispatches",
+	)
+	if len(dispatches.Dispatches) != 1 {
+		t.Fatalf("dispatch count = %d, want one failed provider event", len(dispatches.Dispatches))
+	}
+	dispatch := dispatches.Dispatches[0]
+	if dispatch.Status != factoryapi.FactoryDispatchStatusFAILED ||
+		dispatch.Provider == nil || *dispatch.Provider != "antigravity" ||
+		dispatch.FailureDetail == nil || !strings.Contains(dispatch.FailureDetail.Message, rejection) {
+		t.Fatalf("failed dispatch = %#v, want Antigravity and typed rejection", dispatch)
+	}
+	assertNoGoMapFailure(t, dispatch.FailureDetail.Message)
+}
+
+func assertUnavailableFactoryResult(t *testing.T, result *factoryapi.FactorySessionResult) {
+	t.Helper()
+	if result == nil || result.ResultStatus != factoryapi.FactorySessionResultStatusUnavailable {
+		t.Fatalf("Factory result = %#v, want UNAVAILABLE after provider rejection", result)
+	}
+}
+
+func assertReadableAntigravityEvent(t *testing.T, events []factoryapi.FactoryEvent, reason string) {
+	t.Helper()
+	for _, event := range events {
+		if event.Type != factoryapi.FactoryEventTypeDispatchReconciled {
+			continue
+		}
+		payload, err := event.Payload.AsDispatchReconciledEventPayload()
+		if err != nil {
+			t.Fatalf("decode Antigravity dispatch reconciliation event: %v", err)
+		}
+		if payload.FailureDetail == nil || !strings.Contains(payload.FailureDetail.Message, reason) {
+			continue
+		}
+		assertNoGoMapFailure(t, payload.FailureDetail.Message)
+		return
+	}
+	t.Fatalf("Factory events = %#v, want a typed Antigravity inference rejection", events)
+}
+
+func assertNoGoMapFailure(t *testing.T, message string) {
+	t.Helper()
+	if strings.Contains(message, "map[value:") || strings.Contains(message, "type=unknown") {
+		t.Fatalf("failure message = %q, must not expose a stringified Go map", message)
+	}
+}
+
 // TestJavaScriptChildUsesProviderCommandEdgeThroughRootProcess proves the
 // live provider-invocation route is assembled from the Providers root and
 // reaches the injected command edge when no mock-worker or provider override
