@@ -49,6 +49,11 @@ const (
 	CostsLineItemStatusUNPRICED CostsLineItemStatus = "UNPRICED"
 )
 
+// Defines values for CostsProviderModelRollupCurrency.
+const (
+	CostsProviderModelRollupCurrencyUSD CostsProviderModelRollupCurrency = "USD"
+)
+
 // Defines values for CostsProviderModelRollupStatus.
 const (
 	CostsProviderModelRollupStatusNOUSAGE  CostsProviderModelRollupStatus = "NO_USAGE"
@@ -68,6 +73,11 @@ const (
 	CostsReportStatusPARTIAL  CostsReportStatus = "PARTIAL"
 	CostsReportStatusPRICED   CostsReportStatus = "PRICED"
 	CostsReportStatusUNPRICED CostsReportStatus = "UNPRICED"
+)
+
+// Defines values for CostsRollupCurrency.
+const (
+	CostsRollupCurrencyUSD CostsRollupCurrency = "USD"
 )
 
 // Defines values for CostsRollupStatus.
@@ -1717,16 +1727,23 @@ type CostsLineItemStatus string
 type CostsProviderModelRollup struct {
 	CachedInputTokens *int64        `json:"cached_input_tokens,omitempty"`
 	Coverage          CostsCoverage `json:"coverage"`
-	InputTokens       *int64        `json:"input_tokens,omitempty"`
+
+	// Currency Currency of the known cost amount.
+	Currency    CostsProviderModelRollupCurrency `json:"currency"`
+	InputTokens *int64                           `json:"input_tokens,omitempty"`
 
 	// Key Stable public provider/model pair key in the form provider/model.
 	Key string `json:"key"`
+
+	// KnownCost Exact USD decimal for the priced portion of this provider/model rollup; PARTIAL never implies a complete total.
+	KnownCost *string `json:"known_cost"`
 
 	// Model Exact resolved model identity, when known.
 	Model        string `json:"model"`
 	OutputTokens *int64 `json:"output_tokens,omitempty"`
 
 	// PricedSubtotal Exact USD decimal subtotal; absent when no usage is priced.
+	// Deprecated: this property has been marked as deprecated upstream, but no `x-deprecated-reason` was set
 	PricedSubtotal *string `json:"priced_subtotal,omitempty"`
 
 	// Provider Canonical provider identity, when known.
@@ -1734,8 +1751,18 @@ type CostsProviderModelRollup struct {
 	ReasoningOutputTokens *int64 `json:"reasoning_output_tokens,omitempty"`
 
 	// Status PRICED means all usage rows for this provider/model are valued; PARTIAL means some are valued; UNPRICED means usage exists but none is valued; NO_USAGE means this pair has no usage rows.
-	Status CostsProviderModelRollupStatus `json:"status"`
+	Status      CostsProviderModelRollupStatus `json:"status"`
+	TokenTotals CostsTokenTotals               `json:"token_totals"`
+
+	// UnpricedDispatchCount Number of distinct dispatches whose usage is not fully valued for this provider/model.
+	UnpricedDispatchCount int `json:"unpriced_dispatch_count"`
+
+	// UnpricedPairs Deterministically ordered unpriced provider/model facts for this rollup.
+	UnpricedPairs []CostsUnpricedPair `json:"unpriced_pairs"`
 }
+
+// CostsProviderModelRollupCurrency Currency of the known cost amount.
+type CostsProviderModelRollupCurrency string
 
 // CostsProviderModelRollupStatus PRICED means all usage rows for this provider/model are valued; PARTIAL means some are valued; UNPRICED means usage exists but none is valued; NO_USAGE means this pair has no usage rows.
 type CostsProviderModelRollupStatus string
@@ -1750,10 +1777,14 @@ type CostsReport struct {
 	// FactorySessions Rollups keyed by Factory Session identity.
 	FactorySessions []CostsRollup `json:"factory_sessions"`
 
+	// KnownCost Exact USD decimal for the priced portion. Null means no usage row had a known price; PARTIAL never implies a complete total.
+	KnownCost *string `json:"known_cost"`
+
 	// LineItems Deterministically ordered canonical usage rows and their valuation status.
 	LineItems []CostsLineItem `json:"line_items"`
 
 	// PricedSubtotal Exact USD decimal subtotal for fully priced rows; absent when no row is priced.
+	// Deprecated: this property has been marked as deprecated upstream, but no `x-deprecated-reason` was set
 	PricedSubtotal *string `json:"priced_subtotal,omitempty"`
 
 	// ProviderModels Rollups keyed by canonical provider/model pair.
@@ -1761,7 +1792,14 @@ type CostsReport struct {
 	Scope          CostsScope                 `json:"scope"`
 
 	// Status PRICED means every usage row is valued; PARTIAL means some rows are valued; UNPRICED means usage exists but none is valued; NO_USAGE means no canonical usage rows were encountered. Missing price is never represented as zero.
-	Status CostsReportStatus `json:"status"`
+	Status      CostsReportStatus `json:"status"`
+	TokenTotals CostsTokenTotals  `json:"token_totals"`
+
+	// UnpricedDispatchCount Number of distinct dispatches whose usage is not fully valued.
+	UnpricedDispatchCount int `json:"unpriced_dispatch_count"`
+
+	// UnpricedPairs Deterministically ordered provider/model pairs contributing unpriced dispatches; null identities are explicit unknowns.
+	UnpricedPairs []CostsUnpricedPair `json:"unpriced_pairs"`
 
 	// WorkItems Rollups keyed by Work item identity.
 	WorkItems []CostsRollup `json:"work_items"`
@@ -1780,19 +1818,36 @@ type CostsReportStatus string
 type CostsRollup struct {
 	CachedInputTokens *int64        `json:"cached_input_tokens,omitempty"`
 	Coverage          CostsCoverage `json:"coverage"`
-	InputTokens       *int64        `json:"input_tokens,omitempty"`
+
+	// Currency Currency of the known cost amount.
+	Currency    CostsRollupCurrency `json:"currency"`
+	InputTokens *int64              `json:"input_tokens,omitempty"`
 
 	// Key Stable dimension key for this rollup.
-	Key          string `json:"key"`
-	OutputTokens *int64 `json:"output_tokens,omitempty"`
+	Key string `json:"key"`
+
+	// KnownCost Exact USD decimal for the priced portion of this rollup; PARTIAL never implies a complete total.
+	KnownCost    *string `json:"known_cost"`
+	OutputTokens *int64  `json:"output_tokens,omitempty"`
 
 	// PricedSubtotal Exact USD decimal subtotal; absent when no usage is priced.
+	// Deprecated: this property has been marked as deprecated upstream, but no `x-deprecated-reason` was set
 	PricedSubtotal        *string `json:"priced_subtotal,omitempty"`
 	ReasoningOutputTokens *int64  `json:"reasoning_output_tokens,omitempty"`
 
 	// Status PRICED means all usage rows in the rollup are valued; PARTIAL means some are valued; UNPRICED means usage exists but none is valued; NO_USAGE means no canonical usage rows were encountered.
-	Status CostsRollupStatus `json:"status"`
+	Status      CostsRollupStatus `json:"status"`
+	TokenTotals CostsTokenTotals  `json:"token_totals"`
+
+	// UnpricedDispatchCount Number of distinct dispatches whose usage is not fully valued in this rollup.
+	UnpricedDispatchCount int `json:"unpriced_dispatch_count"`
+
+	// UnpricedPairs Deterministically ordered provider/model pairs contributing unpriced dispatches in this rollup.
+	UnpricedPairs []CostsUnpricedPair `json:"unpriced_pairs"`
 }
+
+// CostsRollupCurrency Currency of the known cost amount.
+type CostsRollupCurrency string
 
 // CostsRollupStatus PRICED means all usage rows in the rollup are valued; PARTIAL means some are valued; UNPRICED means usage exists but none is valued; NO_USAGE means no canonical usage rows were encountered.
 type CostsRollupStatus string
@@ -1808,6 +1863,36 @@ type CostsScope struct {
 
 // CostsScopeKind Selection scope used to produce the report.
 type CostsScopeKind string
+
+// CostsTokenTotals defines model for CostsTokenTotals.
+type CostsTokenTotals struct {
+	// CachedInputTokens Aggregate cached-input subclass count, or null when no subclass measurement was present.
+	CachedInputTokens *int64 `json:"cached_input_tokens"`
+
+	// InputTokens Aggregate input-token count, or null when the source measurement was absent.
+	InputTokens *int64 `json:"input_tokens"`
+
+	// OutputTokens Aggregate output-token count, or null when the source measurement was absent.
+	OutputTokens *int64 `json:"output_tokens"`
+
+	// ReasoningOutputTokens Aggregate reasoning-output subclass count, or null when no subclass measurement was present.
+	ReasoningOutputTokens *int64 `json:"reasoning_output_tokens"`
+
+	// TotalTokens Input tokens plus output tokens; subclass counts are not added a second time.
+	TotalTokens *int64 `json:"total_tokens"`
+}
+
+// CostsUnpricedPair defines model for CostsUnpricedPair.
+type CostsUnpricedPair struct {
+	// DispatchCount Distinct unpriced dispatches for this provider/model pair in the containing scope.
+	DispatchCount int `json:"dispatch_count"`
+
+	// Model Resolved model identity, or null when the usage identity was unavailable.
+	Model *string `json:"model"`
+
+	// Provider Canonical provider identity, or null when the usage identity was unavailable.
+	Provider *string `json:"provider"`
+}
 
 // Diagnostics defines model for Diagnostics.
 type Diagnostics struct {

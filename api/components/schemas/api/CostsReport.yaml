@@ -4,6 +4,10 @@ required:
   - scope
   - currency
   - status
+  - known_cost
+  - token_totals
+  - unpriced_dispatch_count
+  - unpriced_pairs
   - coverage
   - line_items
   - work_items
@@ -26,9 +30,25 @@ properties:
       - UNPRICED
       - NO_USAGE
     description: PRICED means every usage row is valued; PARTIAL means some rows are valued; UNPRICED means usage exists but none is valued; NO_USAGE means no canonical usage rows were encountered. Missing price is never represented as zero.
+  known_cost:
+    type: string
+    nullable: true
+    description: Exact USD decimal for the priced portion. Null means no usage row had a known price; PARTIAL never implies a complete total.
   priced_subtotal:
     type: string
+    deprecated: true
     description: Exact USD decimal subtotal for fully priced rows; absent when no row is priced.
+  token_totals:
+    $ref: './CostsTokenTotals.yaml'
+  unpriced_dispatch_count:
+    type: integer
+    minimum: 0
+    description: Number of distinct dispatches whose usage is not fully valued.
+  unpriced_pairs:
+    type: array
+    description: Deterministically ordered provider/model pairs contributing unpriced dispatches; null identities are explicit unknowns.
+    items:
+      $ref: './CostsUnpricedPair.yaml'
   coverage:
     $ref: './CostsCoverage.yaml'
   line_items:

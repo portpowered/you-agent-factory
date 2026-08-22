@@ -109,6 +109,27 @@ type TokenCounts struct {
 	ReasoningOutputTokens *int64 `json:"reasoning_output_tokens,omitempty"`
 }
 
+// TokenTotals is the complete aggregate token shape used by reports and
+// rollups. Nullable fields preserve the distinction between an absent source
+// measurement and an observed zero while keeping every JSON key present.
+// TotalTokens is input plus output and never adds cached-input or
+// reasoning-output subclasses a second time.
+type TokenTotals struct {
+	TotalTokens           *int64 `json:"total_tokens"`
+	InputTokens           *int64 `json:"input_tokens"`
+	OutputTokens          *int64 `json:"output_tokens"`
+	CachedInputTokens     *int64 `json:"cached_input_tokens"`
+	ReasoningOutputTokens *int64 `json:"reasoning_output_tokens"`
+}
+
+// UnpricedPair identifies one provider/model pair whose usage could not be
+// valued. Nil identities are explicit unknowns rather than omitted facts.
+type UnpricedPair struct {
+	Provider      *string `json:"provider"`
+	Model         *string `json:"model"`
+	DispatchCount int     `json:"dispatch_count"`
+}
+
 // LineItem is one canonical usage row and its complete valuation outcome.
 // Unpriced rows retain their identity and observed token counts; PricedAmount
 // is absent for unpriced rows and is present as "0" for explicitly free usage.
@@ -130,9 +151,14 @@ type LineItem struct {
 type Rollup struct {
 	Key string `json:"key"`
 	TokenCounts
-	Status         Status   `json:"status"`
-	PricedSubtotal *string  `json:"priced_subtotal,omitempty"`
-	Coverage       Coverage `json:"coverage"`
+	Currency              string         `json:"currency"`
+	Status                Status         `json:"status"`
+	KnownCost             *string        `json:"known_cost"`
+	PricedSubtotal        *string        `json:"priced_subtotal,omitempty"` // Deprecated compatibility alias; use KnownCost.
+	TokenTotals           TokenTotals    `json:"token_totals"`
+	UnpricedDispatchCount int            `json:"unpriced_dispatch_count"`
+	UnpricedPairs         []UnpricedPair `json:"unpriced_pairs"`
+	Coverage              Coverage       `json:"coverage"`
 }
 
 // ProviderModelRollup is a rollup keyed by an exact provider/model identity.
@@ -145,16 +171,20 @@ type ProviderModelRollup struct {
 // Report is the complete deterministic Costs result. All monetary values are
 // exact decimal strings in Currency; no floating-point amount is exposed.
 type Report struct {
-	Scope           Scope                 `json:"scope"`
-	Currency        string                `json:"currency"`
-	Status          Status                `json:"status"`
-	PricedSubtotal  *string               `json:"priced_subtotal,omitempty"`
-	Coverage        Coverage              `json:"coverage"`
-	LineItems       []LineItem            `json:"line_items"`
-	WorkItems       []Rollup              `json:"work_items"`
-	WorkerSessions  []Rollup              `json:"worker_sessions"`
-	ProviderModels  []ProviderModelRollup `json:"provider_models"`
-	FactorySessions []Rollup              `json:"factory_sessions"`
+	Scope                 Scope                 `json:"scope"`
+	Currency              string                `json:"currency"`
+	Status                Status                `json:"status"`
+	KnownCost             *string               `json:"known_cost"`
+	PricedSubtotal        *string               `json:"priced_subtotal,omitempty"` // Deprecated compatibility alias; use KnownCost.
+	TokenTotals           TokenTotals           `json:"token_totals"`
+	UnpricedDispatchCount int                   `json:"unpriced_dispatch_count"`
+	UnpricedPairs         []UnpricedPair        `json:"unpriced_pairs"`
+	Coverage              Coverage              `json:"coverage"`
+	LineItems             []LineItem            `json:"line_items"`
+	WorkItems             []Rollup              `json:"work_items"`
+	WorkerSessions        []Rollup              `json:"worker_sessions"`
+	ProviderModels        []ProviderModelRollup `json:"provider_models"`
+	FactorySessions       []Rollup              `json:"factory_sessions"`
 }
 
 // CostsQueryResult is the descriptive alias for Report.

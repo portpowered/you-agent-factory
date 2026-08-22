@@ -58,6 +58,21 @@ func assertExactReport(t *testing.T, report costs.Report) {
 	if report.PricedSubtotal == nil || *report.PricedSubtotal != "10.2" {
 		t.Fatalf("priced subtotal = %v, want exact 10.2", report.PricedSubtotal)
 	}
+	if report.KnownCost == nil || *report.KnownCost != "10.2" {
+		t.Fatalf("known cost = %v, want exact 10.2", report.KnownCost)
+	}
+	assertTokenTotals(t, report.TokenTotals, 2_001_021, 1_001_018, 3_002_039)
+	if report.TokenTotals.CachedInputTokens == nil || *report.TokenTotals.CachedInputTokens != 500_500 || report.TokenTotals.ReasoningOutputTokens == nil || *report.TokenTotals.ReasoningOutputTokens != 200_000 {
+		t.Fatalf("subclass token totals = %#v, want cached 500500 and reasoning 200000", report.TokenTotals)
+	}
+	if report.UnpricedDispatchCount != 3 {
+		t.Fatalf("unpriced dispatch count = %d, want 3", report.UnpricedDispatchCount)
+	}
+	assertUnpricedPairs(t, report.UnpricedPairs, []unpricedPairWant{
+		{model: nil, dispatchCount: 1},
+		{model: stringPtr("gpt-no-cache"), dispatchCount: 1},
+		{model: stringPtr("unknown"), dispatchCount: 1},
+	})
 	wantCoverage := costs.Coverage{
 		EncounteredRows: 5, PricedRows: 2, UnpricedRows: 3,
 		EncounteredProviderModels: 4, PricedProviderModels: 2, UnpricedProviderModels: 2,
@@ -97,6 +112,14 @@ func assertExactRollups(t *testing.T, report costs.Report) {
 	}
 	for _, rollup := range report.FactorySessions {
 		assertFactorySessionRollup(t, rollup)
+	}
+	for _, rollup := range report.WorkItems {
+		if rollup.Currency != "USD" {
+			t.Fatalf("work rollup currency = %q, want USD", rollup.Currency)
+		}
+		if rollup.TokenTotals.TotalTokens == nil {
+			t.Fatalf("work rollup %#v has no total token fact", rollup)
+		}
 	}
 }
 
@@ -144,6 +167,50 @@ func TestQueryNoUsageAndExplicitZeroRemainDistinct(t *testing.T) {
 	}
 	if free.Status != costs.StatusPriced || free.PricedSubtotal == nil || *free.PricedSubtotal != "0" {
 		t.Fatalf("explicit zero report = %#v, want PRICED amount 0", free)
+	}
+	if free.KnownCost == nil || *free.KnownCost != "0" || free.TokenTotals.TotalTokens == nil || *free.TokenTotals.TotalTokens != 0 {
+		t.Fatalf("explicit zero facts = %#v, want known zero and total zero", free)
+	}
+}
+
+func TestQueryUnpricedFactsDeduplicateDispatchesAndRetainUnknownIdentity(t *testing.T) {
+	t.Parallel()
+
+	settings := &settingsReader{document: operatorsettings.Document{PriceTable: operatorsettings.PriceTable{
+		Models: []operatorsettings.PriceTableModel{{Provider: "codex", Model: "known", InputPerMillionTokens: "1", OutputPerMillionTokens: "1"}},
+	}}}
+	rows := []factoryvisualization.RuntimeMetricsUsageRow{
+		usageRow("session", "work", "dispatch-a", "worker-a", "codex", "unknown", 2, 3, nil, nil),
+		usageRow("session", "work", "dispatch-a", "worker-a", "CODEX", "unknown", 4, 5, nil, nil),
+		usageRow("session", "work", "dispatch-b", "worker-b", "", "", 6, 7, nil, nil),
+	}
+	query, err := New(settings, metricsQueryStub(rows, nil), logging.NoopLogger{})
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+
+	report, err := query.Query(context.Background(), validRequest())
+	if err != nil {
+		t.Fatalf("Query() error = %v", err)
+	}
+	if report.Status != costs.StatusUnpriced || report.KnownCost != nil {
+		t.Fatalf("report = %#v, want wholly unpriced with no known cost", report)
+	}
+	assertTokenTotals(t, report.TokenTotals, 12, 15, 27)
+	if report.TokenTotals.CachedInputTokens != nil || report.TokenTotals.ReasoningOutputTokens != nil {
+		t.Fatalf("absent subclass totals = %#v, want nil cached/reasoning facts", report.TokenTotals)
+	}
+	if report.UnpricedDispatchCount != 2 {
+		t.Fatalf("unpriced dispatch count = %d, want two distinct dispatches", report.UnpricedDispatchCount)
+	}
+	if len(report.UnpricedPairs) != 2 {
+		t.Fatalf("unpriced pairs = %#v, want canonical unknown and missing pairs", report.UnpricedPairs)
+	}
+	if report.UnpricedPairs[0].Provider != nil || report.UnpricedPairs[0].Model != nil || report.UnpricedPairs[0].DispatchCount != 1 {
+		t.Fatalf("missing identity pair = %#v, want explicit nil identities", report.UnpricedPairs[0])
+	}
+	if report.UnpricedPairs[1].Provider == nil || *report.UnpricedPairs[1].Provider != "CODEX" || report.UnpricedPairs[1].Model == nil || *report.UnpricedPairs[1].Model != "unknown" || report.UnpricedPairs[1].DispatchCount != 1 {
+		t.Fatalf("canonical pair = %#v, want CODEX/unknown with one dispatch", report.UnpricedPairs[1])
 	}
 }
 
@@ -426,5 +493,49 @@ func assertLine(t *testing.T, lines []costs.LineItem, model string, status costs
 
 func int64Ptr(value int64) *int64    { return &value }
 func stringPtr(value string) *string { return &value }
+
+type unpricedPairWant struct {
+	model         *string
+	dispatchCount int
+}
+
+func assertTokenTotals(t *testing.T, totals costs.TokenTotals, input, output, total int64) {
+	t.Helper()
+	values := []struct {
+		name string
+		got  *int64
+		want int64
+	}{
+		{"input", totals.InputTokens, input},
+		{"output", totals.OutputTokens, output},
+		{"total", totals.TotalTokens, total},
+	}
+	for _, value := range values {
+		if value.got == nil || *value.got != value.want {
+			t.Fatalf("%s token total = %v, want %d", value.name, value.got, value.want)
+		}
+	}
+}
+
+func assertUnpricedPairs(t *testing.T, got []costs.UnpricedPair, want []unpricedPairWant) {
+	t.Helper()
+	if len(got) != len(want) {
+		t.Fatalf("unpriced pairs = %#v, want %d pairs", got, len(want))
+	}
+	for index, expected := range want {
+		if got[index].Model == nil && expected.model != nil || got[index].Model != nil && expected.model == nil {
+			t.Fatalf("unpriced pair %d model = %#v, want %#v", index, got[index].Model, expected.model)
+		}
+		if got[index].Model != nil && *got[index].Model != *expected.model {
+			t.Fatalf("unpriced pair %d model = %q, want %q", index, *got[index].Model, *expected.model)
+		}
+		if got[index].Provider == nil || *got[index].Provider != "CODEX" {
+			t.Fatalf("unpriced pair %d provider = %#v, want CODEX", index, got[index].Provider)
+		}
+		if got[index].DispatchCount != expected.dispatchCount {
+			t.Fatalf("unpriced pair %d dispatch count = %d, want %d", index, got[index].DispatchCount, expected.dispatchCount)
+		}
+	}
+}
 
 var _ logging.Logger = (*captureLogger)(nil)

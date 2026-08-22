@@ -23,16 +23,26 @@ type normalizedPrice struct {
 type priceIndex map[string]normalizedPrice
 
 type summary struct {
-	amount   *big.Rat
-	coverage costs.Coverage
-	tokens   tokenAccumulator
-	pairs    map[string]*pairCoverage
+	amount                 *big.Rat
+	coverage               costs.Coverage
+	tokens                 tokenAccumulator
+	pairs                  map[string]*pairCoverage
+	unpricedDispatches     map[string]struct{}
+	unpricedDispatchesNoID int
+	unpricedPairs          map[string]*unpricedPairCoverage
 }
 
 type pairCoverage struct {
 	provider string
 	model    string
 	unpriced bool
+}
+
+type unpricedPairCoverage struct {
+	provider            *string
+	model               *string
+	dispatches          map[string]struct{}
+	dispatchesWithoutID int
 }
 
 type tokenAccumulator struct {
@@ -55,6 +65,7 @@ func calculateReport(
 	report := costs.Report{
 		Scope:           scope,
 		Currency:        table.Currency,
+		UnpricedPairs:   []costs.UnpricedPair{},
 		LineItems:       []costs.LineItem{},
 		WorkItems:       []costs.Rollup{},
 		WorkerSessions:  []costs.Rollup{},
@@ -101,19 +112,23 @@ func calculateReport(
 	if err != nil {
 		return costs.Report{}, err
 	}
-	report.WorkItems, err = rollups(work)
+	report.KnownCost = report.PricedSubtotal
+	report.TokenTotals = overall.tokens.totals()
+	report.UnpricedDispatchCount = overall.unpricedDispatchCount()
+	report.UnpricedPairs = overall.unpricedPairsValue()
+	report.WorkItems, err = rollups(work, table.Currency)
 	if err != nil {
 		return costs.Report{}, err
 	}
-	report.WorkerSessions, err = rollups(workerSessions)
+	report.WorkerSessions, err = rollups(workerSessions, table.Currency)
 	if err != nil {
 		return costs.Report{}, err
 	}
-	report.FactorySessions, err = rollups(factorySessions)
+	report.FactorySessions, err = rollups(factorySessions, table.Currency)
 	if err != nil {
 		return costs.Report{}, err
 	}
-	report.ProviderModels, err = providerRollups(providerModels)
+	report.ProviderModels, err = providerRollups(providerModels, table.Currency)
 	if err != nil {
 		return costs.Report{}, err
 	}
@@ -253,7 +268,11 @@ func exactAmountString(amount *big.Rat) (*string, error) {
 }
 
 func newSummary() *summary {
-	return &summary{pairs: make(map[string]*pairCoverage)}
+	return &summary{
+		pairs:              make(map[string]*pairCoverage),
+		unpricedDispatches: make(map[string]struct{}),
+		unpricedPairs:      make(map[string]*unpricedPairCoverage),
+	}
 }
 
 func (target *summary) add(line costs.LineItem, amount *big.Rat, priced bool) {
@@ -264,6 +283,14 @@ func (target *summary) add(line costs.LineItem, amount *big.Rat, priced bool) {
 		target.coverage.UnpricedRows++
 	}
 	target.tokens.add(line.TokenCounts)
+	if !priced {
+		if dispatchID := strings.TrimSpace(line.DispatchID); dispatchID == "" {
+			target.unpricedDispatchesNoID++
+		} else {
+			target.unpricedDispatches[dispatchID] = struct{}{}
+		}
+		target.addUnpricedPair(line)
+	}
 	provider, model := canonicalProvider(line.Provider), strings.TrimSpace(line.Model)
 	if provider == "" || model == "" {
 		return
@@ -287,6 +314,8 @@ func (target *summary) add(line costs.LineItem, amount *big.Rat, priced bool) {
 }
 
 func (target *summary) result() (costs.Status, *string, costs.Coverage, error) {
+	target.coverage.PricedProviderModels = 0
+	target.coverage.UnpricedProviderModels = 0
 	for _, pair := range target.pairs {
 		if !pair.unpriced {
 			target.coverage.PricedProviderModels++
@@ -314,17 +343,68 @@ func (target *summary) result() (costs.Status, *string, costs.Coverage, error) {
 	return status, amount, target.coverage, nil
 }
 
+func (target *summary) addUnpricedPair(line costs.LineItem) {
+	provider := canonicalProvider(line.Provider)
+	model := strings.TrimSpace(line.Model)
+	key := provider + "\x00" + model
+	pair := target.unpricedPairs[key]
+	if pair == nil {
+		pair = &unpricedPairCoverage{
+			provider:   optionalIdentity(provider),
+			model:      optionalIdentity(model),
+			dispatches: make(map[string]struct{}),
+		}
+		target.unpricedPairs[key] = pair
+	}
+	if dispatchID := strings.TrimSpace(line.DispatchID); dispatchID == "" {
+		pair.dispatchesWithoutID++
+	} else {
+		pair.dispatches[dispatchID] = struct{}{}
+	}
+}
+
+func (target *summary) unpricedDispatchCount() int {
+	return len(target.unpricedDispatches) + target.unpricedDispatchesNoID
+}
+
+func (target *summary) unpricedPairsValue() []costs.UnpricedPair {
+	keys := make([]string, 0, len(target.unpricedPairs))
+	for key := range target.unpricedPairs {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	result := make([]costs.UnpricedPair, 0, len(keys))
+	for _, key := range keys {
+		pair := target.unpricedPairs[key]
+		result = append(result, costs.UnpricedPair{
+			Provider:      cloneStringPointer(pair.provider),
+			Model:         cloneStringPointer(pair.model),
+			DispatchCount: len(pair.dispatches) + pair.dispatchesWithoutID,
+		})
+	}
+	return result
+}
+
 func (target *summary) rollup(key string) (costs.Rollup, error) {
+	return target.rollupWithCurrency(key, "")
+}
+
+func (target *summary) rollupWithCurrency(key, currency string) (costs.Rollup, error) {
 	status, amount, coverage, err := target.result()
 	if err != nil {
 		return costs.Rollup{}, err
 	}
 	return costs.Rollup{
-		Key:            key,
-		TokenCounts:    target.tokens.value(),
-		Status:         status,
-		PricedSubtotal: amount,
-		Coverage:       coverage,
+		Key:                   key,
+		TokenCounts:           target.tokens.value(),
+		Currency:              currency,
+		Status:                status,
+		KnownCost:             amount,
+		PricedSubtotal:        amount,
+		TokenTotals:           target.tokens.totals(),
+		UnpricedDispatchCount: target.unpricedDispatchCount(),
+		UnpricedPairs:         target.unpricedPairsValue(),
+		Coverage:              coverage,
 	}, nil
 }
 
@@ -341,7 +421,7 @@ func addDimension(groups map[string]*summary, key string, line costs.LineItem, a
 	target.add(line, amount, priced)
 }
 
-func rollups(groups map[string]*summary) ([]costs.Rollup, error) {
+func rollups(groups map[string]*summary, currency string) ([]costs.Rollup, error) {
 	keys := make([]string, 0, len(groups))
 	for key := range groups {
 		keys = append(keys, key)
@@ -349,7 +429,7 @@ func rollups(groups map[string]*summary) ([]costs.Rollup, error) {
 	sort.Strings(keys)
 	result := make([]costs.Rollup, 0, len(keys))
 	for _, key := range keys {
-		rollup, err := groups[key].rollup(key)
+		rollup, err := groups[key].rollupWithCurrency(key, currency)
 		if err != nil {
 			return nil, err
 		}
@@ -358,7 +438,7 @@ func rollups(groups map[string]*summary) ([]costs.Rollup, error) {
 	return result, nil
 }
 
-func providerRollups(groups map[string]*summary) ([]costs.ProviderModelRollup, error) {
+func providerRollups(groups map[string]*summary, currency string) ([]costs.ProviderModelRollup, error) {
 	keys := make([]string, 0, len(groups))
 	for key := range groups {
 		keys = append(keys, key)
@@ -368,7 +448,7 @@ func providerRollups(groups map[string]*summary) ([]costs.ProviderModelRollup, e
 	for _, key := range keys {
 		group := groups[key]
 		pair := group.pairs[key]
-		rollup, err := group.rollup(publicProviderModelKey(pair.provider, pair.model))
+		rollup, err := group.rollupWithCurrency(publicProviderModelKey(pair.provider, pair.model), currency)
 		if err != nil {
 			return nil, err
 		}
@@ -393,6 +473,23 @@ func (tokens tokenAccumulator) value() costs.TokenCounts {
 	}
 }
 
+func (tokens tokenAccumulator) totals() costs.TokenTotals {
+	input := cloneInt64(tokens.input)
+	output := cloneInt64(tokens.output)
+	var total *int64
+	if input != nil && output != nil {
+		value := *input + *output
+		total = &value
+	}
+	return costs.TokenTotals{
+		TotalTokens:           total,
+		InputTokens:           input,
+		OutputTokens:          output,
+		CachedInputTokens:     cloneInt64(tokens.cached),
+		ReasoningOutputTokens: cloneInt64(tokens.reasoning),
+	}
+}
+
 func addToken(current, value *int64) *int64 {
 	if value == nil {
 		return current
@@ -406,6 +503,22 @@ func addToken(current, value *int64) *int64 {
 }
 
 func cloneInt64(value *int64) *int64 {
+	if value == nil {
+		return nil
+	}
+	cloned := *value
+	return &cloned
+}
+
+func optionalIdentity(value string) *string {
+	if value == "" {
+		return nil
+	}
+	cloned := value
+	return &cloned
+}
+
+func cloneStringPointer(value *string) *string {
 	if value == nil {
 		return nil
 	}

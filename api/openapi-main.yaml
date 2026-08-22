@@ -2588,6 +2588,10 @@ components:
       $ref: './components/schemas/api/CostsScope.yaml'
     CostsCoverage:
       $ref: './components/schemas/api/CostsCoverage.yaml'
+    CostsTokenTotals:
+      $ref: './components/schemas/api/CostsTokenTotals.yaml'
+    CostsUnpricedPair:
+      $ref: './components/schemas/api/CostsUnpricedPair.yaml'
     CostsLineItem:
       $ref: './components/schemas/api/CostsLineItem.yaml'
     CostsRollup:
