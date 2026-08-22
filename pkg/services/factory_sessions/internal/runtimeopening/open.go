@@ -277,14 +277,14 @@ func openRuntime(
 		resumeInput = &input
 	}
 	var restoredWorldState *factorydefinitions.FactoryWorldState
+	var boardHistoryOpening currentBoardHistoryOpening
 	// A portable resume input owns its selected-history reconstruction. Only a
 	// direct live opening should restore the current board recording; applying
 	// that restart-only probe to an explicit resume artifact would reject valid
 	// replay fixtures that intentionally have no current-board recording.
 	if load.ReplayArtifact == nil && resumeInput == nil {
-		allowMissingBoardHistory := false
 		if strings.TrimSpace(configured.Recordings.RecordPath) != "" {
-			allowMissingBoardHistory, err = currentBoardHistoryMayBeUninitialized(
+			boardHistoryOpening, err = inspectCurrentBoardHistory(
 				ctx,
 				durableExecution.Service,
 				sessionID,
@@ -297,7 +297,7 @@ func openRuntime(
 			recordingsService,
 			configured.Recordings.RecordPath,
 			sessionID,
-			allowMissingBoardHistory,
+			boardHistoryOpening.allowMissingHistory,
 		)
 		if err != nil {
 			return runtimeProducts{}, err
@@ -360,6 +360,19 @@ func openRuntime(
 		)
 	if err != nil {
 		return runtimeProducts{}, err
+	}
+	if boardHistoryOpening.hasDurableState && restoredWorldState == nil {
+		if runtimeLogger := startupRuntime.RuntimeLogger(); runtimeLogger != nil {
+			runtimeLogger.Warn(
+				"current Factory Session board recording is absent after durable state was preserved; board contents were lost, an empty board was initialized, and preserved durable state was not deleted",
+				zap.String("session_id", sessionID),
+				zap.String(
+					"recording_path",
+					factoryruntime.SessionScopedRecordPath(configured.Recordings.RecordPath, sessionID),
+				),
+				zap.String("recovery", "missing_board_recording_after_durable_state"),
+			)
+		}
 	}
 	cleanup.Add(func() error {
 		var finalizationErr error
@@ -789,27 +802,36 @@ type durableSessionStateReader interface {
 	HasDurableState(context.Context, string) (bool, error)
 }
 
-// currentBoardHistoryMayBeUninitialized makes the missing-history escape hatch
-// explicit. A missing recording is only an acceptable first open when this
-// factory has no persisted durable session state; once durable state exists, a
-// missing board recording is a data-loss condition and must fail closed.
-func currentBoardHistoryMayBeUninitialized(
+type currentBoardHistoryOpening struct {
+	allowMissingHistory bool
+	hasDurableState     bool
+}
+
+// inspectCurrentBoardHistory makes the missing-history escape hatch explicit.
+// A successful persistence probe is required before a missing board recording
+// can be treated as either a fresh opening or an interrupted write. The latter
+// is observable through hasDurableState so the caller can warn that the board
+// was lost while preserving the durable snapshot.
+func inspectCurrentBoardHistory(
 	ctx context.Context,
 	service any,
 	sessionID string,
-) (bool, error) {
+) (currentBoardHistoryOpening, error) {
 	if service == nil {
-		return false, fmt.Errorf("inspect current Factory Session board history: durable session state probe is unavailable")
+		return currentBoardHistoryOpening{}, fmt.Errorf("inspect current Factory Session board history: durable session state probe is unavailable")
 	}
 	probe, ok := service.(durableSessionStateReader)
 	if !ok {
-		return false, fmt.Errorf("inspect current Factory Session board history: durable session state probe is unavailable")
+		return currentBoardHistoryOpening{}, fmt.Errorf("inspect current Factory Session board history: durable session state probe is unavailable")
 	}
 	hasDurableState, err := probe.HasDurableState(ctx, sessionID)
 	if err != nil {
-		return false, fmt.Errorf("inspect current Factory Session board history initialization: %w", err)
+		return currentBoardHistoryOpening{}, fmt.Errorf("inspect current Factory Session board history initialization: %w", err)
 	}
-	return !hasDurableState, nil
+	return currentBoardHistoryOpening{
+		allowMissingHistory: true,
+		hasDurableState:     hasDurableState,
+	}, nil
 }
 
 // restoreCurrentBoardState loads a detached Factory world state through the

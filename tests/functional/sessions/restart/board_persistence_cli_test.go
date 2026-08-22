@@ -22,6 +22,7 @@ import (
 
 	"github.com/portpowered/infinite-you/internal/builtcliacceptance"
 	"github.com/portpowered/infinite-you/internal/testutil"
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -82,6 +83,79 @@ func TestBoardPersistenceCLIRestartRoundTrip(t *testing.T) {
 	runBoardPersistenceInitialGeneration(t, scenario)
 	runBoardPersistenceRecoveryGeneration(t, scenario)
 	runBoardPersistenceSecondRestart(t, scenario)
+}
+
+// TestBoardPersistenceCLIRestartAfterHardKillWithMissingBoardRecording proves
+// that a valid durable snapshot survives an ungraceful daemon stop even when
+// the current-board recording is absent at the next opening boundary. The
+// process boundary is intentional: BuildProcess covers composition, while
+// only a real child process can prove kill-and-reopen behavior.
+func TestBoardPersistenceCLIRestartAfterHardKillWithMissingBoardRecording(t *testing.T) {
+	cliContext, cancel := context.WithTimeout(t.Context(), 45*time.Second)
+	defer cancel()
+	scenario := newBoardPersistenceScenario(t, cliContext)
+	first := startBoardPersistenceDaemon(t, scenario.binaryPath, scenario.factoryDir, scenario.homeDir, scenario.recordPath, scenario.releasePath)
+	batchJSON := boardPersistenceBatchJSON(t, boardPersistenceRequestID, []boardPersistenceBatchWork{
+		{Name: "board-init", WorkID: boardPersistenceInitialWorkID, State: "init", TraceID: "trace-board-init", Content: "durable init content"},
+		{Name: "board-processing", WorkID: boardPersistenceProcessingWorkID, State: "processing", TraceID: "trace-board-processing", Content: "durable processing content"},
+		{Name: "board-awaiting-ci", WorkID: boardPersistenceAwaitingWorkID, State: "awaiting-ci", TraceID: "trace-board-awaiting-ci", Content: "durable awaiting-ci content"},
+	})
+	submitBatchThroughCLI(t, cliContext, first, scenario.binaryPath, scenario.factoryDir, scenario.homeDir, batchJSON, boardPersistenceRequestID, 3)
+	waitForBoardStates(t, first.baseURL, map[string]string{
+		boardPersistenceInitialWorkID:    "init",
+		boardPersistenceProcessingWorkID: "processing",
+		boardPersistenceAwaitingWorkID:   "awaiting-ci",
+	}, 30*time.Second)
+	if err := os.WriteFile(scenario.releasePath, []byte("release\n"), 0o600); err != nil {
+		t.Fatalf("release worker helper before durable snapshot probe: %v", err)
+	}
+	waitForBoardStates(t, first.baseURL, map[string]string{
+		boardPersistenceInitialWorkID:    "init",
+		boardPersistenceProcessingWorkID: "complete",
+		boardPersistenceAwaitingWorkID:   "awaiting-ci",
+	}, 30*time.Second)
+
+	snapshotPath := filepath.Join(
+		scenario.factoryDir,
+		".you-agent-factory",
+		"durable-sessions",
+		factorysessions.DefaultSessionID+".json",
+	)
+	if strings.TrimSpace(first.sessionID) == "" {
+		t.Fatal("hard-kill scenario session ID is empty")
+	}
+	snapshotBefore := waitForBoardPersistenceSnapshot(t, snapshotPath, factorysessions.DefaultSessionID, 30*time.Second)
+
+	// Remove the selected board artifact immediately before the forceful stop so
+	// the next process observes the same interrupted-write boundary as the
+	// outage: durable state is already present, but board history is absent.
+	if err := os.Remove(scenario.recordPath); err != nil {
+		t.Fatalf("remove current-board recording before hard kill: %v", err)
+	}
+	first.kill(t)
+	if _, err := os.Stat(scenario.recordPath); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("current-board recording after hard kill = %v, want absent", err)
+	}
+
+	second := startBoardPersistenceDaemon(t, scenario.binaryPath, scenario.factoryDir, scenario.homeDir, scenario.recordPath, scenario.releasePath)
+	defer second.kill(t)
+	restarted := waitForBoardStates(t, second.baseURL, map[string]string{}, 30*time.Second)
+	if len(restarted.Results) != 0 {
+		t.Fatalf("restarted board = %#v, want empty after unreconstructable board history", restarted.Results)
+	}
+	snapshotAfter, err := os.ReadFile(snapshotPath)
+	if err != nil {
+		t.Fatalf("read durable snapshot after recovery: %v", err)
+	}
+	if !bytes.Equal(snapshotAfter, snapshotBefore) {
+		t.Fatalf("durable snapshot changed during missing-board recovery")
+	}
+	waitForBoardPersistenceLogMessage(t, second, []string{
+		"board contents were lost",
+		"empty board was initialized",
+		"preserved durable state was not deleted",
+		filepath.Base(scenario.recordPath),
+	}, 30*time.Second)
 }
 
 type boardPersistenceScenario struct {
@@ -356,6 +430,7 @@ type boardPersistenceDaemon struct {
 	sessionID  string
 	factoryDir string
 	homeDir    string
+	logDir     string
 	recordPath string
 	stdout     *bytes.Buffer
 	stderr     *bytes.Buffer
@@ -414,6 +489,7 @@ func startBoardPersistenceDaemon(
 		stdout:     &stdout,
 		stderr:     &stderr,
 		done:       make(chan struct{}),
+		logDir:     filepath.Join(homeDir, ".you-agent-factory", "logs"),
 	}
 	if err := command.Start(); err != nil {
 		t.Fatalf("start isolated you daemon: %v", err)
@@ -430,6 +506,32 @@ func startBoardPersistenceDaemon(
 	daemon.sessionID = waitForBoardSessionID(t, daemon.baseURL, 30*time.Second)
 	t.Logf("isolated daemon live session ID: %q", daemon.sessionID)
 	return daemon
+}
+
+func (daemon *boardPersistenceDaemon) kill(t *testing.T) {
+	t.Helper()
+	if daemon == nil {
+		return
+	}
+	daemon.mu.Lock()
+	if daemon.stopped {
+		daemon.mu.Unlock()
+		return
+	}
+	daemon.mu.Unlock()
+	if err := daemon.cmd.Process.Kill(); err != nil && !errors.Is(err, os.ErrProcessDone) {
+		t.Fatalf("hard-kill isolated you daemon: %v", err)
+	}
+	timer := time.NewTimer(20 * time.Second)
+	defer timer.Stop()
+	select {
+	case <-daemon.done:
+		daemon.mu.Lock()
+		daemon.stopped = true
+		daemon.mu.Unlock()
+	case <-timer.C:
+		t.Fatalf("hard-killed isolated you daemon did not exit within 20s\nstdout=%s\nstderr=%s", daemon.stdout.String(), daemon.stderr.String())
+	}
 }
 
 func (daemon *boardPersistenceDaemon) cleanup() {
@@ -539,6 +641,76 @@ func dumpBoardPersistenceDiagnostics(t *testing.T, daemon *boardPersistenceDaemo
 		t.Logf("daemon runtime log tail %q (%d bytes): %s", path, len(contents), contents)
 		return nil
 	})
+}
+
+func waitForBoardPersistenceSnapshot(t *testing.T, path, wantSessionID string, timeout time.Duration) []byte {
+	t.Helper()
+	deadline := time.NewTimer(timeout)
+	defer deadline.Stop()
+	ticker := time.NewTicker(25 * time.Millisecond)
+	defer ticker.Stop()
+	var lastErr error
+	for {
+		contents, err := os.ReadFile(path)
+		if err == nil && len(contents) > 0 {
+			var snapshot struct {
+				Session struct {
+					SessionID string `json:"sessionId"`
+				} `json:"session"`
+			}
+			if err := json.Unmarshal(contents, &snapshot); err == nil && snapshot.Session.SessionID == wantSessionID {
+				return contents
+			}
+			lastErr = fmt.Errorf("durable snapshot was empty or session identity was not %q", wantSessionID)
+		} else {
+			lastErr = err
+		}
+		select {
+		case <-ticker.C:
+		case <-deadline.C:
+			t.Fatalf("timed out waiting for valid durable snapshot %q: %v", path, lastErr)
+		}
+	}
+}
+
+func waitForBoardPersistenceLogMessage(
+	t *testing.T,
+	daemon *boardPersistenceDaemon,
+	fragments []string,
+	timeout time.Duration,
+) {
+	t.Helper()
+	deadline := time.NewTimer(timeout)
+	defer deadline.Stop()
+	ticker := time.NewTicker(25 * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		found := false
+		_ = filepath.WalkDir(daemon.logDir, func(path string, entry os.DirEntry, err error) error {
+			if err != nil || entry.IsDir() || !strings.HasSuffix(strings.ToLower(entry.Name()), ".log") {
+				return nil
+			}
+			contents, readErr := os.ReadFile(path)
+			if readErr != nil {
+				return nil
+			}
+			for _, fragment := range fragments {
+				if !strings.Contains(string(contents), fragment) {
+					return nil
+				}
+			}
+			found = true
+			return filepath.SkipAll
+		})
+		if found {
+			return
+		}
+		select {
+		case <-ticker.C:
+		case <-deadline.C:
+			t.Fatalf("timed out waiting for recovery warning in runtime logs under %q", daemon.logDir)
+		}
+	}
 }
 
 func reserveBoardPersistenceAddress(t *testing.T) string {
