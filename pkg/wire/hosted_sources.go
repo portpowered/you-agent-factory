@@ -40,12 +40,17 @@ func provideAutomationHostedSourceInputs(
 	if secretResolver == nil {
 		secretResolver = automationswire.NewHostedLinearSecretResolver(os.Getenv, os.ReadFile)
 	}
+	cursorFileSystem := edges.AutomationsCursorFileSystem
+	if cursorFileSystem == nil {
+		cursorFileSystem = platformfilesystem.Local{}
+	}
 	return automationswire.HostedSourceInputs{
-		Clock:           clock,
-		HTTPClient:      httpClient,
-		SecretResolver:  secretResolver,
-		LinearEndpoint:  edges.HostedLinearEndpoint,
-		CheckpointStore: checkpointStore,
+		Clock:            clock,
+		HTTPClient:       httpClient,
+		SecretResolver:   secretResolver,
+		LinearEndpoint:   edges.HostedLinearEndpoint,
+		CheckpointStore:  checkpointStore,
+		CursorFileSystem: cursorFileSystem,
 	}, nil
 }
 

@@ -13,6 +13,8 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
+	"go.uber.org/zap/zaptest/observer"
 )
 
 func TestRuntimeLifecycle_IsolatesOwnersAndClassifiesDuplicates(t *testing.T) {
@@ -131,6 +133,117 @@ func TestRuntimeLifecycle_StartsAndStopsSchedulerOwnership(t *testing.T) {
 	if _, err := service.DeactivateRuntime(context.Background(), automations.RuntimeDeactivationRequest{RuntimeID: request.RuntimeID}); err != nil {
 		t.Fatalf("DeactivateRuntime() error = %v", err)
 	}
+}
+
+func TestRuntimeLifecycle_ReportsFilesystemWatcherTermination(t *testing.T) {
+	watchErr := errors.New("watch sidecar failed with distinctive detail")
+	tests := []struct {
+		name       string
+		watch      func(context.Context) error
+		message    string
+		level      zapcore.Level
+		reason     string
+		errorValue string
+	}{
+		{
+			name:       "error",
+			watch:      func(context.Context) error { return watchErr },
+			message:    "filesystem watcher stopped with error",
+			level:      zapcore.ErrorLevel,
+			errorValue: watchErr.Error(),
+		},
+		{
+			name:    "event stream closure",
+			watch:   func(context.Context) error { return nil },
+			message: "filesystem watcher stopped unexpectedly",
+			level:   zapcore.WarnLevel,
+			reason:  "event stream closed",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			logCore, observedLogs := observer.New(zap.InfoLevel)
+			instance, cancel := runtimeInstanceForWatcherTest(zap.New(logCore), test.watch)
+			defer cancel()
+
+			if err := instance.start(context.Background()); err != nil {
+				t.Fatalf("runtimeInstance.start() error = %v", err)
+			}
+			instance.sidecars.Wait()
+
+			entries := observedLogs.FilterMessage(test.message).All()
+			if len(entries) != 1 {
+				t.Fatalf("%s logs = %d, want 1", test.message, len(entries))
+			}
+			entry := entries[0]
+			if entry.Level != test.level {
+				t.Fatalf("termination log level = %v, want %v", entry.Level, test.level)
+			}
+			contextMap := entry.ContextMap()
+			if got := contextMap["runtime_id"]; got != "runtime-watcher-diagnostic" {
+				t.Fatalf("runtime_id = %#v, want runtime-watcher-diagnostic", got)
+			}
+			if got := contextMap["watch_root"]; got != "/factories/example/inputs" {
+				t.Fatalf("watch_root = %#v, want /factories/example/inputs", got)
+			}
+			if test.reason != "" && contextMap["reason"] != test.reason {
+				t.Fatalf("termination reason = %#v, want %s", contextMap["reason"], test.reason)
+			}
+			if test.errorValue != "" && contextMap["error"] != test.errorValue {
+				t.Fatalf("termination error = %#v, want %s", contextMap["error"], test.errorValue)
+			}
+		})
+	}
+}
+
+func TestRuntimeLifecycle_DoesNotReportFilesystemWatcherCancellation(t *testing.T) {
+	logCore, observedLogs := observer.New(zap.InfoLevel)
+	instance, cancel := runtimeInstanceForWatcherTest(zap.New(logCore), func(ctx context.Context) error {
+		<-ctx.Done()
+		return ctx.Err()
+	})
+
+	if err := instance.start(context.Background()); err != nil {
+		t.Fatalf("runtimeInstance.start() error = %v", err)
+	}
+	cancel()
+	instance.sidecars.Wait()
+
+	if got := observedLogs.FilterMessage("filesystem watcher stopped with error").Len(); got != 0 {
+		t.Fatalf("watcher error logs after context cancellation = %d, want 0", got)
+	}
+	if got := observedLogs.FilterMessage("filesystem watcher stopped unexpectedly").Len(); got != 0 {
+		t.Fatalf("watcher terminal logs after context cancellation = %d, want 0", got)
+	}
+}
+
+type runtimeLifecycleWatcher struct {
+	watch func(context.Context) error
+}
+
+func (w runtimeLifecycleWatcher) PreseedInputs(context.Context) error { return nil }
+
+func (w runtimeLifecycleWatcher) Watch(ctx context.Context) error {
+	if w.watch == nil {
+		return nil
+	}
+	return w.watch(ctx)
+}
+
+func runtimeInstanceForWatcherTest(
+	logger *zap.Logger,
+	watch func(context.Context) error,
+) (*runtimeInstance, context.CancelFunc) {
+	ctx, cancel := context.WithCancel(context.Background())
+	return &runtimeInstance{
+		runtimeID:   "runtime-watcher-diagnostic",
+		watcherRoot: "/factories/example/inputs",
+		owner:       New(logger, nil, nil, "", "", nil, nil, nil),
+		watcher:     runtimeLifecycleWatcher{watch: watch},
+		ctx:         ctx,
+		cancel:      cancel,
+	}, cancel
 }
 
 func TestRuntimeLifecycle_SnapshotConfigAndInputHelpers(t *testing.T) {

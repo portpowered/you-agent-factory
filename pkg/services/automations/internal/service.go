@@ -10,6 +10,7 @@ package internal
 import (
 	"context"
 	"errors"
+	"strings"
 	"sync"
 
 	"github.com/jonboulle/clockwork"
@@ -44,6 +45,7 @@ type Service struct {
 	hostedPollers      automations.HostedPollers
 	resolveTemplates   workers.TemplateFieldResolver
 	executionPolicy    factorydefinitions.WorkstationExecutionPolicyService
+	cursorFileSystem   scriptpollerswire.CursorPersistenceFileSystem
 	reconciler         reconciliation.Service
 	scriptPollers      scriptpollers.Service
 	cron               cron.Service
@@ -67,6 +69,57 @@ func New(
 	resolveTemplates workers.TemplateFieldResolver,
 	executionPolicy factorydefinitions.WorkstationExecutionPolicyService,
 ) *Service {
+	return newService(
+		logger,
+		clock,
+		commandRunner,
+		workflowID,
+		defaultFactoryDir,
+		hostedPollers,
+		resolveTemplates,
+		executionPolicy,
+		nil,
+	)
+}
+
+// NewWithCursorFileSystem constructs an owner with the production cursor
+// persistence effect. Direct owner-local callers can use New and retain the
+// in-memory recorder.
+func NewWithCursorFileSystem(
+	logger *zap.Logger,
+	clock Clock,
+	commandRunner workers.CommandRunner,
+	workflowID string,
+	defaultFactoryDir string,
+	hostedPollers automations.HostedPollers,
+	resolveTemplates workers.TemplateFieldResolver,
+	executionPolicy factorydefinitions.WorkstationExecutionPolicyService,
+	cursorFileSystem scriptpollerswire.CursorPersistenceFileSystem,
+) *Service {
+	return newService(
+		logger,
+		clock,
+		commandRunner,
+		workflowID,
+		defaultFactoryDir,
+		hostedPollers,
+		resolveTemplates,
+		executionPolicy,
+		cursorFileSystem,
+	)
+}
+
+func newService(
+	logger *zap.Logger,
+	clock Clock,
+	commandRunner workers.CommandRunner,
+	workflowID string,
+	defaultFactoryDir string,
+	hostedPollers automations.HostedPollers,
+	resolveTemplates workers.TemplateFieldResolver,
+	executionPolicy factorydefinitions.WorkstationExecutionPolicyService,
+	cursorFileSystem scriptpollerswire.CursorPersistenceFileSystem,
+) *Service {
 	service := &Service{
 		loggerValue:       logger,
 		clock:             clock,
@@ -76,6 +129,7 @@ func New(
 		hostedPollers:     hostedPollers,
 		resolveTemplates:  resolveTemplates,
 		executionPolicy:   executionPolicy,
+		cursorFileSystem:  cursorFileSystem,
 		schedulerSources:  make(map[automations.SourceIdentity]*schedulerSource),
 		runtimes:          make(map[string]*runtimeInstance),
 		runtimeActivating: make(map[string]struct{}),
@@ -88,13 +142,22 @@ func New(
 }
 
 func (s *Service) newScriptPollers() scriptpollers.Service {
+	cursorRecorder := scriptpollers.NewMemoryCursorRecorder()
+	// The process-scoped root has no factory-local base until a runtime is
+	// activated. Keep that inert owner memory-backed rather than allowing an
+	// empty base to resolve durable state relative to the daemon CWD.
+	if strings.TrimSpace(s.defaultFactoryDir) != "" && s.cursorFileSystem != nil {
+		if durable, err := scriptpollerswire.NewDurableCursorRecorder(s.defaultFactoryDir, s.cursorFileSystem); err == nil {
+			cursorRecorder = durable
+		}
+	}
 	return scriptpollerswire.NewService(scriptpollers.Dependencies{
 		Logger:           s.pollerLogger,
 		Clock:            s.supervisorClock,
 		CommandRunner:    s.commandRunner,
 		ResolveTemplates: s.resolveTemplates,
 		ExecutionPolicy:  s.executionPolicy,
-		CursorRecorder:   scriptpollers.NewMemoryCursorRecorder(),
+		CursorRecorder:   cursorRecorder,
 	})
 }
 
@@ -177,6 +240,9 @@ func (s *Service) GetCursor(
 	request automations.GetCursorRequest,
 ) (automations.GetCursorResult, error) {
 	if s != nil && s.scriptPollers != nil && scriptpollers.IsScriptPollerInstanceID(request.InstanceID) {
+		if result, handled, err := s.getCursorFromActiveRuntime(ctx, request); handled {
+			return result, err
+		}
 		return s.scriptPollers.GetCursor(ctx, request)
 	}
 	return s.reconciler.GetCursor(ctx, request)

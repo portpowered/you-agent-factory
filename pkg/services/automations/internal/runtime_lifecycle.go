@@ -24,6 +24,7 @@ type runtimeInstance struct {
 	owner            *Service
 	runtimeConfig    *runtimeSnapshotConfig
 	watcher          automations.FilesystemWatcher
+	watcherRoot      string
 	submit           automations.WorkRequestSubmitter
 	startSchedulers  bool
 	ctx              context.Context
@@ -163,6 +164,36 @@ func (s *Service) ActivateRuntime(
 		RuntimeID: normalized.RuntimeID,
 		State:     automations.RuntimeLifecycleActivated,
 	}, nil
+}
+
+func (s *Service) getCursorFromActiveRuntime(
+	ctx context.Context,
+	request automations.GetCursorRequest,
+) (automations.GetCursorResult, bool, error) {
+	if s == nil {
+		return automations.GetCursorResult{}, false, nil
+	}
+	s.runtimeMu.Lock()
+	instances := make([]*runtimeInstance, 0, len(s.runtimes))
+	for _, instance := range s.runtimes {
+		instances = append(instances, instance)
+	}
+	s.runtimeMu.Unlock()
+
+	for _, instance := range instances {
+		if instance == nil || instance.owner == nil || instance.owner == s {
+			continue
+		}
+		result, err := instance.owner.GetCursor(ctx, request)
+		if err == nil {
+			return result, true, nil
+		}
+		if errors.Is(err, automations.ErrNotFound) {
+			continue
+		}
+		return automations.GetCursorResult{}, true, err
+	}
+	return automations.GetCursorResult{}, false, nil
 }
 
 func (s *Service) StartRuntime(ctx context.Context, runtimeID string) error {
@@ -322,9 +353,9 @@ func (s *Service) buildRuntimeInstance(
 	if strings.TrimSpace(workflowID) == "" {
 		workflowID = s.workflowID
 	}
-	owner := New(
+	owner := NewWithCursorFileSystem(
 		s.logger(), s.clock, s.commandRunner(), workflowID, request.Snapshot.FactoryDir,
-		s.hostedPollers, s.resolveTemplates, s.executionPolicy,
+		s.hostedPollers, s.resolveTemplates, s.executionPolicy, s.cursorFileSystem,
 	)
 	if owner == nil {
 		return nil, runtimeLifecycleError(
@@ -347,12 +378,14 @@ func (s *Service) buildRuntimeInstance(
 	filesystemInputs := request.Inputs.Filesystem
 	if filesystemInputs.Files != nil && filesystemInputs.WalkDirectory != nil &&
 		filesystemInputs.WorkRequestIDs != nil && request.Inputs.Submitter != nil {
-		instance.watcher = owner.NewFilesystemWatcher(runtimeFilesystemConfig(
+		watcherConfig := runtimeFilesystemConfig(
 			request.Snapshot.FactoryDir,
 			filesystemInputs,
 			s.logger(),
 			request.Inputs.Submitter,
-		))
+		)
+		instance.watcherRoot = watcherConfig.Dir
+		instance.watcher = owner.NewFilesystemWatcher(watcherConfig)
 	}
 	if instance.watcher != nil {
 		if err := instance.watcher.PreseedInputs(ctx); err != nil {
@@ -437,10 +470,36 @@ func (instance *runtimeInstance) start(ctx context.Context) error {
 		instance.sidecars.Add(1)
 		go func() {
 			defer instance.sidecars.Done()
-			_ = instance.watcher.Watch(instance.ctx)
+			instance.observeWatcherTermination(instance.watcher.Watch(instance.ctx))
 		}()
 	}
 	return nil
+}
+
+func (instance *runtimeInstance) observeWatcherTermination(err error) {
+	if instance == nil {
+		return
+	}
+	if instance.ctx != nil && instance.ctx.Err() != nil {
+		return
+	}
+	if errors.Is(err, context.Canceled) {
+		return
+	}
+
+	fields := []zap.Field{
+		zap.String("runtime_id", instance.runtimeID),
+		zap.String("watch_root", instance.watcherRoot),
+	}
+	logger := instance.owner.logger()
+	if err != nil {
+		logger.Error("filesystem watcher stopped with error", append(fields, zap.Error(err))...)
+		return
+	}
+	logger.Warn(
+		"filesystem watcher stopped unexpectedly",
+		append(fields, zap.String("reason", "event stream closed"))...,
+	)
 }
 
 func (instance *runtimeInstance) stop(ctx context.Context) error {

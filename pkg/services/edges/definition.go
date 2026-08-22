@@ -58,7 +58,13 @@ type Edges struct {
 	HostedSecretResolver          automations.HostedLinearSecretResolver
 	HostedLinearCheckpointStore   automations.HostedLinearCheckpointStore
 	HostedClock                   automations.HostedLinearClock
-	FactoryWebhookHTTPClient      interface {
+	AutomationsCursorFileSystem   interface {
+		ReadFile(string) ([]byte, error)
+		MkdirAll(string, fs.FileMode) error
+		WriteFile(string, []byte, fs.FileMode) error
+		Rename(string, string) error
+	}
+	FactoryWebhookHTTPClient interface {
 		Do(*http.Request) (*http.Response, error)
 	}
 	FactoryWebhookClock interface {
@@ -298,6 +304,9 @@ func Merge(defaults Edges, replacements Edges) Edges {
 	}
 	if replacements.HostedClock != nil {
 		defaults.HostedClock = replacements.HostedClock
+	}
+	if replacements.AutomationsCursorFileSystem != nil {
+		defaults.AutomationsCursorFileSystem = replacements.AutomationsCursorFileSystem
 	}
 	if replacements.FactoryWebhookHTTPClient != nil {
 		defaults.FactoryWebhookHTTPClient = replacements.FactoryWebhookHTTPClient

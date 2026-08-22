@@ -62,7 +62,7 @@ func TestProtocolFailuresMapToStableExecuteFailureKinds(t *testing.T) {
 				Model:              "test-model",
 				UserMessage:        "classify ACP failure",
 				WorkingDirectory:   cwd,
-				ProcessEnvironment: append(os.Environ(), protocolHelperEnvironment+"="+test.mode),
+				ProcessEnvironment: protocolHelperProcessEnvironment(test.mode),
 			})
 			var failure providers.ExecuteFailure
 			if !errors.As(err, &failure) {
@@ -107,7 +107,7 @@ func TestPromptCancelledStopReasonMapsToExecuteFailureKindCanceled(t *testing.T)
 		Model:              "test-model",
 		UserMessage:        "cancelled turn",
 		WorkingDirectory:   t.TempDir(),
-		ProcessEnvironment: append(os.Environ(), protocolHelperEnvironment+"=cancelled-turn"),
+		ProcessEnvironment: protocolHelperProcessEnvironment("cancelled-turn"),
 	})
 	var failure providers.ExecuteFailure
 	if !errors.As(err, &failure) {
@@ -139,7 +139,7 @@ func TestACPExecuteObservesProviderSessionWhileAttemptIsLive(t *testing.T) {
 	go func() {
 		result, executeErr := serviceValue.Execute(context.Background(), "cursor-acp", providers.ExecuteRequest{
 			Provider: "cursor-acp", AttemptID: "attempt-live-observation", UserMessage: "observe the provider session",
-			WorkingDirectory: workingDirectory, ProcessEnvironment: append(os.Environ(), protocolHelperEnvironment+"=normal"),
+			WorkingDirectory: workingDirectory, ProcessEnvironment: protocolHelperProcessEnvironment("normal"),
 			SessionObserver: func(reference providers.SessionRef) {
 				observed <- reference
 				<-releaseObservation
@@ -195,7 +195,7 @@ func TestContinuationResumesExactSessionThroughSessionLoad(t *testing.T) {
 		AttemptID:          "attempt-resume",
 		UserMessage:        "continue the prior turn",
 		WorkingDirectory:   t.TempDir(),
-		ProcessEnvironment: append(os.Environ(), protocolHelperEnvironment+"=resume"),
+		ProcessEnvironment: protocolHelperProcessEnvironment("resume"),
 	}, reference)
 	if err != nil {
 		t.Fatalf("Execute() error = %v, want nil - the peer only implements session/load in resume mode", err)
@@ -234,7 +234,7 @@ func TestContinuationSessionLoadFailureDoesNotFallBackToFreshSession(t *testing.
 		AttemptID:          "attempt-resume-not-found",
 		UserMessage:        "continue the prior turn",
 		WorkingDirectory:   t.TempDir(),
-		ProcessEnvironment: append(os.Environ(), protocolHelperEnvironment+"=resume-not-found"),
+		ProcessEnvironment: protocolHelperProcessEnvironment("resume-not-found"),
 	}, reference)
 	var failure providers.ExecuteFailure
 	if !errors.As(err, &failure) {
@@ -290,15 +290,12 @@ func TestInitializeFailureRedactsConfiguredSecretsFromStderr(t *testing.T) {
 	t.Cleanup(func() { _ = serviceValue.Close(context.Background()) })
 
 	_, err = serviceValue.Execute(context.Background(), "cursor-acp", providers.ExecuteRequest{
-		Provider:         "cursor-acp",
-		AttemptID:        "attempt-stderr",
-		UserMessage:      "redact stderr",
-		WorkingDirectory: t.TempDir(),
-		EnvVars:          map[string]string{"ACP_TEST_API_TOKEN": "super-secret-token"},
-		ProcessEnvironment: append(os.Environ(),
-			protocolHelperEnvironment+"=stderr",
-			"ACP_TEST_API_TOKEN=super-secret-token",
-		),
+		Provider:           "cursor-acp",
+		AttemptID:          "attempt-stderr",
+		UserMessage:        "redact stderr",
+		WorkingDirectory:   t.TempDir(),
+		EnvVars:            map[string]string{"ACP_TEST_API_TOKEN": "super-secret-token"},
+		ProcessEnvironment: append(protocolHelperProcessEnvironment("stderr"), "ACP_TEST_API_TOKEN=super-secret-token"),
 	})
 	var failure providers.ExecuteFailure
 	if !errors.As(err, &failure) {
@@ -349,6 +346,18 @@ func protocolHelperCommandFactory(starts *atomic.Int32) func(name string, args .
 		}
 		return exec.Command(name, args...)
 	}
+}
+
+func protocolHelperProcessEnvironment(mode string) []string {
+	environment := make([]string, 0, len(os.Environ())+1)
+	for _, entry := range os.Environ() {
+		name, _, _ := strings.Cut(entry, "=")
+		if strings.EqualFold(name, protocolHelperEnvironment) {
+			continue
+		}
+		environment = append(environment, entry)
+	}
+	return append(environment, protocolHelperEnvironment+"="+mode)
 }
 
 // pkgmaintcheck:ignore-cyclomatic-complexity pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption
