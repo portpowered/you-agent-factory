@@ -165,12 +165,33 @@ first time you raise a blocker set, or a new blocker on a head pushed since
 your last pass. Holds are bounded by the review visit cap, so a genuinely
 stuck lane still surfaces without you forcing a rejection.
 
+### Step 4.3 — Rebase evidence and moving-tip convergence
+
+A reviewer may require a rebase only when one of these two conditions is
+actually established:
+
+1. GitHub reports an actual merge conflict. The rebase-demand comment must
+   identify the conflict evidence, including the conflicting files or the
+   applicable merge-state report.
+2. The branch lacks a specifically named commit required by its own
+   specifically named red check. The rebase-demand comment must name the
+   missing commit, the dependent red check, and the evidence that connects
+   that check to that commit.
+
+An advanced `main` tip, branch age, ordinary divergence, a desire to refresh
+CI, or a request to move to a newer tip is insufficient by itself. Before
+repeating a rebase demand with a different tip SHA, stop and check for new
+evidence that independently satisfies one of the two permitted conditions;
+do not repeat the demand when the only change is that `main` advanced. No
+other review instruction authorizes a moving-tip rebase path.
+
 ### Step 5 - handle feedback
 
 - Post a PR comment with your review summary, including the acceptance criteria checklist results, only after the required CI state is terminal for the current head or you have concrete independent review findings to report.
 - Include any blocking issues, correctness concerns, missing tests, CI failures, or prompt-rule violations in that comment.
 - If you would have requested changes in a normal review, describe the required fixes plainly in the comment so the executor can act on them.
 - If earlier blocking feedback is no longer applicable, say so explicitly in a newer PR conversation comment so the processor has clear resolution evidence.
+- Any comment that requires a rebase must identify one of the two permitted conditions above and include its named conflict evidence or missing commit/check evidence. Do not issue a generic or moving-tip rebase demand.
 - Do not post a PR comment whose only content is that required CI is still pending or in progress.
 - A hold (`<CONTINUE>`) is silent by definition: when you hold for non-terminal CI or for an unchanged head with no new findings, post no PR comment at all.
 
@@ -180,7 +201,7 @@ Use `gh pr comment` for the comment post. Do not use `gh pr review --approve` or
 
 If you believe that the PR is complete and the CI passes, please merge the PR. 
 
-If the PR has merge conflicts, please tell the processor to fix the merge conflicts and rebase and push the changes.
+If GitHub reports an actual merge conflict, tell the processor to resolve the named conflicts, rebase, and push the changes. If the branch lacks a specifically named commit required by its own specifically named red check, use the same evidence-bound instruction. Apply Step 4.3: an advanced `main` tip alone is insufficient, and do not ask for a rebase merely to refresh the branch or move it to a newer SHA.
 
 ### Step 7 - respond back
 
