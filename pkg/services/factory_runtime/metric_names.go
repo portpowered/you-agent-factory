@@ -14,6 +14,10 @@ const (
 	RuntimeDispatchComplete               = "dispatch.completed"
 	RuntimeDispatchDuration               = "dispatch.duration"
 	RuntimeDispatchRetries                = "dispatch.retry_count"
+	// RuntimeDispatchCost and RuntimeProviderCost remain recognized names for
+	// historical records. The runtime host does not emit them because the
+	// Costs service values canonical token rows and no read model consumes
+	// independent cost samples.
 	RuntimeDispatchCost                   = "dispatch.cost"
 	RuntimeProviderRequest                = "provider.requested"
 	RuntimeProviderComplete               = "provider.completed"
