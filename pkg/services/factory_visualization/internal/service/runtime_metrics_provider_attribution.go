@@ -27,14 +27,6 @@ type metricProviderAttributionBuilder struct {
 	evidenceByDispatch map[string]*metricProviderEvidence
 }
 
-func newMetricProviderAttribution(records []RuntimeMetricRecord) metricProviderAttribution {
-	builder := newMetricProviderAttributionBuilder()
-	for _, record := range records {
-		builder.add(record)
-	}
-	return builder.result()
-}
-
 func newMetricProviderAttributionBuilder() metricProviderAttributionBuilder {
 	return metricProviderAttributionBuilder{
 		evidenceByDispatch: make(map[string]*metricProviderEvidence),
