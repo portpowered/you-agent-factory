@@ -23,6 +23,7 @@ func TestClassifierValidationMatrixEmitsExactLaneSets(t *testing.T) {
 		{"frontend", []string{"ui/src/App.tsx"}, "frontend", []string{laneFrontend}},
 		{"backend or CLI", []string{"cmd/factory/main.go"}, "backend", []string{laneBackend, laneUIBackendIntegration}},
 		{"API contract", []string{"api/openapi-main.yaml"}, "api-contract", []string{laneFrontend, laneBackend, laneUIBackendIntegration, laneAPIPackage}},
+		{"contracts check", []string{"cmd/contractscheck/repository_mutation_test.go"}, "api-contract", []string{laneFrontend, laneBackend, laneUIBackendIntegration, laneAPIPackage}},
 		{"API package", []string{"packages/api/package.json"}, "api-package", []string{laneFrontend, laneBackend, laneUIBackendIntegration, laneAPIPackage}},
 		{"Packaged Factories package", []string{"packages/packaged-factories/package.json"}, "packaged-factories-package", []string{laneBackend, lanePackagedFactoriesPackage}},
 		{"Model Providers package", []string{"packages/model-providers/package.json"}, "model-providers-package", []string{laneBackend, laneModelProvidersPackage}},
