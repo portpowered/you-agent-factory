@@ -659,139 +659,193 @@ func dispatchHandoff(dispatchID string) workers.WorkstationDispatchRequest {
 	}
 }
 
-func TestCancel_BeforeBoundaryAdmissionEitherWaitsOrTerminatesTheExactSupervision(t *testing.T) {
+type admissionHandoffOutcome struct {
+	result workers.WorkstationDispatchResult
+	err    error
+}
+
+type admissionControlOutcome struct {
+	result workersessions.ControlResult
+	err    error
+}
+
+type admissionCancellationFixture struct {
+	registry         *registry
+	sessionID        string
+	dispatchID       string
+	supervision      *supervision
+	request          workers.WorkstationDispatchRequest
+	logger           *controlClaimLogger
+	admissionStarted chan struct{}
+	releaseAdmission chan struct{}
+	executionCalled  chan struct{}
+	executionDone    chan admissionHandoffOutcome
+	closeAdmission   func()
+}
+
+func newAdmissionCancellationFixture(t *testing.T) admissionCancellationFixture {
+	t.Helper()
 	r := newTestRegistry(t)
-	r.reserveIfAbsent("worker-1")
-	if _, err := r.transitionToStarting("worker-1"); err != nil {
+	const sessionID = "worker-1"
+	const dispatchID = "dispatch-1"
+	r.reserveIfAbsent(sessionID)
+	if _, err := r.transitionToStarting(sessionID); err != nil {
 		t.Fatalf("transitionToStarting: %v", err)
 	}
-	request := dispatchHandoff("dispatch-1")
-	supervision, ok := r.registerSupervision("worker-1", "dispatch-1", "", request)
+	request := dispatchHandoff(dispatchID)
+	supervision, ok := r.registerSupervision(sessionID, dispatchID, "", request)
 	if !ok {
 		t.Fatal("registerSupervision: want supervised STARTING attempt")
 	}
-	admissionStarted := make(chan struct{})
-	releaseAdmission := make(chan struct{})
+	fixture := admissionCancellationFixture{
+		registry:         r,
+		sessionID:        sessionID,
+		dispatchID:       dispatchID,
+		supervision:      supervision,
+		request:          request,
+		admissionStarted: make(chan struct{}),
+		releaseAdmission: make(chan struct{}),
+		executionCalled:  make(chan struct{}, 1),
+		executionDone:    make(chan admissionHandoffOutcome, 1),
+	}
 	logger := &controlClaimLogger{claimed: make(chan struct{}), release: make(chan struct{})}
-	r.logger = logger
+	fixture.logger = logger
 	var releaseOnce sync.Once
-	release := func() {
+	fixture.closeAdmission = func() {
 		releaseOnce.Do(func() {
-			close(releaseAdmission)
+			close(fixture.releaseAdmission)
 			close(logger.release)
 		})
 	}
-	defer release()
-
+	r.logger = logger
 	supervision.mu.Lock()
 	supervision.publishing = true
 	supervision.mu.Unlock()
-	executionCalled := make(chan struct{}, 1)
-	type handoffOutcome struct {
-		result workers.WorkstationDispatchResult
-		err    error
-	}
-	executionDone := make(chan handoffOutcome, 1)
 	go func() {
 		result, err := executeWithService(
 			context.Background(),
 			coverageExecution{execute: func(_ context.Context, request workers.ExecuteRequest) (workers.ExecuteResult, error) {
-				executionCalled <- struct{}{}
+				fixture.executionCalled <- struct{}{}
 				return coverageExecutionResult(request, workers.ExecutionOutcomeAccepted), nil
 			}},
-			request,
+			fixture.request,
 			supervision,
 			func() {
-				close(admissionStarted)
-				<-releaseAdmission
+				close(fixture.admissionStarted)
+				<-fixture.releaseAdmission
 				if supervision.admissionAllowed() {
-					r.acceptSupervision("worker-1", supervision)
+					r.acceptSupervision(fixture.sessionID, supervision)
 				}
 			},
 		)
 		r.finishSupervisionPublication(supervision)
-		executionDone <- handoffOutcome{result: result, err: err}
+		fixture.executionDone <- admissionHandoffOutcome{result: result, err: err}
 	}()
+	return fixture
+}
 
+func (f *admissionCancellationFixture) release() {
+	f.closeAdmission()
+}
+
+func (f *admissionCancellationFixture) waitAtAdmission(t *testing.T) {
+	t.Helper()
 	select {
-	case <-admissionStarted:
+	case <-f.admissionStarted:
 	case <-time.After(2 * time.Second):
 		t.Fatal("execution did not reach the controlled admission gate")
 	}
-	starting, err := r.Get(context.Background(), workersessions.GetRequest{ID: "worker-1"})
+	starting, err := f.registry.Get(context.Background(), workersessions.GetRequest{ID: f.sessionID})
 	if err != nil || starting.State != workersessions.StateStarting {
 		t.Fatalf("session at admission gate = %+v, %v, want STARTING", starting, err)
 	}
-	supervision.mu.Lock()
-	accepted, publishing := supervision.accepted, supervision.publishing
-	supervision.mu.Unlock()
+	f.supervision.mu.Lock()
+	accepted, publishing := f.supervision.accepted, f.supervision.publishing
+	f.supervision.mu.Unlock()
 	if accepted || !publishing {
 		t.Fatalf("supervision at admission gate accepted=%t publishing=%t, want false/true", accepted, publishing)
 	}
+}
 
-	controlDone := make(chan struct {
-		result workersessions.ControlResult
-		err    error
-	}, 1)
+func (f *admissionCancellationFixture) startCancel(t *testing.T) <-chan admissionControlOutcome {
+	t.Helper()
+	controlDone := make(chan admissionControlOutcome, 1)
 	go func() {
-		result, err := r.Cancel(context.Background(), workersessions.ControlRequest{ID: "worker-1"})
-		controlDone <- struct {
-			result workersessions.ControlResult
-			err    error
-		}{result: result, err: err}
+		result, err := f.registry.Cancel(context.Background(), workersessions.ControlRequest{ID: f.sessionID})
+		controlDone <- admissionControlOutcome{result: result, err: err}
 	}()
 	select {
-	case <-logger.claimed:
+	case <-f.logger.claimed:
 	case <-time.After(2 * time.Second):
 		t.Fatal("Cancel did not claim the exact supervision at the admission gate")
 	}
-	supervision.mu.Lock()
-	queued := supervision.preAdmissionAction
-	supervision.mu.Unlock()
+	f.supervision.mu.Lock()
+	queued := f.supervision.preAdmissionAction
+	f.supervision.mu.Unlock()
 	if queued != workersessions.ControlActionCancel {
 		t.Fatalf("queued admission control = %q, want CANCEL", queued)
 	}
+	return controlDone
+}
 
-	release()
-	var control struct {
-		result workersessions.ControlResult
-		err    error
-	}
+func waitAdmissionControl(t *testing.T, controlDone <-chan admissionControlOutcome) admissionControlOutcome {
+	t.Helper()
 	select {
-	case control = <-controlDone:
+	case control := <-controlDone:
+		return control
 	case <-time.After(2 * time.Second):
 		t.Fatal("Cancel did not resolve after releasing the admission gate")
 	}
-	if control.err != nil || control.result.Outcome != workersessions.ControlOutcomeApplied ||
-		control.result.DispatchID != "dispatch-1" || control.result.Session.State != workersessions.StateCanceled {
-		t.Fatalf("Cancel() during admission = %#v, %v, want applied exact CANCELED supervision", control.result, control.err)
-	}
+	return admissionControlOutcome{}
+}
 
-	var handoff handoffOutcome
+func waitAdmissionHandoff(t *testing.T, handoffDone <-chan admissionHandoffOutcome) admissionHandoffOutcome {
+	t.Helper()
 	select {
-	case handoff = <-executionDone:
+	case handoff := <-handoffDone:
+		return handoff
 	case <-time.After(2 * time.Second):
 		t.Fatal("execution handoff did not finish after pre-admission cancellation")
 	}
+	return admissionHandoffOutcome{}
+}
+
+func assertAdmissionCancellation(t *testing.T, fixture *admissionCancellationFixture, control admissionControlOutcome, handoff admissionHandoffOutcome) {
+	t.Helper()
+	if control.err != nil || control.result.Outcome != workersessions.ControlOutcomeApplied ||
+		control.result.DispatchID != fixture.dispatchID || control.result.Session.State != workersessions.StateCanceled {
+		t.Fatalf("Cancel() during admission = %#v, %v, want applied exact CANCELED supervision", control.result, control.err)
+	}
 	if !errors.Is(handoff.err, workers.ErrWorkstationDispatchCanceled) ||
-		handoff.result.DispatchID != "dispatch-1" ||
+		handoff.result.DispatchID != fixture.dispatchID ||
 		handoff.result.TerminalOutcome != workers.WorkstationDispatchTerminalOutcomeCanceled {
 		t.Fatalf("execution handoff = %#v, %v, want exact canceled dispatch", handoff.result, handoff.err)
 	}
 	select {
-	case <-executionCalled:
+	case <-fixture.executionCalled:
 		t.Fatal("Workers execution ran after cancellation won before admission")
 	default:
 	}
-
-	// A late completion from the gate must not resurrect the exact canceled
-	// session after control has committed its absorbing terminal state.
-	r.completeSupervision("worker-1", supervision, handoff.result, handoff.err)
-	final, err := r.Get(context.Background(), workersessions.GetRequest{ID: "worker-1"})
+	fixture.registry.completeSupervision(fixture.sessionID, fixture.supervision, handoff.result, handoff.err)
+	final, err := fixture.registry.Get(context.Background(), workersessions.GetRequest{ID: fixture.sessionID})
 	if err != nil || final.State != workersessions.StateCanceled {
 		t.Fatalf("late admission completion session = %+v, %v, want absorbing CANCELED", final, err)
 	}
+}
 
+func TestCancel_BeforeBoundaryAdmissionEitherWaitsOrTerminatesTheExactSupervision(t *testing.T) {
+	fixture := newAdmissionCancellationFixture(t)
+	defer fixture.release()
+	fixture.waitAtAdmission(t)
+	controlDone := fixture.startCancel(t)
+	fixture.release()
+	control := waitAdmissionControl(t, controlDone)
+	handoff := waitAdmissionHandoff(t, fixture.executionDone)
+	assertAdmissionCancellation(t, &fixture, control, handoff)
+}
+
+func TestCancel_PreAdmissionTerminalAndConcurrentControlRemainNoop(t *testing.T) {
+	r := newTestRegistry(t)
 	r.reserveIfAbsent("worker-2")
 	if _, err := r.transitionToStarting("worker-2"); err != nil {
 		t.Fatalf("transitionToStarting(worker-2): %v", err)
@@ -806,6 +860,7 @@ func TestCancel_BeforeBoundaryAdmissionEitherWaitsOrTerminatesTheExactSupervisio
 	if err != nil || noOp.Outcome != workersessions.ControlOutcomeNoop {
 		t.Fatalf("repeated pre-admission Cancel() = %#v, %v, want NOOP", noOp, err)
 	}
+
 	requestedSupervision := newSupervision("dispatch-requested", "")
 	requestedSupervision.requestedAction = workersessions.ControlActionPause
 	if attempt := requestedSupervision.beginCancellation(workersessions.ControlActionCancel); attempt.kind != cancellationAttemptNoop {
