@@ -922,7 +922,7 @@ fmt-check:
 	@set -e; \
 	paths_file="$${TMPDIR:-.}/you-gofmt-check-$$.paths"; \
 	trap 'rm -f "$$paths_file"' 0 1 2 3 15; \
-	git ls-files -z --cached -- 'cmd/**/*.go' 'pkg/**/*.go' > "$$paths_file"; \
+	git ls-files -z --cached -- 'cmd/**/*.go' 'pkg/**/*.go' 'tests/**/*.go' > "$$paths_file"; \
 	violations="$$(xargs -0 $(GO)fmt -l < "$$paths_file")"; \
 	if test -n "$$violations"; then \
 		printf '%s\n' "$$violations"; \
