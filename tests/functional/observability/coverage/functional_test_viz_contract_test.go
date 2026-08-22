@@ -77,7 +77,7 @@ func TestFunctionalTestVizContract_WiresBoundarySingleCoverageThenMarkdown(t *te
 		makefilePath,
 		"functional-test-viz",
 		"GO="+goStub,
-		"FUNCTIONAL_TEST_JOBS=8",
+		"FUNCTIONAL_TEST_JOBS=12",
 	)
 	if err != nil {
 		t.Fatalf("run functional-test-viz wiring contract: %v\n%s", err, output)
@@ -103,7 +103,7 @@ func TestFunctionalTestVizContract_WiresBoundarySingleCoverageThenMarkdown(t *te
 	if !strings.Contains(output, "json="+functionalTestVizDefaultJSON) {
 		t.Fatalf("coverage invocation missing default JSON path:\n%s", output)
 	}
-	if !strings.Contains(output, "test-jobs=8") {
+	if !strings.Contains(output, "test-jobs=12") {
 		t.Fatalf("coverage invocation did not preserve the CI test-jobs override:\n%s", output)
 	}
 	if !strings.Contains(output, "-coverage-summary "+functionalTestVizDefaultJSON) {

@@ -1,9 +1,10 @@
 import assert from "node:assert/strict";
-import { existsSync } from "node:fs";
+import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { tmpdir } from "node:os";
 import { env, platform } from "node:process";
-import { spawnSync } from "node:child_process";
 import test from "node:test";
 
 const repositoryRoot = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
@@ -67,15 +68,91 @@ test("explicit functional CI jobs keep discovery and instrumented coverage separ
 			"YOU_LOGICAL_CPUS=8",
 			"YOU_EXPECTED_CONCURRENT_LANES=4",
 			"FUNCTIONAL_DEFAULT_JOBS=4",
-			"FUNCTIONAL_TEST_JOBS=8",
+			"FUNCTIONAL_TEST_JOBS=12",
 		],
 		["-n", "test-unit", "test-functional", "test-functional-coverage"],
 	);
 	assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
 	assert.match(result.stdout, /unitlane -jobs 2/);
 	assert.match(result.stdout, /functionallane -jobs 4/);
-	assert.match(result.stdout, /gocoveragecheck -suite functional -stream -jobs 4 -test-jobs 8/);
+	assert.match(result.stdout, /gocoveragecheck -suite functional -stream -jobs 4 -test-jobs 12/);
 	assert.doesNotMatch(result.stdout, /functionallane -jobs 4 .*test-jobs/);
+});
+
+test("functional runner derives a bounded 3x instrumented window", (t) => {
+	if (platform === "win32") {
+		t.skip("POSIX functional runner derivation executes on the Linux CI runner");
+		return;
+	}
+	const bash = spawnSync("bash", ["-c", "exit 0"], { encoding: "utf8" });
+	if (bash.error) {
+		t.skip(`Bash workflow smoke test requires bash: ${bash.error.message}`);
+		return;
+	}
+
+	const cases = [
+		{ cpus: "4", wantJobs: "4", wantTestJobs: "12" },
+		{ cpus: "1", wantJobs: "2", wantTestJobs: "3" },
+		{ cpus: "64", wantJobs: "64", wantTestJobs: "16" },
+	];
+	for (const testCase of cases) {
+		const directory = mkdtempSync(join(tmpdir(), "functional-parallelism-"));
+		try {
+			const nprocPath = join(directory, "nproc");
+			const outputPath = join(directory, "github-output");
+			writeFileSync(nprocPath, `#!/bin/sh\nprintf '%s\\n' '${testCase.cpus}'\n`);
+			chmodSync(nprocPath, 0o755);
+			const result = spawnSync("bash", ["scripts/ci/select-functional-parallelism.sh"], {
+				cwd: repositoryRoot,
+				env: { ...env, NPROC_BIN: nprocPath, GITHUB_OUTPUT: outputPath },
+				encoding: "utf8",
+			});
+			assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
+			assert.match(
+				result.stdout,
+				new RegExp(
+					`logical_cpus=${testCase.cpus} jobs=${testCase.wantJobs} test_jobs=${testCase.wantTestJobs} test_job_policy=3x-capped-16`,
+				),
+			);
+			assert.equal(
+				readFileSync(outputPath, "utf8"),
+				`jobs=${testCase.wantJobs}\ntest_jobs=${testCase.wantTestJobs}\n`,
+			);
+		} finally {
+			rmSync(directory, { recursive: true, force: true });
+		}
+	}
+});
+
+test("functional runner fails closed for unusable or oversized CPU counts", (t) => {
+	if (platform === "win32") {
+		t.skip("POSIX functional runner derivation executes on the Linux CI runner");
+		return;
+	}
+	const bash = spawnSync("bash", ["-c", "exit 0"], { encoding: "utf8" });
+	if (bash.error) {
+		t.skip(`Bash workflow smoke test requires bash: ${bash.error.message}`);
+		return;
+	}
+
+	for (const cpus of ["", "0", "65", "not-a-number"]) {
+		const directory = mkdtempSync(join(tmpdir(), "functional-parallelism-invalid-"));
+		try {
+			const nprocPath = join(directory, "nproc");
+			const outputPath = join(directory, "github-output");
+			writeFileSync(nprocPath, `#!/bin/sh\nprintf '%s\\n' '${cpus}'\n`);
+			chmodSync(nprocPath, 0o755);
+			const result = spawnSync("bash", ["scripts/ci/select-functional-parallelism.sh"], {
+				cwd: repositoryRoot,
+				env: { ...env, NPROC_BIN: nprocPath, GITHUB_OUTPUT: outputPath },
+				encoding: "utf8",
+			});
+			assert.notEqual(result.status, 0, `CPU count ${JSON.stringify(cpus)} unexpectedly passed`);
+			assert.match(result.stderr, /unusable logical CPU count|bounded logical-CPU input limit/);
+		} finally {
+			rmSync(directory, { recursive: true, force: true });
+		}
+	}
 });
 
 test("functional coverage without the CI test-window override keeps the existing command", (t) => {

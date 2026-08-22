@@ -125,9 +125,9 @@ func TestFunctionalCoverageCommandSmoke_SeparatesDiscoveryAndInstrumentedJobs(t 
 		wantFlag   string
 	}{{
 		name:       "functional CI override",
-		testJobs:   "8",
-		wantHeader: "jobs=4 test_jobs=8",
-		wantFlag:   "-test-jobs 8",
+		testJobs:   "12",
+		wantHeader: "jobs=4 test_jobs=12",
+		wantFlag:   "-test-jobs 12",
 	}, {
 		name:       "local default",
 		wantHeader: "jobs=4 test_jobs=default",
@@ -229,7 +229,7 @@ sleep 2
 		"FUNCTIONAL_TEST_TRIGGER=pull_request",
 		"FUNCTIONAL_SHORT=true",
 		"FUNCTIONAL_DEFAULT_JOBS=4",
-		"FUNCTIONAL_TEST_JOBS=8",
+		"FUNCTIONAL_TEST_JOBS=12",
 		fmt.Sprintf("MAKE_BIN=%s", makePath),
 	)
 	if err == nil {
@@ -246,8 +246,8 @@ sleep 2
 	}
 	log := string(logBody)
 	for _, expected := range []string{
-		"tier=pr-short trigger=pull_request short=true budget=0.1s selection=subtractive quarantine=tests/functional/functional-quarantine.json jobs=4 test_jobs=8",
-		"fake-make: default_jobs=4 test_jobs=8",
+		"tier=pr-short trigger=pull_request short=true budget=0.1s selection=subtractive quarantine=tests/functional/functional-quarantine.json jobs=4 test_jobs=12",
+		"fake-make: default_jobs=4 test_jobs=12",
 		"inventory: discovered-packages=147 observed-packages=12",
 		"quarantine: selector=./tests/functional/example bucket=ENVIRONMENT-DEPENDENT observed=skip",
 		"tier timed out after budget=0.1s",
