@@ -285,10 +285,21 @@ test("the pinned build repairs LocalAI path and Darwin shell incompatibilities",
 	const buildScript = await readFile("scripts/build-localai-backend-artifact.sh", "utf8");
 	assert.match(buildScript, /ensure_localai_grpc_compat_path/);
 	assert.match(buildScript, /ln -s "\$grpc_path" "\$compatibility_path"/);
+	assert.match(buildScript, /WINDOWS_NODE_DIR/);
+	assert.match(buildScript, /node_bin_dir="\$\(cygpath -u "\$WINDOWS_NODE_DIR"\)"/);
+	assert.match(buildScript, /export PATH="\$node_bin_dir:\$PATH"/);
 	assert.match(buildScript, /stage_darwin_go_package/);
 	assert.match(buildScript, /for library in "\$\{backend_path\}"\/libgo\*\.dylib "\$\{backend_path\}"\/libgo\*\.so/);
 	assert.match(buildScript, /BUILD_TYPE="\$BUILD_TYPE" JOBS=2 "\$binary"/);
 	assert.match(buildScript, /localai-whisper\|localai-vibevoice\)\r?\n\s+if \[\[ "\$TARGET_ID" == "darwin-arm64" \]\]/);
+});
+
+test("the Windows workflow exports setup-node's directory to the MSYS2 build shell", async () => {
+	const workflow = await readFile(".github/workflows/localai-backend-artifacts.yml", "utf8");
+	assert.match(workflow, /- name: Expose the pinned Node tool to MSYS2/);
+	assert.match(workflow, /if: runner\.os == 'Windows'/);
+	assert.match(workflow, /Get-Command node -CommandType Application -ErrorAction Stop/);
+	assert.match(workflow, /WINDOWS_NODE_DIR=\$\(\$nodeCommand\.Source \| Split-Path -Parent\)/);
 });
 
 test("the pinned llama build preserves recursive protobuf arguments and Darwin compatibility", async () => {

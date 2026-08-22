@@ -19,6 +19,10 @@ export TAG_LIB_GRPC="$GRPC_COMMIT"
 if [[ "$TARGET_ID" == "windows-amd64" ]] && command -v cygpath >/dev/null 2>&1; then
 	LOCALAI_ROOT="$(cygpath -u "$LOCALAI_ROOT")"
 	config_path="$(cygpath -u "$config_path")"
+	if [[ -n "${WINDOWS_NODE_DIR:-}" ]]; then
+		node_bin_dir="$(cygpath -u "$WINDOWS_NODE_DIR")"
+		export PATH="$node_bin_dir:$PATH"
+	fi
 	if [[ -n "${VCPKG_ROOT:-}" ]]; then
 		VCPKG_ROOT="$(cygpath -u "$VCPKG_ROOT")"
 		export VCPKG_ROOT

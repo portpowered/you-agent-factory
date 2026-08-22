@@ -91,6 +91,13 @@ jobs:
         with:
           node-version: ${{ needs.validate-inputs.outputs.node_version }}
 
+      - name: Expose the pinned Node tool to MSYS2
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $nodeCommand = Get-Command node -CommandType Application -ErrorAction Stop
+          "WINDOWS_NODE_DIR=$($nodeCommand.Source | Split-Path -Parent)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
       - name: Set up Go at the pinned tool version
         uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5
         with:
