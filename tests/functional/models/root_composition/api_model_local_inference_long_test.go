@@ -401,10 +401,17 @@ type realLocalModelContentObservation struct {
 func assertRecordedRealLocalModelEvents(t *testing.T, events []factoryapi.FactoryEvent) string {
 	t.Helper()
 	check := inspectRecordedRealLocalModelEvents(events)
-	if !check.sawTTSRequest || strings.TrimSpace(check.audioPath) == "" {
+	if !realLocalModelEventsSatisfyContract(check) {
 		t.Fatalf("output validation failure: %s", formatRealLocalModelEventCheck(check))
 	}
 	return check.audioPath
+}
+
+func realLocalModelEventsSatisfyContract(check realLocalModelEventCheck) bool {
+	return check.sawTTSRequest &&
+		len(check.responses) == 1 &&
+		len(check.failures) == 0 &&
+		strings.TrimSpace(check.audioPath) != ""
 }
 
 func inspectRecordedRealLocalModelEvents(events []factoryapi.FactoryEvent) realLocalModelEventCheck {
@@ -433,6 +440,10 @@ func inspectRecordedRealLocalModelEvents(events []factoryapi.FactoryEvent) realL
 	}
 	if len(check.responses) == 0 {
 		check.failures = append(check.failures, "no MODEL_RESPONSE event observed")
+	} else if len(check.responses) != 1 {
+		check.failures = append(check.failures, fmt.Sprintf(
+			"MODEL_RESPONSE count: got %d, want exactly 1", len(check.responses),
+		))
 	}
 	return check
 }
@@ -616,6 +627,9 @@ func TestRecordedRealLocalModelEventDiagnostics(t *testing.T) {
 			if testCase.includeResponse {
 				events = append(events, realLocalModelResponseEvent(t, testCase.response))
 			}
+			for _, response := range testCase.additionalResponses {
+				events = append(events, realLocalModelResponseEvent(t, response))
+			}
 
 			check := inspectRecordedRealLocalModelEvents(events)
 			formatted := formatRealLocalModelEventCheck(check)
@@ -625,16 +639,21 @@ func TestRecordedRealLocalModelEventDiagnostics(t *testing.T) {
 			if testCase.wantPath != "" && check.audioPath != testCase.wantPath {
 				t.Fatalf("audio path = %q, want %q; diagnostics: %s", check.audioPath, testCase.wantPath, formatted)
 			}
+			if got := realLocalModelEventsSatisfyContract(check); got != testCase.wantValid {
+				t.Fatalf("contract valid = %t, want %t; diagnostics: %s", got, testCase.wantValid, formatted)
+			}
 		})
 	}
 }
 
 type realLocalModelDiagnosticCase struct {
-	name            string
-	response        *factoryapi.ModelResponseEventPayload
-	includeResponse bool
-	want            string
-	wantPath        string
+	name                string
+	response            *factoryapi.ModelResponseEventPayload
+	includeResponse     bool
+	additionalResponses []*factoryapi.ModelResponseEventPayload
+	want                string
+	wantPath            string
+	wantValid           bool
 }
 
 type realLocalModelDiagnosticFixtureSet struct {
@@ -676,8 +695,10 @@ func realLocalModelDiagnosticCases(t *testing.T) []realLocalModelDiagnosticCase 
 		{name: "audio part decode failure", includeResponse: true, response: response("TTS", succeeded, fixtures.malformedAudio), want: "audio-part decode failure"},
 		{name: "wrong audio content type", includeResponse: true, response: response("TTS", succeeded, fixtures.wrongContentType), want: "audio content-type mismatch"},
 		{name: "empty file and URL", includeResponse: true, response: response("TTS", succeeded, fixtures.emptyFileAndURL), want: "empty file or URL"},
-		{name: "valid file", includeResponse: true, response: response("TTS", succeeded, fixtures.validFile), want: `eventType=MODEL_RESPONSE operation="TTS" outcome="SUCCEEDED" outputParts=1 parts=[part[0]={type="AUDIO" contentType="audio/wav" file="C:/tmp/factory-work.wav" url=<empty>}`, wantPath: "C:/tmp/factory-work.wav"},
-		{name: "valid URL", includeResponse: true, response: response("TTS", succeeded, fixtures.validURL), want: `eventType=MODEL_RESPONSE operation="TTS" outcome="SUCCEEDED" outputParts=1 parts=[part[0]={type="AUDIO" contentType="audio/wav" file=<empty> url="file:///tmp/factory-work.wav"}`, wantPath: "/tmp/factory-work.wav"},
+		{name: "valid file", includeResponse: true, response: response("TTS", succeeded, fixtures.validFile), want: `eventType=MODEL_RESPONSE operation="TTS" outcome="SUCCEEDED" outputParts=1 parts=[part[0]={type="AUDIO" contentType="audio/wav" file="C:/tmp/factory-work.wav" url=<empty>}`, wantPath: "C:/tmp/factory-work.wav", wantValid: true},
+		{name: "valid URL", includeResponse: true, response: response("TTS", succeeded, fixtures.validURL), want: `eventType=MODEL_RESPONSE operation="TTS" outcome="SUCCEEDED" outputParts=1 parts=[part[0]={type="AUDIO" contentType="audio/wav" file=<empty> url="file:///tmp/factory-work.wav"}`, wantPath: "/tmp/factory-work.wav", wantValid: true},
+		{name: "valid response plus malformed response", includeResponse: true, response: response("TTS", succeeded, fixtures.validFile), additionalResponses: []*factoryapi.ModelResponseEventPayload{nil}, want: "payload decode failure", wantPath: "C:/tmp/factory-work.wav"},
+		{name: "duplicate valid response", includeResponse: true, response: response("TTS", succeeded, fixtures.validFile), additionalResponses: []*factoryapi.ModelResponseEventPayload{response("TTS", succeeded, fixtures.validFile)}, want: "MODEL_RESPONSE count: got 2, want exactly 1", wantPath: "C:/tmp/factory-work.wav"},
 	}
 }
 
