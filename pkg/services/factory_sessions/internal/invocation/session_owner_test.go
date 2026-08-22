@@ -404,6 +404,33 @@ func TestSessionOwner_PreservesCallerCancellationAtSubmission(t *testing.T) {
 	}
 }
 
+func TestSessionOwner_MapsCancellationArrivingDuringSubmissionToInvocationOutcome(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	owner := newTestSessionOwner(sessionOwnerFixture{
+		FactoryConfig: func(string) (*interfaces.FactoryConfig, error) { return sessionOwnerFactoryConfig(), nil },
+		SubmitWork: func(context.Context, string, workdomain.SubmitRequest) (workdomain.WorkRequestSubmitResult, error) {
+			cancel()
+			return workdomain.WorkRequestSubmitResult{}, context.Canceled
+		},
+		Observe: func(context.Context, string, SessionInvocationWaitInput) (SessionInvocationObservation, error) {
+			t.Fatal("Observe called after submission cancellation")
+			return SessionInvocationObservation{}, nil
+		},
+	})
+	sourceKind := factoryapi.InvocationInputSourceKindText
+	content := sessionOwnerTextContent(t, "hello")
+
+	result, err := owner.InvokeFactorySession(ctx, "session-1", sessionOwnerInvocationRequest(factoryapi.InvocationRequest{
+		SourceKind: &sourceKind, Content: &content,
+	}))
+	if err != nil {
+		t.Fatalf("InvokeFactorySession: %v", err)
+	}
+	assertSessionOwnerEqual(t, "status", result.Status, interfaces.InvocationTerminalStatusCanceled)
+	assertSessionOwnerEqual(t, "error code", result.ErrorCode, string(interfaces.InvocationErrorCodeCanceled))
+}
+
 func successfulSessionOwner(cfg *interfaces.FactoryConfig, capture func(workdomain.SubmitRequest)) *SessionOwner {
 	return newTestSessionOwner(sessionOwnerFixture{
 		FactoryConfig: func(string) (*interfaces.FactoryConfig, error) { return cfg, nil },
