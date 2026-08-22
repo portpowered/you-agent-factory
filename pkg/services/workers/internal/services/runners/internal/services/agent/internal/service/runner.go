@@ -858,7 +858,7 @@ func normalizeProviderFailure(
 	if failure.Kind == providers.ExecuteFailureKindCanceled {
 		return canceledProviderError(errors.Join(interruption, cause), result)
 	}
-	failureType := failureTypeForProviderKind(failure.Kind)
+	failureType := failureTypeForProviderFailure(failure)
 	if failure.Diagnostics != nil {
 		switch failure.Diagnostics.Metadata["work-failure-type"] {
 		case string(workers.WorkFailureTypeMissingExecutable):
@@ -874,7 +874,7 @@ func normalizeProviderFailure(
 	}
 	normalized := workers.NewProviderError(
 		failureType,
-		boundedFailureMessage(canonicalAgentFailureMessage(failure.Kind, failureType, failure.Message)),
+		boundedFailureMessage(canonicalAgentFailureMessage(failure, failureType, failure.Message)),
 		errors.Join(interruption, cause),
 	)
 	// Providers has already normalized and sanitized this message. Retain the

@@ -11,6 +11,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/state"
 	factorytoken "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/token"
 	"github.com/portpowered/infinite-you/pkg/services/work"
+	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
 // CascadingFailureSubsystem propagates failure from parent/dependency tokens
@@ -121,6 +122,112 @@ func (cf *CascadingFailureSubsystem) Execute(_ context.Context, snapshot *interf
 	}
 
 	return &interfaces.TickResult{Mutations: mutations}, nil
+}
+
+func shouldRouteTerminalFailureToFailedState(result resolvedWorkResult) bool {
+	if result.outcome != workerexecution.OutcomeFailed || result.failureMetadata == nil {
+		return false
+	}
+	// Cancellation is a terminal dispatch lifecycle result, but its late-result
+	// path is absorbed by the runtime rather than routed through the authored
+	// failure place. Keep that established behavior while routing other terminal
+	// normalized failures directly to FAILED. Explicit dependency, timeout, and
+	// throttling failures remain on their existing intermittent retry paths.
+	if result.err == workerexecution.ErrWorkstationDispatchCanceled.Error() {
+		return false
+	}
+	return workerexecution.FailureDecisionFromMetadata(result.failureMetadata).Terminal
+}
+
+func (t *TransitionerSubsystem) terminalFailureArcs(
+	transition *petri.Transition,
+	consumedTokens []factorytoken.Token,
+) []petri.Arc {
+	if t.netDefinition == nil || transition == nil {
+		return nil
+	}
+
+	workTypeIDs := make([]string, 0, len(consumedTokens))
+	seenWorkTypes := make(map[string]struct{}, len(consumedTokens))
+	appendWorkType := func(workTypeID string) {
+		if workTypeID == "" {
+			return
+		}
+		if _, seen := seenWorkTypes[workTypeID]; seen {
+			return
+		}
+		if _, exists := t.netDefinition.WorkTypes[workTypeID]; !exists {
+			return
+		}
+		seenWorkTypes[workTypeID] = struct{}{}
+		workTypeIDs = append(workTypeIDs, workTypeID)
+	}
+
+	for _, token := range consumedTokens {
+		appendWorkType(token.Color.WorkTypeID)
+	}
+	if len(workTypeIDs) == 0 {
+		for _, arc := range transition.InputArcs {
+			place, ok := t.netDefinition.Places[arc.PlaceID]
+			if !ok {
+				continue
+			}
+			appendWorkType(place.TypeID)
+		}
+	}
+
+	arcs := make([]petri.Arc, 0, len(workTypeIDs))
+	for _, workTypeID := range workTypeIDs {
+		workType := t.netDefinition.WorkTypes[workTypeID]
+		failedState := ""
+		for _, stateDefinition := range workType.States {
+			if stateDefinition.Category == state.StateCategoryFailed {
+				failedState = stateDefinition.Value
+				break
+			}
+		}
+		if failedState == "" {
+			continue
+		}
+		failedPlaceID := state.PlaceID(workTypeID, failedState)
+		arcs = append(arcs, petri.Arc{
+			ID:           fmt.Sprintf("%s:terminal-failure:%s", transition.ID, failedPlaceID),
+			Name:         fmt.Sprintf("%s:terminal-failure:%s", transition.ID, failedPlaceID),
+			PlaceID:      failedPlaceID,
+			TransitionID: transition.ID,
+			Direction:    petri.ArcOutput,
+			Cardinality:  petri.ArcCardinality{Mode: petri.CardinalityOne},
+		})
+	}
+	return arcs
+}
+
+func (t *TransitionerSubsystem) calculateArcsForResolvedResult(
+	currentTransition *petri.Transition,
+	resolved resolvedWorkResult,
+	consumedTokens []factorytoken.Token,
+) ([]petri.Arc, resolvedWorkResult, error) {
+	if shouldRouteTerminalFailureToFailedState(resolved) {
+		if arcs := t.terminalFailureArcs(currentTransition, consumedTokens); len(arcs) > 0 {
+			return arcs, resolved, nil
+		}
+	}
+	workstation, ok := runtimeWorkstation(currentTransition.Name, t.runtimeConfig)
+	if ok &&
+		workstation != nil &&
+		t.decisionEnvelopes != nil &&
+		t.decisionEnvelopes.UsesGoalRoutingDecisionEnvelope(workstation) {
+		if resolved.outcome == workerexecution.OutcomeAccepted {
+			return matchClassificationLabelArcs(currentTransition, resolved.selectedClassificationLabel, resolved, "decision %q did not match any authored routing route")
+		}
+		arcs, err := calculateArcs(currentTransition, resolved.outcome)
+		return arcs, resolved, err
+	}
+	if !ok || workstation == nil || workstation.Type != interfaces.WorkstationTypeClassify || resolved.outcome != workerexecution.OutcomeAccepted {
+		arcs, err := calculateArcs(currentTransition, resolved.outcome)
+		return arcs, resolved, err
+	}
+	return matchClassificationLabelArcs(currentTransition, resolved.output, resolved, "classifier label %q did not match any authored classification route")
 }
 
 // isInFailedPlace returns true if the token is in a FAILED-category place.

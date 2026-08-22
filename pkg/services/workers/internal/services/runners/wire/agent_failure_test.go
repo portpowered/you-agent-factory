@@ -28,7 +28,7 @@ func TestAgentRunnerNormalizesProviderFailureKindsWithoutRetry(t *testing.T) {
 		{providers.ExecuteFailureKindMisconfigured, workers.WorkFailureTypeMisconfigured, workers.WorkFailureFamilyTerminal, providers.ErrExecuteFailed},
 		{providers.ExecuteFailureKindThrottled, workers.WorkFailureTypeThrottled, workers.WorkFailureFamilyThrottle, providers.ErrExecuteFailed},
 		{providers.ExecuteFailureKindDependency, workers.WorkFailureTypeInternalServerError, workers.WorkFailureFamilyRetryable, providers.ErrExecuteFailed},
-		{providers.ExecuteFailureKindUnknown, workers.WorkFailureTypePermanentBadRequest, workers.WorkFailureFamilyTerminal, providers.ErrExecuteFailed},
+		{providers.ExecuteFailureKindUnknown, workers.WorkFailureTypeUnknown, workers.WorkFailureFamilyTerminal, providers.ErrExecuteFailed},
 		{providers.ExecuteFailureKindTimeout, workers.WorkFailureTypeTimeout, workers.WorkFailureFamilyRetryable, context.DeadlineExceeded},
 	}
 	for _, test := range tests {

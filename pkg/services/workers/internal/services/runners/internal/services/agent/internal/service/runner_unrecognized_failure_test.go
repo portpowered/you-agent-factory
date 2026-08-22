@@ -44,6 +44,9 @@ func TestExecuteUnrecognizedProviderFailureIsTerminalAndProviderNeutral(t *testi
 	fake := &failingProvidersFake{failure: providers.ExecuteFailure{
 		Kind:    providers.ExecuteFailureKindUnknown,
 		Message: providerDetail,
+		Diagnostics: &providers.ExecuteDiagnostics{Metadata: map[string]string{
+			providers.ExecuteDiagnosticMetadataUnrecognizedProviderRefusal: "true",
+		}},
 	}}
 	runner, err := New(fake, noopPublisher)
 	if err != nil {

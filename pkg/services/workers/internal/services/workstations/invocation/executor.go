@@ -292,7 +292,7 @@ func normalizeProvidersFailure(err error, model, provider string) error {
 		return err
 	}
 	normalized := workers.NewProviderError(
-		workersFailureType(failure.Kind),
+		workersFailureType(failure),
 		failure.Message,
 		err,
 	)
@@ -313,8 +313,13 @@ func unsupportedProviderContinuationError(reference providers.SessionRef) error 
 	return normalized
 }
 
-func workersFailureType(kind providers.ExecuteFailureKind) workers.WorkFailureType {
-	switch kind {
+func workersFailureType(failure providers.ExecuteFailure) workers.WorkFailureType {
+	if failure.Kind == providers.ExecuteFailureKindUnknown &&
+		failure.Diagnostics != nil &&
+		failure.Diagnostics.Metadata[providers.ExecuteDiagnosticMetadataUnrecognizedProviderRefusal] == "true" {
+		return workers.WorkFailureTypePermanentBadRequest
+	}
+	switch failure.Kind {
 	case providers.ExecuteFailureKindCanceled:
 		return workers.WorkFailureTypeUnknown
 	case providers.ExecuteFailureKindTimeout:
@@ -329,16 +334,11 @@ func workersFailureType(kind providers.ExecuteFailureKind) workers.WorkFailureTy
 	case providers.ExecuteFailureKindMisconfigured:
 		return workers.WorkFailureTypeMisconfigured
 	case providers.ExecuteFailureKindDependency:
-		// Preserve the invocation path's existing dependency classification;
-		// only unrecognized provider refusals use the terminal fallback below.
 		return workers.WorkFailureTypeUnknown
 	case providers.ExecuteFailureKindUnknown, providers.ExecuteFailureKindSessionNotFound:
-		// An unrecognized provider refusal is deterministic for the same
-		// invocation. Preserve the existing terminal runtime route instead of
-		// allowing a provider-specific fallback to re-enter authored retries.
-		return workers.WorkFailureTypePermanentBadRequest
+		return workers.WorkFailureTypeUnknown
 	default:
-		return workers.WorkFailureTypePermanentBadRequest
+		return workers.WorkFailureTypeUnknown
 	}
 }
 

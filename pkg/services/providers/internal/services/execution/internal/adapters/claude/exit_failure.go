@@ -54,16 +54,14 @@ func declaredFailureFromCommandOutput(stdout, stderr []byte) (providers.ExecuteF
 		var envelope apiErrorEnvelope
 		if json.Unmarshal([]byte(line), &envelope) == nil && envelope.Error != nil {
 			failure := classifyAPIErrorRecord(*envelope.Error)
-			if failure.Kind != providers.ExecuteFailureKindUnknown {
-				return failure, true
-			}
+			markUnrecognizedProviderRefusal(&failure)
+			return failure, true
 		}
 		var direct apiErrorRecord
 		if json.Unmarshal([]byte(line), &direct) == nil && strings.TrimSpace(direct.Message) != "" {
 			failure := classifyAPIErrorRecord(direct)
-			if failure.Kind != providers.ExecuteFailureKindUnknown {
-				return failure, true
-			}
+			markUnrecognizedProviderRefusal(&failure)
+			return failure, true
 		}
 	}
 	return providers.ExecuteFailure{}, false
@@ -84,12 +82,21 @@ func classifyAPIErrorRecord(record apiErrorRecord) providers.ExecuteFailure {
 		kind = providers.ExecuteFailureKindDependency
 	}
 	if kind == providers.ExecuteFailureKindUnknown {
-		return providers.ExecuteFailure{Kind: kind}
+		return providers.ExecuteFailure{Kind: kind, Message: message}
 	}
 	if message == "" {
 		message = claudeDeclaredFailureMessage(kind)
 	}
 	return providers.ExecuteFailure{Kind: kind, Message: message}
+}
+
+func markUnrecognizedProviderRefusal(failure *providers.ExecuteFailure) {
+	if failure == nil || failure.Kind != providers.ExecuteFailureKindUnknown {
+		return
+	}
+	failure.Diagnostics = &providers.ExecuteDiagnostics{Metadata: map[string]string{
+		providers.ExecuteDiagnosticMetadataUnrecognizedProviderRefusal: "true",
+	}}
 }
 
 func formatCombinedCommandOutput(result providerservice.CommandResult) string {

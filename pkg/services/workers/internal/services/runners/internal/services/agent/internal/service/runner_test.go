@@ -138,15 +138,15 @@ func TestExecuteCanonicalizesTimeoutAndUnknownFailureMessages(t *testing.T) {
 			failure: providers.ExecuteFailure{
 				Kind: providers.ExecuteFailureKindUnknown,
 			},
-			wantMsg: unrecognizedProviderFailureMessage,
+			wantMsg: "provider invocation failed",
 		},
 		{
-			name: "unknown provider-specific message is suppressed",
+			name: "unknown provider-specific message is preserved",
 			failure: providers.ExecuteFailure{
 				Kind:    providers.ExecuteFailureKindUnknown,
 				Message: "Agy execution exited with code 2: provider secret",
 			},
-			wantMsg: unrecognizedProviderFailureMessage,
+			wantMsg: "Agy execution exited with code 2: provider secret",
 		},
 		{
 			name: "canceled provider attempt",
@@ -610,8 +610,8 @@ func TestFailureTypeForProviderKindPreservesProviderClassification(t *testing.T)
 		{kind: providers.ExecuteFailureKindThrottled, want: workers.WorkFailureTypeThrottled},
 		{kind: providers.ExecuteFailureKindDependency, want: workers.WorkFailureTypeInternalServerError},
 		{kind: providers.ExecuteFailureKindTimeout, want: workers.WorkFailureTypeTimeout},
-		{kind: providers.ExecuteFailureKindUnknown, want: workers.WorkFailureTypePermanentBadRequest},
-		{kind: providers.ExecuteFailureKindSessionNotFound, want: workers.WorkFailureTypePermanentBadRequest},
+		{kind: providers.ExecuteFailureKindUnknown, want: workers.WorkFailureTypeUnknown},
+		{kind: providers.ExecuteFailureKindSessionNotFound, want: workers.WorkFailureTypeUnknown},
 	}
 	for _, test := range tests {
 		if got := failureTypeForProviderKind(test.kind); got != test.want {

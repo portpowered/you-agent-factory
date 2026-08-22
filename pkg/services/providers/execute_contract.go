@@ -327,6 +327,11 @@ func (progress ExecuteProgress) Clone() ExecuteProgress {
 // failure message as safe to preserve through the Workers boundary.
 const ExecuteDiagnosticMetadataSafeFailureMessage = "safe_failure_message"
 
+// ExecuteDiagnosticMetadataUnrecognizedProviderRefusal marks a structured
+// provider-declared refusal whose specific failure kind is not recognized.
+// Generic unknown failures do not carry this policy marker.
+const ExecuteDiagnosticMetadataUnrecognizedProviderRefusal = "unrecognized_provider_refusal"
+
 // ExecuteDiagnostics carries sanitized one-attempt diagnostic facts on success
 // or failure without raw provider command output.
 type ExecuteDiagnostics struct {

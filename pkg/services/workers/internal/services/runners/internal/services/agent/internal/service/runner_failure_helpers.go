@@ -46,34 +46,40 @@ func failureTypeForProviderKind(kind providers.ExecuteFailureKind) workers.WorkF
 	case providers.ExecuteFailureKindTimeout:
 		return workers.WorkFailureTypeTimeout
 	case providers.ExecuteFailureKindUnknown, providers.ExecuteFailureKindSessionNotFound:
-		// A provider refusal that has no specific classifier is deterministic
-		// for the same request. Map it onto the existing terminal route so it
-		// cannot follow an authored retry arc or expose provider output.
-		return workers.WorkFailureTypePermanentBadRequest
+		return workers.WorkFailureTypeUnknown
 	default:
+		return workers.WorkFailureTypeUnknown
+	}
+}
+
+func failureTypeForProviderFailure(failure providers.ExecuteFailure) workers.WorkFailureType {
+	if isUnrecognizedProviderRefusal(failure) {
 		return workers.WorkFailureTypePermanentBadRequest
 	}
+	return failureTypeForProviderKind(failure.Kind)
+}
+
+func isUnrecognizedProviderRefusal(failure providers.ExecuteFailure) bool {
+	return failure.Kind == providers.ExecuteFailureKindUnknown &&
+		failure.Diagnostics != nil &&
+		failure.Diagnostics.Metadata[providers.ExecuteDiagnosticMetadataUnrecognizedProviderRefusal] == "true"
 }
 
 const failureMessageRuneLimit = 512
 
 const (
-	agentTimeoutFailureMessage           = "provider invocation timed out"
-	agentCanceledFailureMessage          = "provider invocation was canceled"
-	unrecognizedProviderFailureMessage   = "provider rejected the execution request"
-	missingProviderSessionFailureMessage = "provider session was not found"
+	agentTimeoutFailureMessage         = "provider invocation timed out"
+	agentCanceledFailureMessage        = "provider invocation was canceled"
+	unrecognizedProviderFailureMessage = "provider rejected the execution request"
 )
 
 func canonicalAgentFailureMessage(
-	providerKind providers.ExecuteFailureKind,
+	failure providers.ExecuteFailure,
 	failureType workers.WorkFailureType,
 	providerMessage string,
 ) string {
-	switch providerKind {
-	case providers.ExecuteFailureKindUnknown:
+	if isUnrecognizedProviderRefusal(failure) {
 		return unrecognizedProviderFailureMessage
-	case providers.ExecuteFailureKindSessionNotFound:
-		return missingProviderSessionFailureMessage
 	}
 	switch failureType {
 	case workers.WorkFailureTypeTimeout:

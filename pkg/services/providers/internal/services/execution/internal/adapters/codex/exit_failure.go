@@ -108,25 +108,33 @@ func declaredFailureFromCommandOutput(stdout, stderr []byte) (providers.ExecuteF
 		}
 		if envelope.Error != nil {
 			failure := classifyDeclaredFailure(*envelope.Error)
-			if failure.Kind != providers.ExecuteFailureKindUnknown {
-				return failure, true
+			if envelope.Type == "error" {
+				markUnrecognizedProviderRefusal(&failure)
 			}
+			return failure, true
 		}
 		if envelope.Type == "error" && strings.TrimSpace(envelope.Message) != "" {
 			failure := classifyDeclaredFailure(errorRecord{Message: envelope.Message})
-			if failure.Kind != providers.ExecuteFailureKindUnknown {
-				return failure, true
-			}
+			markUnrecognizedProviderRefusal(&failure)
+			return failure, true
 		}
 		var direct errorRecord
 		if json.Unmarshal([]byte(line), &direct) == nil && strings.TrimSpace(direct.Message) != "" {
 			failure := classifyDeclaredFailure(direct)
-			if failure.Kind != providers.ExecuteFailureKindUnknown {
-				return failure, true
-			}
+			markUnrecognizedProviderRefusal(&failure)
+			return failure, true
 		}
 	}
 	return providers.ExecuteFailure{}, false
+}
+
+func markUnrecognizedProviderRefusal(failure *providers.ExecuteFailure) {
+	if failure == nil || failure.Kind != providers.ExecuteFailureKindUnknown {
+		return
+	}
+	failure.Diagnostics = &providers.ExecuteDiagnostics{Metadata: map[string]string{
+		providers.ExecuteDiagnosticMetadataUnrecognizedProviderRefusal: "true",
+	}}
 }
 
 func formatCombinedCommandOutput(result providerservice.CommandResult) string {

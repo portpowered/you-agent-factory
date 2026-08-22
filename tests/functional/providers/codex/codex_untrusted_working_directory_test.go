@@ -1,4 +1,4 @@
-package workflow
+package codex
 
 import (
 	"os/exec"
@@ -84,7 +84,10 @@ func TestCodexUnrecognizedRefusalFailsOnceWithNeutralDiagnostic(t *testing.T) {
 	dir := scaffoldCodexWorkingDirectoryFactory(t)
 	runner := support.NewShapedProviderCommandRunner(platformprocess.CommandResult{
 		ExitCode: 77,
-		Stderr:   []byte("future refusal: credential=secret"),
+		// A structured provider error is deliberately unknown to this adapter.
+		// The adapter marks it as a provider-declared refusal; raw command text
+		// remains an ordinary unknown failure and keeps the existing contract.
+		Stderr: []byte(`{"type":"error","message":"future refusal: credential=secret"}`),
 	})
 	_, listed, events := support.RunFactoryToCompletionWithEdgesAndObservations(
 		t,
