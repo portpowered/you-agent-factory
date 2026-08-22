@@ -47,11 +47,11 @@ export function App({
         locationSearch={locationSearch}
       >
         {surface === "customer-factory-emulator-demos" ? (
-          <main className="min-h-screen overflow-x-hidden bg-surface p-1 md:p-2">
+          <main className="min-h-screen overflow-x-clip bg-surface p-1 md:p-2">
             <CustomerFactoryEmulatorDemos />
           </main>
         ) : surface === "packaged-factories" ? (
-          <main className="min-h-screen overflow-x-hidden bg-surface p-4 md:p-6">
+          <main className="min-h-screen overflow-x-clip bg-surface p-4 md:p-6">
             <div className="mx-auto min-w-0 max-w-7xl">
               <PackagedFactoryInventory copyText={packagedFactoryCopyText} />
             </div>

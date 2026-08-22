@@ -452,7 +452,7 @@ describe("CurrentActivityGraphViewport", () => {
 
     const reactFlow = await screen.findByTestId("mock-react-flow");
     expect(reactFlow.getAttribute("data-selection-on-drag")).toBe("true");
-    expect(reactFlow.getAttribute("data-pan-on-drag")).toBe("");
+    expect(reactFlow.getAttribute("data-pan-on-drag")).toBe("1");
     expect(reactFlow.getAttribute("data-pan-on-scroll")).toBe("true");
     expect(reactFlow.getAttribute("data-zoom-on-scroll")).toBe("false");
     expect(reactFlow.getAttribute("data-delete-key-code")).toBe("null");

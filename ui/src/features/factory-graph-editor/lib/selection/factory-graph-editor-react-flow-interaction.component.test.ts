@@ -6,12 +6,12 @@ import {
 } from "./factory-graph-editor-react-flow-interaction";
 
 describe("factory-graph-editor-react-flow-interaction", () => {
-  it("uses selection-first pan and zoom defaults", () => {
+  it("uses middle-button pan while preserving selection-first defaults", () => {
     expect(FACTORY_GRAPH_EDITOR_REACT_FLOW_GESTURE_PROPS).toEqual({
       deleteKeyCode: null,
       elementsSelectable: true,
       panActivationKeyCode: "Space",
-      panOnDrag: [],
+      panOnDrag: [1],
       panOnScroll: true,
       selectionOnDrag: true,
       zoomOnPinch: true,

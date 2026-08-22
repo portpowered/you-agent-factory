@@ -35,7 +35,7 @@ export function DashboardGeneralHeader({
           )}
         >
           <Heading
-            className="m-0 min-w-0 shrink-0 md:col-start-1 md:self-center"
+            className="m-0 flex min-w-0 shrink-0 items-center md:col-start-1 md:self-center"
             level="page"
           >
             <DashboardBrandLockup
