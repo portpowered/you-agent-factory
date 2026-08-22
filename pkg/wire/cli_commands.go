@@ -107,7 +107,7 @@ func provideCostsCLI() costscli.Operation {
 	return costscli.NewOperation(func(server string) (costscli.Client, error) {
 		return generatedhttpclient.NewClientWithResponses(
 			server,
-			generatedhttpclient.WithHTTPClient(&http.Client{Timeout: standardCLIHTTPTimeout}),
+			generatedhttpclient.WithHTTPClient(&http.Client{Timeout: costscli.DefaultRequestTimeout}),
 		)
 	})
 }

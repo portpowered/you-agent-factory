@@ -7,8 +7,10 @@ import (
 	"fmt"
 	"io"
 	"strings"
+	"time"
 
 	generatedclient "github.com/portpowered/infinite-you/pkg/transports/http/client"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/spf13/cobra"
 )
 
@@ -32,17 +34,19 @@ type Operation func(context.Context, CostsConfig) error
 
 // CostsCommandConfig contains invocation-scoped callbacks from the root CLI.
 type CostsCommandConfig struct {
-	Operation Operation
-	Server    func() string
-	JSON      func() bool
+	Operation      Operation
+	Server         func() string
+	JSON           func() bool
+	RequestTimeout time.Duration
 }
 
 // CostsConfig contains the fully resolved inputs for one cost report request.
 type CostsConfig struct {
-	Server    string
-	SessionID string
-	JSON      bool
-	Output    io.Writer
+	Server         string
+	SessionID      string
+	JSON           bool
+	Output         io.Writer
+	RequestTimeout time.Duration
 }
 
 // NewOperation binds the generated HTTP client factory to the Costs command
@@ -57,20 +61,33 @@ func NewOperation(factory ClientFactory) Operation {
 		}
 		client, err := factory(strings.TrimSpace(config.Server))
 		if err != nil {
-			return fmt.Errorf("build metrics costs client: %w", err)
+			return newCostsError(
+				CostsNetworkFailureCode,
+				internalErrorFamily,
+				fmt.Sprintf("build GET %s client for %s failed; check --server and confirm the Factory API endpoint is valid", metricsCostsEndpoint, safeServerEndpoint(config.Server)),
+				err,
+			)
 		}
 		if client == nil {
-			return fmt.Errorf("build metrics costs client: client is required")
+			return newCostsError(
+				CostsNetworkFailureCode,
+				internalErrorFamily,
+				fmt.Sprintf("build GET %s client for %s failed; check --server and confirm the Factory API endpoint is valid", metricsCostsEndpoint, safeServerEndpoint(config.Server)),
+				nil,
+			)
 		}
+		requestTimeout := normalizeRequestTimeout(config.RequestTimeout)
+		requestContext, cancel := context.WithTimeout(ctx, requestTimeout)
+		defer cancel()
 		response, err := client.GetMetricsCostsWithResponse(
-			ctx,
+			requestContext,
 			costsRequestParams(config.SessionID),
 		)
 		if err != nil {
-			return fmt.Errorf("query metrics costs: %w", err)
+			return newCostsTransportError(config.Server, requestTimeout, err)
 		}
 		if response == nil || response.JSON200 == nil {
-			return costsResponseError(response)
+			return costsResponseError(response, config.Server)
 		}
 		output, err := renderCostsOutput(*response.JSON200, config.JSON)
 		if err != nil {
@@ -101,10 +118,11 @@ func NewCostsCommand(config CostsCommandConfig) *cobra.Command {
 				jsonOutput = config.JSON()
 			}
 			return RunCosts(cmd.Context(), config.Operation, CostsConfig{
-				Server:    server,
-				SessionID: sessionID,
-				JSON:      jsonOutput,
-				Output:    cmd.OutOrStdout(),
+				Server:         server,
+				SessionID:      sessionID,
+				JSON:           jsonOutput,
+				Output:         cmd.OutOrStdout(),
+				RequestTimeout: config.RequestTimeout,
 			})
 		},
 	}
@@ -146,18 +164,51 @@ func costsRequestParams(sessionID string) *generatedclient.GetMetricsCostsParams
 	return &generatedclient.GetMetricsCostsParams{SessionId: &sessionID}
 }
 
-func costsResponseError(response *generatedclient.GetMetricsCostsClientResponse) error {
+func costsResponseError(response *generatedclient.GetMetricsCostsClientResponse, server string) error {
 	if response == nil {
-		return fmt.Errorf("query metrics costs: empty server response")
+		return newCostsError(
+			CostsNetworkFailureCode,
+			internalErrorFamily,
+			fmt.Sprintf("GET %s at %s returned no response; check --server and confirm the Factory API is running", metricsCostsEndpoint, safeServerEndpoint(server)),
+			nil,
+		)
 	}
-	if response.JSON400 != nil && strings.TrimSpace(response.JSON400.Message) != "" {
-		return fmt.Errorf("query metrics costs: %s", response.JSON400.Message)
-	}
-	if response.JSON500 != nil && strings.TrimSpace(response.JSON500.Message) != "" {
-		return fmt.Errorf("query metrics costs: %s", response.JSON500.Message)
+	for _, candidate := range []*generatedclient.ErrorResponse{
+		response.JSON400,
+		response.JSON408,
+		response.JSON500,
+		response.JSON504,
+	} {
+		if candidate == nil {
+			continue
+		}
+		code := strings.TrimSpace(string(candidate.Code))
+		if code == "" {
+			code = CostsHTTPFailureCode
+		}
+		message := strings.TrimSpace(candidate.Message)
+		if message == "" {
+			message = fmt.Sprintf("server returned HTTP %d", response.StatusCode())
+		}
+		return newCostsError(
+			code,
+			candidateFamily(factoryapi.ErrorFamily(candidate.Family)),
+			fmt.Sprintf("GET %s at %s returned HTTP %d: %s", metricsCostsEndpoint, safeServerEndpoint(server), response.StatusCode(), message),
+			nil,
+		)
 	}
 	if response.StatusCode() != 0 {
-		return fmt.Errorf("query metrics costs: server returned HTTP %d", response.StatusCode())
+		return newCostsError(
+			CostsHTTPFailureCode,
+			familyForStatus(response.StatusCode()),
+			fmt.Sprintf("GET %s at %s returned HTTP %d; retry the command or check the Factory API logs", metricsCostsEndpoint, safeServerEndpoint(server), response.StatusCode()),
+			nil,
+		)
 	}
-	return fmt.Errorf("query metrics costs: response did not contain a cost report")
+	return newCostsError(
+		CostsHTTPFailureCode,
+		internalErrorFamily,
+		fmt.Sprintf("GET %s at %s returned no cost report; retry the command or check the Factory API logs", metricsCostsEndpoint, safeServerEndpoint(server)),
+		nil,
+	)
 }

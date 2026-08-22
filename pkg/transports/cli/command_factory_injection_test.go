@@ -8,11 +8,15 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"net/http"
+	"net/http/httptest"
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	startupcli "github.com/portpowered/infinite-you/pkg/initializer/process"
+	costscli "github.com/portpowered/infinite-you/pkg/services/costs/transports/cli"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorydefinitionscli "github.com/portpowered/infinite-you/pkg/services/factory_definitions/transports/cli"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/cli/session"
@@ -23,6 +27,7 @@ import (
 	workcmd "github.com/portpowered/infinite-you/pkg/services/work/transports/cli/work"
 	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/terminalpolicy"
+	generatedclient "github.com/portpowered/infinite-you/pkg/transports/http/client"
 	"go.uber.org/zap"
 )
 
@@ -609,6 +614,75 @@ func TestExecuteCommandUsageFailuresUseCentralCobraRenderer(t *testing.T) {
 				t.Fatalf("stderr mislabeled usage failure: %q", stderr.String())
 			}
 		})
+	}
+}
+
+func TestProductionMetricsCostsTimeoutDiagnosticPreservesEndpointAcrossModes(t *testing.T) {
+	t.Parallel()
+
+	const requestTimeout = 25 * time.Millisecond
+	modes := [][]string{
+		{"--server", "PLACEHOLDER", "metrics", "costs"},
+		{"--server", "PLACEHOLDER", "--verbose", "metrics", "costs"},
+		{"--server", "PLACEHOLDER", "--debug", "metrics", "costs"},
+	}
+	started := make(chan struct{}, len(modes))
+	server := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, request *http.Request) {
+		started <- struct{}{}
+		<-request.Context().Done()
+	}))
+	defer server.Close()
+
+	operation := costscli.NewOperation(func(serverURL string) (costscli.Client, error) {
+		return generatedclient.NewClientWithResponses(
+			serverURL,
+			generatedclient.WithHTTPClient(&http.Client{}),
+		)
+	})
+	factory := withTestInjectedPlatformRoles(CommandFactory{
+		costsCLI: func(ctx context.Context, config costscli.CostsConfig) error {
+			config.RequestTimeout = requestTimeout
+			return operation(ctx, config)
+		},
+	})
+
+	wantMessage := fmt.Sprintf(
+		"GET /metrics/costs at %s timed out within the configured %s request timeout; retry or narrow the request with --session",
+		server.URL,
+		requestTimeout,
+	)
+	for _, template := range modes {
+		args := append([]string(nil), template...)
+		args[1] = server.URL
+		var stdout, stderr bytes.Buffer
+		err := factory.ExecuteCommand(startupcli.CommandInvocation{
+			Arguments: args,
+			Stdin:     strings.NewReader(""),
+			Stdout:    &stdout,
+			Stderr:    &stderr,
+			Context:   context.Background(),
+			HomeDir:   func() (string, error) { return "operator-home", nil },
+			LookupEnv: func(string) (string, bool) { return "", false },
+		})
+		if err == nil {
+			t.Fatalf("ExecuteCommand(%v) error = nil, want timeout", args)
+		}
+		if stdout.Len() != 0 {
+			t.Fatalf("stdout for %v = %q, want empty failure output", args, stdout.String())
+		}
+		assertSingleMetricsDiagnostic(t, stderr.String(), costscli.CostsRequestTimeoutCode, "INTERNAL_SERVER_ERROR", wantMessage)
+		if strings.Contains(stderr.String(), "CLI_COMMAND_FAILED") || strings.Contains(stderr.String(), "INTERNAL_SERVER_ERROR: command failed") {
+			t.Fatalf("timeout diagnostic for %v collapsed to a generic failure: %q", args, stderr.String())
+		}
+		var costsErr *costscli.CostsError
+		if !errors.As(err, &costsErr) || costsErr.CLIErrorCode() != costscli.CostsRequestTimeoutCode {
+			t.Fatalf("ExecuteCommand(%v) error = %v, want typed timeout", args, err)
+		}
+		select {
+		case <-started:
+		case <-time.After(time.Second):
+			t.Fatalf("delayed costs server did not receive %v", args)
+		}
 	}
 }
 
