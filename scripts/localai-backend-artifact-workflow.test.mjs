@@ -299,6 +299,7 @@ test("the Windows workflow exports setup-node's directory to the MSYS2 build she
 	assert.match(workflow, /- name: Expose the pinned Node tool to MSYS2/);
 	assert.match(workflow, /if: runner\.os == 'Windows'/);
 	assert.match(workflow, /Get-Command node -CommandType Application -ErrorAction Stop/);
+	assert.match(workflow, /Select-Object -First 1/);
 	assert.match(workflow, /WINDOWS_NODE_DIR=\$\(\$nodeCommand\.Source \| Split-Path -Parent\)/);
 });
 

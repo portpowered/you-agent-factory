@@ -95,7 +95,7 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          $nodeCommand = Get-Command node -CommandType Application -ErrorAction Stop
+          $nodeCommand = Get-Command node -CommandType Application -ErrorAction Stop | Select-Object -First 1
           "WINDOWS_NODE_DIR=$($nodeCommand.Source | Split-Path -Parent)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
       - name: Set up Go at the pinned tool version
