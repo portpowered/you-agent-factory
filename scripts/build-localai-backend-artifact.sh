@@ -23,6 +23,10 @@ if [[ "$TARGET_ID" == "windows-amd64" ]] && command -v cygpath >/dev/null 2>&1; 
 		node_bin_dir="$(cygpath -u "$WINDOWS_NODE_DIR")"
 		export PATH="$node_bin_dir:$PATH"
 	fi
+	if [[ -n "${WINDOWS_GO_DIR:-}" ]]; then
+		go_bin_dir="$(cygpath -u "$WINDOWS_GO_DIR")"
+		export PATH="$go_bin_dir:$PATH"
+	fi
 	if [[ -n "${VCPKG_ROOT:-}" ]]; then
 		VCPKG_ROOT="$(cygpath -u "$VCPKG_ROOT")"
 		export VCPKG_ROOT
