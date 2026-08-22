@@ -192,7 +192,7 @@ func newTestFactory(opts ...testFactoryOption) (factoryhost.Engine, error) {
 		cfg.net, cfg.scheduler, workerService, workerSessionsService, cfg.runtimeConfig, nil, nil,
 		cfg.workflowContext, cfg.runtimeMode, cfg.logger, cfg.clock,
 		cfg.inlineDispatch, cfg.eventHistory, "runtime-test-recording-id", "runtime-test-id", nil,
-		cfg.restoredWorldState, unavailableProviderSessions{},
+		cfg.restoredWorldState, false, unavailableProviderSessions{},
 		nil, nil, cfg.submissionHooks,
 		cfg.dispatchRecorder, cfg.completionRecorder, cfg.petriMutationRecorder,
 		cfg.completionDeliveryPlanner,

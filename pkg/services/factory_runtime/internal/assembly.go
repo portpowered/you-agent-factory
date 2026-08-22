@@ -236,14 +236,22 @@ func (a *Assembly) configureRestoredWorldState(
 	if spec == nil {
 		return fmt.Errorf("Factory Runtime build spec is required")
 	}
+	// Deterministic replay also needs a detached starting board: replay hooks
+	// reproduce the event history, while the runtime marking supplies the Work
+	// identities that those hooks observe. It is not a daemon restart, so its
+	// recorded active dispatches must not be interrupted or re-armed.
+	if replayArtifact != nil {
+		restored, err := reconstructRestoredWorldState(recordingsRuntime, spec.ReplayEvents)
+		if err != nil {
+			return err
+		}
+		spec.RestoredWorldState = restored
+		spec.SkipRestoredDispatchReconciliation = true
+		return nil
+	}
 	// Live daemon openings supply detached current-board state explicitly.
 	if restoredWorldState != nil {
 		spec.RestoredWorldState = restoredWorldState
-		return nil
-	}
-	// Deterministic replay replays its recorded events and must not also seed
-	// the restart-only world-state path, or durable claims would be duplicated.
-	if replayArtifact != nil {
 		return nil
 	}
 	// Resume is a live continuation: reconstruct the successor's starting
