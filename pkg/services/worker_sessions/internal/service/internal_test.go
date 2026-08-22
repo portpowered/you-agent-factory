@@ -869,6 +869,89 @@ func TestCancel_BeforePublicationUsesRegisteredSupervision(t *testing.T) {
 	}
 }
 
+func TestTerminate_BeforePublicationUsesRegisteredSupervisionAndIsIdempotent(t *testing.T) {
+	r := newTestRegistry(t)
+	const sessionID = "worker-terminate-before-publication"
+	const dispatchID = "dispatch-terminate-before-publication"
+	r.reserveIfAbsent(sessionID)
+	if _, err := r.transitionToStarting(sessionID); err != nil {
+		t.Fatalf("transitionToStarting: %v", err)
+	}
+	request := dispatchHandoff(dispatchID)
+	supervision, ok := r.registerSupervision(sessionID, dispatchID, "", request)
+	if !ok {
+		t.Fatal("registerSupervision: want exact pre-publication supervision")
+	}
+
+	result, err := r.Terminate(context.Background(), workersessions.ControlRequest{ID: sessionID})
+	if err != nil || result.Outcome != workersessions.ControlOutcomeApplied ||
+		result.DispatchID != dispatchID || result.Session.State != workersessions.StateTerminated {
+		t.Fatalf("Terminate() before publication = %#v, %v, want applied exact TERMINATED supervision", result, err)
+	}
+	if errors.Is(err, workers.ErrUnknownWorkstationDispatch) {
+		t.Fatalf("Terminate() before publication returned unknown dispatch: %v", err)
+	}
+
+	repeated, err := r.Terminate(context.Background(), workersessions.ControlRequest{ID: sessionID})
+	if err != nil || repeated.Outcome != workersessions.ControlOutcomeNoop ||
+		repeated.DispatchID != dispatchID || repeated.Session.State != workersessions.StateTerminated {
+		t.Fatalf("repeated Terminate() = %#v, %v, want exact terminal NOOP", repeated, err)
+	}
+
+	// A late canceled publication belongs to the same supervision and cannot
+	// replace the absorbing terminal state or make a second boundary request.
+	r.completeSupervision(sessionID, supervision, canceledBeforeAdmissionResult(request), workers.ErrWorkstationDispatchCanceled)
+	final, err := r.Get(context.Background(), workersessions.GetRequest{ID: sessionID})
+	if err != nil || final.State != workersessions.StateTerminated {
+		t.Fatalf("late pre-publication completion session = %+v, %v, want absorbing TERMINATED", final, err)
+	}
+}
+
+func TestCancel_KnownSessionWithAbsentOrUnknownBoundaryDispatchFailsClosed(t *testing.T) {
+	for _, test := range []struct {
+		name       string
+		install    func(*supervision)
+		wantReason string
+	}{
+		{
+			name:       "absent cancellation handle",
+			wantReason: "absent",
+		},
+		{
+			name: "unknown boundary identity",
+			install: func(supervision *supervision) {
+				supervision.installCancelFailure(func() error { return workers.ErrUnknownWorkstationDispatch })
+			},
+			wantReason: "unknown",
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			r := newTestRegistry(t)
+			const sessionID = "worker-fail-closed"
+			const dispatchID = "dispatch-fail-closed"
+			r.sessions[sessionID] = workersessions.Session{ID: sessionID, State: workersessions.StateRunning}
+			supervision := newSupervision(dispatchID, "", dispatchHandoff(dispatchID))
+			supervision.accepted = true
+			if test.install != nil {
+				test.install(supervision)
+			}
+			r.supervisions[sessionID] = supervision
+			r.dispatchOwners[dispatchID] = sessionID
+
+			result, err := r.Cancel(context.Background(), workersessions.ControlRequest{ID: sessionID})
+			if !errors.Is(err, workers.ErrUnknownWorkstationDispatch) ||
+				result.Outcome != workersessions.ControlOutcomeFailed || result.DispatchID != dispatchID ||
+				result.Session.State != workersessions.StateRunning {
+				t.Fatalf("Cancel() with %s boundary dispatch = %#v, %v, want failed exact RUNNING result", test.wantReason, result, err)
+			}
+			current, getErr := r.Get(context.Background(), workersessions.GetRequest{ID: sessionID})
+			if getErr != nil || current.State != workersessions.StateRunning {
+				t.Fatalf("session after %s boundary failure = %+v, %v, want RUNNING", test.wantReason, current, getErr)
+			}
+		})
+	}
+}
+
 func TestPublishRegisteredAttempt_CanceledBeforeAdmissionRetainsExactTerminal(t *testing.T) {
 	r := newTestRegistry(t)
 	const sessionID = "worker-publish-canceled"
