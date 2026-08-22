@@ -68,9 +68,17 @@ func ReconstructWorldStateRequest(
 	events []factorydefinitions.FactoryEvent,
 	selectedTick int,
 ) recordings.ReconstructWorldStateRequest {
+	canonicalEvents := canonicalEventsFromFactory(events)
+	for index := range canonicalEvents {
+		// Visualization subscribes to the process-wide Factory event stream. The
+		// source context still retains any originating session identity, while
+		// the canonical projection scope must describe this global query rather
+		// than reject a history containing session-scoped event envelopes.
+		canonicalEvents[index].Scope = recordings.CanonicalEventScope{}
+	}
 	return recordings.ReconstructWorldStateRequest{
-		Scope:        reconnectScope(scopeFromFactoryReconnect(factorydefinitions.FactoryEventReconnectScope{})),
-		Events:       canonicalEventsFromFactory(events),
+		Scope:        recordings.CanonicalEventScope{},
+		Events:       canonicalEvents,
 		SelectedTick: selectedTick,
 	}
 }
@@ -87,10 +95,16 @@ func ValidateReconnectReplayRequest(
 	if err != nil {
 		return recordings.ValidateReconnectReplayRequest{}, err
 	}
+	canonicalScope := reconnectScope(scopeFromFactoryReconnect(scope))
+	if canonicalScope == (recordings.CanonicalEventScope{}) {
+		for index := range canonicalEvents {
+			canonicalEvents[index].Scope = recordings.CanonicalEventScope{}
+		}
+	}
 	return recordings.ValidateReconnectReplayRequest{
 		Events: canonicalEvents,
 		Cursor: canonicalCursor,
-		Scope:  reconnectScope(scopeFromFactoryReconnect(scope)),
+		Scope:  canonicalScope,
 	}, nil
 }
 

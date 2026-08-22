@@ -39,7 +39,7 @@ func provideRecordingsRoot(
 	} else if appender, ok := storage.(platformreplay.Appender); ok {
 		appendFile = appender.AppendFile
 	}
-	return recordingswire.NewRuntimeRootWithAppend(
+	service, err := recordingswire.NewRuntimeRootWithAppend(
 		targets,
 		writeFile,
 		appendFile,
@@ -55,6 +55,13 @@ func provideRecordingsRoot(
 		logger,
 		platformclock.Real{},
 	)
+	if err != nil {
+		return nil, err
+	}
+	if edges.RecordingsRootObserver != nil {
+		edges.RecordingsRootObserver(service)
+	}
+	return service, nil
 }
 
 func provideRecordingsRuntimeOpening(

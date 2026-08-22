@@ -216,6 +216,10 @@ type Edges struct {
 	OperatorSettingsIDGenerator          operatorsettings.IDGenerator
 	SystemInitializationInspectPath      func(string) (fs.FileInfo, error)
 
+	// RecordingsRootObserver is a construction-time observation seam for
+	// functional callers that need to exercise the public Recordings root
+	// directly. It does not replace or mutate any Recordings dependency.
+	RecordingsRootObserver           func(recordings.Service)
 	Clock                            platformclock.Source
 	ACPWireRecorder                  wiretranscript.WireRecorder
 	SubmissionRecorder               recordings.SubmissionRecorder
@@ -655,6 +659,9 @@ func Merge(defaults Edges, replacements Edges) Edges {
 	}
 	if replacements.RecordingReadDirectory != nil {
 		defaults.RecordingReadDirectory = replacements.RecordingReadDirectory
+	}
+	if replacements.RecordingsRootObserver != nil {
+		defaults.RecordingsRootObserver = replacements.RecordingsRootObserver
 	}
 	if replacements.APIServerStarter != nil {
 		defaults.APIServerStarter = replacements.APIServerStarter
