@@ -12,13 +12,6 @@ export const BACKEND_LINT_ALLOWANCES = Object.freeze({
 		deadline: "2026-10-15",
 		removalCondition: "Route the matrix through the Factory Definitions catalog boundary, then delete this allowance when hosted packaged-factory-consumption-check passes.",
 	},
-	deadcode: {
-		baselineViolationCount: 562,
-		reason: "The 2026-08-16 hosted baseline reports 562 existing dead-code findings against the repository baseline.",
-		ownerOrLane: "Repository dead-code cleanup lane",
-		deadline: "2026-12-31",
-		removalCondition: "Remove or review the existing findings and update the source baseline intentionally, then delete this allowance when hosted deadcode reports zero drift.",
-	},
 });
 
 // Targets recorded here are gated with no allowance at all: any failure is a
