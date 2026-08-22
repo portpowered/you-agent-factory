@@ -4,9 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 	"net/http/httptest"
-	"sync"
+	"strings"
 	"testing"
 	"time"
 
@@ -93,36 +94,31 @@ func TestHandlerMapsCostsFailureToInternalError(t *testing.T) {
 	}
 }
 
-func TestHandlerCharacterizesSlowCostsQueryAtLowAndConcurrentLoad(t *testing.T) {
+func TestHandlerBoundsSlowCostsQueryAtLowAndConcurrentLoad(t *testing.T) {
 	t.Parallel()
 
 	t.Run("low load", func(t *testing.T) {
-		runBlockedCostsLoad(t, 1)
+		runTimedOutCostsLoad(t, 1)
 	})
 	t.Run("representative concurrent load", func(t *testing.T) {
-		runBlockedCostsLoad(t, 16)
+		runTimedOutCostsLoad(t, 16)
 	})
 }
 
-// runBlockedCostsLoad is a characterization harness for the pre-bound
-// metrics-costs route. The gate models a canonical metrics read that has not
-// completed; channels make the observation deterministic without sleeps, a
-// live daemon, or assumptions about artifact layout. Story 004 can retain
-// this harness while changing the assertion from "waits for the query" to a
-// bounded timeout/cancellation result.
-func runBlockedCostsLoad(t *testing.T, requestCount int) {
+// runTimedOutCostsLoad models a canonical metrics read that does not complete
+// on its own. The query observes context cancellation, so the test proves that
+// both low and representative concurrent load terminate with a typed response
+// without a live daemon, sleeps, or assumptions about artifact layout.
+func runTimedOutCostsLoad(t *testing.T, requestCount int) {
 	t.Helper()
-	release := make(chan struct{})
-	var releaseOnce sync.Once
-	releaseQuery := func() { releaseOnce.Do(func() { close(release) }) }
-	defer releaseQuery()
+	const queryTimeout = 25 * time.Millisecond
 	started := make(chan struct{}, requestCount)
-	query := costs.CostsQuery(func(context.Context, costs.QueryRequest) (costs.Report, error) {
+	query := costs.CostsQuery(func(ctx context.Context, _ costs.QueryRequest) (costs.Report, error) {
 		started <- struct{}{}
-		<-release
-		return costs.Report{Status: costs.StatusNoUsage}, nil
+		<-ctx.Done()
+		return costs.Report{}, ctx.Err()
 	})
-	handler := NewHandler(NewAdapter(query, "metrics", "settings"), zap.NewNop())
+	handler := NewHandlerWithQueryTimeout(NewAdapter(query, "metrics", "settings"), zap.NewNop(), queryTimeout)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		handler.GetMetricsCosts(w, r, factoryapi.GetMetricsCostsParams{})
 	}))
@@ -131,6 +127,7 @@ func runBlockedCostsLoad(t *testing.T, requestCount int) {
 	type result struct {
 		status int
 		err    error
+		body   []byte
 	}
 	results := make(chan result, requestCount)
 	for i := 0; i < requestCount; i++ {
@@ -139,6 +136,7 @@ func runBlockedCostsLoad(t *testing.T, requestCount int) {
 			item := result{err: err}
 			if response != nil {
 				item.status = response.StatusCode
+				item.body, item.err = io.ReadAll(response.Body)
 				_ = response.Body.Close()
 			}
 			results <- item
@@ -152,26 +150,72 @@ func runBlockedCostsLoad(t *testing.T, requestCount int) {
 			t.Fatalf("request %d did not reach the canonical costs query", i+1)
 		}
 	}
-	select {
-	case got := <-results:
-		t.Fatalf("costs request completed before the canonical query was released: %#v", got)
-	default:
-	}
-
-	releaseQuery()
-	completionDeadline := time.After(time.Second)
+	completionDeadline := time.After(2 * time.Second)
 	for i := 0; i < requestCount; i++ {
 		select {
 		case got := <-results:
 			if got.err != nil {
-				t.Fatalf("costs request %d error after release: %v", i+1, got.err)
+				t.Fatalf("costs request %d error after server timeout: %v", i+1, got.err)
 			}
-			if got.status != http.StatusOK {
-				t.Fatalf("costs request %d status = %d, want %d", i+1, got.status, http.StatusOK)
+			if got.status != http.StatusGatewayTimeout {
+				t.Fatalf("costs request %d status = %d, want %d", i+1, got.status, http.StatusGatewayTimeout)
+			}
+			var response factoryapi.ErrorResponse
+			if err := json.Unmarshal(got.body, &response); err != nil {
+				t.Fatalf("costs request %d timeout body: %v", i+1, err)
+			}
+			if response.Code != factoryapi.ErrorResponseCode("COSTS_QUERY_TIMEOUT") || !strings.Contains(response.Message, queryTimeout.String()) {
+				t.Fatalf("costs request %d timeout response = %#v, want typed timeout with %s", i+1, response, queryTimeout)
+			}
+			if strings.Contains(string(got.body), "line_items") || strings.Contains(string(got.body), "priced_subtotal") {
+				t.Fatalf("costs request %d emitted partial report content: %s", i+1, got.body)
 			}
 		case <-completionDeadline:
-			t.Fatalf("costs request %d did not complete after the canonical query was released", i+1)
+			t.Fatalf("costs request %d did not complete after the server timeout", i+1)
 		}
+	}
+}
+
+func TestHandlerMapsCanceledCostsQueryToRequestTimeout(t *testing.T) {
+	t.Parallel()
+
+	started := make(chan struct{})
+	query := costs.CostsQuery(func(ctx context.Context, _ costs.QueryRequest) (costs.Report, error) {
+		close(started)
+		<-ctx.Done()
+		return costs.Report{}, ctx.Err()
+	})
+	handler := NewHandlerWithQueryTimeout(NewAdapter(query, "metrics", "settings"), zap.NewNop(), time.Second)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	request := httptest.NewRequest(http.MethodGet, "/metrics/costs", nil).WithContext(ctx)
+	recorder := httptest.NewRecorder()
+	done := make(chan struct{})
+	go func() {
+		handler.GetMetricsCosts(recorder, request, factoryapi.GetMetricsCostsParams{})
+		close(done)
+	}()
+	select {
+	case <-started:
+	case <-time.After(time.Second):
+		t.Fatal("costs query did not start before cancellation")
+	}
+	cancel()
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("costs handler did not complete after cancellation")
+	}
+
+	if recorder.Code != http.StatusRequestTimeout {
+		t.Fatalf("status = %d, want %d", recorder.Code, http.StatusRequestTimeout)
+	}
+	var response factoryapi.ErrorResponse
+	if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil {
+		t.Fatalf("decode cancellation response: %v", err)
+	}
+	if response.Code != factoryapi.ErrorResponseCode("COSTS_QUERY_CANCELED") || !strings.Contains(response.Message, "canceled") {
+		t.Fatalf("cancellation response = %#v, want actionable typed cancellation", response)
 	}
 }
 

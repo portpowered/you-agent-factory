@@ -71,6 +71,10 @@ properties:
       - MODEL_CACHE_IN_USE
       - NOT_FOUND
       - INTERNAL_ERROR
+      - COSTS_INVALID_REQUEST
+      - COSTS_QUERY_CANCELED
+      - COSTS_QUERY_FAILED
+      - COSTS_QUERY_TIMEOUT
     x-enum-descriptions:
       - Request payload or parameter validation failed.
       - Factory session discovery found a readable factory target whose config could not be loaded.
@@ -127,6 +131,10 @@ properties:
       - The selected managed model cache revision is held by an active model host or invocation.
       - The requested resource does not exist.
       - The server failed while handling an otherwise valid request.
+      - The metrics costs request contained invalid configuration or selection input.
+      - The metrics costs request was canceled before the report completed.
+      - The metrics costs query failed while reading or valuing runtime usage.
+      - The metrics costs query exceeded its server-side completion bound.
   targets:
     type: array
     description: Optional canonical validation targets that clients can map to factory graph nodes, handles, and form fields.

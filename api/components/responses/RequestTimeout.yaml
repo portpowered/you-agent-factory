@@ -1,0 +1,5 @@
+description: The metrics cost query was canceled before it completed.
+content:
+  application/json:
+    schema:
+      $ref: '../schemas/api/ErrorResponse.yaml'

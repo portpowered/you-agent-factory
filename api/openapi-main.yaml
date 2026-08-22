@@ -75,7 +75,9 @@ paths:
         price table. The default scope covers all Factory Sessions. Supplying
         an unknown-but-valid Factory Session ID returns a successful no-usage
         report for that scope rather than unrelated usage. Missing prices are
-        returned as UNPRICED rows and are never treated as zero.
+        returned as UNPRICED rows and are never treated as zero. The server
+        bounds one cost query at eight seconds and returns a typed timeout
+        response when the canonical read does not complete in that window.
       parameters:
         - name: session_id
           in: query
@@ -92,8 +94,12 @@ paths:
                 $ref: '#/components/schemas/CostsReport'
         '400':
           $ref: './components/responses/BadRequest.yaml'
+        '408':
+          $ref: './components/responses/RequestTimeout.yaml'
         '500':
           $ref: './components/responses/InternalError.yaml'
+        '504':
+          $ref: './components/responses/GatewayTimeout.yaml'
   /worker-sessions:
     get:
       tags:

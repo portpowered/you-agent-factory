@@ -121,6 +121,10 @@ const (
 const (
 	ErrorResponseCodeADMITTEDAPPLICATIONFAILURE                     ErrorResponseCode = "ADMITTED_APPLICATION_FAILURE"
 	ErrorResponseCodeBADREQUEST                                     ErrorResponseCode = "BAD_REQUEST"
+	ErrorResponseCodeCOSTSINVALIDREQUEST                            ErrorResponseCode = "COSTS_INVALID_REQUEST"
+	ErrorResponseCodeCOSTSQUERYCANCELED                             ErrorResponseCode = "COSTS_QUERY_CANCELED"
+	ErrorResponseCodeCOSTSQUERYFAILED                               ErrorResponseCode = "COSTS_QUERY_FAILED"
+	ErrorResponseCodeCOSTSQUERYTIMEOUT                              ErrorResponseCode = "COSTS_QUERY_TIMEOUT"
 	ErrorResponseCodeEXECUTIONREQUESTIDCONFLICT                     ErrorResponseCode = "EXECUTION_REQUEST_ID_CONFLICT"
 	ErrorResponseCodeFACTORYALREADYEXISTS                           ErrorResponseCode = "FACTORY_ALREADY_EXISTS"
 	ErrorResponseCodeFACTORYNOTIDLE                                 ErrorResponseCode = "FACTORY_NOT_IDLE"
@@ -9545,6 +9549,9 @@ type FactorySessionResourceCapacityConflict struct {
 	union json.RawMessage
 }
 
+// GatewayTimeout defines model for GatewayTimeout.
+type GatewayTimeout = ErrorResponse
+
 // InternalError defines model for InternalError.
 type InternalError = ErrorResponse
 
@@ -9556,6 +9563,9 @@ type MoveWorkConflict = ErrorResponse
 
 // NotFound defines model for NotFound.
 type NotFound = ErrorResponse
+
+// RequestTimeout defines model for RequestTimeout.
+type RequestTimeout = ErrorResponse
 
 // ResponseEventBadRequest defines model for ResponseEventBadRequest.
 type ResponseEventBadRequest = ErrorResponse

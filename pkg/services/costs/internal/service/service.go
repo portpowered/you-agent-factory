@@ -86,6 +86,9 @@ func (service *Service) QueryCosts(
 		)
 		return costs.Report{}, err
 	}
+	if err := ctx.Err(); err != nil {
+		return costs.Report{}, err
+	}
 	metrics, err := service.metrics.QueryRuntimeMetrics(ctx, factoryvisualization.RuntimeMetricsQueryRequest{
 		MetricsRoot:       strings.TrimSpace(request.MetricsRoot),
 		SessionID:         sessionID,

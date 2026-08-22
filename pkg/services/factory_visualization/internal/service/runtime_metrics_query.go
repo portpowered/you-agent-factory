@@ -130,6 +130,9 @@ func (q *metricsQuery) QueryRuntimeMetrics(
 			Cause:   streamErr,
 		}
 	}
+	if err := ctx.Err(); err != nil {
+		return RuntimeMetricsQueryResult{}, err
+	}
 
 	return q.finishQuery(accumulator, root, sessionID, runtimeID, considered)
 }
