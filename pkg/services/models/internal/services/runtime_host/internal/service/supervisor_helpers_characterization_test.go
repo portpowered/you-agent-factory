@@ -30,3 +30,30 @@ func TestRequiresSupervisedBackend_CharacterizesCurrentMembership(t *testing.T) 
 		})
 	}
 }
+
+func TestRequiresRuntimeHostBackend_PreservesPinnedBackendMembership(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		backend string
+		want    bool
+	}{
+		{name: "managed runtime alias", backend: "  llamaCpp ", want: true},
+		{name: "pinned llama cpp artifact backend", backend: "localai-llamacpp", want: true},
+		{name: "pinned whisper artifact backend", backend: "localai-whisper", want: true},
+		{name: "pinned vibevoice artifact backend", backend: "localai-vibevoice", want: true},
+		{name: "blank", backend: "", want: false},
+		{name: "unknown", backend: "GGUF", want: false},
+	}
+	for _, testCase := range tests {
+		testCase := testCase
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+			got := requiresRuntimeHostBackend(testCase.backend)
+			if got != testCase.want {
+				t.Fatalf("requiresRuntimeHostBackend(%q) = %t, want %t", testCase.backend, got, testCase.want)
+			}
+		})
+	}
+}
