@@ -131,6 +131,9 @@ func newServer(
 	if logger == nil {
 		logger = zap.NewNop()
 	}
+	if workHTTP != nil {
+		workHTTP = workHTTP.WithLogger(logger)
+	}
 	srv := &Server{
 		factorySessionsAdapter: &factorySessionsAdapter{Adapter: factorySessionsHTTP},
 		workAdapter:            &workAdapter{Adapter: workHTTP},
