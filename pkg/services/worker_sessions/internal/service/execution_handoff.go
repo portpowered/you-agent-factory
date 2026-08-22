@@ -45,6 +45,14 @@ func (r *registry) publishExecution(
 			r.acceptSupervision(sessionID, supervision)
 			close(admitted)
 		})
+		if errors.Is(dispatchErr, workers.ErrWorkstationDispatchCanceled) && supervision.pendingTerminalControlBeforeAdmission() != "" {
+			// Let a terminal control that claimed this exact unadmitted
+			// supervision commit first. Publishing the canceled handoff must not
+			// win the terminal race and turn an applied Cancel into an unknown
+			// dispatch or a generic publication failure.
+			r.finishSupervisionPublication(supervision)
+			<-supervision.done
+		}
 		r.completeSupervision(sessionID, supervision, result, dispatchErr)
 		dispatchDone <- dispatchErr
 	}()

@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -268,18 +269,32 @@ func (r *registry) publishRegisteredAttempt(
 		supervision,
 	)
 	if publishErr != nil {
-		final, committed := r.commitTerminal(sessionID, workersessions.StateFailed, classifyTerminal(publishErr, workers.WorkstationDispatchResult{}))
-		supervision.mu.Lock()
-		supervision.err = publishErr
-		supervision.mu.Unlock()
-		supervision.signalPublished()
+		r.finishSupervisionPublication(supervision)
+		if errors.Is(publishErr, workers.ErrWorkstationDispatchCanceled) && supervision.pendingTerminalControlBeforeAdmission() != "" {
+			// The terminal control was claimed while this supervision was still
+			// unadmitted. Let that exact control commit the absorbing state; the
+			// publisher must not win the race with a generic failure.
+			<-supervision.done
+		}
+		dispatch := workers.WorkstationDispatchResult{}
+		if errors.Is(publishErr, workers.ErrWorkstationDispatchCanceled) {
+			dispatch = canceledBeforeAdmissionResult(handoff)
+		}
+		controlAction := supervision.pendingTerminalControlBeforeAdmission()
+		finalState, terminal := dispatchedTerminal(controlAction, dispatch, publishErr)
+		final, committed := r.commitTerminal(sessionID, finalState, terminal)
+		supervision.recordResult(dispatch, publishErr)
 		supervision.finishAttempt()
 		supervision.signalDone()
 		if committed {
 			r.logTerminal(sessionID, attemptID, final)
-			r.publishTerminalRecordOrLog(ctx, sessionID, attemptID, final.State, *final.Result)
+			if final.Result != nil {
+				r.publishTerminalRecordOrLog(ctx, sessionID, attemptID, final.State, *final.Result)
+			}
+		} else if final.Terminal() {
+			r.publishTerminalSnapshot(ctx, sessionID, attemptID, final)
 		}
-		return workersessions.InvokeSessionResult{Session: final}, false
+		return workersessions.InvokeSessionResult{Session: final, Dispatch: dispatch, DispatchErr: publishErr}, false
 	}
 
 	r.finishSupervisionPublication(supervision)

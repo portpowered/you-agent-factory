@@ -350,6 +350,13 @@ func (r *registry) cancelControlIteration(
 	}
 
 	attempt := supervision.beginCancellation(action)
+	r.logger.Info(
+		"worker session control claimed",
+		"sessionID", req.ID,
+		"attemptID", supervision.dispatchID,
+		"action", string(action),
+		"attempt", cancellationAttemptName(attempt.kind),
+	)
 	switch attempt.kind {
 	case cancellationAttemptNoop:
 		return r.controlNoop(req.ID, action, session, supervision), false, nil
@@ -379,6 +386,24 @@ func (r *registry) cancelBoundary(
 	cancelResult := workers.WorkstationDispatchCancelResult{
 		DispatchID: attempt.dispatchID,
 		Outcome:    workers.WorkstationDispatchCancelOutcomeCanceled,
+	}
+	// A queued terminal control can reach this helper after publication has
+	// closed without an admission callback. The exact supervision is known, but
+	// Workers is not: terminalize the session locally and never ask the Workers
+	// boundary to cancel an identity it has not admitted.
+	if !supervision.isAccepted() {
+		if attempt.wait != nil {
+			supervision.finishCancellation(action, attempt.wait, cancelResult, nil, false)
+		}
+		final, committed := r.commitControlTerminal(req.ID, controlTerminalState(action))
+		if committed {
+			r.finishControlHistory(controlReservationFor(supervision), workersessions.ControlOutcomeApplied, attempt.dispatchID, final.State)
+			supervision.signalDone()
+		}
+		if !committed {
+			return r.controlNoop(req.ID, action, final, supervision), false, nil
+		}
+		return r.controlApplied(req.ID, action, final, supervision), false, nil
 	}
 	var cancelErr error
 	canceled, executionCancelErr := supervision.cancelExecution()
@@ -762,6 +787,14 @@ func (s *supervision) beginCancellation(action workersessions.ControlAction) can
 	if s.preAdmissionAction != "" {
 		action = s.preAdmissionAction
 		s.preAdmissionAction = ""
+		// A terminal control that was queued while publication was in
+		// progress still owns an unadmitted supervision when the admission
+		// callback never arrived. Do not turn that state into a Workers
+		// cancellation request: Workers has no dispatch to cancel yet.
+		if !s.accepted && terminalControlAction(action) {
+			s.controlAction = action
+			return cancellationAttempt{kind: cancellationAttemptBeforeAdmission}
+		}
 		s.controlActive = true
 		s.controlDone = make(chan struct{})
 		s.requestedAction = action
@@ -797,6 +830,47 @@ func (s *supervision) finishCancellation(
 	}
 	s.mu.Unlock()
 	return alreadyTerminal
+}
+
+func terminalControlAction(action workersessions.ControlAction) bool {
+	return action == workersessions.ControlActionCancel || action == workersessions.ControlActionTerminate
+}
+
+func cancellationAttemptName(kind cancellationAttemptKind) string {
+	switch kind {
+	case cancellationAttemptNoop:
+		return "noop"
+	case cancellationAttemptWait:
+		return "wait"
+	case cancellationAttemptBeforeAdmission:
+		return "before_admission"
+	case cancellationAttemptBoundary:
+		return "boundary"
+	default:
+		return "unknown"
+	}
+}
+
+// pendingTerminalControlBeforeAdmission reports a terminal control that has
+// claimed this exact supervision before the Workers admission callback. The
+// publisher uses it as a join point: the control must commit the absorbing
+// session state before the publisher can report its canceled handoff.
+func (s *supervision) pendingTerminalControlBeforeAdmission() workersessions.ControlAction {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.accepted {
+		return ""
+	}
+	for _, action := range []workersessions.ControlAction{
+		s.controlAction,
+		s.requestedAction,
+		s.preAdmissionAction,
+	} {
+		if terminalControlAction(action) {
+			return action
+		}
+	}
+	return ""
 }
 
 // baseDispatchID returns the identity every attempt suffix is derived from, so

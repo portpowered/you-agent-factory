@@ -63,6 +63,25 @@ func (b failingPublishBoundary) Execute(context.Context, workers.ExecuteRequest)
 	return workers.ExecuteResult{}, b.err
 }
 
+// controlClaimLogger is a deterministic observation point immediately after
+// beginCancellation has claimed a supervision. The test holds the logger call
+// until the admission gate is released, so the interleaving is controlled by
+// channels rather than by scheduler timing.
+type controlClaimLogger struct {
+	logging.NoopLogger
+	claimed chan struct{}
+	release chan struct{}
+	once    sync.Once
+}
+
+func (l *controlClaimLogger) Info(message string, _ ...any) {
+	if message != "worker session control claimed" {
+		return
+	}
+	l.once.Do(func() { close(l.claimed) })
+	<-l.release
+}
+
 // newTestRegistry returns the concrete *registry (not just the Service
 // interface) so white-box tests in this package can drive reserveIfAbsent
 // and transitionToStarting directly.
@@ -646,27 +665,131 @@ func TestCancel_BeforeBoundaryAdmissionEitherWaitsOrTerminatesTheExactSupervisio
 	if _, err := r.transitionToStarting("worker-1"); err != nil {
 		t.Fatalf("transitionToStarting: %v", err)
 	}
-	supervision, ok := r.registerSupervision("worker-1", "dispatch-1", "")
+	request := dispatchHandoff("dispatch-1")
+	supervision, ok := r.registerSupervision("worker-1", "dispatch-1", "", request)
 	if !ok {
 		t.Fatal("registerSupervision: want supervised STARTING attempt")
 	}
+	admissionStarted := make(chan struct{})
+	releaseAdmission := make(chan struct{})
+	logger := &controlClaimLogger{claimed: make(chan struct{}), release: make(chan struct{})}
+	r.logger = logger
+	var releaseOnce sync.Once
+	release := func() {
+		releaseOnce.Do(func() {
+			close(releaseAdmission)
+			close(logger.release)
+		})
+	}
+	defer release()
+
 	supervision.mu.Lock()
 	supervision.publishing = true
 	supervision.mu.Unlock()
-	resultCh := make(chan workersessions.ControlResult, 1)
-	errCh := make(chan error, 1)
+	executionCalled := make(chan struct{}, 1)
+	type handoffOutcome struct {
+		result workers.WorkstationDispatchResult
+		err    error
+	}
+	executionDone := make(chan handoffOutcome, 1)
+	go func() {
+		result, err := executeWithService(
+			context.Background(),
+			coverageExecution{execute: func(_ context.Context, request workers.ExecuteRequest) (workers.ExecuteResult, error) {
+				executionCalled <- struct{}{}
+				return coverageExecutionResult(request, workers.ExecutionOutcomeAccepted), nil
+			}},
+			request,
+			supervision,
+			func() {
+				close(admissionStarted)
+				<-releaseAdmission
+				if supervision.admissionAllowed() {
+					r.acceptSupervision("worker-1", supervision)
+				}
+			},
+		)
+		r.finishSupervisionPublication(supervision)
+		executionDone <- handoffOutcome{result: result, err: err}
+	}()
+
+	select {
+	case <-admissionStarted:
+	case <-time.After(2 * time.Second):
+		t.Fatal("execution did not reach the controlled admission gate")
+	}
+	starting, err := r.Get(context.Background(), workersessions.GetRequest{ID: "worker-1"})
+	if err != nil || starting.State != workersessions.StateStarting {
+		t.Fatalf("session at admission gate = %+v, %v, want STARTING", starting, err)
+	}
+	supervision.mu.Lock()
+	accepted, publishing := supervision.accepted, supervision.publishing
+	supervision.mu.Unlock()
+	if accepted || !publishing {
+		t.Fatalf("supervision at admission gate accepted=%t publishing=%t, want false/true", accepted, publishing)
+	}
+
+	controlDone := make(chan struct {
+		result workersessions.ControlResult
+		err    error
+	}, 1)
 	go func() {
 		result, err := r.Cancel(context.Background(), workersessions.ControlRequest{ID: "worker-1"})
-		resultCh <- result
-		errCh <- err
+		controlDone <- struct {
+			result workersessions.ControlResult
+			err    error
+		}{result: result, err: err}
 	}()
+	select {
+	case <-logger.claimed:
+	case <-time.After(2 * time.Second):
+		t.Fatal("Cancel did not claim the exact supervision at the admission gate")
+	}
 	supervision.mu.Lock()
-	supervision.publishing = false
+	queued := supervision.preAdmissionAction
 	supervision.mu.Unlock()
-	supervision.signalPublished()
-	result := <-resultCh
-	if err := <-errCh; err != nil || result.Outcome != workersessions.ControlOutcomeApplied || result.Session.State != workersessions.StateCanceled {
-		t.Fatalf("Cancel() before admission = %#v, %v, want applied CANCELED", result, err)
+	if queued != workersessions.ControlActionCancel {
+		t.Fatalf("queued admission control = %q, want CANCEL", queued)
+	}
+
+	release()
+	var control struct {
+		result workersessions.ControlResult
+		err    error
+	}
+	select {
+	case control = <-controlDone:
+	case <-time.After(2 * time.Second):
+		t.Fatal("Cancel did not resolve after releasing the admission gate")
+	}
+	if control.err != nil || control.result.Outcome != workersessions.ControlOutcomeApplied ||
+		control.result.DispatchID != "dispatch-1" || control.result.Session.State != workersessions.StateCanceled {
+		t.Fatalf("Cancel() during admission = %#v, %v, want applied exact CANCELED supervision", control.result, control.err)
+	}
+
+	var handoff handoffOutcome
+	select {
+	case handoff = <-executionDone:
+	case <-time.After(2 * time.Second):
+		t.Fatal("execution handoff did not finish after pre-admission cancellation")
+	}
+	if !errors.Is(handoff.err, workers.ErrWorkstationDispatchCanceled) ||
+		handoff.result.DispatchID != "dispatch-1" ||
+		handoff.result.TerminalOutcome != workers.WorkstationDispatchTerminalOutcomeCanceled {
+		t.Fatalf("execution handoff = %#v, %v, want exact canceled dispatch", handoff.result, handoff.err)
+	}
+	select {
+	case <-executionCalled:
+		t.Fatal("Workers execution ran after cancellation won before admission")
+	default:
+	}
+
+	// A late completion from the gate must not resurrect the exact canceled
+	// session after control has committed its absorbing terminal state.
+	r.completeSupervision("worker-1", supervision, handoff.result, handoff.err)
+	final, err := r.Get(context.Background(), workersessions.GetRequest{ID: "worker-1"})
+	if err != nil || final.State != workersessions.StateCanceled {
+		t.Fatalf("late admission completion session = %+v, %v, want absorbing CANCELED", final, err)
 	}
 
 	r.reserveIfAbsent("worker-2")
@@ -706,6 +829,100 @@ func TestCancel_BeforeBoundaryAdmissionEitherWaitsOrTerminatesTheExactSupervisio
 	attempt := activeSupervision.beginCancellation(workersessions.ControlActionCancel)
 	if attempt.kind != cancellationAttemptWait || attempt.wait != closedWait {
 		t.Fatalf("beginCancellation() with another active control = %#v, want wait for that control", attempt)
+	}
+}
+
+func TestCancel_BeforePublicationUsesRegisteredSupervision(t *testing.T) {
+	r := newTestRegistry(t)
+	r.reserveIfAbsent("worker-before-publication")
+	if _, err := r.transitionToStarting("worker-before-publication"); err != nil {
+		t.Fatalf("transitionToStarting: %v", err)
+	}
+	supervision, ok := r.registerSupervision(
+		"worker-before-publication",
+		"dispatch-before-publication",
+		"",
+		dispatchHandoff("dispatch-before-publication"),
+	)
+	if !ok {
+		t.Fatal("registerSupervision: want exact pre-publication supervision")
+	}
+
+	result, err := r.Cancel(context.Background(), workersessions.ControlRequest{ID: "worker-before-publication"})
+	if err != nil || result.Outcome != workersessions.ControlOutcomeApplied ||
+		result.DispatchID != "dispatch-before-publication" || result.Session.State != workersessions.StateCanceled {
+		t.Fatalf("Cancel() before publication = %#v, %v, want applied exact CANCELED supervision", result, err)
+	}
+	if errors.Is(err, workers.ErrUnknownWorkstationDispatch) {
+		t.Fatalf("Cancel() before publication returned unknown dispatch: %v", err)
+	}
+
+	r.completeSupervision(
+		"worker-before-publication",
+		supervision,
+		canceledBeforeAdmissionResult(dispatchHandoff("dispatch-before-publication")),
+		workers.ErrWorkstationDispatchCanceled,
+	)
+	final, err := r.Get(context.Background(), workersessions.GetRequest{ID: "worker-before-publication"})
+	if err != nil || final.State != workersessions.StateCanceled {
+		t.Fatalf("late pre-publication completion session = %+v, %v, want absorbing CANCELED", final, err)
+	}
+}
+
+func TestPublishRegisteredAttempt_CanceledBeforeAdmissionRetainsExactTerminal(t *testing.T) {
+	r := newTestRegistry(t)
+	const sessionID = "worker-publish-canceled"
+	const dispatchID = "dispatch-publish-canceled"
+	r.reserveIfAbsent(sessionID)
+	if _, err := r.transitionToStarting(sessionID); err != nil {
+		t.Fatalf("transitionToStarting: %v", err)
+	}
+	request := dispatchHandoff(dispatchID)
+	supervision, ok := r.registerSupervision(sessionID, dispatchID, "", request)
+	if !ok {
+		t.Fatal("registerSupervision: want exact publication supervision")
+	}
+	supervision.mu.Lock()
+	supervision.publishing = true
+	supervision.mu.Unlock()
+
+	logger := &controlClaimLogger{claimed: make(chan struct{}), release: make(chan struct{})}
+	r.logger = logger
+	var releaseOnce sync.Once
+	release := func() { releaseOnce.Do(func() { close(logger.release) }) }
+	defer release()
+	controlDone := make(chan struct {
+		result workersessions.ControlResult
+		err    error
+	}, 1)
+	go func() {
+		result, err := r.Cancel(context.Background(), workersessions.ControlRequest{ID: sessionID})
+		controlDone <- struct {
+			result workersessions.ControlResult
+			err    error
+		}{result: result, err: err}
+	}()
+	select {
+	case <-logger.claimed:
+	case <-time.After(2 * time.Second):
+		t.Fatal("Cancel did not claim publication supervision")
+	}
+	release()
+
+	result, retry := r.publishRegisteredAttempt(context.Background(), sessionID, request, supervision, true)
+	if retry || result.Session.State != workersessions.StateCanceled ||
+		result.Dispatch.DispatchID != dispatchID ||
+		!errors.Is(result.DispatchErr, workers.ErrWorkstationDispatchCanceled) {
+		t.Fatalf("publishRegisteredAttempt() = %#v, retry %t, want exact canceled terminal", result, retry)
+	}
+	select {
+	case control := <-controlDone:
+		if control.err != nil || control.result.Outcome != workersessions.ControlOutcomeApplied ||
+			control.result.DispatchID != dispatchID || control.result.Session.State != workersessions.StateCanceled {
+			t.Fatalf("Cancel() after publication cancellation = %#v, %v, want applied exact CANCELED supervision", control.result, control.err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("Cancel did not resolve after canceled publication")
 	}
 }
 
