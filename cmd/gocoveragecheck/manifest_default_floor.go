@@ -11,15 +11,31 @@ import (
 // is held to its lane's default floor instead of failing the manifest
 // completeness check, so adding a package no longer requires a manifest edit.
 //
-// The values come from the measured distribution of existing floors: the unit
+// Both values come from the measured distribution of existing floors: the unit
 // lane's tenth percentile is 50.00, so a new package that reaches the default
-// sits in the bottom decile rather than failing on arrival. Functional tests
-// exercise flows rather than packages, so a positive functional default would
-// fail ordinary packages en masse; 0.00 keeps a package measured and reported
-// without demanding that a flow reach it.
+// sits in the bottom decile rather than failing on arrival.
+//
+// The functional default was 0.00, justified on the grounds that a positive
+// default would fail ordinary packages en masse. That is a statement about
+// blast radius, not about correctness, and it made the functional gate assert
+// nothing for any unregistered package. Functional tests exist to prove
+// systematic correctness end to end, so a package no functional flow reaches is
+// precisely the package worth reporting: if nothing exercises it, there is no
+// evidence the system works when it is involved.
+//
+// The cost of the old default is concrete. pkg/services/costs and its
+// internal/service and transports/http packages all sat at zero functional
+// coverage, and a price table that defaulted to zero models produced no cost
+// figure at all for a month while every unit test passed. Nothing exercised
+// that path end to end, and nothing was required to.
+//
+// 15.00 is the tenth percentile of the functional floors of packages that ARE
+// exercised (the whole-population tenth percentile is 0.00, which is itself the
+// finding). It is deliberately a low bar meaning "some flow genuinely reaches
+// this package", not unit-like density, and it is expected to ratchet upward.
 const (
 	unitLaneDefaultFloorPercent       = "50.00"
-	functionalLaneDefaultFloorPercent = "0.00"
+	functionalLaneDefaultFloorPercent = "15.00"
 )
 
 // laneDefaultCoverageFloor reports the built-in default floor for lane. It is

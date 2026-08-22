@@ -14,15 +14,15 @@ func TestCoverageDefaultFloorIsLaneSpecific(t *testing.T) {
 	if got := laneDefaultCoverageFloor("unit").String(); got != "50.00" {
 		t.Fatalf("unit lane default = %s, want 50.00", got)
 	}
-	if got := laneDefaultCoverageFloor("functional").String(); got != "0.00" {
-		t.Fatalf("functional lane default = %s, want 0.00", got)
+	if got := laneDefaultCoverageFloor("functional").String(); got != "15.00" {
+		t.Fatalf("functional lane default = %s, want 15.00", got)
 	}
 	unitManifest := coverageManifest{Lane: "unit"}
 	if got := unitManifest.defaultFloor().String(); got != "50.00" {
 		t.Fatalf("unit manifest without defaultFloorPercent = %s, want the unit lane default", got)
 	}
 	functionalManifest := coverageManifest{Lane: "functional"}
-	if got := functionalManifest.defaultFloor().String(); got != "0.00" {
+	if got := functionalManifest.defaultFloor().String(); got != "15.00" {
 		t.Fatalf("functional manifest without defaultFloorPercent = %s, want the functional lane default", got)
 	}
 	declared := coverageManifest{Lane: "functional", DefaultFloorPercent: json.RawMessage("25.00")}
@@ -73,14 +73,26 @@ func TestCheckCoverageDefaultFloorEvaluatesUnlistedPackagesPerLane(t *testing.T)
 			rejectText:  "floor-source=lane-default",
 		},
 		{
-			name:   "functional unlisted at the unit-failing measurement passes its 0.00 default",
+			name:   "functional unlisted at the unit-failing measurement passes its lower functional default",
 			lane:   "functional",
 			totals: packageCoverageTotals{coveredStatements: 40, totalStatements: 100},
 		},
 		{
-			name:   "functional unlisted with no covered statements passes",
+			// The point of the functional lane default. A package that has
+			// measurable statements and that NO functional flow reaches is the
+			// case most worth reporting: nothing proves the system works when
+			// that package is involved. This previously passed under a 0.00
+			// default, which is how packages like pkg/services/costs carried
+			// zero end-to-end coverage indefinitely.
+			name:        "functional unlisted that no flow reaches is reported",
+			lane:        "functional",
+			totals:      packageCoverageTotals{coveredStatements: 0, totalStatements: 100},
+			wantFailure: "package coverage regression: package=" + unlisted + " lane=functional floor-source=lane-default expected-minimum=15.00% actual=0.0000% delta=-15.0000 percentage-points covered=0/100 statements",
+		},
+		{
+			name:   "functional unlisted with no measurable statements still passes vacuously",
 			lane:   "functional",
-			totals: packageCoverageTotals{coveredStatements: 0, totalStatements: 100},
+			totals: packageCoverageTotals{coveredStatements: 0, totalStatements: 0},
 		},
 		{
 			name:         "functional unlisted below a declared default fails",
