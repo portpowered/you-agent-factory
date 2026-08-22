@@ -151,9 +151,9 @@ func TestResolveChildWorkerSettings_CanonicalizesExplicitModelProvider(t *testin
 }
 
 func TestResolveChildWorkerSettings_UnknownPresetNamesSource(t *testing.T) {
-	got, err := workflowruntime.ResolveChildWorkerSettings(factory.JavaScriptChildExecutionRequest{Preset: "missing"}, nil, factory.JavaScriptWorkerSettings{})
-	if err != nil || got.Preset != "missing" {
-		t.Fatalf("explicit child preset = %#v, error = %v", got, err)
+	_, err := workflowruntime.ResolveChildWorkerSettings(factory.JavaScriptChildExecutionRequest{Preset: "missing"}, nil, factory.JavaScriptWorkerSettings{})
+	if err == nil || !strings.Contains(err.Error(), `"missing" from agent.run`) {
+		t.Fatalf("explicit child preset error = %v, want source-specific unknown-preset diagnostic", err)
 	}
 	_, err = workflowruntime.ResolveChildWorkerSettings(factory.JavaScriptChildExecutionRequest{AgentID: "reviewer"}, map[string]interfaces.FactoryOrchestratorJavaScriptAgent{"reviewer": {Preset: "missing"}}, factory.JavaScriptWorkerSettings{})
 	if err == nil || !strings.Contains(err.Error(), `"missing" from factory agent`) {

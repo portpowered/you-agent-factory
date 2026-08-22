@@ -259,10 +259,16 @@ func testAgentRunInventoryErrors(t *testing.T, record callbehavior.CallBehaviorR
 		t.Run(errCase.Condition, func(t *testing.T) {
 			source := agentRunErrorSource(errCase.Condition)
 			if source == "" {
-				t.Skip("condition not observable from installed JS host surface")
+				t.Fatalf("missing inline source for inventory error condition %q", errCase.Condition)
 			}
 			outcome := runInlineWorkflowFailure(t, "agent-run-"+errCase.Condition, source)
 			assertInventoryFailureMessage(t, outcome, errCase.Message)
+			if errCase.Condition == "unknown-preset" {
+				const want = `agent.run() references unknown operator worker preset "definitely-not-a-preset" from agent.run`
+				if !strings.Contains(outcome.Failure.Message, want) {
+					t.Fatalf("failure message = %q, want source-specific TypeError message %q", outcome.Failure.Message, want)
+				}
+			}
 			assertNoChildDispatchRecords(t, outcome.Records)
 		})
 	}
@@ -602,7 +608,7 @@ func agentRunErrorSource(condition string) string {
 	case "missing-prompt":
 		return `const child = {}; child.label = "missing-prompt"; return agent.run(child);`
 	case "unknown-preset":
-		return ""
+		return `return agent.run({ prompt: "review", preset: "definitely-not-a-preset" });`
 	case "unsupported-model-provider":
 		return `return agent.run({ prompt: "review", modelProvider: "Not_A_Provider" });`
 	case "unsupported-reasoning-effort":

@@ -77,7 +77,7 @@ func ResolveChildWorkerSettings(req ChildExecutionRequest, agents map[string]int
 	if selectedPreset != "" {
 		var ok bool
 		preset, ok = config.Presets[selectedPreset]
-		if !ok && source == "factory agent" {
+		if !ok {
 			return ChildExecutionRequest{}, fmt.Errorf("agent.run() references unknown operator worker preset %q from %s", selectedPreset, source)
 		}
 	}
