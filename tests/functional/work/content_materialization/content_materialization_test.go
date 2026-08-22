@@ -168,9 +168,7 @@ func contentMaterializationFactoryConfig() map[string]any {
 			},
 		}},
 		"workers": []map[string]any{{
-			"name":    "content-worker",
-			"type":    "SCRIPT_WORKER",
-			"command": "capture-content",
+			"name": "content-worker",
 		}},
 		"workstations": []map[string]any{{
 			"name":      "process-content",
