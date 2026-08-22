@@ -13,6 +13,7 @@ output-options:
     strict: false
   include-operation-ids:
     - getStatus
+    - getMetrics
     - getMetricsCosts
     - getEventsBySessionId
     - getEditableCurrentFactoryDefinition

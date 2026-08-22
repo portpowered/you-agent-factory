@@ -57,6 +57,7 @@ func (q *metricsQuery) QueryRuntimeMetrics(
 	}
 
 	sessionID := strings.TrimSpace(request.SessionID)
+	sessionIDs := normalizedMetricsSessionIDs(request.SessionIDs)
 	runtimeID := strings.TrimSpace(request.RuntimeInstanceID)
 	q.logger.Info(
 		"Factory Runtime metrics query started",
@@ -81,16 +82,24 @@ func (q *metricsQuery) QueryRuntimeMetrics(
 		}
 	}
 
-	accumulator := newMetricsAccumulator()
-	considered := 0
+	matchedRecords := make([]RuntimeMetricRecord, 0, len(records))
 	for _, record := range records {
 		if err := ctx.Err(); err != nil {
 			return RuntimeMetricsQueryResult{}, err
 		}
-		if !runtimeMetricRecordMatches(record, sessionID, runtimeID) {
-			continue
+		if runtimeMetricRecordMatches(record, sessionID, sessionIDs, runtimeID) {
+			matchedRecords = append(matchedRecords, record)
 		}
-		recognized, err := q.addRecord(accumulator, record, root)
+	}
+
+	attribution := newMetricProviderAttribution(matchedRecords)
+	accumulator := newMetricsAccumulator()
+	considered := 0
+	for _, record := range matchedRecords {
+		if err := ctx.Err(); err != nil {
+			return RuntimeMetricsQueryResult{}, err
+		}
+		recognized, err := q.addRecord(accumulator, record, root, attribution)
 		if err != nil {
 			return RuntimeMetricsQueryResult{}, err
 		}
@@ -106,11 +115,14 @@ func (q *metricsQuery) addRecord(
 	accumulator *metricsAccumulator,
 	record RuntimeMetricRecord,
 	root string,
+	attribution metricProviderAttribution,
 ) (bool, error) {
 	metricName, _ := recordString(record, "metric_name")
 	isUsage := isUsageRuntimeMetric(metricName)
+	provider := attribution.providerFor(record)
 	if isUsage {
-		if err := accumulator.addUsage(record); err != nil {
+		provider = providerForUsageRecord(attribution, record)
+		if err := accumulator.addUsage(record, provider); err != nil {
 			q.logger.Warn(
 				"Factory Runtime metrics usage record rejected",
 				"metrics_root", root,
@@ -124,7 +136,7 @@ func (q *metricsQuery) addRecord(
 			}
 		}
 	}
-	return accumulator.add(record) || isUsage, nil
+	return accumulator.add(record, provider) || isUsage, nil
 }
 
 func (q *metricsQuery) finishQuery(
@@ -209,7 +221,7 @@ func newMetricsAccumulator() *metricsAccumulator {
 	}
 }
 
-func (a *metricsAccumulator) addUsage(record RuntimeMetricRecord) error {
+func (a *metricsAccumulator) addUsage(record RuntimeMetricRecord, provider string) error {
 	metricName, ok := recordString(record, "metric_name")
 	if !ok || !isUsageRuntimeMetric(metricName) {
 		return nil
@@ -219,6 +231,7 @@ func (a *metricsAccumulator) addUsage(record RuntimeMetricRecord) error {
 		return fmt.Errorf("%s: %w", metricName, err)
 	}
 	identity := usageIdentityFromRecord(record)
+	identity.provider = provider
 	builder := a.usage[identity]
 	if builder == nil {
 		builder = &usageBuilder{identity: identity}
@@ -283,7 +296,7 @@ func runtimeMetricTokenCount(record RuntimeMetricRecord) (int64, error) {
 	return int64(value), nil
 }
 
-func (a *metricsAccumulator) add(record RuntimeMetricRecord) bool {
+func (a *metricsAccumulator) add(record RuntimeMetricRecord, provider string) bool {
 	metricName, ok := recordString(record, "metric_name")
 	if !ok || !isSupportedRuntimeMetric(metricName) {
 		return false
@@ -301,21 +314,19 @@ func (a *metricsAccumulator) add(record RuntimeMetricRecord) bool {
 		applyMetric(builder, metricName, value, strings.TrimSpace(unit), strings.TrimSpace(reason))
 	}
 	apply(&a.totals)
-	addLabeledAggregate(a.workstations, record, "workstation", apply)
-	addLabeledAggregate(a.workerTypes, record, "worker_type", apply)
-	addLabeledAggregate(a.providers, record, "provider", apply)
+	addLabeledAggregate(a.workstations, recordStringValue(record, "workstation"), apply)
+	addLabeledAggregate(a.workerTypes, recordStringValue(record, "worker_type"), apply)
+	addLabeledAggregate(a.providers, provider, apply)
 	return true
 }
 
 func addLabeledAggregate(
 	groups map[string]*metricAggregateBuilder,
-	record RuntimeMetricRecord,
-	label string,
+	key string,
 	apply func(*metricAggregateBuilder),
 ) {
-	key, ok := recordString(record, label)
 	key = strings.TrimSpace(key)
-	if !ok || key == "" {
+	if key == "" {
 		return
 	}
 	builder := groups[key]
@@ -529,8 +540,13 @@ func cloneFloatMap(values map[string]float64) map[string]float64 {
 	return clone
 }
 
-func runtimeMetricRecordMatches(record RuntimeMetricRecord, sessionID, runtimeID string) bool {
-	if sessionID != "" {
+func runtimeMetricRecordMatches(record RuntimeMetricRecord, sessionID string, sessionIDs []string, runtimeID string) bool {
+	if len(sessionIDs) > 0 {
+		value, ok := recordString(record, "session_id")
+		if !ok || !containsMetricSessionID(sessionIDs, value) {
+			return false
+		}
+	} else if sessionID != "" {
 		value, ok := recordString(record, "session_id")
 		if !ok || value != sessionID {
 			return false
@@ -543,6 +559,35 @@ func runtimeMetricRecordMatches(record RuntimeMetricRecord, sessionID, runtimeID
 		}
 	}
 	return true
+}
+
+func normalizedMetricsSessionIDs(values []string) []string {
+	if len(values) == 0 {
+		return nil
+	}
+	seen := make(map[string]struct{}, len(values))
+	ids := make([]string, 0, len(values))
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value == "" {
+			continue
+		}
+		if _, ok := seen[value]; ok {
+			continue
+		}
+		seen[value] = struct{}{}
+		ids = append(ids, value)
+	}
+	return ids
+}
+
+func containsMetricSessionID(values []string, value string) bool {
+	for _, candidate := range values {
+		if candidate == value {
+			return true
+		}
+	}
+	return false
 }
 
 func recordString(record RuntimeMetricRecord, key string) (string, bool) {

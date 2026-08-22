@@ -1,0 +1,27 @@
+type: object
+additionalProperties: false
+properties:
+  factory_session_id:
+    type: string
+  work_id:
+    type: string
+  dispatch_id:
+    type: string
+  worker_session_id:
+    type: string
+  provider:
+    type: string
+  model:
+    type: string
+  input_tokens:
+    type: integer
+    format: int64
+  output_tokens:
+    type: integer
+    format: int64
+  cached_input_tokens:
+    type: integer
+    format: int64
+  reasoning_output_tokens:
+    type: integer
+    format: int64

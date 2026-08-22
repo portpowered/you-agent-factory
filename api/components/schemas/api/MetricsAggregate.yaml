@@ -1,0 +1,28 @@
+type: object
+additionalProperties: false
+required:
+  - input_tokens
+  - output_tokens
+  - completed_dispatches
+  - failures_by_reason
+  - dispatch_latency
+  - provider_latency
+properties:
+  input_tokens:
+    type: number
+    format: double
+  output_tokens:
+    type: number
+    format: double
+  completed_dispatches:
+    type: number
+    format: double
+  failures_by_reason:
+    type: object
+    additionalProperties:
+      type: number
+      format: double
+  dispatch_latency:
+    $ref: './MetricsDuration.yaml'
+  provider_latency:
+    $ref: './MetricsDuration.yaml'

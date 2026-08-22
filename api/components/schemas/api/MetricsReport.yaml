@@ -1,0 +1,33 @@
+type: object
+additionalProperties: false
+required:
+  - scope
+  - cost
+  - totals
+  - workstations
+  - worker_types
+  - providers
+  - usage_rows
+properties:
+  scope:
+    $ref: './MetricsScope.yaml'
+  cost:
+    $ref: './MetricsCost.yaml'
+  totals:
+    $ref: './MetricsAggregate.yaml'
+  workstations:
+    type: array
+    items:
+      $ref: './MetricsBreakdown.yaml'
+  worker_types:
+    type: array
+    items:
+      $ref: './MetricsBreakdown.yaml'
+  providers:
+    type: array
+    items:
+      $ref: './MetricsBreakdown.yaml'
+  usage_rows:
+    type: array
+    items:
+      $ref: './MetricsUsageRow.yaml'

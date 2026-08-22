@@ -1,0 +1,11 @@
+type: object
+additionalProperties: false
+required:
+  - kind
+properties:
+  kind:
+    type: string
+    description: 'Selection scope used to produce the report: ALL_FACTORY_SESSIONS or FACTORY_SESSION.'
+  factory_session_id:
+    type: string
+    description: Public Factory Session identity when kind is FACTORY_SESSION.

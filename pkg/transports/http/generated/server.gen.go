@@ -117,6 +117,9 @@ const (
 	ErrorResponseCodeINVALIDRESPONSEEVENTFILTER                     ErrorResponseCode = "INVALID_RESPONSE_EVENT_FILTER"
 	ErrorResponseCodeLIFECYCLECONFLICT                              ErrorResponseCode = "LIFECYCLE_CONFLICT"
 	ErrorResponseCodeMETHODNOTALLOWED                               ErrorResponseCode = "METHOD_NOT_ALLOWED"
+	ErrorResponseCodeMETRICSINVALIDREQUEST                          ErrorResponseCode = "METRICS_INVALID_REQUEST"
+	ErrorResponseCodeMETRICSSESSIONNOTFOUND                         ErrorResponseCode = "METRICS_SESSION_NOT_FOUND"
+	ErrorResponseCodeMETRICSSESSIONSCOPEUNAVAILABLE                 ErrorResponseCode = "METRICS_SESSION_SCOPE_UNAVAILABLE"
 	ErrorResponseCodeMOVEWORKREQUESTALREADYAPPLIED                  ErrorResponseCode = "MOVE_WORK_REQUEST_ALREADY_APPLIED"
 	ErrorResponseCodeNOTFOUND                                       ErrorResponseCode = "NOT_FOUND"
 	ErrorResponseCodePROJECTIONUNAVAILABLE                          ErrorResponseCode = "PROJECTION_UNAVAILABLE"
@@ -5917,6 +5920,70 @@ type ManagedRuntimeSourceDiagnostics struct {
 	SourceKind *string `json:"sourceKind,omitempty"`
 }
 
+// MetricsAggregate defines model for MetricsAggregate.
+type MetricsAggregate struct {
+	CompletedDispatches float64            `json:"completed_dispatches"`
+	DispatchLatency     MetricsDuration    `json:"dispatch_latency"`
+	FailuresByReason    map[string]float64 `json:"failures_by_reason"`
+	InputTokens         float64            `json:"input_tokens"`
+	OutputTokens        float64            `json:"output_tokens"`
+	ProviderLatency     MetricsDuration    `json:"provider_latency"`
+}
+
+// MetricsBreakdown defines model for MetricsBreakdown.
+type MetricsBreakdown struct {
+	Aggregate MetricsAggregate `json:"aggregate"`
+	Key       string           `json:"key"`
+}
+
+// MetricsCost defines model for MetricsCost.
+type MetricsCost struct {
+	// Availability Cost is unavailable on the canonical metrics projection; no numeric price is implied.
+	Availability string `json:"availability"`
+}
+
+// MetricsDuration defines model for MetricsDuration.
+type MetricsDuration struct {
+	P50     *float64 `json:"p50"`
+	P95     *float64 `json:"p95"`
+	Samples int      `json:"samples"`
+	Unit    string   `json:"unit"`
+}
+
+// MetricsReport defines model for MetricsReport.
+type MetricsReport struct {
+	Cost         MetricsCost        `json:"cost"`
+	Providers    []MetricsBreakdown `json:"providers"`
+	Scope        MetricsScope       `json:"scope"`
+	Totals       MetricsAggregate   `json:"totals"`
+	UsageRows    []MetricsUsageRow  `json:"usage_rows"`
+	WorkerTypes  []MetricsBreakdown `json:"worker_types"`
+	Workstations []MetricsBreakdown `json:"workstations"`
+}
+
+// MetricsScope defines model for MetricsScope.
+type MetricsScope struct {
+	// FactorySessionId Public Factory Session identity when kind is FACTORY_SESSION.
+	FactorySessionId *string `json:"factory_session_id,omitempty"`
+
+	// Kind Selection scope used to produce the report: ALL_FACTORY_SESSIONS or FACTORY_SESSION.
+	Kind string `json:"kind"`
+}
+
+// MetricsUsageRow defines model for MetricsUsageRow.
+type MetricsUsageRow struct {
+	CachedInputTokens     *int64  `json:"cached_input_tokens,omitempty"`
+	DispatchId            *string `json:"dispatch_id,omitempty"`
+	FactorySessionId      *string `json:"factory_session_id,omitempty"`
+	InputTokens           *int64  `json:"input_tokens,omitempty"`
+	Model                 *string `json:"model,omitempty"`
+	OutputTokens          *int64  `json:"output_tokens,omitempty"`
+	Provider              *string `json:"provider,omitempty"`
+	ReasoningOutputTokens *int64  `json:"reasoning_output_tokens,omitempty"`
+	WorkId                *string `json:"work_id,omitempty"`
+	WorkerSessionId       *string `json:"worker_session_id,omitempty"`
+}
+
 // ModelCapability defines model for ModelCapability.
 type ModelCapability struct {
 	// ModelProvider Built-in model-provider constants retained as generated-client conveniences. Authored modelProvider fields use the open ProviderIdentity contract, so this list is not an exhaustive provider inventory.
@@ -9341,6 +9408,9 @@ type FactorySessionResourceCapacityConflict struct {
 // InternalError defines model for InternalError.
 type InternalError = ErrorResponse
 
+// MetricsSessionScopeUnavailable defines model for MetricsSessionScopeUnavailable.
+type MetricsSessionScopeUnavailable = ErrorResponse
+
 // MoveWorkConflict defines model for MoveWorkConflict.
 type MoveWorkConflict = ErrorResponse
 
@@ -9579,6 +9649,12 @@ type StreamWorkerSessionEventsByWorkerSessionIdParams struct {
 
 	// StreamGenerationId Optional durable Worker Session event-stream generation that qualifies after_position. A generation mismatch never falls back to another history.
 	StreamGenerationId *WorkerSessionStreamGenerationID `form:"stream_generation_id,omitempty" json:"stream_generation_id,omitempty"`
+}
+
+// GetMetricsParams defines parameters for GetMetrics.
+type GetMetricsParams struct {
+	// SessionId Optional discoverable live Factory Session identity.
+	SessionId *string `form:"session_id,omitempty" json:"session_id,omitempty"`
 }
 
 // GetMetricsCostsParams defines parameters for GetMetricsCosts.
@@ -18385,6 +18461,9 @@ type ServerInterface interface {
 	// Validate factory definition
 	// (POST /factory-validations)
 	ValidateFactory(w http.ResponseWriter, r *http.Request)
+	// Get canonical runtime metrics
+	// (GET /metrics)
+	GetMetrics(w http.ResponseWriter, r *http.Request, params GetMetricsParams)
 	// Get exact runtime cost rollups
 	// (GET /metrics/costs)
 	GetMetricsCosts(w http.ResponseWriter, r *http.Request, params GetMetricsCostsParams)
@@ -20141,6 +20220,33 @@ func (siw *ServerInterfaceWrapper) ValidateFactory(w http.ResponseWriter, r *htt
 	handler.ServeHTTP(w, r)
 }
 
+// GetMetrics operation middleware
+func (siw *ServerInterfaceWrapper) GetMetrics(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetMetricsParams
+
+	// ------------- Optional query parameter "session_id" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "session_id", r.URL.Query(), &params.SessionId)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "session_id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetMetrics(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // GetMetricsCosts operation middleware
 func (siw *ServerInterfaceWrapper) GetMetricsCosts(w http.ResponseWriter, r *http.Request) {
 
@@ -20864,6 +20970,8 @@ func HandlerWithOptions(si ServerInterface, options GorillaServerOptions) http.H
 	r.HandleFunc(options.BaseURL+"/factory-sessions/{session_id}/worker-sessions/{worker_session_id}/transcript", wrapper.ReadWorkerSessionTranscriptByFactorySessionAndWorkerSessionId).Methods("GET")
 
 	r.HandleFunc(options.BaseURL+"/factory-validations", wrapper.ValidateFactory).Methods("POST")
+
+	r.HandleFunc(options.BaseURL+"/metrics", wrapper.GetMetrics).Methods("GET")
 
 	r.HandleFunc(options.BaseURL+"/metrics/costs", wrapper.GetMetricsCosts).Methods("GET")
 

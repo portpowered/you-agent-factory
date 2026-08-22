@@ -35,7 +35,7 @@ var apiSet = wire.NewSet(
 	providersessionshttp.NewAdapter,
 	providersessionshttp.NewHandler,
 	mcpstdio.NewOpener,
-	provideHTTPRuntimeBinding,
+	provideHTTPRuntimeBindingWithMetrics,
 )
 
 var servicesSet = wire.NewSet(
@@ -334,6 +334,7 @@ var cliCommandOperationsSet = wire.NewSet(
 	provideSubmitPayloadReader,
 	provideOperatorDefaultsResolver,
 	provideStandardCLIHTTPProtocol,
+	provideMetricsCLI,
 	provideCostsCLI,
 	provideRemoteInvocationOperation,
 	provideExtendedCLIHTTPProtocol,

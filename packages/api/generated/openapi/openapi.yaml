@@ -30,6 +30,33 @@ tags:
   - name: Workflows
     description: Stored workflow inspection.
 paths:
+  /metrics:
+    get:
+      tags:
+        - Metrics
+      operationId: getMetrics
+      summary: Get canonical runtime metrics
+      description: Reads the canonical Factory Visualization metrics projection. The default scope covers all retained Factory Sessions. When session_id is supplied, the server resolves that public live Factory Session ID through Factory Sessions before reading retained metrics; it never guesses a scope from the current working directory or definition. A valid resolved scope with no retained facts returns an explicit empty report.
+      parameters:
+        - name: session_id
+          in: query
+          required: false
+          description: Optional discoverable live Factory Session identity.
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Canonical runtime metrics for the selected scope.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MetricsReport'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/MetricsSessionScopeUnavailable'
   /metrics/costs:
     get:
       tags:
@@ -2596,6 +2623,12 @@ components:
                 message: The retained Factory Response Event stream has expired.
                 family: GONE
                 code: RESPONSE_EVENT_STREAM_EXPIRED
+    MetricsSessionScopeUnavailable:
+      description: The selected live Factory Session has no retained metrics scope.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
   schemas:
     SubmitWorkRequest:
       type: object
@@ -4116,6 +4149,149 @@ components:
           description: Rollups keyed by Factory Session identity.
           items:
             $ref: '#/components/schemas/CostsRollup'
+    MetricsScope:
+      type: object
+      additionalProperties: false
+      required:
+        - kind
+      properties:
+        kind:
+          type: string
+          description: 'Selection scope used to produce the report: ALL_FACTORY_SESSIONS or FACTORY_SESSION.'
+        factory_session_id:
+          type: string
+          description: Public Factory Session identity when kind is FACTORY_SESSION.
+    MetricsCost:
+      type: object
+      additionalProperties: false
+      required:
+        - availability
+      properties:
+        availability:
+          type: string
+          description: Cost is unavailable on the canonical metrics projection; no numeric price is implied.
+    MetricsDuration:
+      type: object
+      additionalProperties: false
+      required:
+        - unit
+        - samples
+      properties:
+        unit:
+          type: string
+        samples:
+          type: integer
+          minimum: 0
+        p50:
+          type: number
+          format: double
+          nullable: true
+        p95:
+          type: number
+          format: double
+          nullable: true
+    MetricsAggregate:
+      type: object
+      additionalProperties: false
+      required:
+        - input_tokens
+        - output_tokens
+        - completed_dispatches
+        - failures_by_reason
+        - dispatch_latency
+        - provider_latency
+      properties:
+        input_tokens:
+          type: number
+          format: double
+        output_tokens:
+          type: number
+          format: double
+        completed_dispatches:
+          type: number
+          format: double
+        failures_by_reason:
+          type: object
+          additionalProperties:
+            type: number
+            format: double
+        dispatch_latency:
+          $ref: '#/components/schemas/MetricsDuration'
+        provider_latency:
+          $ref: '#/components/schemas/MetricsDuration'
+    MetricsBreakdown:
+      type: object
+      additionalProperties: false
+      required:
+        - key
+        - aggregate
+      properties:
+        key:
+          type: string
+        aggregate:
+          $ref: '#/components/schemas/MetricsAggregate'
+    MetricsUsageRow:
+      type: object
+      additionalProperties: false
+      properties:
+        factory_session_id:
+          type: string
+        work_id:
+          type: string
+        dispatch_id:
+          type: string
+        worker_session_id:
+          type: string
+        provider:
+          type: string
+        model:
+          type: string
+        input_tokens:
+          type: integer
+          format: int64
+        output_tokens:
+          type: integer
+          format: int64
+        cached_input_tokens:
+          type: integer
+          format: int64
+        reasoning_output_tokens:
+          type: integer
+          format: int64
+    MetricsReport:
+      type: object
+      additionalProperties: false
+      required:
+        - scope
+        - cost
+        - totals
+        - workstations
+        - worker_types
+        - providers
+        - usage_rows
+      properties:
+        scope:
+          $ref: '#/components/schemas/MetricsScope'
+        cost:
+          $ref: '#/components/schemas/MetricsCost'
+        totals:
+          $ref: '#/components/schemas/MetricsAggregate'
+        workstations:
+          type: array
+          items:
+            $ref: '#/components/schemas/MetricsBreakdown'
+        worker_types:
+          type: array
+          items:
+            $ref: '#/components/schemas/MetricsBreakdown'
+        providers:
+          type: array
+          items:
+            $ref: '#/components/schemas/MetricsBreakdown'
+        usage_rows:
+          type: array
+          items:
+            $ref: '#/components/schemas/MetricsUsageRow'
     WorkerSessionProviderSessionRef:
       type: object
       additionalProperties: false
@@ -5136,6 +5312,9 @@ components:
             - WORKER_SESSION_TRANSCRIPT_ACTIVE
             - WORKER_SESSION_TRANSCRIPT_UNAVAILABLE
             - WORKER_SESSION_TRANSCRIPT_PROJECTION_UNAVAILABLE
+            - METRICS_INVALID_REQUEST
+            - METRICS_SESSION_NOT_FOUND
+            - METRICS_SESSION_SCOPE_UNAVAILABLE
             - NOT_FOUND
             - INTERNAL_ERROR
           x-enum-descriptions:
@@ -5187,6 +5366,9 @@ components:
             - The requested Worker Session has not reached a terminal state.
             - The finished Worker Session has no normalized transcript available.
             - Provider Sessions could not project the normalized Worker Session transcript.
+            - The metrics request could not be interpreted by the canonical metrics route.
+            - The requested live Factory Session identity was not discoverable.
+            - The live Factory Session was discoverable, but no retained metrics scope was available.
             - The requested resource does not exist.
             - The server failed while handling an otherwise valid request.
         targets:

@@ -18,18 +18,21 @@ const (
 )
 
 // MetricsCommandConfig contains the process-scoped inputs for the metrics
-// command. The command reads through the public Factory Visualization query;
-// it does not inspect runtime metric artifacts itself.
+// command. Production composition supplies the generated HTTP operation;
+// focused local callers may still inject the public query compatibility path.
 type MetricsCommandConfig struct {
-	Query   factoryvisualization.RuntimeMetricsQuery
-	HomeDir func() (string, error)
-	JSON    func() bool
-	Costs   *cobra.Command
+	Operation Operation
+	Server    func() string
+	Query     factoryvisualization.RuntimeMetricsQuery
+	HomeDir   func() (string, error)
+	JSON      func() bool
+	Costs     *cobra.Command
 }
 
 // MetricsConfig contains the resolved inputs for one metrics query and output
 // rendering operation.
 type MetricsConfig struct {
+	Server    string
 	GroupBy   string
 	SessionID string
 	JSON      bool
@@ -52,14 +55,22 @@ func NewMetricsCommand(config MetricsCommandConfig) *cobra.Command {
 			if config.JSON != nil {
 				jsonOutput = config.JSON()
 			}
-			return RunMetrics(cmd.Context(), MetricsConfig{
+			metricsConfig := MetricsConfig{
+				Server:    "",
 				GroupBy:   groupBy,
 				SessionID: sessionID,
 				JSON:      jsonOutput,
 				Output:    cmd.OutOrStdout(),
 				Query:     config.Query,
 				HomeDir:   config.HomeDir,
-			})
+			}
+			if config.Server != nil {
+				metricsConfig.Server = config.Server()
+			}
+			if config.Operation != nil {
+				return RunMetricsOperation(cmd.Context(), config.Operation, metricsConfig)
+			}
+			return RunMetrics(cmd.Context(), metricsConfig)
 		},
 	}
 	command.Flags().StringVar(&groupBy, "group-by", metricsGroupByWorkstation,

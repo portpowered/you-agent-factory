@@ -3,7 +3,6 @@ package runtime_metrics_test
 import (
 	"encoding/json"
 	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 
@@ -39,18 +38,23 @@ func TestMetricsInvalidGroupThroughRootProcessPreservesCodedDiagnostic(t *testin
 // both public presenters consume the query result returned by the canonical
 // process rather than relying on a presenter-local cost constant.
 func TestMetricsSuccessThroughRootProcessRendersQueryCostAvailability(t *testing.T) {
-	t.Parallel()
+	home := t.TempDir()
+	factoryDirectory := support.ScaffoldSingleStepFactory(t, "metrics-cost-availability")
+	workingDirectory := t.TempDir()
+	environment := append(os.Environ(), "HOME="+home, "USERPROFILE="+home)
+	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir:                factoryDirectory,
+		WorkingDirectory:          workingDirectory,
+		WaitForServiceModeRuntime: true,
+		Env:                       environment,
+	})
 
-	homeDir := t.TempDir()
-	if err := os.MkdirAll(filepath.Join(homeDir, ".you-agent-factory", "metrics"), 0o755); err != nil {
-		t.Fatalf("create metrics root: %v", err)
-	}
 	process := support.BuildProcess(t, serviceedges.Edges{})
 	support.CleanupProcess(t, process)
-	env := []string{"HOME=" + homeDir, "USERPROFILE=" + homeDir}
 
-	human := support.FakeInputs(t.Context(), []string{"you", "metrics"})
-	human.Input.Env = env
+	human := support.FakeInputs(t.Context(), []string{"you", "--server", server.URL(), "metrics"})
+	human.Input.Env = environment
+	human.Input.WorkingDirectory = workingDirectory
 	if err := process.Execute(human.Input); err != nil {
 		t.Fatalf("Process.Execute(metrics human) error = %v\nstdout:\n%s\nstderr:\n%s", err, human.Stdout(), human.Stderr())
 	}
@@ -58,8 +62,9 @@ func TestMetricsSuccessThroughRootProcessRendersQueryCostAvailability(t *testing
 		t.Fatalf("human metrics output = %q, stderr = %q", human.Stdout(), human.Stderr())
 	}
 
-	machine := support.FakeInputs(t.Context(), []string{"you", "--json", "metrics"})
-	machine.Input.Env = env
+	machine := support.FakeInputs(t.Context(), []string{"you", "--json", "--server", server.URL(), "metrics"})
+	machine.Input.Env = environment
+	machine.Input.WorkingDirectory = workingDirectory
 	if err := process.Execute(machine.Input); err != nil {
 		t.Fatalf("Process.Execute(metrics JSON) error = %v\nstdout:\n%s\nstderr:\n%s", err, machine.Stdout(), machine.Stderr())
 	}

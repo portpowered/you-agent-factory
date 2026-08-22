@@ -120,6 +120,9 @@ const (
 	ErrorResponseCodeINVALIDRESPONSEEVENTFILTER                     ErrorResponseCode = "INVALID_RESPONSE_EVENT_FILTER"
 	ErrorResponseCodeLIFECYCLECONFLICT                              ErrorResponseCode = "LIFECYCLE_CONFLICT"
 	ErrorResponseCodeMETHODNOTALLOWED                               ErrorResponseCode = "METHOD_NOT_ALLOWED"
+	ErrorResponseCodeMETRICSINVALIDREQUEST                          ErrorResponseCode = "METRICS_INVALID_REQUEST"
+	ErrorResponseCodeMETRICSSESSIONNOTFOUND                         ErrorResponseCode = "METRICS_SESSION_NOT_FOUND"
+	ErrorResponseCodeMETRICSSESSIONSCOPEUNAVAILABLE                 ErrorResponseCode = "METRICS_SESSION_SCOPE_UNAVAILABLE"
 	ErrorResponseCodeMOVEWORKREQUESTALREADYAPPLIED                  ErrorResponseCode = "MOVE_WORK_REQUEST_ALREADY_APPLIED"
 	ErrorResponseCodeNOTFOUND                                       ErrorResponseCode = "NOT_FOUND"
 	ErrorResponseCodePROJECTIONUNAVAILABLE                          ErrorResponseCode = "PROJECTION_UNAVAILABLE"
@@ -5891,6 +5894,70 @@ type ManagedRuntimeSourceDiagnostics struct {
 	SourceKind *string `json:"sourceKind,omitempty"`
 }
 
+// MetricsAggregate defines model for MetricsAggregate.
+type MetricsAggregate struct {
+	CompletedDispatches float64            `json:"completed_dispatches"`
+	DispatchLatency     MetricsDuration    `json:"dispatch_latency"`
+	FailuresByReason    map[string]float64 `json:"failures_by_reason"`
+	InputTokens         float64            `json:"input_tokens"`
+	OutputTokens        float64            `json:"output_tokens"`
+	ProviderLatency     MetricsDuration    `json:"provider_latency"`
+}
+
+// MetricsBreakdown defines model for MetricsBreakdown.
+type MetricsBreakdown struct {
+	Aggregate MetricsAggregate `json:"aggregate"`
+	Key       string           `json:"key"`
+}
+
+// MetricsCost defines model for MetricsCost.
+type MetricsCost struct {
+	// Availability Cost is unavailable on the canonical metrics projection; no numeric price is implied.
+	Availability string `json:"availability"`
+}
+
+// MetricsDuration defines model for MetricsDuration.
+type MetricsDuration struct {
+	P50     *float64 `json:"p50"`
+	P95     *float64 `json:"p95"`
+	Samples int      `json:"samples"`
+	Unit    string   `json:"unit"`
+}
+
+// MetricsReport defines model for MetricsReport.
+type MetricsReport struct {
+	Cost         MetricsCost        `json:"cost"`
+	Providers    []MetricsBreakdown `json:"providers"`
+	Scope        MetricsScope       `json:"scope"`
+	Totals       MetricsAggregate   `json:"totals"`
+	UsageRows    []MetricsUsageRow  `json:"usage_rows"`
+	WorkerTypes  []MetricsBreakdown `json:"worker_types"`
+	Workstations []MetricsBreakdown `json:"workstations"`
+}
+
+// MetricsScope defines model for MetricsScope.
+type MetricsScope struct {
+	// FactorySessionId Public Factory Session identity when kind is FACTORY_SESSION.
+	FactorySessionId *string `json:"factory_session_id,omitempty"`
+
+	// Kind Selection scope used to produce the report: ALL_FACTORY_SESSIONS or FACTORY_SESSION.
+	Kind string `json:"kind"`
+}
+
+// MetricsUsageRow defines model for MetricsUsageRow.
+type MetricsUsageRow struct {
+	CachedInputTokens     *int64  `json:"cached_input_tokens,omitempty"`
+	DispatchId            *string `json:"dispatch_id,omitempty"`
+	FactorySessionId      *string `json:"factory_session_id,omitempty"`
+	InputTokens           *int64  `json:"input_tokens,omitempty"`
+	Model                 *string `json:"model,omitempty"`
+	OutputTokens          *int64  `json:"output_tokens,omitempty"`
+	Provider              *string `json:"provider,omitempty"`
+	ReasoningOutputTokens *int64  `json:"reasoning_output_tokens,omitempty"`
+	WorkId                *string `json:"work_id,omitempty"`
+	WorkerSessionId       *string `json:"worker_session_id,omitempty"`
+}
+
 // ModelCapability defines model for ModelCapability.
 type ModelCapability struct {
 	// ModelProvider Built-in model-provider constants retained as generated-client conveniences. Authored modelProvider fields use the open ProviderIdentity contract, so this list is not an exhaustive provider inventory.
@@ -9315,6 +9382,9 @@ type FactorySessionResourceCapacityConflict struct {
 // InternalError defines model for InternalError.
 type InternalError = ErrorResponse
 
+// MetricsSessionScopeUnavailable defines model for MetricsSessionScopeUnavailable.
+type MetricsSessionScopeUnavailable = ErrorResponse
+
 // MoveWorkConflict defines model for MoveWorkConflict.
 type MoveWorkConflict = ErrorResponse
 
@@ -9409,6 +9479,12 @@ type StreamWorkerSessionEventsByWorkerSessionIdParams struct {
 
 	// StreamGenerationId Optional durable Worker Session event-stream generation that qualifies after_position. A generation mismatch never falls back to another history.
 	StreamGenerationId *WorkerSessionStreamGenerationID `form:"stream_generation_id,omitempty" json:"stream_generation_id,omitempty"`
+}
+
+// GetMetricsParams defines parameters for GetMetrics.
+type GetMetricsParams struct {
+	// SessionId Optional discoverable live Factory Session identity.
+	SessionId *string `form:"session_id,omitempty" json:"session_id,omitempty"`
 }
 
 // GetMetricsCostsParams defines parameters for GetMetricsCosts.
@@ -18040,6 +18116,9 @@ type ClientInterface interface {
 	// StreamWorkerSessionEventsByWorkerSessionId request
 	StreamWorkerSessionEventsByWorkerSessionId(ctx context.Context, sessionId SessionID, workerSessionId WorkerSessionID, params *StreamWorkerSessionEventsByWorkerSessionIdParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// GetMetrics request
+	GetMetrics(ctx context.Context, params *GetMetricsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// GetMetricsCosts request
 	GetMetricsCosts(ctx context.Context, params *GetMetricsCostsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
@@ -18079,6 +18158,18 @@ func (c *Client) GetFactoryResponseEventsBySessionId(ctx context.Context, sessio
 
 func (c *Client) StreamWorkerSessionEventsByWorkerSessionId(ctx context.Context, sessionId SessionID, workerSessionId WorkerSessionID, params *StreamWorkerSessionEventsByWorkerSessionIdParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewStreamWorkerSessionEventsByWorkerSessionIdRequest(c.Server, sessionId, workerSessionId, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) GetMetrics(ctx context.Context, params *GetMetricsParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetMetricsRequest(c.Server, params)
 	if err != nil {
 		return nil, err
 	}
@@ -18408,6 +18499,55 @@ func NewStreamWorkerSessionEventsByWorkerSessionIdRequest(server string, session
 	return req, nil
 }
 
+// NewGetMetricsRequest generates requests for GetMetrics
+func NewGetMetricsRequest(server string, params *GetMetricsParams) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/metrics")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		queryValues := queryURL.Query()
+
+		if params.SessionId != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "session_id", runtime.ParamLocationQuery, *params.SessionId); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		queryURL.RawQuery = queryValues.Encode()
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 // NewGetMetricsCostsRequest generates requests for GetMetricsCosts
 func NewGetMetricsCostsRequest(server string, params *GetMetricsCostsParams) (*http.Request, error) {
 	var err error
@@ -18604,6 +18744,9 @@ type ClientWithResponsesInterface interface {
 	// StreamWorkerSessionEventsByWorkerSessionIdWithResponse request
 	StreamWorkerSessionEventsByWorkerSessionIdWithResponse(ctx context.Context, sessionId SessionID, workerSessionId WorkerSessionID, params *StreamWorkerSessionEventsByWorkerSessionIdParams, reqEditors ...RequestEditorFn) (*StreamWorkerSessionEventsByWorkerSessionIdClientResponse, error)
 
+	// GetMetricsWithResponse request
+	GetMetricsWithResponse(ctx context.Context, params *GetMetricsParams, reqEditors ...RequestEditorFn) (*GetMetricsClientResponse, error)
+
 	// GetMetricsCostsWithResponse request
 	GetMetricsCostsWithResponse(ctx context.Context, params *GetMetricsCostsParams, reqEditors ...RequestEditorFn) (*GetMetricsCostsClientResponse, error)
 
@@ -18686,6 +18829,31 @@ func (r StreamWorkerSessionEventsByWorkerSessionIdClientResponse) Status() strin
 
 // StatusCode returns HTTPResponse.StatusCode
 func (r StreamWorkerSessionEventsByWorkerSessionIdClientResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type GetMetricsClientResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *MetricsReport
+	JSON400      *BadRequest
+	JSON404      *NotFound
+	JSON503      *MetricsSessionScopeUnavailable
+}
+
+// Status returns HTTPResponse.Status
+func (r GetMetricsClientResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetMetricsClientResponse) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
@@ -18815,6 +18983,15 @@ func (c *ClientWithResponses) StreamWorkerSessionEventsByWorkerSessionIdWithResp
 		return nil, err
 	}
 	return ParseStreamWorkerSessionEventsByWorkerSessionIdClientResponse(rsp)
+}
+
+// GetMetricsWithResponse request returning *GetMetricsClientResponse
+func (c *ClientWithResponses) GetMetricsWithResponse(ctx context.Context, params *GetMetricsParams, reqEditors ...RequestEditorFn) (*GetMetricsClientResponse, error) {
+	rsp, err := c.GetMetrics(ctx, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetMetricsClientResponse(rsp)
 }
 
 // GetMetricsCostsWithResponse request returning *GetMetricsCostsClientResponse
@@ -18987,6 +19164,53 @@ func ParseStreamWorkerSessionEventsByWorkerSessionIdClientResponse(rsp *http.Res
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
 		var dest WorkerSessionRecordingUnavailable
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON503 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetMetricsClientResponse parses an HTTP response from a GetMetricsWithResponse call
+func ParseGetMetricsClientResponse(rsp *http.Response) (*GetMetricsClientResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetMetricsClientResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest MetricsReport
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest BadRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NotFound
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest MetricsSessionScopeUnavailable
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}

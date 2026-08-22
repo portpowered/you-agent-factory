@@ -19,6 +19,14 @@ const (
 	MetricsHomeDirectoryFailedCode = "METRICS_HOME_DIRECTORY_FAILED"
 	// MetricsQueryFailedCode identifies a failure reading the metrics query.
 	MetricsQueryFailedCode = "METRICS_QUERY_FAILED"
+	// MetricsInvalidRequestCode identifies an authored HTTP request rejected by
+	// the metrics route.
+	MetricsInvalidRequestCode = "METRICS_INVALID_REQUEST"
+	// MetricsSessionNotFoundCode identifies an unknown public live session ID.
+	MetricsSessionNotFoundCode = "METRICS_SESSION_NOT_FOUND"
+	// MetricsScopeUnavailableCode identifies a known session with no retained
+	// metrics identity.
+	MetricsScopeUnavailableCode = "METRICS_SESSION_SCOPE_UNAVAILABLE"
 )
 
 const (
@@ -84,8 +92,11 @@ func (err *MetricsError) CLIErrorFamily() factoryapi.ErrorFamily {
 	if err == nil {
 		return ""
 	}
-	if err.CLIErrorCode() == MetricsInvalidGroupByCode {
+	switch err.CLIErrorCode() {
+	case MetricsInvalidGroupByCode, MetricsInvalidRequestCode:
 		return factoryapi.ErrorFamilyBadRequest
+	case MetricsSessionNotFoundCode:
+		return factoryapi.ErrorFamilyNotFound
 	}
 	return factoryapi.ErrorFamilyInternalServerError
 }

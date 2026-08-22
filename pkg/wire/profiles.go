@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"net"
-	"net/http"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -26,12 +25,8 @@ import (
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	platformmetrics "github.com/portpowered/infinite-you/pkg/platform/metrics"
 	"github.com/portpowered/infinite-you/pkg/platform/runtimeartifact"
-	costs "github.com/portpowered/infinite-you/pkg/services/costs"
-	costshttp "github.com/portpowered/infinite-you/pkg/services/costs/transports/http"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	factorydefinitionshttp "github.com/portpowered/infinite-you/pkg/services/factory_definitions/transports/http"
-	factorydefinitionmapping "github.com/portpowered/infinite-you/pkg/services/factory_definitions/transports/mapping/factorydefinition"
 	factorydefinitionswire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
@@ -41,29 +36,22 @@ import (
 	factorysessionwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire"
 	factoryvisualization "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
 	factoryvisualizationwire "github.com/portpowered/infinite-you/pkg/services/factory_visualization/wire"
-	modelshttp "github.com/portpowered/infinite-you/pkg/services/models/transports/http"
 	modelswire "github.com/portpowered/infinite-you/pkg/services/models/wire"
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	globalconfigmapping "github.com/portpowered/infinite-you/pkg/services/operator_settings/transports/globalconfig"
 	settingswire "github.com/portpowered/infinite-you/pkg/services/operator_settings/wire"
-	providersessionshttp "github.com/portpowered/infinite-you/pkg/services/provider_sessions/transports/http"
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	recordingscli "github.com/portpowered/infinite-you/pkg/services/recordings/transports/cli"
-	recordingshttp "github.com/portpowered/infinite-you/pkg/services/recordings/transports/http"
 	recordingmcp "github.com/portpowered/infinite-you/pkg/services/recordings/transports/mcp"
 	recordingswire "github.com/portpowered/infinite-you/pkg/services/recordings/wire"
 	systeminitialization "github.com/portpowered/infinite-you/pkg/services/system_initialization"
 	systeminitializationwire "github.com/portpowered/infinite-you/pkg/services/system_initialization/wire"
 	"github.com/portpowered/infinite-you/pkg/services/work"
-	workhttp "github.com/portpowered/infinite-you/pkg/services/work/transports/http"
 	workwire "github.com/portpowered/infinite-you/pkg/services/work/wire"
-	workersessionshttp "github.com/portpowered/infinite-you/pkg/services/worker_sessions/transports/http"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/terminalpolicy"
-	transporthttp "github.com/portpowered/infinite-you/pkg/transports/http"
-	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 	factorysessionmapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factorysession"
 	mcpserver "github.com/portpowered/infinite-you/pkg/transports/mcp/server"
 	mcpstdio "github.com/portpowered/infinite-you/pkg/transports/mcp/stdio"
@@ -847,135 +835,4 @@ func provideResponsePresentation() factoryvisualization.ResponsePresentation {
 
 func provideDirectJavaScriptSyncRunner() factorysessionwire.DirectJavaScriptSyncRunner {
 	return sessionexecutioncli.RunNormalizedSync
-}
-
-// httpRuntimeBinding is the Wire-owned operation that builds the owner HTTP
-// adapters for one opened runtime and returns the generated route shell.
-// Runtime opening invokes this operation directly; no transport application
-// binder or central mapping graph is involved.
-type httpRuntimeBinding func(factorysessionwire.OpenedApplicationRuntime) (http.Handler, error)
-
-// provideHTTPRuntimeBinding is the single Wire-owned live HTTP composition
-// path. It builds each owner adapter for the opened runtime and hands the
-// generated route shell only those prebuilt adapters.
-func provideHTTPRuntimeBinding(
-	factoryStatusProjector factoryruntime.FactoryStatusProjector,
-	providerSessionsHTTP *providersessionshttp.Handler,
-	modelsContent work.ContentPreparation,
-	validation factorydefinitions.SubmittedDefinitionValidationOperation,
-	invocationWorkType factorydefinitions.InvocationWorkTypeService,
-	sessionRequests factorysessionshttp.RequestPreparation,
-	costsQuery costs.CostsQuery,
-) (httpRuntimeBinding, error) {
-	if factoryStatusProjector == nil || providerSessionsHTTP == nil || modelsContent == nil || validation == nil || invocationWorkType == nil || sessionRequests == nil || costsQuery == nil {
-		return nil, errors.New("construct HTTP runtime binding: owner adapters and boundary policies are required")
-	}
-	return func(opened factorysessionwire.OpenedApplicationRuntime) (http.Handler, error) {
-		return newHTTPRuntimeHandler(opened, factoryStatusProjector, providerSessionsHTTP, modelsContent, validation, invocationWorkType, sessionRequests, costsQuery)
-	}, nil
-}
-
-func newHTTPRuntimeHandler(
-	opened factorysessionwire.OpenedApplicationRuntime,
-	factoryStatusProjector factoryruntime.FactoryStatusProjector,
-	providerSessionsHTTP *providersessionshttp.Handler,
-	modelsContent work.ContentPreparation,
-	validation factorydefinitions.SubmittedDefinitionValidationOperation,
-	invocationWorkType factorydefinitions.InvocationWorkTypeService,
-	sessionRequests factorysessionshttp.RequestPreparation,
-	costsQuery costs.CostsQuery,
-) (http.Handler, error) {
-	if opened.FactoryRuntime == nil || opened.FactoryDefinitions == nil || opened.FactorySessions == nil || opened.LiveControl == nil {
-		return nil, errors.New("bind HTTP mappings: opened Factory Session roles are required")
-	}
-	modelInvoker := opened.ModelInvoker
-	if modelInvoker == nil {
-		modelInvoker = opened.Workers
-	}
-	modelsAdapter := modelshttp.NewAdapter(opened.Models, modelInvoker, modelsContent, opened.ModelsScope)
-	modelsHandler := modelshttp.NewHandler(modelsAdapter, opened.Logger)
-	if modelsHandler == nil {
-		return nil, errors.New("bind HTTP runtime: Models service, invoker, content preparation, and logger are required")
-	}
-	definitionMapping := factorydefinitionmapping.New(opened.FactoryDefinitions)
-	runtimeAPI := apisurface.NewRuntimeAPI(opened.FactoryRuntime, definitionMapping)
-	if _, ok := opened.FactoryRuntime.(interface {
-		SubscribeFactoryEvents(
-			context.Context,
-			*factorydefinitions.FactoryEventReconnectCursor,
-			factorydefinitions.FactoryEventReconnectScope,
-		) (*factorydefinitions.FactoryEventStream, error)
-	}); !ok {
-		return nil, errors.New("bind HTTP mappings: Factory Runtime event subscription is required")
-	}
-	statusSessions, ok := opened.FactorySessions.(factorysessionshttp.FactoryStatusSessionReader)
-	if !ok {
-		return nil, errors.New("bind HTTP mappings: Factory Sessions session-scoped status observation is required")
-	}
-	statusAPI := factorysessionshttp.NewFactoryStatusAPI(statusSessions, factoryStatusProjector)
-	liveGateway, ok := opened.FactorySessions.(factorysessionmapping.LiveGateway)
-	if !ok {
-		return nil, errors.New("bind HTTP mappings: Factory Sessions live result gateway is required")
-	}
-	factoryDefinitionsAPI := factorydefinitionmapping.NewAPI(definitionMapping, definitionMapping)
-	liveAPI := factorysessionmapping.NewLiveAPI(opened.LiveControl, liveGateway)
-	invocationAPI := factorysessionmapping.NewInvocationAPI(opened.FactorySessions)
-	durableAPI := factorysessionmapping.NewDurableAPI(opened.FactorySessions)
-	sessionsHandler := factorysessionshttp.NewHandler(factorysessionshttp.Dependencies{
-		SessionsRoot: opened.FactorySessions, LiveControl: opened.LiveControl,
-		Runtime: runtimeAPI, FactoryStatus: statusAPI,
-		Sessions: liveAPI, Invocation: invocationAPI, FactoryDefinitions: factoryDefinitionsAPI,
-		FactoryValidation: validation, WorkflowPreview: opened.WorkflowPreview,
-		DurableExecution: durableAPI, DurableLifecycle: durableAPI,
-		DurableListing: durableAPI, DurableResponseEvents: durableAPI,
-		DurableLister:     opened.FactorySessions,
-		LiveSessionLister: factorysessionshttp.ReadProjectionSessionListReader{Reader: opened.LiveControl},
-		WorkerPrompts:     opened.WorkerPrompts, InvocationWorkType: invocationWorkType,
-		SessionRequests: sessionRequests,
-	}, opened.Logger)
-	workHandler := workhttpAdapter(opened, factoryDefinitionsAPI, invocationWorkType)
-	factoryDefinitionsHandler := factorydefinitionshttp.NewHandlerFromRoot(
-		factorydefinitionshttp.RootBinding{Definitions: opened.FactoryDefinitions}, opened.Logger,
-	)
-	legacyDurable := factorysessionmapping.NewDurableAPI(opened.FactorySessions)
-	recordingsAdapter := recordingshttp.NewAdapterWithLegacyFallback(
-		opened.Recordings,
-		factorysessionmapping.NewDurableHistoryBridge(legacyDurable),
-		factorysessionshttp.NewDurableRequestPreparation(sessionRequests),
-		opened.FactorySessions,
-	)
-	var workerSessionsHandler *workersessionshttp.Handler
-	if opened.WorkerSessions != nil {
-		workerSessionsHandler = workersessionshttp.NewHandler(
-			workersessionshttp.NewAdapterWithStartAndContinueAndInterruptAndControl(
-				opened.WorkerSessions, opened.WorkerSessions, opened.WorkerSessions,
-				opened.WorkerSessions, opened.WorkerSessions, opened.Work,
-				newWorkerSessionsFactorySessionScopeResolver(opened.FactorySessions),
-			), opened.Logger,
-		)
-	}
-	costsAdapter := costshttp.NewAdapter(
-		costsQuery,
-		opened.Resources.Diagnostics.MetricsRootDir,
-		opened.OperatorSettingsPath,
-	)
-	costsHandler := costshttp.NewHandler(costsAdapter, opened.Logger)
-	if costsHandler == nil {
-		return nil, errors.New("bind HTTP runtime: Costs query and runtime paths are required")
-	}
-	return transporthttp.NewServerWithRecordingsAndCosts(
-		recordingsAdapter, sessionsHandler, workHandler, modelsHandler, providerSessionsHTTP,
-		factoryDefinitionsHandler, opened.Logger, costsHandler, workerSessionsHandler,
-	).Handler(), nil
-}
-
-func workhttpAdapter(
-	opened factorysessionwire.OpenedApplicationRuntime,
-	factoryDefinitionsAPI apisurface.FactorySaveAPI,
-	invocationWorkType factorydefinitions.InvocationWorkTypeService,
-) *workhttp.Adapter {
-	return workhttp.NewAdapterWithSessionScope(opened.Work, func(ctx context.Context, sessionID string) error {
-		_, err := factoryDefinitionsAPI.GetCurrentFactoryForSession(ctx, sessionID)
-		return err
-	}).WithDefaultWorkTypeResolver(newDefaultWorkTypeResolver(factoryDefinitionsAPI, invocationWorkType))
 }

@@ -38,10 +38,16 @@ func (query RuntimeMetricsQuery) QueryRuntimeMetrics(
 }
 
 // RuntimeMetricsQueryRequest identifies the artifact root and optional runtime
-// scope filters. When both identifiers are supplied they are intersected.
+// scope filters. SessionIDs is authoritative when supplied; SessionID remains
+// the single-identity compatibility filter when no candidate set is present.
 type RuntimeMetricsQueryRequest struct {
-	MetricsRoot       string
-	SessionID         string
+	MetricsRoot string
+	SessionID   string
+	// SessionIDs is an optional resolved retained-scope set. It is used by
+	// transport adapters when one public Factory Session maps to more than
+	// one canonical identity across live/runtime artifact generations. When it
+	// is empty, SessionID remains the direct legacy filter.
+	SessionIDs        []string
 	RuntimeInstanceID string
 }
 
@@ -53,6 +59,13 @@ const (
 	// RuntimeMetricsCostUnavailable is the only cost state exposed by this
 	// query. No price or numeric cost value is represented.
 	RuntimeMetricsCostUnavailable RuntimeMetricsCostAvailability = "UNAVAILABLE"
+
+	// RuntimeMetricsUnavailableProviderKey is the stable machine key used when
+	// retained metric facts cannot be attributed to one concrete provider.
+	RuntimeMetricsUnavailableProviderKey = "unavailable"
+	// RuntimeMetricsUnavailableProviderLabel explains the unavailable machine
+	// key in human-oriented metrics output.
+	RuntimeMetricsUnavailableProviderLabel = "Unavailable (provider attribution not proven)"
 )
 
 // RuntimeMetricsCost is an explicit non-numeric cost representation.

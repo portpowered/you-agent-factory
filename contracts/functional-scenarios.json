@@ -1112,6 +1112,21 @@
       "reviewedReason": "No qualifying repository-owned functional test currently invokes and observes this component through its customer boundary."
     },
     {
+      "stableId": "rest/getMetrics",
+      "name": "getMetrics",
+      "interface": "rest",
+      "classification": "operation",
+      "status": "covered",
+      "lane": "short",
+      "executionClass": "deterministic",
+      "evidence": [
+        {
+          "test": "tests/functional/factory/visualization/runtime_metrics/documented_workflow_test.go::TestMetricsDocumentedWorkflowThroughRootProcess",
+          "boundary": "rest"
+        }
+      ]
+    },
+    {
       "stableId": "rest/getMetricsCosts",
       "name": "getMetricsCosts",
       "interface": "rest",

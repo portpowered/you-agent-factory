@@ -78,6 +78,22 @@ func TestMetricsCommand_SelectsEverySupportedGrouping(t *testing.T) {
 	}
 }
 
+func TestMetricsCommandExplainsUnavailableProviderAttributionInHumanOutput(t *testing.T) {
+	output, err := executeMetricsCommand(t, metricsQueryStub(func(context.Context, factoryvisualization.RuntimeMetricsQueryRequest) (factoryvisualization.RuntimeMetricsQueryResult, error) {
+		return factoryvisualization.RuntimeMetricsQueryResult{
+			Providers: []factoryvisualization.RuntimeMetricsBreakdown{{
+				Key: factoryvisualization.RuntimeMetricsUnavailableProviderKey,
+			}},
+		}, nil
+	}), []string{"--group-by", "provider"})
+	if err != nil {
+		t.Fatalf("execute metrics: %v", err)
+	}
+	if !strings.Contains(output, factoryvisualization.RuntimeMetricsUnavailableProviderLabel+":") || strings.Contains(output, "${") {
+		t.Fatalf("unavailable provider output = %q, want human label without template syntax", output)
+	}
+}
+
 func TestMetricsCommand_ScopesEveryGroupingInHumanAndJSON(t *testing.T) {
 	formats := []struct {
 		name string

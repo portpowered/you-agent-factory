@@ -1,0 +1,5 @@
+description: The selected live Factory Session has no retained metrics scope.
+content:
+  application/json:
+    schema:
+      $ref: '../schemas/api/ErrorResponse.yaml'
