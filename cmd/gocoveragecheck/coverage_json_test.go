@@ -85,6 +85,31 @@ func TestExecuteWritesDeterministicJSONCoverageTotals(t *testing.T) {
 	}
 }
 
+func TestCoverageSummaryRetainsFloorPolicyAndDiagnostics(t *testing.T) {
+	summary := buildCoverageSummaryJSON(coverageResult{
+		packageFloorPolicy: coverageFloorPolicyAdvisory,
+		packageMinimumWarnings: []string{
+			"package coverage regression: package=pkg/example lane=unit expected-minimum=80.00% actual=40.0000% delta=-40.0000 percentage-points",
+		},
+		manifestCompletenessWarnings: []string{
+			"coverage manifest missing entry: package=pkg/services/example lane=unit",
+		},
+		unmeasuredPackageDiagnostics: []string{
+			"coverage not evaluated: package=pkg/unmeasured lane=unit (no measurement in profile)",
+		},
+	})
+
+	if summary.PackageFloorPolicy != coverageFloorPolicyAdvisory {
+		t.Fatalf("packageFloorPolicy = %q, want %q", summary.PackageFloorPolicy, coverageFloorPolicyAdvisory)
+	}
+	if len(summary.PackageFloorFindings) != 1 || !strings.Contains(summary.PackageFloorFindings[0], "package=pkg/example") {
+		t.Fatalf("packageFloorFindings = %v, want retained floor diagnostic", summary.PackageFloorFindings)
+	}
+	if len(summary.ManifestDiagnostics) != 2 || !strings.Contains(summary.ManifestDiagnostics[0], "missing entry") || !strings.Contains(summary.ManifestDiagnostics[1], "no measurement") {
+		t.Fatalf("manifestDiagnostics = %v, want retained manifest diagnostics", summary.ManifestDiagnostics)
+	}
+}
+
 func TestExecuteOmitsJSONFileWhenJSONOutputOptionAbsent(t *testing.T) {
 	originalCommandRunner := commandRunner
 	originalStdout := stdoutWriter

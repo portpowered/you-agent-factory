@@ -13,6 +13,9 @@ import (
 type coverageSummaryJSON struct {
 	Complete             bool                  `json:"complete"`
 	MeasurementReason    string                `json:"measurementReason,omitempty"`
+	PackageFloorPolicy   string                `json:"packageFloorPolicy"`
+	PackageFloorFindings []string              `json:"packageFloorFindings,omitempty"`
+	ManifestDiagnostics  []string              `json:"manifestDiagnostics,omitempty"`
 	CoveredStatements    int                   `json:"coveredStatements"`
 	MeasurableStatements int                   `json:"measurableStatements"`
 	CoveragePercent      float64               `json:"coveragePercent"`
@@ -40,13 +43,36 @@ type packageCoverageGate struct {
 
 func buildCoverageSummaryJSON(result coverageResult) coverageSummaryJSON {
 	covered, measurable := overallStatementTotals(result)
+	policy := strings.TrimSpace(result.packageFloorPolicy)
+	if policy == "" {
+		policy = coverageFloorPolicyBlocking
+	}
 	return coverageSummaryJSON{
 		Complete:             true,
 		CoveredStatements:    covered,
 		MeasurableStatements: measurable,
 		CoveragePercent:      roundCoveragePercent(result.actual),
+		PackageFloorPolicy:   policy,
+		PackageFloorFindings: appendCoverageDiagnostics(result.packageMinimumWarnings, result.packageMinimumFailures),
+		ManifestDiagnostics:  appendCoverageDiagnostics(result.manifestCompletenessWarnings, result.unmeasuredPackageDiagnostics),
 		Packages:             buildPackageCoverageJSON(result),
 	}
+}
+
+func appendCoverageDiagnostics(groups ...[]string) []string {
+	count := 0
+	for _, group := range groups {
+		count += len(group)
+	}
+	if count == 0 {
+		return nil
+	}
+
+	diagnostics := make([]string, 0, count)
+	for _, group := range groups {
+		diagnostics = append(diagnostics, group...)
+	}
+	return diagnostics
 }
 
 func buildPackageCoverageJSON(result coverageResult) []packageCoverageJSON {

@@ -45,6 +45,11 @@ const defaultPackageCoverageMin = 80.0
 const defaultPackageFloorEpsilon = 0.25
 const defaultCoverageJobs = 2
 
+const (
+	coverageFloorPolicyBlocking = "blocking"
+	coverageFloorPolicyAdvisory = "advisory"
+)
+
 var (
 	defaultCoveragePatterns                   = []string{"./pkg/..."}
 	unitTestPatterns                          = []string{"./pkg/..."}
@@ -98,6 +103,7 @@ type config struct {
 	packageBaseline      string
 	packageMin           float64
 	packageFloorEpsilon  float64
+	packageFloorPolicy   string
 	packages             string
 	profile              string
 	short                bool
@@ -118,7 +124,9 @@ type coverageResult struct {
 	zeroCoveragePackages         []string
 	packageMinimumFailures       []string
 	packageMinimumWarnings       []string
+	manifestCompletenessWarnings []string
 	unmeasuredPackageDiagnostics []string
+	packageFloorPolicy           string
 }
 
 type packageCoverageTotals struct {
@@ -148,6 +156,9 @@ func execute(cfg config) error {
 	if strings.TrimSpace(cfg.updateProfiles) != "" {
 		return executeSampledManifestUpdate(cfg)
 	}
+	if cfg.packageFloorPolicyIsAdvisory() {
+		writeAdvisoryFloorPolicyBanner()
+	}
 	if cfg.phaseTiming == nil && unitCoveragePhaseTimingEnabled(cfg) {
 		cfg.phaseTiming = newCoveragePhaseTimer(stdoutWriter)
 		defer cfg.phaseTiming.emit()
@@ -164,13 +175,19 @@ func execute(cfg config) error {
 		}
 		return err
 	}
+	result.packageFloorPolicy = cfg.packageFloorPolicyValue()
 
 	var failures []string
 	if result.actual < cfg.min {
 		failures = append(failures, fmt.Sprintf("go coverage %.1f%% is below minimum %.1f%%", result.actual, cfg.min))
 	}
 	if len(result.insufficientCoveragePackages) > 0 {
-		failures = append(failures, formatInsufficientCoverageFailure(result.insufficientCoveragePackages, cfg.packageCoverageMin()))
+		insufficientFailure := formatInsufficientCoverageFailure(result.insufficientCoveragePackages, cfg.packageCoverageMin())
+		if cfg.packageFloorPolicyIsAdvisory() {
+			result.packageMinimumWarnings = append(result.packageMinimumWarnings, insufficientFailure)
+		} else {
+			failures = append(failures, insufficientFailure)
+		}
 	}
 	failures = append(failures, result.packageMinimumFailures...)
 
@@ -217,6 +234,7 @@ func parseConfig() config {
 	flag.StringVar(&cfg.packageBaseline, "package-baseline", "", "newline-delimited list of backend packages temporarily exempt from the per-package minimum coverage gate; defaults by suite")
 	flag.Float64Var(&cfg.packageMin, "package-min", defaultPackageCoverageMin, "minimum statement coverage required for each non-baselined backend package")
 	flag.Float64Var(&cfg.packageFloorEpsilon, "package-floor-epsilon", defaultPackageFloorEpsilon, "allowed manifest package-floor drift in percentage points; only applies with -package-manifest")
+	flag.StringVar(&cfg.packageFloorPolicy, "package-floor-policy", coverageFloorPolicyBlocking, "package-floor enforcement policy: blocking or advisory")
 	flag.StringVar(&cfg.packages, "packages", "", "space-separated go test package patterns; overrides -suite package discovery")
 	flag.StringVar(&cfg.profile, "profile", "", "coverage profile output path; defaults to a temp file")
 	flag.BoolVar(&cfg.short, "short", true, "run with go test -short")
@@ -229,6 +247,9 @@ func parseConfig() config {
 }
 
 func validateConfig(cfg config) error {
+	if policy := cfg.packageFloorPolicyValue(); policy != coverageFloorPolicyBlocking && policy != coverageFloorPolicyAdvisory {
+		return fmt.Errorf("configure go coverage: -package-floor-policy must be %q or %q (got %q)", coverageFloorPolicyBlocking, coverageFloorPolicyAdvisory, cfg.packageFloorPolicy)
+	}
 	manifestOperations := 0
 	for _, value := range []string{cfg.generateManifest, cfg.updateManifest, cfg.packageManifest} {
 		if strings.TrimSpace(value) != "" {
@@ -269,6 +290,24 @@ func validateConfig(cfg config) error {
 		}
 	}
 	return nil
+}
+
+func (cfg config) packageFloorPolicyValue() string {
+	policy := strings.ToLower(strings.TrimSpace(cfg.packageFloorPolicy))
+	if policy == "" {
+		return coverageFloorPolicyBlocking
+	}
+	return policy
+}
+
+func (cfg config) packageFloorPolicyIsAdvisory() bool {
+	return cfg.packageFloorPolicyValue() == coverageFloorPolicyAdvisory
+}
+
+func writeAdvisoryFloorPolicyBanner() {
+	fmt.Fprintln(stderrWriter, "!!! COVERAGE FLOOR POLICY: advisory !!!")
+	fmt.Fprintln(stderrWriter, "Package floors and missing-manifest findings are report-only during the test-corpus rebuild.")
+	fmt.Fprintln(stderrWriter, "Set -package-floor-policy=blocking to restore blocking enforcement.")
 }
 
 func (cfg config) packageCoverageBaselinePath() string {

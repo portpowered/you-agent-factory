@@ -83,6 +83,34 @@ func TestFunctionalCoverageCommandSmoke_ReportsExplicitTierSelection(t *testing.
 	}
 }
 
+// TestCoverageTargetsSmoke_ForwardOneFloorPolicy proves unit and functional
+// coverage invoke the checker with the same explicit reversible policy.
+func TestCoverageTargetsSmoke_ForwardOneFloorPolicy(t *testing.T) {
+	repoRoot := testutil.MustRepoPath(t, ".")
+	goStub := writeMakeEchoScript(t, "stub-go-coverage-policy")
+
+	for _, target := range []string{"test-unit-coverage", "test-functional-coverage"} {
+		t.Run(target, func(t *testing.T) {
+			makefilePath := writeVerifyFastWrapperMakefile(t, repoRoot, map[string]string{
+				"functional-boundary-check": "@printf '%s\\n' 'stub:boundary-ok'\n",
+			})
+			output, err := runMakefileTargetWithArgs(
+				repoRoot,
+				makefilePath,
+				fmt.Sprintf("GO=%s", goStub),
+				"GO_COVERAGE_FLOOR_POLICY=advisory",
+				target,
+			)
+			if err != nil {
+				t.Fatalf("run %s: %v\n%s", target, err, output)
+			}
+			if !strings.Contains(output, "-package-floor-policy advisory") {
+				t.Fatalf("%s did not forward the advisory policy to gocoveragecheck:\n%s", target, output)
+			}
+		})
+	}
+}
+
 // TestFunctionalCoverageCommandSmoke_DefersOrdinaryGocoverageFailure proves
 // the CI-only handoff preserves gocoveragecheck's exact exit code while
 // allowing the compact verdict step to own an ordinary exit-1 outcome.

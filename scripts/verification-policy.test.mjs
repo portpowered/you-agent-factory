@@ -211,6 +211,24 @@ test("summary records touched areas, each decision, reason, and terminal result"
 	assert.match(summary, /Verification Policy passed/);
 });
 
+test("a successful coverage lane stays successful when its reason contains advisory findings", () => {
+	const evaluation = evaluateVerificationPolicy(
+		policy({
+			classification: "backend",
+			areas: "ci-tooling",
+			lanes: [
+				...laneNames.filter((name) => name !== "Backend").map((name) => lane(name)),
+				lane("Backend", true, "success", {
+					reason:
+						"COVERAGE FLOOR POLICY: advisory; package coverage regression and missing-manifest findings are report-only.",
+				}),
+			],
+		}),
+	);
+
+	assert.deepEqual(evaluation, { ok: true, failures: [] });
+});
+
 test("summary falls back to the classifier's global reason for a selected lane", () => {
 	const input = policy({
 		classificationReason: "Unknown paths require conservative full verification.",

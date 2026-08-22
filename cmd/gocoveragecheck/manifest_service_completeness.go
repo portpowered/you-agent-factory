@@ -53,7 +53,15 @@ func validateCoverageManifestServiceRoots(
 	declared map[string]struct{},
 	measuredTotals map[string]packageCoverageTotals,
 ) error {
-	missing := make(map[string]struct{})
+	missing := missingCoverageManifestServiceRoots(measuredPackages, declared)
+	if len(missing) == 0 {
+		return nil
+	}
+	return formatMissingCoverageManifestServiceRoots(lane, missing, measuredTotals)
+}
+
+func missingCoverageManifestServiceRoots(measuredPackages []string, declared map[string]struct{}) []string {
+	missingSet := make(map[string]struct{})
 	for _, importPath := range measuredPackages {
 		root, ok := coverageManifestServiceRoot(importPath)
 		if !ok {
@@ -62,12 +70,9 @@ func validateCoverageManifestServiceRoots(
 		if _, declaredRoot := declared[root]; declaredRoot {
 			continue
 		}
-		missing[root] = struct{}{}
+		missingSet[root] = struct{}{}
 	}
-	if len(missing) == 0 {
-		return nil
-	}
-	return formatMissingCoverageManifestServiceRoots(lane, slices.Sorted(maps.Keys(missing)), measuredTotals)
+	return slices.Sorted(maps.Keys(missingSet))
 }
 
 func formatMissingCoverageManifestServiceRoots(lane string, missing []string, measuredTotals map[string]packageCoverageTotals) error {
@@ -87,6 +92,33 @@ func formatMissingCoverageManifestServiceRoots(lane string, missing []string, me
 		"validate go coverage manifest: measured %s services have no root manifest entry:\n%s",
 		lane, strings.Join(lines, "\n"),
 	)
+}
+
+func formatMissingCoverageManifestServiceRootDiagnostics(
+	lane string,
+	measuredPackages []string,
+	declared map[string]struct{},
+	measuredTotals map[string]packageCoverageTotals,
+) []string {
+	missing := missingCoverageManifestServiceRoots(measuredPackages, declared)
+	if len(missing) == 0 {
+		return nil
+	}
+
+	diagnostics := make([]string, 0, len(missing))
+	for _, root := range missing {
+		diagnostic := fmt.Sprintf(
+			"coverage manifest missing entry: package=%s lane=%s (measured service has no root manifest entry; record one entry for the service root)",
+			root,
+			lane,
+		)
+		if measuredTotals != nil {
+			totals := measuredTotals[root]
+			diagnostic += fmt.Sprintf("; root package measures %d/%d statements", totals.coveredStatements, totals.totalStatements)
+		}
+		diagnostics = append(diagnostics, diagnostic)
+	}
+	return diagnostics
 }
 
 // isCoverageManifestServiceRoot reports whether importPath is a service root.

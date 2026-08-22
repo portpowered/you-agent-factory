@@ -197,6 +197,11 @@ jobs:
       pull-requests: write
     env:
       PR_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+      # Keep both coverage matrix lanes report-only for package-floor and
+      # manifest-completeness findings while the test corpus is rebuilt. The
+      # Makefile default remains blocking, so removing this one setting
+      # restores enforcement for local and hosted coverage runs.
+      GO_COVERAGE_FLOOR_POLICY: advisory
     strategy:
       fail-fast: false
       matrix:

@@ -277,15 +277,19 @@ func readCoverageManifestFile(filename string, lane string, measuredPackages []s
 }
 
 func readCoverageManifestFileWithTotals(filename string, lane string, measuredPackages []string, measuredTotals map[string]packageCoverageTotals) (coverageManifest, error) {
+	return readCoverageManifestFileWithTotalsAtMode(filename, lane, measuredPackages, measuredTotals, true)
+}
+
+func readCoverageManifestFileWithTotalsAtMode(filename string, lane string, measuredPackages []string, measuredTotals map[string]packageCoverageTotals, requireComplete bool) (coverageManifest, error) {
 	data, err := os.ReadFile(filename)
 	if err != nil {
 		return coverageManifest{}, fmt.Errorf("read %s go coverage manifest: %w", lane, err)
 	}
 	var manifest coverageManifest
 	if measuredTotals == nil {
-		manifest, err = readCoverageManifest(data, lane, measuredPackages)
+		manifest, err = readCoverageManifestAtMode(data, lane, measuredPackages, time.Now().UTC(), requireComplete)
 	} else {
-		manifest, err = readCoverageManifestWithTotals(data, lane, measuredPackages, measuredTotals)
+		manifest, err = readCoverageManifestAtModeWithTotals(data, lane, measuredPackages, time.Now().UTC(), requireComplete, measuredTotals)
 	}
 	if err != nil {
 		return coverageManifest{}, err
