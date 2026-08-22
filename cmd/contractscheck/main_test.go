@@ -5,7 +5,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"reflect"
 	"strings"
 	"testing"
 
@@ -23,9 +22,7 @@ func TestRunPassesCleanStagingWithoutWriting(t *testing.T) {
 	if got := stdout.String(); got != successMessage+"\n" || stderr.Len() != 0 {
 		t.Fatalf("run() stdout = %q, stderr = %q", got, stderr.String())
 	}
-	if after := commandTree(t, root); !reflect.DeepEqual(after, before) {
-		t.Fatal("run() changed repository bytes on success")
-	}
+	assertCommandTreeUnchanged(t, "run() changed repository bytes on success", before, commandTree(t, root))
 }
 
 func TestRunReportsCombinedDriftDeterministicallyWithoutWriting(t *testing.T) {
@@ -71,9 +68,7 @@ func TestRunReportsCombinedDriftDeterministicallyWithoutWriting(t *testing.T) {
 			t.Fatalf("run %d stdout = %q, stderr = %q, want %q", runIndex, stdout, stderr, want)
 		}
 	}
-	if after := commandTree(t, root); !reflect.DeepEqual(after, before) {
-		t.Fatal("run() changed repository bytes on failure")
-	}
+	assertCommandTreeUnchanged(t, "run() changed repository bytes on failure", before, commandTree(t, root))
 }
 
 func TestRunReportsPackagedFactorySchemaDriftWithRegenerationRemedy(t *testing.T) {
@@ -115,9 +110,7 @@ func TestRunReportsPackagedFactorySchemaDriftWithRegenerationRemedy(t *testing.T
 					t.Fatalf("run() stderr = %q, want fragment %q", stderr, fragment)
 				}
 			}
-			if after := commandTree(t, root); !reflect.DeepEqual(after, before) {
-				t.Fatal("run() changed repository bytes on failure")
-			}
+			assertCommandTreeUnchanged(t, "run() changed repository bytes on failure", before, commandTree(t, root))
 		})
 	}
 }
@@ -160,9 +153,9 @@ func commandFixture(t *testing.T) string {
 	return root
 }
 
-func commandTree(t *testing.T, root string) map[string]string {
+func commandTree(t *testing.T, root string) commandTreeSnapshot {
 	t.Helper()
-	result := make(map[string]string)
+	result := make(commandTreeSnapshot)
 	if err := filepath.WalkDir(root, func(path string, entry os.DirEntry, err error) error {
 		if err != nil || entry.IsDir() {
 			return err
@@ -175,7 +168,7 @@ func commandTree(t *testing.T, root string) map[string]string {
 		if err != nil {
 			return err
 		}
-		result[filepath.ToSlash(relative)] = string(payload)
+		result[filepath.ToSlash(relative)] = payload
 		return nil
 	}); err != nil {
 		t.Fatalf("walk repository: %v", err)
