@@ -2,6 +2,7 @@ package factory_visualization
 
 import (
 	"context"
+	"time"
 
 	platformmetrics "github.com/portpowered/infinite-you/pkg/platform/metrics"
 )
@@ -49,7 +50,20 @@ type RuntimeMetricsQueryRequest struct {
 	// is empty, SessionID remains the direct legacy filter.
 	SessionIDs        []string
 	RuntimeInstanceID string
+	// GroupBy selects one presentation dimension for a request. An empty value
+	// retains the full projection used by Costs and direct query callers.
+	GroupBy string
+	// StartTimeUTC and EndTimeUTC bound date-partition discovery. Bounds are
+	// optional; EndTimeUTC is exclusive when provided.
+	StartTimeUTC time.Time
+	EndTimeUTC   time.Time
 }
+
+const (
+	RuntimeMetricsGroupByWorkstation = "workstation"
+	RuntimeMetricsGroupByWorker      = "worker"
+	RuntimeMetricsGroupByProvider    = "provider"
+)
 
 // RuntimeMetricsCostAvailability describes whether a query contains a cost
 // calculation. Cost is intentionally unavailable for this read model.

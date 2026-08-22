@@ -12,9 +12,9 @@ import (
 )
 
 const (
-	metricsGroupByWorkstation = "workstation"
-	metricsGroupByWorker      = "worker"
-	metricsGroupByProvider    = "provider"
+	metricsGroupByWorkstation = factoryvisualization.RuntimeMetricsGroupByWorkstation
+	metricsGroupByWorker      = factoryvisualization.RuntimeMetricsGroupByWorker
+	metricsGroupByProvider    = factoryvisualization.RuntimeMetricsGroupByProvider
 )
 
 // MetricsCommandConfig contains the process-scoped inputs for the metrics
@@ -113,6 +113,7 @@ func RunMetrics(ctx context.Context, config MetricsConfig) error {
 	result, err := config.Query.QueryRuntimeMetrics(ctx, factoryvisualization.RuntimeMetricsQueryRequest{
 		MetricsRoot: platformmetrics.RuntimeMetricsRoot(homeDir),
 		SessionID:   sessionID,
+		GroupBy:     groupBy,
 	})
 	if err != nil {
 		return newMetricsQueryError(err)

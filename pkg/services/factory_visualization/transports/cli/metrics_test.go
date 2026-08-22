@@ -144,6 +144,9 @@ func TestMetricsCommand_ScopesEveryGroupingInHumanAndJSON(t *testing.T) {
 					if gotRequest.SessionID != scope.id {
 						t.Fatalf("query session ID = %q, want %q", gotRequest.SessionID, scope.id)
 					}
+					if gotRequest.GroupBy != group.name {
+						t.Fatalf("query group by = %q, want %q", gotRequest.GroupBy, group.name)
+					}
 					if format.json {
 						assertMetricsJSONOutput(t, output, group.name, group.key, scope.id)
 						return

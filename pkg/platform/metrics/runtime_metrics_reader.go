@@ -36,6 +36,45 @@ type Reader interface {
 	Stream(context.Context, string, func(RuntimeMetricRecord) error) error
 }
 
+// SelectedReader is the optional selective extension of Reader. Keeping the
+// original Stream method on Reader preserves the small compatibility boundary
+// for callers that do not need selection, while production readers can prune
+// artifacts and envelopes before materializing records.
+type SelectedReader interface {
+	StreamSelected(context.Context, string, StreamSelection, func(RuntimeMetricRecord) error) error
+}
+
+// RuntimeMetricRecordEnvelope contains only the string fields requested by a
+// caller's envelope selector. Platform Metrics does not interpret those
+// fields; it merely exposes a policy-free pre-decode selection point.
+type RuntimeMetricRecordEnvelope struct {
+	Path   string
+	Fields map[string]string
+}
+
+// RuntimeMetricsReadStats reports request-local traversal work. It is an
+// optional observation port for tests and diagnostics; the reader never
+// retains it between operations.
+type RuntimeMetricsReadStats struct {
+	DirectoriesVisited int
+	ArtifactsVisited   int
+	ArtifactsOpened    int
+	BytesRead          int64
+	RecordsDecoded     int
+}
+
+// StreamSelection supplies policy-free callbacks for one metrics read. The
+// callbacks are owned by the caller and may reject a directory, artifact, or
+// decoded envelope. A rejected envelope is not materialized as a full record.
+// When Path is nil, every path is visited. When IncludeEnvelope is nil, every
+// complete JSON object is materialized as before.
+type StreamSelection struct {
+	Path            func(path string, isDirectory bool) bool
+	EnvelopeFields  []string
+	IncludeEnvelope func(RuntimeMetricRecordEnvelope) bool
+	Stats           *RuntimeMetricsReadStats
+}
+
 // RuntimeMetricsReadError is a safe, typed failure from metrics discovery or
 // decoding. The cause remains available to errors.Is/errors.As callers while
 // the rendered message contains only operation and path context.
@@ -78,6 +117,7 @@ type RuntimeMetricsReader struct {
 }
 
 var _ Reader = (*RuntimeMetricsReader)(nil)
+var _ SelectedReader = (*RuntimeMetricsReader)(nil)
 
 // NewRuntimeMetricsReader constructs the stateless runtime metrics reader
 // from the exact filesystem effects selected by the composition root.
@@ -111,6 +151,19 @@ func (r *RuntimeMetricsReader) Stream(
 	root string,
 	visit func(RuntimeMetricRecord) error,
 ) error {
+	return r.StreamSelected(ctx, root, StreamSelection{}, visit)
+}
+
+// StreamSelected discovers metric artifacts and applies the supplied
+// request-local path and envelope selection before full record decoding.
+// Platform Metrics only executes callbacks and does not interpret their
+// dimension or metric meaning.
+func (r *RuntimeMetricsReader) StreamSelected(
+	ctx context.Context,
+	root string,
+	selection StreamSelection,
+	visit func(RuntimeMetricRecord) error,
+) error {
 	if r == nil || r.filesystem == nil {
 		return &RuntimeMetricsReadError{Operation: "read runtime metrics", Cause: errors.New("filesystem is required")}
 	}
@@ -139,8 +192,17 @@ func (r *RuntimeMetricsReader) Stream(
 		if ctxErr := ctx.Err(); ctxErr != nil {
 			return ctxErr
 		}
+		if selection.Stats != nil && entry != nil && entry.IsDir() {
+			selection.Stats.DirectoriesVisited++
+		}
 		if walkErr != nil {
 			return &RuntimeMetricsReadError{Operation: "inspect runtime metrics path", Path: path, Cause: walkErr}
+		}
+		if selection.Path != nil && !selection.Path(path, entry.IsDir()) {
+			if entry.IsDir() {
+				return fs.SkipDir
+			}
+			return nil
 		}
 		if entry.IsDir() || entry.Type()&fs.ModeSymlink != 0 || !isRuntimeMetricsArtifact(entry.Name()) {
 			return nil
@@ -148,7 +210,10 @@ func (r *RuntimeMetricsReader) Stream(
 		if !entry.Type().IsRegular() {
 			return nil
 		}
-		return readRuntimeMetricsArtifact(ctx, path, r.filesystem, visit)
+		if selection.Stats != nil {
+			selection.Stats.ArtifactsVisited++
+		}
+		return readRuntimeMetricsArtifact(ctx, path, r.filesystem, selection, visit)
 	})
 	if err != nil {
 		if _, ok := err.(*RuntimeMetricsReadError); ok {
@@ -167,11 +232,15 @@ func readRuntimeMetricsArtifact(
 	ctx context.Context,
 	path string,
 	filesystem ArtifactFileSystem,
+	selection StreamSelection,
 	visit func(RuntimeMetricRecord) error,
 ) (returnErr error) {
 	file, err := filesystem.Open(path)
 	if err != nil {
 		return &RuntimeMetricsReadError{Operation: "read runtime metrics artifact", Path: path, Cause: err}
+	}
+	if selection.Stats != nil {
+		selection.Stats.ArtifactsOpened++
 	}
 	defer func() {
 		if closeErr := file.Close(); returnErr == nil && closeErr != nil {
@@ -206,7 +275,7 @@ func readRuntimeMetricsArtifact(
 		source = gzipReader
 	}
 
-	err = readRuntimeMetricsJSONL(ctx, source, visit)
+	err = readRuntimeMetricsJSONL(ctx, source, path, selection, visit)
 	if err != nil {
 		if _, ok := err.(*RuntimeMetricsReadError); ok {
 			return err
@@ -219,8 +288,13 @@ func readRuntimeMetricsArtifact(
 func readRuntimeMetricsJSONL(
 	ctx context.Context,
 	source io.Reader,
+	path string,
+	selection StreamSelection,
 	visit func(RuntimeMetricRecord) error,
 ) error {
+	if selection.Stats != nil {
+		source = &countingReader{reader: source, stats: selection.Stats}
+	}
 	reader := bufio.NewReader(source)
 	lineNumber := 0
 	for {
@@ -233,12 +307,30 @@ func readRuntimeMetricsJSONL(
 			return readErr
 		}
 		if len(bytes.TrimSpace(line)) > 0 {
+			if selection.IncludeEnvelope != nil {
+				envelope, selected, envelopeErr := selectRuntimeMetricEnvelope(path, line, selection)
+				if envelopeErr != nil {
+					if errors.Is(readErr, io.EOF) {
+						return nil
+					}
+					return envelopeErr
+				}
+				if !selected || !selection.IncludeEnvelope(envelope) {
+					if errors.Is(readErr, io.EOF) {
+						return nil
+					}
+					continue
+				}
+			}
 			record, decodeErr := decodeRuntimeMetricRecord(line)
 			if decodeErr != nil {
 				if errors.Is(readErr, io.EOF) {
 					return nil
 				}
 				return fmt.Errorf("line %d: malformed JSON: %w", lineNumber, decodeErr)
+			}
+			if selection.Stats != nil {
+				selection.Stats.RecordsDecoded++
 			}
 			if err := visit(record); err != nil {
 				return err
@@ -248,6 +340,45 @@ func readRuntimeMetricsJSONL(
 			return nil
 		}
 	}
+}
+
+func selectRuntimeMetricEnvelope(
+	path string,
+	line []byte,
+	selection StreamSelection,
+) (RuntimeMetricRecordEnvelope, bool, error) {
+	var rawFields map[string]json.RawMessage
+	if err := json.Unmarshal(line, &rawFields); err != nil {
+		return RuntimeMetricRecordEnvelope{}, false, fmt.Errorf("decode runtime metrics envelope: %w", err)
+	}
+	if rawFields == nil {
+		return RuntimeMetricRecordEnvelope{}, false, errors.New("runtime metrics envelope must be an object")
+	}
+	fields := make(map[string]string, len(selection.EnvelopeFields))
+	for _, field := range selection.EnvelopeFields {
+		value, ok := rawFields[field]
+		if !ok {
+			continue
+		}
+		var text string
+		if err := json.Unmarshal(value, &text); err == nil {
+			fields[field] = text
+		}
+	}
+	return RuntimeMetricRecordEnvelope{Path: path, Fields: fields}, true, nil
+}
+
+type countingReader struct {
+	reader io.Reader
+	stats  *RuntimeMetricsReadStats
+}
+
+func (reader *countingReader) Read(buffer []byte) (int, error) {
+	count, err := reader.reader.Read(buffer)
+	if reader.stats != nil {
+		reader.stats.BytesRead += int64(count)
+	}
+	return count, err
 }
 
 func decodeRuntimeMetricRecord(line []byte) (RuntimeMetricRecord, error) {
