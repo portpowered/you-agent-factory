@@ -130,6 +130,11 @@ function summarizeTimingArtifact(timing, limits) {
 		complete: timing.complete !== false,
 		captureReason: textValue(timing.captureReason),
 		wallSeconds: finiteNumber(timing.wallSeconds),
+		packageElapsedSecondsSum: finiteNumber(timing.packageElapsedSecondsSum),
+		effectiveConcurrency: deriveEffectiveConcurrency(
+			timing.packageElapsedSecondsSum,
+			timing.wallSeconds,
+		),
 		packageCount: finiteNumber(timing.packageCount),
 		expectedPackageCount: finiteNumber(timing.expectedPackageCount),
 		testFailCount: finiteNumber(timing.testFailCount),
@@ -181,7 +186,7 @@ export function renderCoverageReportBody(summary, options = {}) {
 	if (manifestDiagnostics) {
 		sections.push(manifestDiagnostics);
 	}
-	sections.push(renderTimingOverview(summary.timing, timingArtifactName));
+	sections.push(renderTimingOverview(summary.timing, timingArtifactName, options));
 	const slowest = renderSlowestTable(summary.timing.slowest);
 	if (slowest) {
 		sections.push(
@@ -228,20 +233,38 @@ function renderDiagnostics(heading, diagnostics) {
 	return `${heading}\n\n${diagnostics.map((diagnostic) => `- ${diagnostic}`).join("\n")}`;
 }
 
-function renderTimingOverview(timing, artifactName) {
+function renderTimingOverview(timing, artifactName, options = {}) {
 	if (!timing.available) {
-		return `- Timing summary: unavailable — this run published no readable \`${artifactName}\`.`;
+		const lines = [`- Timing summary: unavailable — this run published no readable \`${artifactName}\`.`];
+		if (options.includeEffectiveConcurrency) {
+			lines.push(renderEffectiveConcurrencyUnavailable());
+		}
+		return lines.join("\n");
 	}
 	const lines = [
 		`- Wall-clock duration: ${timing.wallSeconds.toFixed(3)}s across ${timing.packageCount}/${timing.expectedPackageCount || timing.packageCount} package(s)`,
 		`- Observed top-level tests: ${timing.observed} (failed: ${timing.testFailCount})`,
 	];
+	if (options.includeEffectiveConcurrency) {
+		lines.push(renderEffectiveConcurrency(timing));
+	}
 	if (!timing.complete) {
 		lines.push(
 			`- Capture status: incomplete — partial diagnostics only${timing.captureReason ? ` (${timing.captureReason})` : ""}`,
 		);
 	}
 	return lines.join("\n");
+}
+
+function renderEffectiveConcurrency(timing) {
+	if (timing.effectiveConcurrency === null) {
+		return renderEffectiveConcurrencyUnavailable();
+	}
+	return `- Effective concurrency: ${timing.effectiveConcurrency.toFixed(2)}x (packageElapsedSecondsSum=${timing.packageElapsedSecondsSum.toFixed(3)}s / wallSeconds=${timing.wallSeconds.toFixed(3)}s)`;
+}
+
+function renderEffectiveConcurrencyUnavailable() {
+	return "- Effective concurrency: unavailable — requires a finite, non-negative packageElapsedSecondsSum and a positive finite wallSeconds";
 }
 
 function renderPackageTable(rows) {
@@ -339,6 +362,20 @@ export function coverageReportProvenance(env, headShaVariable) {
 
 function finiteNumber(value) {
 	return typeof value === "number" && Number.isFinite(value) ? value : 0;
+}
+
+function deriveEffectiveConcurrency(packageElapsedSecondsSum, wallSeconds) {
+	if (
+		typeof packageElapsedSecondsSum !== "number" ||
+		!Number.isFinite(packageElapsedSecondsSum) ||
+		packageElapsedSecondsSum < 0 ||
+		typeof wallSeconds !== "number" ||
+		!Number.isFinite(wallSeconds) ||
+		wallSeconds <= 0
+	) {
+		return null;
+	}
+	return packageElapsedSecondsSum / wallSeconds;
 }
 
 // Headroom is a subtraction between two numbers the producer records at
