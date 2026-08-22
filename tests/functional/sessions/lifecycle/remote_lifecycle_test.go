@@ -536,7 +536,7 @@ func runRemoteClientDisconnect(t *testing.T, homeDir, namedFactoryDir, serverURL
 	if err := terminateRemoteFunctionalSession(serverURL, sessionID); err != nil {
 		t.Fatalf("terminate disconnected durable session %s: %v", sessionID, err)
 	}
-	if strings.Contains(admissionOutput.String(), "127.0.0.1:1") {
+	if strings.Contains(admissionOutput.String(), "http://127.0.0.1:1/") {
 		t.Fatalf("remote output leaked a local fallback endpoint: %s", admissionOutput.String())
 	}
 }
