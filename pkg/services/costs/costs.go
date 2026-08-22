@@ -6,15 +6,12 @@ import (
 	"fmt"
 	"strings"
 
-	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
+	providers "github.com/portpowered/infinite-you/pkg/services/providers"
 )
 
-// PriceTableReader is the narrow Operator Settings capability required by the
-// Costs operation. Costs does not need the settings service's update or
-// precedence operations.
-type PriceTableReader interface {
-	LoadDocument(operatorsettings.LoadDocumentRequest) (operatorsettings.LoadDocumentResult, error)
-}
+// PriceTableReader is retained as a descriptive alias for the narrow
+// Providers-owned pricing capability consumed by Costs.
+type PriceTableReader = providers.PriceTableReader
 
 // CostsQuery is the stateless operation over canonical runtime usage rows.
 // The request supplies artifact/configuration paths as data; the operation
@@ -38,7 +35,9 @@ func (query CostsQuery) QueryCosts(ctx context.Context, request QueryRequest) (R
 // Query is the short compatibility name for the Costs operation type.
 type Query = CostsQuery
 
-// QueryRequest identifies the canonical metrics and operator-settings inputs.
+// QueryRequest identifies the canonical metrics input and optional scope
+// filters. OperatorSettingsPath is retained as an ignored compatibility field
+// for existing CLI/API callers; pricing is now read only from Providers.
 // FactorySessionID and RuntimeInstanceID are optional independent filters;
 // both are passed to the canonical Factory Visualization query.
 type QueryRequest struct {
@@ -53,9 +52,6 @@ type QueryRequest struct {
 func (request QueryRequest) Validate() error {
 	if strings.TrimSpace(request.MetricsRoot) == "" {
 		return fmt.Errorf("metrics root is required")
-	}
-	if strings.TrimSpace(request.OperatorSettingsPath) == "" {
-		return fmt.Errorf("operator settings path is required")
 	}
 	return nil
 }

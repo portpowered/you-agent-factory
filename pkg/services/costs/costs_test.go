@@ -18,8 +18,8 @@ func TestQueryNilOperationAndRequestValidation(t *testing.T) {
 	if err := (QueryRequest{}).Validate(); err == nil {
 		t.Fatal("empty QueryRequest.Validate() = nil, want error")
 	}
-	if err := (QueryRequest{MetricsRoot: "metrics"}).Validate(); err == nil {
-		t.Fatal("missing settings path validation = nil, want error")
+	if err := (QueryRequest{MetricsRoot: "metrics"}).Validate(); err != nil {
+		t.Fatalf("missing compatibility settings path = %v, want no validation error", err)
 	}
 	operation := CostsQuery(func(context.Context, QueryRequest) (Report, error) {
 		return Report{Status: StatusNoUsage}, nil

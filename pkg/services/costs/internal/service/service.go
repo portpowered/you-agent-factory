@@ -8,48 +8,45 @@ import (
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	costs "github.com/portpowered/infinite-you/pkg/services/costs"
 	factoryvisualization "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
-	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
+	providers "github.com/portpowered/infinite-you/pkg/services/providers"
 )
 
 // Service owns valuation policy while retaining no report or request state.
-// File and metrics access remain behind the two injected owner contracts.
+// Provider pricing and canonical metrics remain behind two injected owner
+// contracts.
 type Service struct {
-	settings PriceTableReader
-	metrics  factoryvisualization.RuntimeMetricsQuery
-	logger   logging.Logger
+	pricing providers.PriceTableReader
+	metrics factoryvisualization.RuntimeMetricsQuery
+	logger  logging.Logger
 }
-
-// PriceTableReader is kept private so the implementation depends on the
-// narrow Costs contract rather than the complete Operator Settings service.
-type PriceTableReader = costs.PriceTableReader
 
 // New constructs the stateless Costs operation.
 func New(
-	settings PriceTableReader,
+	pricing providers.PriceTableReader,
 	metrics factoryvisualization.RuntimeMetricsQuery,
 	logger logging.Logger,
 ) (costs.CostsQuery, error) {
 	switch {
-	case settings == nil:
+	case pricing == nil:
 		return nil, errors.New("construct Costs query: price-table reader is required")
 	case metrics == nil:
 		return nil, errors.New("construct Costs query: runtime metrics query is required")
 	}
 	service := &Service{
-		settings: settings,
-		metrics:  metrics,
-		logger:   logging.EnsureLogger(logger),
+		pricing: pricing,
+		metrics: metrics,
+		logger:  logging.EnsureLogger(logger),
 	}
 	return service.QueryCosts, nil
 }
 
-// QueryCosts loads the operator-owned table, queries canonical usage, and
+// QueryCosts loads the provider-owned table, queries canonical usage, and
 // calculates one deterministic report from detached local accumulators.
 func (service *Service) QueryCosts(
 	ctx context.Context,
 	request costs.QueryRequest,
 ) (costs.Report, error) {
-	if service == nil || service.settings == nil || service.metrics == nil {
+	if service == nil || service.pricing == nil || service.metrics == nil {
 		return costs.Report{}, &costs.QueryError{
 			Kind:    costs.QueryErrorInvalidInput,
 			Message: "query runtime costs: dependencies are required",
@@ -78,13 +75,13 @@ func (service *Service) QueryCosts(
 		"runtime_instance_id", runtimeID,
 	)
 
-	table, err := service.loadPriceTable(request.OperatorSettingsPath)
+	table, err := service.readPriceTable()
 	if err != nil {
 		service.logger.Error(
 			"runtime costs query failed",
 			"scope_kind", scopeForRequest(request).Kind,
 			"factory_session_id", sessionID,
-			"status", "SETTINGS_ERROR",
+			"status", "PRICING_ERROR",
 			"error_kind", queryErrorKind(err),
 		)
 		return costs.Report{}, err
@@ -145,22 +142,20 @@ func (service *Service) QueryCosts(
 	return report, nil
 }
 
-func (service *Service) loadPriceTable(path string) (operatorsettings.PriceTable, error) {
-	loaded, err := service.settings.LoadDocument(operatorsettings.LoadDocumentRequest{
-		Path: strings.TrimSpace(path),
-	})
+func (service *Service) readPriceTable() (providers.PriceTable, error) {
+	table, err := service.pricing.ReadPriceTable()
 	if err != nil {
-		return operatorsettings.PriceTable{}, &costs.QueryError{
+		return providers.PriceTable{}, &costs.QueryError{
 			Kind:    costs.QueryErrorSettingsReadFailed,
-			Message: "query runtime costs: load operator price table",
+			Message: "query runtime costs: read provider price table",
 			Cause:   err,
 		}
 	}
-	table, err := loaded.Document.PriceTable.Normalize()
+	table, err = table.Normalize()
 	if err != nil {
-		return operatorsettings.PriceTable{}, &costs.QueryError{
+		return providers.PriceTable{}, &costs.QueryError{
 			Kind:    costs.QueryErrorInvalidPriceTable,
-			Message: "query runtime costs: normalize operator price table",
+			Message: "query runtime costs: validate provider price table",
 			Cause:   err,
 		}
 	}

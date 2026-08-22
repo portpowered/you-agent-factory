@@ -10,7 +10,7 @@ import (
 	costs "github.com/portpowered/infinite-you/pkg/services/costs"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryvisualization "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
-	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
+	providers "github.com/portpowered/infinite-you/pkg/services/providers"
 )
 
 type normalizedPrice struct {
@@ -54,7 +54,7 @@ type tokenAccumulator struct {
 
 func calculateReport(
 	ctx context.Context,
-	table operatorsettings.PriceTable,
+	table providers.PriceTable,
 	rows []factoryvisualization.RuntimeMetricsUsageRow,
 	scope costs.Scope,
 ) (costs.Report, error) {
@@ -135,7 +135,7 @@ func calculateReport(
 	return report, nil
 }
 
-func buildPriceIndex(table operatorsettings.PriceTable) (priceIndex, error) {
+func buildPriceIndex(table providers.PriceTable) (priceIndex, error) {
 	index := make(priceIndex, len(table.Models))
 	for _, model := range table.Models {
 		input, err := parseDecimal(model.InputPerMillionTokens)
@@ -159,7 +159,7 @@ func buildPriceIndex(table operatorsettings.PriceTable) (priceIndex, error) {
 				return nil, fmt.Errorf("parse reasoning-output rate for %q/%q: %w", model.Provider, model.Model, err)
 			}
 		}
-		index[providerModelKey(model.Provider, model.Model)] = price
+		index[providerModelKey(model.Provider.String(), model.Model)] = price
 	}
 	return index, nil
 }

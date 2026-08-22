@@ -15,7 +15,7 @@ import (
 	costscli "github.com/portpowered/infinite-you/pkg/services/costs/transports/cli"
 	costshttp "github.com/portpowered/infinite-you/pkg/services/costs/transports/http"
 	factoryvisualization "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
-	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
+	providers "github.com/portpowered/infinite-you/pkg/services/providers"
 	generatedclient "github.com/portpowered/infinite-you/pkg/transports/http/client"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"go.uber.org/zap"
@@ -36,7 +36,7 @@ func TestPublicCostsBoundaryCoversPricingCases(t *testing.T) {
 			t.Parallel()
 
 			query, err := New(
-				&settingsReader{document: operatorsettings.Document{PriceTable: testCase.table}},
+				&priceReader{table: testCase.table},
 				metricsQueryStub(testCase.rows, nil),
 				logging.NoopLogger{},
 			)
@@ -85,7 +85,7 @@ func assertPublicCLIOutputs(t *testing.T, report factoryapi.CostsReport, testCas
 }
 
 func publicBoundaryPricingCases(
-	knownTable operatorsettings.PriceTable,
+	knownTable providers.PriceTable,
 	knownRow, unknownRow, unknownModelRow factoryvisualization.RuntimeMetricsUsageRow,
 ) []publicBoundaryCase {
 	return []publicBoundaryCase{
@@ -144,7 +144,7 @@ func TestPublicCostsTokenTotalsIgnorePriceCoverage(t *testing.T) {
 	}
 	cases := []struct {
 		name   string
-		table  operatorsettings.PriceTable
+		table  providers.PriceTable
 		status costs.Status
 	}{
 		{name: "full", table: publicBoundaryPriceTable(publicBoundaryKnownModel("known"), publicBoundaryKnownModel("unpriced")), status: costs.StatusPriced},
@@ -157,7 +157,7 @@ func TestPublicCostsTokenTotalsIgnorePriceCoverage(t *testing.T) {
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 			query, err := New(
-				&settingsReader{document: operatorsettings.Document{PriceTable: testCase.table}},
+				&priceReader{table: testCase.table},
 				metricsQueryStub(rows, nil),
 				logging.NoopLogger{},
 			)
@@ -181,7 +181,7 @@ func TestPublicCostsTokenTotalsIgnorePriceCoverage(t *testing.T) {
 
 type publicBoundaryCase struct {
 	name                  string
-	table                 operatorsettings.PriceTable
+	table                 providers.PriceTable
 	rows                  []factoryvisualization.RuntimeMetricsUsageRow
 	status                costs.Status
 	knownCost             string
@@ -373,16 +373,17 @@ func publicBoundaryClientReport(t *testing.T, report factoryapi.CostsReport) gen
 	return clientReport
 }
 
-func publicBoundaryPriceTable(models ...operatorsettings.PriceTableModel) operatorsettings.PriceTable {
-	return operatorsettings.PriceTable{Currency: operatorsettings.PriceTableCurrencyUSD, Models: models}
+func publicBoundaryPriceTable(models ...providers.PriceTableModel) providers.PriceTable {
+	return providers.PriceTable{Currency: providers.PriceTableCurrencyUSD, Models: models}
 }
 
-func publicBoundaryKnownModel(model string) operatorsettings.PriceTableModel {
+func publicBoundaryKnownModel(model string) providers.PriceTableModel {
 	cached := "1"
 	reasoning := "8"
-	return operatorsettings.PriceTableModel{
+	return providers.PriceTableModel{
 		Provider: "codex", Model: model, InputPerMillionTokens: "2", OutputPerMillionTokens: "4",
 		CachedInputPerMillionTokens: &cached, ReasoningOutputPerMillionTokens: &reasoning,
+		SourceURL: "https://example.com/test-pricing", AsOfDate: "2026-08-21",
 	}
 }
 

@@ -6,14 +6,15 @@ import (
 	costs "github.com/portpowered/infinite-you/pkg/services/costs"
 	costsservice "github.com/portpowered/infinite-you/pkg/services/costs/internal/service"
 	factoryvisualization "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
+	providers "github.com/portpowered/infinite-you/pkg/services/providers"
 )
 
 // NewCostsQuery constructs the stateless Costs operation from its two narrow
 // owner capabilities and the process logger.
 func NewCostsQuery(
-	settings costs.PriceTableReader,
+	pricing providers.PriceTableReader,
 	metrics factoryvisualization.RuntimeMetricsQuery,
 	logger logging.Logger,
 ) (costs.CostsQuery, error) {
-	return costsservice.New(settings, metrics, logger)
+	return costsservice.New(pricing, metrics, logger)
 }
