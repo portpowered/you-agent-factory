@@ -34,15 +34,7 @@ func TestVisualizationActiveViewLifecycleThroughPublicProcess(t *testing.T) {
 	})
 	defer server.Stop(t)
 
-	var visualizationRoot factoryvisualization.Root
-	// The injected root observer is the deterministic publication signal. The
-	// bounded fallback is only a startup deadlock watchdog because the public
-	// process boundary exposes no synchronous root-publication result.
-	select {
-	case visualizationRoot = <-rootPublished:
-	case <-time.After(5 * time.Second):
-		t.Fatal("FactoryVisualizationRootObserver did not publish a root")
-	}
+	visualizationRoot := waitForPublishedRoot(t, rootPublished)
 
 	if _, err := visualizationRoot.Join(context.Background(), factoryvisualization.JoinRequest{}); err == nil {
 		t.Fatal("Join before Activate returned nil error, want not-activated lifecycle failure")
@@ -119,6 +111,20 @@ func TestVisualizationActiveViewLifecycleThroughPublicProcess(t *testing.T) {
 	if _, err := visualizationRoot.Join(context.Background(), factoryvisualization.JoinRequest{}); err != nil {
 		t.Fatalf("Join after StopDrain: %v", err)
 	}
+}
+
+func waitForPublishedRoot(t *testing.T, rootPublished <-chan factoryvisualization.Root) factoryvisualization.Root {
+	t.Helper()
+	// The injected root observer is the deterministic publication signal. The
+	// bounded fallback is only a startup deadlock watchdog because the public
+	// process boundary exposes no synchronous root-publication result.
+	select {
+	case root := <-rootPublished:
+		return root
+	case <-time.After(5 * time.Second):
+		t.Fatal("FactoryVisualizationRootObserver did not publish a root")
+	}
+	return nil
 }
 
 func visualizationInertFactoryConfig() map[string]any {
