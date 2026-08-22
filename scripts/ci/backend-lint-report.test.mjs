@@ -125,13 +125,12 @@ test("all clean current-main checkers pass the baseline policy", () => {
 test("deadcode drift is a blocking failure without a Backend Lint allowance", () => {
 	assert.equal(BACKEND_LINT_ALLOWANCES.deadcode, undefined);
 	const summary = summarizeBackendLintReport(report({
-		targets: [
-			...baselineTargets(),
-			unallowlistedTarget(
+		targets: baselineTargets({
+			deadcode: unallowlistedTarget(
 				"deadcode",
 				"Repository dead-code baseline drift detected\nLINT_VIOLATION_COUNT: 397\ncurrent findings: 397",
 			),
-		],
+		}),
 	}));
 	const verdict = renderBackendLintVerdict(summary);
 
@@ -234,15 +233,13 @@ test("added-finding extraction excludes removed entries and incomplete diagnosti
 
 test("a clean deadcode result is reported as a gated checker", () => {
 	const summary = summarizeBackendLintReport(report({
-		targets: [
-			...baselineTargets(),
-			{
-				name: "deadcode",
+		targets: baselineTargets({
+			deadcode: {
 				status: "pass",
 				durationMillis: 100,
 				output: "[agent-factory:deadcode] baseline matches",
 			},
-		],
+		}),
 	}));
 	const markdown = renderBackendLintSummary(summary);
 
@@ -496,6 +493,18 @@ test("dropping a no-allowance target from the lint suite fails the policy", () =
 	assert.match(
 		summary.failures.join("\n"),
 		/service-cycle-check is gated with no allowance and must run in every lint report, but it was not observed/,
+	);
+	assert.match(renderBackendLintSummary(summary), /### No-allowance targets/);
+});
+
+test("dropping deadcode from the lint suite fails the policy", () => {
+	const targets = baselineTargets().filter((target) => target.name !== "deadcode");
+	const summary = summarizeBackendLintReport(report({ targets }));
+
+	assert.equal(summary.ok, false);
+	assert.match(
+		summary.failures.join("\n"),
+		/deadcode is gated with no allowance and must run in every lint report, but it was not observed/,
 	);
 	assert.match(renderBackendLintSummary(summary), /### No-allowance targets/);
 });
