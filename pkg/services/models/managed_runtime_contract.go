@@ -4,6 +4,8 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+
+	"github.com/portpowered/infinite-you/pkg/services/models/internal/backendregistry"
 )
 
 var (
@@ -23,6 +25,13 @@ var (
 	// ErrUnsupportedResponseMode.
 	ErrUnsupported = errors.New("managed runtime unsupported")
 )
+
+// IsManagedRuntimeBackend reports whether value is an enabled managed-runtime
+// backend alias. It trims surrounding whitespace, compares case-insensitively,
+// and performs no configuration lookup or external effect.
+func IsManagedRuntimeBackend(value string) bool {
+	return backendregistry.IsManagedRuntimeBackend(value)
+}
 
 // ReadinessState names the managed-runtime readiness vocabulary.
 type ReadinessState string

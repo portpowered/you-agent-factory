@@ -38,8 +38,7 @@ func runtimeSlotKey(scope models.RuntimeScopeRef, modelName string) string {
 }
 
 func requiresSupervisedBackend(backend string) bool {
-	return strings.ToUpper(strings.TrimSpace(backend)) == "LLAMACPP" ||
-		requiresPinnedGRPCBackend(backend)
+	return models.IsManagedRuntimeBackend(backend) || requiresPinnedGRPCBackend(backend)
 }
 
 func requiresPinnedGRPCBackend(backend string) bool {

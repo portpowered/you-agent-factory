@@ -269,10 +269,6 @@ func RuntimeResource(factoryCfg *models.RuntimeConfig, workerDef *models.Runtime
 	return models.RuntimeResource{}, "", false
 }
 
-func CanonicalBackendName(value string) string {
-	return strings.ToUpper(strings.TrimSpace(value))
-}
-
 const (
 	DefaultOmniVoiceCommand       = "omnivoice-llamacpp"
 	omniVoiceInvokeSubcommand     = "invoke"
@@ -365,7 +361,7 @@ func (r *omniVoiceLocalRuntime) Supports(resource models.RuntimeResource, worker
 		return false
 	}
 	return strings.TrimSpace(worker.ModelLocality) == models.RuntimeModelLocalityLocal &&
-		CanonicalBackendName(resource.Backend) == "LLAMACPP" &&
+		models.IsManagedRuntimeBackend(resource.Backend) &&
 		canonicalModelName(worker.Model) == canonicalModelName("OMNIVOICE_Q4_K_M")
 }
 
