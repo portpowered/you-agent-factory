@@ -1,0 +1,19 @@
+type: object
+additionalProperties: false
+required:
+  - provider
+  - model
+  - dispatch_count
+properties:
+  provider:
+    type: string
+    nullable: true
+    description: Canonical provider identity, or null when the usage identity was unavailable.
+  model:
+    type: string
+    nullable: true
+    description: Resolved model identity, or null when the usage identity was unavailable.
+  dispatch_count:
+    type: integer
+    minimum: 1
+    description: Distinct unpriced dispatches for this provider/model pair in the containing scope.

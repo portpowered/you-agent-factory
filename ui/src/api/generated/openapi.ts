@@ -1868,6 +1868,41 @@ export interface components {
       /** @description Distinct provider/model pairs with one or more unpriced rows. */
       unpriced_provider_models: number;
     };
+    CostsTokenTotals: {
+      /**
+       * Format: int64
+       * @description Input tokens plus output tokens; subclass counts are not added a second time.
+       */
+      total_tokens: number | null;
+      /**
+       * Format: int64
+       * @description Aggregate input-token count, or null when the source measurement was absent.
+       */
+      input_tokens: number | null;
+      /**
+       * Format: int64
+       * @description Aggregate output-token count, or null when the source measurement was absent.
+       */
+      output_tokens: number | null;
+      /**
+       * Format: int64
+       * @description Aggregate cached-input subclass count, or null when no subclass measurement was present.
+       */
+      cached_input_tokens: number | null;
+      /**
+       * Format: int64
+       * @description Aggregate reasoning-output subclass count, or null when no subclass measurement was present.
+       */
+      reasoning_output_tokens: number | null;
+    };
+    CostsUnpricedPair: {
+      /** @description Canonical provider identity, or null when the usage identity was unavailable. */
+      provider: string | null;
+      /** @description Resolved model identity, or null when the usage identity was unavailable. */
+      model: string | null;
+      /** @description Distinct unpriced dispatches for this provider/model pair in the containing scope. */
+      dispatch_count: number;
+    };
     CostsLineItem: {
       factory_session_id?: string;
       work_id?: string;
@@ -1896,6 +1931,11 @@ export interface components {
     CostsRollup: {
       /** @description Stable dimension key for this rollup. */
       key: string;
+      /**
+       * @description Currency of the known cost amount.
+       * @enum {string}
+       */
+      currency: CostsRollupCurrency;
       /** Format: int64 */
       input_tokens?: number;
       /** Format: int64 */
@@ -1909,8 +1949,18 @@ export interface components {
        * @enum {string}
        */
       status: CostsRollupStatus;
-      /** @description Exact USD decimal subtotal; absent when no usage is priced. */
+      /** @description Exact USD decimal for the priced portion of this rollup; PARTIAL never implies a complete total. */
+      known_cost: string | null;
+      /**
+       * @deprecated
+       * @description Exact USD decimal subtotal; absent when no usage is priced.
+       */
       priced_subtotal?: string;
+      token_totals: components["schemas"]["CostsTokenTotals"];
+      /** @description Number of distinct dispatches whose usage is not fully valued in this rollup. */
+      unpriced_dispatch_count: number;
+      /** @description Deterministically ordered provider/model pairs contributing unpriced dispatches in this rollup. */
+      unpriced_pairs: components["schemas"]["CostsUnpricedPair"][];
       coverage: components["schemas"]["CostsCoverage"];
     };
     CostsProviderModelRollup: {
@@ -1920,6 +1970,11 @@ export interface components {
       model: string;
       /** @description Stable public provider/model pair key in the form provider/model. */
       key: string;
+      /**
+       * @description Currency of the known cost amount.
+       * @enum {string}
+       */
+      currency: CostsProviderModelRollupCurrency;
       /** Format: int64 */
       input_tokens?: number;
       /** Format: int64 */
@@ -1933,8 +1988,18 @@ export interface components {
        * @enum {string}
        */
       status: CostsProviderModelRollupStatus;
-      /** @description Exact USD decimal subtotal; absent when no usage is priced. */
+      /** @description Exact USD decimal for the priced portion of this provider/model rollup; PARTIAL never implies a complete total. */
+      known_cost: string | null;
+      /**
+       * @deprecated
+       * @description Exact USD decimal subtotal; absent when no usage is priced.
+       */
       priced_subtotal?: string;
+      token_totals: components["schemas"]["CostsTokenTotals"];
+      /** @description Number of distinct dispatches whose usage is not fully valued for this provider/model. */
+      unpriced_dispatch_count: number;
+      /** @description Deterministically ordered unpriced provider/model facts for this rollup. */
+      unpriced_pairs: components["schemas"]["CostsUnpricedPair"][];
       coverage: components["schemas"]["CostsCoverage"];
     };
     CostsReport: {
@@ -1949,8 +2014,18 @@ export interface components {
        * @enum {string}
        */
       status: CostsReportStatus;
-      /** @description Exact USD decimal subtotal for fully priced rows; absent when no row is priced. */
+      /** @description Exact USD decimal for the priced portion. Null means no usage row had a known price; PARTIAL never implies a complete total. */
+      known_cost: string | null;
+      /**
+       * @deprecated
+       * @description Exact USD decimal subtotal for fully priced rows; absent when no row is priced.
+       */
       priced_subtotal?: string;
+      token_totals: components["schemas"]["CostsTokenTotals"];
+      /** @description Number of distinct dispatches whose usage is not fully valued. */
+      unpriced_dispatch_count: number;
+      /** @description Deterministically ordered provider/model pairs contributing unpriced dispatches; null identities are explicit unknowns. */
+      unpriced_pairs: components["schemas"]["CostsUnpricedPair"][];
       coverage: components["schemas"]["CostsCoverage"];
       /** @description Deterministically ordered canonical usage rows and their valuation status. */
       line_items: components["schemas"]["CostsLineItem"][];
@@ -10187,6 +10262,11 @@ export const CostsLineItemStatus = {
 } as const;
 export type CostsLineItemStatus =
   (typeof CostsLineItemStatus)[keyof typeof CostsLineItemStatus];
+export const CostsRollupCurrency = {
+  USD: "USD",
+} as const;
+export type CostsRollupCurrency =
+  (typeof CostsRollupCurrency)[keyof typeof CostsRollupCurrency];
 export const CostsRollupStatus = {
   PRICED: "PRICED",
   PARTIAL: "PARTIAL",
@@ -10195,6 +10275,11 @@ export const CostsRollupStatus = {
 } as const;
 export type CostsRollupStatus =
   (typeof CostsRollupStatus)[keyof typeof CostsRollupStatus];
+export const CostsProviderModelRollupCurrency = {
+  USD: "USD",
+} as const;
+export type CostsProviderModelRollupCurrency =
+  (typeof CostsProviderModelRollupCurrency)[keyof typeof CostsProviderModelRollupCurrency];
 export const CostsProviderModelRollupStatus = {
   PRICED: "PRICED",
   PARTIAL: "PARTIAL",

@@ -1,0 +1,39 @@
+type: object
+additionalProperties: false
+required:
+  - total_tokens
+  - input_tokens
+  - output_tokens
+  - cached_input_tokens
+  - reasoning_output_tokens
+properties:
+  total_tokens:
+    type: integer
+    format: int64
+    minimum: 0
+    nullable: true
+    description: Input tokens plus output tokens; subclass counts are not added a second time.
+  input_tokens:
+    type: integer
+    format: int64
+    minimum: 0
+    nullable: true
+    description: Aggregate input-token count, or null when the source measurement was absent.
+  output_tokens:
+    type: integer
+    format: int64
+    minimum: 0
+    nullable: true
+    description: Aggregate output-token count, or null when the source measurement was absent.
+  cached_input_tokens:
+    type: integer
+    format: int64
+    minimum: 0
+    nullable: true
+    description: Aggregate cached-input subclass count, or null when no subclass measurement was present.
+  reasoning_output_tokens:
+    type: integer
+    format: int64
+    minimum: 0
+    nullable: true
+    description: Aggregate reasoning-output subclass count, or null when no subclass measurement was present.

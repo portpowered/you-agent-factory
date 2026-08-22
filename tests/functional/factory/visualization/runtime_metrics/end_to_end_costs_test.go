@@ -18,7 +18,7 @@ import (
 )
 
 const (
-	endToEndPricedModel   = "gpt-5"
+	endToEndPricedModel   = "gpt-5-codex"
 	endToEndUnpricedModel = "mystery-model"
 )
 
@@ -46,7 +46,6 @@ func TestRuntimeCostsEndToEndFromProviderCompletion(t *testing.T) {
 		30*time.Second,
 		func(configuredHome string) {
 			homeDir = configuredHome
-			writeCostsFunctionalOperatorConfig(t, configuredHome)
 		},
 	)
 	if homeDir == "" {
@@ -79,17 +78,17 @@ func TestRuntimeCostsEndToEndFromProviderCompletion(t *testing.T) {
 	if report.Currency != generatedclient.CostsReportCurrency("USD") {
 		t.Fatalf("cost report currency = %q, want USD", report.Currency)
 	}
-	if report.PricedSubtotal == nil || *report.PricedSubtotal != "13" {
-		t.Fatalf("priced subtotal = %v, want exact 13 USD", report.PricedSubtotal)
+	if report.PricedSubtotal == nil || *report.PricedSubtotal != "21.25" {
+		t.Fatalf("priced subtotal = %v, want exact 21.25 USD", report.PricedSubtotal)
 	}
 	if report.Coverage.EncounteredRows != 2 || report.Coverage.PricedRows != 1 ||
 		report.Coverage.UnpricedRows != 1 || report.Coverage.EncounteredProviderModels != 2 ||
 		report.Coverage.PricedProviderModels != 1 || report.Coverage.UnpricedProviderModels != 1 {
 		t.Fatalf("cost report coverage = %#v, want one priced and one unpriced row/model", report.Coverage)
 	}
-	assertCostLineItem(t, report, endToEndPricedModel, generatedclient.CostsLineItemStatus("PRICED"), "13")
+	assertCostLineItem(t, report, endToEndPricedModel, generatedclient.CostsLineItemStatus("PRICED"), "21.25")
 	assertCostLineItem(t, report, endToEndUnpricedModel, generatedclient.CostsLineItemStatus("UNPRICED"), "")
-	if !strings.Contains(output, `"status":"UNPRICED"`) || !strings.Contains(output, `"priced_subtotal":"13"`) {
+	if !strings.Contains(output, `"status":"UNPRICED"`) || !strings.Contains(output, `"priced_subtotal":"21.25"`) {
 		t.Fatalf("public costs JSON omitted priced or unpriced evidence: %s", output)
 	}
 
@@ -108,7 +107,6 @@ func TestRuntimeCostsNoUsageThroughPublicCLI(t *testing.T) {
 	if err := os.MkdirAll(platformmetrics.RuntimeMetricsRoot(homeDir), 0o755); err != nil {
 		t.Fatalf("create empty runtime metrics root: %v", err)
 	}
-	writeCostsFunctionalOperatorConfig(t, homeDir)
 	factoryDir := support.ScaffoldSingleStepFactory(t, "costs-no-usage-functional")
 
 	report, output := queryCostsReport(t, factoryDir, homeDir, "")

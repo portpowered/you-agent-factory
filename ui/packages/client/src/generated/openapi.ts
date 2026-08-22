@@ -10,6 +10,26 @@
  */
 
 export interface paths {
+  "/metrics": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Get canonical runtime metrics
+     * @description Reads the canonical Factory Visualization metrics projection. The default scope covers all retained Factory Sessions. When session_id is supplied, the server resolves that public live Factory Session ID through Factory Sessions before reading retained metrics; it never guesses a scope from the current working directory or definition. A valid resolved scope with no retained facts returns an explicit empty report.
+     */
+    get: operations["getMetrics"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/metrics/costs": {
     parameters: {
       query?: never;
@@ -640,6 +660,26 @@ export interface paths {
     get: operations["listModels"];
     put?: never;
     post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/models/invocations": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Invoke a model through the generic contract
+     * @description Invokes a configured model or supported source reference through the provider-neutral Models contract. Ordered inputs and named outputs remain detached from backend and cache details.
+     */
+    post: operations["invokeGenericModel"];
     delete?: never;
     options?: never;
     head?: never;
@@ -1834,6 +1874,41 @@ export interface components {
       /** @description Distinct provider/model pairs with one or more unpriced rows. */
       unpriced_provider_models: number;
     };
+    CostsTokenTotals: {
+      /**
+       * Format: int64
+       * @description Input tokens plus output tokens; subclass counts are not added a second time.
+       */
+      total_tokens: number | null;
+      /**
+       * Format: int64
+       * @description Aggregate input-token count, or null when the source measurement was absent.
+       */
+      input_tokens: number | null;
+      /**
+       * Format: int64
+       * @description Aggregate output-token count, or null when the source measurement was absent.
+       */
+      output_tokens: number | null;
+      /**
+       * Format: int64
+       * @description Aggregate cached-input subclass count, or null when no subclass measurement was present.
+       */
+      cached_input_tokens: number | null;
+      /**
+       * Format: int64
+       * @description Aggregate reasoning-output subclass count, or null when no subclass measurement was present.
+       */
+      reasoning_output_tokens: number | null;
+    };
+    CostsUnpricedPair: {
+      /** @description Canonical provider identity, or null when the usage identity was unavailable. */
+      provider: string | null;
+      /** @description Resolved model identity, or null when the usage identity was unavailable. */
+      model: string | null;
+      /** @description Distinct unpriced dispatches for this provider/model pair in the containing scope. */
+      dispatch_count: number;
+    };
     CostsLineItem: {
       factory_session_id?: string;
       work_id?: string;
@@ -1862,6 +1937,11 @@ export interface components {
     CostsRollup: {
       /** @description Stable dimension key for this rollup. */
       key: string;
+      /**
+       * @description Currency of the known cost amount.
+       * @enum {string}
+       */
+      currency: CostsRollupCurrency;
       /** Format: int64 */
       input_tokens?: number;
       /** Format: int64 */
@@ -1875,8 +1955,18 @@ export interface components {
        * @enum {string}
        */
       status: CostsRollupStatus;
-      /** @description Exact USD decimal subtotal; absent when no usage is priced. */
+      /** @description Exact USD decimal for the priced portion of this rollup; PARTIAL never implies a complete total. */
+      known_cost: string | null;
+      /**
+       * @deprecated
+       * @description Exact USD decimal subtotal; absent when no usage is priced.
+       */
       priced_subtotal?: string;
+      token_totals: components["schemas"]["CostsTokenTotals"];
+      /** @description Number of distinct dispatches whose usage is not fully valued in this rollup. */
+      unpriced_dispatch_count: number;
+      /** @description Deterministically ordered provider/model pairs contributing unpriced dispatches in this rollup. */
+      unpriced_pairs: components["schemas"]["CostsUnpricedPair"][];
       coverage: components["schemas"]["CostsCoverage"];
     };
     CostsProviderModelRollup: {
@@ -1886,6 +1976,11 @@ export interface components {
       model: string;
       /** @description Stable public provider/model pair key in the form provider/model. */
       key: string;
+      /**
+       * @description Currency of the known cost amount.
+       * @enum {string}
+       */
+      currency: CostsProviderModelRollupCurrency;
       /** Format: int64 */
       input_tokens?: number;
       /** Format: int64 */
@@ -1899,8 +1994,18 @@ export interface components {
        * @enum {string}
        */
       status: CostsProviderModelRollupStatus;
-      /** @description Exact USD decimal subtotal; absent when no usage is priced. */
+      /** @description Exact USD decimal for the priced portion of this provider/model rollup; PARTIAL never implies a complete total. */
+      known_cost: string | null;
+      /**
+       * @deprecated
+       * @description Exact USD decimal subtotal; absent when no usage is priced.
+       */
       priced_subtotal?: string;
+      token_totals: components["schemas"]["CostsTokenTotals"];
+      /** @description Number of distinct dispatches whose usage is not fully valued for this provider/model. */
+      unpriced_dispatch_count: number;
+      /** @description Deterministically ordered unpriced provider/model facts for this rollup. */
+      unpriced_pairs: components["schemas"]["CostsUnpricedPair"][];
       coverage: components["schemas"]["CostsCoverage"];
     };
     CostsReport: {
@@ -1915,8 +2020,18 @@ export interface components {
        * @enum {string}
        */
       status: CostsReportStatus;
-      /** @description Exact USD decimal subtotal for fully priced rows; absent when no row is priced. */
+      /** @description Exact USD decimal for the priced portion. Null means no usage row had a known price; PARTIAL never implies a complete total. */
+      known_cost: string | null;
+      /**
+       * @deprecated
+       * @description Exact USD decimal subtotal for fully priced rows; absent when no row is priced.
+       */
       priced_subtotal?: string;
+      token_totals: components["schemas"]["CostsTokenTotals"];
+      /** @description Number of distinct dispatches whose usage is not fully valued. */
+      unpriced_dispatch_count: number;
+      /** @description Deterministically ordered provider/model pairs contributing unpriced dispatches; null identities are explicit unknowns. */
+      unpriced_pairs: components["schemas"]["CostsUnpricedPair"][];
       coverage: components["schemas"]["CostsCoverage"];
       /** @description Deterministically ordered canonical usage rows and their valuation status. */
       line_items: components["schemas"]["CostsLineItem"][];
@@ -1928,6 +2043,66 @@ export interface components {
       provider_models: components["schemas"]["CostsProviderModelRollup"][];
       /** @description Rollups keyed by Factory Session identity. */
       factory_sessions: components["schemas"]["CostsRollup"][];
+    };
+    MetricsScope: {
+      /** @description Selection scope used to produce the report: ALL_FACTORY_SESSIONS or FACTORY_SESSION. */
+      kind: string;
+      /** @description Public Factory Session identity when kind is FACTORY_SESSION. */
+      factory_session_id?: string;
+    };
+    MetricsCost: {
+      /** @description Cost is unavailable on the canonical metrics projection; no numeric price is implied. */
+      availability: string;
+    };
+    MetricsDuration: {
+      unit: string;
+      samples: number;
+      /** Format: double */
+      p50?: number | null;
+      /** Format: double */
+      p95?: number | null;
+    };
+    MetricsAggregate: {
+      /** Format: double */
+      input_tokens: number;
+      /** Format: double */
+      output_tokens: number;
+      /** Format: double */
+      completed_dispatches: number;
+      failures_by_reason: {
+        [key: string]: number;
+      };
+      dispatch_latency: components["schemas"]["MetricsDuration"];
+      provider_latency: components["schemas"]["MetricsDuration"];
+    };
+    MetricsBreakdown: {
+      key: string;
+      aggregate: components["schemas"]["MetricsAggregate"];
+    };
+    MetricsUsageRow: {
+      factory_session_id?: string;
+      work_id?: string;
+      dispatch_id?: string;
+      worker_session_id?: string;
+      provider?: string;
+      model?: string;
+      /** Format: int64 */
+      input_tokens?: number;
+      /** Format: int64 */
+      output_tokens?: number;
+      /** Format: int64 */
+      cached_input_tokens?: number;
+      /** Format: int64 */
+      reasoning_output_tokens?: number;
+    };
+    MetricsReport: {
+      scope: components["schemas"]["MetricsScope"];
+      cost: components["schemas"]["MetricsCost"];
+      totals: components["schemas"]["MetricsAggregate"];
+      workstations: components["schemas"]["MetricsBreakdown"][];
+      worker_types: components["schemas"]["MetricsBreakdown"][];
+      providers: components["schemas"]["MetricsBreakdown"][];
+      usage_rows: components["schemas"]["MetricsUsageRow"][];
     };
     WorkerSessionProviderSessionRef: {
       /** @description Provider identity that issued the correlated session. */
@@ -7688,6 +7863,15 @@ export interface components {
         "application/json": components["schemas"]["ErrorResponse"];
       };
     };
+    /** @description The selected live Factory Session has no retained metrics scope. */
+    MetricsSessionScopeUnavailable: {
+      headers: {
+        [name: string]: unknown;
+      };
+      content: {
+        "application/json": components["schemas"]["ErrorResponse"];
+      };
+    };
   };
   parameters: {
     /** @description Stable live factory session identifier. Use `~default` to target the default compatibility session explicitly. */
@@ -7767,6 +7951,32 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+  getMetrics: {
+    parameters: {
+      query?: {
+        /** @description Optional discoverable live Factory Session identity. */
+        session_id?: string;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Canonical runtime metrics for the selected scope. */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["MetricsReport"];
+        };
+      };
+      400: components["responses"]["BadRequest"];
+      404: components["responses"]["NotFound"];
+      503: components["responses"]["MetricsSessionScopeUnavailable"];
+    };
+  };
   getMetricsCosts: {
     parameters: {
       query?: {
@@ -8808,6 +9018,33 @@ export interface operations {
           "application/json": components["schemas"]["ListModelsResponse"];
         };
       };
+      500: components["responses"]["InternalError"];
+    };
+  };
+  invokeGenericModel: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["GenericModelInvocationRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful generic model invocation result. */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["GenericModelInvocationResponse"];
+        };
+      };
+      400: components["responses"]["BadRequest"];
+      404: components["responses"]["NotFound"];
       500: components["responses"]["InternalError"];
     };
   };
@@ -10031,6 +10268,11 @@ export const CostsLineItemStatus = {
 } as const;
 export type CostsLineItemStatus =
   (typeof CostsLineItemStatus)[keyof typeof CostsLineItemStatus];
+export const CostsRollupCurrency = {
+  USD: "USD",
+} as const;
+export type CostsRollupCurrency =
+  (typeof CostsRollupCurrency)[keyof typeof CostsRollupCurrency];
 export const CostsRollupStatus = {
   PRICED: "PRICED",
   PARTIAL: "PARTIAL",
@@ -10039,6 +10281,11 @@ export const CostsRollupStatus = {
 } as const;
 export type CostsRollupStatus =
   (typeof CostsRollupStatus)[keyof typeof CostsRollupStatus];
+export const CostsProviderModelRollupCurrency = {
+  USD: "USD",
+} as const;
+export type CostsProviderModelRollupCurrency =
+  (typeof CostsProviderModelRollupCurrency)[keyof typeof CostsProviderModelRollupCurrency];
 export const CostsProviderModelRollupStatus = {
   PRICED: "PRICED",
   PARTIAL: "PARTIAL",
@@ -10296,13 +10543,19 @@ export const ErrorResponseCode = {
   WORKER_SESSION_RECORDING_UNAVAILABLE: "WORKER_SESSION_RECORDING_UNAVAILABLE",
   // Provider Sessions could not project the normalized Worker Session transcript.
   WORKER_SESSION_STREAM_UNAVAILABLE: "WORKER_SESSION_STREAM_UNAVAILABLE",
-  // The requested resource does not exist.
+  // The metrics request could not be interpreted by the canonical metrics route.
   WORKER_SESSION_TRANSCRIPT_ACTIVE: "WORKER_SESSION_TRANSCRIPT_ACTIVE",
-  // The server failed while handling an otherwise valid request.
+  // The requested live Factory Session identity was not discoverable.
   WORKER_SESSION_TRANSCRIPT_UNAVAILABLE:
     "WORKER_SESSION_TRANSCRIPT_UNAVAILABLE",
+  // The live Factory Session was discoverable, but no retained metrics scope was available.
   WORKER_SESSION_TRANSCRIPT_PROJECTION_UNAVAILABLE:
     "WORKER_SESSION_TRANSCRIPT_PROJECTION_UNAVAILABLE",
+  // The requested resource does not exist.
+  METRICS_INVALID_REQUEST: "METRICS_INVALID_REQUEST",
+  // The server failed while handling an otherwise valid request.
+  METRICS_SESSION_NOT_FOUND: "METRICS_SESSION_NOT_FOUND",
+  METRICS_SESSION_SCOPE_UNAVAILABLE: "METRICS_SESSION_SCOPE_UNAVAILABLE",
   NOT_FOUND: "NOT_FOUND",
   INTERNAL_ERROR: "INTERNAL_ERROR",
 } as const;

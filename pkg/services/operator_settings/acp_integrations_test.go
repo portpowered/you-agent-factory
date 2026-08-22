@@ -149,6 +149,15 @@ func TestPriceTableNormalizeRoundTripsCanonicalIdentitiesAndExplicitZero(t *test
 	}
 }
 
+func TestDefaultPriceTableDoesNotPublishProviderPricing(t *testing.T) {
+	t.Parallel()
+
+	table := defaultPriceTable()
+	if table.Currency != PriceTableCurrencyUSD || len(table.Models) != 0 {
+		t.Fatalf("defaultPriceTable() = %#v, want empty legacy USD table", table)
+	}
+}
+
 func TestPriceTableNormalizeRejectsInvalidEntries(t *testing.T) {
 	t.Parallel()
 

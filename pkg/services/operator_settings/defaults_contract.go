@@ -94,6 +94,10 @@ type PriceTableModel struct {
 }
 
 func defaultPriceTable() PriceTable {
+	// Pricing facts are Providers-owned and are intentionally not part of the
+	// operator-authored configuration. Keep this legacy compatibility shape
+	// empty so absent-file and decoded-file settings cannot become a second
+	// valuation authority.
 	return PriceTable{Currency: PriceTableCurrencyUSD, Models: []PriceTableModel{}}
 }
 

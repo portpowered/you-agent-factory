@@ -14,6 +14,11 @@ func TestAdapterMapsExactReportAndRuntimeInputs(t *testing.T) {
 	t.Parallel()
 	inputTokens := int64(12)
 	outputTokens := int64(0)
+	totalTokens := int64(12)
+	provider := "provider"
+	model := "known"
+	dispatchCount := 1
+	knownPair := costs.UnpricedPair{Provider: &provider, Model: &model, DispatchCount: dispatchCount}
 	query := costs.CostsQuery(func(_ context.Context, request costs.QueryRequest) (costs.Report, error) {
 		if request.MetricsRoot != "metrics-root" || request.OperatorSettingsPath != "settings.json" || request.FactorySessionID != "session-a" {
 			t.Fatalf("Costs request = %#v", request)
@@ -23,13 +28,19 @@ func TestAdapterMapsExactReportAndRuntimeInputs(t *testing.T) {
 			Scope:          costs.Scope{Kind: costs.ScopeFactorySession, FactorySessionID: "session-a"},
 			Currency:       "USD",
 			Status:         costs.StatusPartial,
+			KnownCost:      &amount,
 			PricedSubtotal: &amount,
-			Coverage:       costs.Coverage{EncounteredRows: 2, PricedRows: 1, UnpricedRows: 1, EncounteredProviderModels: 2, PricedProviderModels: 1, UnpricedProviderModels: 1},
+			TokenTotals: costs.TokenTotals{
+				TotalTokens: &totalTokens, InputTokens: &inputTokens, OutputTokens: &outputTokens,
+			},
+			UnpricedDispatchCount: 1,
+			UnpricedPairs:         []costs.UnpricedPair{knownPair},
+			Coverage:              costs.Coverage{EncounteredRows: 2, PricedRows: 1, UnpricedRows: 1, EncounteredProviderModels: 2, PricedProviderModels: 1, UnpricedProviderModels: 1},
 			LineItems: []costs.LineItem{
 				{Model: "known", Status: costs.StatusPriced, PricedAmount: &amount, TokenCounts: costs.TokenCounts{InputTokens: &inputTokens, OutputTokens: &outputTokens}},
 				{Model: "unknown", Status: costs.StatusUnpriced, Reason: "no configured price"},
 			},
-			ProviderModels: []costs.ProviderModelRollup{{Provider: "provider", Model: "known", Rollup: costs.Rollup{Key: "provider/known", Status: costs.StatusPriced, PricedSubtotal: &amount}}},
+			ProviderModels: []costs.ProviderModelRollup{{Provider: "provider", Model: "known", Rollup: costs.Rollup{Key: "provider/known", Currency: "USD", Status: costs.StatusPriced, KnownCost: &amount, PricedSubtotal: &amount, TokenTotals: costs.TokenTotals{TotalTokens: &totalTokens, InputTokens: &inputTokens, OutputTokens: &outputTokens}, UnpricedPairs: []costs.UnpricedPair{}}}},
 		}, nil
 	})
 	adapter := NewAdapter(query, " metrics-root ", " settings.json ")
@@ -55,8 +66,11 @@ func assertMappedReport(t *testing.T, got factoryapi.CostsReport, inputTokens, o
 
 func assertMappedReportHeader(t *testing.T, got factoryapi.CostsReport) {
 	t.Helper()
-	if got.Currency != "USD" || got.Status != "PARTIAL" || got.PricedSubtotal == nil || *got.PricedSubtotal != "123456789.000001" {
+	if got.Currency != "USD" || got.Status != "PARTIAL" || got.KnownCost == nil || *got.KnownCost != "123456789.000001" || got.PricedSubtotal == nil || *got.PricedSubtotal != "123456789.000001" {
 		t.Fatalf("mapped report = %#v", got)
+	}
+	if got.TokenTotals.TotalTokens == nil || *got.TokenTotals.TotalTokens != 12 || got.UnpricedDispatchCount != 1 || len(got.UnpricedPairs) != 1 {
+		t.Fatalf("mapped report partial facts = %#v", got)
 	}
 }
 
@@ -79,7 +93,7 @@ func assertMappedReportProviderRollup(t *testing.T, got factoryapi.CostsReport) 
 	if got.LineItems[1].PricedAmount != nil || got.LineItems[1].Reason == nil || *got.LineItems[1].Reason != "no configured price" {
 		t.Fatalf("unpriced line item = %#v", got.LineItems[1])
 	}
-	if len(got.ProviderModels) != 1 || got.ProviderModels[0].Key != "provider/known" || got.ProviderModels[0].PricedSubtotal == nil || *got.ProviderModels[0].PricedSubtotal != "123456789.000001" {
+	if len(got.ProviderModels) != 1 || got.ProviderModels[0].Key != "provider/known" || got.ProviderModels[0].PricedSubtotal == nil || *got.ProviderModels[0].PricedSubtotal != "123456789.000001" || got.ProviderModels[0].Currency != "USD" {
 		t.Fatalf("provider rollups = %#v", got.ProviderModels)
 	}
 }

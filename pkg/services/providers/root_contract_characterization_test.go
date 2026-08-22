@@ -9,6 +9,7 @@ import (
 	"go/token"
 	"os"
 	"path/filepath"
+	"reflect"
 	"slices"
 	"testing"
 
@@ -313,3 +314,120 @@ func providersRepositoryRoot(t *testing.T) string {
 	}
 	return root
 }
+
+func TestPriceTableNormalizeRequiresProvenanceAndExplicitEqualRates(t *testing.T) {
+	t.Parallel()
+
+	reasoning := "2"
+	valid := providers.PriceTable{
+		Currency: providers.PriceTableCurrencyUSD,
+		Models: []providers.PriceTableModel{{
+			Provider:                        providers.IDCodex,
+			Model:                           "gpt-5",
+			InputPerMillionTokens:           "1",
+			OutputPerMillionTokens:          "2",
+			ReasoningOutputPerMillionTokens: &reasoning,
+			SourceURL:                       "https://example.com/pricing",
+			AsOfDate:                        "2026-08-21",
+			EqualRateClasses:                []providers.PriceClass{providers.PriceClassReasoningOutput},
+		}},
+	}
+	if _, err := valid.Normalize(); err != nil {
+		t.Fatalf("valid price table Normalize() = %v", err)
+	}
+
+	cases := []struct {
+		name   string
+		mutate func(*providers.PriceTable)
+	}{
+		{name: "missing source", mutate: func(table *providers.PriceTable) { table.Models[0].SourceURL = "" }},
+		{name: "missing date", mutate: func(table *providers.PriceTable) { table.Models[0].AsOfDate = "" }},
+		{name: "negative rate", mutate: func(table *providers.PriceTable) { table.Models[0].InputPerMillionTokens = "-1" }},
+		{name: "unsupported currency", mutate: func(table *providers.PriceTable) { table.Currency = "EUR" }},
+		{name: "implicit equal rate", mutate: func(table *providers.PriceTable) { table.Models[0].EqualRateClasses = nil }},
+		{name: "mismatched equality", mutate: func(table *providers.PriceTable) {
+			table.Models[0].ReasoningOutputPerMillionTokens = stringPointer("3")
+		}},
+		{name: "duplicate pair", mutate: func(table *providers.PriceTable) { table.Models = append(table.Models, table.Models[0].Clone()) }},
+	}
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			candidate := valid.Clone()
+			testCase.mutate(&candidate)
+			if _, err := candidate.Normalize(); !errors.Is(err, providers.ErrPriceTableInvalid) {
+				t.Fatalf("Normalize() error = %v, want ErrPriceTableInvalid", err)
+			}
+		})
+	}
+}
+
+func TestPriceTableNormalizeCanonicalizesAndDetachesEntries(t *testing.T) {
+	t.Parallel()
+
+	cached := "0"
+	table := providers.PriceTable{
+		Currency: providers.PriceTableCurrencyUSD,
+		Models: []providers.PriceTableModel{{
+			Provider:                    providers.ID(" CODEX "),
+			Model:                       " gpt-5 ",
+			InputPerMillionTokens:       " 1 ",
+			OutputPerMillionTokens:      "2",
+			CachedInputPerMillionTokens: &cached,
+			SourceURL:                   "https://example.com/pricing",
+			AsOfDate:                    "2026-08-21",
+		}},
+	}
+	normalized, err := table.Normalize()
+	if err != nil {
+		t.Fatalf("Normalize() = %v", err)
+	}
+	if normalized.Models[0].Provider != providers.IDCodex || normalized.Models[0].Model != "gpt-5" || normalized.Models[0].InputPerMillionTokens != "1" {
+		t.Fatalf("normalized identity/rate = %#v", normalized.Models[0])
+	}
+	cloned := normalized.Clone()
+	cloned.Models[0].Model = "mutated"
+	*cloned.Models[0].CachedInputPerMillionTokens = "9"
+	if normalized.Models[0].Model == "mutated" || *normalized.Models[0].CachedInputPerMillionTokens != "0" {
+		t.Fatal("Clone() shares mutable pricing state")
+	}
+	if reflect.DeepEqual(normalized, cloned) {
+		t.Fatal("Clone() did not detach the entry")
+	}
+}
+
+func TestPriceTableReaderFuncReturnsDetachedEntries(t *testing.T) {
+	t.Parallel()
+
+	cached := "0"
+	table := providers.PriceTable{
+		Currency: providers.PriceTableCurrencyUSD,
+		Models: []providers.PriceTableModel{{
+			Provider:                    providers.IDCodex,
+			Model:                       "gpt-5",
+			InputPerMillionTokens:       "1",
+			OutputPerMillionTokens:      "2",
+			CachedInputPerMillionTokens: &cached,
+			SourceURL:                   "https://example.com/pricing",
+			AsOfDate:                    "2026-08-21",
+		}},
+	}
+	reader := providers.PriceTableReaderFunc(func() (providers.PriceTable, error) {
+		return table, nil
+	})
+
+	first, err := reader.ReadPriceTable()
+	if err != nil {
+		t.Fatalf("ReadPriceTable() = %v", err)
+	}
+	first.Models[0].Model = "mutated"
+	*first.Models[0].CachedInputPerMillionTokens = "9"
+	second, err := reader.ReadPriceTable()
+	if err != nil {
+		t.Fatalf("second ReadPriceTable() = %v", err)
+	}
+	if second.Models[0].Model != "gpt-5" || *second.Models[0].CachedInputPerMillionTokens != "0" {
+		t.Fatalf("ReadPriceTable() returned aliased data: %#v", second.Models[0])
+	}
+}
+
+func stringPointer(value string) *string { return &value }

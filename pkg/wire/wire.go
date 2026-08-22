@@ -150,6 +150,7 @@ var servicesSet = wire.NewSet(
 	provideFactoryVisualizationMetricsQuery,
 	provideRuntimeMetricsQueryCapability,
 	provideFactorySessionExecutionRuntimeOpening,
+	provideProviderPriceTableReader,
 	provideCostsQuery,
 	provideCostsQueryCapability,
 	provideFactorySessionsRuntimeAssembly,

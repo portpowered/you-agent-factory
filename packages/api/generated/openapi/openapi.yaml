@@ -3982,6 +3982,66 @@ components:
           type: integer
           minimum: 0
           description: Distinct provider/model pairs with one or more unpriced rows.
+    CostsTokenTotals:
+      type: object
+      additionalProperties: false
+      required:
+        - total_tokens
+        - input_tokens
+        - output_tokens
+        - cached_input_tokens
+        - reasoning_output_tokens
+      properties:
+        total_tokens:
+          type: integer
+          format: int64
+          minimum: 0
+          nullable: true
+          description: Input tokens plus output tokens; subclass counts are not added a second time.
+        input_tokens:
+          type: integer
+          format: int64
+          minimum: 0
+          nullable: true
+          description: Aggregate input-token count, or null when the source measurement was absent.
+        output_tokens:
+          type: integer
+          format: int64
+          minimum: 0
+          nullable: true
+          description: Aggregate output-token count, or null when the source measurement was absent.
+        cached_input_tokens:
+          type: integer
+          format: int64
+          minimum: 0
+          nullable: true
+          description: Aggregate cached-input subclass count, or null when no subclass measurement was present.
+        reasoning_output_tokens:
+          type: integer
+          format: int64
+          minimum: 0
+          nullable: true
+          description: Aggregate reasoning-output subclass count, or null when no subclass measurement was present.
+    CostsUnpricedPair:
+      type: object
+      additionalProperties: false
+      required:
+        - provider
+        - model
+        - dispatch_count
+      properties:
+        provider:
+          type: string
+          nullable: true
+          description: Canonical provider identity, or null when the usage identity was unavailable.
+        model:
+          type: string
+          nullable: true
+          description: Resolved model identity, or null when the usage identity was unavailable.
+        dispatch_count:
+          type: integer
+          minimum: 1
+          description: Distinct unpriced dispatches for this provider/model pair in the containing scope.
     CostsLineItem:
       type: object
       additionalProperties: false
@@ -4033,12 +4093,22 @@ components:
       additionalProperties: false
       required:
         - key
+        - currency
         - status
+        - known_cost
+        - token_totals
+        - unpriced_dispatch_count
+        - unpriced_pairs
         - coverage
       properties:
         key:
           type: string
           description: Stable dimension key for this rollup.
+        currency:
+          type: string
+          enum:
+            - USD
+          description: Currency of the known cost amount.
         input_tokens:
           type: integer
           format: int64
@@ -4063,9 +4133,25 @@ components:
             - UNPRICED
             - NO_USAGE
           description: PRICED means all usage rows in the rollup are valued; PARTIAL means some are valued; UNPRICED means usage exists but none is valued; NO_USAGE means no canonical usage rows were encountered.
+        known_cost:
+          type: string
+          nullable: true
+          description: Exact USD decimal for the priced portion of this rollup; PARTIAL never implies a complete total.
         priced_subtotal:
           type: string
+          deprecated: true
           description: Exact USD decimal subtotal; absent when no usage is priced.
+        token_totals:
+          $ref: '#/components/schemas/CostsTokenTotals'
+        unpriced_dispatch_count:
+          type: integer
+          minimum: 0
+          description: Number of distinct dispatches whose usage is not fully valued in this rollup.
+        unpriced_pairs:
+          type: array
+          description: Deterministically ordered provider/model pairs contributing unpriced dispatches in this rollup.
+          items:
+            $ref: '#/components/schemas/CostsUnpricedPair'
         coverage:
           $ref: '#/components/schemas/CostsCoverage'
     CostsProviderModelRollup:
@@ -4075,7 +4161,12 @@ components:
         - provider
         - model
         - key
+        - currency
         - status
+        - known_cost
+        - token_totals
+        - unpriced_dispatch_count
+        - unpriced_pairs
         - coverage
       properties:
         provider:
@@ -4087,6 +4178,11 @@ components:
         key:
           type: string
           description: Stable public provider/model pair key in the form provider/model.
+        currency:
+          type: string
+          enum:
+            - USD
+          description: Currency of the known cost amount.
         input_tokens:
           type: integer
           format: int64
@@ -4111,9 +4207,25 @@ components:
             - UNPRICED
             - NO_USAGE
           description: PRICED means all usage rows for this provider/model are valued; PARTIAL means some are valued; UNPRICED means usage exists but none is valued; NO_USAGE means this pair has no usage rows.
+        known_cost:
+          type: string
+          nullable: true
+          description: Exact USD decimal for the priced portion of this provider/model rollup; PARTIAL never implies a complete total.
         priced_subtotal:
           type: string
+          deprecated: true
           description: Exact USD decimal subtotal; absent when no usage is priced.
+        token_totals:
+          $ref: '#/components/schemas/CostsTokenTotals'
+        unpriced_dispatch_count:
+          type: integer
+          minimum: 0
+          description: Number of distinct dispatches whose usage is not fully valued for this provider/model.
+        unpriced_pairs:
+          type: array
+          description: Deterministically ordered unpriced provider/model facts for this rollup.
+          items:
+            $ref: '#/components/schemas/CostsUnpricedPair'
         coverage:
           $ref: '#/components/schemas/CostsCoverage'
     CostsReport:
@@ -4123,6 +4235,10 @@ components:
         - scope
         - currency
         - status
+        - known_cost
+        - token_totals
+        - unpriced_dispatch_count
+        - unpriced_pairs
         - coverage
         - line_items
         - work_items
@@ -4145,9 +4261,25 @@ components:
             - UNPRICED
             - NO_USAGE
           description: PRICED means every usage row is valued; PARTIAL means some rows are valued; UNPRICED means usage exists but none is valued; NO_USAGE means no canonical usage rows were encountered. Missing price is never represented as zero.
+        known_cost:
+          type: string
+          nullable: true
+          description: Exact USD decimal for the priced portion. Null means no usage row had a known price; PARTIAL never implies a complete total.
         priced_subtotal:
           type: string
+          deprecated: true
           description: Exact USD decimal subtotal for fully priced rows; absent when no row is priced.
+        token_totals:
+          $ref: '#/components/schemas/CostsTokenTotals'
+        unpriced_dispatch_count:
+          type: integer
+          minimum: 0
+          description: Number of distinct dispatches whose usage is not fully valued.
+        unpriced_pairs:
+          type: array
+          description: Deterministically ordered provider/model pairs contributing unpriced dispatches; null identities are explicit unknowns.
+          items:
+            $ref: '#/components/schemas/CostsUnpricedPair'
         coverage:
           $ref: '#/components/schemas/CostsCoverage'
         line_items:

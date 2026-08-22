@@ -537,11 +537,15 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	handler := http.NewHandler(httpAdapter, logger)
 	contentPreparation := work.NewContentPreparation()
 	requestPreparation := provideFactorySessionHTTPRequestPreparation(v69)
+	priceTableReader, err := provideProviderPriceTableReader()
+	if err != nil {
+		return nil, err
+	}
 	runtimeMetricsQuery, err := provideFactoryVisualizationMetricsQuery(loggingLogger)
 	if err != nil {
 		return nil, err
 	}
-	costsQuery, err := provideCostsQuery(operatorsettingsService, runtimeMetricsQuery, loggingLogger)
+	costsQuery, err := provideCostsQuery(priceTableReader, runtimeMetricsQuery, loggingLogger)
 	if err != nil {
 		return nil, err
 	}
@@ -926,6 +930,7 @@ var servicesSet = wire5.NewSet(
 	provideFactoryVisualizationMetricsQuery,
 	provideRuntimeMetricsQueryCapability,
 	provideFactorySessionExecutionRuntimeOpening,
+	provideProviderPriceTableReader,
 	provideCostsQuery,
 	provideCostsQueryCapability,
 	provideFactorySessionsRuntimeAssembly,

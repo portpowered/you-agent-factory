@@ -7,16 +7,20 @@ import (
 
 func reportToAPI(report costs.Report) factoryapi.CostsReport {
 	return factoryapi.CostsReport{
-		Scope:           scopeToAPI(report.Scope),
-		Currency:        factoryapi.CostsReportCurrency(report.Currency),
-		Status:          factoryapi.CostsReportStatus(report.Status),
-		PricedSubtotal:  report.PricedSubtotal,
-		Coverage:        coverageToAPI(report.Coverage),
-		LineItems:       lineItemsToAPI(report.LineItems),
-		WorkItems:       rollupsToAPI(report.WorkItems),
-		WorkerSessions:  rollupsToAPI(report.WorkerSessions),
-		ProviderModels:  providerRollupsToAPI(report.ProviderModels),
-		FactorySessions: rollupsToAPI(report.FactorySessions),
+		Scope:                 scopeToAPI(report.Scope),
+		Currency:              factoryapi.CostsReportCurrency(report.Currency),
+		Status:                factoryapi.CostsReportStatus(report.Status),
+		KnownCost:             report.KnownCost,
+		PricedSubtotal:        report.PricedSubtotal,
+		TokenTotals:           tokenTotalsToAPI(report.TokenTotals),
+		UnpricedDispatchCount: report.UnpricedDispatchCount,
+		UnpricedPairs:         unpricedPairsToAPI(report.UnpricedPairs),
+		Coverage:              coverageToAPI(report.Coverage),
+		LineItems:             lineItemsToAPI(report.LineItems),
+		WorkItems:             rollupsToAPI(report.WorkItems),
+		WorkerSessions:        rollupsToAPI(report.WorkerSessions),
+		ProviderModels:        providerRollupsToAPI(report.ProviderModels),
+		FactorySessions:       rollupsToAPI(report.FactorySessions),
 	}
 }
 
@@ -78,12 +82,17 @@ func providerRollupsToAPI(rollups []costs.ProviderModelRollup) []factoryapi.Cost
 			Provider:              rollup.Provider,
 			Model:                 rollup.Model,
 			Key:                   mapped.Key,
+			Currency:              factoryapi.CostsProviderModelRollupCurrency(mapped.Currency),
 			InputTokens:           mapped.InputTokens,
 			OutputTokens:          mapped.OutputTokens,
 			CachedInputTokens:     mapped.CachedInputTokens,
 			ReasoningOutputTokens: mapped.ReasoningOutputTokens,
 			Status:                factoryapi.CostsProviderModelRollupStatus(mapped.Status),
+			KnownCost:             mapped.KnownCost,
 			PricedSubtotal:        mapped.PricedSubtotal,
+			TokenTotals:           mapped.TokenTotals,
+			UnpricedDispatchCount: mapped.UnpricedDispatchCount,
+			UnpricedPairs:         mapped.UnpricedPairs,
 			Coverage:              mapped.Coverage,
 		})
 	}
@@ -93,14 +102,41 @@ func providerRollupsToAPI(rollups []costs.ProviderModelRollup) []factoryapi.Cost
 func rollupToAPI(rollup costs.Rollup) factoryapi.CostsRollup {
 	return factoryapi.CostsRollup{
 		Key:                   rollup.Key,
+		Currency:              factoryapi.CostsRollupCurrency(rollup.Currency),
 		InputTokens:           rollup.InputTokens,
 		OutputTokens:          rollup.OutputTokens,
 		CachedInputTokens:     rollup.CachedInputTokens,
 		ReasoningOutputTokens: rollup.ReasoningOutputTokens,
 		Status:                factoryapi.CostsRollupStatus(rollup.Status),
+		KnownCost:             rollup.KnownCost,
 		PricedSubtotal:        rollup.PricedSubtotal,
+		TokenTotals:           tokenTotalsToAPI(rollup.TokenTotals),
+		UnpricedDispatchCount: rollup.UnpricedDispatchCount,
+		UnpricedPairs:         unpricedPairsToAPI(rollup.UnpricedPairs),
 		Coverage:              coverageToAPI(rollup.Coverage),
 	}
+}
+
+func tokenTotalsToAPI(totals costs.TokenTotals) factoryapi.CostsTokenTotals {
+	return factoryapi.CostsTokenTotals{
+		TotalTokens:           totals.TotalTokens,
+		InputTokens:           totals.InputTokens,
+		OutputTokens:          totals.OutputTokens,
+		CachedInputTokens:     totals.CachedInputTokens,
+		ReasoningOutputTokens: totals.ReasoningOutputTokens,
+	}
+}
+
+func unpricedPairsToAPI(pairs []costs.UnpricedPair) []factoryapi.CostsUnpricedPair {
+	result := make([]factoryapi.CostsUnpricedPair, 0, len(pairs))
+	for _, pair := range pairs {
+		result = append(result, factoryapi.CostsUnpricedPair{
+			Provider:      cloneStringPointer(pair.Provider),
+			Model:         cloneStringPointer(pair.Model),
+			DispatchCount: pair.DispatchCount,
+		})
+	}
+	return result
 }
 
 func optionalString(value string) *string {
@@ -108,4 +144,12 @@ func optionalString(value string) *string {
 		return nil
 	}
 	return &value
+}
+
+func cloneStringPointer(value *string) *string {
+	if value == nil {
+		return nil
+	}
+	cloned := *value
+	return &cloned
 }

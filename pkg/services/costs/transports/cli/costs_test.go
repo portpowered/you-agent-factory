@@ -104,16 +104,42 @@ func assertJSONCostsReport(t *testing.T, output string) {
 	if err := json.Unmarshal([]byte(output), &decoded); err != nil {
 		t.Fatalf("decode API-shaped JSON: %v\n%s", err, output)
 	}
+	assertJSONCostAmounts(t, decoded)
+	assertJSONUnpricedFacts(t, decoded)
+	assertJSONReportDimensions(t, decoded)
+	assertNoLegacyJSONEnvelope(t, output)
+}
+
+func assertJSONCostAmounts(t *testing.T, decoded generatedclient.CostsReport) {
+	t.Helper()
 	if decoded.PricedSubtotal == nil || *decoded.PricedSubtotal != "12.345678" {
 		t.Fatalf("decoded subtotal = %#v, want exact amount", decoded.PricedSubtotal)
 	}
+	if decoded.KnownCost == nil || *decoded.KnownCost != "12.345678" || decoded.TokenTotals.TotalTokens == nil || *decoded.TokenTotals.TotalTokens != 10 {
+		t.Fatalf("decoded partial facts = %#v, want known cost and total tokens", decoded)
+	}
+}
+
+func assertJSONUnpricedFacts(t *testing.T, decoded generatedclient.CostsReport) {
+	t.Helper()
+	if decoded.UnpricedDispatchCount != 1 || len(decoded.UnpricedPairs) != 1 || decoded.UnpricedPairs[0].DispatchCount != 1 {
+		t.Fatalf("decoded unpriced facts = %#v, want one unpriced dispatch/pair", decoded)
+	}
+}
+
+func assertJSONReportDimensions(t *testing.T, decoded generatedclient.CostsReport) {
+	t.Helper()
 	if decoded.Coverage.PricedRows != 1 || len(decoded.LineItems) != 2 || len(decoded.WorkItems) != 1 || len(decoded.WorkerSessions) != 1 {
 		t.Fatalf("decoded report dimensions = %#v, want complete API report", decoded)
 	}
 	if len(decoded.ProviderModels) != 1 || decoded.ProviderModels[0].Key != "openai/mystery" || len(decoded.FactorySessions) != 1 {
 		t.Fatalf("decoded provider/session rollups = %#v, want complete API report", decoded)
 	}
-	if strings.Contains(output, "group_by") || strings.Contains(output, "totals") || strings.Contains(output, "\\u0000") {
+}
+
+func assertNoLegacyJSONEnvelope(t *testing.T, output string) {
+	t.Helper()
+	if strings.Contains(output, "group_by") || strings.Contains(output, "\"totals\"") || strings.Contains(output, "\\u0000") {
 		t.Fatalf("JSON output used the legacy metrics envelope:\n%s", output)
 	}
 }
@@ -168,9 +194,16 @@ func costsReportForCLI() generatedclient.CostsReport {
 		EncounteredRows: 2, PricedRows: 1, UnpricedRows: 1,
 		EncounteredProviderModels: 2, PricedProviderModels: 1, UnpricedProviderModels: 1,
 	}
+	total := int64(10)
+	tokenTotals := generatedclient.CostsTokenTotals{
+		TotalTokens: &total, InputTokens: &input, OutputTokens: &output,
+		CachedInputTokens: &cached, ReasoningOutputTokens: &reasoning,
+	}
+	unpricedPair := generatedclient.CostsUnpricedPair{Provider: &provider, Model: &model, DispatchCount: 1}
 	rollup := generatedclient.CostsRollup{
-		Key: "work-a", Status: generatedclient.CostsRollupStatus("PRICED"),
-		PricedSubtotal: &amount, Coverage: coverage,
+		Key: "work-a", Currency: generatedclient.CostsRollupCurrency("USD"), Status: generatedclient.CostsRollupStatus("PRICED"),
+		KnownCost: &amount, PricedSubtotal: &amount, TokenTotals: tokenTotals,
+		UnpricedDispatchCount: 1, UnpricedPairs: []generatedclient.CostsUnpricedPair{unpricedPair}, Coverage: coverage,
 		InputTokens: &input, CachedInputTokens: &cached,
 		OutputTokens: &output, ReasoningOutputTokens: &reasoning,
 	}
@@ -178,18 +211,19 @@ func costsReportForCLI() generatedclient.CostsReport {
 		Scope: generatedclient.CostsScope{
 			Kind: generatedclient.CostsScopeKind("FACTORY_SESSION"), FactorySessionId: &session,
 		},
-		Currency:       generatedclient.CostsReportCurrency("USD"),
-		Status:         generatedclient.CostsReportStatus("PARTIAL"),
-		PricedSubtotal: &amount,
-		Coverage:       coverage,
+		Currency:  generatedclient.CostsReportCurrency("USD"),
+		Status:    generatedclient.CostsReportStatus("PARTIAL"),
+		KnownCost: &amount, PricedSubtotal: &amount, TokenTotals: tokenTotals,
+		UnpricedDispatchCount: 1, UnpricedPairs: []generatedclient.CostsUnpricedPair{unpricedPair},
+		Coverage: coverage,
 		LineItems: []generatedclient.CostsLineItem{
 			{Provider: &provider, Model: &model, Status: generatedclient.CostsLineItemStatus("UNPRICED"), Reason: &reason,
 				InputTokens: &input, CachedInputTokens: &cached, OutputTokens: &output, ReasoningOutputTokens: &reasoning},
 			{Status: generatedclient.CostsLineItemStatus("PRICED"), PricedAmount: &amount},
 		},
 		WorkItems:       []generatedclient.CostsRollup{rollup},
-		WorkerSessions:  []generatedclient.CostsRollup{{Key: "worker-a", Status: generatedclient.CostsRollupStatus("PRICED"), Coverage: coverage}},
-		ProviderModels:  []generatedclient.CostsProviderModelRollup{{Provider: "openai", Model: "mystery", Key: "openai/mystery", Status: generatedclient.CostsProviderModelRollupStatus("UNPRICED"), Coverage: coverage}},
-		FactorySessions: []generatedclient.CostsRollup{{Key: "session-a", Status: generatedclient.CostsRollupStatus("PARTIAL"), Coverage: coverage}},
+		WorkerSessions:  []generatedclient.CostsRollup{{Key: "worker-a", Currency: generatedclient.CostsRollupCurrency("USD"), Status: generatedclient.CostsRollupStatus("PRICED"), TokenTotals: tokenTotals, UnpricedPairs: []generatedclient.CostsUnpricedPair{}, Coverage: coverage}},
+		ProviderModels:  []generatedclient.CostsProviderModelRollup{{Provider: "openai", Model: "mystery", Key: "openai/mystery", Currency: generatedclient.CostsProviderModelRollupCurrency("USD"), Status: generatedclient.CostsProviderModelRollupStatus("UNPRICED"), TokenTotals: tokenTotals, UnpricedDispatchCount: 1, UnpricedPairs: []generatedclient.CostsUnpricedPair{unpricedPair}, Coverage: coverage}},
+		FactorySessions: []generatedclient.CostsRollup{{Key: "session-a", Currency: generatedclient.CostsRollupCurrency("USD"), Status: generatedclient.CostsRollupStatus("PARTIAL"), TokenTotals: tokenTotals, UnpricedDispatchCount: 1, UnpricedPairs: []generatedclient.CostsUnpricedPair{unpricedPair}, Coverage: coverage}},
 	}
 }

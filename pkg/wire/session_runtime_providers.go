@@ -630,15 +630,20 @@ func provideRuntimeMetricsQueryCapability(
 	return runtimeMetricsQueryCapability{query: query}, nil
 }
 
-// provideCostsQuery composes valuation over the existing canonical metrics
-// query and the narrow Operator Settings document reader. Costs reads no
-// artifacts or configuration directly.
+// provideProviderPriceTableReader exposes the immutable pricing facts owned by
+// Providers. It is separate from the configurable Operator Settings document.
+func provideProviderPriceTableReader() (costs.PriceTableReader, error) {
+	return providerswire.NewPriceTableReader()
+}
+
+// provideCostsQuery composes valuation over canonical metrics and the narrow
+// Providers pricing reader. Costs reads no artifacts or operator files.
 func provideCostsQuery(
-	settings operatorsettings.Service,
+	pricing costs.PriceTableReader,
 	metrics factoryvisualization.RuntimeMetricsQuery,
 	logger logging.Logger,
 ) (costs.CostsQuery, error) {
-	return costswire.NewCostsQuery(settings, metrics, logger)
+	return costswire.NewCostsQuery(pricing, metrics, logger)
 }
 
 func provideCostsQueryCapability(

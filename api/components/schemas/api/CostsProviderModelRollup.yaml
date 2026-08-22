@@ -4,7 +4,12 @@ required:
   - provider
   - model
   - key
+  - currency
   - status
+  - known_cost
+  - token_totals
+  - unpriced_dispatch_count
+  - unpriced_pairs
   - coverage
 properties:
   provider:
@@ -16,6 +21,11 @@ properties:
   key:
     type: string
     description: Stable public provider/model pair key in the form provider/model.
+  currency:
+    type: string
+    enum:
+      - USD
+    description: Currency of the known cost amount.
   input_tokens:
     type: integer
     format: int64
@@ -40,8 +50,24 @@ properties:
       - UNPRICED
       - NO_USAGE
     description: PRICED means all usage rows for this provider/model are valued; PARTIAL means some are valued; UNPRICED means usage exists but none is valued; NO_USAGE means this pair has no usage rows.
+  known_cost:
+    type: string
+    nullable: true
+    description: Exact USD decimal for the priced portion of this provider/model rollup; PARTIAL never implies a complete total.
   priced_subtotal:
     type: string
+    deprecated: true
     description: Exact USD decimal subtotal; absent when no usage is priced.
+  token_totals:
+    $ref: './CostsTokenTotals.yaml'
+  unpriced_dispatch_count:
+    type: integer
+    minimum: 0
+    description: Number of distinct dispatches whose usage is not fully valued for this provider/model.
+  unpriced_pairs:
+    type: array
+    description: Deterministically ordered unpriced provider/model facts for this rollup.
+    items:
+      $ref: './CostsUnpricedPair.yaml'
   coverage:
     $ref: './CostsCoverage.yaml'

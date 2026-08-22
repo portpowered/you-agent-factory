@@ -47,6 +47,16 @@ func TestOpenAPIContract_CostsReportIsTypedAndAmountsAreOptionalStrings(t *testi
 	doc := loadBundledOpenAPIDocument(t)
 	paths := objectField(t, doc, "paths")
 	operation := pathOperation(t, paths, "/metrics/costs", "get")
+	assertCostsOperation(t, operation)
+
+	schemas := componentSchemas(t, doc)
+	assertCostsReportSchema(t, schemas)
+	assertCostsTokenTotalsSchema(t, schemas)
+	assertCostsRollupSchema(t, schemas)
+}
+
+func assertCostsOperation(t *testing.T, operation map[string]any) {
+	t.Helper()
 	if operation["operationId"] != "getMetricsCosts" {
 		t.Fatalf("costs operationId = %v, want getMetricsCosts", operation["operationId"])
 	}
@@ -60,11 +70,17 @@ func TestOpenAPIContract_CostsReportIsTypedAndAmountsAreOptionalStrings(t *testi
 	}
 	assertResponseRef(t, operation, "400", "#/components/responses/BadRequest")
 	assertResponseRef(t, operation, "500", "#/components/responses/InternalError")
+}
 
-	schemas := componentSchemas(t, doc)
+func assertCostsReportSchema(t *testing.T, schemas map[string]any) {
+	t.Helper()
 	report := schemaObject(t, schemas, "CostsReport")
-	assertRequiredFields(t, report, "scope", "currency", "status", "coverage", "line_items", "work_items", "worker_sessions", "provider_models", "factory_sessions")
+	assertRequiredFields(t, report, "scope", "currency", "status", "known_cost", "token_totals", "unpriced_dispatch_count", "unpriced_pairs", "coverage", "line_items", "work_items", "worker_sessions", "provider_models", "factory_sessions")
 	reportProperties := schemaProperties(t, report, "CostsReport")
+	knownCost, ok := reportProperties["known_cost"].(map[string]any)
+	if !ok || knownCost["type"] != "string" || knownCost["nullable"] != true {
+		t.Fatalf("CostsReport.known_cost = %#v, want nullable string", reportProperties["known_cost"])
+	}
 	pricedSubtotal, ok := reportProperties["priced_subtotal"].(map[string]any)
 	if !ok || pricedSubtotal["type"] != "string" {
 		t.Fatalf("CostsReport.priced_subtotal = %#v, want optional string", reportProperties["priced_subtotal"])
@@ -82,6 +98,26 @@ func TestOpenAPIContract_CostsReportIsTypedAndAmountsAreOptionalStrings(t *testi
 		t.Fatalf("CostsReport.status = %#v", reportProperties["status"])
 	}
 	assertEnumValues(t, status, "CostsReport.status", []string{"PRICED", "PARTIAL", "UNPRICED", "NO_USAGE"})
+}
+
+func assertCostsTokenTotalsSchema(t *testing.T, schemas map[string]any) {
+	t.Helper()
+	tokenTotals := schemaObject(t, schemas, "CostsTokenTotals")
+	assertRequiredFields(t, tokenTotals, "total_tokens", "input_tokens", "output_tokens", "cached_input_tokens", "reasoning_output_tokens")
+	for _, field := range []string{"total_tokens", "input_tokens", "output_tokens", "cached_input_tokens", "reasoning_output_tokens"} {
+		property := schemaProperties(t, tokenTotals, "CostsTokenTotals")[field].(map[string]any)
+		if property["type"] != "integer" || property["nullable"] != true {
+			t.Fatalf("CostsTokenTotals.%s = %#v, want nullable integer", field, property)
+		}
+	}
+}
+
+func assertCostsRollupSchema(t *testing.T, schemas map[string]any) {
+	t.Helper()
+	unpricedPair := schemaObject(t, schemas, "CostsUnpricedPair")
+	assertRequiredFields(t, unpricedPair, "provider", "model", "dispatch_count")
+	rollup := schemaObject(t, schemas, "CostsRollup")
+	assertRequiredFields(t, rollup, "key", "currency", "status", "known_cost", "token_totals", "unpriced_dispatch_count", "unpriced_pairs", "coverage")
 }
 
 func TestGeneratedGoClientBuildsMetricsCostsRequestAndExposesTypedResponses(t *testing.T) {

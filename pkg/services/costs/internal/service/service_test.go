@@ -12,20 +12,20 @@ import (
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	costs "github.com/portpowered/infinite-you/pkg/services/costs"
 	factoryvisualization "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
-	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
+	providers "github.com/portpowered/infinite-you/pkg/services/providers"
 )
 
 func TestQueryExactValuationCoverageAndRollups(t *testing.T) {
 	t.Parallel()
 
-	settings := &settingsReader{document: operatorsettings.Document{PriceTable: operatorsettings.PriceTable{
-		Currency: operatorsettings.PriceTableCurrencyUSD,
-		Models: []operatorsettings.PriceTableModel{
-			{Provider: "codex", Model: "gpt-5", InputPerMillionTokens: "2.5", OutputPerMillionTokens: "5.25", CachedInputPerMillionTokens: stringPtr("0.5"), ReasoningOutputPerMillionTokens: stringPtr("10")},
-			{Provider: "codex", Model: "gpt-zero", InputPerMillionTokens: "0", OutputPerMillionTokens: "0"},
-			{Provider: "codex", Model: "gpt-no-cache", InputPerMillionTokens: "1", OutputPerMillionTokens: "1"},
+	pricing := &priceReader{table: providers.PriceTable{
+		Currency: providers.PriceTableCurrencyUSD,
+		Models: []providers.PriceTableModel{
+			testPriceModel("gpt-5", "2.5", "5.25", stringPtr("0.5"), stringPtr("10")),
+			testPriceModel("gpt-zero", "0", "0", nil, nil),
+			testPriceModel("gpt-no-cache", "1", "1", nil, nil),
 		},
-	}}}
+	}}
 	rows := []factoryvisualization.RuntimeMetricsUsageRow{
 		usageRow("session-b", "work-b", "dispatch-b", "worker-b", "codex", "gpt-5", 2_000_000, 1_000_000, int64Ptr(500_000), int64Ptr(200_000)),
 		usageRow("session-a", "work-a", "dispatch-a", "worker-a", "codex", "gpt-zero", 3, 4, nil, nil),
@@ -33,7 +33,7 @@ func TestQueryExactValuationCoverageAndRollups(t *testing.T) {
 		usageRow("session-a", "work-a2", "dispatch-a2", "worker-a2", "codex", "gpt-no-cache", 1_000, 1_000, int64Ptr(500), nil),
 		usageRow("session-a", "work-a3", "dispatch-a3", "worker-a3", "codex", "", 8, 9, nil, nil),
 	}
-	query, err := New(settings, metricsQueryStub(rows, nil), logging.NoopLogger{})
+	query, err := New(pricing, metricsQueryStub(rows, nil), logging.NoopLogger{})
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
@@ -58,6 +58,21 @@ func assertExactReport(t *testing.T, report costs.Report) {
 	if report.PricedSubtotal == nil || *report.PricedSubtotal != "10.2" {
 		t.Fatalf("priced subtotal = %v, want exact 10.2", report.PricedSubtotal)
 	}
+	if report.KnownCost == nil || *report.KnownCost != "10.2" {
+		t.Fatalf("known cost = %v, want exact 10.2", report.KnownCost)
+	}
+	assertTokenTotals(t, report.TokenTotals, 2_001_021, 1_001_018, 3_002_039)
+	if report.TokenTotals.CachedInputTokens == nil || *report.TokenTotals.CachedInputTokens != 500_500 || report.TokenTotals.ReasoningOutputTokens == nil || *report.TokenTotals.ReasoningOutputTokens != 200_000 {
+		t.Fatalf("subclass token totals = %#v, want cached 500500 and reasoning 200000", report.TokenTotals)
+	}
+	if report.UnpricedDispatchCount != 3 {
+		t.Fatalf("unpriced dispatch count = %d, want 3", report.UnpricedDispatchCount)
+	}
+	assertUnpricedPairs(t, report.UnpricedPairs, []unpricedPairWant{
+		{model: nil, dispatchCount: 1},
+		{model: stringPtr("gpt-no-cache"), dispatchCount: 1},
+		{model: stringPtr("unknown"), dispatchCount: 1},
+	})
 	wantCoverage := costs.Coverage{
 		EncounteredRows: 5, PricedRows: 2, UnpricedRows: 3,
 		EncounteredProviderModels: 4, PricedProviderModels: 2, UnpricedProviderModels: 2,
@@ -98,6 +113,14 @@ func assertExactRollups(t *testing.T, report costs.Report) {
 	for _, rollup := range report.FactorySessions {
 		assertFactorySessionRollup(t, rollup)
 	}
+	for _, rollup := range report.WorkItems {
+		if rollup.Currency != "USD" {
+			t.Fatalf("work rollup currency = %q, want USD", rollup.Currency)
+		}
+		if rollup.TokenTotals.TotalTokens == nil {
+			t.Fatalf("work rollup %#v has no total token fact", rollup)
+		}
+	}
 }
 
 func assertFactorySessionRollup(t *testing.T, rollup costs.Rollup) {
@@ -117,10 +140,11 @@ func assertFactorySessionRollup(t *testing.T, rollup costs.Rollup) {
 func TestQueryNoUsageAndExplicitZeroRemainDistinct(t *testing.T) {
 	t.Parallel()
 
-	settings := &settingsReader{document: operatorsettings.Document{PriceTable: operatorsettings.PriceTable{
-		Models: []operatorsettings.PriceTableModel{{Provider: "codex", Model: "free", InputPerMillionTokens: "0", OutputPerMillionTokens: "0"}},
-	}}}
-	query, err := New(settings, metricsQueryStub(nil, nil), logging.NoopLogger{})
+	pricing := &priceReader{table: providers.PriceTable{
+		Currency: providers.PriceTableCurrencyUSD,
+		Models:   []providers.PriceTableModel{testPriceModel("free", "0", "0", nil, nil)},
+	}}
+	query, err := New(pricing, metricsQueryStub(nil, nil), logging.NoopLogger{})
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
@@ -132,7 +156,7 @@ func TestQueryNoUsageAndExplicitZeroRemainDistinct(t *testing.T) {
 		t.Fatalf("empty report = %#v, want NO_USAGE with absent amount", empty)
 	}
 
-	query, err = New(settings, metricsQueryStub([]factoryvisualization.RuntimeMetricsUsageRow{
+	query, err = New(pricing, metricsQueryStub([]factoryvisualization.RuntimeMetricsUsageRow{
 		usageRow("session", "work", "dispatch", "worker", "codex", "free", 0, 0, nil, nil),
 	}, nil), logging.NoopLogger{})
 	if err != nil {
@@ -145,22 +169,85 @@ func TestQueryNoUsageAndExplicitZeroRemainDistinct(t *testing.T) {
 	if free.Status != costs.StatusPriced || free.PricedSubtotal == nil || *free.PricedSubtotal != "0" {
 		t.Fatalf("explicit zero report = %#v, want PRICED amount 0", free)
 	}
+	if free.KnownCost == nil || *free.KnownCost != "0" || free.TokenTotals.TotalTokens == nil || *free.TokenTotals.TotalTokens != 0 {
+		t.Fatalf("explicit zero facts = %#v, want known zero and total zero", free)
+	}
+}
+
+func TestQueryUnpricedFactsDeduplicateDispatchesAndRetainUnknownIdentity(t *testing.T) {
+	t.Parallel()
+
+	pricing := &priceReader{table: providers.PriceTable{
+		Currency: providers.PriceTableCurrencyUSD,
+		Models:   []providers.PriceTableModel{testPriceModel("known", "1", "1", nil, nil)},
+	}}
+	rows := []factoryvisualization.RuntimeMetricsUsageRow{
+		usageRow("session", "work", "dispatch-a", "worker-a", "codex", "unknown", 2, 3, nil, nil),
+		usageRow("session", "work", "dispatch-a", "worker-a", "CODEX", "unknown", 4, 5, nil, nil),
+		usageRow("session", "work", "dispatch-b", "worker-b", "", "", 6, 7, nil, nil),
+	}
+	query, err := New(pricing, metricsQueryStub(rows, nil), logging.NoopLogger{})
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+
+	report, err := query.Query(context.Background(), validRequest())
+	if err != nil {
+		t.Fatalf("Query() error = %v", err)
+	}
+	assertUnpricedReportFacts(t, report)
+}
+
+func assertUnpricedReportFacts(t *testing.T, report costs.Report) {
+	t.Helper()
+	if report.Status != costs.StatusUnpriced || report.KnownCost != nil {
+		t.Fatalf("report = %#v, want wholly unpriced with no known cost", report)
+	}
+	assertTokenTotals(t, report.TokenTotals, 12, 15, 27)
+	if report.TokenTotals.CachedInputTokens != nil || report.TokenTotals.ReasoningOutputTokens != nil {
+		t.Fatalf("absent subclass totals = %#v, want nil cached/reasoning facts", report.TokenTotals)
+	}
+	if report.UnpricedDispatchCount != 2 {
+		t.Fatalf("unpriced dispatch count = %d, want two distinct dispatches", report.UnpricedDispatchCount)
+	}
+	assertUnpricedPairFacts(t, report.UnpricedPairs)
+}
+
+func assertUnpricedPairFacts(t *testing.T, pairs []costs.UnpricedPair) {
+	t.Helper()
+	if len(pairs) != 2 {
+		t.Fatalf("unpriced pairs = %#v, want canonical unknown and missing pairs", pairs)
+	}
+	assertMissingIdentityPair(t, pairs[0])
+	assertCanonicalUnknownPair(t, pairs[1])
+}
+
+func assertMissingIdentityPair(t *testing.T, pair costs.UnpricedPair) {
+	t.Helper()
+	if pair.Provider != nil || pair.Model != nil || pair.DispatchCount != 1 {
+		t.Fatalf("missing identity pair = %#v, want explicit nil identities", pair)
+	}
+}
+
+func assertCanonicalUnknownPair(t *testing.T, pair costs.UnpricedPair) {
+	t.Helper()
+	if pair.Provider == nil || *pair.Provider != "CODEX" || pair.Model == nil || *pair.Model != "unknown" || pair.DispatchCount != 1 {
+		t.Fatalf("canonical pair = %#v, want CODEX/unknown with one dispatch", pair)
+	}
 }
 
 func TestQueryUnpricedUsageRetainsCorrelationAndCountsRepeatedRows(t *testing.T) {
 	t.Parallel()
 
-	settings := &settingsReader{document: operatorsettings.Document{PriceTable: operatorsettings.PriceTable{
-		Currency: operatorsettings.PriceTableCurrencyUSD,
-		Models: []operatorsettings.PriceTableModel{{
-			Provider: "codex", Model: "known", InputPerMillionTokens: "1", OutputPerMillionTokens: "1",
-		}},
-	}}}
+	pricing := &priceReader{table: providers.PriceTable{
+		Currency: providers.PriceTableCurrencyUSD,
+		Models:   []providers.PriceTableModel{testPriceModel("known", "1", "1", nil, nil)},
+	}}
 	rows := []factoryvisualization.RuntimeMetricsUsageRow{
 		usageRow("session", "work-unknown-a", "dispatch-unknown-a", "worker-unknown-a", "codex", "missing", 10, 20, nil, nil),
 		usageRow("session", "work-unknown-b", "dispatch-unknown-b", "worker-unknown-b", "codex", "missing", 30, 40, nil, nil),
 	}
-	query, err := New(settings, metricsQueryStub(rows, nil), logging.NoopLogger{})
+	query, err := New(pricing, metricsQueryStub(rows, nil), logging.NoopLogger{})
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
@@ -200,14 +287,15 @@ func assertUnpricedLineRetainsCorrelation(t *testing.T, line costs.LineItem) {
 func TestQueryScopedSelectionAndDeterministicOutput(t *testing.T) {
 	t.Parallel()
 
-	settings := &settingsReader{document: operatorsettings.Document{PriceTable: operatorsettings.PriceTable{
-		Models: []operatorsettings.PriceTableModel{{Provider: "codex", Model: "model", InputPerMillionTokens: "1", OutputPerMillionTokens: "1"}},
-	}}}
+	pricing := &priceReader{table: providers.PriceTable{
+		Currency: providers.PriceTableCurrencyUSD,
+		Models:   []providers.PriceTableModel{testPriceModel("model", "1", "1", nil, nil)},
+	}}
 	rows := []factoryvisualization.RuntimeMetricsUsageRow{
 		usageRow("session-b", "work-b", "dispatch-b", "worker-b", "codex", "model", 2, 2, nil, nil),
 		usageRow("session-a", "work-a", "dispatch-a", "worker-a", "codex", "model", 1, 1, nil, nil),
 	}
-	query, err := New(settings, metricsQueryStub(rows, nil), logging.NoopLogger{})
+	query, err := New(pricing, metricsQueryStub(rows, nil), logging.NoopLogger{})
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
@@ -243,16 +331,16 @@ func TestQueryErrorsAreTypedAndLogsSafeTerminalOutcome(t *testing.T) {
 
 func assertSettingsReadFailureIsSafe(t *testing.T) {
 	t.Helper()
-	settingsErr := errors.New("settings unavailable")
+	pricingErr := errors.New("provider pricing unavailable")
 	logger := &captureLogger{}
-	query, err := New(&settingsReader{err: settingsErr}, metricsQueryStub(nil, nil), logger)
+	query, err := New(&priceReader{err: pricingErr}, metricsQueryStub(nil, nil), logger)
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
 	_, err = query.Query(context.Background(), validRequest())
 	var queryErr *costs.QueryError
-	if !errors.As(err, &queryErr) || queryErr.Kind != costs.QueryErrorSettingsReadFailed || !errors.Is(err, settingsErr) {
-		t.Fatalf("settings error = %v, want typed wrapped settings failure", err)
+	if !errors.As(err, &queryErr) || queryErr.Kind != costs.QueryErrorSettingsReadFailed || !errors.Is(err, pricingErr) {
+		t.Fatalf("pricing error = %v, want typed wrapped provider-pricing failure", err)
 	}
 	if !logger.hasMessage("runtime costs query started") || !logger.hasMessage("runtime costs query failed") {
 		t.Fatalf("log messages = %#v, want start and safe terminal failure", logger.messages)
@@ -260,7 +348,7 @@ func assertSettingsReadFailureIsSafe(t *testing.T) {
 	if strings.Contains(logger.fieldsText(), "inputPerMillion") || strings.Contains(logger.fieldsText(), "gpt") {
 		t.Fatalf("logs contain configuration identity/content: %#v", logger.fields)
 	}
-	if strings.Contains(logger.fieldsText(), settingsErr.Error()) {
+	if strings.Contains(logger.fieldsText(), pricingErr.Error()) {
 		t.Fatalf("logs contain dependency error details: %#v", logger.fields)
 	}
 }
@@ -268,7 +356,7 @@ func assertSettingsReadFailureIsSafe(t *testing.T) {
 func assertMetricsFailureIsTyped(t *testing.T) {
 	t.Helper()
 	metricsErr := errors.New("metrics unavailable")
-	query, err := New(&settingsReader{document: operatorsettings.Document{}}, metricsQueryStub(nil, metricsErr), logging.NoopLogger{})
+	query, err := New(&priceReader{table: providers.PriceTable{Currency: providers.PriceTableCurrencyUSD}}, metricsQueryStub(nil, metricsErr), logging.NoopLogger{})
 	if err != nil {
 		t.Fatalf("New(metrics error) error = %v", err)
 	}
@@ -281,13 +369,13 @@ func assertMetricsFailureIsTyped(t *testing.T) {
 
 func assertInvalidRequestIsTyped(t *testing.T) {
 	t.Helper()
-	query, err := New(&settingsReader{document: operatorsettings.Document{}}, metricsQueryStub(nil, nil), logging.NoopLogger{})
+	query, err := New(&priceReader{table: providers.PriceTable{Currency: providers.PriceTableCurrencyUSD}}, metricsQueryStub(nil, nil), logging.NoopLogger{})
 	if err != nil {
 		t.Fatalf("New(invalid request) error = %v", err)
 	}
-	_, err = query.Query(context.Background(), costs.QueryRequest{MetricsRoot: "metrics-root"})
+	_, err = query.Query(context.Background(), costs.QueryRequest{})
 	var queryErr *costs.QueryError
-	if !errors.As(err, &queryErr) || queryErr.Kind != costs.QueryErrorInvalidInput || !strings.Contains(err.Error(), "operator settings path") {
+	if !errors.As(err, &queryErr) || queryErr.Kind != costs.QueryErrorInvalidInput || !strings.Contains(err.Error(), "metrics root") {
 		t.Fatalf("invalid request error = %v, want actionable invalid input", err)
 	}
 }
@@ -362,16 +450,36 @@ func metricsQueryStub(rows []factoryvisualization.RuntimeMetricsUsageRow, err er
 	}
 }
 
-type settingsReader struct {
-	document operatorsettings.Document
-	err      error
+type priceReader struct {
+	table providers.PriceTable
+	err   error
 }
 
-func (reader *settingsReader) LoadDocument(operatorsettings.LoadDocumentRequest) (operatorsettings.LoadDocumentResult, error) {
+func (reader *priceReader) ReadPriceTable() (providers.PriceTable, error) {
 	if reader.err != nil {
-		return operatorsettings.LoadDocumentResult{}, reader.err
+		return providers.PriceTable{}, reader.err
 	}
-	return operatorsettings.LoadDocumentResult{Document: reader.document}, nil
+	return reader.table.Clone(), nil
+}
+
+func testPriceModel(model, input, output string, cached, reasoning *string) providers.PriceTableModel {
+	entry := providers.PriceTableModel{
+		Provider:                        providers.IDCodex,
+		Model:                           model,
+		InputPerMillionTokens:           input,
+		OutputPerMillionTokens:          output,
+		CachedInputPerMillionTokens:     cached,
+		ReasoningOutputPerMillionTokens: reasoning,
+		SourceURL:                       "https://example.com/test-pricing",
+		AsOfDate:                        "2026-08-21",
+	}
+	if cached != nil && *cached == input {
+		entry.EqualRateClasses = append(entry.EqualRateClasses, providers.PriceClassCachedInput)
+	}
+	if reasoning != nil && *reasoning == output {
+		entry.EqualRateClasses = append(entry.EqualRateClasses, providers.PriceClassReasoningOutput)
+	}
+	return entry
 }
 
 type captureLogger struct {
@@ -426,5 +534,49 @@ func assertLine(t *testing.T, lines []costs.LineItem, model string, status costs
 
 func int64Ptr(value int64) *int64    { return &value }
 func stringPtr(value string) *string { return &value }
+
+type unpricedPairWant struct {
+	model         *string
+	dispatchCount int
+}
+
+func assertTokenTotals(t *testing.T, totals costs.TokenTotals, input, output, total int64) {
+	t.Helper()
+	values := []struct {
+		name string
+		got  *int64
+		want int64
+	}{
+		{"input", totals.InputTokens, input},
+		{"output", totals.OutputTokens, output},
+		{"total", totals.TotalTokens, total},
+	}
+	for _, value := range values {
+		if value.got == nil || *value.got != value.want {
+			t.Fatalf("%s token total = %v, want %d", value.name, value.got, value.want)
+		}
+	}
+}
+
+func assertUnpricedPairs(t *testing.T, got []costs.UnpricedPair, want []unpricedPairWant) {
+	t.Helper()
+	if len(got) != len(want) {
+		t.Fatalf("unpriced pairs = %#v, want %d pairs", got, len(want))
+	}
+	for index, expected := range want {
+		if got[index].Model == nil && expected.model != nil || got[index].Model != nil && expected.model == nil {
+			t.Fatalf("unpriced pair %d model = %#v, want %#v", index, got[index].Model, expected.model)
+		}
+		if got[index].Model != nil && *got[index].Model != *expected.model {
+			t.Fatalf("unpriced pair %d model = %q, want %q", index, *got[index].Model, *expected.model)
+		}
+		if got[index].Provider == nil || *got[index].Provider != "CODEX" {
+			t.Fatalf("unpriced pair %d provider = %#v, want CODEX", index, got[index].Provider)
+		}
+		if got[index].DispatchCount != expected.dispatchCount {
+			t.Fatalf("unpriced pair %d dispatch count = %d, want %d", index, got[index].DispatchCount, expected.dispatchCount)
+		}
+	}
+}
 
 var _ logging.Logger = (*captureLogger)(nil)

@@ -11,9 +11,9 @@ import (
 // NewCostsQuery constructs the stateless Costs operation from its two narrow
 // owner capabilities and the process logger.
 func NewCostsQuery(
-	settings costs.PriceTableReader,
+	pricing costs.PriceTableReader,
 	metrics factoryvisualization.RuntimeMetricsQuery,
 	logger logging.Logger,
 ) (costs.CostsQuery, error) {
-	return costsservice.New(settings, metrics, logger)
+	return costsservice.New(pricing, metrics, logger)
 }
